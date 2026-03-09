@@ -1,0 +1,25 @@
+[presets.commute]
+type = "expense"
+domain = "self"
+category = "transport"
+amount = 90
+tag = ["auto","bus"]
+
+[presets.snacks]
+type = "expense"
+domain = "work"
+category = "staff_welfare"
+tag = ["snacks"]
+
+[presets.petrol]
+type = "expense"
+domain = "self"
+category = "transport"
+amount = 200
+tag = ["petrol"]
+
+[presets.bakery]
+type = "expense"
+domain = "home"
+category = "household"
+tag = ["bakery","snacks"]

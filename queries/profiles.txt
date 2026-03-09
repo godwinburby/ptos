@@ -1,0 +1,23 @@
+# Expense discipline
+expense_home_current: --month current --type expense --where domain!=work --sum
+expense_work_current: --month current --type expense --where domain=work --where tag!=snacks --sum
+
+# Snack drift
+snacks_home_current: --month current --type expense --where domain!=work --tag snacks --sum
+snacks_work_current: --month current --type expense --where domain=work --tag snacks --sum
+
+# Assessment performance
+assessment_current: --month current --type assessment --count
+assessment_quarter: --quarter current --type assessment --count
+
+# Prescription performance (revenue + volume)
+prescription_current: --month current --type prescription --sum --count
+prescription_quarter: --quarter current --type prescription --sum --count
+
+# Expense of personal and home transport not work includeing auto , bus , metro, taxi, train etc
+expense_transport_nonwork: --month current --type expense --where category=transport --where domain!=work --sum --show
+expense_transport_work: --month current --type expense --where category=transport --where domain=work --sum --show
+
+# Expense of bakery and restaurant of self and home not work
+expense_bakery_current: --month current --type expense --where category=food --where domain!=work --tag bakery --sum
+expense_restaurant_current: --month current --type expense --where category=food --where domain!=work --tag restaurant --sum

@@ -1,0 +1,284 @@
+[types]
+allowed = [
+  "expense",
+  "income",
+  "investment",
+  "assessment",
+  "prescription",
+  "fitting",
+  "followup",
+  "outreach",
+  "exercise",
+  "conversation",
+  "learning"
+]
+
+# --------------------------------------------------
+# FIELD METADATA
+# --------------------------------------------------
+
+[fields.amount]
+type = "int"
+dimension = false
+aggregatable = true
+
+[fields.client]
+type = "string"
+dimension = false
+
+[fields.name]
+type = "string"
+dimension = false
+
+[fields.category]
+type = "string"
+dimension = true
+
+[fields.domain]
+type = "string"
+dimension = true
+
+[fields.tag]
+type = "string"
+dimension = true
+multi = true
+
+[fields.advance]
+type = "int"
+dimension = false
+aggregatable = true
+
+[fields.balance]
+type = "int"
+dimension = false
+aggregatable = true
+
+[fields.duration]
+type = "int"
+dimension = false
+aggregatable = true
+# ----------------------
+# EXPENSE
+# ----------------------
+
+[type.expense.required]
+fields = ["domain", "category", "amount"]
+
+[type.expense.hierarchy]
+levels = ["domain", "category", "tag"]
+
+[type.expense.domains.self]
+categories = ["food", "transport", "medical", "education", "travel", "entertainment", "personal"]
+
+[type.expense.domains.self.tags.food]
+values = ["snacks", "tea", "coffee", "restaurant", "bakery"]
+
+[type.expense.domains.self.tags.transport]
+values = ["auto", "bus", "metro", "taxi", "uber", "rapido"]
+
+[type.expense.domains.home]
+categories = ["grocery", "utilities", "rent", "maintenance", "child", "religious", "household"]
+
+[type.expense.domains.home.tags.grocery]
+values = ["vegetables", "milk", "rice", "fruits","super_market","quick_delivery"]
+
+[type.expense.domains.home.tags.household]
+values = ["bakery", "snacks","restaurant"]
+
+[type.expense.domains.work]
+categories = ["admin", "books", "electricity", "courier", "postage", "office", "stationary","staff_welfare","repair","maintenance"]
+
+[type.expense.domains.work.tags.staff_welfare]
+values = ["snacks"]
+
+# ----------------------
+# INCOME
+# ----------------------
+
+[type.income.required]
+fields = ["source", "amount"]
+
+[type.income.allowed.source]
+values = ["salary", "extra"]
+
+[type.income.allowed.tag]
+values = ["bonus", "gift", "refund", "commission"]
+
+# ----------------------
+# INVESTMENT
+# ----------------------
+
+[type.investment.required]
+fields = ["instrument", "amount","provider"]
+
+[type.investment.allowed.instrument]
+values = ["rd", "fd", "mutual_fund", "ppf"]
+
+[type.investment.allowed.provider]
+values = ["hdfc_bank", "hdfc_mf", "motilal_oswald_mf", "cordial_gramin"]
+
+[type.investment.tags.mutual_fund]
+values = ["sip", "lumpsum"]
+
+# ----------------------
+# ASSESSMENT
+# ----------------------
+
+[type.assessment.required]
+fields = ["client","name", "source", "outcome", "booked_by"]
+
+[type.assessment.allowed.source]
+values = ["raf", "ent", "walkin", "marketing", "camp"]
+
+[type.assessment.allowed.outcome]
+values = ["normal", "deferred", "prescribed"]
+
+[type.assessment.allowed.fit]
+values = ["monaural", "binaural"]
+
+[type.assessment.allowed.booked_by]
+values = ["cso", "cce", "cre", "ent"]
+
+# Conditional rule:
+# fit required only when outcome=prescribed
+[type.assessment.conditional_required]
+fit = { when = { outcome = "prescribed" } }
+
+# ----------------------
+# PRESCRIPTION
+# ----------------------
+
+[type.prescription.required]
+fields = ["client","name", "model", "fit", "amount", "source", "booked_by"]
+
+[type.prescription.allowed.source]
+values = ["raf", "ent", "walkin", "marketing", "camp"]
+
+[type.prescription.allowed.booked_by]
+values = ["cso", "cce", "cre", "ent"]
+
+[type.prescription.allowed.fit]
+values = ["monaural", "binaural"]
+
+[type.prescription.allowed.model]
+values = [
+    "lumity_l30_rkit",
+    "lumity_l50_rkit",
+    "nexia_4_bte_r"
+]
+
+# ----------------------
+# FITTING
+# ----------------------
+
+[type.fitting.required]
+fields = ["client","name", "model", "balance", "fit"]
+
+[type.fitting.allowed.fit]
+values = ["monaural", "binaural"]
+
+# ----------------------
+# FOLLOWUP
+# ----------------------
+
+[type.followup.required]
+fields = ["client","name", "stage","result"]
+
+[type.followup.allowed.stage]
+values = ["trial", "decision", "assessment", "cant_afford","upgrade","wants_emi","deferred","current_aid_ok","unattended"]
+
+[type.followup.tags.stage]
+values = ["aid"]
+
+[type.followup.allowed.channel]
+values = ["phone", "whatsapp", "visit"]
+
+[type.followup.allowed.result]
+values = [
+  "not_interested",
+  "need_time",
+  "busy",
+  "not_reachable",
+  "wrong_number",
+  "does_not_exist",
+  "out_of_station",
+  "ringing",
+  "another_provider",
+  "deceased",
+  "not_well",
+  "not_available",
+  "busy_call_later",
+  "out_of_service",
+  "current_aid_ok"
+]
+# ----------------------
+# OUTREACH
+# ----------------------
+
+[type.outreach.required]
+fields = ["place", "name", "outcome"]
+
+[type.outreach.allowed.place]
+values = ["medical_shop", "clinic", "camp"]
+
+[type.outreach.allowed.outcome]
+values = ["referral", "visit", "no_response"]
+
+# ----------------------
+# EXERCISE
+# ----------------------
+
+[type.exercise.required]
+fields = ["activity", "duration"]
+
+[type.exercise.allowed.activity]
+values = ["walk", "stretch", "strength", "cycle"]
+
+[type.exercise.tags.walk]
+values = ["morning","evening"]
+
+[type.exercise.allowed.domain]
+values = ["self"]
+
+# ----------------------
+# CONVERSATION
+# ----------------------
+
+[type.conversation.required]
+fields = ["relation","person","topic","mood","duration","outcome"]
+
+#[type.conversation.optional]
+#fields = ["mood","duration","outcome"]
+
+[type.conversation.allowed.relation]
+values = ["wife","child","family","friend","colleague","neighbour","stranger"]
+
+[type.conversation.allowed.topic]
+values = [
+  "money","borrow","family","health","work",
+  "parenting","planning","relationship","ideas",
+  "problem","spiritual","social"
+]
+
+[type.conversation.allowed.mood]
+values = [
+  "positive","neutral","supportive","tense","conflict"
+]
+
+[type.conversation.allowed.outcome]
+values = [
+  "none","pending","agreed","refused","followup"
+]
+
+# ----------------------
+# LEARNING
+# ----------------------
+
+[type.learning.required]
+fields = ["topic"]
+
+[type.learning.allowed.source]
+values = ["youtube", "podcast", "course", "article","book","audio_book"]
+
+[type.learning.allowed.domain]
+values = ["self","work"]

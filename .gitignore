@@ -1,0 +1,17 @@
+# runtime data
+records/
+journal/
+notes/
+scripts/
+tasks/
+.stfolder/
+
+# python cache
+__pycache__/
+*.pyc
+
+# logs
+*.log
+
+# temporary files
+*.tmp

@@ -1,0 +1,175 @@
+# base queries
+[assessments]
+where = "type=assessment"
+
+[deferred]
+where = "type=assessment outcome=deferred"
+
+[prescriptions]
+where = "type=prescription"
+
+[binaural]
+where = "type=prescription fit=binaural"
+
+#metrics queries
+[metrics.prescription_ratio]
+ratio = ["prescriptions","assessments"]
+
+[metrics.binaural_ratio]
+ratio = ["binaural","prescriptions"]
+
+[metrics.asp]
+avg = "prescriptions"
+
+[metrics.loss_ratio]
+ratio = ["deferred","assessments"]
+
+# final dashboard
+[dashboards.clinic]
+metrics = [
+  "assessments",
+  "prescriptions",
+  "loss_ratio",
+  "prescription_ratio",
+  "binaural_ratio",
+  "asp"
+]
+
+# Prescription this month
+[rx]
+where = "type=prescription"
+time = "this-month"
+sum = true
+
+# Prescription last month
+[rxlm]
+where = "type=prescription"
+time = "last-month"
+sum = true
+
+# Prescription first quarter
+[rxq1]
+where = "type=prescription"
+from = 2026-01-01
+to = 2026-03-31
+sum = true
+
+# Prescription this quarter
+[rxtq]
+where = "type=prescription"
+time = "this-quarter"
+sum = true
+
+# Prescription last quarter
+[rxlq]
+where = "type=prescription"
+time = "last-quarter"
+sum = true
+
+# Assessments this month
+[ass]
+where = "type=assessment"
+time = "this-month"
+
+# Assessments last month
+[asslm]
+where = "type=assessment"
+time = "last-month"
+
+# Assessments this quarter
+[asstq]
+where = "type=assessment"
+time = "this-quarter"
+
+# Assessments last quarter
+[asslq]
+where = "type=assessment"
+time = "last-quarter"
+
+# Followup this month
+[flp]
+where = "type=followup"
+
+# Followup last month
+[flplm]
+where = "type=followup"
+time = "last-month"
+
+# Followup this quarter
+[flptq]
+where = "type=followup"
+time = "this-quarter"
+
+# Followup this quarter
+[flplq]
+where = "type=followup"
+time = "last-quarter"
+
+# Home and self expense
+[exp]
+where = "type=expense domain!=work"
+time = "this-month"
+sum = true
+
+# Home and self expense today
+[exptd]
+where = "type=expense domain!=work"
+time = "today"
+sum = true
+
+# self expense
+[self]
+where = "type=expense domain=self"
+time = "this-month"
+sum = true
+
+# work expense excluding snacks clinic month starting from last month 26th to this month 25th
+[work]
+where = "type=expense domain=work tag!=snacks"
+time = "clinic"
+sum = true
+
+# work expense excluding snacks last clinic month
+[worklm]
+where = "type=expense domain=work tag!=snacks"
+time = "clinic-1"
+sum = true
+
+# work snacks expense 
+[snacksw]
+where = "type=expense domain=work tag=snacks"
+time = "clinic"
+sum = true
+
+# work snacks expense today
+[snackswtd]
+where = "type=expense domain=work tag=snacks"
+time = "today"
+sum = true
+
+# work snacks expense last month
+[snackswlm]
+where = "type=expense domain=work tag=snacks"
+time = "clinic-1"
+sum = true
+
+# pivot source outcome for assessment
+[funnel]
+where = "type=assessment"
+time = "this-quarter"
+pivot = ["source","outcome"]
+count = true
+
+# pivot model source for prescription
+[rx_models]
+where = "type=prescription"
+time = "this-quarter"
+pivot = ["model","source"]
+sum = true
+
+# group  by category where domain!= work
+[exp_cat]
+where = "type=expense domain!=work"
+time = "this-month"
+group = ["category"]
+sum = true

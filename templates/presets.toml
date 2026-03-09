@@ -1,0 +1,11 @@
+[presets.tea]
+type="expense"
+domain="self"
+category="food"
+tag=["tea"]
+
+[presets.commute]
+type="expense"
+domain="self"
+category="transport"
+tag=["bus"]

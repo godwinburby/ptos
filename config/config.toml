@@ -1,0 +1,8 @@
+[editor]
+command = "nvim"
+
+[display]
+currency = "₹"
+
+[cycles]
+clinic = 26
