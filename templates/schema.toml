@@ -1,0 +1,56 @@
+[types]
+allowed = ["expense","income","note"]
+
+[fields.amount]
+type = "int"
+dimension = false
+aggregatable = true
+
+[fields.domain]
+type = "string"
+dimension = true
+
+[fields.category]
+type = "string"
+dimension = true
+
+[fields.tag]
+type = "string"
+dimension = true
+multi = true
+
+# ----------------------
+# EXPENSE
+# ----------------------
+
+[type.expense.required]
+fields = ["domain","category","amount"]
+
+[type.expense.hierarchy]
+levels = ["domain","category","tag"]
+
+[type.expense.domains.self]
+categories = ["food","transport"]
+
+[type.expense.domains.self.tags.food]
+values = ["snacks","tea","coffee"]
+
+[type.expense.domains.self.tags.transport]
+values = ["bus","metro","auto"]
+
+# ----------------------
+# INCOME
+# ----------------------
+
+[type.income.required]
+fields = ["source","amount"]
+
+[type.income.allowed.source]
+values = ["salary","extra"]
+
+# ----------------------
+# NOTE
+# ----------------------
+
+[type.note.required]
+fields = ["topic"]

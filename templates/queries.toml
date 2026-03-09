@@ -1,0 +1,16 @@
+# ----------------------
+# BASIC QUERIES
+# ----------------------
+
+[expenses]
+where = "type=expense"
+sum = true
+
+[income]
+where = "type=income"
+sum = true
+
+[expense_by_category]
+where = "type=expense"
+group = "category"
+sum = true
