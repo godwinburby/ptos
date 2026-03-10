@@ -495,14 +495,18 @@ ptos --type expense --pivot ?
 Filters go with `-w` or inside `where =` in queries.
 
 ```bash
-ptos --where type=expense                   # equality
-ptos --where type=expense domain=self       # multiple filters (AND)
-ptos --where type=expense domain!=work      # not equal
-ptos --where type=expense amount>=500       # numeric comparison
-ptos --where type=expense tag=restaurant
+ptos --where type=expense                        # equality
+ptos --where type=expense domain=self            # multiple filters (AND)
+ptos --where type=expense domain!=work           # not equal
+ptos --where type=expense amount>=500            # numeric comparison
+ptos --where type=expense tag=restaurant         # tag match
+ptos --where type=prescription model~lumity      # field contains text
+ptos --where type=prescription model~lumity --group model  # group by variant
 ```
 
-Operators: `=` `!=` `>` `<` `>=` `<=`
+Operators: `=` `!=` `>` `<` `>=` `<=` `~` (contains, case-insensitive)
+
+The `~` operator is useful when field values share a common prefix — for example `model~lumity` matches `lumity_l30_rkit`, `lumity_l50_rkit`, and any future lumity variants without listing each one.
 
 ---
 
