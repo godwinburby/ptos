@@ -257,10 +257,20 @@ def apply_where(kv, filters):
         "<=": lambda a, b: a <= b,
     }
     for cond in filters:
-        m = re.match(r"(\w+)(!=|>=|<=|=|>|<)(.+)", cond)
+        m = re.match(r"(\w+)(!=|>=|<=|~|=|>|<)(.+)", cond)
         if not m:
             continue
         key, op, val = m.groups()
+        # ~ operator: field contains substring (case-insensitive)
+        if op == "~":
+            cur = kv.get(key, "")
+            if isinstance(cur, list):
+                if not any(val.lower() in v.lower() for v in cur):
+                    return False
+            else:
+                if val.lower() not in cur.lower():
+                    return False
+            continue
         if key not in kv:
             return False
         cur = kv[key]
@@ -1238,7 +1248,7 @@ def build_parser(cycles):
 
     qry = p.add_argument_group("Query")
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
-    qry.add_argument("-w", "--where",  nargs="+", action="append",  help="Filter expressions")
+    qry.add_argument("-w", "--where",  nargs="+", action="append",  help="Filter expressions — operators: = != > < >= <= ~(contains)")
     qry.add_argument("-t", "--time",   default="this-month",        help="Time window — full or short: td yd tw lw tm lm tq lq ty ly YYYY-MM, or custom cycles from config.toml")
     qry.add_argument("-f", "--from",   dest="date_from",            help="Start date YYYY-MM-DD")
     qry.add_argument("-T", "--to",     dest="date_to",              help="End date YYYY-MM-DD")
