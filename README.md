@@ -11,7 +11,7 @@ Every event you record becomes one line in a plain-text `.log` file:
 
 ```
 2026-03-10 type=expense domain=self category=food amount=120 tag=restaurant | lunch with team
-2026-03-10 type=assessment client=C001 name=Rajan source=raf outcome=prescribed fit=binaural
+2026-03-10 type=expense domain=self category=transport amount=90 tag=auto
 2026-03-10 type=exercise activity=walk duration=30 tag=morning
 ```
 
@@ -83,11 +83,11 @@ ptos --preset commute --date yesterday
 ptos --add
 
 # Run a saved query
-ptos --query rx
+ptos --query monthly_expenses
 
 # Override a saved query's time window
-ptos --query rx --time last-month
-ptos --query rx --time last-quarter
+ptos --query monthly_expenses --time last-month
+ptos --query monthly_expenses --time last-quarter
 
 # Open today's journal
 ptos --journal
@@ -166,7 +166,7 @@ ptos --edit x        # ptos.py itself
 | `last-year` | Previous year |
 | `YYYY-MM` | Specific month, e.g. `2026-03` |
 | `all` | No date filter |
-| Custom cycles | Defined in `config.toml` — e.g. `clinic`, `clinic-1` |
+| Custom cycles | Defined in `config.toml` — e.g. `salary`, `salary-1` |
 
 Short aliases are available for faster typing:
 
@@ -184,19 +184,19 @@ Short aliases are available for faster typing:
 | `ly` | `last-year` |
 
 ```bash
-ptos --query rx --time lm       # last month
-ptos --query ass --time tq      # this quarter
-ptos --type expense --time td   # today
-ptos --query rx --trend --time tm
+ptos --query monthly_expenses --time lm       # last month
+ptos --query monthly_expenses --time tq       # this quarter
+ptos --type expense --time td                 # today
+ptos --query monthly_expenses --trend --time tm
 ```
 
-Custom cycles let you define a billing or reporting period that starts on a fixed day of the month rather than the 1st. `clinic-1` means one cycle back, `clinic-2` two cycles back, and so on.
+Custom cycles let you define a billing or reporting period that starts on a fixed day of the month rather than the 1st. `salary-1` means one cycle back, `salary-2` two cycles back, and so on.
 
 ```toml
 # config.toml
 [cycles]
-clinic = 26   # cycle runs 26th → 25th next month
-salary = 1    # same as calendar month
+salary = 26   # cycle runs 26th → 25th next month
+billing = 1   # same as calendar month
 ```
 
 ---
@@ -232,13 +232,13 @@ when = { outcome = "prescribed" }
 
 ```toml
 [shared.source]
-options = ["raf", "ent", "walkin", "marketing"]
+options = ["referral", "walkin", "online", "marketing"]
 
 # Then in any type:
-[type.assessment.fields.source]
+[type.lead.fields.source]
 use = "shared.source"
 
-[type.prescription.fields.source]
+[type.sale.fields.source]
 use = "shared.source"
 ```
 
@@ -267,42 +267,42 @@ multi     = true              # a record can have multiple tag= entries
 ### Base queries — reusable filters
 
 ```toml
-[assessments]
-where = "type=assessment"
+[expenses]
+where = "type=expense"
 
-[deferred]
-where = "type=assessment outcome=deferred"
+[food]
+where = "type=expense category=food"
 ```
 
 ### Metrics — computed over base queries
 
 ```toml
-[metrics.prescription_ratio]
-ratio = ["prescriptions", "assessments"]   # prescriptions / assessments × 100%
+[metrics.food_ratio]
+ratio = ["food", "expenses"]     # food spend as % of total expenses
 
-[metrics.asp]
-avg = "prescriptions"                      # average numeric field value
+[metrics.avg_spend]
+avg = "expenses"                 # average spend per record
 ```
 
 ### Dashboards — named collection of metrics and base queries
 
 ```toml
-[dashboards.clinic]
+[dashboards.monthly]
 metrics = ["assessments", "prescriptions", "prescription_ratio", "asp"]
 ```
 
-Run with: `ptos --query clinic`
+Run with: `ptos --query monthly`
 
 ### Saved queries — any combination of filters, time, analysis
 
 ```toml
-[rx]
-where = "type=prescription"
+[monthly_expenses]
+where = "type=expense"
 time  = "this-month"
 sum   = true
 
-[funnel]
-where = "type=assessment"
+[expense_funnel]
+where = "type=lead"
 time  = "this-quarter"
 pivot = ["source", "outcome"]
 count = true
@@ -316,10 +316,10 @@ group = ["category"]
 **Saved queries compose with `--time`** — the saved query defines the default time, but you can always override it at the CLI:
 
 ```bash
-ptos --query rx                   # uses the query's own time setting
-ptos --query rx --time last-month     # same filters, different window
-ptos --query rx --time last-quarter
-ptos --query rx --time 2026-01
+ptos --query monthly_expenses                   # uses the query's own time setting
+ptos --query monthly_expenses --time last-month     # same filters, different window
+ptos --query monthly_expenses --time last-quarter
+ptos --query monthly_expenses --time 2026-01
 ```
 
 ---
@@ -329,35 +329,35 @@ ptos --query rx --time 2026-01
 `--trend` runs your filters across the last N consecutive periods and shows them side by side. Works with any time window that has a natural predecessor.
 
 ```bash
-# Prescriptions over last 6 clinic cycles (default)
-ptos --where type=prescription --trend
+# Expenses over last 6 months (default)
+ptos --where type=expense --trend
 
-# Assessments by calendar month, last 3 months
-ptos --where type=assessment --trend 3 --time this-month
+# Expenses by calendar month, last 3 months
+ptos --where type=expense --trend 3 --time this-month
 
 # Work expenses over last 4 months
 ptos --where type=expense domain=work --trend 4 --time this-month
 
 # Any saved query + trend
-ptos --query rx --trend
+ptos --query monthly_expenses --trend
 ```
 
 Output:
 
 ```
-Trend: type=prescription
+Trend: type=expense
 
 period              count      total        avg
 -----------------------------------------------
-2025-10                 0         ₹0          -
-2025-11                 0         ₹0          -
-2025-12                 0         ₹0          -
-2026-01                 3    ₹303900    ₹101300
-2026-02                 2    ₹222650    ₹111325
-2026-03                 0         ₹0          -
+2025-10                12      ₹3,840       ₹320
+2025-11                14      ₹4,210       ₹300
+2025-12                10      ₹3,100       ₹310
+2026-01                12      ₹3,964       ₹330
+2026-02                14      ₹4,793       ₹342
+2026-03                10      ₹2,153       ₹215
 ```
 
-Supported time windows for `--trend`: custom cycles (`clinic`, `clinic-1`…), `this-month`, `last-month`, `this-week`, `this-quarter`, `YYYY-MM`.
+Supported time windows for `--trend`: custom cycles (e.g. `salary`, `salary-1`…), `this-month`, `last-month`, `this-week`, `this-quarter`, `YYYY-MM`.
 
 ---
 
@@ -381,7 +381,7 @@ The `sort_by` field's options in `schema.toml` define the priority order:
 
 ```toml
 [type.followup.fields.stage]
-options = ["trial", "decision", "assessment", "deferred", "unattended"]
+options = ["trial", "decision", "negotiation", "deferred", "unattended"]
 #           ↑ most urgent                                 ↑ least urgent
 ```
 
@@ -398,12 +398,12 @@ Output:
 ```
 Due  (>3 days)  type=followup
 
-   last  stage           client                    note
---------------------------------------------------------------------------------
-      5d  trial           george_joseph             needs super power BTE for trial
-      5d  decision        zahira_thajudheen         wants BTE with exchange
-      5d  assessment      lalitha_k                 will bring her saturday
-      4d  assessment      sreedharan_parambath      takes calls, says will come
+   last  stage       client          note
+--------------------------------------------------------------------
+      5d  trial       alice_k         trialling product, happy so far
+      5d  decision    bob_m           discussing with family
+      5d  assessment  carol_r         said will call next week
+      4d  assessment  david_s         takes calls, says will come
 ```
 
 ### Adapting for other domains
@@ -472,20 +472,20 @@ ptos --type expense --group domain category
 # Group expenses by month over the year
 ptos --type expense --time this-year --group month
 
-# Pivot assessments: source vs outcome
-ptos --type assessment --pivot source outcome --count
+# Pivot expenses: domain vs category
+ptos --type expense --pivot domain category --count
 
-# Pivot prescriptions: model vs source, summing amount
-ptos --type prescription --pivot model source
+# Pivot leads: source vs outcome, summing amount
+ptos --type lead --pivot source outcome
 
 # Discover what fields are available in your current results
 ptos --type expense --fields
 
 # Discover available group fields
-ptos --type assessment --group ?
+ptos --type expense --group ?
 
 # Discover available pivot fields
-ptos --type assessment --pivot ?
+ptos --type expense --pivot ?
 ```
 
 ---
@@ -499,7 +499,7 @@ ptos --where type=expense                   # equality
 ptos --where type=expense domain=self       # multiple filters (AND)
 ptos --where type=expense domain!=work      # not equal
 ptos --where type=expense amount>=500       # numeric comparison
-ptos --where type=prescription fit=binaural
+ptos --where type=expense tag=restaurant
 ```
 
 Operators: `=` `!=` `>` `<` `>=` `<=`
@@ -518,7 +518,7 @@ command = "nvim"        # falls back to $EDITOR, then notepad/nvim by OS
 currency = "₹"          # prefix shown on all numeric output
 
 [cycles]
-clinic = 26             # billing cycle starting on the 26th
+salary = 26             # billing cycle starting on the 26th
 ```
 
 ### PTOS_HOME environment variable
