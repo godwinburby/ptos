@@ -854,6 +854,28 @@ def complete_record(schema, record):
     note = input("\nAdd note (optional): ").strip()
     return record, note
 
+def save_as_preset(name, record):
+    """Append a new preset to presets.toml from a record dict."""
+    presets_path = os.path.join(CONFIG_DIR, "presets.toml")
+    lines = []
+    lines.append(f"\n[presets.{name}]")
+    for k, v in record.items():
+        if k == "tag":
+            if isinstance(v, list):
+                tags = ", ".join(f'"{t}"' for t in v)
+                lines.append(f"tag      = [{tags}]")
+            else:
+                lines.append(f'tag      = ["{v}"]')
+        elif k == "amount":
+            lines.append(f"amount   = {v}")
+        else:
+            lines.append("{:<8} = \"{}\"".format(k, v))
+    lines.append("# amount omitted — will be prompted each time" if "amount" not in record else "")
+    block = "\n".join(l for l in lines if l is not None)
+    with open(presets_path, "a", encoding="utf-8") as f:
+        f.write(block + "\n")
+    print(f"Preset '{name}' saved to presets.toml")
+
 def interactive_add(schema, date=None):
     record, note = complete_record(schema, {})
     problems     = validate_record(schema, record)
@@ -863,10 +885,15 @@ def interactive_add(schema, date=None):
     line = build_record_line(date, record, note)
     print("\nRecord preview:\n")
     print(line)
-    if input("\nSave? (y/n): ").strip().lower() != "y":
+    ans = input("\nSave? (Y/n): ").strip().lower()
+    if ans == "n":
         return
     append_record(line)
     print("Record added.")
+    # offer to save as preset
+    preset_name = input("\nSave as preset? (name or Enter to skip): ").strip()
+    if preset_name:
+        save_as_preset(preset_name, record)
 
 def quick_add(args):
     presets = get_presets()

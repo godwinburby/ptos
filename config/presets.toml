@@ -34,3 +34,10 @@ domain   = "home"
 category = "household"
 tag      = ["bakery", "snacks"]
 # amount omitted — will be prompted each time
+
+[presets.maid]
+type     = "expense"
+domain   = "home"
+category = "child"
+tag      = ["maid"]
+

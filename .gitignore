@@ -16,3 +16,4 @@ __pycache__/
 
 # temporary files
 *.tmp
+.stversions/
