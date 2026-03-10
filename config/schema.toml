@@ -119,6 +119,19 @@ options = ["cso", "cce", "cre", "ent"]
 [shared.fit]
 options = ["monaural", "binaural"]
 
+[shared.model]
+# update this list when new models arrive — ptos --edit s
+options = [
+  "lumity_l30_rkit",
+  "lumity_l50_rkit",
+  "lumity_l90_rkit",
+  "nexia_4_bte_r",
+  "nexia_4_ric",
+  "nexia_power_bte",
+  "resound_key_188",
+  "resound_one_ric"
+]
+
 # ==================================================
 # TYPES
 # ==================================================
@@ -203,7 +216,8 @@ when = { outcome = "prescribed" }
 # ----------------------
 
 [type.prescription]
-required = ["client", "name", "model", "fit", "amount", "source", "booked_by"]
+required = ["client", "name", "model", "fit", "amount", "advance", "source", "booked_by"]
+# balance = amount - advance (computed on query, not stored)
 
 [type.prescription.fields.source]
 use = "shared.source"
@@ -215,23 +229,28 @@ use = "shared.booked_by"
 use = "shared.fit"
 
 [type.prescription.fields.model]
-options = [
-  "lumity_l30_rkit",
-  "lumity_l50_rkit",
-  "nexia_4_bte_r"
-]
+use = "shared.model"
 
 # ----------------------
 # FITTING
 # ----------------------
 
 [type.fitting]
-required = ["client", "name", "model", "balance", "fit"]
+required = ["client", "name", "model", "fit", "amount", "source", "booked_by"]
+# amount here = actual revenue collected on fitting date
+# fitting date = record date (no separate field needed)
+
+[type.fitting.fields.source]
+use = "shared.source"
+
+[type.fitting.fields.booked_by]
+use = "shared.booked_by"
 
 [type.fitting.fields.fit]
 use = "shared.fit"
 
-# model is free text for fitting (no fixed list)
+[type.fitting.fields.model]
+use = "shared.model"
 
 # ----------------------
 # FOLLOWUP
