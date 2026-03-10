@@ -70,6 +70,10 @@ time  = "tm"
 where = "type=followup"
 time  = "tm"
 
+[flp_normal]
+where = "type=followup category=normal"
+time  = "ty"
+
 # --------------------------------------------------
 # EXPENSE QUERIES
 # --------------------------------------------------
@@ -145,3 +149,5 @@ type    = "followup"
 key     = "client"
 sort_by = "stage"
 days    = 7
+# stage priority order is defined in schema.toml:
+# trial → decision → prescription → assessment

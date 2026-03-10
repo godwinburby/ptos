@@ -111,7 +111,7 @@ multi     = true
 # --------------------------------------------------
 
 [shared.source]
-options = ["raf", "ent", "walkin", "marketing", "camp"]
+options = ["mgm", "mgm_coffee", "ent", "walkin", "marketing", "camp"]
 
 [shared.booked_by]
 options = ["cso", "cce", "cre", "ent"]
@@ -238,26 +238,62 @@ use = "shared.fit"
 # ----------------------
 
 [type.followup]
-required = ["client", "name", "stage", "result"]
+required = ["client", "category", "stage", "result"]
+
+[type.followup.fields.category]
+# what kind of client they are — drives what you are selling
+options = [
+  "new",        # first visit pending, came via lead
+  "deferred",   # loss confirmed, did not buy yet
+  "normal",     # minimal/no loss, annual recheck due
+  "monaural",   # has one aid, second ear candidate
+  "upgrade",    # has aid under warranty, wants newer model
+  "loyalty"     # warranty over 3+ years, repurchase cycle
+]
 
 [type.followup.fields.stage]
+# where they are in the pipeline — drives --due priority order
+# trial is most urgent, assessment is least urgent
 options = [
-  "trial", "decision", "assessment",
-  "cant_afford", "upgrade", "wants_emi",
-  "deferred", "current_aid_ok", "unattended"
+  "trial",        # aid given for home trial
+  "decision",     # trial done, thinking
+  "prescription", # decided, closing formalities
+  "assessment"    # needs to come in for hearing test
+]
+
+[type.followup.fields.result]
+# what happened on the last contact
+options = [
+  # spoke to client directly
+  "need_time",        # thinking, will talk to family
+  "fix_appointment",  # specific date and time confirmed
+  "cant_afford",      # financial constraint
+  "not_interested",   # clearly said no
+  "another_provider", # went elsewhere privately
+  "current_aids_ok",  # happy with existing aids
+  "under_ent",        # doctor managing, on hold
+  "not_well",         # health issue, call later
+  "government_panel", # needs govt funding / quotation
+  "not_relevant",     # did not sign up, wrong lead
+
+  # spoke but not to client
+  "busy_call_later",  # client picked up, asked to call back
+  "not_available",    # someone else picked up
+  "out_of_station",   # travelling
+  "voicemail",        # went to voicemail
+
+  # did not connect
+  "ringing",          # rang, nobody picked up
+  "not_reachable",    # switched off or out of service
+  "wrong_number",     # incorrect number
+  "does_not_exist",   # number invalid or dead
+
+  # permanent closure
+  "deceased"          # passed away
 ]
 
 [type.followup.fields.channel]
 options = ["phone", "whatsapp", "visit"]
-
-[type.followup.fields.result]
-options = [
-  "not_interested", "need_time", "busy",
-  "not_reachable", "wrong_number", "does_not_exist",
-  "out_of_station", "ringing", "another_provider",
-  "deceased", "not_well", "not_available",
-  "busy_call_later", "out_of_service", "current_aid_ok"
-]
 
 # tags that appear when stage = trial
 [type.followup.tags.stage]
