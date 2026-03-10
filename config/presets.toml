@@ -1,25 +1,36 @@
+# --------------------------------------------------
+# PTOS PRESETS
+# --------------------------------------------------
+# Quick-add shortcuts for frequent records.
+# Usage:  ptos --preset <name>
+#         ptos --preset <name> field=value   (override a field)
+#         ptos --preset <name> --date yesterday
+# --------------------------------------------------
+
 [presets.commute]
-type = "expense"
-domain = "self"
+type     = "expense"
+domain   = "self"
 category = "transport"
-amount = 90
-tag = ["auto","bus"]
+amount   = 90
+tag      = ["auto", "bus"]
 
 [presets.snacks]
-type = "expense"
-domain = "work"
+type     = "expense"
+domain   = "work"
 category = "staff_welfare"
-tag = ["snacks"]
+tag      = ["snacks"]
+# amount omitted — will be prompted each time
 
 [presets.petrol]
-type = "expense"
-domain = "self"
+type     = "expense"
+domain   = "self"
 category = "transport"
-amount = 200
-tag = ["petrol"]
+amount   = 200
+tag      = ["petrol"]
 
 [presets.bakery]
-type = "expense"
-domain = "home"
+type     = "expense"
+domain   = "home"
 category = "household"
-tag = ["bakery","snacks"]
+tag      = ["bakery", "snacks"]
+# amount omitted — will be prompted each time

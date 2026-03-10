@@ -4,6 +4,7 @@ journal/
 notes/
 scripts/
 tasks/
+queries/
 .stfolder/
 
 # python cache
