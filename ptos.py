@@ -1290,13 +1290,56 @@ options = ["self", "work"]
 
 _STARTER_JOURNAL = """# {{date}}
 
-## Focus
+## ARRIVE
+Reality:
+Body:  Mood:
+Word:
+Intention:
+Prayer:
+
+---
+
+## ENGAGE
+
+### Top 3
+- [ ]
+- [ ]
+- [ ]
+
+### Home / Personal
+- [ ]
+
+### One person to love well
+-
+
+### Habits
+- [ ] Prayer
+- [ ] Move
+- [ ] Connect
+- [ ] Learn
+
+### Drift Checks
+11:  2:  5:
+
+---
+
+## RELEASE
+
+### Done
+- [x]
+- [x]
+- [x]
+
+### Went Well
 
 
-## Notes
+### Drifted
 
 
-## Log
+### Gratitude
+
+
+### Tomorrow
 
 """
 
