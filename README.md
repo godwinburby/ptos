@@ -98,6 +98,7 @@ ptos --edit q        # queries.toml
 ptos --edit c        # config.toml
 ptos --edit p        # presets.toml
 ptos --edit r        # this year's records log
+ptos --edit j        # today's journal (same as --journal)
 ptos --edit x        # ptos.py itself
 ```
 
@@ -145,8 +146,8 @@ ptos --edit x        # ptos.py itself
 | Flag | Description |
 |------|-------------|
 | `--lint` | Lint all records against schema |
-| `--journal` | Open today's journal |
-| `--edit [TARGET]` | Edit a workspace file (r s q c p d x) |
+| `--journal` | Open today's journal (creates from template if new) |
+| `--edit [TARGET]` | Edit a workspace file — r s q c p d/j x |
 | `--fields` | Field discovery report for current results |
 | `--init` | Initialise workspace |
 
