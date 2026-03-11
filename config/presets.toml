@@ -41,3 +41,10 @@ domain   = "home"
 category = "child"
 tag      = ["maid"]
 
+
+[presets.mom_medicine]
+type     = "expense"
+domain   = "home"
+category = "medical"
+tag      = ["medicine", "mom"]
+
