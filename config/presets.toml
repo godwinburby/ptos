@@ -48,3 +48,10 @@ domain   = "home"
 category = "medical"
 tag      = ["medicine", "mom"]
 
+
+[presets.porter]
+type     = "expense"
+domain   = "work"
+category = "postage"
+tag      = ["porter"]
+

@@ -74,11 +74,6 @@ type         = "int"
 dimension    = false
 aggregatable = true
 
-[fields.balance]
-type         = "int"
-dimension    = false
-aggregatable = true
-
 [fields.duration]
 type         = "int"
 dimension    = false
@@ -171,7 +166,7 @@ options = ["salary", "extra"]
 
 [type.income.tags.source]
 options.salary = ["bonus", "commission"]
-options.extra  = ["gift", "refund"]
+options.extra  = ["gift", "refund","cash_back"]
 
 # ----------------------
 # INVESTMENT
@@ -200,7 +195,7 @@ required = ["client", "name", "source", "outcome", "booked_by"]
 use = "shared.source"
 
 [type.assessment.fields.outcome]
-options = ["normal", "deferred", "prescribed"]
+options = ["normal", "deferred", "trial", "prescribed"]
 
 [type.assessment.fields.fit]
 use = "shared.fit"
@@ -257,27 +252,27 @@ use = "shared.model"
 # ----------------------
 
 [type.followup]
-required = ["client", "category", "stage", "result"]
+required = ["client", "category", "intent", "result"]
 
 [type.followup.fields.category]
 # what kind of client they are — drives what you are selling
 options = [
-  "new",        # first visit pending, came via lead
-  "deferred",   # loss confirmed, did not buy yet
+  "new",        # fresh lead, never assessed
+  "deferred",   # assessed, did not buy
   "normal",     # minimal/no loss, annual recheck due
   "monaural",   # has one aid, second ear candidate
   "upgrade",    # has aid under warranty, wants newer model
   "loyalty"     # warranty over 3+ years, repurchase cycle
 ]
 
-[type.followup.fields.stage]
-# where they are in the pipeline — drives --due priority order
-# trial is most urgent, assessment is least urgent
+[type.followup.fields.intent]
+# what you are trying to achieve on this call — drives --due priority order
+# trial is most urgent, mgm is least urgent
 options = [
-  "trial",        # aid given for home trial
-  "decision",     # trial done, thinking
-  "prescription", # decided, closing formalities
-  "assessment"    # needs to come in for hearing test
+  "trial",       # get them to try the aid at home
+  "decision",    # trialled, push for buying decision
+  "assessment",  # get them to come in for hearing test
+  "mgm"          # ask for a referral (any category)
 ]
 
 [type.followup.fields.result]
@@ -311,11 +306,8 @@ options = [
   "deceased"          # passed away
 ]
 
-[type.followup.fields.channel]
-options = ["phone", "whatsapp", "visit"]
-
-# tags that appear when stage = trial
-[type.followup.tags.stage]
+# tags that appear when intent = trial
+[type.followup.tags.intent]
 options.trial = ["aid"]
 
 # ----------------------
@@ -326,7 +318,7 @@ options.trial = ["aid"]
 required = ["place", "name", "outcome"]
 
 [type.outreach.fields.place]
-options = ["medical_shop", "clinic", "camp"]
+options = ["medical_shop", "gp", "ent", "camp"]
 
 [type.outreach.fields.outcome]
 options = ["referral", "visit", "no_response"]
@@ -350,7 +342,7 @@ options.walk = ["morning", "evening"]
 # ----------------------
 
 [type.conversation]
-required = ["relation", "person", "topic", "mood", "duration", "outcome"]
+required = ["relation", "person", "topic", "mood", "outcome"]
 
 [type.conversation.fields.relation]
 options = ["wife", "child", "family", "friend", "colleague", "neighbour", "stranger"]
@@ -373,7 +365,10 @@ options = ["none", "pending", "agreed", "refused", "followup"]
 # ----------------------
 
 [type.learning]
-required = ["topic"]
+required = ["domain","topic","source"]
+
+[type.learning.fields.topic]
+options = ["religion","philosophy","coding","productivity","self_help"]
 
 [type.learning.fields.source]
 options = ["youtube", "podcast", "course", "article", "book", "audio_book"]

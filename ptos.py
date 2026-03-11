@@ -1293,26 +1293,27 @@ options = ["self", "work"]
 _STARTER_JOURNAL = """# {{date}}
 
 ## ARRIVE
-Reality:
-Body:  Mood:
-Word:
-Intention:
-Prayer:
+Reality:  (what is actually on your plate today)
+Body:  (how does your body feel)
+Mood:  (what emotion are you carrying)
+Word:  (bible verse or quote that anchors you)
+Intention:  (one thing that would make today a win)
+Prayer:  (talk to God before the day begins)
 
 ---
 
 ## ENGAGE
 
-### Top 3
-- [ ]
+### Top 3  (what must get done today)
+- [ ]  (most important)
 - [ ]
 - [ ]
 
-### Home / Personal
-- [ ]
+### Home / Personal  (don't let clinic crowd this out)
+- [ ]  (family, project, or self)
 
-### One person to love well
--
+### One person to love well  (intentional not incidental)
+-  (name and how you will show up for them)
 
 ### Habits
 - [ ] Prayer
@@ -1320,28 +1321,23 @@ Prayer:
 - [ ] Connect
 - [ ] Learn
 
-### Drift Checks
+### Drift Checks  (pause and assess — are you on track)
 11:  2:  5:
 
 ---
 
-## RELEASE
+## RELEASE  (end of day — be honest)
 
-### Done
-- [x]
-- [x]
-- [x]
-
-### Went Well
+### Wins  (what actually got done, big or small)
 
 
-### Drifted
+### Drifted  (where did you lose focus or fall short)
 
 
-### Gratitude
+### Gratitude  (one thing you are thankful for today)
 
 
-### Tomorrow
+### Tomorrow  (one thing you want to carry forward)
 
 """
 

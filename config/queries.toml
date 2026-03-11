@@ -83,24 +83,19 @@ where = "type=expense domain!=work"
 time  = "tm"
 sum   = true
 
-[exptd]
-where = "type=expense domain!=work"
-time  = "td"
-sum   = true
-
-[self]
+[exps]
 where = "type=expense domain=self"
 time  = "tm"
 sum   = true
 
-[work]
-where = "type=expense domain=work tag!=snacks"
-time  = "clinic"
+[exph]
+where = "type=expense domain=home"
+time  = "tm"
 sum   = true
 
-[worklm]
+[expw]
 where = "type=expense domain=work tag!=snacks"
-time  = "clinic-1"
+time  = "clinic"
 sum   = true
 
 [snacksw]
@@ -108,14 +103,9 @@ where = "type=expense domain=work tag=snacks"
 time  = "clinic"
 sum   = true
 
-[snackswtd]
-where = "type=expense domain=work tag=snacks"
-time  = "td"
-sum   = true
-
-[snackswlm]
-where = "type=expense domain=work tag=snacks"
-time  = "clinic-1"
+[snacks]
+where = "type=expense domain!=work tag=snacks"
+time  = "clinic"
 sum   = true
 
 # --------------------------------------------------
@@ -147,7 +137,7 @@ sum   = true
 [due]
 type    = "followup"
 key     = "client"
-sort_by = "stage"
+sort_by = "intent"
 days    = 7
-# stage priority order is defined in schema.toml:
-# trial → decision → prescription → assessment
+# intent priority order is defined in schema.toml:
+# trial → decision → assessment → mgm
