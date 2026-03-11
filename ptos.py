@@ -1450,6 +1450,7 @@ def build_parser(cycles):
                      help="Show last N periods side by side (default: 6)")
     ana.add_argument("--due",          nargs="?", const="__DEFAULT__", metavar="NAME_OR_DAYS",
                      help="Show overdue records. Optional: named due config from queries.toml, or N days override")
+    ana.add_argument("--table",        action="store_true", help="Show results as a table instead of raw lines")
 
     utl = p.add_argument_group("Utilities")
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
@@ -1748,6 +1749,68 @@ def run_due(arg):
 
 
 # --------------------------------------------------
+# Table renderer
+# --------------------------------------------------
+
+def render_table(results):
+    """Render results as a formatted table.
+    Columns are auto-detected from fields present in results.
+    Multi-value fields (tag) are joined with comma.
+    Values truncated to 15 chars to keep table readable.
+    """
+    TRUNC = 15
+
+    def trunc(s):
+        return s[:TRUNC] + "…" if len(s) > TRUNC else s
+
+    # collect all field names across results, preserving encounter order
+    all_fields = ["date"]
+    seen = set()
+    for line in results:
+        _, kv, _ = parse_line(line)
+        for k in kv:
+            if k not in seen:
+                all_fields.append(k)
+                seen.add(k)
+
+    # check if any notes exist
+    has_note = any(parse_line(l)[2] for l in results)
+    if has_note:
+        all_fields.append("note")
+
+    # build rows
+    rows = []
+    for line in results:
+        d, kv, note = parse_line(line)
+        row = {}
+        row["date"] = str(d)
+        for k, v in kv.items():
+            if isinstance(v, list):
+                row[k] = trunc(",".join(v))
+            else:
+                row[k] = trunc(str(v))
+        if has_note:
+            row["note"] = trunc(note) if note else ""
+        rows.append(row)
+
+    # compute column widths — max of header and all values
+    widths = {f: len(f) for f in all_fields}
+    for row in rows:
+        for f in all_fields:
+            widths[f] = max(widths[f], len(row.get(f, "")))
+
+    # render header
+    print()
+    header = "  ".join(f.ljust(widths[f]) for f in all_fields)
+    print(header)
+    print("-" * len(header))
+
+    # render rows
+    for row in rows:
+        print("  ".join(row.get(f, "").ljust(widths[f]) for f in all_fields))
+
+
+# --------------------------------------------------
 # Main
 # --------------------------------------------------
 
@@ -1936,8 +1999,12 @@ def main():
         return
 
     # ---- default: list records ----
-    for line in results:
-        print(line)
+    if args.table:
+        render_table(results)
+    else:
+        print()
+        for line in results:
+            print(line)
     render_summary(results, start, end, time_label, final_filters, total)
 
 
