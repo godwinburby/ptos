@@ -707,34 +707,70 @@ def input_date():
             print("Invalid date format (YYYY-MM-DD)")
 
 def input_tags(allowed_tags):
+    """Show tag options once. Accept numbers (space/comma separated), custom text, or Enter to skip."""
+    if not allowed_tags:
+        # no schema tags — just prompt for free text
+        val = input("\nTags (comma separated, or Enter to skip): ").strip()
+        if not val:
+            return []
+        return [t.strip().replace(" ", "_") for t in val.split(",") if t.strip()]
+
+    print("\nTag options (pick numbers, add custom, or Enter to skip):")
+    for i, t in enumerate(allowed_tags, 1):
+        print(f"  {i}) {t}")
+    print("  Enter numbers separated by spaces/commas, custom words, or mix")
+    print("  Example: 1 3 or auto,bus or 1 petrol")
+
+    val = input("\nTags: ").strip()
+    if not val:
+        return []
+
     tags = []
-    while True:
-        remaining = [t for t in allowed_tags if t not in tags]
-        options   = {i: t for i, t in enumerate(remaining, 1)}
-        print("\nTag options:")
-        for i, t in options.items():
-            print(f"{i}) {t}")
-        n = len(options)
-        print(f"{n+1}) Custom")
-        print(f"{n+2}) Done")
-        val = input("Enter number or tags: ").strip()
-        if not val or val.lower() in ("done", "d"):
-            break
-        if val.isdigit():
-            i = int(val)
-            if i in options:
-                tags.append(options[i])
-            elif i == n + 1:
-                tag = input_text("Enter custom tag")
-                if tag not in tags:
-                    tags.append(tag)
-            elif i == n + 2:
-                break
-        else:
-            for p in val.split(","):
-                tag = p.strip().replace(" ", "_")
-                if tag and tag not in tags:
-                    tags.append(tag)
+    # if input contains commas, treat as comma-separated (spaces within = underscores)
+    # otherwise treat as space-separated tokens (numbers or single words)
+    if "," in val:
+        parts = val.split(",")
+        for part in parts:
+            part = part.strip()
+            if not part:
+                continue
+            if part.isdigit():
+                i = int(part)
+                if 1 <= i <= len(allowed_tags):
+                    t = allowed_tags[i - 1]
+                    if t not in tags:
+                        tags.append(t)
+            else:
+                tokens = part.split()
+                if tokens and all(tok.isdigit() for tok in tokens):
+                    for tok in tokens:
+                        i = int(tok)
+                        if 1 <= i <= len(allowed_tags):
+                            t = allowed_tags[i - 1]
+                            if t not in tags:
+                                tags.append(t)
+                else:
+                    match = next((t for t in allowed_tags if t.lower() == part.lower()), None)
+                    t = match if match else part.replace(" ", "_")
+                    if t not in tags:
+                        tags.append(t)
+    else:
+        for part in val.split():
+            part = part.strip()
+            if not part:
+                continue
+            if part.isdigit():
+                i = int(part)
+                if 1 <= i <= len(allowed_tags):
+                    t = allowed_tags[i - 1]
+                    if t not in tags:
+                        tags.append(t)
+            else:
+                # match against allowed list case-insensitively
+                match = next((t for t in allowed_tags if t.lower() == part.lower()), None)
+                t = match if match else part.replace(" ", "_")
+                if t not in tags:
+                    tags.append(t)
     return tags
 
 # --------------------------------------------------
@@ -891,7 +927,7 @@ def interactive_add(schema, date=None):
     append_record(line)
     print("Record added.")
     # offer to save as preset
-    preset_name = input("\nSave as preset? (name or Enter to skip): ").strip()
+    preset_name = input("\nSave as preset? (name or Enter to skip): ").strip().replace(" ", "_")
     if preset_name:
         save_as_preset(preset_name, record)
 
