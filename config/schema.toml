@@ -252,7 +252,7 @@ use = "shared.model"
 # ----------------------
 
 [type.followup]
-required = ["client", "category", "intent", "result"]
+required = ["client", "name", "category", "intent", "result"]
 
 [type.followup.fields.category]
 # what kind of client they are — drives what you are selling
