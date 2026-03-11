@@ -57,12 +57,31 @@ def get_presets(): return _load("presets", PRESETS_PATH).get("presets", {}) if o
 def currency():
     return get_config().get("display", {}).get("currency", "")
 
+def _indian_commas(n):
+    """Format integer with Indian grouping: last 3 digits, then groups of 2."""
+    s = str(abs(int(n)))
+    if len(s) <= 3:
+        result = s
+    else:
+        result = s[-3:]
+        s = s[:-3]
+        while s:
+            result = s[-2:] + "," + result
+            s = s[:-2]
+    return ("-" if n < 0 else "") + result
+
 def fmt(n):
     """Format a number with the configured currency symbol."""
-    return f"{currency()}{n}"
+    c = currency()
+    if c == "₹":
+        return c + _indian_commas(n)
+    return f"{c}{n}"
 
 def fmt_avg(n):
-    return f"{currency()}{n:.0f}"
+    c = currency()
+    if c == "₹":
+        return c + _indian_commas(round(n))
+    return f"{c}{n:.0f}"
 
 # --------------------------------------------------
 # Schema helpers
@@ -220,6 +239,8 @@ def parse_line(line):
     """Parse a log line into (date, kv_dict, note)."""
     main, _, note = line.partition("|")
     parts = main.strip().split()
+    if not parts:
+        raise ValueError("empty line")
     date  = parts[0]
     kv    = {}
     for p in parts[1:]:
@@ -304,9 +325,12 @@ def scan_records(start, end, filters, search):
         with open(path, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
-                if not line:
+                if not line or line.startswith("#"):
                     continue
-                d, kv, note = parse_line(line)
+                try:
+                    d, kv, note = parse_line(line)
+                except (ValueError, IndexError):
+                    continue  # skip malformed lines silently
                 if not (start <= d <= end):
                     continue
                 if search and search.lower() not in line.lower():
