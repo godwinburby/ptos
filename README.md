@@ -98,7 +98,8 @@ ptos --edit q        # queries.toml
 ptos --edit c        # config.toml
 ptos --edit p        # presets.toml
 ptos --edit r        # this year's records log
-ptos --edit j        # today's journal (same as --journal)
+ptos --edit d        # today's journal (same as --journal)
+ptos --edit j        # same as --edit d
 ptos --edit x        # ptos.py itself
 ```
 
@@ -137,9 +138,10 @@ ptos --edit x        # ptos.py itself
 | `--group field [field ...]` | Group by one or more fields |
 | `--pivot ROW COL` | Pivot table |
 | `--count` | Count records instead of summing numeric fields |
-| `--sort COL` | Sort pivot rows by a column name |
+| `--sort COL` | Sort records or pivot rows by a column. Works for plain list, table view, and pivot |
 | `--trend [N]` | Show last N periods side by side (default: 6) |
 | `--due [NAME\|DAYS]` | Show overdue records. Optional: named due config or days override |
+| `--table` | Display results as a formatted table instead of raw lines |
 
 ### Utilities
 
@@ -378,6 +380,44 @@ Supported time windows for `--trend`: custom cycles (e.g. `salary`, `salary-1`�
 
 ---
 
+## Table view
+
+`--table` renders results as a formatted table instead of raw log lines.
+
+```bash
+ptos -y expense -t tm --table
+ptos -q flp --table --sort name
+ptos -w type=prescription -t tq --table
+```
+
+Columns are auto-detected from the fields present in the result set. When results contain multiple record types, each type gets its own sub-table with only its relevant columns shown — no empty cells from mismatched fields.
+
+```
+[ expense ]
+date        domain  category   amount  tag      note
+-----------------------------------------------------
+2026-03-10  work    food       32      snacks   tea at clinic
+2026-03-11  home    grocery    190     fruits   apples
+
+[ prescription ]
+date        client  name           model            amount  advance  fit
+------------------------------------------------------------------------
+2026-01-03  AzeA30  abdul_azeez_a  lumity_l30_rkit  83000   10000    binaural
+2026-01-10  ChhN05  n_chandran     lumity_l30_rkit  98000   98000    binaural
+```
+
+Width is adaptive — if the full table fits in your terminal, nothing is truncated. If the terminal is too narrow, the `note` column shrinks first, then other wide columns, with a minimum of 6 characters per column.
+
+`--sort` works with `--table` and with plain list view. Numbers sort numerically, strings sort alphabetically. Records missing the sort field sort last.
+
+```bash
+ptos -q flp --table --sort name       # alphabetical by name
+ptos -q flp --table --sort intent     # by intent field
+ptos -y expense -t tm --table --sort amount   # low to high
+```
+
+---
+
 ## Due list
 
 `--due` scans a configured record type, finds the most recent entry per unique key (e.g. client), and surfaces those not updated within N days — sorted by priority.
@@ -454,6 +494,28 @@ key     = "name"
 sort_by = "category"
 days    = 30
 ```
+
+---
+
+## Journal
+
+`--journal` (or `--edit j` / `--edit d`) opens today's journal in your editor. If the file does not exist it is created from a template automatically.
+
+```bash
+ptos --journal        # open today's journal
+ptos -j               # same, short form
+ptos --edit j         # same via edit shortcut
+```
+
+The built-in template follows an ARRIVE → ENGAGE → RELEASE structure:
+
+- **ARRIVE** — ground yourself before the day starts: reality check, body, mood, a word or verse, intention, prayer
+- **ENGAGE** — top 3 tasks, home/personal item, one person to love well, habits, drift checks at 11 / 2 / 5
+- **RELEASE** — end of day: wins, where you drifted, gratitude, one thing to carry forward
+
+The template is embedded in `ptos.py` so it works even without a `templates/daily.md` file. If you place your own `templates/daily.md` that will be used instead.
+
+Journal files are stored at `journal/YYYY/YYYY-MM-DD.md` — one file per day, plain markdown.
 
 ---
 
