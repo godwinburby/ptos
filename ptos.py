@@ -1999,6 +1999,19 @@ def main():
         return
 
     # ---- default: list records ----
+    # sort by field if --sort given and not in pivot mode
+    if args.sort and not args.pivot:
+        def sort_key(line):
+            _, kv, _ = parse_line(line)
+            val = kv.get(args.sort, "")
+            if isinstance(val, list):
+                val = val[0] if val else ""
+            try:
+                return (0, int(val), "")
+            except (ValueError, TypeError):
+                return (1, 0, str(val).lower())
+        results = sorted(results, key=sort_key)
+
     if args.table:
         render_table(results)
     else:
