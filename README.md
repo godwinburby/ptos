@@ -229,8 +229,8 @@ options.work = ["admin", "supplies", "meals"]
 options.food      = ["snacks", "coffee", "restaurant"]
 options.transport = ["auto", "bus", "taxi"]
 
-[type.expense.conditions.fit]                  # conditionally required field
-when = { outcome = "prescribed" }
+[type.sale.conditions.warranty]                 # conditionally required field
+when = { category = "appliance" }              # warranty required only for appliances
 ```
 
 ### Shared field definitions — define once, reuse everywhere
@@ -293,7 +293,7 @@ avg = "expenses"                 # average spend per record
 
 ```toml
 [dashboards.monthly]
-metrics = ["assessments", "prescriptions", "prescription_ratio", "asp"]
+metrics = ["leads", "sales", "conversion_ratio", "avg_sale"]
 ```
 
 Run with: `ptos --query monthly`
@@ -317,8 +317,8 @@ where = "type=expense domain!=work"
 time  = "this-month"
 group = ["category"]
 
-[rx_trend]
-where = "type=prescription"
+[sales_trend]
+where = "type=sale"
 time  = "this-month"
 trend = 6          # run as trend automatically when queried
 sum   = true
@@ -337,8 +337,8 @@ ptos --query monthly_expenses --time 2026-01
 
 ```bash
 ptos -w type=expense domain!=work -G category -t tm --save exp_cat
-ptos -w type=prescription --trend 6 -t tm --save rx_trend
-ptos -y assessment -t tq -v source outcome --count --save funnel
+ptos -w type=sale --trend 6 -t tm --save sales_trend
+ptos -y lead -t tq -v source outcome --count --save funnel
 ```
 
 ---
@@ -386,8 +386,8 @@ Supported time windows for `--trend`: custom cycles (e.g. `salary`, `salary-1`�
 
 ```bash
 ptos -y expense -t tm --table
-ptos -q flp --table --sort name
-ptos -w type=prescription -t tq --table
+ptos -q leads --table --sort name
+ptos -w type=sale -t tq --table
 ```
 
 Columns are auto-detected from the fields present in the result set. When results contain multiple record types, each type gets its own sub-table with only its relevant columns shown — no empty cells from mismatched fields.
@@ -396,14 +396,14 @@ Columns are auto-detected from the fields present in the result set. When result
 [ expense ]
 date        domain  category   amount  tag      note
 -----------------------------------------------------
-2026-03-10  work    food       32      snacks   tea at clinic
-2026-03-11  home    grocery    190     fruits   apples
+2026-03-10  work    food       32      snacks   coffee and biscuits
+2026-03-11  home    grocery    190     fruits   weekly fruits
 
-[ prescription ]
-date        client  name           model            amount  advance  fit
-------------------------------------------------------------------------
-2026-01-03  AzeA30  abdul_azeez_a  lumity_l30_rkit  83000   10000    binaural
-2026-01-10  ChhN05  n_chandran     lumity_l30_rkit  98000   98000    binaural
+[ sale ]
+date        client  name         product          amount  advance  category
+--------------------------------------------------------------------------
+2026-01-03  Al001   alice_m      comfort_pro_l    83000   10000    appliance
+2026-01-10  Bo002   bob_k        comfort_pro_xl   98000   98000    appliance
 ```
 
 Width is adaptive — if the full table fits in your terminal, nothing is truncated. If the terminal is too narrow, the `note` column shrinks first, then other wide columns, with a minimum of 6 characters per column.
@@ -411,8 +411,8 @@ Width is adaptive — if the full table fits in your terminal, nothing is trunca
 `--sort` works with `--table` and with plain list view. Numbers sort numerically, strings sort alphabetically. Records missing the sort field sort last.
 
 ```bash
-ptos -q flp --table --sort name       # alphabetical by name
-ptos -q flp --table --sort intent     # by intent field
+ptos -q leads --table --sort name      # alphabetical by name
+ptos -q leads --table --sort status    # by status field
 ptos -y expense -t tm --table --sort amount   # low to high
 ```
 
@@ -431,9 +431,9 @@ You can have a single default `[due]` block, or multiple named configs under `[d
 ```toml
 # default — used by: ptos --due
 [due]
-type    = "followup"   # record type to scan
+type    = "lead"       # record type to scan
 key     = "client"     # field that identifies each unique entity
-sort_by = "stage"      # field whose schema option order defines priority
+sort_by = "status"     # field whose schema option order defines priority
 days    = 7            # default overdue threshold
 
 # named — used by: ptos --due outreach
@@ -446,7 +446,7 @@ days    = 14
 The `sort_by` field's options in `schema.toml` define the priority order:
 
 ```toml
-[type.followup.fields.stage]
+[type.lead.fields.status]
 options = ["trial", "decision", "negotiation", "deferred", "unattended"]
 #           ↑ most urgent                                 ↑ least urgent
 ```
@@ -463,14 +463,14 @@ ptos --due outreach         # use [due.outreach] named config
 Output:
 
 ```
-Due  (>3 days)  type=followup
+Due  (>3 days)  type=lead
 
-   last  stage       client          note
+   last  status      client          note
 --------------------------------------------------------------------
-      5d  trial       alice_k         trialling product, happy so far
-      5d  decision    bob_m           discussing with family
-      5d  assessment  carol_r         said will call next week
-      4d  assessment  david_s         takes calls, says will come
+      5d  trial       alice_m         trialling comfort_pro, happy so far
+      5d  decision    bob_k           discussing with family
+      4d  negotiation carol_r         said will call back next week
+      3d  negotiation david_s         takes calls, asks for discount
 ```
 
 ### Adapting for other domains
@@ -599,13 +599,13 @@ ptos --where type=expense domain=self            # multiple filters (AND)
 ptos --where type=expense domain!=work           # not equal
 ptos --where type=expense amount>=500            # numeric comparison
 ptos --where type=expense tag=restaurant         # tag match
-ptos --where type=prescription model~lumity      # field contains text
-ptos --where type=prescription model~lumity --group model  # group by variant
+ptos --where type=sale product~comfort      # field contains text
+ptos --where type=sale product~comfort --group product  # group by variant
 ```
 
 Operators: `=` `!=` `>` `<` `>=` `<=` `~` (contains, case-insensitive)
 
-The `~` operator is useful when field values share a common prefix — for example `model~lumity` matches `lumity_l30_rkit`, `lumity_l50_rkit`, and any future lumity variants without listing each one.
+The `~` operator is useful when field values share a common prefix — for example `product~comfort` matches `comfort_pro_l`, `comfort_pro_xl`, and any future comfort variants without listing each one.
 
 ---
 
@@ -643,7 +643,7 @@ Useful when you want to keep the script somewhere on `PATH` but your data in a s
 ptos --lint          # check all records against schema
 ```
 
-Lint catches: missing required fields, invalid field values, unknown fields, conditional required violations (e.g. `fit` missing when `outcome=prescribed`).
+Lint catches: missing required fields, invalid field values, unknown fields, conditional required violations (e.g. `warranty` missing when `category=appliance`).
 
 ---
 
