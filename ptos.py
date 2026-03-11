@@ -1350,8 +1350,8 @@ def build_parser(cycles):
     ana.add_argument("--sort",                              help="Sort pivot by column name")
     ana.add_argument("--trend",        nargs="?", const=6, type=int, metavar="N",
                      help="Show last N periods side by side (default: 6)")
-    ana.add_argument("--due",          nargs="?", const=7, type=int, metavar="DAYS",
-                     help="Show records not updated in N days — type and key configured in queries.toml [due]")
+    ana.add_argument("--due",          nargs="?", const="__DEFAULT__", metavar="NAME_OR_DAYS",
+                     help="Show overdue records. Optional: named due config from queries.toml, or N days override")
 
     utl = p.add_argument_group("Utilities")
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
@@ -1401,6 +1401,8 @@ def resolve_query_context(args, queries):
         if "pivot" in q:                args.pivot = q["pivot"]
         if q.get("count"):              args.count = True
         if "sort"  in q:                args.sort  = q["sort"]
+        if "trend" in q and args.trend is None:
+            args.trend = int(q["trend"])
 
     return query_filters, metric_mode, dashboard_mode
 
@@ -1531,16 +1533,42 @@ def run_trend(filters, time_keyword, n, cycles):
 # Followup due engine
 # --------------------------------------------------
 
-def run_due(days_override):
+def run_due(arg):
     """Show records whose most recent entry per key is older than N days.
-    All config read from queries.toml [due] section.
+    arg can be:
+      None / '__DEFAULT__'  → use [due] block
+      a named string        → use [due.NAME] block
+      a digit string        → use [due] block with days overridden
     Priority order derived from schema field options — no hardcoding."""
 
     queries = get_queries()
-    due_cfg = queries.get("due")
-    if not due_cfg:
-        sys.exit("[due] section not found in queries.toml\n"
-                 "Add it to enable --due. See README for details.")
+
+    # resolve which due config block to use and whether days is overridden
+    days_override = None
+    if arg is None or arg == "__DEFAULT__":
+        due_cfg = queries.get("due")
+        if not due_cfg:
+            sys.exit("[due] section not found in queries.toml\n"
+                     "Add it to enable --due. See README for details.")
+    elif str(arg).isdigit():
+        due_cfg = queries.get("due")
+        if not due_cfg:
+            sys.exit("[due] section not found in queries.toml\n"
+                     "Add it to enable --due. See README for details.")
+        days_override = int(arg)
+    else:
+        # named config: look for [due.NAME] in queries.toml
+        named = queries.get("due", {})
+        if isinstance(named, dict) and arg in named:
+            due_cfg = named[arg]
+        else:
+            # also allow a top-level [due_NAME] block as fallback
+            due_cfg = queries.get(f"due_{arg}")
+        if not due_cfg:
+            available = [k for k in queries.get("due", {}) if isinstance(queries["due"].get(k), dict)]
+            hint = f"  Available: {', '.join(available)}" if available else ""
+            sys.exit(f"Due config '{arg}' not found in queries.toml.{hint}\n"
+                     f"Define it as [due.{arg}] with type, key, and days.")
 
     rec_type = due_cfg.get("type")
     key_field = due_cfg.get("key")
