@@ -1061,7 +1061,9 @@ def get_today_journal():
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
         else:
-            open(path, "a", encoding="utf-8").close()
+            content = _STARTER_JOURNAL.replace("{{date}}", today_str)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(content)
     return path
 
 # --------------------------------------------------
@@ -1079,7 +1081,7 @@ def resolve_editor():
 def edit_target(target):
     shortcuts = {
         "r": "records", "s": "schema", "q": "queries",
-        "c": "config",  "p": "presets", "d": "daily", "x": "script",
+        "c": "config",  "p": "presets", "d": "daily", "j": "daily", "x": "script",
     }
     target = shortcuts.get(target, target) if target else "records"
     paths  = {
@@ -1457,7 +1459,7 @@ def build_parser(cycles):
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
     utl.add_argument("-j", "--journal", action="store_true", help="Open today's journal")
     utl.add_argument("-e", "--edit",    nargs="?", const="records", metavar="TARGET",
-                     help="Edit a workspace file  (r s q c p d x)")
+                     help="Edit a workspace file  (r s q c p d/j x)")
     utl.add_argument("--fields", action="store_true", help="Show field discovery report")
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
 
