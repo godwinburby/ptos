@@ -1752,51 +1752,47 @@ def run_due(arg):
 # Table renderer
 # --------------------------------------------------
 
-def render_table(results):
-    """Render results as a formatted table.
-    Columns are auto-detected from fields present in results.
-    Multi-value fields (tag) are joined with comma.
-    Truncation is adaptive:
-      - If full table fits in terminal width  → no truncation
-      - If too wide                           → shrink note first
-      - If still too wide                     → shrink widest columns
-        proportionally, minimum 6 chars each
+def _render_single_table(lines, label=None):
+    """Render one group of same-type records as a table.
+    - Columns auto-detected from fields in this group only
+    - Adaptive width: shrinks note first, then widest columns
+    - Minimum 6 chars per column
     """
     import shutil
-    MIN_COL  = 6    # never shrink a column below this
-    COL_GAP  = 2    # spaces between columns
+    MIN_COL = 6
+    COL_GAP = 2
 
-    def trunc(s, width):
-        return s[:width] + "…" if len(s) > width else s
+    def trunc(s, w):
+        return s[:w] + "…" if len(s) > w else s
 
-    # collect all field names across results, preserving encounter order
+    # collect fields in encounter order
     all_fields = ["date"]
     seen = set()
-    for line in results:
+    for line in lines:
         _, kv, _ = parse_line(line)
         for k in kv:
-            if k not in seen:
+            if k not in seen and k != "type":  # type shown in label, skip column
                 all_fields.append(k)
                 seen.add(k)
 
-    # check if any notes exist
-    has_note = any(parse_line(l)[2] for l in results)
+    has_note = any(parse_line(l)[2] for l in lines)
     if has_note:
         all_fields.append("note")
 
     # build raw rows (no truncation yet)
     rows = []
-    for line in results:
+    for line in lines:
         d, kv, note = parse_line(line)
-        row = {}
-        row["date"] = str(d)
+        row = {"date": str(d)}
         for k, v in kv.items():
+            if k == "type":
+                continue
             row[k] = ",".join(v) if isinstance(v, list) else str(v)
         if has_note:
-            row["note"] = note if note else ""
+            row["note"] = note or ""
         rows.append(row)
 
-    # natural column widths — max of header and all values
+    # natural column widths
     natural = {f: len(f) for f in all_fields}
     for row in rows:
         for f in all_fields:
@@ -1804,42 +1800,62 @@ def render_table(results):
 
     term_width = shutil.get_terminal_size(fallback=(120, 24)).columns
     total_gap  = COL_GAP * (len(all_fields) - 1)
+    widths = dict(natural)
 
     def table_width(w):
         return sum(w[f] for f in all_fields) + total_gap
 
-    widths = dict(natural)  # start with natural widths
-
-    # step 1: shrink note column first if table is too wide
+    # step 1: shrink note first
     if has_note and table_width(widths) > term_width:
         excess = table_width(widths) - term_width
-        note_natural = widths["note"]
-        widths["note"] = max(MIN_COL, note_natural - excess)
+        widths["note"] = max(MIN_COL, widths["note"] - excess)
 
-    # step 2: still too wide — shrink other wide columns proportionally
+    # step 2: shrink widest columns one at a time
     if table_width(widths) > term_width:
-        available = term_width - total_gap
         shrinkable = [f for f in all_fields if widths[f] > MIN_COL]
-        # keep shrinking the widest column until it fits or all hit minimum
         while table_width(widths) > term_width and shrinkable:
             widest = max(shrinkable, key=lambda f: widths[f])
             widths[widest] -= 1
             if widths[widest] <= MIN_COL:
                 shrinkable.remove(widest)
 
-    # render header
-    print()
-    header = (" " * COL_GAP).join(f.ljust(widths[f]) for f in all_fields)
+    gap = " " * COL_GAP
+
+    # print label (type name) as section header
+    if label:
+        print(f"\n[ {label} ]")
+    else:
+        print()
+
+    header = gap.join(f.ljust(widths[f]) for f in all_fields)
     print(header)
     print("-" * len(header))
 
-    # render rows with adaptive truncation per column
     for row in rows:
-        cells = []
-        for f in all_fields:
-            val = row.get(f, "")
-            cells.append(trunc(val, widths[f]).ljust(widths[f]))
-        print((" " * COL_GAP).join(cells))
+        cells = [trunc(row.get(f, ""), widths[f]).ljust(widths[f]) for f in all_fields]
+        print(gap.join(cells))
+
+
+def render_table(results):
+    """Render results as a table, grouped by type when multiple types present.
+    Each type gets its own sub-table with only its relevant columns.
+    Single type results render as one clean table with no label.
+    """
+    # group results by type, preserving order
+    groups = {}
+    order  = []
+    for line in results:
+        _, kv, _ = parse_line(line)
+        t = kv.get("type", "unknown")
+        if t not in groups:
+            groups[t] = []
+            order.append(t)
+        groups[t].append(line)
+
+    multi = len(order) > 1
+
+    for t in order:
+        _render_single_table(groups[t], label=t if multi else None)
 
 
 # --------------------------------------------------
