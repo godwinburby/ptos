@@ -1756,12 +1756,18 @@ def render_table(results):
     """Render results as a formatted table.
     Columns are auto-detected from fields present in results.
     Multi-value fields (tag) are joined with comma.
-    Values truncated to 15 chars to keep table readable.
+    Truncation is adaptive:
+      - If full table fits in terminal width  → no truncation
+      - If too wide                           → shrink note first
+      - If still too wide                     → shrink widest columns
+        proportionally, minimum 6 chars each
     """
-    TRUNC = 15
+    import shutil
+    MIN_COL  = 6    # never shrink a column below this
+    COL_GAP  = 2    # spaces between columns
 
-    def trunc(s):
-        return s[:TRUNC] + "…" if len(s) > TRUNC else s
+    def trunc(s, width):
+        return s[:width] + "…" if len(s) > width else s
 
     # collect all field names across results, preserving encounter order
     all_fields = ["date"]
@@ -1778,36 +1784,62 @@ def render_table(results):
     if has_note:
         all_fields.append("note")
 
-    # build rows
+    # build raw rows (no truncation yet)
     rows = []
     for line in results:
         d, kv, note = parse_line(line)
         row = {}
         row["date"] = str(d)
         for k, v in kv.items():
-            if isinstance(v, list):
-                row[k] = trunc(",".join(v))
-            else:
-                row[k] = trunc(str(v))
+            row[k] = ",".join(v) if isinstance(v, list) else str(v)
         if has_note:
-            row["note"] = trunc(note) if note else ""
+            row["note"] = note if note else ""
         rows.append(row)
 
-    # compute column widths — max of header and all values
-    widths = {f: len(f) for f in all_fields}
+    # natural column widths — max of header and all values
+    natural = {f: len(f) for f in all_fields}
     for row in rows:
         for f in all_fields:
-            widths[f] = max(widths[f], len(row.get(f, "")))
+            natural[f] = max(natural[f], len(row.get(f, "")))
+
+    term_width = shutil.get_terminal_size(fallback=(120, 24)).columns
+    total_gap  = COL_GAP * (len(all_fields) - 1)
+
+    def table_width(w):
+        return sum(w[f] for f in all_fields) + total_gap
+
+    widths = dict(natural)  # start with natural widths
+
+    # step 1: shrink note column first if table is too wide
+    if has_note and table_width(widths) > term_width:
+        excess = table_width(widths) - term_width
+        note_natural = widths["note"]
+        widths["note"] = max(MIN_COL, note_natural - excess)
+
+    # step 2: still too wide — shrink other wide columns proportionally
+    if table_width(widths) > term_width:
+        available = term_width - total_gap
+        shrinkable = [f for f in all_fields if widths[f] > MIN_COL]
+        # keep shrinking the widest column until it fits or all hit minimum
+        while table_width(widths) > term_width and shrinkable:
+            widest = max(shrinkable, key=lambda f: widths[f])
+            widths[widest] -= 1
+            if widths[widest] <= MIN_COL:
+                shrinkable.remove(widest)
 
     # render header
     print()
-    header = "  ".join(f.ljust(widths[f]) for f in all_fields)
+    header = (" " * COL_GAP).join(f.ljust(widths[f]) for f in all_fields)
     print(header)
     print("-" * len(header))
 
-    # render rows
+    # render rows with adaptive truncation per column
     for row in rows:
-        print("  ".join(row.get(f, "").ljust(widths[f]) for f in all_fields))
+        cells = []
+        for f in all_fields:
+            val = row.get(f, "")
+            cells.append(trunc(val, widths[f]).ljust(widths[f]))
+        print((" " * COL_GAP).join(cells))
 
 
 # --------------------------------------------------
@@ -1999,19 +2031,6 @@ def main():
         return
 
     # ---- default: list records ----
-    # sort by field if --sort given and not in pivot mode
-    if args.sort and not args.pivot:
-        def sort_key(line):
-            _, kv, _ = parse_line(line)
-            val = kv.get(args.sort, "")
-            if isinstance(val, list):
-                val = val[0] if val else ""
-            try:
-                return (0, int(val), "")
-            except (ValueError, TypeError):
-                return (1, 0, str(val).lower())
-        results = sorted(results, key=sort_key)
-
     if args.table:
         render_table(results)
     else:
