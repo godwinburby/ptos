@@ -914,6 +914,58 @@ def complete_record(schema, record):
     note = input("\nAdd note (optional): ").strip()
     return record, note
 
+
+def save_query(name, args, extra_filters):
+    """Append a new saved query block to queries.toml from current CLI args."""
+    queries = get_queries()
+    if name in queries:
+        ans = input(f"Query '{name}' already exists. Overwrite? (y/N): ").strip().lower()
+        if ans != "y":
+            print("Cancelled.")
+            return
+
+    lines = [f"\n[{name}]"]
+
+    where_str = " ".join(extra_filters)
+    if where_str:
+        lines.append(f'where = "{where_str}"')
+
+    if getattr(args, "date_from", None) or getattr(args, "date_to", None):
+        if getattr(args, "date_from", None):
+            lines.append(f'from  = "{args.date_from}"')
+        if getattr(args, "date_to", None):
+            lines.append(f'to    = "{args.date_to}"')
+    else:
+        lines.append(f'time  = "{args.time}"')
+
+    if getattr(args, "search", None):
+        lines.append(f'search = "{args.search}"')
+
+    if getattr(args, "group", None):
+        group_val = args.group if isinstance(args.group, list) else [args.group]
+        items = ", ".join(f'"{g}"' for g in group_val)
+        lines.append(f"group = [{items}]")
+
+    if getattr(args, "pivot", None):
+        items = ", ".join(f'"{p}"' for p in args.pivot)
+        lines.append(f"pivot = [{items}]")
+        if getattr(args, "count", False):
+            lines.append("count = true")
+        if getattr(args, "sort", None):
+            lines.append(f'sort  = "{args.sort}"')
+
+    if getattr(args, "trend", None) is not None:
+        lines.append(f"trend = {args.trend}")
+
+    if getattr(args, "sum", False):
+        lines.append("sum   = true")
+
+    block = "\n".join(lines)
+    with open(QUERIES_PATH, "a", encoding="utf-8") as f:
+        f.write(block + "\n")
+    print(f"\nQuery '{name}' saved to queries.toml")
+    print(f"Run with: ptos -q {name}")
+
 def save_as_preset(name, record):
     """Append a new preset to presets.toml from a record dict."""
     presets_path = os.path.join(CONFIG_DIR, "presets.toml")
@@ -936,7 +988,7 @@ def save_as_preset(name, record):
         f.write(block + "\n")
     print(f"Preset '{name}' saved to presets.toml")
 
-def interactive_add(schema, date=None):
+def interactive_add(schema, date=None, save_preset_name=None):
     record, note = complete_record(schema, {})
     problems     = validate_record(schema, record)
     if problems:
@@ -950,10 +1002,13 @@ def interactive_add(schema, date=None):
         return
     append_record(line)
     print("Record added.")
-    # offer to save as preset
-    preset_name = input("\nSave as preset? (name or Enter to skip): ").strip().replace(" ", "_")
-    if preset_name:
-        save_as_preset(preset_name, record)
+    # --save-preset flag skips the prompt and uses the provided name directly
+    if save_preset_name:
+        save_as_preset(save_preset_name, record)
+    else:
+        preset_name = input("\nSave as preset? (name or Enter to skip): ").strip().replace(" ", "_")
+        if preset_name:
+            save_as_preset(preset_name, record)
 
 def quick_add(args):
     presets = get_presets()
@@ -1328,10 +1383,11 @@ def build_parser(cycles):
     )
 
     add = p.add_argument_group("Add")
-    add.add_argument("-a", "--add",    nargs="*", help="Add record (no args = interactive)")
-    add.add_argument("-n", "--note",              help="Note to attach to record")
-    add.add_argument("-d", "--date",              help="Date for the record (YYYY-MM-DD, default: today)")
-    add.add_argument("-p", "--preset", nargs="*", help="Quick-add from preset")
+    add.add_argument("-a", "--add",          nargs="*", help="Add record (no args = interactive)")
+    add.add_argument("-n", "--note",                    help="Note to attach to record")
+    add.add_argument("-d", "--date",                    help="Date for the record (YYYY-MM-DD, default: today)")
+    add.add_argument("-p", "--preset",       nargs="*", help="Quick-add from preset")
+    add.add_argument("--save-preset",                   help="Save the record being added as a preset under this name")
 
     qry = p.add_argument_group("Query")
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
@@ -1342,6 +1398,7 @@ def build_parser(cycles):
     qry.add_argument("-y", "--type",                                help="Filter by record type")
     qry.add_argument("-g", "--tag",    action="append",             help="Filter by tag (repeatable)")
     qry.add_argument("-S", "--search",                              help="Full-text search")
+    qry.add_argument("--save",                                      help="Save current query to queries.toml under this name")
 
     ana = p.add_argument_group("Analyse")
     ana.add_argument("-G", "--group",  nargs="+", help="Group by one or more fields")
@@ -1680,7 +1737,7 @@ def main():
 
     if args.add is not None:
         if not args.add:
-            interactive_add(schema, resolve_date(args.date))
+            interactive_add(schema, resolve_date(args.date), args.save_preset)
         else:
             record = {}
             for item in args.add:
@@ -1695,6 +1752,8 @@ def main():
                 sys.exit(problems[0])
             append_record(build_record_line(resolve_date(args.date), record, args.note))
             print("Record added.")
+            if args.save_preset:
+                save_as_preset(args.save_preset, record)
         return
 
     # ---- lint mode ----
@@ -1772,6 +1831,10 @@ def main():
     if args.query and metric_mode:
         run_metric(args.query, queries, start, end, cycles)
         return
+
+    # ---- save query if requested ----
+    if args.save:
+        save_query(args.save, args, final_filters)
 
     # ---- scan ----
     results, total = scan_records(start, end, final_filters, args.search)

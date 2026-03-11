@@ -113,6 +113,7 @@ ptos --edit x        # ptos.py itself
 | `--note "note text"` | Attach a note to the record |
 | `--date DATE` | Date for the record. Accepts `YYYY-MM-DD`, `today`, `yesterday` (default: today) |
 | `--preset [preset] [field=value ...]` | Quick-add from preset. Override fields inline |
+| `--save-preset NAME` | Save the record being added as a preset under this name |
 
 ### Query
 
@@ -126,6 +127,7 @@ ptos --edit x        # ptos.py itself
 | `--type TYPE` | Filter by record type |
 | `--tag TAG` | Filter by tag (repeatable: `--tag auto --tag bus`) |
 | `--search text` | Full-text search |
+| `--save NAME` | Save current query filters and analysis to queries.toml |
 
 ### Analyse
 
@@ -136,7 +138,7 @@ ptos --edit x        # ptos.py itself
 | `--count` | Count records instead of summing numeric fields |
 | `--sort COL` | Sort pivot rows by a column name |
 | `--trend [N]` | Show last N periods side by side (default: 6) |
-| `--due [DAYS]` | Show overdue records not updated in N days (default: from queries.toml) |
+| `--due [NAME\|DAYS]` | Show overdue records. Optional: named due config or days override |
 
 ### Utilities
 
@@ -311,15 +313,29 @@ count = true
 where = "type=expense domain!=work"
 time  = "this-month"
 group = ["category"]
+
+[rx_trend]
+where = "type=prescription"
+time  = "this-month"
+trend = 6          # run as trend automatically when queried
+sum   = true
 ```
 
 **Saved queries compose with `--time`** — the saved query defines the default time, but you can always override it at the CLI:
 
 ```bash
-ptos --query monthly_expenses                   # uses the query's own time setting
+ptos --query monthly_expenses                       # uses the query's own time setting
 ptos --query monthly_expenses --time last-month     # same filters, different window
 ptos --query monthly_expenses --time last-quarter
 ptos --query monthly_expenses --time 2026-01
+```
+
+**Save any CLI command as a query with `--save`** — the query runs normally and is appended to queries.toml in one step:
+
+```bash
+ptos -w type=expense domain!=work -G category -t tm --save exp_cat
+ptos -w type=prescription --trend 6 -t tm --save rx_trend
+ptos -y assessment -t tq -v source outcome --count --save funnel
 ```
 
 ---
@@ -369,12 +385,21 @@ Priority order is read directly from your schema field options. The first option
 
 ### Configure in queries.toml
 
+You can have a single default `[due]` block, or multiple named configs under `[due.NAME]`:
+
 ```toml
+# default — used by: ptos --due
 [due]
 type    = "followup"   # record type to scan
 key     = "client"     # field that identifies each unique entity
 sort_by = "stage"      # field whose schema option order defines priority
 days    = 7            # default overdue threshold
+
+# named — used by: ptos --due outreach
+[due.outreach]
+type    = "outreach"
+key     = "place"
+days    = 14
 ```
 
 The `sort_by` field's options in `schema.toml` define the priority order:
@@ -388,9 +413,10 @@ options = ["trial", "decision", "negotiation", "deferred", "unattended"]
 ### Usage
 
 ```bash
-ptos --due           # use default days from queries.toml
-ptos --due 3         # override to 3 days
-ptos --due 0         # show everyone (morning review)
+ptos --due                  # use default [due] block, default days
+ptos --due 3                # use default [due] block, override to 3 days
+ptos --due 0                # show everyone (morning review)
+ptos --due outreach         # use [due.outreach] named config
 ```
 
 Output:
@@ -450,12 +476,22 @@ tag      = ["snacks"]
 # amount omitted — will be prompted each time
 ```
 
+**Save a preset directly from the command line** using `--save-preset`:
+
+```bash
+# inline add — record is saved and preset is created in one step
+ptos --add type=expense domain=work category=staff_welfare tag=snacks --save-preset snacks
+
+# interactive add — skips the end-of-session prompt, uses the provided name directly
+ptos --add --save-preset my_preset
+```
+
 Override any preset field inline:
 
 ```bash
 ptos --preset commute amount=120        # different amount
 ptos --preset commute tag=uber          # different tag
-ptos --preset commute --date yesterday      # different date
+ptos --preset commute --date yesterday  # different date
 ```
 
 ---
