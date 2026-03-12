@@ -330,12 +330,28 @@ class AddRecordTab(tk.Frame):
         tk.Label(hdr, text="Add Record", font=F_HEAD,
                  fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
 
-        # ── type selector row ─────────────────────────────────────────────────
+        # ── preset + type row ─────────────────────────────────────────────────
         row = tk.Frame(self, bg=BG, pady=PAD)
         row.pack(fill="x", padx=HPAD)
-        lbl(row, "Record type", fg=SUBTEXT, font=F_LABEL).pack(anchor="w")
+
+        # preset selector (left column)
+        preset_col = tk.Frame(row, bg=BG)
+        preset_col.pack(side="left", padx=(0, 32))
+        lbl(preset_col, "Load preset", fg=SUBTEXT, font=F_LABEL).pack(anchor="w")
+        self._preset_var = tk.StringVar()
+        presets = ptos.get_presets()
+        preset_names = ["—"] + sorted(presets.keys())
+        p_combo = _make_combo(preset_col, preset_names,
+                              textvariable=self._preset_var, width=22)
+        p_combo.pack(anchor="w", pady=(4, 0))
+        p_combo.bind("<<ComboboxSelected>>", self._on_preset_change)
+
+        # type selector (right column)
+        type_col = tk.Frame(row, bg=BG)
+        type_col.pack(side="left")
+        lbl(type_col, "Record type", fg=SUBTEXT, font=F_LABEL).pack(anchor="w")
         self._type_var = tk.StringVar()
-        c = _make_combo(row, self.schema["types"]["allowed"],
+        c = _make_combo(type_col, self.schema["types"]["allowed"],
                         textvariable=self._type_var, width=28)
         c.pack(anchor="w", pady=(4, 0))
         c.bind("<<ComboboxSelected>>", self._on_type_change)
@@ -354,6 +370,44 @@ class AddRecordTab(tk.Frame):
                                 wraplength=560, justify="left")
         self._status.pack(side="left", fill="x", expand=True)
         _make_button(foot, "Save Record", self._submit).pack(side="right")
+
+    # ── preset load ───────────────────────────────────────────────────────────
+
+    def _on_preset_change(self, _=None):
+        name = self._preset_var.get()
+        if not name or name == "—":
+            return
+        presets = ptos.get_presets()
+        preset  = presets.get(name, {})
+        if not preset:
+            return
+
+        # set type and rebuild fields
+        rtype = preset.get("type", "")
+        if rtype:
+            self._type_var.set(rtype)
+            self.type_schema = self.schema["type"].get(rtype, {})
+            self._rebuild_fields()
+
+        # fill field values from preset
+        for field, val in preset.items():
+            if field in ("type", "tag"):
+                continue
+            if field in self.field_vars:
+                self.field_vars[field].set(str(val))
+
+        # tick preset tags
+        if "tag" in preset:
+            tags = preset["tag"]
+            if isinstance(tags, str):
+                tags = [tags]
+            for tag in tags:
+                if tag in self.tag_vars:
+                    self.tag_vars[tag].set(1)
+
+        self._update_conditionals()
+        self._status.config(text=f"Preset '{name}' loaded — edit fields then save.",
+                            fg=ACCENT)
 
     # ── type change ───────────────────────────────────────────────────────────
 
@@ -507,12 +561,22 @@ class AddRecordTab(tk.Frame):
         self.tag_vars = {}
         for tag in allowed:
             var = tk.IntVar(value=prev.get(tag, 0))
-            tk.Checkbutton(
+            cb = tk.Checkbutton(
                 self._tag_frame, text=tag, variable=var,
                 font=F_BODY, bg=BG, fg=TEXT,
-                selectcolor=ACCENT, activebackground=BG,
-                relief="flat"
-            ).pack(side="left", padx=(0, 12))
+                selectcolor="white",        # white box — system draws clear checkmark
+                activebackground=BG,
+                activeforeground=ACCENT,
+                relief="flat", cursor="hand2"
+            )
+            cb.pack(side="left", padx=(0, 12))
+            # update label colour to accent when ticked
+            def _on_toggle(v=var, c=cb, t=tag):
+                c.config(fg=ACCENT if v.get() else TEXT)
+            var.trace_add("write", lambda *_, v=var, c=cb: c.config(
+                fg=ACCENT if v.get() else TEXT))
+            # apply initial colour (for preset pre-ticks)
+            cb.config(fg=ACCENT if var.get() else TEXT)
             self.tag_vars[tag] = var
 
     # ── date + note ───────────────────────────────────────────────────────────
@@ -593,6 +657,7 @@ class AddRecordTab(tk.Frame):
 
         # reset
         self._type_var.set("")
+        self._preset_var.set("—")
         self.type_schema = {}
         for w in self._body.winfo_children():
             w.destroy()
