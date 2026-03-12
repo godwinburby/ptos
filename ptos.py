@@ -2112,6 +2112,11 @@ def main():
     # apply --select: keep only chosen fields, always keep date, type and note
     if getattr(args, "select", None):
         selected = set(args.select) | {"type"}  # type always included
+        # warn about unknown fields — collect all field names from results
+        all_keys = {k for line in results for k in parse_line(line)[1]}
+        unknown = [f for f in args.select if f not in all_keys and f != "type"]
+        if unknown:
+            print(f"Warning: unknown field(s) in --select: {', '.join(unknown)}")
         filtered = []
         for line in results:
             d, kv, note = parse_line(line)
