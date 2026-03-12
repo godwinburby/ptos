@@ -8,6 +8,7 @@ import sys
 import os
 import traceback
 import datetime as dt
+import webbrowser
 import tkinter as tk
 from tkinter import ttk, messagebox
 
@@ -1315,6 +1316,56 @@ class PTOSApp(tk.Tk):
         self.option_add("*TCombobox*Listbox.foreground", TEXT)
         self.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
         self.option_add("*TCombobox*Listbox.selectForeground", "white")
+
+        # ── top bar ───────────────────────────────────────────────────────────
+        NAV_PILL  = "#EEF1FB"   # light blue-grey pill
+        NAV_PILLO = "#DDE3F5"   # pill hover
+        NAV_LINK  = ACCENT      # accent blue for link text
+
+        topbar = tk.Frame(self, bg=CARD, pady=0)
+        topbar.pack(fill="x")
+
+        # bottom border line
+        tk.Frame(topbar, bg=BORDER, height=1).pack(fill="x", side="bottom")
+
+        # left — three-line brand block
+        left = tk.Frame(topbar, bg=CARD, padx=HPAD, pady=14)
+        left.pack(side="left")
+        tk.Label(left, text="PTOS",
+                 font=("Segoe UI", 22, "bold"),
+                 fg=TEXT, bg=CARD).pack(anchor="w")
+        tk.Label(left, text="Plain Text Operating System",
+                 font=("Segoe UI", 12, "bold"),
+                 fg=SUBTEXT, bg=CARD).pack(anchor="w")
+        tk.Label(left, text="Log it. Query it. Own it.",
+                 font=("Segoe UI", 11, "bold italic"),
+                 fg=ACCENT, bg=CARD).pack(anchor="w")
+
+        # right — github pill link (pack before notebook so it is visible)
+        right = tk.Frame(topbar, bg=CARD, padx=HPAD)
+        right.pack(side="right", fill="y", pady=14)
+        pill = tk.Frame(right, bg=NAV_PILL, padx=16, pady=10)
+        pill.pack(anchor="center")
+
+        link = tk.Label(pill,
+                        text="⭐  github.com/godwinburby/ptos",
+                        font=("Segoe UI", 11, "bold underline"),
+                        fg=NAV_LINK, bg=NAV_PILL, cursor="hand2")
+        link.pack()
+
+        def _open(_=None):
+            webbrowser.open("https://github.com/godwinburby/ptos")
+        def _enter(_=None):
+            link.config(bg=NAV_PILLO)
+            pill.config(bg=NAV_PILLO)
+        def _leave(_=None):
+            link.config(bg=NAV_PILL)
+            pill.config(bg=NAV_PILL)
+
+        for w in (link, pill):
+            w.bind("<Button-1>", _open)
+            w.bind("<Enter>",    _enter)
+            w.bind("<Leave>",    _leave)
 
         nb = ttk.Notebook(self)
         nb.pack(fill="both", expand=True)
