@@ -597,7 +597,8 @@ class QueryTab(tk.Frame):
         f = q.get("where", "").split()
         s, e = ptos.resolve_time(q["time"], self.cycles) \
                if "time" in q else (start, end)
-        return ptos.scan_records(s, e, f, None)
+        results, total = ptos.scan_records(s, e, f, None)
+        return len(results), total
 
     def _tabulate(self, results):
         rows, cols = [], []
@@ -708,6 +709,72 @@ class BrowseTab(tk.Frame):
         _write(self._out, "\n".join(lines))
 
 
+# ── Error dialog with copyable text ──────────────────────────────────────────
+
+def _show_error_dialog(parent, exc_text, log_path):
+    """Show a resizable error dialog with scrollable copyable traceback."""
+    dlg = tk.Toplevel(parent)
+    dlg.title("PTOS — Error")
+    dlg.geometry("680x420")
+    dlg.resizable(True, True)
+    dlg.grab_set()  # modal
+
+    # header
+    hdr = tk.Frame(dlg, bg="#C0392B", pady=10)
+    hdr.pack(fill="x")
+    tk.Label(hdr, text="  An error occurred",
+             font=("Segoe UI", 13, "bold"),
+             fg="white", bg="#C0392B").pack(side="left", padx=12)
+
+    # log path info
+    info = tk.Frame(dlg, pady=6, padx=12)
+    info.pack(fill="x")
+    tk.Label(info, text=f"Details saved to:  {log_path}",
+             font=("Segoe UI", 10), fg="#555").pack(anchor="w")
+
+    # scrollable text area
+    tf = tk.Frame(dlg, padx=12, pady=4)
+    tf.pack(fill="both", expand=True)
+    xsb = ttk.Scrollbar(tf, orient="horizontal")
+    ysb = ttk.Scrollbar(tf, orient="vertical")
+    txt = tk.Text(tf, font=("Consolas", 10), wrap="none",
+                  bg="#1E2130", fg="#F8C8C8",
+                  xscrollcommand=xsb.set, yscrollcommand=ysb.set,
+                  padx=8, pady=6)
+    xsb.config(command=txt.xview)
+    ysb.config(command=txt.yview)
+    ysb.pack(side="right", fill="y")
+    xsb.pack(side="bottom", fill="x")
+    txt.pack(side="left", fill="both", expand=True)
+    txt.insert("end", exc_text)
+    txt.config(state="normal")  # keep selectable for manual copy
+
+    # buttons
+    foot = tk.Frame(dlg, pady=8, padx=12)
+    foot.pack(fill="x")
+
+    def _copy():
+        dlg.clipboard_clear()
+        dlg.clipboard_append(exc_text)
+        copy_btn.config(text="  Copied!  ")
+        dlg.after(1500, lambda: copy_btn.config(text="  Copy to Clipboard  "))
+
+    copy_btn = tk.Button(foot, text="  Copy to Clipboard  ",
+                         command=_copy,
+                         font=("Segoe UI", 11, "bold"),
+                         bg=ACCENT, fg="white",
+                         activebackground=ACCENT_HO,
+                         relief="flat", padx=12, pady=6)
+    copy_btn.pack(side="left")
+
+    tk.Button(foot, text="  Close  ",
+              command=dlg.destroy,
+              font=("Segoe UI", 11),
+              relief="flat", padx=12, pady=6).pack(side="right")
+
+    dlg.wait_window()
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Main window
 # ══════════════════════════════════════════════════════════════════════════════
@@ -744,10 +811,7 @@ class PTOSApp(tk.Tk):
         timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(LOG_PATH, "a", encoding="utf-8") as f:
             f.write(f"\n{'='*60}\n{timestamp}\n{exc_text}\n")
-        messagebox.showerror(
-            "PTOS — Error",
-            f"An error occurred. Details saved to:\n{LOG_PATH}\n\n{exc_text[-800:]}"
-        )
+        _show_error_dialog(self, exc_text, LOG_PATH)
 
 
 if __name__ == "__main__":
@@ -759,17 +823,12 @@ if __name__ == "__main__":
         timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with open(LOG_PATH, "a", encoding="utf-8") as f:
             f.write(f"\n{'='*60}\n{timestamp}\n{exc_text}\n")
-        # show popup — create a minimal root if the app never started
         try:
             root = tk.Tk()
             root.withdraw()
         except Exception:
             root = None
-        messagebox.showerror(
-            "PTOS — Unexpected Error",
-            f"Something went wrong. Details saved to:\n{LOG_PATH}\n\n"
-            f"{exc_text[-800:]}"   # last 800 chars fits a dialog
-        )
+        _show_error_dialog(root, exc_text, LOG_PATH)
         if root:
             root.destroy()
 
