@@ -190,6 +190,8 @@ ptos --edit x        # ptos.py itself
 | `--tag TAG` | Filter by tag (repeatable: `--tag auto --tag bus`) |
 | `--search text` | Full-text search |
 | `--save NAME` | Save current query filters and analysis to queries.toml |
+| `--file FILENAME` | Read from a specific file in `records/` folder (e.g. `2025.log`). Full filename with extension. No spaces. |
+| `--select field ...` | Show only specified fields in output. Date and note always included. Log format preserved. |
 
 ### Analyse
 
@@ -666,6 +668,41 @@ ptos --where type=sale product~comfort --group product  # group by variant
 Operators: `=` `!=` `>` `<` `>=` `<=` `~` (contains, case-insensitive)
 
 The `~` operator is useful when field values share a common prefix — for example `product~comfort` matches `comfort_pro_l`, `comfort_pro_xl`, and any future comfort variants without listing each one.
+
+---
+
+## Reading from a specific file
+
+By default PTOS reads all `.log` files in `records/`. Use `--file` to read from one specific file — useful for querying a past year or an archive.
+
+```bash
+ptos -y expense --file 2025.log              # all expenses from 2025.log
+ptos -y expense --file 2025.log -t lq        # last quarter of 2025
+ptos --file archive.log -w type=sale         # query an archive file
+```
+
+The full filename including extension is required. No spaces allowed. The file must exist in the `records/` folder.
+
+---
+
+## Selecting output fields
+
+By default PTOS prints the full raw record line. Use `--select` to show only the fields you care about. Date and note are always included.
+
+```bash
+ptos -y followup -t tm --select name intent result
+ptos -y followup -t tm --select name intent result --table
+ptos -y followup -t tm --select name intent --sort intent
+```
+
+Output keeps log format with only the selected fields:
+
+```
+2026-03-11 name=george_joseph intent=trial | will call back next week
+2026-03-11 name=alice_m intent=decision | discussing with family
+```
+
+`--select` works with `--table`, `--sort`, and `--due`. Position in the command does not matter.
 
 ---
 
