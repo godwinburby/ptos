@@ -1,0 +1,780 @@
+"""
+ptos_gui.py  —  Tkinter GUI front-end for PTOS
+Place this file in the same folder as ptos.py.
+Run:  python ptos_gui.py
+"""
+
+import sys
+import os
+import traceback
+import datetime as dt
+import tkinter as tk
+from tkinter import ttk, messagebox
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import ptos
+
+# ── Palette ───────────────────────────────────────────────────────────────────
+BG        = "#F7F8FA"   # page background
+CARD      = "#FFFFFF"   # card / panel background
+BORDER    = "#E2E4EA"   # separator / border
+ACCENT    = "#4F6BED"   # primary blue
+ACCENT_HO = "#3A54D4"   # hover
+SUCCESS   = "#2E7D56"   # saved message
+ERROR_COL = "#C0392B"   # error message
+TEXT      = "#1A1D2E"   # primary text
+SUBTEXT   = "#6B7280"   # secondary labels
+ENTRY_BG  = "#FFFFFF"
+ENTRY_BD  = "#CBD0DC"
+OUTPUT_BG = "#1E2130"   # dark output pane
+OUTPUT_FG = "#D4D8E8"
+
+# ── Fonts ─────────────────────────────────────────────────────────────────────
+F_HEAD  = ("Segoe UI", 18, "bold")   # tab page title
+F_SUBH  = ("Segoe UI", 13, "bold")   # section headings (unused but available)
+F_LABEL = ("Segoe UI", 12)           # field labels, ctrl bar labels
+F_BODY  = ("Segoe UI", 12)           # entries, combos, body text
+F_SMALL = ("Segoe UI", 11)           # hint text (YYYY-MM-DD etc)
+F_MONO  = ("Consolas", 12)           # output pane
+F_BTN   = ("Segoe UI", 12, "bold")   # buttons
+
+PAD  = 10
+HPAD = 20
+
+# ── Time windows ──────────────────────────────────────────────────────────────
+TIME_LABELS = [
+    ("Today",        "td"),
+    ("Yesterday",    "yd"),
+    ("This week",    "tw"),
+    ("Last week",    "lw"),
+    ("This month",   "tm"),
+    ("Last month",   "lm"),
+    ("This quarter", "tq"),
+    ("Last quarter", "lq"),
+    ("This year",    "ty"),
+    ("Last year",    "ly"),
+    ("All time",     "all"),
+]
+_TIME_CODE  = {label: code  for label, code  in TIME_LABELS}
+_TIME_LABEL = {code:  label for label, code  in TIME_LABELS}
+
+
+# ── Widget helpers ────────────────────────────────────────────────────────────
+
+def _setup_ttk_styles():
+    s = ttk.Style()
+    s.theme_use("clam")
+
+    # Notebook tabs
+    s.configure("TNotebook",
+                background=BG, borderwidth=0, tabmargins=0)
+    s.configure("TNotebook.Tab",
+                background=BORDER, foreground=SUBTEXT,
+                font=F_BTN, padding=[20, 10], borderwidth=0)
+    s.map("TNotebook.Tab",
+          background=[("selected", CARD), ("active", "#EEF0F8")],
+          foreground=[("selected", ACCENT)],
+          font=[("selected", F_BTN)])
+
+    # Combobox
+    s.configure("TCombobox",
+                fieldbackground=ENTRY_BG, background=ENTRY_BG,
+                foreground=TEXT, arrowcolor=ACCENT,
+                bordercolor=ENTRY_BD, lightcolor=ENTRY_BD,
+                darkcolor=ENTRY_BD, selectbackground=ACCENT,
+                selectforeground="white", font=F_BODY)
+    s.map("TCombobox",
+          fieldbackground=[("readonly", ENTRY_BG)],
+          foreground=[("readonly", TEXT)])
+
+    # Scrollbar
+    s.configure("TScrollbar", background=BORDER, troughcolor=BG,
+                arrowcolor=SUBTEXT, borderwidth=0)
+
+
+def lbl(parent, text, font=F_LABEL, fg=TEXT, **kw):
+    return tk.Label(parent, text=text, font=font, fg=fg,
+                    bg=parent.cget("bg"), **kw)
+
+def sublbl(parent, text, **kw):
+    return lbl(parent, text, font=F_SMALL, fg=SUBTEXT, **kw)
+
+def _make_entry(parent, textvariable=None, width=28):
+    f = tk.Frame(parent, bg=ENTRY_BD, padx=1, pady=1)
+    e = tk.Entry(f, textvariable=textvariable, width=width,
+                 font=F_BODY, bg=ENTRY_BG, fg=TEXT,
+                 insertbackground=TEXT, relief="flat",
+                 highlightthickness=0)
+    e.pack(fill="both", expand=True, ipady=5, ipadx=4)
+    return f, e
+
+def _make_combo(parent, values, textvariable=None, width=22):
+    c = ttk.Combobox(parent, values=values, textvariable=textvariable,
+                     width=width, state="readonly", font=F_BODY)
+    return c
+
+def _make_button(parent, text, command):
+    b = tk.Button(parent, text=text, command=command,
+                  font=F_BTN, bg=ACCENT, fg="white",
+                  activebackground=ACCENT_HO, activeforeground="white",
+                  relief="flat", cursor="hand2",
+                  padx=20, pady=8, bd=0)
+    return b
+
+def hsep(parent):
+    return tk.Frame(parent, bg=BORDER, height=1)
+
+
+# ── Scrollable inner frame ────────────────────────────────────────────────────
+
+class ScrollBody(tk.Frame):
+    """A vertically-scrollable frame. Children pack into self."""
+    def __init__(self, parent, bg=BG):
+        container = tk.Frame(parent, bg=bg)
+        container.pack(fill="both", expand=True)
+
+        self._canvas = tk.Canvas(container, bg=bg, highlightthickness=0)
+        vsb = ttk.Scrollbar(container, orient="vertical",
+                             command=self._canvas.yview)
+        self._canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        self._canvas.pack(side="left", fill="both", expand=True)
+
+        super().__init__(self._canvas, bg=bg)
+        self._win = self._canvas.create_window((0, 0), window=self, anchor="nw")
+
+        self.bind("<Configure>",
+                  lambda e: self._canvas.configure(
+                      scrollregion=self._canvas.bbox("all")))
+        self._canvas.bind("<Configure>",
+                          lambda e: self._canvas.itemconfig(
+                              self._win, width=e.width))
+        self._canvas.bind_all("<MouseWheel>",
+                              lambda e: self._canvas.yview_scroll(
+                                  int(-1 * (e.delta / 120)), "units"))
+
+    def reset(self):
+        self._canvas.yview_moveto(0)
+
+
+# ── Output pane (dark, monospace, both scrollbars) ────────────────────────────
+
+def _make_output(parent):
+    tf = tk.Frame(parent, bg=BORDER, padx=1, pady=1)
+    xsb = ttk.Scrollbar(tf, orient="horizontal")
+    ysb = ttk.Scrollbar(tf, orient="vertical")
+    t = tk.Text(tf, font=F_MONO, bg=OUTPUT_BG, fg=OUTPUT_FG,
+                insertbackground=OUTPUT_FG, relief="flat",
+                state="disabled", wrap="none",
+                xscrollcommand=xsb.set, yscrollcommand=ysb.set,
+                padx=10, pady=8)
+    xsb.config(command=t.xview)
+    ysb.config(command=t.yview)
+    ysb.pack(side="right",  fill="y")
+    xsb.pack(side="bottom", fill="x")
+    t.pack(side="left", fill="both", expand=True)
+    return tf, t
+
+def _write(widget, text):
+    widget.config(state="normal")
+    widget.delete("1.0", "end")
+    widget.insert("end", text)
+    widget.config(state="disabled")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Add Record Tab
+# ══════════════════════════════════════════════════════════════════════════════
+
+class AddRecordTab(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, bg=BG)
+        self.schema      = ptos.get_schema()
+        self.type_schema = {}
+        self.field_vars  = {}
+        self.field_rows  = {}
+        self.tag_vars    = {}
+        self._build()
+
+    def _build(self):
+        # ── top header bar ────────────────────────────────────────────────────
+        hdr = tk.Frame(self, bg=CARD, pady=16)
+        hdr.pack(fill="x")
+        tk.Label(hdr, text="Add Record", font=F_HEAD,
+                 fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
+
+        # ── type selector row ─────────────────────────────────────────────────
+        row = tk.Frame(self, bg=BG, pady=PAD)
+        row.pack(fill="x", padx=HPAD)
+        lbl(row, "Record type", fg=SUBTEXT, font=F_LABEL).pack(anchor="w")
+        self._type_var = tk.StringVar()
+        c = _make_combo(row, self.schema["types"]["allowed"],
+                        textvariable=self._type_var, width=28)
+        c.pack(anchor="w", pady=(4, 0))
+        c.bind("<<ComboboxSelected>>", self._on_type_change)
+
+        hsep(self).pack(fill="x", pady=(PAD, 0))
+
+        # ── scrollable fields area ────────────────────────────────────────────
+        self._body = ScrollBody(self, bg=BG)
+
+        # ── footer ────────────────────────────────────────────────────────────
+        hsep(self).pack(fill="x", side="bottom")
+        foot = tk.Frame(self, bg=CARD, pady=12, padx=HPAD)
+        foot.pack(fill="x", side="bottom")
+        self._status = tk.Label(foot, text="", font=F_LABEL,
+                                fg=SUCCESS, bg=CARD,
+                                wraplength=560, justify="left")
+        self._status.pack(side="left", fill="x", expand=True)
+        _make_button(foot, "Save Record", self._submit).pack(side="right")
+
+    # ── type change ───────────────────────────────────────────────────────────
+
+    def _on_type_change(self, _=None):
+        rtype = self._type_var.get()
+        if not rtype:
+            return
+        self.type_schema = self.schema["type"].get(rtype, {})
+        self._rebuild_fields()
+        self._status.config(text="")
+
+    def _rebuild_fields(self):
+        for w in self._body.winfo_children():
+            w.destroy()
+        self.field_vars = {}
+        self.field_rows = {}
+        self.tag_vars   = {}
+
+        required   = self.type_schema.get("required", [])
+        all_fields = list(required)
+        for f in self.type_schema.get("fields", {}):
+            if f not in all_fields:
+                all_fields.append(f)
+        for f in self.type_schema.get("conditions", {}):
+            if f not in all_fields:
+                all_fields.append(f)
+
+        for field in all_fields:
+            self._add_field_row(field, field in required)
+
+        self._update_conditionals()
+        self._add_tag_section()
+        self._add_date_note_section()
+        self._body.reset()
+
+    # ── field rows ────────────────────────────────────────────────────────────
+
+    def _add_field_row(self, field, required):
+        frame = tk.Frame(self._body, bg=BG, pady=5)
+        frame.pack(fill="x", padx=HPAD)
+        self.field_rows[field] = frame
+
+        cap = field.replace("_", " ").title()
+        mark = "  *" if required else ""
+        lbl(frame, f"{cap}{mark}", font=F_LABEL,
+            fg=SUBTEXT if not required else TEXT).pack(anchor="w")
+
+        field_meta = self.schema.get("fields", {}).get(field, {})
+        is_int     = isinstance(field_meta, dict) and field_meta.get("type") == "int"
+        opts       = self._resolve_opts(field, {})
+        var        = tk.StringVar()
+        self.field_vars[field] = var
+
+        if is_int:
+            wf, we = _make_entry(frame, textvariable=var, width=16)
+            wf.pack(anchor="w", pady=(3, 0))
+            var.trace_add("write", lambda *_: self._refresh_tags())
+        elif opts is not None:
+            c = _make_combo(frame, opts, textvariable=var, width=32)
+            c.pack(anchor="w", pady=(3, 0))
+            c.bind("<<ComboboxSelected>>", self._on_field_change)
+        else:
+            wf, _ = _make_entry(frame, textvariable=var, width=36)
+            wf.pack(anchor="w", pady=(3, 0))
+
+    def _resolve_opts(self, field, record):
+        fd = self.type_schema.get("fields", {}).get(field, {})
+        if "use" in fd:
+            key = fd["use"].split(".", 1)[1]
+            s   = self.schema.get("shared", {}).get(key, {})
+            o   = s.get("options")
+            return o if isinstance(o, list) else None
+        opts = fd.get("options")
+        if isinstance(opts, list):
+            return opts
+        if isinstance(opts, dict):
+            parent = fd.get("parent")
+            pval   = record.get(parent) or \
+                     self.field_vars.get(parent, tk.StringVar()).get()
+            return opts.get(pval, [])
+        return None
+
+    def _on_field_change(self, _=None):
+        record = self._record_now()
+        for field in list(self.field_vars):
+            fd = self.type_schema.get("fields", {}).get(field, {})
+            if isinstance(fd.get("options"), dict):
+                new_opts = self._resolve_opts(field, record)
+                row = self.field_rows.get(field)
+                if row:
+                    for w in row.winfo_children():
+                        if isinstance(w, ttk.Combobox):
+                            if w.get() not in new_opts:
+                                w.set("")
+                                self.field_vars[field].set("")
+                            w["values"] = new_opts
+        self._update_conditionals()
+        self._refresh_tags()
+
+    def _update_conditionals(self):
+        record = self._record_now()
+        for field, rule in self.type_schema.get("conditions", {}).items():
+            show = all(record.get(k) == v
+                       for k, v in rule.get("when", {}).items())
+            row  = self.field_rows.get(field)
+            if row:
+                if show:
+                    row.pack(fill="x", padx=HPAD)
+                else:
+                    row.pack_forget()
+                    self.field_vars.get(field, tk.StringVar()).set("")
+
+    # ── tags ──────────────────────────────────────────────────────────────────
+
+    def _add_tag_section(self):
+        hsep(self._body).pack(fill="x", padx=HPAD, pady=8)
+
+        outer = tk.Frame(self._body, bg=BG, pady=5)
+        outer.pack(fill="x", padx=HPAD)
+        lbl(outer, "Tags", font=F_LABEL, fg=SUBTEXT).pack(anchor="w")
+
+        inp_row = tk.Frame(outer, bg=BG)
+        inp_row.pack(anchor="w", pady=(3, 0))
+        self._custom_tag_var = tk.StringVar()
+        wf, _ = _make_entry(inp_row, textvariable=self._custom_tag_var, width=30)
+        wf.pack(side="left")
+        sublbl(inp_row, "  comma separated for multiple").pack(
+            side="left", padx=(8, 0))
+
+        self._tag_frame = tk.Frame(outer, bg=BG)
+        self._tag_frame.pack(anchor="w", pady=(6, 0))
+        self._refresh_tags()
+
+    def _refresh_tags(self):
+        if not hasattr(self, "_tag_frame"):
+            return
+        allowed = ptos.resolve_tags(self.schema, self.type_schema,
+                                    self._record_now())
+        prev = {t: v.get() for t, v in self.tag_vars.items()}
+        for w in self._tag_frame.winfo_children():
+            w.destroy()
+        self.tag_vars = {}
+        for tag in allowed:
+            var = tk.IntVar(value=prev.get(tag, 0))
+            tk.Checkbutton(
+                self._tag_frame, text=tag, variable=var,
+                font=F_BODY, bg=BG, fg=TEXT,
+                selectcolor=ACCENT, activebackground=BG,
+                relief="flat"
+            ).pack(side="left", padx=(0, 12))
+            self.tag_vars[tag] = var
+
+    # ── date + note ───────────────────────────────────────────────────────────
+
+    def _add_date_note_section(self):
+        hsep(self._body).pack(fill="x", padx=HPAD, pady=8)
+
+        # date
+        dr = tk.Frame(self._body, bg=BG, pady=5)
+        dr.pack(fill="x", padx=HPAD)
+        lbl(dr, "Date  *", font=F_LABEL, fg=TEXT).pack(anchor="w")
+        date_row = tk.Frame(dr, bg=BG)
+        date_row.pack(anchor="w", pady=(3, 0))
+        self._date_var = tk.StringVar(value=dt.date.today().isoformat())
+        wf, _ = _make_entry(date_row, textvariable=self._date_var, width=14)
+        wf.pack(side="left")
+        sublbl(date_row, "  YYYY-MM-DD").pack(side="left", padx=(8, 0))
+
+        # note
+        nr = tk.Frame(self._body, bg=BG, pady=5)
+        nr.pack(fill="x", padx=HPAD)
+        lbl(nr, "Note", font=F_LABEL, fg=SUBTEXT).pack(anchor="w")
+        self._note_var = tk.StringVar()
+        wf, _ = _make_entry(nr, textvariable=self._note_var, width=48)
+        wf.pack(anchor="w", pady=(3, 0))
+
+        # bottom padding
+        tk.Frame(self._body, bg=BG, height=16).pack()
+
+    # ── submit ────────────────────────────────────────────────────────────────
+
+    def _record_now(self):
+        r = {"type": self._type_var.get()}
+        for f, v in self.field_vars.items():
+            val = v.get().strip()
+            if val:
+                r[f] = val
+        return r
+
+    def _submit(self):
+        self._status.config(text="", fg=SUCCESS)
+        rtype = self._type_var.get()
+        if not rtype:
+            self._status.config(text="Select a record type first.", fg=ERROR_COL)
+            return
+
+        record = self._record_now()
+
+        tags = [t for t, v in self.tag_vars.items() if v.get()]
+        for t in self._custom_tag_var.get().split(","):
+            t = t.strip().replace(" ", "_")
+            if t and t not in tags:
+                tags.append(t)
+        if tags:
+            record["tag"] = tags
+
+        date_str = getattr(self, "_date_var", tk.StringVar()).get().strip()
+        try:
+            ptos.parse_date(date_str)
+        except ValueError:
+            self._status.config(text="Invalid date. Use YYYY-MM-DD.", fg=ERROR_COL)
+            return
+
+        problems = ptos.validate_record(self.schema, record)
+        if problems:
+            self._status.config(text="  |  ".join(problems), fg=ERROR_COL)
+            return
+
+        note = getattr(self, "_note_var", tk.StringVar()).get().strip() or None
+        line = ptos.build_record_line(date_str, record, note)
+        ptos.append_record(line)
+        self._status.config(text=f"✔  Saved:  {line}", fg=SUCCESS)
+
+        # reset
+        self._type_var.set("")
+        self.type_schema = {}
+        for w in self._body.winfo_children():
+            w.destroy()
+        self.field_vars = {}
+        self.tag_vars   = {}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Shared ctrl bar builder
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _ctrl_bar(parent):
+    """Returns a styled control bar frame."""
+    bar = tk.Frame(parent, bg=CARD, pady=12, padx=HPAD)
+    bar.pack(fill="x")
+    return bar
+
+def _ctrl_field(parent, label_text, widget_fn):
+    """Pack a label+widget pair inline. Returns the widget."""
+    tk.Label(parent, text=label_text, font=F_LABEL, fg=SUBTEXT,
+             bg=CARD).pack(side="left", padx=(0, 4))
+    w = widget_fn(parent)
+    w.pack(side="left", padx=(0, 18))
+    return w
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Query Tab
+# ══════════════════════════════════════════════════════════════════════════════
+
+class QueryTab(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, bg=BG)
+        self.cycles  = ptos.get_config().get("cycles", {})
+        self.queries = ptos.get_queries()
+        self._build()
+
+    def _build(self):
+        hdr = tk.Frame(self, bg=CARD, pady=16)
+        hdr.pack(fill="x")
+        tk.Label(hdr, text="Run Query", font=F_HEAD,
+                 fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
+
+        bar = _ctrl_bar(self)
+
+        named      = [k for k in self.queries
+                      if k not in ("metrics", "dashboards", "due")]
+        metrics    = [f"metric: {m}"
+                      for m in self.queries.get("metrics", {})]
+        dashboards = [f"dashboard: {d}"
+                      for d in self.queries.get("dashboards", {})]
+        self._q_var = tk.StringVar()
+        _ctrl_field(bar, "Query",
+                    lambda p: _make_combo(p, named + metrics + dashboards,
+                                          textvariable=self._q_var, width=30))
+
+        self._time_var = tk.StringVar(value="(query default)")
+        time_opts = ["(query default)"] + \
+                    [label for label, _ in TIME_LABELS] + \
+                    list(self.cycles.keys())
+        _ctrl_field(bar, "Time",
+                    lambda p: _make_combo(p, time_opts,
+                                          textvariable=self._time_var, width=16))
+
+        _make_button(bar, "Run", self._run).pack(side="left")
+
+        hsep(self).pack(fill="x")
+
+        pane, self._out = _make_output(self)
+        pane.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+
+    def _run(self):
+        q_name = self._q_var.get().strip()
+        if not q_name:
+            return
+        is_metric    = q_name.startswith("metric: ")
+        is_dashboard = q_name.startswith("dashboard: ")
+        if is_metric:    q_name = q_name[len("metric: "):]
+        if is_dashboard: q_name = q_name[len("dashboard: "):]
+
+        time_raw = self._time_var.get()
+        try:
+            if time_raw == "(query default)":
+                q_def = self.queries.get(q_name, {})
+                start, end = ptos.resolve_time(
+                    q_def.get("time", "tm"), self.cycles)
+            else:
+                code = _TIME_CODE.get(time_raw, time_raw)
+                start, end = ptos.resolve_time(code, self.cycles)
+        except Exception as e:
+            _write(self._out, f"Time error: {e}")
+            return
+
+        lines = []
+        if is_dashboard:
+            db = self.queries.get("dashboards", {}).get(q_name)
+            if not db:
+                _write(self._out, f"Dashboard '{q_name}' not found.")
+                return
+            lines += [f"Dashboard : {q_name}",
+                      f"Period    : {start}  to  {end}", "-" * 44]
+            for item in db.get("metrics", []):
+                lines.append(self._fmt_item(item, start, end))
+        elif is_metric:
+            lines.append(self._fmt_item(q_name, start, end))
+        else:
+            q_def   = self.queries.get(q_name, {})
+            filters = q_def.get("where", "").split()
+            results, total = ptos.scan_records(start, end, filters, None)
+            if not results:
+                _write(self._out, "No records found.")
+                return
+            lines += self._tabulate(results)
+            lines += ["", f"Records : {len(results)}",
+                      f"Period  : {start}  to  {end}"]
+            if total > 0:
+                lines += [f"Total   : {ptos.fmt(total)}",
+                          f"Average : {ptos.fmt_avg(total / len(results))}"]
+        _write(self._out, "\n".join(lines))
+
+    def _fmt_item(self, name, start, end):
+        metrics = self.queries.get("metrics", {})
+        if name in metrics:
+            m = metrics[name]
+            if "ratio" in m:
+                c1, _ = self._base(m["ratio"][0], start, end)
+                c2, _ = self._base(m["ratio"][1], start, end)
+                val   = f"{(c1/c2)*100:.1f}%  ({c1}/{c2})" if c2 else "no data"
+            elif "avg" in m:
+                cnt, tot = self._base(m["avg"], start, end)
+                val = ptos.fmt_avg(tot / cnt) if cnt else "no data"
+            else:
+                val = "?"
+            return f"{name:<28} {val}"
+        elif name in self.queries:
+            cnt, tot = self._base(name, start, end)
+            sfx = f"  ({ptos.fmt(tot)})" if tot > 0 else ""
+            return f"{name:<28} {cnt}{sfx}"
+        return f"{name:<28} (not found)"
+
+    def _base(self, name, start, end):
+        q = self.queries.get(name, {})
+        f = q.get("where", "").split()
+        s, e = ptos.resolve_time(q["time"], self.cycles) \
+               if "time" in q else (start, end)
+        return ptos.scan_records(s, e, f, None)
+
+    def _tabulate(self, results):
+        rows, cols = [], []
+        for line in results:
+            d, kv, note = ptos.parse_line(line)
+            row = {"date": str(d)}
+            row.update({k: (" ".join(v) if isinstance(v, list) else v)
+                        for k, v in kv.items()})
+            if note: row["note"] = note
+            for k in row:
+                if k not in cols: cols.append(k)
+            rows.append(row)
+        w = {c: max(len(c), max(len(str(r.get(c, ""))) for r in rows))
+             for c in cols}
+        hdr = "  ".join(c.upper().ljust(w[c]) for c in cols)
+        out = [hdr, "-" * len(hdr)]
+        for r in rows:
+            out.append("  ".join(str(r.get(c, "")).ljust(w[c]) for c in cols))
+        return out
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Browse Tab
+# ══════════════════════════════════════════════════════════════════════════════
+
+class BrowseTab(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, bg=BG)
+        self.cycles = ptos.get_config().get("cycles", {})
+        self._build()
+
+    def _build(self):
+        hdr = tk.Frame(self, bg=CARD, pady=16)
+        hdr.pack(fill="x")
+        tk.Label(hdr, text="Browse Records", font=F_HEAD,
+                 fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
+
+        bar = _ctrl_bar(self)
+
+        self._type_var = tk.StringVar(value="All types")
+        schema = ptos.get_schema()
+        type_opts = ["All types"] + schema["types"]["allowed"]
+        _ctrl_field(bar, "Type",
+                    lambda p: _make_combo(p, type_opts,
+                                          textvariable=self._type_var, width=16))
+
+        self._time_var = tk.StringVar(value="This month")
+        time_opts = [label for label, _ in TIME_LABELS] + list(self.cycles.keys())
+        _ctrl_field(bar, "Time",
+                    lambda p: _make_combo(p, time_opts,
+                                          textvariable=self._time_var, width=14))
+
+        self._search_var = tk.StringVar()
+        tk.Label(bar, text="Search", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        sf, _ = _make_entry(bar, textvariable=self._search_var, width=20)
+        sf.pack(side="left", padx=(0, 18))
+
+        _make_button(bar, "Search", self._run).pack(side="left")
+
+        hsep(self).pack(fill="x")
+
+        pane, self._out = _make_output(self)
+        pane.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+
+    def _run(self):
+        try:
+            code = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
+            start, end = ptos.resolve_time(code, self.cycles)
+        except Exception as e:
+            _write(self._out, f"Time error: {e}")
+            return
+
+        filters = []
+        t = self._type_var.get()
+        if t and t != "All types":
+            filters.append(f"type={t}")
+
+        results, total = ptos.scan_records(
+            start, end, filters,
+            self._search_var.get().strip() or None)
+
+        if not results:
+            _write(self._out, "No records found.")
+            return
+
+        rows, cols = [], []
+        for line in results:
+            d, kv, note = ptos.parse_line(line)
+            row = {"date": str(d)}
+            row.update({k: (" ".join(v) if isinstance(v, list) else v)
+                        for k, v in kv.items()})
+            if note: row["note"] = note
+            for k in row:
+                if k not in cols: cols.append(k)
+            rows.append(row)
+
+        w = {c: max(len(c), max(len(str(r.get(c, ""))) for r in rows))
+             for c in cols}
+        hdr   = "  ".join(c.upper().ljust(w[c]) for c in cols)
+        lines = [hdr, "-" * len(hdr)]
+        for r in rows:
+            lines.append("  ".join(str(r.get(c, "")).ljust(w[c]) for c in cols))
+        lines += ["", f"Records : {len(results)}   Period : {start}  to  {end}"]
+        if total > 0:
+            lines += [f"Total   : {ptos.fmt(total)}",
+                      f"Average : {ptos.fmt_avg(total / len(results))}"]
+        _write(self._out, "\n".join(lines))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Main window
+# ══════════════════════════════════════════════════════════════════════════════
+
+class PTOSApp(tk.Tk):
+    def __init__(self):
+        super().__init__()
+        self.title("PTOS")
+        self.geometry("900x720")
+        self.minsize(720, 540)
+        self.configure(bg=BG)
+        # Route Tkinter callback errors to our log+popup handler
+        self.report_callback_exception = self._on_callback_error
+
+        _setup_ttk_styles()
+        self.option_add("*TCombobox*Listbox.font", F_BODY)
+        self.option_add("*TCombobox*Listbox.background", ENTRY_BG)
+        self.option_add("*TCombobox*Listbox.foreground", TEXT)
+        self.option_add("*TCombobox*Listbox.selectBackground", ACCENT)
+        self.option_add("*TCombobox*Listbox.selectForeground", "white")
+
+        nb = ttk.Notebook(self)
+        nb.pack(fill="both", expand=True)
+
+        nb.add(AddRecordTab(nb), text="   + Add Record   ")
+        nb.add(QueryTab(nb),     text="   Queries   ")
+        nb.add(BrowseTab(nb),    text="   Browse   ")
+
+    def _on_callback_error(self, exc_type, exc_value, exc_tb):
+        """Called by Tkinter when any callback raises — log and show popup."""
+        exc_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
+        LOG_PATH  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                 "ptos_error.log")
+        timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*60}\n{timestamp}\n{exc_text}\n")
+        messagebox.showerror(
+            "PTOS — Error",
+            f"An error occurred. Details saved to:\n{LOG_PATH}\n\n{exc_text[-800:]}"
+        )
+
+
+if __name__ == "__main__":
+    LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "ptos_error.log")
+
+    def _log_and_show(exc_text):
+        """Write crash to log file and show a popup."""
+        timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*60}\n{timestamp}\n{exc_text}\n")
+        # show popup — create a minimal root if the app never started
+        try:
+            root = tk.Tk()
+            root.withdraw()
+        except Exception:
+            root = None
+        messagebox.showerror(
+            "PTOS — Unexpected Error",
+            f"Something went wrong. Details saved to:\n{LOG_PATH}\n\n"
+            f"{exc_text[-800:]}"   # last 800 chars fits a dialog
+        )
+        if root:
+            root.destroy()
+
+    try:
+        app = PTOSApp()
+        app.mainloop()
+    except Exception:
+        _log_and_show(traceback.format_exc())
