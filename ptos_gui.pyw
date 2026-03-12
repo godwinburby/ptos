@@ -182,6 +182,133 @@ def _write(widget, text):
     widget.config(state="disabled")
 
 
+
+# ── Date Picker ───────────────────────────────────────────────────────────────
+
+class DatePicker(tk.Toplevel):
+    """Popup calendar — sets a StringVar to the chosen YYYY-MM-DD date."""
+
+    def __init__(self, parent, date_var):
+        super().__init__(parent)
+        self.date_var = date_var
+        self.overrideredirect(True)   # no title bar
+        self.resizable(False, False)
+
+        try:
+            chosen = dt.date.fromisoformat(date_var.get())
+        except ValueError:
+            chosen = dt.date.today()
+        self._year  = chosen.year
+        self._month = chosen.month
+        self._chosen = chosen
+
+        self._build()
+        self._position(parent)
+        self.grab_set()
+        self.focus_set()
+        self.bind("<Escape>", lambda _: self.destroy())
+        self.bind("<FocusOut>", self._on_focus_out)
+
+    def _on_focus_out(self, e):
+        # close if focus moves outside this window
+        if self.focus_get() is None:
+            self.destroy()
+
+    def _position(self, parent):
+        self.update_idletasks()
+        x = parent.winfo_rootx()
+        y = parent.winfo_rooty() + parent.winfo_height() + 4
+        self.geometry(f"+{x}+{y}")
+
+    def _build(self):
+        for w in self.winfo_children():
+            w.destroy()
+
+        outer = tk.Frame(self, bg=BORDER, padx=1, pady=1)
+        outer.pack()
+        inner = tk.Frame(outer, bg=CARD)
+        inner.pack()
+
+        # ── nav row ──────────────────────────────────────────────────────────
+        nav = tk.Frame(inner, bg=ACCENT, pady=6)
+        nav.pack(fill="x")
+
+        tk.Button(nav, text="◀", command=self._prev_month,
+                  font=F_BTN, bg=ACCENT, fg="white",
+                  activebackground=ACCENT_HO, relief="flat",
+                  bd=0, padx=10).pack(side="left")
+
+        self._title = tk.Label(nav,
+                               text=dt.date(self._year, self._month, 1).strftime("%B %Y"),
+                               font=F_BTN, fg="white", bg=ACCENT)
+        self._title.pack(side="left", expand=True)
+
+        tk.Button(nav, text="▶", command=self._next_month,
+                  font=F_BTN, bg=ACCENT, fg="white",
+                  activebackground=ACCENT_HO, relief="flat",
+                  bd=0, padx=10).pack(side="right")
+
+        # ── day-of-week headers ───────────────────────────────────────────────
+        dow = tk.Frame(inner, bg=CARD, pady=4)
+        dow.pack(fill="x", padx=6)
+        for d in ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"]:
+            tk.Label(dow, text=d, font=F_SMALL, fg=SUBTEXT,
+                     bg=CARD, width=3).pack(side="left", padx=2)
+
+        # ── day grid ──────────────────────────────────────────────────────────
+        grid = tk.Frame(inner, bg=CARD, padx=6, pady=2)
+        grid.pack()
+
+        import calendar
+        cal = calendar.monthcalendar(self._year, self._month)
+        today = dt.date.today()
+
+        for week in cal:
+            row = tk.Frame(grid, bg=CARD)
+            row.pack()
+            for day in week:
+                if day == 0:
+                    tk.Label(row, text="", width=3, bg=CARD).pack(side="left", padx=2, pady=2)
+                else:
+                    d = dt.date(self._year, self._month, day)
+                    is_chosen = (d == self._chosen)
+                    is_today  = (d == today)
+                    bg  = ACCENT if is_chosen else ("#E8F0FE" if is_today else CARD)
+                    fg  = "white" if is_chosen else (ACCENT if is_today else TEXT)
+                    btn = tk.Button(row, text=str(day), width=3,
+                                    font=F_BODY, bg=bg, fg=fg,
+                                    activebackground=ACCENT_HO,
+                                    activeforeground="white",
+                                    relief="flat", bd=0,
+                                    command=lambda d=d: self._pick(d))
+                    btn.pack(side="left", padx=2, pady=2)
+
+        # ── today shortcut ────────────────────────────────────────────────────
+        foot = tk.Frame(inner, bg=CARD, pady=6)
+        foot.pack(fill="x")
+        tk.Button(foot, text="Today", command=lambda: self._pick(dt.date.today()),
+                  font=F_SMALL, bg=BG, fg=ACCENT,
+                  activeforeground=ACCENT_HO, relief="flat", bd=0).pack()
+
+    def _prev_month(self):
+        self._month -= 1
+        if self._month == 0:
+            self._month = 12
+            self._year -= 1
+        self._build()
+
+    def _next_month(self):
+        self._month += 1
+        if self._month == 13:
+            self._month = 1
+            self._year += 1
+        self._build()
+
+    def _pick(self, d):
+        self.date_var.set(d.isoformat())
+        self.destroy()
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Add Record Tab
 # ══════════════════════════════════════════════════════════════════════════════
@@ -281,8 +408,17 @@ class AddRecordTab(tk.Frame):
         self.field_vars[field] = var
 
         if is_int:
-            wf, we = _make_entry(frame, textvariable=var, width=16)
-            wf.pack(anchor="w", pady=(3, 0))
+            unit = field_meta.get("unit", "")
+            # number-only validation
+            vcmd = (frame.register(lambda s: s == "" or s.isdigit()), "%P")
+            int_row = tk.Frame(frame, bg=BG)
+            int_row.pack(anchor="w", pady=(3, 0))
+            wf, we = _make_entry(int_row, textvariable=var, width=12)
+            we.config(validate="key", validatecommand=vcmd)
+            wf.pack(side="left")
+            if unit:
+                tk.Label(int_row, text=unit, font=F_LABEL, fg=SUBTEXT,
+                         bg=BG).pack(side="left", padx=(8, 0))
             var.trace_add("write", lambda *_: self._refresh_tags())
         elif opts is not None:
             c = _make_combo(frame, opts, textvariable=var, width=32)
@@ -393,7 +529,12 @@ class AddRecordTab(tk.Frame):
         self._date_var = tk.StringVar(value=dt.date.today().isoformat())
         wf, _ = _make_entry(date_row, textvariable=self._date_var, width=14)
         wf.pack(side="left")
-        sublbl(date_row, "  YYYY-MM-DD").pack(side="left", padx=(8, 0))
+        cal_btn = tk.Button(date_row, text="📅",
+                            font=("Segoe UI Emoji", 13),
+                            bg=BG, fg=ACCENT, relief="flat", bd=0,
+                            cursor="hand2",
+                            command=lambda: DatePicker(cal_btn, self._date_var))
+        cal_btn.pack(side="left", padx=(6, 0))
 
         # note
         nr = tk.Frame(self._body, bg=BG, pady=5)
