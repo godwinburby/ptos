@@ -109,15 +109,42 @@ python ptos_gui.pyw
 
 ### Tabs
 
-**+ Add Record** — select a record type and a form renders dynamically from `schema.toml`. Fields with fixed options show as dropdowns. Parent-dependent fields (e.g. category changes based on domain) update live. Conditional fields appear only when their condition is met (e.g. `fit` appears only when `outcome=prescribed`). Schema-defined tags appear as checkboxes; any custom tag can be typed in the tags field as comma-separated values. Date defaults to today. Note is always available.
+**+ Add Record** — select a record type and a form renders dynamically from `schema.toml`. Fields with fixed options show as dropdowns. Parent-dependent fields (e.g. category changes based on domain) update live. Conditional fields appear only when their condition is met (e.g. `fit` appears only when `outcome=prescribed`). Schema-defined tags appear as checkboxes; any custom tag can be typed in the tags field as comma-separated values. Date defaults to today and can be picked from a popup calendar. Note is always available.
 
 **Queries** — run any named query, metric, or dashboard from `queries.toml`. Optional time window override. Results shown in a scrollable monospace table.
 
 **Browse** — filter records by type, time window, and free-text search. Full results shown with horizontal and vertical scroll.
 
+### Field behaviour in the form
+
+- **Dropdowns** — fields with defined options render as dropdowns. Parent-dependent dropdowns (e.g. `category` depending on `domain`) update automatically.
+- **Number fields** — fields typed as `int` in `schema.toml` only accept digits. A unit label appears to the right of the field (e.g. `₹` for `amount` and `advance`, `min` for `duration`). The unit is declared in `schema.toml` as a `unit` key and is purely for display — it is not saved to the record.
+- **Date picker** — click the 📅 icon next to the date field to open a popup calendar. Navigate months with ◀ ▶. Click a date to select it. A Today shortcut is shown at the bottom.
+- **Text fields** — spaces are automatically converted to underscores before saving, since the plain-text log format uses spaces as field separators.
+
+### Unit labels in schema
+
+To show a unit hint next to a numeric field in the GUI, add a `unit` key to the field's global metadata in `schema.toml`:
+
+```toml
+[fields.amount]
+type         = "int"
+dimension    = false
+aggregatable = true
+unit         = "₹"
+
+[fields.duration]
+type         = "int"
+dimension    = false
+aggregatable = true
+unit         = "min"
+```
+
+The `unit` key is ignored by `ptos.py` — it is only read by the GUI.
+
 ### Error log
 
-If the GUI crashes, the full traceback is written to `ptos_error.log` in the PTOS folder and shown in a popup. Safe to share when reporting issues.
+If the GUI crashes, the full traceback is written to `ptos_error.log` in the PTOS folder and shown in a popup with a **Copy to Clipboard** button. Paste the error directly when reporting issues.
 
 ### Requirements
 
