@@ -413,7 +413,7 @@ class AddRecordTab(tk.Frame):
         for f, v in self.field_vars.items():
             val = v.get().strip()
             if val:
-                r[f] = val
+                r[f] = "_".join(val.split())
         return r
 
     def _submit(self):

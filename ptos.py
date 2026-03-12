@@ -313,14 +313,23 @@ def apply_where(kv, filters):
 # Query engine
 # --------------------------------------------------
 
-def scan_records(start, end, filters, search):
-    """Scan all log files and return (matching_lines, numeric_total)."""
+def scan_records(start, end, filters, search, from_file=None):
+    """Scan log files and return (matching_lines, numeric_total).
+    from_file: if given, read only that file from records/ folder.
+    """
     results = []
     total   = 0
     os.makedirs(RECORDS_DIR, exist_ok=True)
-    for fname in sorted(os.listdir(RECORDS_DIR)):
-        if not fname.endswith(".log"):
-            continue
+    if from_file:
+        # validate — no path separators, must exist in records/
+        if any(c in from_file for c in ("/", "\\", " ")):
+            sys.exit(f"--file: filename must not contain spaces or path separators: {from_file}")
+        fnames = [from_file]
+        if not os.path.exists(os.path.join(RECORDS_DIR, from_file)):
+            sys.exit(f"--file: '{from_file}' not found in records/ folder")
+    else:
+        fnames = sorted(f for f in os.listdir(RECORDS_DIR) if f.endswith(".log"))
+    for fname in fnames:
         path = os.path.join(RECORDS_DIR, fname)
         with open(path, encoding="utf-8") as f:
             for line in f:
@@ -1491,6 +1500,8 @@ def build_parser(cycles):
     qry.add_argument("-g", "--tag",    action="append",             help="Filter by tag (repeatable)")
     qry.add_argument("-S", "--search",                              help="Full-text search")
     qry.add_argument("--save",                                      help="Save current query to queries.toml under this name")
+    qry.add_argument("--file",   dest="from_file", metavar="FILENAME", help="Read from this file in records/ folder (e.g. 2025.log)")
+    qry.add_argument("--select", nargs="+", metavar="FIELD",           help="Show only these fields in output (date and note always included)")
 
     ana = p.add_argument_group("Analyse")
     ana.add_argument("-G", "--group",  nargs="+", help="Group by one or more fields")
@@ -2040,7 +2051,7 @@ def main():
         save_query(args.save, args, final_filters)
 
     # ---- scan ----
-    results, total = scan_records(start, end, final_filters, args.search)
+    results, total = scan_records(start, end, final_filters, args.search, getattr(args, "from_file", None))
 
     if not results:
         print("\nNo records found.\n")
@@ -2098,6 +2109,26 @@ def main():
         return
 
     # ---- default: list records ----
+    # apply --select: keep only chosen fields, always keep date and note
+    if getattr(args, "select", None):
+        selected = set(args.select)
+        filtered = []
+        for line in results:
+            d, kv, note = parse_line(line)
+            parts = [str(d)]
+            for k, v in kv.items():
+                if k in selected:
+                    if isinstance(v, list):
+                        for val in v:
+                            parts.append(f"{k}={val}")
+                    else:
+                        parts.append(f"{k}={v}")
+            rec = " ".join(parts)
+            if note:
+                rec += f" | {note}"
+            filtered.append(rec)
+        results = filtered
+
     # sort by field if --sort given and not in pivot mode
     if args.sort and not args.pivot:
         def sort_key(line):

@@ -106,7 +106,7 @@ multi     = true
 # --------------------------------------------------
 
 [shared.source]
-options = ["mgm", "mgm_coffee", "ent", "walkin", "marketing", "camp"]
+options = ["mgm", "mgm_coffee", "ent", "walkin", "marketing", "camp","outreach"]
 
 [shared.booked_by]
 options = ["cso", "cce", "cre", "ent"]
