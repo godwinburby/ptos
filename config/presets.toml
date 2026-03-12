@@ -16,6 +16,13 @@ tag      = ["auto", "bus"]
 
 [presets.snacks]
 type     = "expense"
+domain   = "home"
+category = "household"
+tag      = ["snacks"]
+# amount omitted — will be prompted each time
+
+[presets.snacksw]
+type     = "expense"
 domain   = "work"
 category = "staff_welfare"
 tag      = ["snacks"]

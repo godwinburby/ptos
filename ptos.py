@@ -438,18 +438,69 @@ def validate_record(schema, record):
     return problems
 
 def lint_records(records, schema):
-    errors = 0
+    """Validate all records in two passes:
+    1. Anatomy — universal checks independent of schema
+       errors   : missing date, missing type
+       warnings : missing tag, missing note
+    2. Schema   — type-specific field validation
+       errors   : missing required fields, invalid values, failed conditions
+    """
+    total_errors   = 0
+    total_warnings = 0
+
     for line in records:
-        _, kv, _ = parse_line(line)
-        problems = validate_record(schema, kv)
-        if problems:
-            errors += 1
-            print("\n⚠ Problem in record:")
+        if not line.strip():
+            continue
+
+        d, kv, note = parse_line(line)
+        anatomy_errors   = []
+        anatomy_warnings = []
+
+        # ── Anatomy errors (hard) ──────────────────────────
+        # date: parse_line returns date.min on failure
+        if d == dt.date.min:
+            anatomy_errors.append("ERROR: missing or malformed date")
+
+        # type must be present
+        if "type" not in kv:
+            anatomy_errors.append("ERROR: missing type field")
+
+        # ── Anatomy warnings (soft) ────────────────────────
+        # at least one tag
+        if "tag" not in kv:
+            anatomy_warnings.append("WARNING: no tag")
+
+        # note should be present
+        if not note or not note.strip():
+            anatomy_warnings.append("WARNING: no note")
+
+        # ── Schema validation ──────────────────────────────
+        schema_problems = validate_record(schema, kv)
+
+        # ── Report ─────────────────────────────────────────
+        has_issue = anatomy_errors or anatomy_warnings or schema_problems
+        if has_issue:
+            print(f"\n{'─' * 60}")
             print(line)
-            for p in problems:
-                print("  -", p)
-    if errors == 0:
-        print("✔ No lint errors found")
+            for msg in anatomy_errors:
+                print(f"  ✖ {msg}")
+                total_errors += 1
+            for msg in schema_problems:
+                print(f"  ✖ {msg}")
+                total_errors += 1
+            for msg in anatomy_warnings:
+                print(f"  ⚠ {msg}")
+                total_warnings += 1
+
+    print()
+    if total_errors == 0 and total_warnings == 0:
+        print("✔ All records clean — no errors or warnings")
+    else:
+        if total_errors:
+            print(f"✖ {total_errors} error(s) found")
+        if total_warnings:
+            print(f"⚠ {total_warnings} warning(s) found")
+    print()
 
 # --------------------------------------------------
 # Analysis  —  group + pivot return data, render separately

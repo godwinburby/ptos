@@ -105,7 +105,7 @@ sum   = true
 
 [snacks]
 where = "type=expense domain!=work tag=snacks"
-time  = "clinic"
+time  = "tm"
 sum   = true
 
 # --------------------------------------------------

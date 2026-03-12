@@ -19,6 +19,29 @@ Fields become dimensions for grouping and filtering. Numeric fields become measu
 
 ---
 
+## Anatomy of a record
+
+Every record follows this exact structure:
+
+```
+2026-03-11  type=expense  domain=self category=food amount=120  tag=restaurant  | lunch with team
+──────────  ────────────  ──────────────────────────────────────  ─────────────  ────────────────
+date        type          fields                                  tag(s)         note
+```
+
+| Part | Required | Description |
+|------|----------|-------------|
+| date | yes | `YYYY-MM-DD` — always first |
+| type | yes | what kind of event — always second |
+| fields | yes | `key=value` pairs defined by schema for this type |
+| tag | recommended | freeform labels for cross-cutting queries — `tag=auto tag=bus` |
+| note | recommended | human context after `\|` that fields cannot capture |
+
+A record missing a tag or note is valid but weak — `--lint` will warn you.
+A record missing a date or type is broken — `--lint` will error.
+
+---
+
 ## Requirements
 
 - Python 3.11+ (uses `tomllib` from the standard library)
