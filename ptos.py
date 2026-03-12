@@ -1450,7 +1450,9 @@ def build_parser(cycles):
     p = argparse.ArgumentParser(
         prog="ptos",
         description=(
-            "PTOS — Plain Text Operating System\n\n"
+            "PTOS — Plain Text Operating System\n"
+            "Log it. Query it. Own it.\n"
+            "github.com/godwinburby/ptos\n\n"
             "Record and analyse life, work, and finance events\n"
             "using structured plain-text logs.\n\n"
             "Fields become dimensions. Numeric fields become measures."
