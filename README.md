@@ -191,7 +191,7 @@ ptos --edit x        # ptos.py itself
 | `--search text` | Full-text search |
 | `--save NAME` | Save current query filters and analysis to queries.toml |
 | `--file FILENAME` | Read from a specific file in `records/` folder (e.g. `2025.log`). Full filename with extension. No spaces. |
-| `--select field ...` | Show only specified fields in output. Date and note always included. Log format preserved. |
+| `--select field ...` | Show only specified fields in output. Date, type, and note always included. Log format preserved. |
 
 ### Analyse
 
@@ -687,7 +687,7 @@ The full filename including extension is required. No spaces allowed. The file m
 
 ## Selecting output fields
 
-By default PTOS prints the full raw record line. Use `--select` to show only the fields you care about. Date and note are always included.
+By default PTOS prints the full raw record line. Use `--select` to show only the fields you care about. Date, type, and note are always included regardless of what you specify.
 
 ```bash
 ptos -y followup -t tm --select name intent result
@@ -698,8 +698,8 @@ ptos -y followup -t tm --select name intent --sort intent
 Output keeps log format with only the selected fields:
 
 ```
-2026-03-11 name=george_joseph intent=trial | will call back next week
-2026-03-11 name=alice_m intent=decision | discussing with family
+2026-03-11 type=followup name=george_joseph intent=trial | will call back next week
+2026-03-11 type=followup name=alice_m intent=decision | discussing with family
 ```
 
 `--select` works with `--table`, `--sort`, and `--due`. Position in the command does not matter.
