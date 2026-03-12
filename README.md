@@ -88,6 +88,43 @@ ptos/
 
 ---
 
+## GUI front-end (Windows)
+
+For users who prefer not to use the terminal, PTOS includes a graphical interface — `ptos_gui.pyw` — that runs on any Windows machine with Python installed.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `ptos_gui.pyw` | The GUI application — double-click or run via `ptg.bat` |
+| `ptg.bat` | Windows launcher — runs the GUI without a console window |
+
+### Launching
+
+Double-click `ptg.bat`, or from the terminal:
+
+```cmd
+python ptos_gui.pyw
+```
+
+### Tabs
+
+**+ Add Record** — select a record type and a form renders dynamically from `schema.toml`. Fields with fixed options show as dropdowns. Parent-dependent fields (e.g. category changes based on domain) update live. Conditional fields appear only when their condition is met (e.g. `fit` appears only when `outcome=prescribed`). Schema-defined tags appear as checkboxes; any custom tag can be typed in the tags field as comma-separated values. Date defaults to today. Note is always available.
+
+**Queries** — run any named query, metric, or dashboard from `queries.toml`. Optional time window override. Results shown in a scrollable monospace table.
+
+**Browse** — filter records by type, time window, and free-text search. Full results shown with horizontal and vertical scroll.
+
+### Error log
+
+If the GUI crashes, the full traceback is written to `ptos_error.log` in the PTOS folder and shown in a popup. Safe to share when reporting issues.
+
+### Requirements
+
+Same as `ptos.py` — Python 3.11+, standard library only. No extra packages needed.
+
+---
+
 ## Quick start
 
 ```bash
