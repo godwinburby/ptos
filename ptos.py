@@ -2109,9 +2109,9 @@ def main():
         return
 
     # ---- default: list records ----
-    # apply --select: keep only chosen fields, always keep date and note
+    # apply --select: keep only chosen fields, always keep date, type and note
     if getattr(args, "select", None):
-        selected = set(args.select)
+        selected = set(args.select) | {"type"}  # type always included
         filtered = []
         for line in results:
             d, kv, note = parse_line(line)
