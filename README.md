@@ -1,5 +1,7 @@
 # PTOS — Plain Text Operating System
 
+> Log it. Query it. Own it.
+
 Record and analyse life, work, and finance events using structured plain-text logs.
 One Python file. No database. No dependencies beyond the standard library.
 
