@@ -635,6 +635,11 @@ class QueryTab(tk.Frame):
         hdr.pack(fill="x")
         tk.Label(hdr, text="Run Query", font=F_HEAD,
                  fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
+        # reload button — refreshes query list from queries.toml
+        tk.Button(hdr, text="⟳  Reload", command=self._reload,
+                  font=F_SMALL, bg=CARD, fg=ACCENT,
+                  activeforeground=ACCENT_HO, relief="flat", bd=0,
+                  cursor="hand2").pack(side="right", padx=HPAD)
 
         bar = _ctrl_bar(self)
 
@@ -645,17 +650,23 @@ class QueryTab(tk.Frame):
         dashboards = [f"dashboard: {d}"
                       for d in self.queries.get("dashboards", {})]
         self._q_var = tk.StringVar()
-        _ctrl_field(bar, "Query",
-                    lambda p: _make_combo(p, named + metrics + dashboards,
-                                          textvariable=self._q_var, width=30))
+        q_combo = _make_combo(bar, named + metrics + dashboards,
+                              textvariable=self._q_var, width=30)
+        tk.Label(bar, text="Query", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        q_combo.pack(side="left", padx=(0, 18))
+        q_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
 
         self._time_var = tk.StringVar(value="(query default)")
         time_opts = ["(query default)"] + \
                     [label for label, _ in TIME_LABELS] + \
                     list(self.cycles.keys())
-        _ctrl_field(bar, "Time",
-                    lambda p: _make_combo(p, time_opts,
-                                          textvariable=self._time_var, width=16))
+        t_combo = _make_combo(bar, time_opts,
+                              textvariable=self._time_var, width=16)
+        tk.Label(bar, text="Time", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        t_combo.pack(side="left", padx=(0, 18))
+        t_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
 
         _make_button(bar, "Run", self._run).pack(side="left")
 
@@ -663,6 +674,13 @@ class QueryTab(tk.Frame):
 
         pane, self._out = _make_output(self)
         pane.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+
+    def _reload(self):
+        self.queries = ptos.get_queries()
+        # rebuild the whole tab
+        for w in self.winfo_children():
+            w.destroy()
+        self._build()
 
     def _run(self):
         q_name = self._q_var.get().strip()
@@ -777,33 +795,166 @@ class BrowseTab(tk.Frame):
         tk.Label(hdr, text="Browse Records", font=F_HEAD,
                  fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
 
-        bar = _ctrl_bar(self)
+        # ── row 1: filters ───────────────────────────────────────────────────
+        row1 = tk.Frame(self, bg=CARD, pady=10, padx=HPAD)
+        row1.pack(fill="x")
 
         self._type_var = tk.StringVar(value="All types")
         schema = ptos.get_schema()
         type_opts = ["All types"] + schema["types"]["allowed"]
-        _ctrl_field(bar, "Type",
-                    lambda p: _make_combo(p, type_opts,
-                                          textvariable=self._type_var, width=16))
+        type_combo = _make_combo(row1, type_opts,
+                                 textvariable=self._type_var, width=16)
+        tk.Label(row1, text="Type", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        type_combo.pack(side="left", padx=(0, 18))
+        type_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
 
         self._time_var = tk.StringVar(value="This month")
         time_opts = [label for label, _ in TIME_LABELS] + list(self.cycles.keys())
-        _ctrl_field(bar, "Time",
-                    lambda p: _make_combo(p, time_opts,
-                                          textvariable=self._time_var, width=14))
+        time_combo = _make_combo(row1, time_opts,
+                                 textvariable=self._time_var, width=14)
+        tk.Label(row1, text="Time", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        time_combo.pack(side="left", padx=(0, 18))
+        time_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
 
         self._search_var = tk.StringVar()
-        tk.Label(bar, text="Search", font=F_LABEL, fg=SUBTEXT,
+        tk.Label(row1, text="Search", font=F_LABEL, fg=SUBTEXT,
                  bg=CARD).pack(side="left", padx=(0, 4))
-        sf, _ = _make_entry(bar, textvariable=self._search_var, width=20)
-        sf.pack(side="left", padx=(0, 18))
+        sf, search_entry = _make_entry(row1, textvariable=self._search_var, width=22)
+        sf.pack(side="left", padx=(0, 0))
+        search_entry.bind("<Return>", lambda _: self._run())
 
-        _make_button(bar, "Search", self._run).pack(side="left")
+        # ── row 2: actions ────────────────────────────────────────────────────
+        row2 = tk.Frame(self, bg=CARD, pady=8, padx=HPAD)
+        row2.pack(fill="x")
+
+        _make_button(row2, "Search", self._run).pack(side="left", padx=(0, 12))
+
+        due_btn = tk.Button(row2, text="Due List", command=self._run_due,
+                            font=F_BTN, bg="#E8803A", fg="white",
+                            activebackground="#C96A2A", relief="flat",
+                            cursor="hand2", padx=14, pady=8, bd=0)
+        due_btn.pack(side="left")
 
         hsep(self).pack(fill="x")
 
         pane, self._out = _make_output(self)
         pane.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+
+    def _run_due(self):
+        """Run the default due list from queries.toml [due] config."""
+        try:
+            queries = ptos.get_queries()
+            due_cfg = queries.get("due", {})
+            if not due_cfg:
+                _write(self._out, "No [due] config found in queries.toml.")
+                return
+            results = ptos.get_due(due_cfg, self.cycles)
+            if not results:
+                _write(self._out, "No overdue records.")
+                return
+            _write(self._out, results)
+        except AttributeError:
+            # ptos.get_due may not exist — fall back to CLI output via scan
+            self._run_due_manual()
+        except Exception as e:
+            _write(self._out, f"Due error: {e}")
+
+    def _run_due_manual(self):
+        """Fallback: manually compute due list from [due] config."""
+        try:
+            queries  = ptos.get_queries()
+            due_cfg  = queries.get("due", {})
+            if not due_cfg:
+                _write(self._out, "No [due] config found in queries.toml.")
+                return
+            rtype    = due_cfg.get("type")
+            key_fld  = due_cfg.get("key")
+            days     = int(due_cfg.get("days", 7))
+            sort_fld = due_cfg.get("sort_by")
+
+            if not rtype or not key_fld:
+                _write(self._out, "due config missing 'type' or 'key'.")
+                return
+
+            start, end = ptos.resolve_time("all", self.cycles)
+            results, _ = ptos.scan_records(start, end,
+                                           [f"type={rtype}"], None)
+            if not results:
+                _write(self._out, "No records found.")
+                return
+
+            # most recent record per key
+            latest = {}
+            for line in results:
+                d, kv, note = ptos.parse_line(line)
+                k = kv.get(key_fld, "")
+                if not k:
+                    continue
+                if k not in latest or d > latest[k]["date"]:
+                    latest[k] = {"date": d, "kv": kv, "note": note}
+
+            today = dt.date.today()
+            overdue = []
+            for k, rec in latest.items():
+                age = (today - rec["date"]).days
+                if age >= days:
+                    overdue.append((age, k, rec))
+
+            if not overdue:
+                _write(self._out, f"No records overdue by {days}+ days.")
+                return
+
+            # sort by sort_fld schema option order, then age
+            schema   = ptos.get_schema()
+            sort_opts = []
+            if sort_fld:
+                fd = schema.get("type", {}).get(rtype, {}).get(
+                     "fields", {}).get(sort_fld, {})
+                sort_opts = fd.get("options", [])
+
+            def _priority(item):
+                age, k, rec = item
+                sv = rec["kv"].get(sort_fld, "")
+                pri = sort_opts.index(sv) if sv in sort_opts else len(sort_opts)
+                return (pri, -age)
+
+            overdue.sort(key=_priority)
+
+            lines = [f"Due  (>{days} days)  type={rtype}", ""]
+            cols  = ["last", sort_fld or "sort", key_fld, "note"]
+            cols  = [c for c in cols if c]
+            w     = {c: max(len(c), 6) for c in cols}
+            for age, k, rec in overdue:
+                row = {
+                    "last":   f"{age}d",
+                    key_fld:  k,
+                    "note":   rec["note"] or "",
+                }
+                if sort_fld:
+                    row[sort_fld] = rec["kv"].get(sort_fld, "")
+                for c in cols:
+                    w[c] = max(w[c], len(str(row.get(c, ""))))
+
+            hdr = "  ".join(c.ljust(w[c]) for c in cols)
+            lines += [f"   {hdr}", "   " + "-" * len(hdr)]
+            for age, k, rec in overdue:
+                row = {
+                    "last":   f"{age}d",
+                    key_fld:  k,
+                    "note":   rec["note"] or "",
+                }
+                if sort_fld:
+                    row[sort_fld] = rec["kv"].get(sort_fld, "")
+                lines.append("   " + "  ".join(
+                    str(row.get(c, "")).ljust(w[c]) for c in cols))
+
+            lines += ["", f"Total overdue: {len(overdue)}"]
+            _write(self._out, "\n".join(lines))
+
+        except Exception as e:
+            _write(self._out, f"Due error: {e}")
 
     def _run(self):
         try:
@@ -848,6 +999,119 @@ class BrowseTab(tk.Frame):
             lines += [f"Total   : {ptos.fmt(total)}",
                       f"Average : {ptos.fmt_avg(total / len(results))}"]
         _write(self._out, "\n".join(lines))
+
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Log Editor Tab
+# ══════════════════════════════════════════════════════════════════════════════
+
+class LogEditorTab(tk.Frame):
+    def __init__(self, parent):
+        super().__init__(parent, bg=BG)
+        self._path = None
+        self._build()
+        self._load()
+
+    def _build(self):
+        hdr = tk.Frame(self, bg=CARD, pady=16)
+        hdr.pack(fill="x")
+        tk.Label(hdr, text="Log Editor", font=F_HEAD,
+                 fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
+
+        # action buttons in header
+        btn_frame = tk.Frame(hdr, bg=CARD)
+        btn_frame.pack(side="right", padx=HPAD)
+        tk.Button(btn_frame, text="⟳  Reload", command=self._load,
+                  font=F_SMALL, bg=CARD, fg=ACCENT,
+                  activeforeground=ACCENT_HO, relief="flat", bd=0,
+                  cursor="hand2").pack(side="left", padx=(0, 16))
+        _make_button(btn_frame, "Save", self._save).pack(side="left")
+
+        # path info bar
+        self._path_label = tk.Label(self, text="", font=F_SMALL,
+                                     fg=SUBTEXT, bg=BG, anchor="w")
+        self._path_label.pack(fill="x", padx=HPAD, pady=(6, 0))
+
+        hsep(self).pack(fill="x", pady=(6, 0))
+
+        # status bar
+        self._status = tk.Label(self, text="", font=F_LABEL,
+                                 fg=SUCCESS, bg=BG, anchor="w")
+        self._status.pack(fill="x", padx=HPAD, pady=(4, 0))
+
+        # editor area
+        tf = tk.Frame(self, bg=BORDER, padx=1, pady=1)
+        tf.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+        xsb = ttk.Scrollbar(tf, orient="horizontal")
+        ysb = ttk.Scrollbar(tf, orient="vertical")
+        self._editor = tk.Text(tf, font=F_MONO, bg=OUTPUT_BG, fg=OUTPUT_FG,
+                               insertbackground=OUTPUT_FG, relief="flat",
+                               wrap="none", undo=True,
+                               xscrollcommand=xsb.set,
+                               yscrollcommand=ysb.set,
+                               padx=10, pady=8)
+        xsb.config(command=self._editor.xview)
+        ysb.config(command=self._editor.yview)
+        ysb.pack(side="right", fill="y")
+        xsb.pack(side="bottom", fill="x")
+        self._editor.pack(side="left", fill="both", expand=True)
+
+        # Ctrl+S to save
+        self._editor.bind("<Control-s>", lambda _: self._save())
+        self._editor.bind("<Control-S>", lambda _: self._save())
+
+    def _load(self):
+        cfg    = ptos.get_config()
+        home   = os.path.dirname(os.path.abspath(
+                     sys.modules["ptos"].__file__))
+        ptos_home = os.environ.get("PTOS_HOME", home)
+        year   = dt.date.today().year
+        path   = os.path.join(ptos_home, "records", f"{year}.log")
+
+        self._path = path
+        self._path_label.config(text=path)
+        self._status.config(text="")
+
+        if not os.path.exists(path):
+            self._editor.delete("1.0", "end")
+            self._editor.insert("end", f"# File not found: {path}")
+            return
+
+        with open(path, encoding="utf-8") as f:
+            content = f.read()
+
+        self._editor.delete("1.0", "end")
+        self._editor.insert("end", content)
+        # scroll to end so latest entries are visible
+        self._editor.see("end")
+        self._status.config(text=f"Loaded  {path}")
+
+    def _save(self):
+        if not self._path:
+            return
+        import shutil, tempfile
+
+        content = self._editor.get("1.0", "end-1c")
+
+        # backup before overwrite
+        backup = self._path + ".bak"
+        if os.path.exists(self._path):
+            shutil.copy2(self._path, backup)
+
+        # write atomically via temp file
+        dir_ = os.path.dirname(self._path)
+        with tempfile.NamedTemporaryFile("w", dir=dir_,
+                                         delete=False,
+                                         encoding="utf-8",
+                                         suffix=".tmp") as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+
+        os.replace(tmp_path, self._path)
+        self._status.config(
+            text=f"✔  Saved  ({backup} backup kept)",
+            fg=SUCCESS)
 
 
 # ── Error dialog with copyable text ──────────────────────────────────────────
@@ -943,6 +1207,7 @@ class PTOSApp(tk.Tk):
         nb.add(AddRecordTab(nb), text="   + Add Record   ")
         nb.add(QueryTab(nb),     text="   Queries   ")
         nb.add(BrowseTab(nb),    text="   Browse   ")
+        nb.add(LogEditorTab(nb), text="   Log Editor   ")
 
     def _on_callback_error(self, exc_type, exc_value, exc_tb):
         """Called by Tkinter when any callback raises — log and show popup."""
