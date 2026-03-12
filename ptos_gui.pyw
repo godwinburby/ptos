@@ -334,19 +334,17 @@ class AddRecordTab(tk.Frame):
         row = tk.Frame(self, bg=BG, pady=PAD)
         row.pack(fill="x", padx=HPAD)
 
-        # preset selector (left column)
         preset_col = tk.Frame(row, bg=BG)
         preset_col.pack(side="left", padx=(0, 32))
         lbl(preset_col, "Load preset", fg=SUBTEXT, font=F_LABEL).pack(anchor="w")
         self._preset_var = tk.StringVar()
         presets = ptos.get_presets()
         preset_names = ["—"] + sorted(presets.keys())
-        p_combo = _make_combo(preset_col, preset_names,
-                              textvariable=self._preset_var, width=22)
-        p_combo.pack(anchor="w", pady=(4, 0))
-        p_combo.bind("<<ComboboxSelected>>", self._on_preset_change)
+        self._preset_combo = _make_combo(preset_col, preset_names,
+                                         textvariable=self._preset_var, width=22)
+        self._preset_combo.pack(anchor="w", pady=(4, 0))
+        self._preset_combo.bind("<<ComboboxSelected>>", self._on_preset_change)
 
-        # type selector (right column)
         type_col = tk.Frame(row, bg=BG)
         type_col.pack(side="left")
         lbl(type_col, "Record type", fg=SUBTEXT, font=F_LABEL).pack(anchor="w")
@@ -369,45 +367,13 @@ class AddRecordTab(tk.Frame):
                                 fg=SUCCESS, bg=CARD,
                                 wraplength=560, justify="left")
         self._status.pack(side="left", fill="x", expand=True)
+        tk.Button(foot, text="Save as Preset",
+                  command=self._save_as_preset,
+                  font=F_BTN, bg=BG, fg=ACCENT,
+                  activeforeground=ACCENT_HO,
+                  relief="flat", bd=0, cursor="hand2",
+                  padx=12, pady=8).pack(side="right", padx=(0, 8))
         _make_button(foot, "Save Record", self._submit).pack(side="right")
-
-    # ── preset load ───────────────────────────────────────────────────────────
-
-    def _on_preset_change(self, _=None):
-        name = self._preset_var.get()
-        if not name or name == "—":
-            return
-        presets = ptos.get_presets()
-        preset  = presets.get(name, {})
-        if not preset:
-            return
-
-        # set type and rebuild fields
-        rtype = preset.get("type", "")
-        if rtype:
-            self._type_var.set(rtype)
-            self.type_schema = self.schema["type"].get(rtype, {})
-            self._rebuild_fields()
-
-        # fill field values from preset
-        for field, val in preset.items():
-            if field in ("type", "tag"):
-                continue
-            if field in self.field_vars:
-                self.field_vars[field].set(str(val))
-
-        # tick preset tags
-        if "tag" in preset:
-            tags = preset["tag"]
-            if isinstance(tags, str):
-                tags = [tags]
-            for tag in tags:
-                if tag in self.tag_vars:
-                    self.tag_vars[tag].set(1)
-
-        self._update_conditionals()
-        self._status.config(text=f"Preset '{name}' loaded — edit fields then save.",
-                            fg=ACCENT)
 
     # ── type change ───────────────────────────────────────────────────────────
 
@@ -561,22 +527,12 @@ class AddRecordTab(tk.Frame):
         self.tag_vars = {}
         for tag in allowed:
             var = tk.IntVar(value=prev.get(tag, 0))
-            cb = tk.Checkbutton(
+            tk.Checkbutton(
                 self._tag_frame, text=tag, variable=var,
                 font=F_BODY, bg=BG, fg=TEXT,
-                selectcolor="white",        # white box — system draws clear checkmark
-                activebackground=BG,
-                activeforeground=ACCENT,
-                relief="flat", cursor="hand2"
-            )
-            cb.pack(side="left", padx=(0, 12))
-            # update label colour to accent when ticked
-            def _on_toggle(v=var, c=cb, t=tag):
-                c.config(fg=ACCENT if v.get() else TEXT)
-            var.trace_add("write", lambda *_, v=var, c=cb: c.config(
-                fg=ACCENT if v.get() else TEXT))
-            # apply initial colour (for preset pre-ticks)
-            cb.config(fg=ACCENT if var.get() else TEXT)
+                selectcolor=ACCENT, activebackground=BG,
+                relief="flat"
+            ).pack(side="left", padx=(0, 12))
             self.tag_vars[tag] = var
 
     # ── date + note ───────────────────────────────────────────────────────────
@@ -610,6 +566,100 @@ class AddRecordTab(tk.Frame):
 
         # bottom padding
         tk.Frame(self._body, bg=BG, height=16).pack()
+
+    # ── preset ───────────────────────────────────────────────────────────────
+
+    def _on_preset_change(self, _=None):
+        name = self._preset_var.get()
+        if not name or name == "—":
+            return
+        presets = ptos.get_presets()
+        preset  = presets.get(name, {})
+        if not preset:
+            return
+        rtype = preset.get("type", "")
+        if rtype:
+            self._type_var.set(rtype)
+            self.type_schema = self.schema["type"].get(rtype, {})
+            self._rebuild_fields()
+        for field, val in preset.items():
+            if field in ("type", "tag"):
+                continue
+            if field in self.field_vars:
+                self.field_vars[field].set(str(val))
+        if "tag" in preset:
+            tags = preset["tag"]
+            if isinstance(tags, str):
+                tags = [tags]
+            for tag in tags:
+                if tag in self.tag_vars:
+                    self.tag_vars[tag].set(1)
+        self._update_conditionals()
+        self._status.config(
+            text=f"Preset '{name}' loaded — edit fields then save.", fg=ACCENT)
+
+    def _save_as_preset(self):
+        rtype = self._type_var.get()
+        if not rtype:
+            self._status.config(text="Select a record type first.", fg=ERROR_COL)
+            return
+
+        record = self._record_now()
+        tags   = [t for t, v in self.tag_vars.items() if v.get()]
+        for t in self._custom_tag_var.get().split(","):
+            t = t.strip().replace(" ", "_")
+            if t and t not in tags:
+                tags.append(t)
+        if tags:
+            record["tag"] = tags
+
+        dlg = tk.Toplevel(self)
+        dlg.title("Save as Preset")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        tk.Label(dlg, text="Preset name", font=F_LABEL, fg=TEXT,
+                 padx=20, pady=12).pack(anchor="w")
+        name_var = tk.StringVar()
+        ef, entry_w = _make_entry(dlg, textvariable=name_var, width=28)
+        ef.pack(padx=20, pady=(0, 4))
+        tk.Label(dlg, text="lowercase, use _ for spaces",
+                 font=F_SMALL, fg=SUBTEXT, padx=20).pack(anchor="w")
+        status = tk.Label(dlg, text="", font=F_SMALL, fg=ERROR_COL, padx=20)
+        status.pack(anchor="w")
+
+        def _do_save():
+            name = name_var.get().strip().replace(" ", "_").lower()
+            if not name:
+                status.config(text="Name cannot be empty.")
+                return
+            if name in ptos.get_presets():
+                status.config(text=f"'{name}' already exists — choose another name.")
+                return
+            try:
+                ptos.save_as_preset(name, record)
+                self._preset_combo["values"] = ["—"] + sorted(ptos.get_presets().keys())
+                self._status.config(
+                    text=f"✔  Preset '{name}' saved.", fg=SUCCESS)
+                dlg.destroy()
+            except Exception as e:
+                status.config(text=f"Error: {e}")
+
+        btn_row = tk.Frame(dlg, pady=12, padx=20)
+        btn_row.pack(fill="x")
+        _make_button(btn_row, "Save", _do_save).pack(side="right")
+        tk.Button(btn_row, text="Cancel", command=dlg.destroy,
+                  font=F_BODY, relief="flat", padx=12, pady=8).pack(
+                  side="right", padx=(0, 8))
+
+        entry_w.focus_set()
+        entry_w.bind("<Return>", lambda _: _do_save())
+        dlg.bind("<Escape>", lambda _: dlg.destroy())
+        dlg.update_idletasks()
+        px, py = self.winfo_rootx(), self.winfo_rooty()
+        pw, ph = self.winfo_width(), self.winfo_height()
+        dw, dh = dlg.winfo_width(), dlg.winfo_height()
+        dlg.geometry(f"+{px + (pw-dw)//2}+{py + (ph-dh)//2}")
 
     # ── submit ────────────────────────────────────────────────────────────────
 
