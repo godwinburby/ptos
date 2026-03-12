@@ -330,6 +330,11 @@ def scan_records(start, end, filters, search, from_file=None):
     else:
         fnames = sorted(f for f in os.listdir(RECORDS_DIR) if f.endswith(".log"))
     for fname in fnames:
+        # skip files whose year cannot overlap the query window
+        if fname[:4].isdigit() and start is not None and end is not None:
+            year = int(fname[:4])
+            if year < start.year or year > end.year:
+                continue
         path = os.path.join(RECORDS_DIR, fname)
         with open(path, encoding="utf-8") as f:
             for line in f:
