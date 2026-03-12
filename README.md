@@ -96,7 +96,7 @@ For users who prefer not to use the terminal, PTOS includes a graphical interfac
 
 | File | Purpose |
 |------|---------|
-| `ptos_gui.pyw` | The GUI application — double-click or run via `ptg.bat` |
+| `ptos_gui.pyw` | The GUI application |
 | `ptg.bat` | Windows launcher — runs the GUI without a console window |
 
 ### Launching
@@ -109,22 +109,32 @@ python ptos_gui.pyw
 
 ### Tabs
 
-**+ Add Record** — select a record type and a form renders dynamically from `schema.toml`. Fields with fixed options show as dropdowns. Parent-dependent fields (e.g. category changes based on domain) update live. Conditional fields appear only when their condition is met (e.g. `fit` appears only when `outcome=prescribed`). Schema-defined tags appear as checkboxes; any custom tag can be typed in the tags field as comma-separated values. Date defaults to today and can be picked from a popup calendar. Note is always available.
+**+ Add Record** — schema-driven form that renders dynamically from `schema.toml`. Select a record type and all fields appear. Supports presets, date picker, tag checkboxes, and note. Validates the record before saving.
 
-**Queries** — run any named query, metric, or dashboard from `queries.toml`. Optional time window override. Results shown in a scrollable monospace table.
+**Queries** — run any named query, metric, or dashboard from `queries.toml`. Selecting a query or changing the time window runs it immediately. Reload button refreshes the query list if `queries.toml` has changed.
 
-**Browse** — filter records by type, time window, and free-text search. Full results shown with horizontal and vertical scroll.
+**Browse** — filter records by type and time window, with free-text search. Selecting a dropdown reruns automatically; pressing Enter in the search box runs the search. Due List button shows overdue records from the `[due]` config in `queries.toml`.
 
-### Field behaviour in the form
+**Log Editor** — view and edit the current year's `.log` file directly. Full undo support. Save with the button or Ctrl+S. A `.bak` backup is written automatically before every save.
 
-- **Dropdowns** — fields with defined options render as dropdowns. Parent-dependent dropdowns (e.g. `category` depending on `domain`) update automatically.
-- **Number fields** — fields typed as `int` in `schema.toml` only accept digits. A unit label appears to the right of the field (e.g. `₹` for `amount` and `advance`, `min` for `duration`). The unit is declared in `schema.toml` as a `unit` key and is purely for display — it is not saved to the record.
-- **Date picker** — click the 📅 icon next to the date field to open a popup calendar. Navigate months with ◀ ▶. Click a date to select it. A Today shortcut is shown at the bottom.
-- **Text fields** — spaces are automatically converted to underscores before saving, since the plain-text log format uses spaces as field separators.
+### Add Record — form behaviour
+
+- **Dropdowns** — fields with defined options render as dropdowns. Parent-dependent dropdowns (e.g. `category` depending on `domain`) update automatically when the parent changes.
+- **Conditional fields** — fields that only apply under certain conditions appear and disappear automatically (e.g. `fit` appears only when `outcome=prescribed`).
+- **Number fields** — `int` fields only accept digits. A unit label appears to the right (e.g. `₹` for `amount` and `advance`, `min` for `duration`).
+- **Date picker** — click the 📅 icon to open a popup calendar. Navigate months with ◀ ▶, click a date to select. Today shortcut at the bottom.
+- **Tags** — schema-defined tags appear as checkboxes. Additional custom tags can be typed as comma-separated values.
+- **Text fields** — spaces are converted to underscores automatically before saving, since the plain-text log format uses spaces as field separators. Notes are exempt — spaces in notes are preserved.
+
+### Presets in the GUI
+
+The **Load preset** dropdown at the top of the Add Record form pre-fills the form with any preset from `presets.toml`. Only the fields defined in the preset are filled — blank fields stay empty for you to complete. Tags defined in the preset are ticked automatically.
+
+The **Save as Preset** button (footer, next to Save Record) saves the current form state as a new preset. Only filled fields are saved — intentionally blank fields are omitted, so the preset will prompt for them when loaded. The preset dropdown refreshes immediately after saving.
 
 ### Unit labels in schema
 
-To show a unit hint next to a numeric field in the GUI, add a `unit` key to the field's global metadata in `schema.toml`:
+To show a unit hint next to a numeric field, add a `unit` key to the field's global metadata in `schema.toml`:
 
 ```toml
 [fields.amount]
@@ -142,9 +152,19 @@ unit         = "min"
 
 The `unit` key is ignored by `ptos.py` — it is only read by the GUI.
 
+### Ignore patterns
+
+Add these to Syncthing and `.gitignore` for the PTOS folder:
+
+```
+*.tmp
+*.bak
+ptos_error.log
+```
+
 ### Error log
 
-If the GUI crashes, the full traceback is written to `ptos_error.log` in the PTOS folder and shown in a popup with a **Copy to Clipboard** button. Paste the error directly when reporting issues.
+If the GUI crashes or a callback raises an error, the full traceback is written to `ptos_error.log` in the PTOS folder and shown in a popup with a **Copy to Clipboard** button. The app continues running after the error is dismissed.
 
 ### Requirements
 
