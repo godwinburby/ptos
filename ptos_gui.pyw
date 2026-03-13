@@ -784,7 +784,7 @@ class QueryTab(tk.Frame):
         t_combo.pack(side="left", padx=(0, 18))
         t_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
 
-        _make_button(bar, "Run", self._run).pack(side="left")
+        _make_button(bar, "⟳  Refresh", self._run).pack(side="left")
 
         hsep(self).pack(fill="x")
 
@@ -839,12 +839,15 @@ class QueryTab(tk.Frame):
             if not results:
                 _write(self._out, "No records found.")
                 return
-            lines += self._tabulate(results)
-            lines += ["", f"Records : {len(results)}",
-                      f"Period  : {start}  to  {end}"]
+            # summary at top
+            summary = [f"Query   : {q_name}",
+                       f"Period  : {start}  to  {end}",
+                       f"Records : {len(results)}"]
             if total > 0:
-                lines += [f"Total   : {ptos.fmt(total)}",
-                          f"Average : {ptos.fmt_avg(total / len(results))}"]
+                summary += [f"Total   : {ptos.fmt(total)}",
+                             f"Average : {ptos.fmt_avg(total / len(results))}"]
+            summary.append("-" * 44)
+            lines += summary + [""] + self._tabulate(results)
         _write(self._out, "\n".join(lines))
 
     def _fmt_item(self, name, start, end):
@@ -945,7 +948,7 @@ class BrowseTab(tk.Frame):
         row2 = tk.Frame(self, bg=CARD, pady=8, padx=HPAD)
         row2.pack(fill="x")
 
-        _make_button(row2, "Search", self._run).pack(side="left", padx=(0, 12))
+        _make_button(row2, "⟳  Refresh", self._run).pack(side="left", padx=(0, 12))
 
         due_btn = tk.Button(row2, text="Due List", command=self._run_due,
                             font=F_BTN, bg="#E8803A", fg="white",
@@ -1106,14 +1109,17 @@ class BrowseTab(tk.Frame):
 
         w = {c: max(len(c), max(len(str(r.get(c, ""))) for r in rows))
              for c in cols}
+        # summary at top
+        summary = [f"Period  : {start}  to  {end}",
+                   f"Records : {len(results)}"]
+        if total > 0:
+            summary += [f"Total   : {ptos.fmt(total)}",
+                        f"Average : {ptos.fmt_avg(total / len(results))}"]
+        summary.append("-" * 44)
         hdr   = "  ".join(c.upper().ljust(w[c]) for c in cols)
-        lines = [hdr, "-" * len(hdr)]
+        lines = summary + ["", hdr, "-" * len(hdr)]
         for r in rows:
             lines.append("  ".join(str(r.get(c, "")).ljust(w[c]) for c in cols))
-        lines += ["", f"Records : {len(results)}   Period : {start}  to  {end}"]
-        if total > 0:
-            lines += [f"Total   : {ptos.fmt(total)}",
-                      f"Average : {ptos.fmt_avg(total / len(results))}"]
         _write(self._out, "\n".join(lines))
 
 
