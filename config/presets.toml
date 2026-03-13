@@ -63,3 +63,10 @@ category = "postage"
 tag      = ["porter"]
 
 
+
+[presets.fruits]
+type     = "expense"
+domain   = "home"
+category = "grocery"
+tag      = ["fruits"]
+
