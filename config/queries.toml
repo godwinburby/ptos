@@ -141,3 +141,7 @@ sort_by = "intent"
 days    = 7
 # intent priority order is defined in schema.toml:
 # trial → decision → assessment → mgm
+
+[transport]
+where = "domain=self category=transport type=expense"
+time  = "this-month"
