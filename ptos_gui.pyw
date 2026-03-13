@@ -1304,7 +1304,7 @@ class PTOSApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("PTOS")
-        self.geometry("900x720")
+        self.geometry("960x800")
         self.minsize(720, 540)
         self.configure(bg=BG)
         # Route Tkinter callback errors to our log+popup handler
@@ -1328,23 +1328,29 @@ class PTOSApp(tk.Tk):
         # bottom border line
         tk.Frame(topbar, bg=BORDER, height=1).pack(fill="x", side="bottom")
 
-        # left — three-line brand block
-        left = tk.Frame(topbar, bg=CARD, padx=HPAD, pady=14)
+        # left — compact inline brand
+        left = tk.Frame(topbar, bg=CARD, padx=HPAD, pady=8)
         left.pack(side="left")
-        tk.Label(left, text="PTOS",
-                 font=("Segoe UI", 22, "bold"),
-                 fg=TEXT, bg=CARD).pack(anchor="w")
-        tk.Label(left, text="Plain Text Operating System",
-                 font=("Segoe UI", 12, "bold"),
-                 fg=SUBTEXT, bg=CARD).pack(anchor="w")
+
+        # PTOS + subtitle on one row
+        row1 = tk.Frame(left, bg=CARD)
+        row1.pack(anchor="w")
+        tk.Label(row1, text="PTOS",
+                 font=("Segoe UI", 15, "bold"),
+                 fg=TEXT, bg=CARD).pack(side="left")
+        tk.Label(row1, text="  Plain Text Operating System",
+                 font=("Segoe UI", 11, "bold"),
+                 fg=SUBTEXT, bg=CARD).pack(side="left", pady=(2, 0))
+
+        # tagline on second row
         tk.Label(left, text="Log it. Query it. Own it.",
-                 font=("Segoe UI", 11, "bold italic"),
+                 font=("Segoe UI", 10, "italic"),
                  fg=ACCENT, bg=CARD).pack(anchor="w")
 
-        # right — github pill link (pack before notebook so it is visible)
+        # right — github pill link
         right = tk.Frame(topbar, bg=CARD, padx=HPAD)
-        right.pack(side="right", fill="y", pady=14)
-        pill = tk.Frame(right, bg=NAV_PILL, padx=16, pady=10)
+        right.pack(side="right", fill="y", pady=8)
+        pill = tk.Frame(right, bg=NAV_PILL, padx=14, pady=8)
         pill.pack(anchor="center")
 
         link = tk.Label(pill,
