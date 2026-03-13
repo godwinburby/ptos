@@ -1508,7 +1508,7 @@ def build_parser(cycles):
     qry.add_argument("-S", "--search",                              help="Full-text search")
     qry.add_argument("--save",                                      help="Save current query to queries.toml under this name")
     qry.add_argument("--file",   dest="from_file", metavar="FILENAME", help="Read from this file in records/ folder (e.g. 2025.log)")
-    qry.add_argument("--select", nargs="+", metavar="FIELD",           help="Show only these fields in output (date and note always included)")
+    qry.add_argument("--select", nargs="+", metavar="FIELD",           help="Show only these fields in output (date and type always included; add note to include notes)")
 
     ana = p.add_argument_group("Analyse")
     ana.add_argument("-G", "--group",  nargs="+", help="Group by one or more fields")
@@ -2116,12 +2116,16 @@ def main():
         return
 
     # ---- default: list records ----
-    # apply --select: keep only chosen fields, always keep date, type and note
+    # apply --select: keep only chosen fields
+    # default always includes date + all kv fields; note excluded unless selected
     if getattr(args, "select", None):
-        selected = set(args.select) | {"type"}  # type always included
-        # warn about unknown fields — collect all field names from results
+        want_note = "note" in args.select
+        selected  = set(args.select) | {"type"}  # type always included
+        selected.discard("note")                  # note is not a kv field
+        # warn about unknown fields
         all_keys = {k for line in results for k in parse_line(line)[1]}
-        unknown = [f for f in args.select if f not in all_keys and f != "type"]
+        unknown  = [f for f in args.select
+                    if f not in all_keys and f not in ("type", "note")]
         if unknown:
             print(f"Warning: unknown field(s) in --select: {', '.join(unknown)}")
         filtered = []
@@ -2136,7 +2140,7 @@ def main():
                     else:
                         parts.append(f"{k}={v}")
             rec = " ".join(parts)
-            if note:
+            if want_note and note:
                 rec += f" | {note}"
             filtered.append(rec)
         results = filtered
