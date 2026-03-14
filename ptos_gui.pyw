@@ -330,6 +330,10 @@ class AddRecordTab(tk.Frame):
         hdr.pack(fill="x")
         tk.Label(hdr, text="Add Record", font=F_HEAD,
                  fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
+        tk.Button(hdr, text="⟳  Reload", command=self._reload,
+                  font=F_SMALL, bg=CARD, fg=ACCENT,
+                  activeforeground=ACCENT_HO, relief="flat", bd=0,
+                  cursor="hand2").pack(side="right", padx=HPAD)
 
         # ── preset + type row ─────────────────────────────────────────────────
         row = tk.Frame(self, bg=BG, pady=PAD)
@@ -375,8 +379,34 @@ class AddRecordTab(tk.Frame):
                   relief="flat", bd=0, cursor="hand2",
                   padx=12, pady=8).pack(side="right", padx=(0, 8))
         _make_button(foot, "Save Record", self._submit).pack(side="right")
+        tk.Button(foot, text="✕  Clear", command=self._clear,
+                  font=F_BTN, bg=BG, fg=SUBTEXT,
+                  activeforeground=TEXT, relief="flat",
+                  cursor="hand2", padx=12, pady=8, bd=0).pack(side="right", padx=(0, 8))
 
     # ── type change ───────────────────────────────────────────────────────────
+
+    def _clear(self):
+        """Reset all fields and type selector back to blank state."""
+        self._type_var.set("")
+        self._preset_var.set("—")
+        self.type_schema = {}
+        for w in self._body.winfo_children():
+            w.destroy()
+        self.field_vars = {}
+        self.tag_vars   = {}
+        self._status.config(text="")
+
+    def _reload(self):
+        """Reload schema and presets from disk — updates all dropdowns."""
+        self.schema = ptos.get_schema()
+        presets = ptos.get_presets()
+        self._preset_combo["values"] = ["—"] + sorted(presets.keys())
+        rtype = self._type_var.get()
+        if rtype:
+            self.type_schema = self.schema["type"].get(rtype, {})
+            self._rebuild_fields()
+        self._status.config(text="⟳  Reloaded schema and presets.", fg=ACCENT)
 
     def _on_type_change(self, _=None):
         rtype = self._type_var.get()
@@ -783,13 +813,24 @@ class QueryTab(tk.Frame):
                  bg=CARD).pack(side="left", padx=(0, 4))
         t_combo.pack(side="left", padx=(0, 18))
         t_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
+        t_combo.bind("<Return>", lambda _: self._run())
+        q_combo.bind("<Return>", lambda _: self._run())
 
-        _make_button(bar, "⟳  Refresh", self._run).pack(side="left")
+        _make_button(bar, "⟳  Refresh", self._run).pack(side="left", padx=(0, 8))
+        tk.Button(bar, text="✕  Clear", command=self._clear,
+                  font=F_BTN, bg=BG, fg=SUBTEXT,
+                  activeforeground=TEXT, relief="flat",
+                  cursor="hand2", padx=14, pady=8, bd=0).pack(side="left")
 
         hsep(self).pack(fill="x")
 
         pane, self._out = _make_output(self)
         pane.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+
+    def _clear(self):
+        self._q_var.set("")
+        self._time_var.set("(query default)")
+        _write(self._out, "")
 
     def _reload(self):
         self.queries = ptos.get_queries()
@@ -908,11 +949,21 @@ class BrowseTab(tk.Frame):
         self.cycles = ptos.get_config().get("cycles", {})
         self._build()
 
+    def _reload(self):
+        """Reload schema from disk — rebuilds tab with fresh type list."""
+        for w in self.winfo_children():
+            w.destroy()
+        self._build()
+
     def _build(self):
         hdr = tk.Frame(self, bg=CARD, pady=16)
         hdr.pack(fill="x")
         tk.Label(hdr, text="Browse Records", font=F_HEAD,
                  fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
+        tk.Button(hdr, text="⟳  Reload", command=self._reload,
+                  font=F_SMALL, bg=CARD, fg=ACCENT,
+                  activeforeground=ACCENT_HO, relief="flat", bd=0,
+                  cursor="hand2").pack(side="right", padx=HPAD)
 
         # ── row 1: filters ───────────────────────────────────────────────────
         row1 = tk.Frame(self, bg=CARD, pady=10, padx=HPAD)
@@ -944,6 +995,27 @@ class BrowseTab(tk.Frame):
         sf.pack(side="left", padx=(0, 0))
         search_entry.bind("<Return>", lambda _: self._run())
 
+        # ── row 1b: file + sort ───────────────────────────────────────────────
+        row1b = tk.Frame(self, bg=CARD, pady=4, padx=HPAD)
+        row1b.pack(fill="x")
+
+        self._file_var = tk.StringVar(value="(current year)")
+        tk.Label(row1b, text="File", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        self._file_combo = _make_combo(row1b, ["(current year)"],
+                                        textvariable=self._file_var, width=18)
+        self._file_combo.pack(side="left", padx=(0, 18))
+        self._file_combo.bind("<Button-1>", self._refresh_file_list)
+        self._file_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
+
+        self._sort_var = tk.StringVar()
+        tk.Label(row1b, text="Sort by", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        sf2, sort_entry = _make_entry(row1b, textvariable=self._sort_var, width=14)
+        sf2.pack(side="left", padx=(0, 4))
+        sort_entry.bind("<Return>", lambda _: self._run())
+        sublbl(row1b, "field name").pack(side="left", padx=(0, 18))
+
         # ── row 2: actions ────────────────────────────────────────────────────
         row2 = tk.Frame(self, bg=CARD, pady=8, padx=HPAD)
         row2.pack(fill="x")
@@ -954,7 +1026,16 @@ class BrowseTab(tk.Frame):
                             font=F_BTN, bg="#E8803A", fg="white",
                             activebackground="#C96A2A", relief="flat",
                             cursor="hand2", padx=14, pady=8, bd=0)
-        due_btn.pack(side="left")
+        due_btn.pack(side="left", padx=(0, 12))
+
+        tk.Button(row2, text="Export CSV", command=self._export_csv,
+                  font=F_BTN, bg="#2E7D56", fg="white",
+                  activebackground="#1F5C3E", relief="flat",
+                  cursor="hand2", padx=14, pady=8, bd=0).pack(side="left", padx=(0, 12))
+        tk.Button(row2, text="✕  Clear", command=self._clear,
+                  font=F_BTN, bg=BG, fg=SUBTEXT,
+                  activeforeground=TEXT, relief="flat",
+                  cursor="hand2", padx=14, pady=8, bd=0).pack(side="left")
 
         hsep(self).pack(fill="x")
 
@@ -1075,6 +1156,53 @@ class BrowseTab(tk.Frame):
         except Exception as e:
             _write(self._out, f"Due error: {e}")
 
+    def _clear(self):
+        self._type_var.set("All types")
+        self._time_var.set("This month")
+        self._search_var.set("")
+        self._sort_var.set("")
+        self._file_var.set("(current year)")
+        _write(self._out, "")
+
+    def _refresh_file_list(self, _=None):
+        try:
+            log_files = sorted(
+                f for f in os.listdir(ptos.RECORDS_DIR) if f.endswith(".log"))
+            self._file_combo["values"] = ["(current year)"] + log_files
+        except Exception:
+            pass
+
+    def _get_from_file(self):
+        v = self._file_var.get()
+        return None if v == "(current year)" else v
+
+    def _get_sort(self):
+        v = self._sort_var.get().strip()
+        return v if v else None
+
+    def _export_csv(self):
+        try:
+            code = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
+            start, end = ptos.resolve_time(code, self.cycles)
+        except Exception as e:
+            _write(self._out, f"Time error: {e}")
+            return
+        filters = []
+        t = self._type_var.get()
+        if t and t != "All types":
+            filters.append(f"type={t}")
+        results, _ = ptos.scan_records(
+            start, end, filters,
+            self._search_var.get().strip() or None,
+            self._get_from_file())
+        if not results:
+            _write(self._out, "No records to export.")
+            return
+        time_code  = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
+        time_label = ptos._TIME_ALIASES.get(time_code, time_code)
+        ptos.export_csv(results, "__AUTO__", filters, time_label)
+        _write(self._out, f"Exported {len(results)} record(s) to exports/ folder.")
+
     def _run(self):
         try:
             code = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
@@ -1090,7 +1218,8 @@ class BrowseTab(tk.Frame):
 
         results, total = ptos.scan_records(
             start, end, filters,
-            self._search_var.get().strip() or None)
+            self._search_var.get().strip() or None,
+            self._get_from_file())
 
         if not results:
             _write(self._out, "No records found.")
@@ -1106,6 +1235,14 @@ class BrowseTab(tk.Frame):
             for k in row:
                 if k not in cols: cols.append(k)
             rows.append(row)
+
+        sort_f = self._get_sort()
+        if sort_f:
+            def _sk(r):
+                v = r.get(sort_f, "")
+                try: return (0, int(v), "")
+                except: return (1, 0, str(v).lower())
+            rows.sort(key=_sk)
 
         w = {c: max(len(c), max(len(str(r.get(c, ""))) for r in rows))
              for c in cols}
@@ -1129,6 +1266,16 @@ class BrowseTab(tk.Frame):
 # ══════════════════════════════════════════════════════════════════════════════
 
 class LogEditorTab(tk.Frame):
+
+    # label → relative path from PTOS_HOME (None = current year records)
+    _FILE_TARGETS = [
+        ("Records (current year)",  None),
+        ("schema.toml",             "config/schema.toml"),
+        ("queries.toml",            "config/queries.toml"),
+        ("presets.toml",            "config/presets.toml"),
+        ("config.toml",             "config/config.toml"),
+    ]
+
     def __init__(self, parent):
         super().__init__(parent, bg=BG)
         self._path = None
@@ -1138,7 +1285,7 @@ class LogEditorTab(tk.Frame):
     def _build(self):
         hdr = tk.Frame(self, bg=CARD, pady=16)
         hdr.pack(fill="x")
-        tk.Label(hdr, text="Log Editor", font=F_HEAD,
+        tk.Label(hdr, text="Editor", font=F_HEAD,
                  fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
 
         # action buttons in header
@@ -1150,12 +1297,24 @@ class LogEditorTab(tk.Frame):
                   cursor="hand2").pack(side="left", padx=(0, 16))
         _make_button(btn_frame, "Save", self._save).pack(side="left")
 
+        # file selector bar
+        sel_bar = tk.Frame(self, bg=CARD, pady=8, padx=HPAD)
+        sel_bar.pack(fill="x")
+        tk.Label(sel_bar, text="File", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 6))
+        self._target_var = tk.StringVar(value=self._FILE_TARGETS[0][0])
+        target_labels = [label for label, _ in self._FILE_TARGETS]
+        tc = _make_combo(sel_bar, target_labels,
+                         textvariable=self._target_var, width=28)
+        tc.pack(side="left")
+        tc.bind("<<ComboboxSelected>>", lambda _: self._load())
+
+        hsep(self).pack(fill="x")
+
         # path info bar
         self._path_label = tk.Label(self, text="", font=F_SMALL,
                                      fg=SUBTEXT, bg=BG, anchor="w")
         self._path_label.pack(fill="x", padx=HPAD, pady=(6, 0))
-
-        hsep(self).pack(fill="x", pady=(6, 0))
 
         # status bar
         self._status = tk.Label(self, text="", font=F_LABEL,
@@ -1183,14 +1342,22 @@ class LogEditorTab(tk.Frame):
         self._editor.bind("<Control-s>", lambda _: self._save())
         self._editor.bind("<Control-S>", lambda _: self._save())
 
-    def _load(self):
-        cfg    = ptos.get_config()
-        home   = os.path.dirname(os.path.abspath(
-                     sys.modules["ptos"].__file__))
+    def _resolve_path(self):
+        home = os.path.dirname(os.path.abspath(sys.modules["ptos"].__file__))
         ptos_home = os.environ.get("PTOS_HOME", home)
-        year   = dt.date.today().year
-        path   = os.path.join(ptos_home, "records", f"{year}.log")
+        label = self._target_var.get() if hasattr(self, "_target_var") else None
+        rel = None
+        for lbl_text, rel_path in self._FILE_TARGETS:
+            if lbl_text == label:
+                rel = rel_path
+                break
+        if rel is None:
+            year = dt.date.today().year
+            return os.path.join(ptos_home, "records", f"{year}.log")
+        return os.path.join(ptos_home, rel)
 
+    def _load(self):
+        path = self._resolve_path()
         self._path = path
         self._path_label.config(text=path)
         self._status.config(text="")
@@ -1201,12 +1368,15 @@ class LogEditorTab(tk.Frame):
             return
 
         with open(path, encoding="utf-8") as f:
-            content = f.read()
+            file_content = f.read()
 
         self._editor.delete("1.0", "end")
-        self._editor.insert("end", content)
-        # scroll to end so latest entries are visible
-        self._editor.see("end")
+        self._editor.insert("end", file_content)
+        # scroll to end for records, top for config files
+        if path.endswith(".log"):
+            self._editor.see("end")
+        else:
+            self._editor.see("1.0")
         self._status.config(text=f"Loaded  {path}")
 
     def _save(self):

@@ -71,7 +71,7 @@ category = "grocery"
 tag      = ["fruits"]
 
 
-[presets.resta]
+[presets.restaraunt]
 type     = "expense"
 domain   = "self"
 category = "food"
