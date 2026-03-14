@@ -466,6 +466,7 @@ class AddRecordTab(tk.Frame):
             int_row.pack(anchor="w", pady=(3, 0))
             wf, we = _make_entry(int_row, textvariable=var, width=12)
             we.config(validate="key", validatecommand=vcmd)
+            we.bind("<Control-Return>", lambda _: self._submit())
             wf.pack(side="left")
             if unit:
                 tk.Label(int_row, text=unit, font=F_LABEL, fg=SUBTEXT,
@@ -476,7 +477,8 @@ class AddRecordTab(tk.Frame):
             c.pack(anchor="w", pady=(3, 0))
             c.bind("<<ComboboxSelected>>", self._on_field_change)
         else:
-            wf, _ = _make_entry(frame, textvariable=var, width=36)
+            wf, fe = _make_entry(frame, textvariable=var, width=36)
+            fe.bind("<Control-Return>", lambda _: self._submit())
             wf.pack(anchor="w", pady=(3, 0))
 
     def _resolve_opts(self, field, record):
@@ -578,7 +580,8 @@ class AddRecordTab(tk.Frame):
         date_row = tk.Frame(dr, bg=BG)
         date_row.pack(anchor="w", pady=(3, 0))
         self._date_var = tk.StringVar(value=dt.date.today().isoformat())
-        wf, _ = _make_entry(date_row, textvariable=self._date_var, width=14)
+        wf, de = _make_entry(date_row, textvariable=self._date_var, width=14)
+        de.bind("<Control-Return>", lambda _: self._submit())
         wf.pack(side="left")
         cal_btn = tk.Button(date_row, text="📅",
                             font=("Segoe UI Emoji", 13),
@@ -592,7 +595,8 @@ class AddRecordTab(tk.Frame):
         nr.pack(fill="x", padx=HPAD)
         lbl(nr, "Note", font=F_LABEL, fg=SUBTEXT).pack(anchor="w")
         self._note_var = tk.StringVar()
-        wf, _ = _make_entry(nr, textvariable=self._note_var, width=48)
+        wf, ne = _make_entry(nr, textvariable=self._note_var, width=48)
+        ne.bind("<Control-Return>", lambda _: self._submit())
         wf.pack(anchor="w", pady=(3, 0))
 
         # bottom padding
