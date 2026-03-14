@@ -1394,6 +1394,9 @@ class LogEditorTab(tk.Frame):
         import shutil, tempfile
 
         content = self._editor.get("1.0", "end-1c")
+        # always end with newline so appended records start on a new line
+        if content and not content.endswith("\n"):
+            content += "\n"
 
         # backup before overwrite
         backup = self._path + ".bak"

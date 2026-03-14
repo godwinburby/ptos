@@ -22,6 +22,14 @@ JOURNAL_DIR  = os.path.join(BASE_DIR, "journal")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
 
+def _backup_file(path):
+    """Copy path to path.bak before any write operation.
+    Silent no-op if file does not exist yet.
+    """
+    import shutil
+    if os.path.exists(path):
+        shutil.copy2(path, path + ".bak")
+
 SCHEMA_PATH  = os.path.join(CONFIG_DIR, "schema.toml")
 QUERIES_PATH = os.path.join(CONFIG_DIR, "queries.toml")
 CONFIG_PATH  = os.path.join(CONFIG_DIR, "config.toml")
@@ -362,6 +370,15 @@ def append_record(line):
     os.makedirs(RECORDS_DIR, exist_ok=True)
     year = line[:4]
     path = os.path.join(RECORDS_DIR, f"{year}.log")
+    _backup_file(path)
+    # strip trailing blank lines left by manual editing before appending
+    if os.path.exists(path):
+        with open(path, "r", encoding="utf-8") as f:
+            existing = f.read()
+        stripped = existing.rstrip("\n\r ")
+        if stripped != existing.rstrip():
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(stripped + "\n")
     with open(path, "a", encoding="utf-8") as f:
         f.write(line + "\n")
 
@@ -1035,6 +1052,7 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
             schema_text = (schema_text.rstrip() +
                            f"\n\n{section_key}\n{option_key} = [\"" + tag + "\"]\n")
 
+        _backup_file(schema_path)
         open(schema_path, "w", encoding="utf-8").write(schema_text)
         print(f"  ✔ Added '{tag}' to schema.")
 
@@ -1122,6 +1140,7 @@ def save_query(name, args, extra_filters):
         lines.append("sum   = true")
 
     block = "\n".join(lines)
+    _backup_file(QUERIES_PATH)
     with open(QUERIES_PATH, "a", encoding="utf-8") as f:
         f.write(block + "\n")
     print(f"\nQuery '{name}' saved to queries.toml")
@@ -1145,6 +1164,7 @@ def save_as_preset(name, record):
             lines.append("{:<8} = \"{}\"".format(k, v))
     lines.append("# amount omitted — will be prompted each time" if "amount" not in record else "")
     block = "\n".join(l for l in lines if l is not None)
+    _backup_file(presets_path)
     with open(presets_path, "a", encoding="utf-8") as f:
         f.write(block + "\n")
     print(f"Preset '{name}' saved to presets.toml")
