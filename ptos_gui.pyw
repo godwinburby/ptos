@@ -613,11 +613,16 @@ class AddRecordTab(tk.Frame):
             self._type_var.set(rtype)
             self.type_schema = self.schema["type"].get(rtype, {})
             self._rebuild_fields()
+        # set field values first so tag context is correct
         for field, val in preset.items():
             if field in ("type", "tag"):
                 continue
             if field in self.field_vars:
                 self.field_vars[field].set(str(val))
+        # rebuild tags now that field values are set
+        self._update_conditionals()
+        self._refresh_tags()
+        # now set tag checkboxes
         if "tag" in preset:
             tags = preset["tag"]
             if isinstance(tags, str):
@@ -625,7 +630,11 @@ class AddRecordTab(tk.Frame):
             for tag in tags:
                 if tag in self.tag_vars:
                     self.tag_vars[tag].set(1)
-        self._update_conditionals()
+                else:
+                    # tag not in schema checkboxes — put in custom tag field
+                    existing = self._custom_tag_var.get().strip()
+                    self._custom_tag_var.set(
+                        f"{existing},{tag}" if existing else tag)
         self._status.config(
             text=f"Preset '{name}' loaded — edit fields then save.", fg=ACCENT)
 
