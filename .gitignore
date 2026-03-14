@@ -1,0 +1,23 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# PTOS private data
+records/
+journal/
+tasks/
+
+# PTOS runtime
+ptos_error.log
+*.tmp
+*.bak
+*.log
+
+# Syncthing
+.stfolder/
+.stversions/
+
+# Misc
+test.txt
+scripts/
