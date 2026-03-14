@@ -70,3 +70,11 @@ domain   = "home"
 category = "grocery"
 tag      = ["fruits"]
 
+
+[presets.resta]
+type     = "expense"
+domain   = "self"
+category = "food"
+amount   = 150
+tag      = ["restaurant"]
+

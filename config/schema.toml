@@ -148,7 +148,7 @@ options.home   = ["grocery", "utilities", "rent", "maintenance", "child", "relig
 options.work   = ["admin", "books", "electricity", "courier", "postage", "office", "stationary", "staff_welfare", "repair", "maintenance", "transport", "utilities"]
 
 [type.expense.tags.category]
-options.food          = ["snacks", "tea", "coffee", "restaurant", "bakery", "fruits"]
+options.food          = ["snacks", "tea", "coffee", "restaurant", "bakery", "fruits", "quick_delivery"]
 options.transport     = ["auto", "bus", "metro", "taxi", "uber", "rapido", "petrol"]
 options.grocery       = ["vegetables", "milk", "rice", "fruits", "super_market", "quick_delivery"]
 options.household     = ["bakery", "snacks", "restaurant"]

@@ -70,26 +70,12 @@ time  = "tm"
 where = "type=followup"
 time  = "tm"
 
-[flp_normal]
-where = "type=followup category=normal"
-time  = "ty"
-
 # --------------------------------------------------
 # EXPENSE QUERIES
 # --------------------------------------------------
 
 [exp]
 where = "type=expense domain!=work"
-time  = "tm"
-sum   = true
-
-[exps]
-where = "type=expense domain=self"
-time  = "tm"
-sum   = true
-
-[exph]
-where = "type=expense domain=home"
 time  = "tm"
 sum   = true
 
@@ -118,13 +104,13 @@ time   = "tq"
 pivot  = ["source", "outcome"]
 count  = true
 
-[rx_models]
+[rxmodels]
 where = "type=prescription"
 time  = "tq"
 pivot = ["model", "source"]
 sum   = true
 
-[exp_cat]
+[expcat]
 where = "type=expense domain!=work"
 time  = "tm"
 group = ["category"]
@@ -145,3 +131,9 @@ days    = 7
 [transport]
 where = "domain=self category=transport type=expense"
 time  = "this-month"
+
+[exptag]
+where = "type=expense domain!=work"
+time  = "td"
+group = ["tag"]
+sum   = true

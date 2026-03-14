@@ -796,23 +796,26 @@ def input_date():
             print("Invalid date format (YYYY-MM-DD)")
 
 def input_tags(allowed_tags):
-    """Show tag options once. Accept numbers (space/comma separated), custom text, or Enter to skip."""
+    """Show tag options once. Accept numbers (space/comma separated), custom text, or Enter to skip.
+    Returns (selected_tags, new_tags) where new_tags are not in allowed_tags.
+    """
     if not allowed_tags:
         # no schema tags — just prompt for free text
         val = input("\nTags (comma separated, or Enter to skip): ").strip()
         if not val:
-            return []
-        return [t.strip().replace(" ", "_") for t in val.split(",") if t.strip()]
+            return [], []
+        tags = [t.strip().replace(" ", "_") for t in val.split(",") if t.strip()]
+        return tags, tags  # all are new when no schema tags exist
 
     print("\nTag options (pick numbers, add custom, or Enter to skip):")
     for i, t in enumerate(allowed_tags, 1):
         print(f"  {i}) {t}")
     print("  Enter numbers separated by spaces/commas, custom words, or mix")
-    print("  Example: 1 3 or auto,bus or 1 petrol")
+    print("  Example: 1 3 or auto,bus or 1 petrol or quick delivery (becomes quick_delivery)")
 
     val = input("\nTags: ").strip()
     if not val:
-        return []
+        return [], []
 
     tags = []
     # if input contains commas, treat as comma-separated (spaces within = underscores)
@@ -844,23 +847,34 @@ def input_tags(allowed_tags):
                     if t not in tags:
                         tags.append(t)
     else:
-        for part in val.split():
-            part = part.strip()
-            if not part:
-                continue
-            if part.isdigit():
-                i = int(part)
-                if 1 <= i <= len(allowed_tags):
-                    t = allowed_tags[i - 1]
-                    if t not in tags:
-                        tags.append(t)
-            else:
-                # match against allowed list case-insensitively
-                match = next((t for t in allowed_tags if t.lower() == part.lower()), None)
-                t = match if match else part.replace(" ", "_")
+        # separate numeric tokens (schema picks) from word tokens (custom tag)
+        tokens     = val.split()
+        num_tokens = [tok for tok in tokens if tok.isdigit()]
+        word_tokens = [tok for tok in tokens if not tok.isdigit()]
+
+        # numeric picks
+        for tok in num_tokens:
+            i = int(tok)
+            if 1 <= i <= len(allowed_tags):
+                t = allowed_tags[i - 1]
                 if t not in tags:
                     tags.append(t)
-    return tags
+
+        # word tokens: check if it's a single known tag, otherwise join as one custom tag
+        if word_tokens:
+            joined = "_".join(word_tokens)
+            # try matching the joined form or a single word against allowed list
+            match = next((t for t in allowed_tags
+                          if t.lower() == joined.lower()), None)
+            if not match and len(word_tokens) == 1:
+                match = next((t for t in allowed_tags
+                              if t.lower() == word_tokens[0].lower()), None)
+            t = match if match else joined
+            if t not in tags:
+                tags.append(t)
+
+    new_tags = [t for t in tags if t not in allowed_tags]
+    return tags, new_tags
 
 # --------------------------------------------------
 # Schema interpreter  (field resolution for interactive add)
@@ -950,6 +964,80 @@ def resolve_tags(schema, type_schema, record):
 
     return sorted(allowed_tags)
 
+def add_tags_to_schema(schema_path, rtype, record, new_tags):
+    """Add new tags to schema.toml under the correct context.
+    Finds the best matching [type.X.tags.fieldname] options.value section
+    based on current record field values. Creates section if missing.
+    """
+    import re
+
+    # find which tag trigger field has a value in the current record
+    # prefer fields that already have a tags section defined
+    schema = get_schema()
+    type_schema = schema.get("type", {}).get(rtype, {})
+    tag_section = type_schema.get("tags", {})
+
+    target_field = None
+    target_value = None
+
+    # prefer existing tag section field with a matching value
+    for field, trigger in tag_section.items():
+        val = record.get(field)
+        if val and not isinstance(val, list):
+            target_field = field
+            target_value = val
+            break
+
+    # fall back to first required field that has a value and options
+    if not target_field:
+        for field in type_schema.get("required", []):
+            val = record.get(field)
+            if val and field != "type":
+                target_field = field
+                target_value = val
+                break
+
+    if not target_field:
+        print(f"  Could not determine tag context — skipping schema update.")
+        return
+
+    schema_text = open(schema_path, encoding="utf-8").read()
+    section_key = f"[type.{rtype}.tags.{target_field}]"
+
+    for tag in new_tags:
+        ans = input(f"  Add tag '{tag}' to schema under {rtype} › {target_field}={target_value}? (y/N): ").strip().lower()
+        if ans != "y":
+            continue
+
+        option_key = f"options.{target_value}"
+        # does the section exist?
+        if section_key in schema_text:
+            # does the options.value line exist?
+            pattern = rf'(options\.{re.escape(target_value)}\s*=\s*\[)([^\]]*?)(\])'
+            match = re.search(pattern, schema_text)
+            if match:
+                # append to existing list
+                existing = match.group(2).strip()
+                if existing:
+                    new_list = f'{existing}, "{tag}"'
+                else:
+                    new_list = f'"{tag}"'
+                schema_text = schema_text[:match.start()] +                               f'{match.group(1)}{new_list}{match.group(3)}' +                               schema_text[match.end():]
+            else:
+                # section exists but this options.value line doesn't — append after section header
+                schema_text = schema_text.replace(
+                    section_key,
+                    f"{section_key}\n{option_key} = [\"" + tag + "\"]"
+                )
+        else:
+            # section doesn't exist at all — append to end of file
+            schema_text = (schema_text.rstrip() +
+                           f"\n\n{section_key}\n{option_key} = [\"" + tag + "\"]\n")
+
+        open(schema_path, "w", encoding="utf-8").write(schema_text)
+        print(f"  ✔ Added '{tag}' to schema.")
+
+
 def complete_record(schema, record):
     """Fill missing required and conditional fields interactively. Returns (record, note)."""
     rtype = record.get("type")
@@ -972,7 +1060,14 @@ def complete_record(schema, record):
 
     # tags
     if "tag" not in record:
-        tags = input_tags(resolve_tags(schema, type_schema, record))
+        allowed  = resolve_tags(schema, type_schema, record)
+        tags, new_tags = input_tags(allowed)
+        if new_tags and allowed:
+            # only prompt to add to schema when there is an existing tag hierarchy
+            schema_path = SCHEMA_PATH
+            add_tags_to_schema(schema_path, rtype, record, new_tags)
+            # reload schema so resolve_tags picks up new tags next time
+            schema.update(get_schema())
         if tags:
             record["tag"] = tags
 
