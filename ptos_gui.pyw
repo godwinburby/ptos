@@ -1422,6 +1422,275 @@ class LogEditorTab(tk.Frame):
             fg=SUCCESS)
 
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Journal Tab
+# ══════════════════════════════════════════════════════════════════════════════
+
+class JournalTab(tk.Frame):
+    """Daily journal — plain text editor with light markdown colouring.
+    Opens today's journal automatically. Prev/Next/date picker to browse.
+    """
+
+    def __init__(self, parent):
+        super().__init__(parent, bg=BG)
+        self._path    = None
+        self._current = dt.date.today()
+        self._build()
+        self._load(self._current)
+
+    # ── build ─────────────────────────────────────────────────────────────────
+
+    def _build(self):
+        # header
+        hdr = tk.Frame(self, bg=CARD, pady=12)
+        hdr.pack(fill="x")
+        tk.Label(hdr, text="Journal", font=F_HEAD,
+                 fg=TEXT, bg=CARD).pack(side="left", padx=HPAD)
+
+        # save button top-right
+        btn_frame = tk.Frame(hdr, bg=CARD)
+        btn_frame.pack(side="right", padx=HPAD)
+        _make_button(btn_frame, "Save", self._save).pack(side="right")
+        tk.Button(btn_frame, text="⟳  Reload", command=lambda: self._load(self._current),
+                  font=F_SMALL, bg=CARD, fg=ACCENT,
+                  activeforeground=ACCENT_HO, relief="flat", bd=0,
+                  cursor="hand2").pack(side="right", padx=(0, 12))
+
+        # nav bar
+        nav = tk.Frame(self, bg=CARD, pady=8, padx=HPAD)
+        nav.pack(fill="x")
+
+        tk.Button(nav, text="◀  Prev", command=self._prev,
+                  font=F_BODY, bg=BG, fg=ACCENT,
+                  activeforeground=ACCENT_HO, relief="flat",
+                  cursor="hand2", bd=0, padx=8).pack(side="left")
+
+        tk.Button(nav, text="Today", command=self._go_today,
+                  font=F_BODY, bg=BG, fg=ACCENT,
+                  activeforeground=ACCENT_HO, relief="flat",
+                  cursor="hand2", bd=0, padx=8).pack(side="left", padx=(4, 0))
+
+        tk.Button(nav, text="Next  ▶", command=self._next,
+                  font=F_BODY, bg=BG, fg=ACCENT,
+                  activeforeground=ACCENT_HO, relief="flat",
+                  cursor="hand2", bd=0, padx=8).pack(side="left", padx=(4, 0))
+
+        # date label + calendar picker
+        self._date_var = tk.StringVar()
+        self._date_lbl = tk.Label(nav, textvariable=self._date_var,
+                                  font=("Segoe UI", 12, "bold"),
+                                  fg=TEXT, bg=CARD, cursor="hand2")
+        self._date_lbl.pack(side="left", padx=(20, 0))
+        self._date_lbl.bind("<Button-1>", self._pick_date)
+
+        cal_btn = tk.Button(nav, text="📅",
+                            font=("Segoe UI Emoji", 13),
+                            bg=CARD, fg=ACCENT, relief="flat", bd=0,
+                            cursor="hand2",
+                            command=self._pick_date)
+        cal_btn.pack(side="left", padx=(6, 0))
+
+        # status bar
+        self._status = tk.Label(self, text="", font=F_SMALL,
+                                fg=SUCCESS, bg=BG, anchor="w")
+        self._status.pack(fill="x", padx=HPAD, pady=(4, 0))
+
+        # create entry button — shown only when no entry exists for a past date
+        self._create_btn = tk.Button(self, text="+ Create Entry for This Date",
+                                     command=self._create_entry,
+                                     font=F_BTN, bg=ACCENT, fg="white",
+                                     activebackground=ACCENT_HO,
+                                     relief="flat", cursor="hand2",
+                                     padx=20, pady=10, bd=0)
+        # not packed yet — shown/hidden dynamically in _load
+
+        hsep(self).pack(fill="x", pady=(4, 0))
+
+        # editor
+        tf = tk.Frame(self, bg=BORDER, padx=1, pady=1)
+        tf.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+        xsb = ttk.Scrollbar(tf, orient="horizontal")
+        ysb = ttk.Scrollbar(tf, orient="vertical")
+        self._editor = tk.Text(tf, font=F_MONO, bg=OUTPUT_BG, fg=OUTPUT_FG,
+                               insertbackground=OUTPUT_FG, relief="flat",
+                               wrap="word", undo=True,
+                               xscrollcommand=xsb.set,
+                               yscrollcommand=ysb.set,
+                               padx=12, pady=10)
+        xsb.config(command=self._editor.xview)
+        ysb.config(command=self._editor.yview)
+        ysb.pack(side="right", fill="y")
+        xsb.pack(side="bottom", fill="x")
+        self._editor.pack(side="left", fill="both", expand=True)
+
+        # syntax highlight tags
+        self._editor.tag_config("h1",       foreground="#e06c75", font=("Consolas", 13, "bold"))
+        self._editor.tag_config("h2",       foreground="#e5c07b", font=("Consolas", 12, "bold"))
+        self._editor.tag_config("h3",       foreground="#98c379", font=("Consolas", 12, "bold"))
+        self._editor.tag_config("checkbox", foreground="#e5c07b")
+        self._editor.tag_config("checked",  foreground="#98c379")
+        self._editor.tag_config("rule",     foreground="#4b5263")
+        self._editor.tag_config("bold",     foreground="#ffffff", font=("Consolas", 12, "bold"))
+        self._editor.tag_config("italic",   foreground="#56b6c2", font=("Consolas", 12, "italic"))
+        self._editor.tag_config("note_key", foreground="#61afef")
+
+        # keybindings
+        self._editor.bind("<Control-s>",      lambda _: self._save())
+        self._editor.bind("<Control-S>",      lambda _: self._save())
+        self._editor.bind("<Control-Return>", lambda _: self._toggle_checkbox())
+        self._editor.bind("<KeyRelease>",     lambda _: self._highlight())
+
+    # ── navigation ────────────────────────────────────────────────────────────
+
+    def _prev(self):
+        self._load(self._current - dt.timedelta(days=1))
+
+    def _next(self):
+        next_d = self._current + dt.timedelta(days=1)
+        if next_d <= dt.date.today():
+            self._load(next_d)
+
+    def _go_today(self):
+        self._load(dt.date.today())
+
+    def _pick_date(self, _=None):
+        dv = tk.StringVar(value=self._current.isoformat())
+        DatePicker(self._date_lbl, dv)
+        self.after(300, lambda: self._load_from_var(dv))
+
+    def _load_from_var(self, dv):
+        try:
+            d = dt.date.fromisoformat(dv.get())
+            if d != self._current:
+                self._load(d)
+        except ValueError:
+            pass
+
+    def _create_entry(self):
+        """Create a blank journal entry for the current past date from template."""
+        import shutil
+        d = self._current
+        path = self._journal_path(d)
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # use template if available, else starter
+        home = os.path.dirname(os.path.abspath(sys.modules["ptos"].__file__))
+        ptos_home = os.environ.get("PTOS_HOME", home)
+        template_path = os.path.join(ptos_home, "templates", "daily.md")
+        if os.path.exists(template_path):
+            with open(template_path, encoding="utf-8") as f:
+                text = f.read().replace("{{date}}", d.isoformat())
+        else:
+            text = ptos._STARTER_JOURNAL.replace("{{date}}", d.isoformat())
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(text)
+        self._load(d)  # reload — will now find the file
+
+    # ── load / save ───────────────────────────────────────────────────────────
+
+    def _journal_path(self, d):
+        home = os.path.dirname(os.path.abspath(sys.modules["ptos"].__file__))
+        ptos_home = os.environ.get("PTOS_HOME", home)
+        year_dir = os.path.join(ptos_home, "journal", str(d.year))
+        return os.path.join(year_dir, f"{d.isoformat()}.md")
+
+    def _load(self, d):
+        self._current = d
+        self._date_var.set(d.strftime("%A, %d %B %Y"))
+        self._status.config(text="")
+
+        if d == dt.date.today():
+            # use ptos to create from template if needed
+            path = ptos.get_today_journal()
+        else:
+            path = self._journal_path(d)
+
+        self._path = path
+
+        if not os.path.exists(path):
+            self._editor.config(state="normal")
+            self._editor.delete("1.0", "end")
+            self._editor.config(state="disabled")
+            self._status.config(text=f"No entry for {d.isoformat()}.", fg=SUBTEXT)
+            self._create_btn.pack(pady=(8, 0))
+            return
+        # entry exists — hide create button
+        self._create_btn.pack_forget()
+
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+
+        self._create_btn.pack_forget()
+        self._editor.config(state="normal")
+        self._editor.delete("1.0", "end")
+        self._editor.insert("end", text)
+        self._editor.see("1.0")
+        self._highlight()
+        self._status.config(text=path, fg=SUBTEXT)
+
+    def _save(self):
+        if not self._path:
+            return
+        import shutil, tempfile
+        content = self._editor.get("1.0", "end-1c")
+        if content and not content.endswith("\n"):
+            content += "\n"
+        backup = self._path + ".bak"
+        if os.path.exists(self._path):
+            shutil.copy2(self._path, backup)
+        os.makedirs(os.path.dirname(self._path), exist_ok=True)
+        dir_ = os.path.dirname(self._path)
+        with tempfile.NamedTemporaryFile("w", dir=dir_, delete=False,
+                                         encoding="utf-8", suffix=".tmp") as tmp:
+            tmp.write(content)
+            tmp_path = tmp.name
+        os.replace(tmp_path, self._path)
+        self._status.config(text=f"✔  Saved  {self._path}", fg=SUCCESS)
+
+    # ── checkbox toggle (Ctrl+Enter) ──────────────────────────────────────────
+
+    def _toggle_checkbox(self):
+        line_start = self._editor.index("insert linestart")
+        line_end   = self._editor.index("insert lineend")
+        line = self._editor.get(line_start, line_end)
+        if "- [ ]" in line:
+            new_line = line.replace("- [ ]", "- [x]", 1)
+        elif "- [x]" in line:
+            new_line = line.replace("- [x]", "- [ ]", 1)
+        else:
+            return
+        self._editor.delete(line_start, line_end)
+        self._editor.insert(line_start, new_line)
+        self._highlight()
+
+    # ── syntax highlighting ───────────────────────────────────────────────────
+
+    def _highlight(self):
+        import re
+        ed = self._editor
+        # clear all tags
+        for tag in ("h1", "h2", "h3", "checkbox", "checked", "rule", "bold", "italic", "note_key"):
+            ed.tag_remove(tag, "1.0", "end")
+
+        patterns = [
+            ("h1",       r"^# .+$"),
+            ("h2",       r"^## .+$"),
+            ("h3",       r"^### .+$"),
+            ("checked",  r"- \[x\].*$"),
+            ("checkbox", r"- \[ \].*$"),
+            ("rule",     r"^---+$"),
+            ("bold",     r"[*][*].+?[*][*]"),
+            ("italic",   r"(?<![*])[*][^*]+[*](?![*])"),
+            ("note_key", r"^[A-Za-z][A-Za-z ]+:"),
+        ]
+
+        text = ed.get("1.0", "end")
+        for tag, pattern in patterns:
+            for m in re.finditer(pattern, text, re.MULTILINE):
+                start = f"1.0 + {m.start()} chars"
+                end   = f"1.0 + {m.end()} chars"
+                ed.tag_add(tag, start, end)
+
 # ── Error dialog with copyable text ──────────────────────────────────────────
 
 def _show_error_dialog(parent, exc_text, log_path):
@@ -1569,6 +1838,7 @@ class PTOSApp(tk.Tk):
         nb.pack(fill="both", expand=True)
 
         nb.add(AddRecordTab(nb), text="   + Add Record   ")
+        nb.add(JournalTab(nb),   text="   Journal   ")
         nb.add(QueryTab(nb),     text="   Queries   ")
         nb.add(BrowseTab(nb),    text="   Browse   ")
         nb.add(LogEditorTab(nb), text="   Log Editor   ")
