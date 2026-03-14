@@ -20,6 +20,7 @@ CONFIG_DIR   = os.path.join(BASE_DIR, "config")
 RECORDS_DIR  = os.path.join(BASE_DIR, "records")
 JOURNAL_DIR  = os.path.join(BASE_DIR, "journal")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
 
 SCHEMA_PATH  = os.path.join(CONFIG_DIR, "schema.toml")
 QUERIES_PATH = os.path.join(CONFIG_DIR, "queries.toml")
@@ -1615,6 +1616,8 @@ def build_parser(cycles):
     ana.add_argument("--due",          nargs="?", const="__DEFAULT__", metavar="NAME_OR_DAYS",
                      help="Show overdue records. Optional: named due config from queries.toml, or N days override")
     ana.add_argument("--table",        action="store_true", help="Show results as a table instead of raw lines")
+    ana.add_argument("--export",       nargs="?", const="__AUTO__", metavar="FILENAME",
+                     help="Export results to CSV in exports/ folder. Optional filename (no extension).")
 
     utl = p.add_argument_group("Utilities")
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
@@ -2023,6 +2026,59 @@ def render_table(results):
 
 
 # --------------------------------------------------
+# CSV export
+# --------------------------------------------------
+
+def export_csv(results, filename, filters, time_label):
+    """Export results to exports/FILENAME.csv.
+    Auto-name uses active type filter + time label if no filename given.
+    """
+    import csv
+
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+
+    if filename == "__AUTO__":
+        # build name from filters + time
+        type_part = next((f.split("=")[1] for f in filters if f.startswith("type=")), "records")
+        date_part = time_label.replace(" ", "_").replace("/", "-")
+        filename  = f"{type_part}_{date_part}"
+
+    # sanitise — no spaces or path separators
+    filename = filename.replace(" ", "_")
+    if any(c in filename for c in ("/", "\\")):
+        sys.exit("--export: filename must not contain path separators")
+
+    path = os.path.join(EXPORTS_DIR, f"{filename}.csv")
+
+    # collect all columns in encounter order
+    cols = ["date"]
+    seen = set(["date"])
+    for line in results:
+        _, kv, note = parse_line(line)
+        for k in kv:
+            if k not in seen:
+                cols.append(k)
+                seen.add(k)
+    has_note = any(parse_line(l)[2] for l in results)
+    if has_note:
+        cols.append("note")
+
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=cols)
+        writer.writeheader()
+        for line in results:
+            d, kv, note = parse_line(line)
+            row = {"date": str(d)}
+            for k, v in kv.items():
+                row[k] = ",".join(v) if isinstance(v, list) else str(v)
+            if has_note:
+                row["note"] = note or ""
+            writer.writerow(row)
+
+    print(f"\nExported {len(results)} record(s) to: {path}\n")
+
+
+# --------------------------------------------------
 # Main
 # --------------------------------------------------
 
@@ -2253,6 +2309,10 @@ def main():
             except (ValueError, TypeError):
                 return (1, 0, str(val).lower())
         results = sorted(results, key=sort_key)
+
+    if getattr(args, "export", None):
+        export_csv(results, args.export, final_filters, time_label)
+        return
 
     if args.table:
         render_table(results)
