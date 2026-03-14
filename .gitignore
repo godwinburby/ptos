@@ -21,3 +21,5 @@ ptos_error.log
 # Misc
 test.txt
 scripts/
+exports/
+*.csv

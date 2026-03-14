@@ -253,6 +253,7 @@ ptos --edit x        # ptos.py itself
 | `--trend [N]` | Show last N periods side by side (default: 6) |
 | `--due [NAME\|DAYS]` | Show overdue records. Optional: named due config or days override |
 | `--table` | Display results as a formatted table instead of raw lines |
+| `--export [FILENAME]` | Export results to CSV in `exports/` folder. Optional filename without extension. Auto-named if omitted. |
 
 ### Utilities
 
@@ -752,6 +753,23 @@ Output keeps log format with only the selected fields:
 ```
 
 `--select` works with `--table`, `--sort`, and `--due`. Position in the command does not matter.
+
+---
+
+## Exporting to CSV
+
+`--export` saves results to a `.csv` file in the `exports/` folder next to `records/`.
+
+```bash
+ptos -y expense -t tm --export              # exports/expense_this-month.csv
+ptos -y expense -t tm --export march_spend  # exports/march_spend.csv
+ptos -q flp -t tq --export                  # exports/followup_this-quarter.csv
+ptos -y prescription --export               # exports/prescription_this-month.csv
+```
+
+Auto-naming uses the active type filter and time label so the filename tells you what's in it. All filters, `--select`, and `--sort` apply before export — what you see is what gets exported.
+
+Columns are auto-detected from fields present in results. Multi-value fields like `tag` are joined with a comma. The file can be opened directly in Excel or any spreadsheet app.
 
 ---
 
