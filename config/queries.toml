@@ -34,7 +34,9 @@ ratio = ["prescriptions", "assessments"]
 ratio = ["binaural", "prescriptions"]
 
 [metrics.asp]
-avg = "prescriptions"
+avg          = "prescriptions"
+unit_field   = "fit"
+unit_weights = { monaural = 1, binaural = 2 }
 
 [metrics.loss_ratio]
 ratio = ["deferred", "assessments"]
