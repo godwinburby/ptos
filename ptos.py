@@ -677,6 +677,14 @@ def _run_base_query(name, queries, start, end, cycles):
     results, total = scan_records(start, end, filters, None)
     return len(results), total
 
+def _run_base_query_lines(name, queries, start, end, cycles):
+    """Like _run_base_query but returns raw result lines and total."""
+    q       = queries[name]
+    filters = q["where"].split()
+    if "time" in q:
+        start, end = resolve_time(q["time"], cycles)
+    return scan_records(start, end, filters, None)
+
 def run_metric(name, queries, start, end, cycles):
     metrics = queries.get("metrics", {})
     if name not in metrics:
@@ -694,11 +702,28 @@ def run_metric(name, queries, start, end, cycles):
         return True
 
     if "avg" in m:
-        count, total = _run_base_query(m["avg"], queries, start, end, cycles)
-        if count == 0:
-            print(f"{name:<24} no data")
+        unit_field   = m.get("unit_field")
+        unit_weights = m.get("unit_weights")
+        if unit_field and unit_weights:
+            # weighted average: divide total by sum of per-record unit weights
+            lines, total = _run_base_query_lines(m["avg"], queries, start, end, cycles)
+            if not lines:
+                print(f"{name:<24} no data")
+                return True
+            units = 0
+            for line in lines:
+                _, kv, _ = parse_line(line)
+                val = kv.get(unit_field, "")
+                if isinstance(val, list):
+                    val = val[0]
+                units += unit_weights.get(val, 1)
+            print(f"{name:<24} {fmt_avg(total / units)}")
         else:
-            print(f"{name:<24} {fmt_avg(total / count)}")
+            count, total = _run_base_query(m["avg"], queries, start, end, cycles)
+            if count == 0:
+                print(f"{name:<24} no data")
+            else:
+                print(f"{name:<24} {fmt_avg(total / count)}")
         return True
 
     return False

@@ -1,0 +1,141 @@
+# --------------------------------------------------
+# PTOS QUERIES
+# --------------------------------------------------
+# Usage:
+#   ptos --query <n>                 run saved query
+#   ptos --query <n> --time lm      override time (td yd tw lw tm lm tq lq ty ly)
+#   ptos --query                     list all
+# --------------------------------------------------
+
+# --------------------------------------------------
+# BASE QUERIES  (used by metrics and dashboards)
+# --------------------------------------------------
+
+[assessments]
+where = "type=assessment"
+
+[deferred]
+where = "type=assessment outcome=deferred"
+
+[prescriptions]
+where = "type=prescription"
+
+[binaural]
+where = "type=prescription fit=binaural"
+
+# --------------------------------------------------
+# METRICS
+# --------------------------------------------------
+
+[metrics.prescription_ratio]
+ratio = ["prescriptions", "assessments"]
+
+[metrics.binaural_ratio]
+ratio = ["binaural", "prescriptions"]
+
+[metrics.asp]
+avg          = "prescriptions"
+unit_field   = "fit"
+unit_weights = { monaural = 1, binaural = 2 }
+
+[metrics.loss_ratio]
+ratio = ["deferred", "assessments"]
+
+# --------------------------------------------------
+# DASHBOARDS
+# --------------------------------------------------
+
+[dashboards.clinic]
+metrics = [
+  "assessments",
+  "prescriptions",
+  "loss_ratio",
+  "prescription_ratio",
+  "binaural_ratio",
+  "asp"
+]
+
+# --------------------------------------------------
+# CLINIC QUERIES  (use --time lm / tq / lq to switch period)
+# --------------------------------------------------
+
+[rx]
+where = "type=prescription"
+time  = "tm"
+sum   = true
+
+[ass]
+where = "type=assessment"
+time  = "tm"
+
+[flp]
+where = "type=followup"
+time  = "tm"
+
+# --------------------------------------------------
+# EXPENSE QUERIES
+# --------------------------------------------------
+
+[exp]
+where = "type=expense domain!=work"
+time  = "tm"
+sum   = true
+
+[expw]
+where = "type=expense domain=work tag!=snacks"
+time  = "clinic"
+sum   = true
+
+[snacksw]
+where = "type=expense domain=work tag=snacks"
+time  = "clinic"
+sum   = true
+
+[snacks]
+where = "type=expense domain!=work tag=snacks"
+time  = "tm"
+sum   = true
+
+# --------------------------------------------------
+# ANALYSIS  (use --time to change window)
+# --------------------------------------------------
+
+[funnel]
+where  = "type=assessment"
+time   = "tq"
+pivot  = ["source", "outcome"]
+count  = true
+
+[rxmodels]
+where = "type=prescription"
+time  = "tq"
+pivot = ["model", "source"]
+sum   = true
+
+[expcat]
+where = "type=expense domain!=work"
+time  = "tm"
+group = ["category"]
+sum   = true
+
+# --------------------------------------------------
+# DUE CONFIG  (used by: ptos --due)
+# --------------------------------------------------
+
+[due]
+type    = "followup"
+key     = "client"
+sort_by = "intent"
+days    = 7
+# intent priority order is defined in schema.toml:
+# trial → decision → assessment → mgm
+
+[transport]
+where = "domain=self category=transport type=expense"
+time  = "this-month"
+
+[exptag]
+where = "type=expense domain!=work"
+time  = "td"
+group = ["tag"]
+sum   = true
