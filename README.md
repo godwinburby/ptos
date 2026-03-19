@@ -1,6 +1,6 @@
 # PTOS — Plain Text Operating System
 
-> **New to PTOS?** See `README_START_HERE.md` for a plain-English overview.
+> **New to PTOS?** See [README_START_HERE.md](README_START_HERE.md) for a plain-English overview.
 
 > Log it. Query it. Own it.
 
