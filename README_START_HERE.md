@@ -31,8 +31,9 @@ Simple enough to read in Notepad, powerful enough to query and report on.
 ## The four config files
 
 All the intelligence of PTOS lives in four small files inside the `config/` folder.
-You don't need to edit them for day-to-day use, but knowing what they do helps you
-understand why the app behaves the way it does.
+They are plain text — open any of them in Notepad and you will find clear comments
+at the top explaining exactly how they work. Reading the file itself is usually
+enough to figure out what to change.
 
 ### `schema.toml` — what you can record
 
@@ -48,8 +49,9 @@ For each type, the schema defines which fields are required, what values each fi
 accepts, and which tags appear as checkboxes in the form. The app's forms are built
 entirely from this file.
 
-New record types and new dropdown options can be added to this file. If you need
-something added or changed, contact Godwin.
+To add a new record type or a new dropdown option, open `schema.toml` and follow
+the pattern already there — every type is documented with comments above it.
+The full reference is in `README.md` under the Schema section.
 
 ### `queries.toml` — your saved reports
 
@@ -63,19 +65,20 @@ The file starts with one example query, one metric, and one dashboard:
 - **avg_expense** — average amount per expense record (a metric)
 - **home dashboard** — runs both of the above together in one view
 
-These are just starting points. New queries and dashboards can be added any time.
-If you want a report saved, contact Godwin.
+These are just starting points. The file is heavily commented — read through it and
+the pattern becomes clear quickly. The full reference is in `README.md` under the
+Queries section.
 
 ### `presets.toml` — quick-add shortcuts
 
 Presets are shortcuts for records you add frequently. A preset pre-fills the form
 fields so you just confirm and save — no re-entering the same values every time.
 
-The file starts with a commented-out example (a commute expense preset) to show you
-the format. You can create presets yourself directly from the app without editing
-this file: fill in the Add Record form, then click **Save as Preset** at the bottom.
-Give it a name and it is saved immediately. Next time, pick it from the
-**Load preset** dropdown at the top of the form.
+The file starts with a commented-out example to show you the format. You can also
+create presets directly from the app without editing this file at all: fill in the
+Add Record form, click **Save as Preset** at the bottom, give it a name, and it is
+saved immediately. Next time, pick it from the **Load preset** dropdown at the top
+of the form.
 
 ### `config.toml` — basic settings
 
@@ -86,8 +89,9 @@ Three settings:
 - **cycles** — custom billing or reporting periods defined by a start day of month
   (e.g. `clinic = 26` means a cycle running 26th to 25th next month)
 
-The cycles section is empty by default — add named cycles here if you report on
-periods that don't align with the calendar month. Contact Godwin if unsure.
+The file has inline comments explaining each setting. The cycles section is empty
+by default — add a named cycle here if you report on periods that don't start on
+the 1st of the month.
 
 ---
 
@@ -161,12 +165,10 @@ It goes after the `|` in the log line.
 |---------|-------------|
 | App won't open | Make sure Python is installed. Try right-clicking `ptg.bat` → Run as administrator. |
 | "schema.toml not found" | Run `ptos_init.bat` first. |
-| A field or dropdown option is missing | The schema needs updating. Contact Godwin. |
+| A field or dropdown option is missing | Open `schema.toml` — find the relevant type and add the option following the pattern already there. |
 | Record saved with wrong values | Open the Log Editor tab, find the line, edit it, save. |
-| A query is missing or wrong | Contact Godwin. |
-| Something looks broken | Don't change anything. Contact Godwin and describe what you saw. |
-
-For anything not covered here — contact **Godwin**.
+| A query is missing or producing unexpected results | Open `queries.toml` — the comments at the top explain the format. |
+| Something looks broken and you can't figure it out | Don't change anything — reach out for help and describe what you saw. |
 
 ---
 
