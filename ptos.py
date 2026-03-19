@@ -113,7 +113,8 @@ def non_dimension_fields():
     }
 
 def numeric_value(kv):
-    """Return the first numeric field value found in kv, or None."""
+    """Return the first numeric field value found in kv, or None.
+    Used as a fallback when no --sum-field is specified."""
     for f in numeric_fields():
         if f in kv:
             v = kv[f]
@@ -122,6 +123,18 @@ def numeric_value(kv):
             if str(v).isdigit():
                 return int(v)
     return None
+
+def numeric_value_for(kv, field):
+    """Return the integer value of a specific named field from kv, or None."""
+    if field not in kv:
+        return None
+    v = kv[field]
+    if isinstance(v, list):
+        v = v[0]
+    try:
+        return int(v)
+    except (ValueError, TypeError):
+        return None
 
 def detect_value_field(results):
     """Return the name of the first numeric field found across results."""
@@ -322,9 +335,10 @@ def apply_where(kv, filters):
 # Query engine
 # --------------------------------------------------
 
-def scan_records(start, end, filters, search, from_file=None):
+def scan_records(start, end, filters, search, from_file=None, sum_field=None):
     """Scan log files and return (matching_lines, numeric_total).
     from_file: if given, read only that file from records/ folder.
+    sum_field: if given, sum this specific field instead of the first numeric field found.
     """
     results = []
     total   = 0
@@ -361,7 +375,7 @@ def scan_records(start, end, filters, search, from_file=None):
                 if not apply_where(kv, filters):
                     continue
                 results.append(line)
-                val = numeric_value(kv)
+                val = numeric_value_for(kv, sum_field) if sum_field else numeric_value(kv)
                 if val is not None:
                     total += val
     return results, total
@@ -538,8 +552,10 @@ def lint_records(records, schema):
 # Analysis  —  group + pivot return data, render separately
 # --------------------------------------------------
 
-def group_results(results, fields):
-    """Return (counts, sums, has_numeric) keyed by tuple of field values."""
+def group_results(results, fields, sum_field=None):
+    """Return (counts, sums, has_numeric) keyed by tuple of field values.
+    sum_field: if given, sum this specific field instead of the first numeric field found.
+    """
     counts     = {}
     sums       = {}
     has_amount = False
@@ -551,15 +567,17 @@ def group_results(results, fields):
             elif field == "year": key_parts.append(str(d.year))
             else: key_parts.append(str(kv.get(field, "-")))
         key    = tuple(key_parts)
-        amount = numeric_value(kv)
+        amount = numeric_value_for(kv, sum_field) if sum_field else numeric_value(kv)
         counts[key] = counts.get(key, 0) + 1
         if amount is not None:
             sums[key]  = sums.get(key, 0) + amount
             has_amount = True
     return counts, sums, has_amount
 
-def pivot_results(results, row_field, col_field, count_mode=False, sort_col=None):
-    """Return pivot table as (table_dict, sorted_cols, row_order)."""
+def pivot_results(results, row_field, col_field, count_mode=False, sort_col=None, sum_field=None):
+    """Return pivot table as (table_dict, sorted_cols, row_order).
+    sum_field: if given, sum this specific field instead of the first numeric field found.
+    """
     table = {}
     cols  = set()
 
@@ -575,7 +593,7 @@ def pivot_results(results, row_field, col_field, count_mode=False, sort_col=None
         col_vals = resolve_vals(d, kv, col_field)
         if row_vals is None or col_vals is None:
             continue
-        amount = numeric_value(kv)
+        amount = numeric_value_for(kv, sum_field) if sum_field else numeric_value(kv)
         for row in row_vals:
             for col in col_vals:
                 cols.add(col)
@@ -646,7 +664,7 @@ def render_pivot(table, cols, rows, row_field):
     print(total_line)
     print()
 
-def render_summary(results, start, end, time_label, filters, total):
+def render_summary(results, start, end, time_label, filters, total, sum_field=None):
     count = len(results)
     rows  = [("Time range", f"{start} to {end} ({time_label})")]
     if results:
@@ -655,8 +673,10 @@ def render_summary(results, start, end, time_label, filters, total):
     if filters:
         rows.append(("Filters", " ".join(filters)))
     if total > 0:
-        rows.append(("Total",   fmt(total)))
-        rows.append(("Average", fmt_avg(total / count)))
+        total_label = f"Total ({sum_field})" if sum_field else "Total"
+        avg_label   = f"Average ({sum_field})" if sum_field else "Average"
+        rows.append((total_label, fmt(total)))
+        rows.append((avg_label,   fmt_avg(total / count)))
     width = max(len(r[0]) for r in rows)
     print()
     print("-" * 50)
@@ -1660,6 +1680,8 @@ def build_parser(cycles):
                      help="Show last N periods side by side (default: 6)")
     ana.add_argument("--due",          nargs="?", const="__DEFAULT__", metavar="NAME_OR_DAYS",
                      help="Show overdue records. Optional: named due config from queries.toml, or N days override")
+    ana.add_argument("--sum-field", dest="sum_field", metavar="FIELD",
+                     help="Field to sum instead of the default numeric field (e.g. advance, duration)")
     ana.add_argument("--table",        action="store_true", help="Show results as a table instead of raw lines")
     ana.add_argument("--export",       nargs="?", const="__AUTO__", metavar="FILENAME",
                      help="Export results to CSV in exports/ folder. Optional filename (no extension).")
@@ -2253,8 +2275,14 @@ def main():
     if args.save:
         save_query(args.save, args, final_filters)
 
+    # ---- validate --sum-field ----
+    sum_field = getattr(args, "sum_field", None)
+    if sum_field and sum_field not in numeric_fields():
+        sys.exit(f"--sum-field: '{sum_field}' is not a numeric field in schema.\n"
+                 f"Numeric fields: {', '.join(numeric_fields())}")
+
     # ---- scan ----
-    results, total = scan_records(start, end, final_filters, args.search, getattr(args, "from_file", None))
+    results, total = scan_records(start, end, final_filters, args.search, getattr(args, "from_file", None), sum_field=sum_field)
 
     if not results:
         print("\nNo records found.\n")
@@ -2293,21 +2321,21 @@ def main():
         missing = [f for f in (row, col) if f not in available]
         if missing:
             sys.exit(f"Unknown pivot field(s): {', '.join(missing)}  — try: ptos --fields")
-        render_summary(results, start, end, time_label, final_filters, total)
-        vf = detect_value_field(results)
+        render_summary(results, start, end, time_label, final_filters, total, sum_field=sum_field)
+        vf = sum_field or detect_value_field(results)
         label = f"Value: {vf}" if vf and not args.count else "Count mode"
         print(f"\nPivot  row={row}  col={col}  {label}")
-        table, cols, rows = pivot_results(results, row, col, args.count, args.sort)
+        table, cols, rows = pivot_results(results, row, col, args.count, args.sort, sum_field=sum_field)
         render_pivot(table, cols, rows, row)
         return
 
     # ---- group ----
     if args.group:
-        render_summary(results, start, end, time_label, final_filters, total)
-        vf = detect_value_field(results)
+        render_summary(results, start, end, time_label, final_filters, total, sum_field=sum_field)
+        vf = sum_field or detect_value_field(results)
         label = f"Value: {vf}" if vf else "Count"
         print(f"\nGrouped by: {' '.join(args.group)}  ({label})\n")
-        counts, sums, has_amount = group_results(results, args.group)
+        counts, sums, has_amount = group_results(results, args.group, sum_field=sum_field)
         render_group(counts, sums, has_amount, args.group)
         return
 
@@ -2365,7 +2393,7 @@ def main():
         print()
         for line in results:
             print(line)
-    render_summary(results, start, end, time_label, final_filters, total)
+    render_summary(results, start, end, time_label, final_filters, total, sum_field=sum_field)
 
 
 if __name__ == "__main__":
