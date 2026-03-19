@@ -1496,7 +1496,10 @@ class JournalTab(tk.Frame):
                                 fg=SUCCESS, bg=BG, anchor="w")
         self._status.pack(fill="x", padx=HPAD, pady=(4, 0))
 
+        hsep(self).pack(fill="x", pady=(4, 0))
+
         # create entry button — shown only when no entry exists for a past date
+        # must be packed before the editor so it sits above it in layout order
         self._create_btn = tk.Button(self, text="+ Create Entry for This Date",
                                      command=self._create_entry,
                                      font=F_BTN, bg=ACCENT, fg="white",
@@ -1505,10 +1508,9 @@ class JournalTab(tk.Frame):
                                      padx=20, pady=10, bd=0)
         # not packed yet — shown/hidden dynamically in _load
 
-        hsep(self).pack(fill="x", pady=(4, 0))
-
         # editor
         tf = tk.Frame(self, bg=BORDER, padx=1, pady=1)
+        self._editor_frame = tf
         tf.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
         xsb = ttk.Scrollbar(tf, orient="horizontal")
         ysb = ttk.Scrollbar(tf, orient="vertical")
@@ -1612,7 +1614,7 @@ class JournalTab(tk.Frame):
             self._editor.delete("1.0", "end")
             self._editor.config(state="disabled")
             self._status.config(text=f"No entry for {d.isoformat()}.", fg=SUBTEXT)
-            self._create_btn.pack(pady=(8, 0))
+            self._create_btn.pack(pady=(8, 4), before=self._editor_frame)
             return
         # entry exists — hide create button
         self._create_btn.pack_forget()

@@ -100,6 +100,8 @@ For users who prefer not to use the terminal, PTOS includes a graphical interfac
 |------|---------|
 | `ptos_gui.pyw` | The GUI application |
 | `ptg.bat` | Windows launcher — runs the GUI without a console window |
+| `ptos_init.bat` | First-time setup — creates folders, config files, and first log file |
+| `README_START_HERE.md` | Plain-English guide for non-technical users |
 
 ### Launching
 
@@ -117,7 +119,9 @@ python ptos_gui.pyw
 
 **Browse** — filter records by type and time window, with free-text search. Selecting a dropdown reruns automatically; pressing Enter in the search box runs the search. Due List button shows overdue records from the `[due]` config in `queries.toml`.
 
-**Log Editor** — view and edit the current year's `.log` file directly. Full undo support. Save with the button or Ctrl+S. A `.bak` backup is written automatically before every save.
+**Journal** — daily journal editor. Opens today's journal automatically. Navigate with ◀ Prev / Next ▶ or click the date label / 📅 icon to jump to any date. Today button snaps back to the current date. Forward navigation is blocked — you cannot navigate to future dates. For past dates with no entry, a **+ Create Entry for This Date** button appears; clicking it creates the file from your template without automatically opening an editor. Ctrl+S saves; Ctrl+Enter toggles checkbox items between `[ ]` and `[x]`. Markdown syntax colouring for headings, checkboxes, bold, italic, and horizontal rules. A `.bak` backup is written before every save.
+
+**Log Editor** — view and edit any `.log` file in the `records/` folder. A dropdown at the top lets you switch between files (one per year). Full undo support. Save with the button or Ctrl+S. A `.bak` backup is written automatically before every save.
 
 ### Add Record — form behaviour
 
@@ -399,7 +403,14 @@ ratio = ["food", "expenses"]     # food spend as % of total expenses
 
 [metrics.avg_spend]
 avg = "expenses"                 # average spend per record
+
+[metrics.asp]
+avg          = "prescriptions"   # weighted average — divide total by unit count
+unit_field   = "fit"             # field that carries the unit multiplier
+unit_weights = { monaural = 1, binaural = 2 }
 ```
+
+`unit_field` and `unit_weights` are optional. When present, the average is computed by dividing the total by the sum of per-record weights rather than the number of records. This is useful whenever one record represents a variable number of units — for example, a binaural prescription is two hearing aids, not one. If a record's field value is not found in `unit_weights`, a weight of 1 is assumed. Any field with any value-to-weight mapping works — the engine has no domain knowledge of what the field means.
 
 ### Dashboards — named collection of metrics and base queries
 
