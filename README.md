@@ -692,6 +692,8 @@ ptos --preset commute tag=uber          # different tag
 ptos --preset commute --date yesterday  # different date
 ```
 
+**Tags are always prompted when using a preset** — even if the preset already has tags defined. The existing tags are shown first so you can press Enter to keep them, or type new ones to extend or replace. This lets you add a one-off tag to a preset without editing the preset file.
+
 ---
 
 ## Analysis examples

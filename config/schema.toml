@@ -150,7 +150,7 @@ options.work   = ["admin", "books", "electricity", "courier", "postage", "office
 [type.expense.tags.category]
 options.food          = ["snacks", "tea", "coffee", "restaurant", "bakery", "fruits", "quick_delivery"]
 options.transport     = ["auto", "bus", "metro", "taxi", "uber", "rapido", "petrol"]
-options.grocery       = ["vegetables", "milk", "rice", "fruits", "super_market", "quick_delivery"]
+options.grocery       = ["vegetables", "milk", "rice", "fruits", "super_market", "quick_delivery", "thykoodam"]
 options.household     = ["bakery", "snacks", "restaurant"]
 options.staff_welfare = ["snacks"]
 
