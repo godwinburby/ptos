@@ -41,15 +41,6 @@ unit_weights = { monaural = 1, binaural = 2 }
 [metrics.loss_ratio]
 ratio = ["deferred", "assessments"]
 
-[metrics.total_revenue]
-sum = "prescriptions"
-
-[metrics.highest_sale]
-max = "prescriptions"
-
-[metrics.lowest_sale]
-min = "prescriptions"
-
 # --------------------------------------------------
 # DASHBOARDS
 # --------------------------------------------------
@@ -61,10 +52,7 @@ metrics = [
   "loss_ratio",
   "prescription_ratio",
   "binaural_ratio",
-  "total_revenue",
-  "asp",
-  "highest_sale",
-  "lowest_sale"
+  "asp"
 ]
 
 # --------------------------------------------------
@@ -135,10 +123,11 @@ sum   = true
 # --------------------------------------------------
 
 [due]
-type    = "followup"
-key     = "client"
-sort_by = "intent"
-days    = 7
+type            = "followup"
+key             = "client"
+sort_by         = "intent"
+days            = 7
+exclude_results = ["fix_appointment", "deceased", "not_relevant", "another_provider"]
 # intent priority order is defined in schema.toml:
 # trial → decision → assessment → mgm
 

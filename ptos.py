@@ -1941,7 +1941,8 @@ def run_due(arg):
     if not rec_type or not key_field:
         sys.exit("[due] section in queries.toml is missing 'type' or 'key'.\n"
                  "Example:\n  [due]\n  type = \"followup\"\n  key  = \"client\"\n  days = 7")
-    sort_field = due_cfg.get("sort_by")
+    sort_field      = due_cfg.get("sort_by")
+    exclude_results = due_cfg.get("exclude_results", [])
     days = days_override if days_override is not None else due_cfg.get("days", 7)
 
     # derive priority order from schema field options (list index = priority)
@@ -1973,6 +1974,13 @@ def run_due(arg):
             continue
         if key_val not in latest or d > latest[key_val]["date"]:
             latest[key_val] = {"date": d, "kv": kv, "note": note}
+
+    # drop entries whose latest result is in exclude_results
+    if exclude_results:
+        latest = {
+            k: r for k, r in latest.items()
+            if r["kv"].get("result") not in exclude_results
+        }
 
     overdue = [r for r in latest.values() if r["date"] <= cutoff]
 
