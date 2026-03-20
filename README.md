@@ -55,6 +55,8 @@ A record missing a date or type is broken — `--lint` will error.
 
 ## Installation
 
+`ptos.py` is a single self-contained file — it has no dependencies beyond Python 3.11+.
+
 ```bash
 # 1. Download ptos.py to a folder of your choice
 mkdir ~/ptos && cd ~/ptos
@@ -68,6 +70,8 @@ alias ptos="python ~/ptos/ptos.py"
 ```
 
 `--init` is safe to run more than once. It will not overwrite existing files.
+
+If you want the GUI front-end, also download `ptos_gui.pyw` into the same folder. The GUI requires `ptos.py` to be present alongside it — it imports it directly at runtime.
 
 ---
 
@@ -100,8 +104,11 @@ For users who prefer not to use the terminal, PTOS includes a graphical interfac
 
 | File | Purpose |
 |------|---------|
-| `ptos_gui.pyw` | The GUI application |
+| `ptos.py` | The core engine — required by both CLI and GUI |
+| `ptos_gui.pyw` | The GUI application — requires `ptos.py` in the same folder |
 | `ptg.bat` | Windows launcher — runs the GUI without a console window |
+| `ptos_init.bat` | First-time setup — creates folders, config files, and first log file |
+| `README_START_HERE.md` | Plain-English guide for non-technical users |
 
 ### Launching
 
@@ -117,9 +124,11 @@ python ptos_gui.pyw
 
 **Queries** — run any named query, metric, or dashboard from `queries.toml`. Selecting a query or changing the time window runs it immediately. Reload button refreshes the query list if `queries.toml` has changed.
 
-**Browse** — filter records by type and time window, with free-text search. Selecting a dropdown reruns automatically; pressing Enter in the search box runs the search. Due List button shows overdue records from the `[due]` config in `queries.toml`.
+**Browse** — filter records by type, time window, and field values. When a type is selected, dimension field dropdowns appear automatically for filtering. Also supports free-text search, sort, file selection, and a Group by dropdown for grouped output. Due List button shows overdue records from the `[due]` config in `queries.toml`. Export CSV exports current results. **Save as Query** saves the current filter state as a named query to `queries.toml` — accessible from the Queries tab immediately after saving.
 
-**Log Editor** — view and edit the current year's `.log` file directly. Full undo support. Save with the button or Ctrl+S. A `.bak` backup is written automatically before every save.
+**Journal** — daily journal editor. Opens today's journal automatically. Navigate with ◀ Prev / Next ▶ or click the date label / 📅 icon to jump to any date. Forward navigation is blocked past today. For past dates with no entry, a **+ Create Entry for This Date** button appears. Ctrl+S saves; Ctrl+Enter toggles checkbox items. Markdown syntax colouring for headings, checkboxes, bold, italic, and rules. A `.bak` backup is written before every save.
+
+**Log Editor** — view and edit any `.log` file in the `records/` folder. A dropdown at the top lets you switch between files (one per year). Full undo support. Save with the button or Ctrl+S. A `.bak` backup is written automatically before every save.
 
 ### Add Record — form behaviour
 
@@ -401,7 +410,18 @@ ratio = ["food", "expenses"]     # food spend as % of total expenses
 
 [metrics.avg_spend]
 avg = "expenses"                 # average spend per record
+
+[metrics.total_spend]
+sum = "expenses"                 # total amount across all matched records
+
+[metrics.highest_spend]
+max = "expenses"                 # highest single record amount
+
+[metrics.lowest_spend]
+min = "expenses"                 # lowest single record amount
 ```
+
+`avg` also supports weighted averaging via `unit_field` and `unit_weights` — see the weighted average section below.
 
 ### Dashboards — named collection of metrics and base queries
 
@@ -545,10 +565,11 @@ You can have a single default `[due]` block, or multiple named configs under `[d
 ```toml
 # default — used by: ptos --due
 [due]
-type    = "lead"       # record type to scan
-key     = "client"     # field that identifies each unique entity
-sort_by = "status"     # field whose schema option order defines priority
-days    = 7            # default overdue threshold
+type            = "lead"       # record type to scan
+key             = "client"     # field that identifies each unique entity
+sort_by         = "status"     # field whose schema option order defines priority
+days            = 7            # default overdue threshold
+exclude_results = ["fix_appointment", "deceased"]  # skip these result values entirely
 
 # named — used by: ptos --due outreach
 [due.outreach]
@@ -720,6 +741,16 @@ ptos --where type=sale product~comfort --group product  # group by variant
 Operators: `=` `!=` `>` `<` `>=` `<=` `~` (contains, case-insensitive)
 
 The `~` operator is useful when field values share a common prefix — for example `product~comfort` matches `comfort_pro_l`, `comfort_pro_xl`, and any future comfort variants without listing each one.
+
+**OR values** — use `|` to match any of several values on `=` and `!=`:
+
+```bash
+ptos --where domain=self|home                    # self OR home
+ptos --where type=assessment|prescription        # two types
+ptos --where outcome!=deferred|not_interested    # exclude both
+```
+
+Works in saved queries too: `where = "type=expense domain=self|home"`
 
 ---
 

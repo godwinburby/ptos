@@ -102,9 +102,9 @@ Double-click `ptg.bat` to open the app. You do not need the terminal.
 The app has five tabs:
 
 - **+ Add Record** — fill in a form and save a record. This is where you spend most of your time.
-- **Queries** — run saved reports. Pick a query, choose a time window, results appear instantly.
-- **Browse** — search and filter records freely without a saved query.
-- **Journal** — your daily journal. One file per day. Navigate with Prev / Next or the date picker.
+- **Queries** — run saved reports. Pick a query from the list, choose a time window, results appear instantly.
+- **Browse** — filter and search records. When you pick a type, field filter dropdowns appear automatically. You can also group results by a field, export to CSV, or click **Save as Query** to save the current filters as a named report for the Queries tab.
+- **Journal** — your daily journal. One file per day. Navigate with Prev / Next or the date picker. Past dates with no entry show a Create Entry button.
 - **Log Editor** — view and edit the raw log file directly. Use this only to correct a record.
 
 For day-to-day use, you only need **Add Record** and **Journal**.
@@ -113,9 +113,12 @@ For day-to-day use, you only need **Add Record** and **Journal**.
 
 ## First time setup
 
-1. Double-click `ptos_init.bat` — creates all folders and config files.
-2. Double-click `ptg.bat` — opens the app.
-3. Start adding records.
+The app needs two Python files in the same folder: `ptos.py` (the engine) and `ptos_gui.pyw` (the GUI). Both must be downloaded. `ptos.py` can also be used on its own from the terminal without the GUI.
+
+1. Make sure both `ptos.py` and `ptos_gui.pyw` are in the same folder.
+2. Double-click `ptos_init.bat` — creates all folders and config files.
+3. Double-click `ptg.bat` — opens the app.
+4. Start adding records.
 
 Run `ptos_init.bat` only once.
 
