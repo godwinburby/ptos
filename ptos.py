@@ -618,12 +618,21 @@ def render_group(counts, sums, has_amount, fields):
     label_fn = lambda key: "  ".join(key) if isinstance(key, tuple) else key
 
     if has_amount:
-        grand = 0
-        for key in sorted(sums):
-            grand += sums[key]
-            print(f"{label_fn(key):<20} {fmt(sums[key])}")
-        print("-" * 40)
-        print(f"{'Total':<20} {fmt(grand)}")
+        # show count and sum together
+        col_w = 7
+        print(f"{'':20} {'count':>{col_w}}  {'total':>14}")
+        print("-" * 46)
+        grand_count = 0
+        grand_sum   = 0
+        for key in sorted(counts):
+            label       = label_fn(key)
+            cnt         = counts[key]
+            s           = sums.get(key, 0)
+            grand_count += cnt
+            grand_sum   += s
+            print(f"{label:<20} {cnt:>{col_w}}  {fmt(s):>14}")
+        print("-" * 46)
+        print(f"{'Total':<20} {grand_count:>{col_w}}  {fmt(grand_sum):>14}")
     else:
         grand = 0
         for key in sorted(counts):
@@ -744,6 +753,30 @@ def run_metric(name, queries, start, end, cycles):
                 print(f"{name:<24} no data")
             else:
                 print(f"{name:<24} {fmt_avg(total / count)}")
+        return True
+
+    if "sum" in m:
+        _, total = _run_base_query(m["sum"], queries, start, end, cycles)
+        print(f"{name:<24} {fmt(total)}")
+        return True
+
+    if "max" in m or "min" in m:
+        key      = "max" if "max" in m else "min"
+        lines, _ = _run_base_query_lines(m[key], queries, start, end, cycles)
+        if not lines:
+            print(f"{name:<24} no data")
+            return True
+        values = []
+        for line in lines:
+            _, kv, _ = parse_line(line)
+            v = numeric_value(kv)
+            if v is not None:
+                values.append(v)
+        if not values:
+            print(f"{name:<24} no data")
+        else:
+            result = max(values) if key == "max" else min(values)
+            print(f"{name:<24} {fmt(result)}")
         return True
 
     return False

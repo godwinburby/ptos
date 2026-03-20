@@ -41,6 +41,15 @@ unit_weights = { monaural = 1, binaural = 2 }
 [metrics.loss_ratio]
 ratio = ["deferred", "assessments"]
 
+[metrics.total_revenue]
+sum = "prescriptions"
+
+[metrics.highest_sale]
+max = "prescriptions"
+
+[metrics.lowest_sale]
+min = "prescriptions"
+
 # --------------------------------------------------
 # DASHBOARDS
 # --------------------------------------------------
@@ -52,7 +61,10 @@ metrics = [
   "loss_ratio",
   "prescription_ratio",
   "binaural_ratio",
-  "asp"
+  "total_revenue",
+  "asp",
+  "highest_sale",
+  "lowest_sale"
 ]
 
 # --------------------------------------------------
