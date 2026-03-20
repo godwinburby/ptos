@@ -290,7 +290,11 @@ def build_record_line(date, record, note=None):
     return line
 
 def apply_where(kv, filters):
-    """Return True if kv matches all filter expressions."""
+    """Return True if kv matches all filter expressions.
+    Supports | for OR values on = and != operators:
+      domain=self|home   → domain is self OR home
+      outcome!=trial|decision → outcome is neither trial nor decision
+    """
     ops = {
         "=":  lambda a, b: a == b,
         "!=": lambda a, b: a != b,
@@ -312,6 +316,18 @@ def apply_where(kv, filters):
                     return False
             else:
                 if val.lower() not in cur.lower():
+                    return False
+            continue
+        # | operator: OR across multiple values (= and != only)
+        or_vals = val.split("|") if "|" in val and op in ("=", "!=") else None
+        if or_vals:
+            cur = kv.get(key, "")
+            cur_list = cur if isinstance(cur, list) else [cur]
+            if op == "=":
+                if not any(v in or_vals for v in cur_list):
+                    return False
+            else:  # !=
+                if any(v in or_vals for v in cur_list):
                     return False
             continue
         if key not in kv:
