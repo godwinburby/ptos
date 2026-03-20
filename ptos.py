@@ -290,11 +290,7 @@ def build_record_line(date, record, note=None):
     return line
 
 def apply_where(kv, filters):
-    """Return True if kv matches all filter expressions.
-    Supports | for OR values on = and != operators:
-      domain=self|home   → domain is self OR home
-      outcome!=trial|decision → outcome is neither trial nor decision
-    """
+    """Return True if kv matches all filter expressions."""
     ops = {
         "=":  lambda a, b: a == b,
         "!=": lambda a, b: a != b,
@@ -316,18 +312,6 @@ def apply_where(kv, filters):
                     return False
             else:
                 if val.lower() not in cur.lower():
-                    return False
-            continue
-        # | operator: OR across multiple values (= and != only)
-        or_vals = val.split("|") if "|" in val and op in ("=", "!=") else None
-        if or_vals:
-            cur = kv.get(key, "")
-            cur_list = cur if isinstance(cur, list) else [cur]
-            if op == "=":
-                if not any(v in or_vals for v in cur_list):
-                    return False
-            else:  # !=
-                if any(v in or_vals for v in cur_list):
                     return False
             continue
         if key not in kv:
@@ -1171,18 +1155,24 @@ def complete_record(schema, record):
             if field not in record:
                 record[field] = resolve_field(schema, type_schema, field, record)
 
-    # tags
-    if "tag" not in record:
-        allowed  = resolve_tags(schema, type_schema, record)
-        tags, new_tags = input_tags(allowed)
-        if new_tags and allowed:
-            # only prompt to add to schema when there is an existing tag hierarchy
-            schema_path = SCHEMA_PATH
-            add_tags_to_schema(schema_path, rtype, record, new_tags)
-            # reload schema so resolve_tags picks up new tags next time
-            schema.update(get_schema())
-        if tags:
-            record["tag"] = tags
+    # tags — always prompt so user can confirm, add to, or clear preset tags
+    allowed = resolve_tags(schema, type_schema, record)
+    existing_tags = record.get("tag", [])
+    if isinstance(existing_tags, str):
+        existing_tags = [existing_tags]
+    if existing_tags:
+        print(f"\nCurrent tags: {', '.join(existing_tags)}")
+        print("Press Enter to keep, or enter new tags to replace/extend.")
+    tags, new_tags = input_tags(allowed)
+    if new_tags and allowed:
+        schema_path = SCHEMA_PATH
+        add_tags_to_schema(schema_path, rtype, record, new_tags)
+        schema.update(get_schema())
+    if tags:
+        record["tag"] = tags
+    elif existing_tags and not tags:
+        # user pressed Enter with no input — keep existing preset tags
+        pass  # record["tag"] already set from preset
 
     note = input("\nAdd note (optional): ").strip()
     return record, note
