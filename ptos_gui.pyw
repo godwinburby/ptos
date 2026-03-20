@@ -893,15 +893,48 @@ class QueryTab(tk.Frame):
             if not results:
                 _write(self._out, "No records found.")
                 return
-            # summary at top
             summary = [f"Query   : {q_name}",
                        f"Period  : {start}  to  {end}",
                        f"Records : {len(results)}"]
-            if total > 0:
-                summary += [f"Total   : {ptos.fmt(total)}",
-                             f"Average : {ptos.fmt_avg(total / len(results))}"]
-            summary.append("-" * 44)
-            lines += summary + [""] + self._tabulate(results)
+            # group mode
+            group_fields = q_def.get("group")
+            if group_fields:
+                counts, sums, has_amount = ptos.group_results(results, group_fields)
+                if total > 0:
+                    summary += [f"Total   : {ptos.fmt(total)}"]
+                summary.append("-" * 44)
+                lines += summary + [""]
+                col_w = 7
+                if has_amount:
+                    lines.append(f"{'':20} {'count':>{col_w}}  {'total':>14}")
+                    lines.append("-" * 46)
+                    grand_c, grand_s = 0, 0
+                    for key in sorted(counts):
+                        label = "  ".join(key) if isinstance(key, tuple) else key
+                        cnt   = counts[key]
+                        s     = sums.get(key, 0)
+                        grand_c += cnt
+                        grand_s += s
+                        lines.append(f"{label:<20} {cnt:>{col_w}}  {ptos.fmt(s):>14}")
+                    lines.append("-" * 46)
+                    lines.append(f"{'Total':<20} {grand_c:>{col_w}}  {ptos.fmt(grand_s):>14}")
+                else:
+                    lines.append(f"{'':20} {'count':>{col_w}}")
+                    lines.append("-" * 30)
+                    grand = 0
+                    for key in sorted(counts):
+                        label = "  ".join(key) if isinstance(key, tuple) else key
+                        cnt   = counts[key]
+                        grand += cnt
+                        lines.append(f"{label:<20} {cnt:>{col_w}}")
+                    lines.append("-" * 30)
+                    lines.append(f"{'Total':<20} {grand:>{col_w}}")
+            else:
+                if total > 0:
+                    summary += [f"Total   : {ptos.fmt(total)}",
+                                 f"Average : {ptos.fmt_avg(total / len(results))}"]
+                summary.append("-" * 44)
+                lines += summary + [""] + self._tabulate(results)
         _write(self._out, "\n".join(lines))
 
     def _fmt_item(self, name, start, end):
@@ -960,10 +993,20 @@ class BrowseTab(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg=BG)
         self.cycles = ptos.get_config().get("cycles", {})
+        self._schema = ptos.get_schema()
+        self._field_filter_widgets = []
+        self._row1c = None
+        self._group_var = None
+        self._group_combo = None
         self._build()
 
     def _reload(self):
         """Reload schema from disk — rebuilds tab with fresh type list."""
+        self._schema = ptos.get_schema()
+        self._field_filter_widgets = []
+        self._row1c = None
+        self._group_var = None
+        self._group_combo = None
         for w in self.winfo_children():
             w.destroy()
         self._build()
@@ -990,7 +1033,7 @@ class BrowseTab(tk.Frame):
         tk.Label(row1, text="Type", font=F_LABEL, fg=SUBTEXT,
                  bg=CARD).pack(side="left", padx=(0, 4))
         type_combo.pack(side="left", padx=(0, 18))
-        type_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
+        type_combo.bind("<<ComboboxSelected>>", lambda _: self._on_type_change())
 
         self._time_var = tk.StringVar(value="This month")
         time_opts = [label for label, _ in TIME_LABELS] + list(self.cycles.keys())
@@ -1029,6 +1072,18 @@ class BrowseTab(tk.Frame):
         sort_entry.bind("<Return>", lambda _: self._run())
         sublbl(row1b, "field name").pack(side="left", padx=(0, 18))
 
+        self._group_var = tk.StringVar(value="(none)")
+        tk.Label(row1b, text="Group by", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        self._group_combo = _make_combo(row1b, ["(none)"],
+                                         textvariable=self._group_var, width=14)
+        self._group_combo.pack(side="left", padx=(0, 4))
+        self._group_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
+
+        # ── row 1c: dynamic field filters (shown when type selected) ──────────
+        self._row1c = tk.Frame(self, bg=CARD, pady=4, padx=HPAD)
+        # not packed yet — shown/hidden by _on_type_change
+
         # ── row 2: actions ────────────────────────────────────────────────────
         row2 = tk.Frame(self, bg=CARD, pady=8, padx=HPAD)
         row2.pack(fill="x")
@@ -1044,6 +1099,10 @@ class BrowseTab(tk.Frame):
         tk.Button(row2, text="Export CSV", command=self._export_csv,
                   font=F_BTN, bg="#2E7D56", fg="white",
                   activebackground="#1F5C3E", relief="flat",
+                  cursor="hand2", padx=14, pady=8, bd=0).pack(side="left", padx=(0, 12))
+        tk.Button(row2, text="💾  Save as Query", command=self._save_as_query,
+                  font=F_BTN, bg=ACCENT, fg="white",
+                  activebackground=ACCENT_HO, relief="flat",
                   cursor="hand2", padx=14, pady=8, bd=0).pack(side="left", padx=(0, 12))
         tk.Button(row2, text="✕  Clear", command=self._clear,
                   font=F_BTN, bg=BG, fg=SUBTEXT,
@@ -1173,6 +1232,8 @@ class BrowseTab(tk.Frame):
         self._type_var.set("All types")
         self._time_var.set("This month")
         self._search_var.set("")
+        if self._group_var:
+            self._group_var.set("(none)")
         self._sort_var.set("")
         self._file_var.set("(current year)")
         _write(self._out, "")
@@ -1184,6 +1245,216 @@ class BrowseTab(tk.Frame):
             self._file_combo["values"] = ["(current year)"] + log_files
         except Exception:
             pass
+
+    def _on_type_change(self):
+        """Rebuild field filter row and group options when type changes, then run."""
+        self._build_field_filters()
+        self._build_group_opts()
+        self._run()
+
+    def _build_field_filters(self):
+        """Populate row1c with filter widgets for dimension fields of selected type."""
+        for w in self._row1c.winfo_children():
+            w.destroy()
+        self._field_filter_widgets = []
+
+        rtype = self._type_var.get()
+        if not rtype or rtype == "All types":
+            self._row1c.pack_forget()
+            return
+
+        schema      = self._schema
+        type_schema = schema.get("type", {}).get(rtype, {})
+        non_dim     = ptos.non_dimension_fields()
+        num_fields  = set(ptos.numeric_fields())
+
+        filter_fields = []
+        for field in list(type_schema.get("fields", {}).keys()):
+            if field in non_dim:
+                continue
+            field_def = type_schema["fields"][field]
+            opts = None
+            if "use" in field_def:
+                key  = field_def["use"].split(".", 1)[1]
+                opts = schema.get("shared", {}).get(key, {}).get("options")
+            elif isinstance(field_def.get("options"), list):
+                opts = field_def["options"]
+            elif isinstance(field_def.get("options"), dict):
+                opts = []
+                for vals in field_def["options"].values():
+                    for v in vals:
+                        if v not in opts:
+                            opts.append(v)
+            if field in num_fields:
+                opts = None
+
+            if opts:
+                filter_fields.append((field, "options", opts))
+            elif field in num_fields:
+                filter_fields.append((field, "numeric", None))
+
+        if not filter_fields:
+            self._row1c.pack_forget()
+            return
+
+        for field, kind, opts in filter_fields:
+            tk.Label(self._row1c, text=field, font=F_LABEL,
+                     fg=SUBTEXT, bg=CARD).pack(side="left", padx=(0, 2))
+            if kind == "numeric":
+                op_var = tk.StringVar(value="=")
+                op_combo = _make_combo(self._row1c, ["=", ">=", "<="],
+                                       textvariable=op_var, width=3)
+                op_combo.pack(side="left", padx=(0, 2))
+                val_var = tk.StringVar()
+                _, val_entry = _make_entry(self._row1c,
+                                           textvariable=val_var, width=7)
+                val_entry.pack(side="left", padx=(0, 14))
+                val_entry.bind("<Return>", lambda _: self._run())
+                self._field_filter_widgets.append((field, op_var, val_var))
+            else:
+                op_var  = tk.StringVar(value="=")
+                val_var = tk.StringVar(value="")
+                val_combo = _make_combo(self._row1c, [""] + list(opts),
+                                        textvariable=val_var, width=14)
+                val_combo.pack(side="left", padx=(0, 14))
+                val_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
+                self._field_filter_widgets.append((field, op_var, val_var))
+
+        self._row1c.pack(fill="x")
+
+    def _build_group_opts(self):
+        """Repopulate the Group by dropdown based on selected type."""
+        if self._group_combo is None:
+            return
+        rtype = self._type_var.get()
+        if not rtype or rtype == "All types":
+            self._group_combo["values"] = ["(none)"]
+            self._group_var.set("(none)")
+            return
+        schema      = self._schema
+        type_schema = schema.get("type", {}).get(rtype, {})
+        non_dim     = ptos.non_dimension_fields()
+        dim_fields  = [f for f in type_schema.get("fields", {}).keys()
+                       if f not in non_dim]
+        # also include month/year as virtual group fields
+        opts = ["(none)"] + dim_fields + ["month", "year"]
+        self._group_combo["values"] = opts
+        if self._group_var.get() not in opts:
+            self._group_var.set("(none)")
+
+    def _get_group_by(self):
+        """Return the selected group field, or None."""
+        if self._group_var is None:
+            return None
+        v = self._group_var.get()
+        return v if v and v != "(none)" else None
+
+    def _get_field_filters(self):
+        """Return filter expression list from field filter widgets."""
+        filters = []
+        for field, op_var, val_var in self._field_filter_widgets:
+            val = val_var.get().strip()
+            if not val:
+                continue
+            op = op_var.get()
+            filters.append(f"{field}{op}{val}")
+        return filters
+
+    def _save_as_query(self):
+        """Save current Browse filters as a named query to queries.toml."""
+        t         = self._type_var.get()
+        time_raw  = self._time_var.get()
+        time_code = _TIME_CODE.get(time_raw, time_raw)
+        search    = self._search_var.get().strip()
+        sort      = self._get_sort()
+
+        filters = []
+        if t and t != "All types":
+            filters.append(f"type={t}")
+        filters += self._get_field_filters()
+
+        if not filters and not search:
+            _write(self._out, "Nothing to save — set at least a type or filter first.")
+            return
+
+        dlg = tk.Toplevel(self, bg=BG)
+        dlg.title("Save as Query")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        tk.Label(dlg, text="Save current filters as a query",
+                 font=F_BODY, fg=TEXT, bg=BG).pack(padx=24, pady=(20, 4))
+
+        preview_parts = []
+        if filters:
+            preview_parts.append("where: " + " ".join(filters))
+        preview_parts.append("time:  " + time_code)
+        if search:
+            preview_parts.append("search: " + search)
+        group_f = self._get_group_by()
+        if group_f:
+            preview_parts.append("group: " + group_f)
+        if sort:
+            preview_parts.append("sort:  " + sort)
+        tk.Label(dlg, text="\n".join(preview_parts),
+                 font=F_MONO, fg=SUBTEXT, bg=BG,
+                 justify="left").pack(padx=24, pady=(0, 12))
+
+        tk.Label(dlg, text="Query name", font=F_LABEL,
+                 fg=SUBTEXT, bg=BG).pack(padx=24, anchor="w")
+        name_frame, name_entry = _make_entry(dlg, width=28)
+        name_frame.pack(padx=24, pady=(2, 16))
+        name_entry.focus_set()
+
+        status_lbl = tk.Label(dlg, text="", font=F_SMALL, fg=ERROR_COL, bg=BG)
+        status_lbl.pack(padx=24)
+
+        btn_row = tk.Frame(dlg, bg=BG)
+        btn_row.pack(padx=24, pady=(4, 20))
+        tk.Button(btn_row, text="Cancel", command=dlg.destroy,
+                  font=F_BTN, bg=BG, fg=SUBTEXT, relief="flat",
+                  cursor="hand2", padx=12, pady=6).pack(side="left", padx=(0, 8))
+
+        def _do_save():
+            name = name_entry.get().strip().replace(" ", "_")
+            if not name:
+                status_lbl.config(text="Enter a name.")
+                return
+            try:
+                existing = ptos.get_queries()
+                if name in existing or name in existing.get("metrics", {}) \
+                        or name in existing.get("dashboards", {}):
+                    status_lbl.config(text=f"'{name}' already exists. Choose another name.")
+                    return
+            except Exception:
+                pass
+            lines = [f"\n[{name}]"]
+            if filters:
+                lines.append("where = \"" + " ".join(filters) + "\"")
+            lines.append("time  = \"" + time_code + "\"")
+            if search:
+                lines.append("search = \"" + search + "\"")
+            group_f = self._get_group_by()
+            if group_f:
+                lines.append(f'group = ["{group_f}"]')
+                lines.append("sum   = true")
+            if sort:
+                lines.append("sort  = \"" + sort + "\"")
+            block = "\n".join(lines) + "\n"
+            try:
+                ptos._backup_file(ptos.QUERIES_PATH)
+                with open(ptos.QUERIES_PATH, "a", encoding="utf-8") as f:
+                    f.write(block)
+                ptos._CACHE.pop("queries", None)
+                dlg.destroy()
+                _write(self._out,
+                       f"✔  Query '{name}' saved to queries.toml\n"
+                       f"Run it from the Queries tab.")
+            except Exception as e:
+                status_lbl.config(text=f"Error: {e}")
+
+        _make_button(btn_row, "Save", _do_save).pack(side="right")
+        name_entry.bind("<Return>", lambda _: _do_save())
 
     def _get_from_file(self):
         v = self._file_var.get()
@@ -1204,6 +1475,7 @@ class BrowseTab(tk.Frame):
         t = self._type_var.get()
         if t and t != "All types":
             filters.append(f"type={t}")
+        filters += self._get_field_filters()
         results, _ = ptos.scan_records(
             start, end, filters,
             self._search_var.get().strip() or None,
@@ -1228,6 +1500,7 @@ class BrowseTab(tk.Frame):
         t = self._type_var.get()
         if t and t != "All types":
             filters.append(f"type={t}")
+        filters += self._get_field_filters()
 
         results, total = ptos.scan_records(
             start, end, filters,
@@ -1236,6 +1509,43 @@ class BrowseTab(tk.Frame):
 
         if not results:
             _write(self._out, "No records found.")
+            return
+
+        group_f = self._get_group_by()
+
+        if group_f:
+            # grouped output
+            counts, sums, has_amount = ptos.group_results(results, [group_f])
+            lines = [f"Period  : {start}  to  {end}",
+                     f"Records : {len(results)}",
+                     f"Grouped : {group_f}",
+                     "-" * 44]
+            col_w = 7
+            if has_amount:
+                lines.append(f"{'':20} {'count':>{col_w}}  {'total':>14}")
+                lines.append("-" * 46)
+                grand_c, grand_s = 0, 0
+                for key in sorted(counts):
+                    label = "  ".join(key) if isinstance(key, tuple) else key
+                    cnt   = counts[key]
+                    s     = sums.get(key, 0)
+                    grand_c += cnt
+                    grand_s += s
+                    lines.append(f"{label:<20} {cnt:>{col_w}}  {ptos.fmt(s):>14}")
+                lines.append("-" * 46)
+                lines.append(f"{'Total':<20} {grand_c:>{col_w}}  {ptos.fmt(grand_s):>14}")
+            else:
+                lines.append(f"{'':20} {'count':>{col_w}}")
+                lines.append("-" * 30)
+                grand = 0
+                for key in sorted(counts):
+                    label = "  ".join(key) if isinstance(key, tuple) else key
+                    cnt   = counts[key]
+                    grand += cnt
+                    lines.append(f"{label:<20} {cnt:>{col_w}}")
+                lines.append("-" * 30)
+                lines.append(f"{'Total':<20} {grand:>{col_w}}")
+            _write(self._out, "\n".join(lines))
             return
 
         rows, cols = [], []
@@ -1259,7 +1569,6 @@ class BrowseTab(tk.Frame):
 
         w = {c: max(len(c), max(len(str(r.get(c, ""))) for r in rows))
              for c in cols}
-        # summary at top
         summary = [f"Period  : {start}  to  {end}",
                    f"Records : {len(results)}"]
         if total > 0:

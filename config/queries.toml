@@ -140,3 +140,14 @@ where = "type=expense domain!=work"
 time  = "td"
 group = ["tag"]
 sum   = true
+
+[ass_qtr]
+where = "type=assessment"
+time  = "tq"
+sort  = "outcome"
+
+[exp_cat]
+where = "type=expense"
+time  = "tm"
+group = ["category"]
+sum   = true
