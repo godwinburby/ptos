@@ -1743,6 +1743,37 @@ class LogEditorTab(tk.Frame):
         else:
             self._fr_status.config(text="Not found")
 
+    def _highlight_toml(self):
+        """Apply syntax highlighting for TOML files."""
+        import re
+        ed = self._editor
+        # clear previous tags
+        for tag in ("toml_section", "toml_key", "toml_string", "toml_comment",
+                    "toml_bool", "toml_number"):
+            ed.tag_remove(tag, "1.0", "end")
+        # configure tag colours
+        ed.tag_config("toml_section", foreground="#e06c75", font=("Consolas", 12, "bold"))
+        ed.tag_config("toml_key",     foreground="#61afef")
+        ed.tag_config("toml_string",  foreground="#98c379")
+        ed.tag_config("toml_comment", foreground="#5c6370", font=("Consolas", 12, "italic"))
+        ed.tag_config("toml_bool",    foreground="#e5c07b")
+        ed.tag_config("toml_number",  foreground="#d19a66")
+
+        patterns = [
+            ("toml_comment", r"#[^\n]*"),
+            ("toml_section", r"^\[[\w\.\-]+\]"),
+            ("toml_string",  r'"[^"]*"'),
+            ("toml_key",     r"^\s*[\w\-]+(?=\s*=)"),
+            ("toml_bool",    r"\b(true|false)\b"),
+            ("toml_number",  r"\b\d+\b"),
+        ]
+        content = ed.get("1.0", "end")
+        for tag, pattern in patterns:
+            for m in re.finditer(pattern, content, re.MULTILINE):
+                start = f"1.0+{m.start()}c"
+                end   = f"1.0+{m.end()}c"
+                ed.tag_add(tag, start, end)
+
     def _resolve_path(self):
         home = os.path.dirname(os.path.abspath(sys.modules["ptos"].__file__))
         ptos_home = os.environ.get("PTOS_HOME", home)
@@ -1778,6 +1809,9 @@ class LogEditorTab(tk.Frame):
             self._editor.see("end")
         else:
             self._editor.see("1.0")
+        # syntax highlight toml files
+        if path.endswith(".toml"):
+            self._highlight_toml()
         self._status.config(text=f"Loaded  {path}")
 
     def _save(self):
