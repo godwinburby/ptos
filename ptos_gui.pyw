@@ -1774,6 +1774,49 @@ class LogEditorTab(tk.Frame):
                 end   = f"1.0+{m.end()}c"
                 ed.tag_add(tag, start, end)
 
+    def _highlight_log(self):
+        """Apply syntax highlighting for .log record lines."""
+        import re
+        ed = self._editor
+        for tag in ("log_date", "log_type_val", "log_key", "log_val",
+                    "log_tag", "log_pipe", "log_note"):
+            ed.tag_remove(tag, "1.0", "end")
+
+        ed.tag_config("log_date",     foreground="#61afef")
+        ed.tag_config("log_type_val", foreground="#e06c75",
+                      font=("Consolas", 12, "bold"))
+        ed.tag_config("log_key",      foreground="#e5c07b")
+        ed.tag_config("log_val",      foreground="#98c379")
+        ed.tag_config("log_tag",      foreground="#c678dd")
+        ed.tag_config("log_pipe",     foreground="#4b5263")
+        ed.tag_config("log_note",     foreground="#abb2bf",
+                      font=("Consolas", 12, "italic"))
+
+        content = ed.get("1.0", "end")
+
+        # date — standalone at start of line
+        for m in re.finditer(r"^\d{4}-\d{2}-\d{2}", content, re.MULTILINE):
+            ed.tag_add("log_date", f"1.0+{m.start()}c", f"1.0+{m.end()}c")
+
+        # type=value
+        for m in re.finditer(r"\btype=([\w]+)", content):
+            ed.tag_add("log_type_val", f"1.0+{m.start(1)}c", f"1.0+{m.end(1)}c")
+
+        # tag=value — before generic key=val so it takes priority
+        for m in re.finditer(r"\btag=([\w]+)", content):
+            ed.tag_add("log_tag", f"1.0+{m.start()}c",  f"1.0+{m.end()}c")
+
+        # generic key=value — skip type, tag, and date-like patterns
+        for m in re.finditer(r"\b(?!type=|tag=)([\w]+)=([\w]+)", content):
+            ed.tag_add("log_key", f"1.0+{m.start(1)}c", f"1.0+{m.end(1)}c")
+            ed.tag_add("log_val", f"1.0+{m.start(2)}c", f"1.0+{m.end(2)}c")
+
+        # pipe separator and note
+        for m in re.finditer(r"(\|)(.*?)$", content, re.MULTILINE):
+            ed.tag_add("log_pipe", f"1.0+{m.start(1)}c", f"1.0+{m.end(1)}c")
+            if m.group(2).strip():
+                ed.tag_add("log_note", f"1.0+{m.start(2)}c", f"1.0+{m.end(2)}c")
+
     def _resolve_path(self):
         home = os.path.dirname(os.path.abspath(sys.modules["ptos"].__file__))
         ptos_home = os.environ.get("PTOS_HOME", home)
@@ -1806,6 +1849,7 @@ class LogEditorTab(tk.Frame):
         self._editor.insert("end", file_content)
         # scroll to end for records, top for config files
         if path.endswith(".log"):
+            self._highlight_log()
             self._editor.see("end")
         else:
             self._editor.see("1.0")
