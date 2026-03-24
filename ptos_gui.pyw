@@ -1643,6 +1643,38 @@ class LogEditorTab(tk.Frame):
                                  fg=SUCCESS, bg=BG, anchor="w")
         self._status.pack(fill="x", padx=HPAD, pady=(4, 0))
 
+        # ── find / replace bar (always visible) ──────────────────────────────
+        fr_bar = tk.Frame(self, bg=CARD, pady=6, padx=HPAD)
+        fr_bar.pack(fill="x")
+
+        tk.Label(fr_bar, text="Find", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        self._fr_find_var = tk.StringVar()
+        ff, self._fr_find_entry = _make_entry(fr_bar, textvariable=self._fr_find_var, width=18)
+        ff.pack(side="left", padx=(0, 12))
+
+        tk.Label(fr_bar, text="Replace", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        self._fr_repl_var = tk.StringVar()
+        rf, self._fr_repl_entry = _make_entry(fr_bar, textvariable=self._fr_repl_var, width=18)
+        rf.pack(side="left", padx=(0, 12))
+
+        tk.Button(fr_bar, text="Find Next", command=self._find_next,
+                  font=F_BTN, bg=BG, fg=ACCENT, relief="flat",
+                  cursor="hand2", padx=10, pady=4).pack(side="left", padx=(0, 4))
+        tk.Button(fr_bar, text="Replace", command=self._replace_one,
+                  font=F_BTN, bg=BG, fg=ACCENT, relief="flat",
+                  cursor="hand2", padx=10, pady=4).pack(side="left", padx=(0, 4))
+        tk.Button(fr_bar, text="Replace All", command=self._replace_all,
+                  font=F_BTN, bg=ACCENT, fg="white",
+                  activebackground=ACCENT_HO, relief="flat",
+                  cursor="hand2", padx=10, pady=4).pack(side="left", padx=(0, 12))
+
+        self._fr_status = tk.Label(fr_bar, text="", font=F_SMALL, fg=SUBTEXT, bg=CARD)
+        self._fr_status.pack(side="left")
+
+        hsep(self).pack(fill="x")
+
         # editor area
         tf = tk.Frame(self, bg=BORDER, padx=1, pady=1)
         tf.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
@@ -1654,15 +1686,62 @@ class LogEditorTab(tk.Frame):
                                xscrollcommand=xsb.set,
                                yscrollcommand=ysb.set,
                                padx=10, pady=8)
+        self._editor.tag_config("fr_highlight", background=ACCENT, foreground="white")
         xsb.config(command=self._editor.xview)
         ysb.config(command=self._editor.yview)
         ysb.pack(side="right", fill="y")
         xsb.pack(side="bottom", fill="x")
         self._editor.pack(side="left", fill="both", expand=True)
 
-        # Ctrl+S to save
+        # keybindings
         self._editor.bind("<Control-s>", lambda _: self._save())
         self._editor.bind("<Control-S>", lambda _: self._save())
+        self._fr_find_entry.bind("<Return>", lambda _: self._find_next())
+        self._fr_repl_entry.bind("<Return>", lambda _: self._replace_one())
+
+    def _find_next(self):
+        self._editor.tag_remove("fr_highlight", "1.0", "end")
+        term = self._fr_find_var.get()
+        if not term:
+            return
+        start = self._editor.index("insert")
+        pos   = self._editor.search(term, start, stopindex="end", nocase=True)
+        if not pos:
+            pos = self._editor.search(term, "1.0", stopindex="end", nocase=True)
+        if pos:
+            end = f"{pos}+{len(term)}c"
+            self._editor.tag_add("fr_highlight", pos, end)
+            self._editor.mark_set("insert", end)
+            self._editor.see(pos)
+            self._fr_status.config(text="")
+        else:
+            self._fr_status.config(text="Not found")
+
+    def _replace_one(self):
+        term = self._fr_find_var.get()
+        repl = self._fr_repl_var.get()
+        if not term:
+            return
+        ranges = self._editor.tag_ranges("fr_highlight")
+        if ranges:
+            self._editor.delete(ranges[0], ranges[1])
+            self._editor.insert(ranges[0], repl)
+            self._editor.tag_remove("fr_highlight", "1.0", "end")
+        self._find_next()
+
+    def _replace_all(self):
+        term = self._fr_find_var.get()
+        repl = self._fr_repl_var.get()
+        if not term:
+            return
+        text = self._editor.get("1.0", "end-1c")
+        count = text.count(term)
+        if count:
+            self._editor.delete("1.0", "end")
+            self._editor.insert("1.0", text.replace(term, repl))
+            self._fr_status.config(text=f"{count} replaced")
+        else:
+            self._fr_status.config(text="Not found")
 
     def _resolve_path(self):
         home = os.path.dirname(os.path.abspath(sys.modules["ptos"].__file__))
