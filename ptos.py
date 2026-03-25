@@ -1302,6 +1302,12 @@ def quick_add(args):
     name = args.preset[0]
     if name not in presets:
         sys.exit(f"Unknown preset: {name}")
+    # resolve alias
+    if "alias" in presets[name]:
+        target = presets[name]["alias"]
+        if target not in presets:
+            sys.exit(f"Preset alias '{name}' points to '{target}' which does not exist.")
+        name = target
     record = dict(presets[name])
     for item in args.preset[1:]:
         if "=" not in item:
@@ -1762,6 +1768,14 @@ def resolve_query_context(args, queries):
     Mutates args.time / args.date_from / args.date_to only when
     the CLI left them at their defaults.
     """
+    # resolve alias — if query has only an alias key, redirect to target
+    q_raw = queries.get(args.query, {})
+    if isinstance(q_raw, dict) and "alias" in q_raw:
+        target = q_raw["alias"]
+        if target not in queries:
+            sys.exit(f"Alias '{args.query}' points to '{target}' which does not exist.")
+        args.query = target
+
     metrics    = queries.get("metrics",    {})
     dashboards = queries.get("dashboards", {})
 
@@ -2278,7 +2292,12 @@ def main():
         dashboards = queries.get("dashboards", {})
         print("\nQueries\n")
         for name in queries:
-            if name not in ("metrics", "dashboards"):
+            if name in ("metrics", "dashboards"):
+                continue
+            q = queries[name]
+            if isinstance(q, dict) and "alias" in q:
+                print(f"  {name} → {q['alias']}")
+            else:
                 print(" ", name)
         if metrics:
             print("\nMetrics\n")
