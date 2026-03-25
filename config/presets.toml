@@ -14,6 +14,9 @@ category = "transport"
 amount   = 90
 tag      = ["auto", "bus"]
 
+[presets.cm]
+alias = "commute"
+
 [presets.snacks]
 type     = "expense"
 domain   = "home"
@@ -21,12 +24,15 @@ category = "household"
 tag      = ["snacks"]
 # amount omitted — will be prompted each time
 
-[presets.snacksw]
+[presets.snacks_work]
 type     = "expense"
 domain   = "work"
 category = "staff_welfare"
 tag      = ["snacks"]
 # amount omitted — will be prompted each time
+
+[presets.snacksw]
+alias = "snacks_work"
 
 [presets.petrol]
 type     = "expense"
@@ -55,6 +61,8 @@ domain   = "home"
 category = "medical"
 tag      = ["medicine", "mom"]
 
+[presets.mmed]
+alias = "mom_medicine"
 
 [presets.porter]
 type     = "expense"
@@ -62,14 +70,11 @@ domain   = "work"
 category = "postage"
 tag      = ["porter"]
 
-
-
 [presets.fruits]
 type     = "expense"
 domain   = "home"
 category = "grocery"
 tag      = ["fruits"]
-
 
 [presets.restaraunt]
 type     = "expense"

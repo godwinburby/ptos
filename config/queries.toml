@@ -20,6 +20,9 @@ where = "type=assessment outcome=deferred"
 [prescriptions]
 where = "type=prescription"
 
+[followups]
+where = "type=followup"
+
 [binaural]
 where = "type=prescription fit=binaural"
 
@@ -72,36 +75,41 @@ metrics = [
 # --------------------------------------------------
 
 [rx]
-where = "type=prescription"
-time  = "tm"
-sum   = true
+alias= "prescriptions"
 
 [ass]
-where = "type=assessment"
-time  = "tm"
+alias = "assessments"
 
 [flp]
-where = "type=followup"
-time  = "tm"
+alias = "followups"
 
 # --------------------------------------------------
 # EXPENSE QUERIES
 # --------------------------------------------------
 
-[exp]
+[expense]
 where = "type=expense domain!=work"
 time  = "tm"
 sum   = true
 
-[expw]
+[exp]
+alias = "expense"
+
+[expense_work]
 where = "type=expense domain=work tag!=snacks"
 time  = "clinic"
 sum   = true
 
-[snacksw]
+[expw]
+alias = "expense_work"
+
+[snacks_work]
 where = "type=expense domain=work tag=snacks"
 time  = "clinic"
 sum   = true
+
+[snacksw]
+alias = "snacks_work"
 
 [snacks]
 where = "type=expense domain!=work tag=snacks"
@@ -124,12 +132,14 @@ time  = "tq"
 pivot = ["model", "source"]
 sum   = true
 
-[expcat]
+[expense_category]
 where = "type=expense domain!=work"
 time  = "tm"
 group = ["category"]
 sum   = true
 
+[expcat]
+alias = "expense_category"
 # --------------------------------------------------
 # DUE CONFIG  (used by: ptos --due)
 # --------------------------------------------------
@@ -147,19 +157,17 @@ exclude_results = ["fix_appointment", "deceased", "not_relevant", "another_provi
 where = "domain=self category=transport type=expense"
 time  = "this-month"
 
-[exptag]
+[expense_tag]
 where = "type=expense domain!=work"
 time  = "td"
 group = ["tag"]
 sum   = true
+
+[exptag]
+alias = "expense_tag"
 
 [ass_qtr]
 where = "type=assessment"
 time  = "tq"
 sort  = "outcome"
 
-[exp_cat]
-where = "type=expense"
-time  = "tm"
-group = ["category"]
-sum   = true

@@ -803,7 +803,9 @@ class QueryTab(tk.Frame):
         bar = _ctrl_bar(self)
 
         named      = [k for k in self.queries
-                      if k not in ("metrics", "dashboards", "due")]
+                      if k not in ("metrics", "dashboards", "due")
+                      and not (isinstance(self.queries[k], dict)
+                               and "alias" in self.queries[k])]
         metrics    = [f"metric: {m}"
                       for m in self.queries.get("metrics", {})]
         dashboards = [f"dashboard: {d}"
