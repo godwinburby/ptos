@@ -1,49 +1,77 @@
 # {{date}}
 
 ## ARRIVE
-Reality:  (what is actually on your plate today)
-Body:  (how does your body feel)
-Mood:  (what emotion are you carrying)
-Word:  (bible verse or quote that anchors you)
-Intention:  (one thing that would make today a win)
-Prayer:  (talk to God before the day begins)
+
+### Reality  
+(facts — what is actually on your plate today)  
+- 
+
+### Body  
+(energy, pain, rest — what needs attention)  
+- 
+
+### Mood  
+(name it clearly — calm, anxious, heavy, etc.)  
+- 
+
+### Word  
+(verse or line to anchor your mind)  
+- 
+
+### Intention  
+(one outcome that makes today meaningful)  
+- 
+
+### Prayer  
+(simple, honest — ask for help to see, love, act)  
+- 
 
 ---
 
 ## ENGAGE
 
-### Top 3  (what must get done today)
-- [ ]  (most important)
+### Top 3  (must move forward today — define clearly)
+- [ ] 
 - [ ]
 - [ ]
 
-### Home / Personal  (don't let clinic crowd this out)
-- [ ]  (family, project, or self)
+### Work Drivers  (pipeline — protect future income)
+- [ ] Follow-up  (move an existing case forward)
+- [ ] MGM (referral)  (ask or generate one lead)
+- [ ] Outreach  (create one new opportunity)
 
-### One person to love well  (intentional not incidental)
--  (name and how you will show up for them)
+### Growth  (future — don’t skip)
+- [ ]  (one action that builds next level)
 
-### Habits
+### Home / Personal  (life beyond clinic matters)
+- [ ]  
+
+### One person to love well  (be intentional, not reactive)
+-  (who + how you will show up)
+
+### Habits  (keep the base strong)
 - [ ] Prayer
 - [ ] Move
 - [ ] Connect
 - [ ] Learn
 
-### Drift Checks  (pause and assess — are you on track)
-11:  2:  5:
+### Drift Checks  (pause — realign, don’t drift unconsciously)
+11:  (am I on track?)  
+2:   (what needs correction?)  
+5:   (finish strong?)  
 
 ---
 
-## RELEASE  (end of day — be honest)
+## RELEASE  (end of day — truth, not story)
 
-### Wins  (what actually got done, big or small)
+### Wins  (what actually moved — even small)
+- 
 
+### Drifted  (where did I avoid / distract / delay?)
+- 
 
-### Drifted  (where did you lose focus or fall short)
+### Gratitude  (what is already good — name it)
+- 
 
-
-### Gratitude  (one thing you are thankful for today)
-
-
-### Tomorrow  (one thing you want to carry forward)
-
+### Tomorrow  (one clear carry-forward)
+- 
