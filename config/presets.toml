@@ -83,3 +83,13 @@ category = "food"
 amount   = 150
 tag      = ["restaurant"]
 
+[presets.rt]
+alias = "restaraunt"
+
+
+[presets.book]
+type     = "expense"
+domain   = "self"
+category = "entertainment"
+tag      = ["books", "meesho"]
+
