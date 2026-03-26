@@ -344,7 +344,9 @@ class AddRecordTab(tk.Frame):
         lbl(preset_col, "Load preset", fg=SUBTEXT, font=F_LABEL).pack(anchor="w")
         self._preset_var = tk.StringVar()
         presets = ptos.get_presets()
-        preset_names = ["—"] + sorted(presets.keys())
+        preset_names = ["—"] + sorted(
+            k for k, v in presets.items()
+            if not (isinstance(v, dict) and "alias" in v))
         self._preset_combo = _make_combo(preset_col, preset_names,
                                          textvariable=self._preset_var, width=22)
         self._preset_combo.pack(anchor="w", pady=(4, 0))
@@ -401,7 +403,9 @@ class AddRecordTab(tk.Frame):
         """Reload schema and presets from disk — updates all dropdowns."""
         self.schema = ptos.get_schema()
         presets = ptos.get_presets()
-        self._preset_combo["values"] = ["—"] + sorted(presets.keys())
+        self._preset_combo["values"] = ["—"] + sorted(
+            k for k, v in presets.items()
+            if not (isinstance(v, dict) and "alias" in v))
         rtype = self._type_var.get()
         if rtype:
             self.type_schema = self.schema["type"].get(rtype, {})
@@ -682,7 +686,10 @@ class AddRecordTab(tk.Frame):
                 return
             try:
                 ptos.save_as_preset(name, record)
-                self._preset_combo["values"] = ["—"] + sorted(ptos.get_presets().keys())
+                _p = ptos.get_presets()
+                self._preset_combo["values"] = ["—"] + sorted(
+                    k for k, v in _p.items()
+                    if not (isinstance(v, dict) and "alias" in v))
                 self._status.config(
                     text=f"✔  Preset '{name}' saved.", fg=SUCCESS)
                 dlg.destroy()
@@ -803,9 +810,7 @@ class QueryTab(tk.Frame):
         bar = _ctrl_bar(self)
 
         named      = [k for k in self.queries
-                      if k not in ("metrics", "dashboards", "due")
-                      and not (isinstance(self.queries[k], dict)
-                               and "alias" in self.queries[k])]
+                      if k not in ("metrics", "dashboards", "due")]
         metrics    = [f"metric: {m}"
                       for m in self.queries.get("metrics", {})]
         dashboards = [f"dashboard: {d}"
