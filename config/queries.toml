@@ -171,3 +171,15 @@ where = "type=assessment"
 time  = "tq"
 sort  = "outcome"
 
+
+[auto]
+where = "domain=self category=transport tag=auto type=expense"
+time  = "this-month"
+
+[bus]
+where = "domain=self category=transport tag=bus type=expense"
+time  = "this-month"
+
+[autobus]
+where = "domain=self category=transport tag=auto|bus type=expense"
+time  = "this-month"
