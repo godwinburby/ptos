@@ -1312,7 +1312,31 @@ def quick_add(args):
         if target not in presets:
             sys.exit(f"Preset alias '{name}' points to '{target}' which does not exist.")
         name = target
-    record = dict(presets[name])
+    preset_data = presets[name]
+
+    # ── multi-record preset ───────────────────────────────────────────────────
+    if isinstance(preset_data, dict) and "records" in preset_data:
+        schema    = get_schema()
+        date_str  = resolve_date(args.date)
+        added     = []
+        print(f"\nMulti-record preset '{name}' — {len(preset_data['records'])} record(s)\n")
+        for i, rec_template in enumerate(preset_data["records"], 1):
+            print(f"── Record {i} ──────────────────────────────")
+            record = dict(rec_template)
+            # convert any list values that may have come from toml
+            record, note = complete_record(schema, record)
+            problems = validate_record(schema, record)
+            if problems:
+                sys.exit(f"Record {i}: {problems[0]}")
+            line = build_record_line(date_str, record, note if note else args.note)
+            append_record(line)
+            added.append(line)
+            print(f"✔  {line}\n")
+        print(f"\n{len(added)} record(s) added.")
+        return
+
+    # ── single-record preset (existing behaviour) ─────────────────────────────
+    record = dict(preset_data)
     for item in args.preset[1:]:
         if "=" not in item:
             continue
