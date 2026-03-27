@@ -1299,6 +1299,8 @@ def quick_add(args):
             p = presets[name]
             if isinstance(p, dict) and "alias" in p:
                 print(f"  {name} → {p['alias']}")
+            elif isinstance(p, dict) and "records" in p:
+                print(f"  {name} [{len(p['records'])} records]")
             else:
                 print(" ", name)
         print()
