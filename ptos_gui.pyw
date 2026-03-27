@@ -346,7 +346,7 @@ class AddRecordTab(tk.Frame):
         presets = ptos.get_presets()
         preset_names = ["—"] + sorted(
             k for k, v in presets.items()
-            if not (isinstance(v, dict) and "alias" in v))
+            if not (isinstance(v, dict) and ("alias" in v or "records" in v)))
         self._preset_combo = _make_combo(preset_col, preset_names,
                                          textvariable=self._preset_var, width=22)
         self._preset_combo.pack(anchor="w", pady=(4, 0))
@@ -405,7 +405,7 @@ class AddRecordTab(tk.Frame):
         presets = ptos.get_presets()
         self._preset_combo["values"] = ["—"] + sorted(
             k for k, v in presets.items()
-            if not (isinstance(v, dict) and "alias" in v))
+            if not (isinstance(v, dict) and ("alias" in v or "records" in v)))
         rtype = self._type_var.get()
         if rtype:
             self.type_schema = self.schema["type"].get(rtype, {})
@@ -689,7 +689,7 @@ class AddRecordTab(tk.Frame):
                 _p = ptos.get_presets()
                 self._preset_combo["values"] = ["—"] + sorted(
                     k for k, v in _p.items()
-                    if not (isinstance(v, dict) and "alias" in v))
+                    if not (isinstance(v, dict) and ("alias" in v or "records" in v)))
                 self._status.config(
                     text=f"✔  Preset '{name}' saved.", fg=SUCCESS)
                 dlg.destroy()
