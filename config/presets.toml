@@ -8,11 +8,20 @@
 # --------------------------------------------------
 
 [presets.commute]
+
+[[presets.commute.records]]
 type     = "expense"
 domain   = "self"
 category = "transport"
-amount   = 90
-tag      = ["auto", "bus"]
+amount   = 60
+tag      = ["auto"]
+
+[[presets.commute.records]]
+type     = "expense"
+domain   = "self"
+category = "transport"
+amount   = 30
+tag      = ["bus"]
 
 [presets.cm]
 alias = "commute"
