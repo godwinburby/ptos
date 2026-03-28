@@ -43,8 +43,13 @@ _CACHE = {}
 
 def _load(key, path):
     if key not in _CACHE:
-        with open(path, "rb") as f:
-            _CACHE[key] = tomllib.load(f)
+        try:
+            with open(path, "rb") as f:
+                _CACHE[key] = tomllib.load(f)
+        except tomllib.TOMLDecodeError as e:
+            sys.exit(f"Config error in {path}:\n  {e}\n\nFix the file and try again.")
+        except OSError as e:
+            sys.exit(f"Cannot read {path}:\n  {e}")
     return _CACHE[key]
 
 def get_config():  return _load("config",  CONFIG_PATH)  if os.path.exists(CONFIG_PATH)  else {}
@@ -277,6 +282,17 @@ def parse_line(line):
             kv[k] = [kv[k], v]
     return parse_date(date), kv, note.strip()
 
+def safe_parse_line(line):
+    """Like parse_line but returns None on any error.
+    Used in analysis functions where a bad line must not crash output.
+    scan_records already guards during loading; this catches anything
+    that slips through (e.g. manually edited log lines).
+    """
+    try:
+        return parse_line(line)
+    except Exception:
+        return None
+
 def build_record_line(date, record, note=None):
     parts = []
     for k, v in record.items():
@@ -450,11 +466,17 @@ def validate_record(schema, record):
     problems = []
     rtype    = record.get("type")
 
-    if rtype not in schema["types"]["allowed"]:
-        problems.append(f"Invalid type '{rtype}'")
+    allowed = schema.get("types", {}).get("allowed")
+    if allowed is None:
+        sys.exit(
+            "schema.toml is missing [types] allowed = [...]\n"
+            "Add a [types] section listing your record types."
+        )
+    if rtype not in allowed:
+        problems.append(f"Invalid type '{rtype}' — allowed: {', '.join(str(a) for a in allowed)}")
         return problems
 
-    type_schema = schema["type"][rtype]
+    type_schema = schema.get("type", {}).get(rtype, {})
 
     # required fields  (now a flat list, not a nested dict)
     for f in type_schema.get("required", []):
@@ -576,7 +598,10 @@ def group_results(results, fields, sum_field=None):
     sums       = {}
     has_amount = False
     for line in results:
-        d, kv, _ = parse_line(line)
+        parsed = safe_parse_line(line)
+        if parsed is None:
+            continue
+        d, kv, _ = parsed
         key_parts = []
         for field in fields:
             if field == "month": key_parts.append(d.strftime("%Y-%m"))
@@ -604,7 +629,10 @@ def pivot_results(results, row_field, col_field, count_mode=False, sort_col=None
         return None
 
     for line in results:
-        d, kv, _ = parse_line(line)
+        parsed = safe_parse_line(line)
+        if parsed is None:
+            continue
+        d, kv, _ = parsed
         row_vals = resolve_vals(d, kv, row_field)
         col_vals = resolve_vals(d, kv, col_field)
         if row_vals is None or col_vals is None:
@@ -693,7 +721,12 @@ def render_summary(results, start, end, time_label, filters, total, sum_field=No
     count = len(results)
     rows  = [("Time range", f"{start} to {end} ({time_label})")]
     if results:
-        rows.append(("Data span", f"{results[0].split()[0]} to {results[-1].split()[0]}"))
+        try:
+            first_date = parse_line(results[0])[0]
+            last_date  = parse_line(results[-1])[0]
+            rows.append(("Data span", f"{first_date} to {last_date}"))
+        except Exception:
+            pass
     rows.append(("Records", count))
     if filters:
         rows.append(("Filters", " ".join(filters)))
@@ -715,8 +748,11 @@ def render_summary(results, start, end, time_label, filters, total, sum_field=No
 
 def _run_base_query(name, queries, start, end, cycles):
     """Run a named base query, respecting its own time if defined."""
-    q       = queries[name]
-    filters = q["where"].split()
+    q = queries[name]
+    where = q.get("where", "")
+    if not isinstance(where, str):
+        sys.exit(f"Query '{name}' in queries.toml: 'where' must be a string, got {type(where).__name__}")
+    filters = where.split()
     if "time" in q:
         start, end = resolve_time(q["time"], cycles)
     results, total = scan_records(start, end, filters, None)
@@ -724,8 +760,11 @@ def _run_base_query(name, queries, start, end, cycles):
 
 def _run_base_query_lines(name, queries, start, end, cycles):
     """Like _run_base_query but returns raw result lines and total."""
-    q       = queries[name]
-    filters = q["where"].split()
+    q = queries[name]
+    where = q.get("where", "")
+    if not isinstance(where, str):
+        sys.exit(f"Query '{name}' in queries.toml: 'where' must be a string, got {type(where).__name__}")
+    filters = where.split()
     if "time" in q:
         start, end = resolve_time(q["time"], cycles)
     return scan_records(start, end, filters, None)
@@ -822,7 +861,10 @@ def show_fields(results):
     bad = non_dimension_fields()
     types = {}
     for line in results:
-        d, kv, _ = parse_line(line)
+        parsed = safe_parse_line(line)
+        if parsed is None:
+            continue
+        d, kv, _ = parsed
         rtype = kv.get("type", "unknown")
         types.setdefault(rtype, {"fields": {}, "counts": {}})
         for k, v in kv.items():
@@ -1412,7 +1454,14 @@ def edit_target(target):
     }
     if target not in paths:
         sys.exit(f"Unknown edit target: {target}")
-    subprocess.run(resolve_editor() + [paths[target]])
+    editor = resolve_editor()
+    try:
+        subprocess.run(editor + [paths[target]])
+    except FileNotFoundError:
+        sys.exit(
+            f"Editor '{editor[0]}' not found.\n"
+            f"Set [editor] command in config/config.toml, or set the $EDITOR environment variable."
+        )
 
 # --------------------------------------------------
 # Init
@@ -1834,7 +1883,10 @@ def resolve_query_context(args, queries):
         if q.get("count"):              args.count = True
         if "sort"  in q:                args.sort  = q["sort"]
         if "trend" in q and args.trend is None:
-            args.trend = int(q["trend"])
+            try:
+                args.trend = int(q["trend"])
+            except (ValueError, TypeError):
+                sys.exit(f"Query '{args.query}' in queries.toml: 'trend' must be an integer, got {q['trend']!r}")
 
     return query_filters, metric_mode, dashboard_mode
 
@@ -2110,20 +2162,26 @@ def _render_single_table(lines, label=None):
     all_fields = ["date"]
     seen = set()
     for line in lines:
-        _, kv, _ = parse_line(line)
+        parsed = safe_parse_line(line)
+        if parsed is None:
+            continue
+        _, kv, _ = parsed
         for k in kv:
             if k not in seen and k != "type":  # type shown in label, skip column
                 all_fields.append(k)
                 seen.add(k)
 
-    has_note = any(parse_line(l)[2] for l in lines)
+    has_note = any(safe_parse_line(l) is not None and safe_parse_line(l)[2] for l in lines)
     if has_note:
         all_fields.append("note")
 
     # build raw rows (no truncation yet)
     rows = []
     for line in lines:
-        d, kv, note = parse_line(line)
+        parsed = safe_parse_line(line)
+        if parsed is None:
+            continue
+        d, kv, note = parsed
         row = {"date": str(d)}
         for k, v in kv.items():
             if k == "type":
@@ -2186,7 +2244,10 @@ def render_table(results):
     groups = {}
     order  = []
     for line in results:
-        _, kv, _ = parse_line(line)
+        parsed = safe_parse_line(line)
+        if parsed is None:
+            continue
+        _, kv, _ = parsed
         t = kv.get("type", "unknown")
         if t not in groups:
             groups[t] = []
@@ -2228,12 +2289,15 @@ def export_csv(results, filename, filters, time_label):
     cols = ["date"]
     seen = set(["date"])
     for line in results:
-        _, kv, note = parse_line(line)
+        parsed = safe_parse_line(line)
+        if parsed is None:
+            continue
+        _, kv, note = parsed
         for k in kv:
             if k not in seen:
                 cols.append(k)
                 seen.add(k)
-    has_note = any(parse_line(l)[2] for l in results)
+    has_note = any(safe_parse_line(l) is not None and safe_parse_line(l)[2] for l in results)
     if has_note:
         cols.append("note")
 
@@ -2241,7 +2305,10 @@ def export_csv(results, filename, filters, time_label):
         writer = csv.DictWriter(f, fieldnames=cols)
         writer.writeheader()
         for line in results:
-            d, kv, note = parse_line(line)
+            parsed = safe_parse_line(line)
+            if parsed is None:
+                continue
+            d, kv, note = parsed
             row = {"date": str(d)}
             for k, v in kv.items():
                 row[k] = ",".join(v) if isinstance(v, list) else str(v)
@@ -2287,6 +2354,8 @@ def main():
         else:
             record = {}
             for item in args.add:
+                if "=" not in item:
+                    sys.exit(f"Invalid argument '{item}' — expected key=value format (e.g. type=expense)")
                 k, v = item.split("=", 1)
                 if k in record:
                     record[k] = record[k] if isinstance(record[k], list) else [record[k]]
@@ -2407,7 +2476,7 @@ def main():
 
     if args.group == ["?"]:
         bad = non_dimension_fields()
-        dims = sorted({k for line in results for k in parse_line(line)[1] if k not in bad})
+        dims = sorted({k for line in results for k in (safe_parse_line(line) or (None, {}, None))[1] if k not in bad})
         print("\nAvailable group fields:\n")
         for d in dims: print(d)
         print()
@@ -2416,7 +2485,9 @@ def main():
     if args.pivot and args.pivot[0] == "?":
         available = {"month", "year"}
         for line in results:
-            available.update(parse_line(line)[1].keys())
+            parsed = safe_parse_line(line)
+            if parsed:
+                available.update(parsed[1].keys())
         print("\nAvailable pivot fields:\n")
         for d in sorted(available): print(d)
         print()
@@ -2429,7 +2500,9 @@ def main():
         row, col     = args.pivot[:2]
         available    = {"month", "year"}
         for line in results:
-            available.update(parse_line(line)[1].keys())
+            parsed = safe_parse_line(line)
+            if parsed:
+                available.update(parsed[1].keys())
         missing = [f for f in (row, col) if f not in available]
         if missing:
             sys.exit(f"Unknown pivot field(s): {', '.join(missing)}  — try: ptos --fields")
