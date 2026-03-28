@@ -263,16 +263,17 @@ ptos --edit x        # ptos.py itself
 | `--count` | | Count records instead of summing numeric fields. Works with both `--group` and `--pivot` |
 | `--sort COL` | | Sort records or pivot rows by a column. Works for plain list, table view, and pivot |
 | `--sum-field FIELD` | | Sum a specific numeric field instead of auto-detecting the first one |
-| `--trend [N]` | | Show last N periods side by side (default: 6) |
+| `--trend [N]` | | Show last N periods side by side (default: 6). Also works with `--from`/`--to`: divides the custom range into N equal slices |
 | `--due [NAME\|DAYS]` | | Show overdue records. Optional: named due config or days override |
 | `--table` | | Display results as a formatted table instead of raw lines |
-| `--export [FILENAME]` | | Export results to CSV in `exports/` folder. Optional filename without extension. Auto-named if omitted. |
+| `--export [FILENAME]` | | Export results to CSV in `exports/` folder. Works with raw records, `--group`, and `--pivot`. Optional filename without extension. Auto-named if omitted. |
 
 ### Utilities
 
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--lint` | `-l` | Lint all records against schema |
+| `--lint --fix` | | Open each log file that contains errors in the editor after linting |
 | `--journal` | `-j` | Open today's journal (creates from template if new) |
 | `--edit [TARGET]` | `-e` | Edit a workspace file — r s q c p d/j x |
 | `--fields` | | Field discovery report for current results |
@@ -696,6 +697,46 @@ ptos --preset commute --date yesterday  # different date
 
 **Tags are always prompted when using a preset** — even if the preset already has tags defined. The existing tags are shown first so you can press Enter to keep them, or type new ones to extend or replace. This lets you add a one-off tag to a preset without editing the preset file.
 
+### Preset aliases
+
+An alias is a shorthand name that points to another preset. Useful when you want a short nickname without duplicating the full definition.
+
+```toml
+[presets.commute]
+type     = "expense"
+domain   = "self"
+category = "transport"
+amount   = 90
+tag      = ["auto"]
+
+[presets.c]
+alias = "commute"    # ptos -p c  runs the commute preset
+```
+
+```bash
+ptos -p c            # same as: ptos -p commute
+ptos -p c amount=120 # override works on aliases too
+```
+
+### Multi-record presets
+
+A multi-record preset saves a group of related records that are always added together — for example a morning routine or a recurring set of clinic entries.
+
+```toml
+[presets.morning]
+records = [
+  { type = "exercise", activity = "walk", duration = "30", tag = ["morning"] },
+  { type = "learning", topic = "stoicism", source = "podcast", domain = "self" },
+]
+```
+
+```bash
+ptos -p morning         # prompts for any missing fields in each record, then saves both
+ptos -p morning -d yd   # adds both records dated yesterday
+```
+
+Each record in the group is completed interactively if it has missing fields, then saved in sequence. The preset shows a preview line for each record as it is saved.
+
 ---
 
 ## Analysis examples
@@ -795,16 +836,22 @@ Output keeps log format with only the selected fields:
 
 ## Exporting to CSV
 
-`--export` saves results to a `.csv` file in the `exports/` folder next to `records/`.
+`--export` saves results to a `.csv` file in the `exports/` folder. It works in all three output modes — raw records, grouped, and pivot.
 
 ```bash
+# raw records
 ptos -y expense -t tm --export              # exports/expense_this-month.csv
 ptos -y expense -t tm --export march_spend  # exports/march_spend.csv
-ptos -q flp -t tq --export                  # exports/followup_this-quarter.csv
-ptos -y prescription --export               # exports/prescription_this-month.csv
+
+# grouped output
+ptos -y expense -t tm -G category --export         # exports/expense_this-month_grouped.csv
+ptos -y sale -t tq -G domain --export q3_by_domain # exports/q3_by_domain.csv
+
+# pivot output
+ptos -y sale -t tq -v source outcome --export      # exports/sale_this-quarter_pivot.csv
 ```
 
-Auto-naming uses the active type filter and time label so the filename tells you what's in it. All filters, `--select`, and `--sort` apply before export — what you see is what gets exported.
+Auto-naming appends `_grouped` or `_pivot` as a suffix when in those modes so the filename tells you what's in it. All filters, `--select`, `--sort`, and `--sum-field` apply before export — what you see is what gets exported.
 
 Columns are auto-detected from fields present in results. Multi-value fields like `tag` are joined with a comma. The file can be opened directly in Excel or any spreadsheet app.
 
