@@ -2243,8 +2243,8 @@ def _show_error_dialog(parent, exc_text, log_path):
 
 
 def _write_if_output(app, msg):
-    """Try to write a ptos error message to whichever output pane is visible.
-    Falls back to a messagebox if no output pane is found.
+    """Route a ptos SystemExit message to the active output pane if available,
+    otherwise show the full error dialog with Copy to Clipboard.
     """
     try:
         nb = [w for w in app.winfo_children() if isinstance(w, ttk.Notebook)]
@@ -2256,8 +2256,17 @@ def _write_if_output(app, msg):
                 return
     except Exception:
         pass
-    from tkinter import messagebox
-    messagebox.showerror("PTOS Error", msg)
+    # no output pane found — show the full error dialog
+    LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                            "ptos_error.log")
+    timestamp = ptos.dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S") \
+                if hasattr(ptos, "dt") else ""
+    try:
+        with open(LOG_PATH, "a", encoding="utf-8") as f:
+            f.write(f"\n{'='*60}\n{timestamp}\nSystemExit: {msg}\n")
+    except Exception:
+        pass
+    _show_error_dialog(app, f"SystemExit: {msg}", LOG_PATH)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2353,7 +2362,27 @@ class PTOSApp(tk.Tk):
         """
         if exc_type is SystemExit:
             msg = str(exc_value) or "ptos exited unexpectedly."
-            _write_if_output(self, msg)
+            LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                    "ptos_error.log")
+            timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            try:
+                with open(LOG_PATH, "a", encoding="utf-8") as f:
+                    f.write(f"\n{'='*60}\n{timestamp}\nSystemExit: {msg}\n")
+            except Exception:
+                pass
+            # show in output pane if available, else full error dialog
+            try:
+                nb = [w for w in self.winfo_children()
+                      if isinstance(w, ttk.Notebook)]
+                if nb:
+                    tab = nb[0].nametowidget(nb[0].select())
+                    out = getattr(tab, "_out", None)
+                    if out:
+                        _write(out, f"Error: {msg}")
+                        return
+            except Exception:
+                pass
+            _show_error_dialog(self, f"SystemExit: {msg}", LOG_PATH)
             return
         exc_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
         LOG_PATH  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
