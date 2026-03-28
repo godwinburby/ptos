@@ -1,0 +1,68 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <div class="card-title" style="margin:0;">Log Editor</div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      <label style="font-size:12px; color:var(--subtext);">File</label>
+      <select id="file-select" onchange="loadFile(this.value)" style="width:160px;">
+        {% for f in log_files %}
+          <option value="{{ f }}" {% if f==current_file %}selected{% endif %}>{{ f }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+
+  {% if msg %}
+    <div class="msg msg-{{ msg_type }}">{{ msg }}</div>
+  {% endif %}
+
+  <textarea class="editor-area" id="log-editor"
+            spellcheck="false">{{ content }}</textarea>
+
+  <div style="display:flex; gap:10px; margin-top:12px; align-items:center;">
+    <button class="btn btn-primary" onclick="saveFile()">
+      Save  <kbd style="font-size:10px; opacity:.7">Ctrl+S</kbd>
+    </button>
+    <span style="font-size:12px; color:var(--subtext);" id="save-status"></span>
+    <span style="font-size:11px; color:var(--subtext); margin-left:auto;">
+      A .bak backup is written before every save
+    </span>
+  </div>
+</div>
+
+<script>
+function loadFile(filename) {
+  window.location = "/editor?file=" + encodeURIComponent(filename);
+}
+
+function saveFile() {
+  const file    = document.getElementById("file-select").value;
+  const content = document.getElementById("log-editor").value;
+  const status  = document.getElementById("save-status");
+
+  status.textContent = "Saving…";
+  fetch("/editor/save", {
+    method:  "POST",
+    headers: {"Content-Type": "application/json"},
+    body:    JSON.stringify({file, content})
+  })
+  .then(r => r.json())
+  .then(d => {
+    status.textContent = d.ok ? "✔ Saved" : "✖ " + d.error;
+    status.style.color = d.ok ? "var(--success)" : "var(--error)";
+    setTimeout(() => status.textContent = "", 2500);
+  })
+  .catch(() => {
+    status.textContent = "✖ Save failed";
+    status.style.color = "var(--error)";
+  });
+}
+
+// Ctrl+S
+document.addEventListener("keydown", function(e) {
+  if (e.ctrlKey && e.key === "s") { e.preventDefault(); saveFile(); }
+});
+</script>
+{% endblock %}

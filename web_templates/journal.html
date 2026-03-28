@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
+    <div class="card-title" style="margin:0;">Journal</div>
+    <div style="display:flex; align-items:center; gap:10px;">
+      {% if prev_date %}
+        <a href="/journal?date={{ prev_date }}" class="btn btn-ghost btn-sm">◀ Prev</a>
+      {% endif %}
+      <input type="date" id="date-jump" value="{{ date }}" max="{{ today }}"
+             onchange="jumpDate(this.value)"
+             style="font-size:13px; padding:5px 8px;">
+      {% if next_date and next_date <= today %}
+        <a href="/journal?date={{ next_date }}" class="btn btn-ghost btn-sm">Next ▶</a>
+      {% endif %}
+      <a href="/journal" class="btn btn-ghost btn-sm">Today</a>
+    </div>
+  </div>
+
+  {% if msg %}
+    <div class="msg msg-{{ msg_type }}">{{ msg }}</div>
+  {% endif %}
+
+  <form method="POST" action="/journal/save" id="journal-form">
+    <input type="hidden" name="date" value="{{ date }}">
+    <textarea class="editor-area" name="content" id="journal-editor"
+              spellcheck="false">{{ content }}</textarea>
+    <div style="display:flex; gap:10px; margin-top:12px; align-items:center;">
+      <button type="submit" class="btn btn-primary">Save  <kbd style="font-size:10px; opacity:.7">Ctrl+S</kbd></button>
+      <span style="font-size:12px; color:var(--subtext);" id="save-status"></span>
+    </div>
+  </form>
+</div>
+
+<script>
+function jumpDate(val) {
+  if (val) window.location = "/journal?date=" + val;
+}
+
+// Ctrl+S to save
+document.addEventListener("keydown", function(e) {
+  if (e.ctrlKey && e.key === "s") {
+    e.preventDefault();
+    saveJournal();
+  }
+});
+
+function saveJournal() {
+  const form    = document.getElementById("journal-form");
+  const content = document.getElementById("journal-editor").value;
+  const date    = form.querySelector("[name=date]").value;
+  const status  = document.getElementById("save-status");
+
+  status.textContent = "Saving…";
+  fetch("/journal/save", {
+    method:  "POST",
+    headers: {"Content-Type": "application/json"},
+    body:    JSON.stringify({date, content})
+  })
+  .then(r => r.json())
+  .then(d => {
+    status.textContent = d.ok ? "✔ Saved" : "✖ " + d.error;
+    status.style.color = d.ok ? "var(--success)" : "var(--error)";
+    setTimeout(() => status.textContent = "", 2500);
+  })
+  .catch(() => {
+    status.textContent = "✖ Save failed";
+    status.style.color = "var(--error)";
+  });
+}
+</script>
+{% endblock %}

@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="card">
+  <div class="card-title">Run Query</div>
+
+  <div class="field-row">
+    <div class="field-group">
+      <label>Query / Metric / Dashboard</label>
+      <select id="q-select" style="width:260px;">
+        <option value="">— select —</option>
+        {% if queries %}
+          <optgroup label="Queries">
+            {% for name in queries %}<option value="q:{{ name }}">{{ name }}</option>{% endfor %}
+          </optgroup>
+        {% endif %}
+        {% if metrics %}
+          <optgroup label="Metrics">
+            {% for name in metrics %}<option value="m:{{ name }}">{{ name }}</option>{% endfor %}
+          </optgroup>
+        {% endif %}
+        {% if dashboards %}
+          <optgroup label="Dashboards">
+            {% for name in dashboards %}<option value="d:{{ name }}">{{ name }}</option>{% endfor %}
+          </optgroup>
+        {% endif %}
+      </select>
+    </div>
+    <div class="field-group">
+      <label>Time override</label>
+      <select id="q-time" style="width:160px;">
+        <option value="">(query default)</option>
+        {% for label, code in time_options %}
+          <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="display:flex; align-items:flex-end; gap:8px;">
+      <button class="btn btn-primary" onclick="runQuery()">⟳ Run</button>
+      <button class="btn btn-ghost"   onclick="clearOutput()">✕ Clear</button>
+      <span class="spinner" id="spinner">Running…</span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <pre class="output" id="output">Select a query and press Run.</pre>
+</div>
+
+<script>
+// auto-run when selection changes
+document.getElementById("q-select").addEventListener("change", runQuery);
+document.getElementById("q-time").addEventListener("change",   runQuery);
+
+function runQuery() {
+  const raw  = document.getElementById("q-select").value;
+  const time = document.getElementById("q-time").value;
+  if (!raw) return;
+
+  const [kind, name] = raw.split(":", 2);
+  const out  = document.getElementById("output");
+  const spin = document.getElementById("spinner");
+
+  spin.classList.add("active");
+  out.textContent = "Running…";
+
+  fetch("/queries/run", {
+    method:  "POST",
+    headers: {"Content-Type": "application/json"},
+    body:    JSON.stringify({kind, name, time})
+  })
+  .then(r => r.json())
+  .then(d => {
+    out.textContent = d.result || d.error || "(no output)";
+    spin.classList.remove("active");
+  })
+  .catch(e => {
+    out.textContent = "Request failed: " + e;
+    spin.classList.remove("active");
+  });
+}
+
+function clearOutput() {
+  document.getElementById("q-select").value = "";
+  document.getElementById("q-time").value   = "";
+  document.getElementById("output").textContent = "Select a query and press Run.";
+}
+</script>
+{% endblock %}
