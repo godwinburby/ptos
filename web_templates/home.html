@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-title">Good {{ greeting }}, Godwin</div>
+
+<!-- stat cards -->
+<div class="stat-grid">
+  {% if due_count > 0 %}
+  <div class="stat-card c-warn">
+    <div class="stat-label">Due Today</div>
+    <div class="stat-value">{{ due_count }}</div>
+    <div class="stat-sub"><a href="/due" style="color:#fff;font-weight:700;">View list →</a></div>
+  </div>
+  {% else %}
+  <div class="stat-card">
+    <div class="stat-label">Due</div>
+    <div class="stat-value" style="font-size:20px;color:var(--success);">✓</div>
+    <div class="stat-sub">All clear</div>
+  </div>
+  {% endif %}
+
+  {% for s in stats %}
+  <div class="stat-card">
+    <div class="stat-label">{{ s.label }}</div>
+    <div class="stat-value">{{ s.value }}</div>
+    <div class="stat-sub">{{ s.sub }}</div>
+  </div>
+  {% endfor %}
+</div>
+
+<!-- quick add presets -->
+{% if presets %}
+<div class="card">
+  <div class="card-title">Quick Add</div>
+  <div class="chip-group">
+    {% for name in presets %}
+    <a href="/add?preset={{ name }}" class="preset-chip">+ {{ name }}</a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- due list preview (top 5) -->
+{% if due_rows %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div class="card-title" style="margin:0;">Overdue</div>
+    <a href="/due" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
+  </div>
+  {% for row in due_rows %}
+  <div class="due-row">
+    <div class="due-badge {{ row.heat }}">{{ row.days }}d</div>
+    <div>
+      <div class="due-name">{{ row.name }}</div>
+      <div class="due-meta">{{ row.status }}{% if row.note %} · {{ row.note[:48] }}{% if row.note|length > 48 %}…{% endif %}{% endif %}</div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- recent records -->
+{% if recent %}
+<div class="card">
+  <div class="card-title">Recent Records</div>
+  <div class="output" style="max-height:200px;">{{ recent }}</div>
+</div>
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+  <div class="page-title" style="margin:0;">Due List</div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <select id="days-select" onchange="reload()" style="width:auto;padding:8px 12px;font-size:13px;">
+      <option value="0"  {% if days==0  %}selected{% endif %}>All</option>
+      <option value="1"  {% if days==1  %}selected{% endif %}>1+ days</option>
+      <option value="3"  {% if days==3  %}selected{% endif %}>3+ days</option>
+      <option value="7"  {% if days==7  %}selected{% endif %}>7+ days</option>
+      <option value="14" {% if days==14 %}selected{% endif %}>14+ days</option>
+    </select>
+  </div>
+</div>
+
+{% if error %}
+<div class="msg msg-error">{{ error }}</div>
+{% elif not rows %}
+<div class="card" style="text-align:center;padding:32px;">
+  <div style="font-size:36px;margin-bottom:10px;">✅</div>
+  <div style="font-weight:700;font-size:16px;">All clear</div>
+  <div style="color:var(--sub);font-size:14px;margin-top:4px;">No records overdue</div>
+</div>
+{% else %}
+<div class="card" style="padding:0 18px;">
+  {% for row in rows %}
+  <div class="due-row">
+    <div class="due-badge {{ row.heat }}">{{ row.days }}d</div>
+    <div style="flex:1;min-width:0;">
+      <div class="due-name">{{ row.name }}</div>
+      <div class="due-meta">
+        {% if row.status %}{{ row.status }}{% endif %}
+        {% if row.note %} · {{ row.note[:60] }}{% if row.note|length > 60 %}…{% endif %}{% endif %}
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+<div style="text-align:center;font-size:13px;color:var(--sub);margin-top:6px;">
+  {{ rows|length }} record{{ 's' if rows|length != 1 }} overdue
+</div>
+{% endif %}
+
+<script>
+function reload() {
+  const days = document.getElementById("days-select").value;
+  window.location = "/due?days=" + days;
+}
+</script>
+{% endblock %}
