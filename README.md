@@ -87,6 +87,7 @@ ptos/
 │   └── presets.toml     ← quick-add shortcuts
 ├── records/
 │   └── 2026.log         ← one file per year, append-only
+├── exports/             ← CSV exports from --export (auto-created on first use)
 ├── journal/
 │   └── 2026/
 │       └── 2026-03-10.md
@@ -229,52 +230,53 @@ ptos --edit x        # ptos.py itself
 
 ### Add
 
-| Flag | Description |
-|------|-------------|
-| `--add [field=value ...]` | Add a record. No arguments = interactive mode |
-| `--note "note text"` | Attach a note to the record |
-| `--date DATE` | Date for the record. Accepts `YYYY-MM-DD`, `today`, `yesterday` (default: today) |
-| `--preset [preset] [field=value ...]` | Quick-add from preset. Override fields inline |
-| `--save-preset NAME` | Save the record being added as a preset under this name |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--add [field=value ...]` | `-a` | Add a record. No arguments = interactive mode |
+| `--note "note text"` | `-n` | Attach a note to the record |
+| `--date DATE` | `-d` | Date for the record. Accepts `YYYY-MM-DD`, `today`, `yesterday` (default: today) |
+| `--preset [preset] [field=value ...]` | `-p` | Quick-add from preset. Override fields inline |
+| `--save-preset NAME` | | Save the record being added as a preset under this name |
 
 ### Query
 
-| Flag | Description |
-|------|-------------|
-| `--query [name]` | Run a saved query. No name = list all queries, metrics, dashboards |
-| `--where field=value ...` | Filter by field. Overrides saved query filters |
-| `--time TIME` | Time window (see below). Default: `this-month` |
-| `--from YYYY-MM-DD` | Start date (use with `-T` for custom ranges) |
-| `--to YYYY-MM-DD` | End date |
-| `--type TYPE` | Filter by record type |
-| `--tag TAG` | Filter by tag (repeatable: `--tag auto --tag bus`) |
-| `--search text` | Full-text search |
-| `--save NAME` | Save current query filters and analysis to queries.toml |
-| `--file FILENAME` | Read from a specific file in `records/` folder (e.g. `2025.log`). Full filename with extension. No spaces. |
-| `--select field ...` | Show only specified fields in output. Date, type, and note always included. Log format preserved. |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--query [name]` | `-q` | Run a saved query. No name = list all queries, metrics, dashboards |
+| `--where field=value ...` | `-w` | Filter by field. Overrides saved query filters |
+| `--time TIME` | `-t` | Time window (see below). Default: `this-month` |
+| `--from YYYY-MM-DD` | `-f` | Start date (use with `--to` for custom ranges) |
+| `--to YYYY-MM-DD` | `-T` | End date |
+| `--type TYPE` | `-y` | Filter by record type |
+| `--tag TAG` | `-g` | Filter by tag (repeatable: `--tag auto --tag bus`) |
+| `--search text` | `-S` | Full-text search |
+| `--save NAME` | | Save current query filters and analysis to queries.toml |
+| `--file FILENAME` | | Read from a specific file in `records/` folder (e.g. `2025.log`). Full filename with extension. No spaces. |
+| `--select field ...` | | Show only specified fields in output. Date, type, and note always included. Log format preserved. |
 
 ### Analyse
 
-| Flag | Description |
-|------|-------------|
-| `--group field [field ...]` | Group by one or more fields |
-| `--pivot ROW COL` | Pivot table |
-| `--count` | Count records instead of summing numeric fields |
-| `--sort COL` | Sort records or pivot rows by a column. Works for plain list, table view, and pivot |
-| `--trend [N]` | Show last N periods side by side (default: 6) |
-| `--due [NAME\|DAYS]` | Show overdue records. Optional: named due config or days override |
-| `--table` | Display results as a formatted table instead of raw lines |
-| `--export [FILENAME]` | Export results to CSV in `exports/` folder. Optional filename without extension. Auto-named if omitted. |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--group field [field ...]` | `-G` | Group by one or more fields. Counts records; sums numeric fields when present |
+| `--pivot ROW COL` | `-v` | Pivot table |
+| `--count` | | Count records instead of summing numeric fields. Works with both `--group` and `--pivot` |
+| `--sort COL` | | Sort records or pivot rows by a column. Works for plain list, table view, and pivot |
+| `--sum-field FIELD` | | Sum a specific numeric field instead of auto-detecting the first one |
+| `--trend [N]` | | Show last N periods side by side (default: 6) |
+| `--due [NAME\|DAYS]` | | Show overdue records. Optional: named due config or days override |
+| `--table` | | Display results as a formatted table instead of raw lines |
+| `--export [FILENAME]` | | Export results to CSV in `exports/` folder. Optional filename without extension. Auto-named if omitted. |
 
 ### Utilities
 
-| Flag | Description |
-|------|-------------|
-| `--lint` | Lint all records against schema |
-| `--journal` | Open today's journal (creates from template if new) |
-| `--edit [TARGET]` | Edit a workspace file — r s q c p d/j x |
-| `--fields` | Field discovery report for current results |
-| `--init` | Initialise workspace |
+| Flag | Short | Description |
+|------|-------|-------------|
+| `--lint` | `-l` | Lint all records against schema |
+| `--journal` | `-j` | Open today's journal (creates from template if new) |
+| `--edit [TARGET]` | `-e` | Edit a workspace file — r s q c p d/j x |
+| `--fields` | | Field discovery report for current results |
+| `--init` | | Initialise workspace (safe to run again — will not overwrite existing files) |
 
 ---
 
@@ -808,6 +810,21 @@ Columns are auto-detected from fields present in results. Multi-value fields lik
 
 ---
 
+## Summing a specific field
+
+By default PTOS auto-detects the first numeric field in results and sums it. Use `--sum-field` to target a specific field — useful when a record type has more than one numeric field.
+
+```bash
+ptos -y sale -t tm --sum-field advance       # sum advance payments, not sale amount
+ptos -y sale -t tm --sum-field amount        # sum full sale amounts
+ptos -y sale -t tm --group category --sum-field advance   # group + sum a specific field
+ptos -y sale -t tm --pivot source category --sum-field amount
+```
+
+`--sum-field` works with plain list view, `--group`, `--pivot`, `--trend`, and `--export`. It must be a field declared as `type = "int"` in `schema.toml` — PTOS will exit with an error listing valid numeric fields if you specify an unknown one.
+
+---
+
 ## Configuration
 
 ### config.toml
@@ -843,6 +860,16 @@ ptos --lint          # check all records against schema
 ```
 
 Lint catches: missing required fields, invalid field values, unknown fields, conditional required violations (e.g. `warranty` missing when `category=appliance`).
+
+---
+
+## Automatic backups
+
+Every write operation — `--add`, `--preset`, and journal saves from the GUI — creates a `.bak` file alongside the original before writing. For example, before appending to `records/2026.log`, PTOS writes `records/2026.log.bak`.
+
+This means every record file and journal file always has a one-step-behind backup at all times. No configuration needed.
+
+Add `*.bak` to your `.gitignore` and Syncthing ignore patterns to keep backups off version control.
 
 ---
 
