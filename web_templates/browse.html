@@ -1,199 +1,139 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card">
-  <div class="card-title">Browse Records</div>
+<div class="page-title">Browse</div>
 
-  <div class="field-row">
-    <div class="field-group">
-      <label>Type</label>
-      <select id="b-type" onchange="onTypeChange()">
-        <option value="">All types</option>
-        {% for t in types %}
-          <option value="{{ t }}">{{ t }}</option>
-        {% endfor %}
-      </select>
-    </div>
+<div class="card">
+  <div class="field-group">
+    <label>Type</label>
+    <select id="b-type" onchange="onTypeChange()">
+      <option value="">All types</option>
+      {% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
+    </select>
+  </div>
+
+  <div class="field-row-2">
     <div class="field-group">
       <label>Time</label>
       <select id="b-time">
         {% for label, code in time_options %}
-          <option value="{{ code }}" {% if code=='tm' %}selected{% endif %}>{{ label }}</option>
+        <option value="{{ code }}" {% if code=='tm' %}selected{% endif %}>{{ label }}</option>
         {% endfor %}
       </select>
     </div>
-    <div class="field-group">
-      <label>Search</label>
-      <input type="text" id="b-search" placeholder="full-text search"
-             style="width:200px;" onkeydown="if(event.key==='Enter') runBrowse()">
-    </div>
-  </div>
-
-  <div class="field-row">
     <div class="field-group">
       <label>Group by</label>
       <select id="b-group">
         <option value="">(none)</option>
       </select>
     </div>
-    <div class="field-group">
-      <label>Sort by</label>
-      <input type="text" id="b-sort" placeholder="field name" style="width:130px;">
-    </div>
-    <div class="field-group">
-      <label>File</label>
-      <select id="b-file">
-        <option value="">(current year)</option>
-        {% for f in log_files %}
-          <option value="{{ f }}">{{ f }}</option>
-        {% endfor %}
-      </select>
-    </div>
   </div>
 
-  <!-- dynamic field filters — populated by onTypeChange() -->
-  <div id="field-filters" class="field-row" style="display:none;"></div>
+  <div class="field-group">
+    <label>Search</label>
+    <input type="text" id="b-search" placeholder="full-text search…"
+           onkeydown="if(event.key==='Enter') runBrowse()">
+  </div>
 
-  <div style="display:flex; gap:10px; margin-top:4px; align-items:center;">
-    <button class="btn btn-primary"  onclick="runBrowse()">⟳ Refresh</button>
-    <button class="btn btn-success btn-sm" onclick="runDue()">Due List</button>
-    <button class="btn btn-success btn-sm" onclick="exportCSV()">Export CSV</button>
-    <button class="btn btn-ghost"    onclick="clearBrowse()">✕ Clear</button>
-    <span class="spinner" id="spinner">Loading…</span>
+  <!-- dynamic field filters -->
+  <div id="field-filters" style="display:none;"></div>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-primary btn-sm" onclick="runBrowse()" id="run-btn">⟳ Search</button>
+    <button class="btn btn-success btn-sm" onclick="exportCSV()">↓ CSV</button>
+    <button class="btn btn-ghost btn-sm"   onclick="clearBrowse()">✕ Clear</button>
   </div>
 </div>
 
-<div class="card">
-  <pre class="output" id="output">Select filters and press Refresh.</pre>
+<div class="card" style="padding:0;">
+  <pre class="output" id="output" style="border-radius:12px;min-height:100px;">Set filters and press Search.</pre>
 </div>
 
 <script>
-const TYPES_FIELDS_URL = "/api/type_fields/";
-
 function onTypeChange() {
   const type = document.getElementById("b-type").value;
   const ff   = document.getElementById("field-filters");
-
-  // clear group options back to none
-  const grp = document.getElementById("b-group");
+  const grp  = document.getElementById("b-group");
   grp.innerHTML = '<option value="">(none)</option>';
+  ff.innerHTML  = ""; ff.style.display = "none";
+  if (!type) return;
 
-  if (!type) { ff.style.display = "none"; ff.innerHTML = ""; return; }
-
-  fetch(TYPES_FIELDS_URL + encodeURIComponent(type))
+  fetch("/api/type_fields/" + encodeURIComponent(type))
   .then(r => r.json())
   .then(data => {
-    // populate group dropdown
     (data.dimensions || []).forEach(f => {
       const o = document.createElement("option");
-      o.value = f; o.textContent = f;
-      grp.appendChild(o);
+      o.value = f; o.textContent = f; grp.appendChild(o);
     });
-    // populate field filter selects
-    ff.innerHTML = "";
     (data.fields || []).forEach(f => {
       if (!f.options || !f.options.length) return;
-      const div = document.createElement("div");
-      div.className = "field-group";
-      div.innerHTML = `<label>${f.name}</label>
-        <select id="ff-${f.name}" style="min-width:130px;">
+      const wrap = document.createElement("div");
+      wrap.className = "field-group";
+      wrap.innerHTML = `<label>${f.name}</label>
+        <select id="ff-${f.name}">
           <option value="">(any)</option>
           ${f.options.map(o => `<option value="${o}">${o}</option>`).join("")}
         </select>`;
-      ff.appendChild(div);
+      ff.appendChild(wrap);
     });
-    ff.style.display = ff.children.length ? "flex" : "none";
+    ff.style.display = ff.children.length ? "block" : "none";
   });
 }
 
-function _collectParams() {
+function _params() {
   const type   = document.getElementById("b-type").value;
   const time   = document.getElementById("b-time").value;
   const search = document.getElementById("b-search").value.trim();
   const group  = document.getElementById("b-group").value;
-  const sort   = document.getElementById("b-sort").value.trim();
-  const file   = document.getElementById("b-file").value;
-
-  // collect field filter values
-  const where = [];
+  const where  = [];
   if (type) where.push("type=" + type);
   document.querySelectorAll("[id^='ff-']").forEach(sel => {
-    if (sel.value) {
-      const field = sel.id.replace("ff-", "");
-      where.push(field + "=" + sel.value);
-    }
+    if (sel.value) where.push(sel.id.replace("ff-","") + "=" + sel.value);
   });
-
-  return {where, time, search, group, sort, file};
+  return {where, time, search, group};
 }
 
 function runBrowse() {
-  const params = _collectParams();
-  const out    = document.getElementById("output");
-  const spin   = document.getElementById("spinner");
-
-  spin.classList.add("active");
+  const out = document.getElementById("output");
+  const btn = document.getElementById("run-btn");
+  btn.disabled = true; btn.textContent = "Loading…";
   out.textContent = "Loading…";
 
   fetch("/browse/run", {
-    method:  "POST",
+    method: "POST",
     headers: {"Content-Type": "application/json"},
-    body:    JSON.stringify(params)
+    body: JSON.stringify(_params())
   })
   .then(r => r.json())
   .then(d => {
     out.textContent = d.result || d.error || "(no results)";
-    spin.classList.remove("active");
+    btn.disabled = false; btn.textContent = "⟳ Search";
   })
   .catch(e => {
-    out.textContent = "Request failed: " + e;
-    spin.classList.remove("active");
-  });
-}
-
-function runDue() {
-  const out  = document.getElementById("output");
-  const spin = document.getElementById("spinner");
-  spin.classList.add("active");
-  out.textContent = "Loading due list…";
-
-  fetch("/browse/due", {method: "POST"})
-  .then(r => r.json())
-  .then(d => {
-    out.textContent = d.result || d.error || "(no output)";
-    spin.classList.remove("active");
-  })
-  .catch(e => {
-    out.textContent = "Request failed: " + e;
-    spin.classList.remove("active");
+    out.textContent = "Error: " + e;
+    btn.disabled = false; btn.textContent = "⟳ Search";
   });
 }
 
 function exportCSV() {
-  const params = _collectParams();
-  const form   = document.createElement("form");
-  form.method  = "POST";
-  form.action  = "/browse/export";
-  const inp    = document.createElement("input");
-  inp.type  = "hidden";
-  inp.name  = "params";
-  inp.value = JSON.stringify(params);
+  const form  = document.createElement("form");
+  form.method = "POST"; form.action = "/browse/export";
+  const inp   = document.createElement("input");
+  inp.type = "hidden"; inp.name = "params";
+  inp.value = JSON.stringify(_params());
   form.appendChild(inp);
-  document.body.appendChild(form);
-  form.submit();
+  document.body.appendChild(form); form.submit();
   document.body.removeChild(form);
 }
 
 function clearBrowse() {
-  document.getElementById("b-type").value   = "";
-  document.getElementById("b-time").value   = "tm";
-  document.getElementById("b-search").value = "";
-  document.getElementById("b-group").value  = "";
-  document.getElementById("b-sort").value   = "";
-  document.getElementById("b-file").value   = "";
+  ["b-type","b-time","b-search","b-group"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = id === "b-time" ? "tm" : "";
+  });
   document.getElementById("field-filters").innerHTML = "";
   document.getElementById("field-filters").style.display = "none";
-  document.getElementById("output").textContent = "Select filters and press Refresh.";
+  document.getElementById("output").textContent = "Set filters and press Search.";
 }
 </script>
 {% endblock %}

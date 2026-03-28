@@ -1,89 +1,82 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card">
-  <div class="card-title">Run Query</div>
+<div class="page-title">Queries</div>
 
-  <div class="field-row">
-    <div class="field-group">
-      <label>Query / Metric / Dashboard</label>
-      <select id="q-select" style="width:260px;">
-        <option value="">— select —</option>
-        {% if queries %}
-          <optgroup label="Queries">
-            {% for name in queries %}<option value="q:{{ name }}">{{ name }}</option>{% endfor %}
-          </optgroup>
-        {% endif %}
-        {% if metrics %}
-          <optgroup label="Metrics">
-            {% for name in metrics %}<option value="m:{{ name }}">{{ name }}</option>{% endfor %}
-          </optgroup>
-        {% endif %}
-        {% if dashboards %}
-          <optgroup label="Dashboards">
-            {% for name in dashboards %}<option value="d:{{ name }}">{{ name }}</option>{% endfor %}
-          </optgroup>
-        {% endif %}
-      </select>
-    </div>
-    <div class="field-group">
-      <label>Time override</label>
-      <select id="q-time" style="width:160px;">
-        <option value="">(query default)</option>
-        {% for label, code in time_options %}
-          <option value="{{ code }}">{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div style="display:flex; align-items:flex-end; gap:8px;">
-      <button class="btn btn-primary" onclick="runQuery()">⟳ Run</button>
-      <button class="btn btn-ghost"   onclick="clearOutput()">✕ Clear</button>
-      <span class="spinner" id="spinner">Running…</span>
-    </div>
+<div class="card">
+  <div class="field-group">
+    <label>Query / Metric / Dashboard</label>
+    <select id="q-select" onchange="runQuery()">
+      <option value="">— select —</option>
+      {% if queries %}
+      <optgroup label="Queries">
+        {% for name in queries %}<option value="q:{{ name }}">{{ name }}</option>{% endfor %}
+      </optgroup>
+      {% endif %}
+      {% if metrics %}
+      <optgroup label="Metrics">
+        {% for name in metrics %}<option value="m:{{ name }}">{{ name }}</option>{% endfor %}
+      </optgroup>
+      {% endif %}
+      {% if dashboards %}
+      <optgroup label="Dashboards">
+        {% for name in dashboards %}<option value="d:{{ name }}">{{ name }}</option>{% endfor %}
+      </optgroup>
+      {% endif %}
+    </select>
+  </div>
+  <div class="field-group">
+    <label>Time Override</label>
+    <select id="q-time" onchange="runQuery()">
+      <option value="">(query default)</option>
+      {% for label, code in time_options %}
+      <option value="{{ code }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button class="btn btn-primary btn-sm" onclick="runQuery()" id="run-btn">⟳ Run</button>
+    <button class="btn btn-ghost btn-sm"   onclick="clearOut()">✕ Clear</button>
   </div>
 </div>
 
-<div class="card">
-  <pre class="output" id="output">Select a query and press Run.</pre>
+<div class="card" style="padding:0;">
+  <pre class="output" id="output" style="border-radius:12px;min-height:120px;">Select a query above.</pre>
 </div>
 
 <script>
-// auto-run when selection changes
-document.getElementById("q-select").addEventListener("change", runQuery);
-document.getElementById("q-time").addEventListener("change",   runQuery);
-
 function runQuery() {
   const raw  = document.getElementById("q-select").value;
   const time = document.getElementById("q-time").value;
+  const out  = document.getElementById("output");
+  const btn  = document.getElementById("run-btn");
   if (!raw) return;
 
-  const [kind, name] = raw.split(":", 2);
-  const out  = document.getElementById("output");
-  const spin = document.getElementById("spinner");
-
-  spin.classList.add("active");
+  const [kind, ...rest] = raw.split(":");
+  const name = rest.join(":");
+  btn.disabled = true;
+  btn.textContent = "Running…";
   out.textContent = "Running…";
 
   fetch("/queries/run", {
-    method:  "POST",
+    method: "POST",
     headers: {"Content-Type": "application/json"},
-    body:    JSON.stringify({kind, name, time})
+    body: JSON.stringify({kind, name, time})
   })
   .then(r => r.json())
   .then(d => {
     out.textContent = d.result || d.error || "(no output)";
-    spin.classList.remove("active");
+    btn.disabled = false; btn.textContent = "⟳ Run";
   })
   .catch(e => {
-    out.textContent = "Request failed: " + e;
-    spin.classList.remove("active");
+    out.textContent = "Error: " + e;
+    btn.disabled = false; btn.textContent = "⟳ Run";
   });
 }
-
-function clearOutput() {
+function clearOut() {
   document.getElementById("q-select").value = "";
-  document.getElementById("q-time").value   = "";
-  document.getElementById("output").textContent = "Select a query and press Run.";
+  document.getElementById("q-time").value = "";
+  document.getElementById("output").textContent = "Select a query above.";
 }
 </script>
 {% endblock %}
