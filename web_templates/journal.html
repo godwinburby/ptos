@@ -1,72 +1,67 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="card">
-  <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px;">
-    <div class="card-title" style="margin:0;">Journal</div>
-    <div style="display:flex; align-items:center; gap:10px;">
-      {% if prev_date %}
-        <a href="/journal?date={{ prev_date }}" class="btn btn-ghost btn-sm">◀ Prev</a>
-      {% endif %}
-      <input type="date" id="date-jump" value="{{ date }}" max="{{ today }}"
-             onchange="jumpDate(this.value)"
-             style="font-size:13px; padding:5px 8px;">
-      {% if next_date and next_date <= today %}
-        <a href="/journal?date={{ next_date }}" class="btn btn-ghost btn-sm">Next ▶</a>
-      {% endif %}
-      <a href="/journal" class="btn btn-ghost btn-sm">Today</a>
-    </div>
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+  <div class="page-title" style="margin:0;">Journal</div>
+  <div style="display:flex;gap:6px;align-items:center;">
+    <a href="/journal?date={{ prev_date }}" class="btn btn-ghost btn-sm">◀</a>
+    <input type="date" id="date-jump" value="{{ date }}" max="{{ today }}"
+           onchange="if(this.value) window.location='/journal?date='+this.value"
+           style="width:auto;padding:7px 10px;font-size:13px;">
+    {% if next_date <= today %}
+    <a href="/journal?date={{ next_date }}" class="btn btn-ghost btn-sm">▶</a>
+    {% endif %}
+    <a href="/journal" class="btn btn-ghost btn-sm">Today</a>
   </div>
+</div>
 
-  {% if msg %}
-    <div class="msg msg-{{ msg_type }}">{{ msg }}</div>
-  {% endif %}
+{% if msg %}
+<div class="msg msg-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
 
-  <form method="POST" action="/journal/save" id="journal-form">
-    <input type="hidden" name="date" value="{{ date }}">
-    <textarea class="editor-area" name="content" id="journal-editor"
-              spellcheck="false">{{ content }}</textarea>
-    <div style="display:flex; gap:10px; margin-top:12px; align-items:center;">
-      <button type="submit" class="btn btn-primary">Save  <kbd style="font-size:10px; opacity:.7">Ctrl+S</kbd></button>
-      <span style="font-size:12px; color:var(--subtext);" id="save-status"></span>
-    </div>
-  </form>
+<div class="card" style="padding:0;">
+  <textarea id="journal-editor" name="content"
+            style="width:100%;min-height:520px;resize:vertical;
+                   font-family:'Consolas',monospace;font-size:14px;
+                   line-height:1.7;padding:18px;border:none;
+                   border-radius:12px;background:#fff;outline:none;"
+            spellcheck="false">{{ content }}</textarea>
+</div>
+
+<div style="display:flex;gap:10px;align-items:center;">
+  <button class="btn btn-primary" onclick="saveJournal()" id="save-btn">
+    Save <span style="font-size:11px;opacity:.7;">Ctrl+S</span>
+  </button>
+  <span id="save-status" style="font-size:13px;font-weight:600;"></span>
 </div>
 
 <script>
-function jumpDate(val) {
-  if (val) window.location = "/journal?date=" + val;
-}
-
-// Ctrl+S to save
-document.addEventListener("keydown", function(e) {
-  if (e.ctrlKey && e.key === "s") {
-    e.preventDefault();
-    saveJournal();
-  }
+document.addEventListener("keydown", e => {
+  if (e.ctrlKey && e.key === "s") { e.preventDefault(); saveJournal(); }
 });
 
 function saveJournal() {
-  const form    = document.getElementById("journal-form");
   const content = document.getElementById("journal-editor").value;
-  const date    = form.querySelector("[name=date]").value;
+  const btn     = document.getElementById("save-btn");
   const status  = document.getElementById("save-status");
+  btn.disabled  = true; btn.textContent = "Saving…";
 
-  status.textContent = "Saving…";
   fetch("/journal/save", {
-    method:  "POST",
+    method: "POST",
     headers: {"Content-Type": "application/json"},
-    body:    JSON.stringify({date, content})
+    body: JSON.stringify({date: "{{ date }}", content})
   })
   .then(r => r.json())
   .then(d => {
     status.textContent = d.ok ? "✔ Saved" : "✖ " + d.error;
     status.style.color = d.ok ? "var(--success)" : "var(--error)";
+    btn.disabled = false; btn.textContent = "Save";
     setTimeout(() => status.textContent = "", 2500);
   })
   .catch(() => {
-    status.textContent = "✖ Save failed";
+    status.textContent = "✖ Failed";
     status.style.color = "var(--error)";
+    btn.disabled = false; btn.textContent = "Save";
   });
 }
 </script>
