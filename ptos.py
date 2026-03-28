@@ -528,11 +528,13 @@ def lint_records(records, schema):
        warnings : missing tag, missing note
     2. Schema   — type-specific field validation
        errors   : missing required fields, invalid values, failed conditions
+    Returns set of log file paths that contain errors (for --fix).
     """
     total_errors   = 0
     total_warnings = 0
     total_checked  = 0
     type_counts    = {}
+    error_files    = set()
 
     for line in records:
         if not line.strip():
@@ -580,6 +582,9 @@ def lint_records(records, schema):
             for msg in anatomy_warnings:
                 print(f"  ⚠ {msg}")
                 total_warnings += 1
+            # track the log file this line came from (by year in date)
+            if d != dt.date.min:
+                error_files.add(os.path.join(RECORDS_DIR, f"{d.year}.log"))
 
     type_summary = "  ".join(f"{t}:{n}" for t, n in sorted(type_counts.items()))
     print(f"\nChecked {total_checked} record(s) across {len(type_counts)} type(s)  [{type_summary}]")
@@ -592,6 +597,7 @@ def lint_records(records, schema):
         if total_warnings:
             print(f"⚠ {total_warnings} warning(s) found")
     print()
+    return error_files
 
 # --------------------------------------------------
 # Analysis  —  group + pivot return data, render separately
@@ -1841,6 +1847,7 @@ def build_parser(cycles):
 
     utl = p.add_argument_group("Utilities")
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
+    utl.add_argument("--fix",           action="store_true", help="With --lint: open each file that has errors in the editor")
     utl.add_argument("-j", "--journal", action="store_true", help="Open today's journal")
     utl.add_argument("-e", "--edit",    nargs="?", const="records", metavar="TARGET",
                      help="Edit a workspace file  (r s q c p d/j x)")
@@ -1985,9 +1992,24 @@ def _prior_periods(time_keyword, n, cycles):
     return []
 
 
-def run_trend(filters, time_keyword, n, cycles):
-    """Run filters across N consecutive periods and render as a comparison table."""
-    periods = _prior_periods(time_keyword, n, cycles)
+def run_trend(filters, time_keyword, n, cycles, custom_start=None, custom_end=None):
+    """Run filters across N consecutive periods and render as a comparison table.
+    If custom_start/custom_end given, divides that range into N equal slices.
+    """
+    if custom_start and custom_end:
+        # divide the custom range into n equal day-slices
+        total_days = (custom_end - custom_start).days + 1
+        slice_days = max(1, total_days // n)
+        periods = []
+        for i in range(n):
+            s = custom_start + dt.timedelta(days=i * slice_days)
+            e = s + dt.timedelta(days=slice_days - 1)
+            if i == n - 1:
+                e = custom_end  # last slice absorbs any remainder
+            label = f"{s} – {e}" if slice_days > 1 else str(s)
+            periods.append((label, s, e))
+    else:
+        periods = _prior_periods(time_keyword, n, cycles)
 
     if not periods:
         sys.exit(f"--trend not supported for time window: {time_keyword}\n"
@@ -2125,6 +2147,13 @@ def run_due(arg):
         r["date"]
     ))
 
+    # detect whether records have a 'name' field separate from the key field
+    has_name_field = any(
+        "name" in r["kv"] and r["kv"].get("name") != r["kv"].get(key_field)
+        for r in overdue
+    )
+    display_col = "name" if has_name_field else key_field
+
     days_col  = 7
     sort_col  = 16
     name_col  = 24
@@ -2132,9 +2161,9 @@ def run_due(arg):
     # build header dynamically — show sort_by column only if configured
     if sort_field:
         header = (f"{'last':>{days_col}}  {sort_field:<{sort_col}}"
-                  f"{key_field:<{name_col}}  note")
+                  f"{display_col:<{name_col}}  note")
     else:
-        header = f"{'last':>{days_col}}  {key_field:<{name_col}}  note"
+        header = f"{'last':>{days_col}}  {display_col:<{name_col}}  note"
 
     print(f"\nDue  (>{days} days)  type={rec_type}\n")
     print(header)
@@ -2332,6 +2361,64 @@ def export_csv(results, filename, filters, time_label):
     print(f"\nExported {len(results)} record(s) to: {path}\n")
 
 
+def export_csv_group(counts, sums, has_amount, fields, filename, filters, time_label):
+    """Export grouped results to CSV."""
+    import csv
+
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+
+    if filename == "__AUTO__":
+        type_part = next((f.split("=")[1] for f in filters if f.startswith("type=")), "records")
+        date_part = time_label.replace(" ", "_").replace("/", "-")
+        filename  = f"{type_part}_{date_part}_grouped"
+
+    filename = filename.replace(" ", "_")
+    path     = os.path.join(EXPORTS_DIR, f"{filename}.csv")
+
+    label_fn = lambda key: list(key) if isinstance(key, tuple) else [key]
+    col_names = fields + ["count"] + (["total"] if has_amount else [])
+
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=col_names)
+        writer.writeheader()
+        for key in sorted(counts):
+            row = dict(zip(fields, label_fn(key)))
+            row["count"] = counts[key]
+            if has_amount:
+                row["total"] = sums.get(key, 0)
+            writer.writerow(row)
+
+    print(f"\nExported {len(counts)} group(s) to: {path}\n")
+
+
+def export_csv_pivot(table, cols, rows, row_field, filename, filters, time_label):
+    """Export pivot results to CSV."""
+    import csv
+
+    os.makedirs(EXPORTS_DIR, exist_ok=True)
+
+    if filename == "__AUTO__":
+        type_part = next((f.split("=")[1] for f in filters if f.startswith("type=")), "records")
+        date_part = time_label.replace(" ", "_").replace("/", "-")
+        filename  = f"{type_part}_{date_part}_pivot"
+
+    filename  = filename.replace(" ", "_")
+    path      = os.path.join(EXPORTS_DIR, f"{filename}.csv")
+    col_names = [row_field] + cols + ["total"]
+
+    with open(path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=col_names)
+        writer.writeheader()
+        for row in rows:
+            r = {row_field: row}
+            for c in cols:
+                r[c] = table[row].get(c, 0)
+            r["total"] = sum(table[row].get(c, 0) for c in cols)
+            writer.writerow(r)
+
+    print(f"\nExported {len(rows)} row(s) to: {path}\n")
+
+
 # --------------------------------------------------
 # Main
 # --------------------------------------------------
@@ -2387,7 +2474,18 @@ def main():
     # ---- lint mode ----
     if args.lint:
         results, _ = scan_records(dt.date.min, dt.date.max, [], None)
-        lint_records(results, schema)
+        error_files = lint_records(results, schema)
+        if getattr(args, "fix", False) and error_files:
+            editor = resolve_editor()
+            print(f"Opening {len(error_files)} file(s) with errors...\n")
+            for path in sorted(error_files):
+                try:
+                    subprocess.run(editor + [path])
+                except FileNotFoundError:
+                    sys.exit(
+                        f"Editor '{editor[0]}' not found.\n"
+                        f"Set [editor] command in config/config.toml or set $EDITOR."
+                    )
         return
 
     # ---- flatten --where ----
@@ -2463,7 +2561,12 @@ def main():
 
     # ---- trend mode ----
     if args.trend is not None:
-        run_trend(final_filters, args.time, args.trend, cycles)
+        # if a custom date range was given, slice it into N equal periods
+        if args.date_from or args.date_to:
+            run_trend(final_filters, args.time, args.trend, cycles,
+                      custom_start=start, custom_end=end)
+        else:
+            run_trend(final_filters, args.time, args.trend, cycles)
         return
 
     # ---- dashboard / metric (don't need full scan) ----
@@ -2546,6 +2649,9 @@ def main():
         label = f"Value: {vf}" if vf and not args.count else "Count mode"
         print(f"\nPivot  row={row}  col={col}  {label}")
         table, cols, rows = pivot_results(results, row, col, args.count, args.sort, sum_field=sum_field)
+        if getattr(args, "export", None):
+            export_csv_pivot(table, cols, rows, row, args.export, final_filters, time_label)
+            return
         render_pivot(table, cols, rows, row)
         return
 
@@ -2556,6 +2662,9 @@ def main():
         label = f"Value: {vf}" if vf else "Count"
         print(f"\nGrouped by: {' '.join(args.group)}  ({label})\n")
         counts, sums, has_amount = group_results(results, args.group, sum_field=sum_field)
+        if getattr(args, "export", None):
+            export_csv_group(counts, sums, has_amount, args.group, args.export, final_filters, time_label)
+            return
         render_group(counts, sums, has_amount, args.group)
         return
 
