@@ -1,0 +1,205 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PTOS{% if title %} — {{ title }}{% endif %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:        #F7F8FA;
+      --card:      #FFFFFF;
+      --border:    #E2E4EA;
+      --accent:    #4F6BED;
+      --accent-ho: #3A54D4;
+      --success:   #2E7D56;
+      --error:     #C0392B;
+      --text:      #1A1D2E;
+      --subtext:   #6B7280;
+      --entry-bg:  #FFFFFF;
+      --entry-bd:  #CBD0DC;
+      --out-bg:    #1E2130;
+      --out-fg:    #D4D8E8;
+    }
+
+    body {
+      font-family: "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* ── top bar ── */
+    .topbar {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-shrink: 0;
+    }
+    .brand-name  { font-size: 17px; font-weight: 700; color: var(--text); }
+    .brand-sub   { font-size: 12px; color: var(--subtext); margin-left: 10px; }
+    .brand-tag   { font-size: 11px; font-style: italic; color: var(--accent); display: block; }
+    .gh-link     { font-size: 12px; font-weight: 600; color: var(--accent);
+                   text-decoration: none; background: #EEF1FB; padding: 6px 14px;
+                   border-radius: 6px; }
+    .gh-link:hover { background: #DDE3F5; }
+
+    /* ── nav tabs ── */
+    .nav {
+      background: var(--card);
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      padding: 0 24px;
+      flex-shrink: 0;
+    }
+    .nav a {
+      display: block;
+      padding: 12px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--subtext);
+      text-decoration: none;
+      border-bottom: 2px solid transparent;
+      transition: color .15s, border-color .15s;
+    }
+    .nav a:hover   { color: var(--text); }
+    .nav a.active  { color: var(--accent); border-bottom-color: var(--accent); }
+
+    /* ── page content ── */
+    .page { flex: 1; padding: 24px; max-width: 1100px; width: 100%; margin: 0 auto; }
+
+    /* ── cards ── */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 20px 24px;
+      margin-bottom: 16px;
+    }
+    .card-title { font-size: 18px; font-weight: 700; margin-bottom: 16px; }
+
+    /* ── form controls ── */
+    .field-row   { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-end; margin-bottom: 14px; }
+    .field-group { display: flex; flex-direction: column; gap: 4px; }
+    label        { font-size: 12px; color: var(--subtext); font-weight: 500; }
+
+    input[type=text], input[type=number], input[type=date], select, textarea {
+      font-family: inherit;
+      font-size: 13px;
+      background: var(--entry-bg);
+      border: 1px solid var(--entry-bd);
+      border-radius: 5px;
+      padding: 7px 10px;
+      color: var(--text);
+      outline: none;
+      transition: border-color .15s;
+    }
+    input[type=text]:focus, input[type=number]:focus,
+    input[type=date]:focus, select:focus, textarea:focus {
+      border-color: var(--accent);
+    }
+    select { cursor: pointer; }
+
+    /* ── buttons ── */
+    .btn {
+      font-family: inherit;
+      font-size: 13px;
+      font-weight: 600;
+      padding: 8px 18px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .btn-primary   { background: var(--accent);  color: #fff; }
+    .btn-primary:hover { background: var(--accent-ho); }
+    .btn-success   { background: #2E7D56; color: #fff; }
+    .btn-success:hover { background: #1F5C3E; }
+    .btn-ghost     { background: transparent; color: var(--subtext);
+                     border: 1px solid var(--border); }
+    .btn-ghost:hover { background: var(--bg); color: var(--text); }
+    .btn-danger    { background: var(--error); color: #fff; }
+    .btn-sm        { padding: 5px 12px; font-size: 12px; }
+
+    /* ── output pane ── */
+    .output {
+      background: var(--out-bg);
+      color: var(--out-fg);
+      font-family: "Consolas", "Courier New", monospace;
+      font-size: 13px;
+      padding: 14px 16px;
+      border-radius: 6px;
+      white-space: pre;
+      overflow: auto;
+      min-height: 120px;
+      max-height: 520px;
+      line-height: 1.55;
+    }
+
+    /* ── status messages ── */
+    .msg         { padding: 10px 14px; border-radius: 5px; font-size: 13px; margin-bottom: 14px; }
+    .msg-success { background: #EBF5F0; color: var(--success); border: 1px solid #A8D5BC; }
+    .msg-error   { background: #FDECEA; color: var(--error);   border: 1px solid #F5B7B1; }
+
+    /* ── tag checkboxes ── */
+    .tags        { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 6px; }
+    .tag-label   { display: flex; align-items: center; gap: 5px;
+                   background: var(--bg); border: 1px solid var(--border);
+                   border-radius: 4px; padding: 4px 10px; cursor: pointer;
+                   font-size: 12px; user-select: none; }
+    .tag-label input { margin: 0; cursor: pointer; }
+    .tag-label:has(input:checked) { background: #EEF1FB; border-color: var(--accent);
+                                    color: var(--accent); }
+
+    /* ── separator ── */
+    hr { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+    /* ── textarea full-width ── */
+    .editor-area {
+      width: 100%; min-height: 480px; resize: vertical;
+      font-family: "Consolas", monospace; font-size: 13px;
+      line-height: 1.6; padding: 12px;
+    }
+
+    /* ── inline hint ── */
+    .hint { font-size: 11px; color: var(--subtext); margin-top: 3px; }
+
+    /* ── spinner (used during fetch) ── */
+    .spinner { display: none; color: var(--subtext); font-size: 12px; margin-left: 10px; }
+    .spinner.active { display: inline; }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div>
+    <span class="brand-name">PTOS</span>
+    <span class="brand-sub">Plain Text Operating System</span>
+    <span class="brand-tag">Log it. Query it. Own it.</span>
+  </div>
+  <a class="gh-link" href="https://github.com/godwinburby/ptos" target="_blank">
+    ⭐ github.com/godwinburby/ptos
+  </a>
+</div>
+
+<nav class="nav">
+  <a href="/add"     class="{% if tab=='add'     %}active{% endif %}">+ Add Record</a>
+  <a href="/journal" class="{% if tab=='journal' %}active{% endif %}">Journal</a>
+  <a href="/queries" class="{% if tab=='queries' %}active{% endif %}">Queries</a>
+  <a href="/browse"  class="{% if tab=='browse'  %}active{% endif %}">Browse</a>
+  <a href="/editor"  class="{% if tab=='editor'  %}active{% endif %}">Log Editor</a>
+</nav>
+
+<div class="page">
+  {% block content %}{% endblock %}
+</div>
+
+</body>
+</html>
