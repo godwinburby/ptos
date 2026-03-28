@@ -531,12 +531,17 @@ def lint_records(records, schema):
     """
     total_errors   = 0
     total_warnings = 0
+    total_checked  = 0
+    type_counts    = {}
 
     for line in records:
         if not line.strip():
             continue
 
+        total_checked += 1
         d, kv, note = parse_line(line)
+        rtype = kv.get("type", "unknown")
+        type_counts[rtype] = type_counts.get(rtype, 0) + 1
         anatomy_errors   = []
         anatomy_warnings = []
 
@@ -576,6 +581,8 @@ def lint_records(records, schema):
                 print(f"  ⚠ {msg}")
                 total_warnings += 1
 
+    type_summary = "  ".join(f"{t}:{n}" for t, n in sorted(type_counts.items()))
+    print(f"\nChecked {total_checked} record(s) across {len(type_counts)} type(s)  [{type_summary}]")
     print()
     if total_errors == 0 and total_warnings == 0:
         print("✔ All records clean — no errors or warnings")
@@ -1320,8 +1327,9 @@ def interactive_add(schema, date=None, save_preset_name=None):
     line = build_record_line(date, record, note)
     print("\nRecord preview:\n")
     print(line)
-    ans = input("\nSave? (Y/n): ").strip().lower()
-    if ans == "n":
+    ans = input("\nSave? (y/N): ").strip().lower()
+    if ans != "y":
+        print("Cancelled.")
         return
     append_record(line)
     print("Record added.")
@@ -1337,6 +1345,11 @@ def quick_add(args):
     presets = get_presets()
     if not args.preset:
         print("\nAvailable presets:\n")
+        if not presets:
+            print("  No presets defined yet.")
+            print("  Add them to config/presets.toml or use --save-preset after --add.")
+            print()
+            return
         for name in sorted(presets):
             p = presets[name]
             if isinstance(p, dict) and "alias" in p:
@@ -2435,7 +2448,17 @@ def main():
         try:
             start, end = resolve_time(args.time, cycles)
         except ValueError:
-            sys.exit(f"Invalid time keyword: '{args.time}'  —  run: ptos --help  for valid time windows")
+            valid = (
+                "today/td  yesterday/yd  this-week/tw  last-week/lw\n"
+                "  this-month/tm  last-month/lm  this-quarter/tq  last-quarter/lq\n"
+                "  this-year/ty  last-year/ly  all  YYYY-MM"
+            )
+            cycle_names = "  " + "  ".join(cycles.keys()) if cycles else ""
+            sys.exit(
+                f"Invalid time keyword: '{args.time}'\n\n"
+                f"Valid keywords:\n  {valid}"
+                + (f"\nCustom cycles:\n{cycle_names}" if cycle_names else "")
+            )
         time_label = _TIME_ALIASES.get(args.time, args.time)
 
     # ---- trend mode ----
@@ -2467,6 +2490,18 @@ def main():
 
     if not results:
         print("\nNo records found.\n")
+        # warn if any filter field doesn't appear in any record in the full log
+        if final_filters:
+            all_results, _ = scan_records(dt.date.min, dt.date.max, [], None)
+            known_fields = {k for line in all_results for k in (safe_parse_line(line) or (None, {}, None))[1]}
+            known_fields.update({"type", "tag"})
+            for f in final_filters:
+                m = re.match(r"(\w+)(!=|>=|<=|~|=|>|<)", f)
+                if m:
+                    field = m.group(1)
+                    if field not in known_fields:
+                        print(f"  Note: '{field}' not found in any record — check spelling.")
+            print()
         return
 
     # ---- discovery ----
