@@ -100,5 +100,5 @@ alias = "restaraunt"
 type     = "expense"
 domain   = "self"
 category = "entertainment"
-tag      = ["books", "meesho"]
+tag      = ["books"]
 

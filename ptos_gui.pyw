@@ -957,6 +957,24 @@ class QueryTab(tk.Frame):
             elif "avg" in m:
                 cnt, tot = self._base(m["avg"], start, end)
                 val = ptos.fmt_avg(tot / cnt) if cnt else "no data"
+            elif "sum" in m:
+                _, tot = self._base(m["sum"], start, end)
+                val = ptos.fmt(tot) if tot > 0 else "no data"
+            elif "max" in m or "min" in m:
+                key      = "max" if "max" in m else "min"
+                lines, _ = self._base_lines(m[key], start, end)
+                values   = []
+                for line in lines:
+                    parsed = ptos.safe_parse_line(line)
+                    if parsed:
+                        v = ptos.numeric_value(parsed[1])
+                        if v is not None:
+                            values.append(v)
+                if values:
+                    result = max(values) if key == "max" else min(values)
+                    val = ptos.fmt(result)
+                else:
+                    val = "no data"
             else:
                 val = "?"
             return f"{name:<28} {val}"
@@ -965,6 +983,14 @@ class QueryTab(tk.Frame):
             sfx = f"  ({ptos.fmt(tot)})" if tot > 0 else ""
             return f"{name:<28} {cnt}{sfx}"
         return f"{name:<28} (not found)"
+
+    def _base_lines(self, name, start, end):
+        """Like _base but returns raw result lines instead of just count/total."""
+        q = self.queries.get(name, {})
+        f = q.get("where", "").split()
+        s, e = ptos.resolve_time(q["time"], self.cycles) \
+               if "time" in q else (start, end)
+        return ptos.scan_records(s, e, f, None)
 
     def _base(self, name, start, end):
         q = self.queries.get(name, {})
@@ -1124,114 +1150,96 @@ class BrowseTab(tk.Frame):
         pane.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
 
     def _run_due(self):
-        """Run the default due list from queries.toml [due] config."""
+        """Compute due list directly using ptos engine — no duplication."""
         try:
             queries = ptos.get_queries()
-            due_cfg = queries.get("due", {})
+            due_cfg = queries.get("due")
             if not due_cfg:
-                _write(self._out, "No [due] config found in queries.toml.")
+                _write(self._out, "No [due] config found in queries.toml.\n"
+                                  "Add a [due] section with type, key, and days.")
                 return
-            results = ptos.get_due(due_cfg, self.cycles)
-            if not results:
-                _write(self._out, "No overdue records.")
-                return
-            _write(self._out, results)
-        except AttributeError:
-            # ptos.get_due may not exist — fall back to CLI output via scan
-            self._run_due_manual()
-        except Exception as e:
-            _write(self._out, f"Due error: {e}")
 
-    def _run_due_manual(self):
-        """Fallback: manually compute due list from [due] config."""
-        try:
-            queries  = ptos.get_queries()
-            due_cfg  = queries.get("due", {})
-            if not due_cfg:
-                _write(self._out, "No [due] config found in queries.toml.")
-                return
             rtype    = due_cfg.get("type")
             key_fld  = due_cfg.get("key")
             days     = int(due_cfg.get("days", 7))
             sort_fld = due_cfg.get("sort_by")
+            exclude  = due_cfg.get("exclude_results", [])
 
             if not rtype or not key_fld:
                 _write(self._out, "due config missing 'type' or 'key'.")
                 return
 
-            start, end = ptos.resolve_time("all", self.cycles)
-            results, _ = ptos.scan_records(start, end,
-                                           [f"type={rtype}"], None)
-            if not results:
-                _write(self._out, "No records found.")
-                return
+            # priority order from schema
+            priority = {}
+            if sort_fld:
+                schema    = ptos.get_schema()
+                type_meta = schema.get("type", {}).get(rtype, {})
+                options   = type_meta.get("fields", {}).get(sort_fld, {}).get("options", [])
+                if isinstance(options, list):
+                    priority = {v: i for i, v in enumerate(options)}
+
+            results, _ = ptos.scan_records(
+                ptos.dt.date.min, ptos.dt.date.max, [f"type={rtype}"], None)
 
             # most recent record per key
             latest = {}
             for line in results:
-                d, kv, note = ptos.parse_line(line)
-                k = kv.get(key_fld, "")
+                parsed = ptos.safe_parse_line(line)
+                if not parsed:
+                    continue
+                d, kv, note = parsed
+                k = kv.get(key_fld)
                 if not k:
                     continue
                 if k not in latest or d > latest[k]["date"]:
                     latest[k] = {"date": d, "kv": kv, "note": note}
 
-            today = dt.date.today()
-            overdue = []
-            for k, rec in latest.items():
-                age = (today - rec["date"]).days
-                if age >= days:
-                    overdue.append((age, k, rec))
+            if exclude:
+                latest = {k: r for k, r in latest.items()
+                          if r["kv"].get("result") not in exclude}
+
+            cutoff  = ptos.today() - ptos.dt.timedelta(days=days)
+            overdue = [r for r in latest.values() if r["date"] <= cutoff]
 
             if not overdue:
-                _write(self._out, f"No records overdue by {days}+ days.")
+                _write(self._out, f"No records overdue (all within {days} days).")
                 return
 
-            # sort by sort_fld schema option order, then age
-            schema   = ptos.get_schema()
-            sort_opts = []
-            if sort_fld:
-                fd = schema.get("type", {}).get(rtype, {}).get(
-                     "fields", {}).get(sort_fld, {})
-                sort_opts = fd.get("options", [])
+            overdue.sort(key=lambda r: (
+                priority.get(r["kv"].get(sort_fld, ""), 999) if sort_fld else 0,
+                r["date"]
+            ))
 
-            def _priority(item):
-                age, k, rec = item
-                sv = rec["kv"].get(sort_fld, "")
-                pri = sort_opts.index(sv) if sv in sort_opts else len(sort_opts)
-                return (pri, -age)
+            # detect whether name field exists separate from key field
+            has_name = any(
+                "name" in r["kv"] and r["kv"].get("name") != r["kv"].get(key_fld)
+                for r in overdue
+            )
+            display_col = "name" if has_name else key_fld
 
-            overdue.sort(key=_priority)
+            days_w = 6
+            sort_w = 16
+            name_w = 24
 
             lines = [f"Due  (>{days} days)  type={rtype}", ""]
-            cols  = ["last", sort_fld or "sort", key_fld, "note"]
-            cols  = [c for c in cols if c]
-            w     = {c: max(len(c), 6) for c in cols}
-            for age, k, rec in overdue:
-                row = {
-                    "last":   f"{age}d",
-                    key_fld:  k,
-                    "note":   rec["note"] or "",
-                }
-                if sort_fld:
-                    row[sort_fld] = rec["kv"].get(sort_fld, "")
-                for c in cols:
-                    w[c] = max(w[c], len(str(row.get(c, ""))))
+            if sort_fld:
+                hdr = f"{'last':>{days_w}}  {sort_fld:<{sort_w}}{display_col:<{name_w}}  note"
+            else:
+                hdr = f"{'last':>{days_w}}  {display_col:<{name_w}}  note"
+            lines += [hdr, "-" * 80]
 
-            hdr = "  ".join(c.ljust(w[c]) for c in cols)
-            lines += [f"   {hdr}", "   " + "-" * len(hdr)]
-            for age, k, rec in overdue:
-                row = {
-                    "last":   f"{age}d",
-                    key_fld:  k,
-                    "note":   rec["note"] or "",
-                }
+            for rec in overdue:
+                kv   = rec["kv"]
+                gap  = (ptos.today() - rec["date"]).days
+                name = kv.get("name", kv.get(key_fld, "-"))
+                note = rec["note"] or ""
                 if sort_fld:
-                    row[sort_fld] = rec["kv"].get(sort_fld, "")
-                lines.append("   " + "  ".join(
-                    str(row.get(c, "")).ljust(w[c]) for c in cols))
+                    sv = kv.get(sort_fld, "-")
+                    lines.append(f"{gap:>{days_w}}d  {sv:<{sort_w}}{name:<{name_w}}  {note}")
+                else:
+                    lines.append(f"{gap:>{days_w}}d  {name:<{name_w}}  {note}")
 
-            lines += ["", f"Total overdue: {len(overdue)}"]
+            lines += ["", f"{len(overdue)} record(s) due"]
             _write(self._out, "\n".join(lines))
 
         except Exception as e:
@@ -2234,6 +2242,24 @@ def _show_error_dialog(parent, exc_text, log_path):
     dlg.wait_window()
 
 
+def _write_if_output(app, msg):
+    """Try to write a ptos error message to whichever output pane is visible.
+    Falls back to a messagebox if no output pane is found.
+    """
+    try:
+        nb = [w for w in app.winfo_children() if isinstance(w, ttk.Notebook)]
+        if nb:
+            tab = nb[0].nametowidget(nb[0].select())
+            out = getattr(tab, "_out", None)
+            if out:
+                _write(out, f"Error: {msg}")
+                return
+    except Exception:
+        pass
+    from tkinter import messagebox
+    messagebox.showerror("PTOS Error", msg)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Main window
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2321,7 +2347,14 @@ class PTOSApp(tk.Tk):
         nb.add(LogEditorTab(nb), text="   Log Editor   ")
 
     def _on_callback_error(self, exc_type, exc_value, exc_tb):
-        """Called by Tkinter when any callback raises — log and show popup."""
+        """Called by Tkinter when any callback raises — log and show popup.
+        Also catches SystemExit (raised by ptos.sys.exit calls) so it never
+        silently kills the GUI process.
+        """
+        if exc_type is SystemExit:
+            msg = str(exc_value) or "ptos exited unexpectedly."
+            _write_if_output(self, msg)
+            return
         exc_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
         LOG_PATH  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                  "ptos_error.log")
@@ -2352,5 +2385,7 @@ if __name__ == "__main__":
     try:
         app = PTOSApp()
         app.mainloop()
+    except SystemExit as e:
+        _log_and_show(f"PTOS exited: {e}")
     except Exception:
         _log_and_show(traceback.format_exc())
