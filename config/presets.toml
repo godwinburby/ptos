@@ -102,3 +102,18 @@ domain   = "self"
 category = "entertainment"
 tag      = ["books"]
 
+
+[presets.dessert]
+type     = "expense"
+domain   = "home"
+category = "food"
+tag      = ["dessert"]
+
+
+[presets.lubimoist]
+type     = "expense"
+domain   = "self"
+category = "medical"
+amount   = 288
+tag      = ["eye_drops", "medicine", "lubimoist"]
+

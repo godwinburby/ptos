@@ -45,16 +45,29 @@ def _build_field_defs(schema, rtype, current_record=None):
     for fname in all_fields:
         if fname == "tag": continue
         field_meta = schema.get("fields", {}).get(fname, {})
-        is_int  = isinstance(field_meta, dict) and field_meta.get("type") == "int"
-        unit    = field_meta.get("unit", "") if isinstance(field_meta, dict) else ""
-        field_def = type_schema.get("fields", {}).get(fname, {})
-        parent  = field_def.get("parent")
+        is_int     = isinstance(field_meta, dict) and field_meta.get("type") == "int"
+        unit       = field_meta.get("unit", "") if isinstance(field_meta, dict) else ""
+        field_def  = type_schema.get("fields", {}).get(fname, {})
+        parent     = field_def.get("parent")
+        has_parent = bool(parent)
+
         if parent:
-            options = ptos.resolve_options_for_value(type_schema, fname, record.get(parent,""))
+            parent_val = record.get(parent, "")
+            options    = ptos.resolve_options_for_value(type_schema, fname, parent_val)
+            # options is [] when parent has no value yet — keep has_parent True
+            # so template shows the "select parent first" placeholder dropdown
         else:
             options = ptos.resolve_options(schema, type_schema, fname) or []
-        defs.append({"name":fname,"required":fname in required,
-                     "options":options,"is_int":is_int,"unit":unit,"parent":parent or ""})
+
+        defs.append({
+            "name":       fname,
+            "required":   fname in required,
+            "options":    options,
+            "is_int":     is_int,
+            "unit":       unit,
+            "parent":     parent or "",
+            "has_parent": has_parent,
+        })
     return defs
 
 

@@ -101,6 +101,12 @@
         </option>
         {% endfor %}
       </select>
+      {% elif f.has_parent %}
+      {# parent-dependent field whose parent has no value yet — show placeholder dropdown #}
+      <select name="{{ f.name }}" id="field-{{ f.name }}"
+              data-parent="{{ f.parent }}" onchange="onParentChange('{{ f.name }}')">
+        <option value="">— select {{ f.parent }} first —</option>
+      </select>
       {% elif f.is_int %}
       <input type="number" name="{{ f.name }}" min="0" inputmode="numeric"
              value="{{ field_values.get(f.name, '') if field_values else '' }}"
