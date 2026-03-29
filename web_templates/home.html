@@ -7,18 +7,17 @@
 <div class="stat-grid">
   {% if due_count > 0 %}
   <div class="stat-card c-warn">
-    <div class="stat-label">Due Today</div>
+    <div class="stat-label">Overdue</div>
     <div class="stat-value">{{ due_count }}</div>
     <div class="stat-sub"><a href="/due" style="color:#fff;font-weight:700;">View list →</a></div>
   </div>
   {% else %}
   <div class="stat-card">
     <div class="stat-label">Due</div>
-    <div class="stat-value" style="font-size:20px;color:var(--success);">✓</div>
-    <div class="stat-sub">All clear</div>
+    <div class="stat-value" style="font-size:18px;color:var(--success);">All clear ✓</div>
+    <div class="stat-sub">Nothing overdue</div>
   </div>
   {% endif %}
-
   {% for s in stats %}
   <div class="stat-card">
     <div class="stat-label">{{ s.label }}</div>
@@ -40,7 +39,7 @@
 </div>
 {% endif %}
 
-<!-- due list preview (top 5) -->
+<!-- due preview -->
 {% if due_rows %}
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
@@ -52,18 +51,29 @@
     <div class="due-badge {{ row.heat }}">{{ row.days }}d</div>
     <div>
       <div class="due-name">{{ row.name }}</div>
-      <div class="due-meta">{{ row.status }}{% if row.note %} · {{ row.note[:48] }}{% if row.note|length > 48 %}…{% endif %}{% endif %}</div>
+      <div class="due-meta">{{ row.status }}{% if row.note %} · {{ row.note[:50] }}{% if row.note|length > 50 %}…{% endif %}{% endif %}</div>
     </div>
   </div>
   {% endfor %}
 </div>
 {% endif %}
 
-<!-- recent records -->
-{% if recent %}
+<!-- recent records as table -->
+{% if recent_rows %}
 <div class="card">
-  <div class="card-title">Recent Records</div>
-  <div class="output" style="max-height:200px;">{{ recent }}</div>
+  <div class="card-title">Today's Records</div>
+  {% if recent_cols %}
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead><tr>{% for c in recent_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+      <tbody>
+        {% for row in recent_rows %}
+        <tr>{% for c in recent_cols %}<td>{{ row.get(c,'') }}</td>{% endfor %}</tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 

@@ -14,6 +14,8 @@ from tkinter import ttk, messagebox
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ptos
+import ptos_service as svc
+from ptos_service import PTOSError
 
 # ── Palette ───────────────────────────────────────────────────────────────────
 BG        = "#F7F8FA"   # page background
@@ -183,6 +185,211 @@ def _write(widget, text):
     widget.config(state="disabled")
 
 
+# ── ResultPane — structured data renderer (replaces dark output pane) ─────────
+
+class ResultPane(tk.Frame):
+    """
+    Renders structured data dicts from ptos_service as proper Tkinter widgets.
+    Supports: records (Treeview), group (Treeview), pivot (Treeview),
+              trend (Treeview), metric (label), dashboard (label grid).
+    Falls back to a plain text pane for errors or unknown kinds.
+    """
+    def __init__(self, parent, **kw):
+        super().__init__(parent, bg=BG, **kw)
+        self._inner = None
+
+    def clear(self):
+        if self._inner:
+            self._inner.destroy()
+            self._inner = None
+
+    def show_error(self, msg):
+        self.clear()
+        f = tk.Frame(self, bg=BG, pady=8)
+        f.pack(fill="both", expand=True)
+        tk.Label(f, text=msg, font=F_LABEL, fg=ERROR_COL,
+                 bg=BG, wraplength=600, justify="left").pack(anchor="w", padx=8)
+        self._inner = f
+
+    def show_message(self, msg):
+        self.clear()
+        f = tk.Frame(self, bg=BG, pady=8)
+        f.pack(fill="both", expand=True)
+        tk.Label(f, text=msg, font=F_LABEL, fg=SUBTEXT,
+                 bg=BG).pack(anchor="w", padx=8)
+        self._inner = f
+
+    def show(self, data):
+        """data is a dict returned by ptos_service with a 'kind' key."""
+        self.clear()
+        if not data:
+            self.show_message("No data.")
+            return
+        kind = data.get("kind", "")
+        try:
+            if kind == "records":   self._show_records(data)
+            elif kind == "group":   self._show_group(data)
+            elif kind == "pivot":   self._show_pivot(data)
+            elif kind == "trend":   self._show_trend(data)
+            elif kind == "metric":  self._show_metric(data)
+            elif kind == "dashboard": self._show_dashboard(data)
+            else:
+                self.show_message(str(data))
+        except Exception as e:
+            self.show_error(f"Render error: {e}")
+
+    # ── summary bar ───────────────────────────────────────────────────────────
+
+    def _summary_bar(self, parent, data):
+        bar = tk.Frame(parent, bg=CARD, pady=4, padx=4)
+        parts = []
+        if data.get("count") is not None:
+            parts.append(f"{data['count']} records")
+        if data.get("total_fmt"):
+            parts.append(f"Total: {data['total_fmt']}")
+        if data.get("avg_fmt"):
+            parts.append(f"Avg: {data['avg_fmt']}")
+        if data.get("time_label"):
+            parts.append(data["time_label"])
+        if parts:
+            tk.Label(bar, text="  ·  ".join(parts),
+                     font=F_SMALL, fg=SUBTEXT, bg=CARD).pack(anchor="w")
+        return bar
+
+    # ── treeview helper ───────────────────────────────────────────────────────
+
+    def _make_tree(self, parent, columns, rows, totals_row=None):
+        """columns: list of str. rows: list of dicts. totals_row: dict or None."""
+        frame = tk.Frame(parent, bg=BG)
+        frame.pack(fill="both", expand=True)
+
+        xsb = ttk.Scrollbar(frame, orient="horizontal")
+        ysb = ttk.Scrollbar(frame, orient="vertical")
+        tree = ttk.Treeview(frame, columns=columns, show="headings",
+                            yscrollcommand=ysb.set, xscrollcommand=xsb.set,
+                            selectmode="browse")
+        xsb.config(command=tree.xview)
+        ysb.config(command=tree.yview)
+        ysb.pack(side="right", fill="y")
+        xsb.pack(side="bottom", fill="x")
+        tree.pack(side="left", fill="both", expand=True)
+
+        # configure columns
+        for col in columns:
+            tree.heading(col, text=col)
+            # right-align numeric-looking columns
+            tree.column(col, anchor="e" if col in ("count","total","total_fmt","avg_fmt","days","amount","advance") else "w",
+                        width=110, minwidth=60)
+        tree.column(columns[0], width=160)  # first col wider
+
+        # fill rows
+        for row in rows:
+            vals = [str(row.get(c,"")) for c in columns]
+            tree.insert("", "end", values=vals)
+
+        # totals row in bold tag
+        if totals_row:
+            tree.tag_configure("total", font=(F_LABEL[0], F_LABEL[1], "bold"))
+            vals = [str(totals_row.get(c,"")) for c in columns]
+            tree.insert("", "end", values=vals, tags=("total",))
+
+        return frame
+
+    # ── kind renderers ────────────────────────────────────────────────────────
+
+    def _show_records(self, data):
+        f = tk.Frame(self, bg=BG)
+        f.pack(fill="both", expand=True)
+        self._inner = f
+        if not data.get("records"):
+            tk.Label(f, text="No records found.", font=F_LABEL,
+                     fg=SUBTEXT, bg=BG).pack(anchor="w", padx=8, pady=8)
+            return
+        self._summary_bar(f, data).pack(fill="x")
+        cols = data.get("columns", [])
+        self._make_tree(f, cols, data["records"])
+
+    def _show_group(self, data):
+        f = tk.Frame(self, bg=BG)
+        f.pack(fill="both", expand=True)
+        self._inner = f
+        has_amt = data.get("has_amount", False)
+        cols = ["key", "count"] + (["total"] if has_amt else [])
+        rows = []
+        for r in data.get("rows", []):
+            row = {"key": r["key"], "count": str(r["count"])}
+            if has_amt: row["total"] = r["total_fmt"]
+            rows.append(row)
+        totals = {"key": "Total", "count": str(data.get("grand_count",0))}
+        if has_amt: totals["total"] = data.get("grand_total_fmt","")
+        tk.Label(f, text=f"Grouped by {', '.join(data.get('fields',[]))}  ·  {data.get('time_label','')}",
+                 font=F_SMALL, fg=SUBTEXT, bg=BG).pack(anchor="w", padx=4, pady=(4,0))
+        self._make_tree(f, cols, rows, totals_row=totals)
+
+    def _show_pivot(self, data):
+        f = tk.Frame(self, bg=BG)
+        f.pack(fill="both", expand=True)
+        self._inner = f
+        cols  = [data.get("row_field","row")] + data.get("cols",[]) + ["total"]
+        rows  = []
+        for r in data.get("rows", []):
+            row = {data.get("row_field","row"): r["label"], "total": str(r["total"])}
+            for c in data.get("cols", []): row[c] = str(r.get(c,0))
+            rows.append(row)
+        ct = data.get("col_totals", {})
+        totals = {data.get("row_field","row"): "Total", "total": str(data.get("grand",0))}
+        for c in data.get("cols", []): totals[c] = str(ct.get(c,0))
+        tk.Label(f, text=f"Pivot  {data.get('row_field','')} × {data.get('col_field','')}  ·  {data.get('time_label','')}",
+                 font=F_SMALL, fg=SUBTEXT, bg=BG).pack(anchor="w", padx=4, pady=(4,0))
+        self._make_tree(f, cols, rows, totals_row=totals)
+
+    def _show_trend(self, data):
+        f = tk.Frame(self, bg=BG)
+        f.pack(fill="both", expand=True)
+        self._inner = f
+        has_amt = data.get("has_amount", False)
+        cols    = ["label", "count"] + (["total","avg"] if has_amt else [])
+        rows    = []
+        for p in data.get("periods", []):
+            row = {"label": p["label"], "count": str(p["count"])}
+            if has_amt:
+                row["total"] = p.get("total_fmt","")
+                row["avg"]   = p.get("avg_fmt","")
+            rows.append(row)
+        tk.Label(f, text=f"Trend  ·  {data.get('filter_str','')}",
+                 font=F_SMALL, fg=SUBTEXT, bg=BG).pack(anchor="w", padx=4, pady=(4,0))
+        self._make_tree(f, cols, rows)
+
+    def _show_metric(self, data):
+        f = tk.Frame(self, bg=CARD, relief="flat", bd=1)
+        f.pack(fill="x", padx=8, pady=8)
+        self._inner = f
+        tk.Label(f, text=data.get("name","").replace("_"," "),
+                 font=F_SMALL, fg=SUBTEXT, bg=CARD).pack(anchor="w", padx=12, pady=(10,0))
+        tk.Label(f, text=data.get("value","—"),
+                 font=(F_HEAD[0], 28, "bold"), fg=ACCENT, bg=CARD).pack(anchor="w", padx=12, pady=(2,10))
+
+    def _show_dashboard(self, data):
+        f = tk.Frame(self, bg=BG)
+        f.pack(fill="both", expand=True)
+        self._inner = f
+        tk.Label(f, text=f"Dashboard: {data.get('name','')}  ·  {data.get('period','')}",
+                 font=F_SMALL, fg=SUBTEXT, bg=BG).pack(anchor="w", padx=4, pady=(4,4))
+        grid = tk.Frame(f, bg=BG)
+        grid.pack(fill="x", padx=4)
+        col_n = 0
+        for item in data.get("items", []):
+            card = tk.Frame(grid, bg=CARD, relief="flat", bd=1,
+                            padx=14, pady=10)
+            card.grid(row=0, column=col_n, padx=6, pady=4, sticky="nsew")
+            grid.columnconfigure(col_n, weight=1)
+            tk.Label(card, text=item["name"].replace("_"," "),
+                     font=F_SMALL, fg=SUBTEXT, bg=CARD).pack(anchor="w")
+            tk.Label(card, text=item.get("value","—"),
+                     font=(F_LABEL[0], 16, "bold"), fg=TEXT, bg=CARD).pack(anchor="w")
+            col_n += 1
+
+
 
 # ── Date Picker ───────────────────────────────────────────────────────────────
 
@@ -344,9 +551,7 @@ class AddRecordTab(tk.Frame):
         lbl(preset_col, "Load preset", fg=SUBTEXT, font=F_LABEL).pack(anchor="w")
         self._preset_var = tk.StringVar()
         presets = ptos.get_presets()
-        preset_names = ["—"] + sorted(
-            k for k, v in presets.items()
-            if not (isinstance(v, dict) and ("alias" in v or "records" in v)))
+        preset_names = ["—"] + sorted(presets.keys())
         self._preset_combo = _make_combo(preset_col, preset_names,
                                          textvariable=self._preset_var, width=22)
         self._preset_combo.pack(anchor="w", pady=(4, 0))
@@ -403,9 +608,7 @@ class AddRecordTab(tk.Frame):
         """Reload schema and presets from disk — updates all dropdowns."""
         self.schema = ptos.get_schema()
         presets = ptos.get_presets()
-        self._preset_combo["values"] = ["—"] + sorted(
-            k for k, v in presets.items()
-            if not (isinstance(v, dict) and ("alias" in v or "records" in v)))
+        self._preset_combo["values"] = ["—"] + sorted(presets.keys())
         rtype = self._type_var.get()
         if rtype:
             self.type_schema = self.schema["type"].get(rtype, {})
@@ -686,10 +889,7 @@ class AddRecordTab(tk.Frame):
                 return
             try:
                 ptos.save_as_preset(name, record)
-                _p = ptos.get_presets()
-                self._preset_combo["values"] = ["—"] + sorted(
-                    k for k, v in _p.items()
-                    if not (isinstance(v, dict) and ("alias" in v or "records" in v)))
+                self._preset_combo["values"] = ["—"] + sorted(ptos.get_presets().keys())
                 self._status.config(
                     text=f"✔  Preset '{name}' saved.", fg=SUCCESS)
                 dlg.destroy()
@@ -810,9 +1010,7 @@ class QueryTab(tk.Frame):
         bar = _ctrl_bar(self)
 
         named      = [k for k in self.queries
-                      if k not in ("metrics", "dashboards", "due")
-                      and not (isinstance(self.queries[k], dict)
-                               and "alias" in self.queries[k])]
+                      if k not in ("metrics", "dashboards", "due")]
         metrics    = [f"metric: {m}"
                       for m in self.queries.get("metrics", {})]
         dashboards = [f"dashboard: {d}"
@@ -846,17 +1044,16 @@ class QueryTab(tk.Frame):
 
         hsep(self).pack(fill="x")
 
-        pane, self._out = _make_output(self)
-        pane.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+        self._result = ResultPane(self)
+        self._result.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
 
     def _clear(self):
         self._q_var.set("")
         self._time_var.set("(query default)")
-        _write(self._out, "")
+        self._result.clear()
 
     def _reload(self):
         self.queries = ptos.get_queries()
-        # rebuild the whole tab
         for w in self.winfo_children():
             w.destroy()
         self._build()
@@ -871,153 +1068,22 @@ class QueryTab(tk.Frame):
         if is_dashboard: q_name = q_name[len("dashboard: "):]
 
         time_raw = self._time_var.get()
+        time_code = None if time_raw == "(query default)" else _TIME_CODE.get(time_raw, time_raw)
+
         try:
-            if time_raw == "(query default)":
-                q_def = self.queries.get(q_name, {})
-                start, end = ptos.resolve_time(
-                    q_def.get("time", "tm"), self.cycles)
+            if is_dashboard:
+                data = svc.get_dashboard(q_name, time_code or "tm")
+                data["kind"] = "dashboard"
+            elif is_metric:
+                data = svc.get_metric(q_name, time_code or "tm")
+                data["kind"] = "metric"
             else:
-                code = _TIME_CODE.get(time_raw, time_raw)
-                start, end = ptos.resolve_time(code, self.cycles)
+                data = svc.run_query(q_name, time_code)
+            self._result.show(data)
+        except PTOSError as e:
+            self._result.show_error(str(e))
         except Exception as e:
-            _write(self._out, f"Time error: {e}")
-            return
-
-        lines = []
-        if is_dashboard:
-            db = self.queries.get("dashboards", {}).get(q_name)
-            if not db:
-                _write(self._out, f"Dashboard '{q_name}' not found.")
-                return
-            lines += [f"Dashboard : {q_name}",
-                      f"Period    : {start}  to  {end}", "-" * 44]
-            for item in db.get("metrics", []):
-                lines.append(self._fmt_item(item, start, end))
-        elif is_metric:
-            lines.append(self._fmt_item(q_name, start, end))
-        else:
-            q_def   = self.queries.get(q_name, {})
-            filters = q_def.get("where", "").split()
-            results, total = ptos.scan_records(start, end, filters, None)
-            if not results:
-                _write(self._out, "No records found.")
-                return
-            summary = [f"Query   : {q_name}",
-                       f"Period  : {start}  to  {end}",
-                       f"Records : {len(results)}"]
-            # group mode
-            group_fields = q_def.get("group")
-            if group_fields:
-                counts, sums, has_amount = ptos.group_results(results, group_fields)
-                if total > 0:
-                    summary += [f"Total   : {ptos.fmt(total)}"]
-                summary.append("-" * 44)
-                lines += summary + [""]
-                col_w = 7
-                if has_amount:
-                    lines.append(f"{'':20} {'count':>{col_w}}  {'total':>14}")
-                    lines.append("-" * 46)
-                    grand_c, grand_s = 0, 0
-                    for key in sorted(counts):
-                        label = "  ".join(key) if isinstance(key, tuple) else key
-                        cnt   = counts[key]
-                        s     = sums.get(key, 0)
-                        grand_c += cnt
-                        grand_s += s
-                        lines.append(f"{label:<20} {cnt:>{col_w}}  {ptos.fmt(s):>14}")
-                    lines.append("-" * 46)
-                    lines.append(f"{'Total':<20} {grand_c:>{col_w}}  {ptos.fmt(grand_s):>14}")
-                else:
-                    lines.append(f"{'':20} {'count':>{col_w}}")
-                    lines.append("-" * 30)
-                    grand = 0
-                    for key in sorted(counts):
-                        label = "  ".join(key) if isinstance(key, tuple) else key
-                        cnt   = counts[key]
-                        grand += cnt
-                        lines.append(f"{label:<20} {cnt:>{col_w}}")
-                    lines.append("-" * 30)
-                    lines.append(f"{'Total':<20} {grand:>{col_w}}")
-            else:
-                if total > 0:
-                    summary += [f"Total   : {ptos.fmt(total)}",
-                                 f"Average : {ptos.fmt_avg(total / len(results))}"]
-                summary.append("-" * 44)
-                lines += summary + [""] + self._tabulate(results)
-        _write(self._out, "\n".join(lines))
-
-    def _fmt_item(self, name, start, end):
-        metrics = self.queries.get("metrics", {})
-        if name in metrics:
-            m = metrics[name]
-            if "ratio" in m:
-                c1, _ = self._base(m["ratio"][0], start, end)
-                c2, _ = self._base(m["ratio"][1], start, end)
-                val   = f"{(c1/c2)*100:.1f}%  ({c1}/{c2})" if c2 else "no data"
-            elif "avg" in m:
-                cnt, tot = self._base(m["avg"], start, end)
-                val = ptos.fmt_avg(tot / cnt) if cnt else "no data"
-            elif "sum" in m:
-                _, tot = self._base(m["sum"], start, end)
-                val = ptos.fmt(tot) if tot > 0 else "no data"
-            elif "max" in m or "min" in m:
-                key      = "max" if "max" in m else "min"
-                lines, _ = self._base_lines(m[key], start, end)
-                values   = []
-                for line in lines:
-                    parsed = ptos.safe_parse_line(line)
-                    if parsed:
-                        v = ptos.numeric_value(parsed[1])
-                        if v is not None:
-                            values.append(v)
-                if values:
-                    result = max(values) if key == "max" else min(values)
-                    val = ptos.fmt(result)
-                else:
-                    val = "no data"
-            else:
-                val = "?"
-            return f"{name:<28} {val}"
-        elif name in self.queries:
-            cnt, tot = self._base(name, start, end)
-            sfx = f"  ({ptos.fmt(tot)})" if tot > 0 else ""
-            return f"{name:<28} {cnt}{sfx}"
-        return f"{name:<28} (not found)"
-
-    def _base_lines(self, name, start, end):
-        """Like _base but returns raw result lines instead of just count/total."""
-        q = self.queries.get(name, {})
-        f = q.get("where", "").split()
-        s, e = ptos.resolve_time(q["time"], self.cycles) \
-               if "time" in q else (start, end)
-        return ptos.scan_records(s, e, f, None)
-
-    def _base(self, name, start, end):
-        q = self.queries.get(name, {})
-        f = q.get("where", "").split()
-        s, e = ptos.resolve_time(q["time"], self.cycles) \
-               if "time" in q else (start, end)
-        results, total = ptos.scan_records(s, e, f, None)
-        return len(results), total
-
-    def _tabulate(self, results):
-        rows, cols = [], []
-        for line in results:
-            d, kv, note = ptos.parse_line(line)
-            row = {"date": str(d)}
-            row.update({k: (" ".join(v) if isinstance(v, list) else v)
-                        for k, v in kv.items()})
-            if note: row["note"] = note
-            for k in row:
-                if k not in cols: cols.append(k)
-            rows.append(row)
-        w = {c: max(len(c), max(len(str(r.get(c, ""))) for r in rows))
-             for c in cols}
-        hdr = "  ".join(c.upper().ljust(w[c]) for c in cols)
-        out = [hdr, "-" * len(hdr)]
-        for r in rows:
-            out.append("  ".join(str(r.get(c, "")).ljust(w[c]) for c in cols))
-        return out
+            self._result.show_error(str(e))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1146,104 +1212,36 @@ class BrowseTab(tk.Frame):
 
         hsep(self).pack(fill="x")
 
-        pane, self._out = _make_output(self)
-        pane.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+        self._result = ResultPane(self)
+        self._result.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
 
     def _run_due(self):
-        """Compute due list directly using ptos engine — no duplication."""
+        """Show due list using service layer — renders as Treeview."""
         try:
-            queries = ptos.get_queries()
-            due_cfg = queries.get("due")
-            if not due_cfg:
-                _write(self._out, "No [due] config found in queries.toml.\n"
-                                  "Add a [due] section with type, key, and days.")
+            data = svc.get_due()
+            data["kind"] = "records"
+            # reshape due rows into records format for Treeview
+            rows = data.get("rows", [])
+            if not rows:
+                self._result.show_message("No records overdue.")
                 return
-
-            rtype    = due_cfg.get("type")
-            key_fld  = due_cfg.get("key")
-            days     = int(due_cfg.get("days", 7))
-            sort_fld = due_cfg.get("sort_by")
-            exclude  = due_cfg.get("exclude_results", [])
-
-            if not rtype or not key_fld:
-                _write(self._out, "due config missing 'type' or 'key'.")
-                return
-
-            # priority order from schema
-            priority = {}
-            if sort_fld:
-                schema    = ptos.get_schema()
-                type_meta = schema.get("type", {}).get(rtype, {})
-                options   = type_meta.get("fields", {}).get(sort_fld, {}).get("options", [])
-                if isinstance(options, list):
-                    priority = {v: i for i, v in enumerate(options)}
-
-            results, _ = ptos.scan_records(
-                ptos.dt.date.min, ptos.dt.date.max, [f"type={rtype}"], None)
-
-            # most recent record per key
-            latest = {}
-            for line in results:
-                parsed = ptos.safe_parse_line(line)
-                if not parsed:
-                    continue
-                d, kv, note = parsed
-                k = kv.get(key_fld)
-                if not k:
-                    continue
-                if k not in latest or d > latest[k]["date"]:
-                    latest[k] = {"date": d, "kv": kv, "note": note}
-
-            if exclude:
-                latest = {k: r for k, r in latest.items()
-                          if r["kv"].get("result") not in exclude}
-
-            cutoff  = ptos.today() - ptos.dt.timedelta(days=days)
-            overdue = [r for r in latest.values() if r["date"] <= cutoff]
-
-            if not overdue:
-                _write(self._out, f"No records overdue (all within {days} days).")
-                return
-
-            overdue.sort(key=lambda r: (
-                priority.get(r["kv"].get(sort_fld, ""), 999) if sort_fld else 0,
-                r["date"]
-            ))
-
-            # detect whether name field exists separate from key field
-            has_name = any(
-                "name" in r["kv"] and r["kv"].get("name") != r["kv"].get(key_fld)
-                for r in overdue
-            )
-            display_col = "name" if has_name else key_fld
-
-            days_w = 6
-            sort_w = 16
-            name_w = 24
-
-            lines = [f"Due  (>{days} days)  type={rtype}", ""]
-            if sort_fld:
-                hdr = f"{'last':>{days_w}}  {sort_fld:<{sort_w}}{display_col:<{name_w}}  note"
-            else:
-                hdr = f"{'last':>{days_w}}  {display_col:<{name_w}}  note"
-            lines += [hdr, "-" * 80]
-
-            for rec in overdue:
-                kv   = rec["kv"]
-                gap  = (ptos.today() - rec["date"]).days
-                name = kv.get("name", kv.get(key_fld, "-"))
-                note = rec["note"] or ""
-                if sort_fld:
-                    sv = kv.get(sort_fld, "-")
-                    lines.append(f"{gap:>{days_w}}d  {sv:<{sort_w}}{name:<{name_w}}  {note}")
-                else:
-                    lines.append(f"{gap:>{days_w}}d  {name:<{name_w}}  {note}")
-
-            lines += ["", f"{len(overdue)} record(s) due"]
-            _write(self._out, "\n".join(lines))
-
+            sf   = data.get("sort_field") or "status"
+            cols = ["days", "name", sf, "note"] if sf else ["days", "name", "note"]
+            cols = [c for c in cols if c]
+            records = [{c: str(r.get(c,"")) for c in cols} for r in rows]
+            self._result.show({
+                "kind":    "records",
+                "records": records,
+                "columns": cols,
+                "count":   len(records),
+                "total":   0, "total_fmt":"", "avg_fmt":"",
+                "time_label": f">{data.get('days',7)} days overdue",
+                "filters": [],
+            })
+        except PTOSError as e:
+            self._result.show_error(str(e))
         except Exception as e:
-            _write(self._out, f"Due error: {e}")
+            self._result.show_error(str(e))
 
     def _clear(self):
         self._type_var.set("All types")
@@ -1253,23 +1251,55 @@ class BrowseTab(tk.Frame):
             self._group_var.set("(none)")
         self._sort_var.set("")
         self._file_var.set("(current year)")
-        _write(self._out, "")
+        self._result.clear()
 
-    def _refresh_file_list(self, _=None):
+    def _export_csv(self):
+        filters = []
+        t = self._type_var.get()
+        if t and t != "All types":
+            filters.append(f"type={t}")
+        filters += self._get_field_filters()
+        time_code = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
         try:
-            log_files = sorted(
-                f for f in os.listdir(ptos.RECORDS_DIR) if f.endswith(".log"))
-            self._file_combo["values"] = ["(current year)"] + log_files
-        except Exception:
-            pass
+            data = svc.get_records(filters, time_code,
+                                   search=self._search_var.get().strip() or None,
+                                   sort=self._get_sort(),
+                                   from_file=self._get_from_file())
+            results_raw, _ = ptos.scan_records(
+                *ptos.resolve_time(time_code, self.cycles),
+                filters, self._search_var.get().strip() or None,
+                self._get_from_file())
+            time_label = ptos._TIME_ALIASES.get(time_code, time_code)
+            ptos.export_csv(results_raw, "__AUTO__", filters, time_label)
+            self._result.show_message(
+                f"✔  Exported {data['count']} record(s) to exports/ folder.")
+        except Exception as e:
+            self._result.show_error(str(e))
 
-    def _on_type_change(self):
-        """Rebuild field filter row and group options when type changes, then run."""
-        self._build_field_filters()
-        self._build_group_opts()
-        self._run()
-
-    def _build_field_filters(self):
+    def _run(self):
+        filters = []
+        t = self._type_var.get()
+        if t and t != "All types":
+            filters.append(f"type={t}")
+        filters += self._get_field_filters()
+        time_code = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
+        group_f   = self._get_group_by()
+        try:
+            if group_f:
+                data = svc.get_group(filters, time_code, [group_f],
+                                     from_file=self._get_from_file())
+                data["kind"] = "group"
+            else:
+                data = svc.get_records(filters, time_code,
+                                       search=self._search_var.get().strip() or None,
+                                       sort=self._get_sort(),
+                                       from_file=self._get_from_file())
+                data["kind"] = "records"
+            self._result.show(data)
+        except PTOSError as e:
+            self._result.show_error(str(e))
+        except Exception as e:
+            self._result.show_error(str(e))
         """Populate row1c with filter widgets for dimension fields of selected type."""
         for w in self._row1c.winfo_children():
             w.destroy()
@@ -1391,7 +1421,7 @@ class BrowseTab(tk.Frame):
         filters += self._get_field_filters()
 
         if not filters and not search:
-            _write(self._out, "Nothing to save — set at least a type or filter first.")
+            self._result.show_message("Nothing to save — set at least a type or filter first.")
             return
 
         dlg = tk.Toplevel(self, bg=BG)
@@ -1464,9 +1494,9 @@ class BrowseTab(tk.Frame):
                     f.write(block)
                 ptos._CACHE.pop("queries", None)
                 dlg.destroy()
-                _write(self._out,
-                       f"✔  Query '{name}' saved to queries.toml\n"
-                       f"Run it from the Queries tab.")
+                self._result.show_message(
+                    f"✔  Query '{name}' saved to queries.toml\n"
+                    f"Run it from the Queries tab.")
             except Exception as e:
                 status_lbl.config(text=f"Error: {e}")
 
@@ -1481,130 +1511,33 @@ class BrowseTab(tk.Frame):
         v = self._sort_var.get().strip()
         return v if v else None
 
-    def _export_csv(self):
+    def _refresh_file_list(self, _=None):
         try:
-            code = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
-            start, end = ptos.resolve_time(code, self.cycles)
-        except Exception as e:
-            _write(self._out, f"Time error: {e}")
+            log_files = sorted(
+                f for f in os.listdir(ptos.RECORDS_DIR) if f.endswith(".log"))
+            self._file_combo["values"] = ["(current year)"] + log_files
+        except Exception:
+            pass
+
+    def _on_type_change(self):
+        """Rebuild field filter row and group options when type changes, then run."""
+        self._build_field_filters()
+        self._build_group_opts()
+        self._run()
+
+    def _build_field_filters(self):
+        """Populate row1c with filter widgets for dimension fields of selected type."""
+        for w in self._row1c.winfo_children():
+            w.destroy()
+        self._field_filter_widgets = []
+        rtype = self._type_var.get()
+        if not rtype or rtype == "All types":
+            self._row1c.pack_forget()
             return
-        filters = []
-        t = self._type_var.get()
-        if t and t != "All types":
-            filters.append(f"type={t}")
-        filters += self._get_field_filters()
-        results, _ = ptos.scan_records(
-            start, end, filters,
-            self._search_var.get().strip() or None,
-            self._get_from_file())
-        if not results:
-            _write(self._out, "No records to export.")
-            return
-        time_code  = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
-        time_label = ptos._TIME_ALIASES.get(time_code, time_code)
-        ptos.export_csv(results, "__AUTO__", filters, time_label)
-        _write(self._out, f"Exported {len(results)} record(s) to exports/ folder.")
-
-    def _run(self):
-        try:
-            code = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
-            start, end = ptos.resolve_time(code, self.cycles)
-        except Exception as e:
-            _write(self._out, f"Time error: {e}")
-            return
-
-        filters = []
-        t = self._type_var.get()
-        if t and t != "All types":
-            filters.append(f"type={t}")
-        filters += self._get_field_filters()
-
-        results, total = ptos.scan_records(
-            start, end, filters,
-            self._search_var.get().strip() or None,
-            self._get_from_file())
-
-        if not results:
-            _write(self._out, "No records found.")
-            return
-
-        group_f = self._get_group_by()
-
-        if group_f:
-            # grouped output
-            counts, sums, has_amount = ptos.group_results(results, [group_f])
-            lines = [f"Period  : {start}  to  {end}",
-                     f"Records : {len(results)}",
-                     f"Grouped : {group_f}",
-                     "-" * 44]
-            col_w = 7
-            if has_amount:
-                lines.append(f"{'':20} {'count':>{col_w}}  {'total':>14}")
-                lines.append("-" * 46)
-                grand_c, grand_s = 0, 0
-                for key in sorted(counts):
-                    label = "  ".join(key) if isinstance(key, tuple) else key
-                    cnt   = counts[key]
-                    s     = sums.get(key, 0)
-                    grand_c += cnt
-                    grand_s += s
-                    lines.append(f"{label:<20} {cnt:>{col_w}}  {ptos.fmt(s):>14}")
-                lines.append("-" * 46)
-                lines.append(f"{'Total':<20} {grand_c:>{col_w}}  {ptos.fmt(grand_s):>14}")
-            else:
-                lines.append(f"{'':20} {'count':>{col_w}}")
-                lines.append("-" * 30)
-                grand = 0
-                for key in sorted(counts):
-                    label = "  ".join(key) if isinstance(key, tuple) else key
-                    cnt   = counts[key]
-                    grand += cnt
-                    lines.append(f"{label:<20} {cnt:>{col_w}}")
-                lines.append("-" * 30)
-                lines.append(f"{'Total':<20} {grand:>{col_w}}")
-            _write(self._out, "\n".join(lines))
-            return
-
-        rows, cols = [], []
-        for line in results:
-            d, kv, note = ptos.parse_line(line)
-            row = {"date": str(d)}
-            row.update({k: (" ".join(v) if isinstance(v, list) else v)
-                        for k, v in kv.items()})
-            if note: row["note"] = note
-            for k in row:
-                if k not in cols: cols.append(k)
-            rows.append(row)
-
-        sort_f = self._get_sort()
-        if sort_f:
-            def _sk(r):
-                v = r.get(sort_f, "")
-                try: return (0, int(v), "")
-                except: return (1, 0, str(v).lower())
-            rows.sort(key=_sk)
-
-        w = {c: max(len(c), max(len(str(r.get(c, ""))) for r in rows))
-             for c in cols}
-        summary = [f"Period  : {start}  to  {end}",
-                   f"Records : {len(results)}"]
-        if total > 0:
-            summary += [f"Total   : {ptos.fmt(total)}",
-                        f"Average : {ptos.fmt_avg(total / len(results))}"]
-        summary.append("-" * 44)
-        hdr   = "  ".join(c.upper().ljust(w[c]) for c in cols)
-        lines = summary + ["", hdr, "-" * len(hdr)]
-        for r in rows:
-            lines.append("  ".join(str(r.get(c, "")).ljust(w[c]) for c in cols))
-        _write(self._out, "\n".join(lines))
-
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Log Editor Tab
 # ══════════════════════════════════════════════════════════════════════════════
-
-class LogEditorTab(tk.Frame):
 
     # label → relative path from PTOS_HOME (None = current year records)
     _FILE_TARGETS = [
@@ -1660,38 +1593,6 @@ class LogEditorTab(tk.Frame):
                                  fg=SUCCESS, bg=BG, anchor="w")
         self._status.pack(fill="x", padx=HPAD, pady=(4, 0))
 
-        # ── find / replace bar (always visible) ──────────────────────────────
-        fr_bar = tk.Frame(self, bg=CARD, pady=6, padx=HPAD)
-        fr_bar.pack(fill="x")
-
-        tk.Label(fr_bar, text="Find", font=F_LABEL, fg=SUBTEXT,
-                 bg=CARD).pack(side="left", padx=(0, 4))
-        self._fr_find_var = tk.StringVar()
-        ff, self._fr_find_entry = _make_entry(fr_bar, textvariable=self._fr_find_var, width=18)
-        ff.pack(side="left", padx=(0, 12))
-
-        tk.Label(fr_bar, text="Replace", font=F_LABEL, fg=SUBTEXT,
-                 bg=CARD).pack(side="left", padx=(0, 4))
-        self._fr_repl_var = tk.StringVar()
-        rf, self._fr_repl_entry = _make_entry(fr_bar, textvariable=self._fr_repl_var, width=18)
-        rf.pack(side="left", padx=(0, 12))
-
-        tk.Button(fr_bar, text="Find Next", command=self._find_next,
-                  font=F_BTN, bg=BG, fg=ACCENT, relief="flat",
-                  cursor="hand2", padx=10, pady=4).pack(side="left", padx=(0, 4))
-        tk.Button(fr_bar, text="Replace", command=self._replace_one,
-                  font=F_BTN, bg=BG, fg=ACCENT, relief="flat",
-                  cursor="hand2", padx=10, pady=4).pack(side="left", padx=(0, 4))
-        tk.Button(fr_bar, text="Replace All", command=self._replace_all,
-                  font=F_BTN, bg=ACCENT, fg="white",
-                  activebackground=ACCENT_HO, relief="flat",
-                  cursor="hand2", padx=10, pady=4).pack(side="left", padx=(0, 12))
-
-        self._fr_status = tk.Label(fr_bar, text="", font=F_SMALL, fg=SUBTEXT, bg=CARD)
-        self._fr_status.pack(side="left")
-
-        hsep(self).pack(fill="x")
-
         # editor area
         tf = tk.Frame(self, bg=BORDER, padx=1, pady=1)
         tf.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
@@ -1703,136 +1604,15 @@ class LogEditorTab(tk.Frame):
                                xscrollcommand=xsb.set,
                                yscrollcommand=ysb.set,
                                padx=10, pady=8)
-        self._editor.tag_config("fr_highlight", background=ACCENT, foreground="white")
         xsb.config(command=self._editor.xview)
         ysb.config(command=self._editor.yview)
         ysb.pack(side="right", fill="y")
         xsb.pack(side="bottom", fill="x")
         self._editor.pack(side="left", fill="both", expand=True)
 
-        # keybindings
+        # Ctrl+S to save
         self._editor.bind("<Control-s>", lambda _: self._save())
         self._editor.bind("<Control-S>", lambda _: self._save())
-        self._fr_find_entry.bind("<Return>", lambda _: self._find_next())
-        self._fr_repl_entry.bind("<Return>", lambda _: self._replace_one())
-
-    def _find_next(self):
-        self._editor.tag_remove("fr_highlight", "1.0", "end")
-        term = self._fr_find_var.get()
-        if not term:
-            return
-        start = self._editor.index("insert")
-        pos   = self._editor.search(term, start, stopindex="end", nocase=True)
-        if not pos:
-            pos = self._editor.search(term, "1.0", stopindex="end", nocase=True)
-        if pos:
-            end = f"{pos}+{len(term)}c"
-            self._editor.tag_add("fr_highlight", pos, end)
-            self._editor.mark_set("insert", end)
-            self._editor.see(pos)
-            self._fr_status.config(text="")
-        else:
-            self._fr_status.config(text="Not found")
-
-    def _replace_one(self):
-        term = self._fr_find_var.get()
-        repl = self._fr_repl_var.get()
-        if not term:
-            return
-        ranges = self._editor.tag_ranges("fr_highlight")
-        if ranges:
-            self._editor.delete(ranges[0], ranges[1])
-            self._editor.insert(ranges[0], repl)
-            self._editor.tag_remove("fr_highlight", "1.0", "end")
-        self._find_next()
-
-    def _replace_all(self):
-        term = self._fr_find_var.get()
-        repl = self._fr_repl_var.get()
-        if not term:
-            return
-        text = self._editor.get("1.0", "end-1c")
-        count = text.count(term)
-        if count:
-            self._editor.delete("1.0", "end")
-            self._editor.insert("1.0", text.replace(term, repl))
-            self._fr_status.config(text=f"{count} replaced")
-        else:
-            self._fr_status.config(text="Not found")
-
-    def _highlight_toml(self):
-        """Apply syntax highlighting for TOML files."""
-        import re
-        ed = self._editor
-        # clear previous tags
-        for tag in ("toml_section", "toml_key", "toml_string", "toml_comment",
-                    "toml_bool", "toml_number"):
-            ed.tag_remove(tag, "1.0", "end")
-        # configure tag colours
-        ed.tag_config("toml_section", foreground="#e06c75", font=("Consolas", 12, "bold"))
-        ed.tag_config("toml_key",     foreground="#61afef")
-        ed.tag_config("toml_string",  foreground="#98c379")
-        ed.tag_config("toml_comment", foreground="#5c6370", font=("Consolas", 12, "italic"))
-        ed.tag_config("toml_bool",    foreground="#e5c07b")
-        ed.tag_config("toml_number",  foreground="#d19a66")
-
-        patterns = [
-            ("toml_comment", r"#[^\n]*"),
-            ("toml_section", r"^\[[\w\.\-]+\]"),
-            ("toml_string",  r'"[^"]*"'),
-            ("toml_key",     r"^\s*[\w\-]+(?=\s*=)"),
-            ("toml_bool",    r"\b(true|false)\b"),
-            ("toml_number",  r"\b\d+\b"),
-        ]
-        content = ed.get("1.0", "end")
-        for tag, pattern in patterns:
-            for m in re.finditer(pattern, content, re.MULTILINE):
-                start = f"1.0+{m.start()}c"
-                end   = f"1.0+{m.end()}c"
-                ed.tag_add(tag, start, end)
-
-    def _highlight_log(self):
-        """Apply syntax highlighting for .log record lines."""
-        import re
-        ed = self._editor
-        for tag in ("log_date", "log_type_val", "log_key", "log_val",
-                    "log_tag", "log_pipe", "log_note"):
-            ed.tag_remove(tag, "1.0", "end")
-
-        ed.tag_config("log_date",     foreground="#61afef")
-        ed.tag_config("log_type_val", foreground="#e06c75",
-                      font=("Consolas", 12, "bold"))
-        ed.tag_config("log_key",      foreground="#e5c07b")
-        ed.tag_config("log_val",      foreground="#98c379")
-        ed.tag_config("log_tag",      foreground="#c678dd")
-        ed.tag_config("log_pipe",     foreground="#4b5263")
-        ed.tag_config("log_note",     foreground="#abb2bf",
-                      font=("Consolas", 12, "italic"))
-
-        content = ed.get("1.0", "end")
-
-        # date — standalone at start of line
-        for m in re.finditer(r"^\d{4}-\d{2}-\d{2}", content, re.MULTILINE):
-            ed.tag_add("log_date", f"1.0+{m.start()}c", f"1.0+{m.end()}c")
-
-        # type=value
-        for m in re.finditer(r"\btype=([\w]+)", content):
-            ed.tag_add("log_type_val", f"1.0+{m.start(1)}c", f"1.0+{m.end(1)}c")
-
-        # tag=value — before generic key=val so it takes priority
-        for m in re.finditer(r"\btag=([\w]+)", content):
-            ed.tag_add("log_tag", f"1.0+{m.start()}c",  f"1.0+{m.end()}c")
-
-        # generic key=value — skip type, tag, and date-like patterns
-        for m in re.finditer(r"\b(?!type=|tag=)([\w]+)=([\w]+)", content):
-            ed.tag_add("log_key", f"1.0+{m.start(1)}c", f"1.0+{m.end(1)}c")
-            ed.tag_add("log_val", f"1.0+{m.start(2)}c", f"1.0+{m.end(2)}c")
-
-        # pipe separator and note
-        for m in re.finditer(r"(\|)(.*?)$", content, re.MULTILINE):
-            ed.tag_add("log_pipe", f"1.0+{m.start(1)}c", f"1.0+{m.end(1)}c")
-            if m.group(2).strip():
-                ed.tag_add("log_note", f"1.0+{m.start(2)}c", f"1.0+{m.end(2)}c")
 
     def _resolve_path(self):
         home = os.path.dirname(os.path.abspath(sys.modules["ptos"].__file__))
@@ -1866,13 +1646,9 @@ class LogEditorTab(tk.Frame):
         self._editor.insert("end", file_content)
         # scroll to end for records, top for config files
         if path.endswith(".log"):
-            self._highlight_log()
             self._editor.see("end")
         else:
             self._editor.see("1.0")
-        # syntax highlight toml files
-        if path.endswith(".toml"):
-            self._highlight_toml()
         self._status.config(text=f"Loaded  {path}")
 
     def _save(self):
@@ -2242,33 +2018,6 @@ def _show_error_dialog(parent, exc_text, log_path):
     dlg.wait_window()
 
 
-def _write_if_output(app, msg):
-    """Route a ptos SystemExit message to the active output pane if available,
-    otherwise show the full error dialog with Copy to Clipboard.
-    """
-    try:
-        nb = [w for w in app.winfo_children() if isinstance(w, ttk.Notebook)]
-        if nb:
-            tab = nb[0].nametowidget(nb[0].select())
-            out = getattr(tab, "_out", None)
-            if out:
-                _write(out, f"Error: {msg}")
-                return
-    except Exception:
-        pass
-    # no output pane found — show the full error dialog
-    LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                            "ptos_error.log")
-    timestamp = ptos.dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S") \
-                if hasattr(ptos, "dt") else ""
-    try:
-        with open(LOG_PATH, "a", encoding="utf-8") as f:
-            f.write(f"\n{'='*60}\n{timestamp}\nSystemExit: {msg}\n")
-    except Exception:
-        pass
-    _show_error_dialog(app, f"SystemExit: {msg}", LOG_PATH)
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # Main window
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2356,34 +2105,7 @@ class PTOSApp(tk.Tk):
         nb.add(LogEditorTab(nb), text="   Log Editor   ")
 
     def _on_callback_error(self, exc_type, exc_value, exc_tb):
-        """Called by Tkinter when any callback raises — log and show popup.
-        Also catches SystemExit (raised by ptos.sys.exit calls) so it never
-        silently kills the GUI process.
-        """
-        if exc_type is SystemExit:
-            msg = str(exc_value) or "ptos exited unexpectedly."
-            LOG_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)),
-                                    "ptos_error.log")
-            timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            try:
-                with open(LOG_PATH, "a", encoding="utf-8") as f:
-                    f.write(f"\n{'='*60}\n{timestamp}\nSystemExit: {msg}\n")
-            except Exception:
-                pass
-            # show in output pane if available, else full error dialog
-            try:
-                nb = [w for w in self.winfo_children()
-                      if isinstance(w, ttk.Notebook)]
-                if nb:
-                    tab = nb[0].nametowidget(nb[0].select())
-                    out = getattr(tab, "_out", None)
-                    if out:
-                        _write(out, f"Error: {msg}")
-                        return
-            except Exception:
-                pass
-            _show_error_dialog(self, f"SystemExit: {msg}", LOG_PATH)
-            return
+        """Called by Tkinter when any callback raises — log and show popup."""
         exc_text = "".join(traceback.format_exception(exc_type, exc_value, exc_tb))
         LOG_PATH  = os.path.join(os.path.dirname(os.path.abspath(__file__)),
                                  "ptos_error.log")
@@ -2414,7 +2136,5 @@ if __name__ == "__main__":
     try:
         app = PTOSApp()
         app.mainloop()
-    except SystemExit as e:
-        _log_and_show(f"PTOS exited: {e}")
     except Exception:
         _log_and_show(traceback.format_exc())
