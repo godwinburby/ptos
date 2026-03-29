@@ -283,11 +283,7 @@ def parse_line(line):
     return parse_date(date), kv, note.strip()
 
 def safe_parse_line(line):
-    """Like parse_line but returns None on any error.
-    Used in analysis functions where a bad line must not crash output.
-    scan_records already guards during loading; this catches anything
-    that slips through (e.g. manually edited log lines).
-    """
+    """Like parse_line but returns None on any error instead of raising."""
     try:
         return parse_line(line)
     except Exception:
@@ -468,10 +464,7 @@ def validate_record(schema, record):
 
     allowed = schema.get("types", {}).get("allowed")
     if allowed is None:
-        sys.exit(
-            "schema.toml is missing [types] allowed = [...]\n"
-            "Add a [types] section listing your record types."
-        )
+        sys.exit("schema.toml is missing [types] allowed = [...]\nAdd a [types] section listing your record types.")
     if rtype not in allowed:
         problems.append(f"Invalid type '{rtype}' — allowed: {', '.join(str(a) for a in allowed)}")
         return problems
@@ -522,14 +515,7 @@ def validate_record(schema, record):
     return problems
 
 def lint_records(records, schema):
-    """Validate all records in two passes:
-    1. Anatomy — universal checks independent of schema
-       errors   : missing date, missing type
-       warnings : missing tag, missing note
-    2. Schema   — type-specific field validation
-       errors   : missing required fields, invalid values, failed conditions
-    Returns set of log file paths that contain errors (for --fix).
-    """
+    """Validate all records. Returns set of log file paths containing errors."""
     total_errors   = 0
     total_warnings = 0
     total_checked  = 0
@@ -539,7 +525,6 @@ def lint_records(records, schema):
     for line in records:
         if not line.strip():
             continue
-
         total_checked += 1
         d, kv, note = parse_line(line)
         rtype = kv.get("type", "unknown")
@@ -547,42 +532,27 @@ def lint_records(records, schema):
         anatomy_errors   = []
         anatomy_warnings = []
 
-        # ── Anatomy errors (hard) ──────────────────────────
-        # date: parse_line returns date.min on failure
         if d == dt.date.min:
             anatomy_errors.append("ERROR: missing or malformed date")
-
-        # type must be present
         if "type" not in kv:
             anatomy_errors.append("ERROR: missing type field")
-
-        # ── Anatomy warnings (soft) ────────────────────────
-        # at least one tag
         if "tag" not in kv:
             anatomy_warnings.append("WARNING: no tag")
-
-        # note should be present
         if not note or not note.strip():
             anatomy_warnings.append("WARNING: no note")
 
-        # ── Schema validation ──────────────────────────────
         schema_problems = validate_record(schema, kv)
 
-        # ── Report ─────────────────────────────────────────
         has_issue = anatomy_errors or anatomy_warnings or schema_problems
         if has_issue:
             print(f"\n{'─' * 60}")
             print(line)
             for msg in anatomy_errors:
-                print(f"  ✖ {msg}")
-                total_errors += 1
+                print(f"  ✖ {msg}"); total_errors += 1
             for msg in schema_problems:
-                print(f"  ✖ {msg}")
-                total_errors += 1
+                print(f"  ✖ {msg}"); total_errors += 1
             for msg in anatomy_warnings:
-                print(f"  ⚠ {msg}")
-                total_warnings += 1
-            # track the log file this line came from (by year in date)
+                print(f"  ⚠ {msg}"); total_warnings += 1
             if d != dt.date.min:
                 error_files.add(os.path.join(RECORDS_DIR, f"{d.year}.log"))
 
@@ -592,10 +562,8 @@ def lint_records(records, schema):
     if total_errors == 0 and total_warnings == 0:
         print("✔ All records clean — no errors or warnings")
     else:
-        if total_errors:
-            print(f"✖ {total_errors} error(s) found")
-        if total_warnings:
-            print(f"⚠ {total_warnings} warning(s) found")
+        if total_errors:   print(f"✖ {total_errors} error(s) found")
+        if total_warnings: print(f"⚠ {total_warnings} warning(s) found")
     print()
     return error_files
 
@@ -611,10 +579,7 @@ def group_results(results, fields, sum_field=None):
     sums       = {}
     has_amount = False
     for line in results:
-        parsed = safe_parse_line(line)
-        if parsed is None:
-            continue
-        d, kv, _ = parsed
+        d, kv, _ = parse_line(line)
         key_parts = []
         for field in fields:
             if field == "month": key_parts.append(d.strftime("%Y-%m"))
@@ -642,10 +607,7 @@ def pivot_results(results, row_field, col_field, count_mode=False, sort_col=None
         return None
 
     for line in results:
-        parsed = safe_parse_line(line)
-        if parsed is None:
-            continue
-        d, kv, _ = parsed
+        d, kv, _ = parse_line(line)
         row_vals = resolve_vals(d, kv, row_field)
         col_vals = resolve_vals(d, kv, col_field)
         if row_vals is None or col_vals is None:
@@ -734,12 +696,7 @@ def render_summary(results, start, end, time_label, filters, total, sum_field=No
     count = len(results)
     rows  = [("Time range", f"{start} to {end} ({time_label})")]
     if results:
-        try:
-            first_date = parse_line(results[0])[0]
-            last_date  = parse_line(results[-1])[0]
-            rows.append(("Data span", f"{first_date} to {last_date}"))
-        except Exception:
-            pass
+        rows.append(("Data span", f"{results[0].split()[0]} to {results[-1].split()[0]}"))
     rows.append(("Records", count))
     if filters:
         rows.append(("Filters", " ".join(filters)))
@@ -760,11 +717,10 @@ def render_summary(results, start, end, time_label, filters, total, sum_field=No
 # --------------------------------------------------
 
 def _run_base_query(name, queries, start, end, cycles):
-    """Run a named base query, respecting its own time if defined."""
     q = queries[name]
-    where = q.get("where", "")
+    where = q.get("where", "") if isinstance(q, dict) else ""
     if not isinstance(where, str):
-        sys.exit(f"Query '{name}' in queries.toml: 'where' must be a string, got {type(where).__name__}")
+        sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
     filters = where.split()
     if "time" in q:
         start, end = resolve_time(q["time"], cycles)
@@ -772,11 +728,10 @@ def _run_base_query(name, queries, start, end, cycles):
     return len(results), total
 
 def _run_base_query_lines(name, queries, start, end, cycles):
-    """Like _run_base_query but returns raw result lines and total."""
     q = queries[name]
-    where = q.get("where", "")
+    where = q.get("where", "") if isinstance(q, dict) else ""
     if not isinstance(where, str):
-        sys.exit(f"Query '{name}' in queries.toml: 'where' must be a string, got {type(where).__name__}")
+        sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
     filters = where.split()
     if "time" in q:
         start, end = resolve_time(q["time"], cycles)
@@ -874,10 +829,7 @@ def show_fields(results):
     bad = non_dimension_fields()
     types = {}
     for line in results:
-        parsed = safe_parse_line(line)
-        if parsed is None:
-            continue
-        d, kv, _ = parsed
+        d, kv, _ = parse_line(line)
         rtype = kv.get("type", "unknown")
         types.setdefault(rtype, {"fields": {}, "counts": {}})
         for k, v in kv.items():
@@ -1357,49 +1309,13 @@ def quick_add(args):
             print()
             return
         for name in sorted(presets):
-            p = presets[name]
-            if isinstance(p, dict) and "alias" in p:
-                print(f"  {name} → {p['alias']}")
-            elif isinstance(p, dict) and "records" in p:
-                print(f"  {name} [{len(p['records'])} records]")
-            else:
-                print(" ", name)
+            print(" ", name)
         print()
         return
     name = args.preset[0]
     if name not in presets:
         sys.exit(f"Unknown preset: {name}")
-    # resolve alias
-    if isinstance(presets[name], dict) and "alias" in presets[name]:
-        target = presets[name]["alias"]
-        if target not in presets:
-            sys.exit(f"Preset alias '{name}' points to '{target}' which does not exist.")
-        name = target
-    preset_data = presets[name]
-
-    # ── multi-record preset ───────────────────────────────────────────────────
-    if isinstance(preset_data, dict) and "records" in preset_data:
-        schema    = get_schema()
-        date_str  = resolve_date(args.date)
-        added     = []
-        print(f"\nMulti-record preset '{name}' — {len(preset_data['records'])} record(s)\n")
-        for i, rec_template in enumerate(preset_data["records"], 1):
-            print(f"── Record {i} ──────────────────────────────")
-            record = dict(rec_template)
-            # convert any list values that may have come from toml
-            record, note = complete_record(schema, record)
-            problems = validate_record(schema, record)
-            if problems:
-                sys.exit(f"Record {i}: {problems[0]}")
-            line = build_record_line(date_str, record, note if note else args.note)
-            append_record(line)
-            added.append(line)
-            print(f"✔  {line}\n")
-        print(f"\n{len(added)} record(s) added.")
-        return
-
-    # ── single-record preset (existing behaviour) ─────────────────────────────
-    record = dict(preset_data)
+    record = dict(presets[name])
     for item in args.preset[1:]:
         if "=" not in item:
             continue
@@ -1477,10 +1393,7 @@ def edit_target(target):
     try:
         subprocess.run(editor + [paths[target]])
     except FileNotFoundError:
-        sys.exit(
-            f"Editor '{editor[0]}' not found.\n"
-            f"Set [editor] command in config/config.toml, or set the $EDITOR environment variable."
-        )
+        sys.exit(f"Editor '{editor[0]}' not found.\nSet [editor] command in config/config.toml or set $EDITOR.")
 
 # --------------------------------------------------
 # Init
@@ -1847,7 +1760,7 @@ def build_parser(cycles):
 
     utl = p.add_argument_group("Utilities")
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
-    utl.add_argument("--fix",           action="store_true", help="With --lint: open each file that has errors in the editor")
+    utl.add_argument("--fix",           action="store_true", help="With --lint: open files with errors in editor")
     utl.add_argument("-j", "--journal", action="store_true", help="Open today's journal")
     utl.add_argument("-e", "--edit",    nargs="?", const="records", metavar="TARGET",
                      help="Edit a workspace file  (r s q c p d/j x)")
@@ -1867,14 +1780,6 @@ def resolve_query_context(args, queries):
     Mutates args.time / args.date_from / args.date_to only when
     the CLI left them at their defaults.
     """
-    # resolve alias
-    q_raw = queries.get(args.query, {})
-    if isinstance(q_raw, dict) and "alias" in q_raw:
-        target = q_raw["alias"]
-        if target not in queries:
-            sys.exit(f"Alias '{args.query}' points to '{target}' which does not exist.")
-        args.query = target
-
     metrics    = queries.get("metrics",    {})
     dashboards = queries.get("dashboards", {})
 
@@ -1903,10 +1808,7 @@ def resolve_query_context(args, queries):
         if q.get("count"):              args.count = True
         if "sort"  in q:                args.sort  = q["sort"]
         if "trend" in q and args.trend is None:
-            try:
-                args.trend = int(q["trend"])
-            except (ValueError, TypeError):
-                sys.exit(f"Query '{args.query}' in queries.toml: 'trend' must be an integer, got {q['trend']!r}")
+            args.trend = int(q["trend"])
 
     return query_filters, metric_mode, dashboard_mode
 
@@ -1992,24 +1894,9 @@ def _prior_periods(time_keyword, n, cycles):
     return []
 
 
-def run_trend(filters, time_keyword, n, cycles, custom_start=None, custom_end=None):
-    """Run filters across N consecutive periods and render as a comparison table.
-    If custom_start/custom_end given, divides that range into N equal slices.
-    """
-    if custom_start and custom_end:
-        # divide the custom range into n equal day-slices
-        total_days = (custom_end - custom_start).days + 1
-        slice_days = max(1, total_days // n)
-        periods = []
-        for i in range(n):
-            s = custom_start + dt.timedelta(days=i * slice_days)
-            e = s + dt.timedelta(days=slice_days - 1)
-            if i == n - 1:
-                e = custom_end  # last slice absorbs any remainder
-            label = f"{s} – {e}" if slice_days > 1 else str(s)
-            periods.append((label, s, e))
-    else:
-        periods = _prior_periods(time_keyword, n, cycles)
+def run_trend(filters, time_keyword, n, cycles):
+    """Run filters across N consecutive periods and render as a comparison table."""
+    periods = _prior_periods(time_keyword, n, cycles)
 
     if not periods:
         sys.exit(f"--trend not supported for time window: {time_keyword}\n"
@@ -2147,13 +2034,6 @@ def run_due(arg):
         r["date"]
     ))
 
-    # detect whether records have a 'name' field separate from the key field
-    has_name_field = any(
-        "name" in r["kv"] and r["kv"].get("name") != r["kv"].get(key_field)
-        for r in overdue
-    )
-    display_col = "name" if has_name_field else key_field
-
     days_col  = 7
     sort_col  = 16
     name_col  = 24
@@ -2161,9 +2041,9 @@ def run_due(arg):
     # build header dynamically — show sort_by column only if configured
     if sort_field:
         header = (f"{'last':>{days_col}}  {sort_field:<{sort_col}}"
-                  f"{display_col:<{name_col}}  note")
+                  f"{key_field:<{name_col}}  note")
     else:
-        header = f"{'last':>{days_col}}  {display_col:<{name_col}}  note"
+        header = f"{'last':>{days_col}}  {key_field:<{name_col}}  note"
 
     print(f"\nDue  (>{days} days)  type={rec_type}\n")
     print(header)
@@ -2204,26 +2084,20 @@ def _render_single_table(lines, label=None):
     all_fields = ["date"]
     seen = set()
     for line in lines:
-        parsed = safe_parse_line(line)
-        if parsed is None:
-            continue
-        _, kv, _ = parsed
+        _, kv, _ = parse_line(line)
         for k in kv:
             if k not in seen and k != "type":  # type shown in label, skip column
                 all_fields.append(k)
                 seen.add(k)
 
-    has_note = any(safe_parse_line(l) is not None and safe_parse_line(l)[2] for l in lines)
+    has_note = any(parse_line(l)[2] for l in lines)
     if has_note:
         all_fields.append("note")
 
     # build raw rows (no truncation yet)
     rows = []
     for line in lines:
-        parsed = safe_parse_line(line)
-        if parsed is None:
-            continue
-        d, kv, note = parsed
+        d, kv, note = parse_line(line)
         row = {"date": str(d)}
         for k, v in kv.items():
             if k == "type":
@@ -2286,10 +2160,7 @@ def render_table(results):
     groups = {}
     order  = []
     for line in results:
-        parsed = safe_parse_line(line)
-        if parsed is None:
-            continue
-        _, kv, _ = parsed
+        _, kv, _ = parse_line(line)
         t = kv.get("type", "unknown")
         if t not in groups:
             groups[t] = []
@@ -2331,15 +2202,12 @@ def export_csv(results, filename, filters, time_label):
     cols = ["date"]
     seen = set(["date"])
     for line in results:
-        parsed = safe_parse_line(line)
-        if parsed is None:
-            continue
-        _, kv, note = parsed
+        _, kv, note = parse_line(line)
         for k in kv:
             if k not in seen:
                 cols.append(k)
                 seen.add(k)
-    has_note = any(safe_parse_line(l) is not None and safe_parse_line(l)[2] for l in results)
+    has_note = any(parse_line(l)[2] for l in results)
     if has_note:
         cols.append("note")
 
@@ -2347,10 +2215,7 @@ def export_csv(results, filename, filters, time_label):
         writer = csv.DictWriter(f, fieldnames=cols)
         writer.writeheader()
         for line in results:
-            parsed = safe_parse_line(line)
-            if parsed is None:
-                continue
-            d, kv, note = parsed
+            d, kv, note = parse_line(line)
             row = {"date": str(d)}
             for k, v in kv.items():
                 row[k] = ",".join(v) if isinstance(v, list) else str(v)
@@ -2359,64 +2224,6 @@ def export_csv(results, filename, filters, time_label):
             writer.writerow(row)
 
     print(f"\nExported {len(results)} record(s) to: {path}\n")
-
-
-def export_csv_group(counts, sums, has_amount, fields, filename, filters, time_label):
-    """Export grouped results to CSV."""
-    import csv
-
-    os.makedirs(EXPORTS_DIR, exist_ok=True)
-
-    if filename == "__AUTO__":
-        type_part = next((f.split("=")[1] for f in filters if f.startswith("type=")), "records")
-        date_part = time_label.replace(" ", "_").replace("/", "-")
-        filename  = f"{type_part}_{date_part}_grouped"
-
-    filename = filename.replace(" ", "_")
-    path     = os.path.join(EXPORTS_DIR, f"{filename}.csv")
-
-    label_fn = lambda key: list(key) if isinstance(key, tuple) else [key]
-    col_names = fields + ["count"] + (["total"] if has_amount else [])
-
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=col_names)
-        writer.writeheader()
-        for key in sorted(counts):
-            row = dict(zip(fields, label_fn(key)))
-            row["count"] = counts[key]
-            if has_amount:
-                row["total"] = sums.get(key, 0)
-            writer.writerow(row)
-
-    print(f"\nExported {len(counts)} group(s) to: {path}\n")
-
-
-def export_csv_pivot(table, cols, rows, row_field, filename, filters, time_label):
-    """Export pivot results to CSV."""
-    import csv
-
-    os.makedirs(EXPORTS_DIR, exist_ok=True)
-
-    if filename == "__AUTO__":
-        type_part = next((f.split("=")[1] for f in filters if f.startswith("type=")), "records")
-        date_part = time_label.replace(" ", "_").replace("/", "-")
-        filename  = f"{type_part}_{date_part}_pivot"
-
-    filename  = filename.replace(" ", "_")
-    path      = os.path.join(EXPORTS_DIR, f"{filename}.csv")
-    col_names = [row_field] + cols + ["total"]
-
-    with open(path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=col_names)
-        writer.writeheader()
-        for row in rows:
-            r = {row_field: row}
-            for c in cols:
-                r[c] = table[row].get(c, 0)
-            r["total"] = sum(table[row].get(c, 0) for c in cols)
-            writer.writerow(r)
-
-    print(f"\nExported {len(rows)} row(s) to: {path}\n")
 
 
 # --------------------------------------------------
@@ -2482,10 +2289,7 @@ def main():
                 try:
                     subprocess.run(editor + [path])
                 except FileNotFoundError:
-                    sys.exit(
-                        f"Editor '{editor[0]}' not found.\n"
-                        f"Set [editor] command in config/config.toml or set $EDITOR."
-                    )
+                    sys.exit(f"Editor '{editor[0]}' not found.\nSet [editor] command in config/config.toml.")
         return
 
     # ---- flatten --where ----
@@ -2502,12 +2306,7 @@ def main():
         dashboards = queries.get("dashboards", {})
         print("\nQueries\n")
         for name in queries:
-            if name in ("metrics", "dashboards"):
-                continue
-            q = queries[name]
-            if isinstance(q, dict) and "alias" in q:
-                print(f"  {name} → {q['alias']}")
-            else:
+            if name not in ("metrics", "dashboards"):
                 print(" ", name)
         if metrics:
             print("\nMetrics\n")
@@ -2546,11 +2345,9 @@ def main():
         try:
             start, end = resolve_time(args.time, cycles)
         except ValueError:
-            valid = (
-                "today/td  yesterday/yd  this-week/tw  last-week/lw\n"
-                "  this-month/tm  last-month/lm  this-quarter/tq  last-quarter/lq\n"
-                "  this-year/ty  last-year/ly  all  YYYY-MM"
-            )
+            valid = ("today/td  yesterday/yd  this-week/tw  last-week/lw\n"
+                     "  this-month/tm  last-month/lm  this-quarter/tq  last-quarter/lq\n"
+                     "  this-year/ty  last-year/ly  all  YYYY-MM")
             cycle_names = "  " + "  ".join(cycles.keys()) if cycles else ""
             sys.exit(
                 f"Invalid time keyword: '{args.time}'\n\n"
@@ -2561,12 +2358,7 @@ def main():
 
     # ---- trend mode ----
     if args.trend is not None:
-        # if a custom date range was given, slice it into N equal periods
-        if args.date_from or args.date_to:
-            run_trend(final_filters, args.time, args.trend, cycles,
-                      custom_start=start, custom_end=end)
-        else:
-            run_trend(final_filters, args.time, args.trend, cycles)
+        run_trend(final_filters, args.time, args.trend, cycles)
         return
 
     # ---- dashboard / metric (don't need full scan) ----
@@ -2593,17 +2385,14 @@ def main():
 
     if not results:
         print("\nNo records found.\n")
-        # warn if any filter field doesn't appear in any record in the full log
         if final_filters:
             all_results, _ = scan_records(dt.date.min, dt.date.max, [], None)
-            known_fields = {k for line in all_results for k in (safe_parse_line(line) or (None, {}, None))[1]}
-            known_fields.update({"type", "tag"})
+            known = {k for line in all_results for p in [safe_parse_line(line)] if p for k in p[1]}
+            known.update({"type", "tag"})
             for f in final_filters:
                 m = re.match(r"(\w+)(!=|>=|<=|~|=|>|<)", f)
-                if m:
-                    field = m.group(1)
-                    if field not in known_fields:
-                        print(f"  Note: '{field}' not found in any record — check spelling.")
+                if m and m.group(1) not in known:
+                    print(f"  Note: '{m.group(1)}' not found in any record — check spelling.")
             print()
         return
 
@@ -2614,7 +2403,7 @@ def main():
 
     if args.group == ["?"]:
         bad = non_dimension_fields()
-        dims = sorted({k for line in results for k in (safe_parse_line(line) or (None, {}, None))[1] if k not in bad})
+        dims = sorted({k for line in results for k in parse_line(line)[1] if k not in bad})
         print("\nAvailable group fields:\n")
         for d in dims: print(d)
         print()
@@ -2623,9 +2412,7 @@ def main():
     if args.pivot and args.pivot[0] == "?":
         available = {"month", "year"}
         for line in results:
-            parsed = safe_parse_line(line)
-            if parsed:
-                available.update(parsed[1].keys())
+            available.update(parse_line(line)[1].keys())
         print("\nAvailable pivot fields:\n")
         for d in sorted(available): print(d)
         print()
@@ -2638,9 +2425,7 @@ def main():
         row, col     = args.pivot[:2]
         available    = {"month", "year"}
         for line in results:
-            parsed = safe_parse_line(line)
-            if parsed:
-                available.update(parsed[1].keys())
+            available.update(parse_line(line)[1].keys())
         missing = [f for f in (row, col) if f not in available]
         if missing:
             sys.exit(f"Unknown pivot field(s): {', '.join(missing)}  — try: ptos --fields")
@@ -2649,9 +2434,6 @@ def main():
         label = f"Value: {vf}" if vf and not args.count else "Count mode"
         print(f"\nPivot  row={row}  col={col}  {label}")
         table, cols, rows = pivot_results(results, row, col, args.count, args.sort, sum_field=sum_field)
-        if getattr(args, "export", None):
-            export_csv_pivot(table, cols, rows, row, args.export, final_filters, time_label)
-            return
         render_pivot(table, cols, rows, row)
         return
 
@@ -2662,9 +2444,6 @@ def main():
         label = f"Value: {vf}" if vf else "Count"
         print(f"\nGrouped by: {' '.join(args.group)}  ({label})\n")
         counts, sums, has_amount = group_results(results, args.group, sum_field=sum_field)
-        if getattr(args, "export", None):
-            export_csv_group(counts, sums, has_amount, args.group, args.export, final_filters, time_label)
-            return
         render_group(counts, sums, has_amount, args.group)
         return
 

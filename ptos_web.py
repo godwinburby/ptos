@@ -1,22 +1,19 @@
 """
-ptos_web.py  —  Flask web UI for PTOS  (mobile-first, responsive)
-Place in the same folder as ptos.py.
-Run:  python ptos_web.py
-Open: http://localhost:5000
+ptos_web.py  —  Flask web UI for PTOS (mobile-first, responsive)
+Place alongside ptos.py and ptos_service.py.
+Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, io, datetime as dt, json, csv, tempfile
-
-# ── patch sys.exit so ptos never kills the Flask process ─────────────────────
-class PTOSError(Exception): pass
-def _safe_exit(msg=""): raise PTOSError(str(msg))
-sys.exit = _safe_exit
-# ─────────────────────────────────────────────────────────────────────────────
-
+import sys, os, datetime as dt, json, csv, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+import ptos_service as svc
+from ptos_service import PTOSError
 import ptos
 
-from flask import Flask, render_template, request, redirect, url_for, jsonify, send_file
+from flask import (Flask, render_template, request, redirect,
+                   url_for, jsonify, send_file)
+
 app = Flask(__name__, template_folder="web_templates")
 app.secret_key = "ptos-local-only"
 
@@ -27,26 +24,12 @@ TIME_OPTIONS = [
 ]
 _TIME_DICT = dict(TIME_OPTIONS)
 
-def _cycles():
-    return ptos.get_config().get("cycles", {})
-
 def _now_str():
     return dt.datetime.now().strftime("%a %d %b")
 
 def _greeting():
     h = dt.datetime.now().hour
     return "morning" if h < 12 else "afternoon" if h < 17 else "evening"
-
-def _capture(fn, *args, **kwargs):
-    buf = io.StringIO(); old = sys.stdout; sys.stdout = buf
-    try:    fn(*args, **kwargs)
-    except (PTOSError, Exception): pass
-    finally: sys.stdout = old
-    return buf.getvalue()
-
-def _resolve_time(code):
-    try:    return ptos.resolve_time(code or "tm", _cycles())
-    except: return dt.date.min, dt.date.max
 
 def _build_field_defs(schema, rtype, current_record=None):
     if not rtype: return []
@@ -74,62 +57,6 @@ def _build_field_defs(schema, rtype, current_record=None):
                      "options":options,"is_int":is_int,"unit":unit,"parent":parent or ""})
     return defs
 
-def _due_rows(days_override=None):
-    """Return list of due row dicts for home and due pages."""
-    try:
-        queries = ptos.get_queries()
-        due_cfg = queries.get("due")
-        if not due_cfg: return []
-        rtype    = due_cfg.get("type")
-        key_fld  = due_cfg.get("key")
-        days     = days_override if days_override is not None else int(due_cfg.get("days", 7))
-        sort_fld = due_cfg.get("sort_by")
-        exclude  = due_cfg.get("exclude_results", [])
-        if not rtype or not key_fld: return []
-
-        priority = {}
-        if sort_fld:
-            schema    = ptos.get_schema()
-            type_meta = schema.get("type", {}).get(rtype, {})
-            options   = type_meta.get("fields", {}).get(sort_fld, {}).get("options", [])
-            if isinstance(options, list):
-                priority = {v: i for i, v in enumerate(options)}
-
-        results, _ = ptos.scan_records(dt.date.min, dt.date.max, [f"type={rtype}"], None)
-        latest = {}
-        for line in results:
-            parsed = ptos.safe_parse_line(line)
-            if not parsed: continue
-            d, kv, note = parsed
-            k = kv.get(key_fld)
-            if not k: continue
-            if k not in latest or d > latest[k]["date"]:
-                latest[k] = {"date": d, "kv": kv, "note": note}
-        if exclude:
-            latest = {k: r for k, r in latest.items()
-                      if r["kv"].get("result") not in exclude}
-        cutoff  = ptos.today() - dt.timedelta(days=days)
-        overdue = [r for r in latest.values() if r["date"] <= cutoff]
-        overdue.sort(key=lambda r: (
-            priority.get(r["kv"].get(sort_fld,""), 999) if sort_fld else 0,
-            r["date"]
-        ))
-        rows = []
-        for rec in overdue:
-            kv  = rec["kv"]
-            gap = (ptos.today() - rec["date"]).days
-            heat = "hot" if gap >= 7 else "warm" if gap >= 3 else "cool"
-            rows.append({
-                "days":   gap,
-                "name":   kv.get("name", kv.get(key_fld, "-")),
-                "status": kv.get(sort_fld, "") if sort_fld else "",
-                "note":   rec["note"] or "",
-                "heat":   heat,
-            })
-        return rows
-    except Exception:
-        return []
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Home
@@ -142,80 +69,48 @@ def home():
     presets = {k: v for k, v in ptos.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
 
-    due_rows = _due_rows()
-    due_count = len(due_rows)
+    # due list
+    try:
+        due_data  = svc.get_due()
+        due_rows  = due_data["rows"]
+        due_count = due_data["count"]
+    except Exception:
+        due_rows = []; due_count = 0
 
-    # build stat cards from saved queries in queries.toml [dashboards.home] or first dashboard
+    # dashboard stats
     stats = []
     try:
         queries    = ptos.get_queries()
         dashboards = queries.get("dashboards", {})
-        # pick first dashboard or one named "home"/"monthly"
-        db_name = next((n for n in ("home","monthly","clinic") if n in dashboards),
-                       next(iter(dashboards), None))
+        db_name    = next((n for n in ("home","monthly","clinic") if n in dashboards),
+                          next(iter(dashboards), None))
         if db_name:
-            cycles = _cycles()
-            start, end = _resolve_time("tm")
-            for item in dashboards[db_name].get("metrics", [])[:3]:
-                metrics = queries.get("metrics", {})
-                if item in metrics:
-                    m = metrics[item]
-                    if "ratio" in m:
-                        c1,_ = _run_base(m["ratio"][0], queries, start, end)
-                        c2,_ = _run_base(m["ratio"][1], queries, start, end)
-                        val = f"{(c1/c2)*100:.0f}%" if c2 else "—"
-                    elif "avg" in m:
-                        cnt,tot = _run_base(m["avg"], queries, start, end)
-                        val = ptos.fmt_avg(tot/cnt) if cnt else "—"
-                    elif "sum" in m:
-                        _,tot = _run_base(m["sum"], queries, start, end)
-                        val = ptos.fmt(tot)
-                    else: val = "—"
-                    stats.append({"label": item.replace("_"," "), "value": val, "sub": "this month"})
-                elif item in queries:
-                    cnt, tot = _run_base(item, queries, start, end)
-                    val = str(cnt)
-                    sub = ptos.fmt(tot) if tot > 0 else "this month"
-                    stats.append({"label": item.replace("_"," "), "value": val, "sub": sub})
+            db = svc.get_dashboard(db_name, "tm")
+            for item in db["items"][:4]:
+                stats.append({"label": item["name"].replace("_"," "),
+                               "value": item["value"], "sub": "this month"})
     except Exception:
         pass
 
-    # recent records (last 5 lines of current year log)
-    recent = ""
+    # recent records
+    recent_rows = []
     try:
-        path = os.path.join(ptos.RECORDS_DIR, f"{ptos.today().year}.log")
-        if os.path.exists(path):
-            with open(path, encoding="utf-8") as f:
-                lines = [l.rstrip() for l in f if l.strip()]
-            recent = "\n".join(lines[-5:])
+        data = svc.get_records([], "td")
+        recent_rows = data["records"][-8:]
+        recent_cols = data["columns"]
     except Exception:
-        pass
+        recent_cols = []
 
     return render_template("home.html",
-        tab="home", title="Home", now=_now_str(),
-        greeting=_greeting(),
+        tab="home", title="Home", now=_now_str(), greeting=_greeting(),
         presets=sorted(presets.keys())[:8],
-        due_count=due_count,
-        due_rows=due_rows[:5],
+        due_count=due_count, due_rows=due_rows[:5],
         stats=stats,
-        recent=recent)
-
-def _run_base(name, queries, start, end):
-    q = queries.get(name, {})
-    f = q.get("where","").split() if isinstance(q, dict) else []
-    try:
-        if isinstance(q, dict) and "time" in q:
-            s, e = _resolve_time(q["time"])
-        else:
-            s, e = start, end
-        results, total = ptos.scan_records(s, e, f, None)
-        return len(results), total
-    except Exception:
-        return 0, 0
+        recent_rows=recent_rows, recent_cols=recent_cols)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Due List
+# Due
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/due")
@@ -223,20 +118,14 @@ def due_page():
     days = request.args.get("days", None)
     days_int = int(days) if days is not None else None
     try:
-        queries = ptos.get_queries()
-        due_cfg = queries.get("due")
-        if not due_cfg:
-            return render_template("due.html", tab="due", title="Due List",
-                now=_now_str(), rows=[], days=7,
-                error="No [due] config in queries.toml")
-        default_days = int(due_cfg.get("days", 7))
-        days_used = days_int if days_int is not None else default_days
-        rows = _due_rows(days_override=days_used)
-    except Exception as e:
-        rows = []
-        days_used = 7
+        data = svc.get_due(days_override=days_int)
+        rows = data["rows"]
+        days_used = data["days"]
+        error = None
+    except PTOSError as e:
+        rows = []; days_used = 7; error = str(e)
     return render_template("due.html", tab="due", title="Due List",
-        now=_now_str(), rows=rows, days=days_used, error=None)
+        now=_now_str(), rows=rows, days=days_used, error=error)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -245,18 +134,19 @@ def due_page():
 
 @app.route("/add", methods=["GET"])
 def add_get():
-    schema  = ptos.get_schema()
+    try:
+        schema = ptos.get_schema()
+    except PTOSError:
+        schema = {"types": {"allowed": []}}
     types   = schema.get("types", {}).get("allowed", [])
     presets = {k: v for k, v in ptos.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
-
     selected_type = request.args.get("type", "")
     preset_name   = request.args.get("preset", "")
     field_values  = {k: v for k, v in request.args.items()
                      if k not in ("type","preset","date")}
     if "tag" in request.args:
         field_values["tag"] = request.args.getlist("tag")
-
     if preset_name and not selected_type:
         pd = ptos.get_presets().get(preset_name, {})
         if isinstance(pd, dict) and "alias" in pd:
@@ -264,38 +154,34 @@ def add_get():
         if pd:
             selected_type = pd.get("type", "")
             for k, v in pd.items():
-                if k != "type" and k not in field_values:
-                    field_values[k] = v
-
+                if k != "type" and k not in field_values: field_values[k] = v
     field_defs  = _build_field_defs(schema, selected_type, field_values)
     tag_options = []
     if selected_type:
         ts = schema.get("type", {}).get(selected_type, {})
         tag_options = ptos.resolve_tags(schema, ts, field_values)
-
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, presets=sorted(presets.keys()),
-        selected_type=selected_type,
-        field_defs=field_defs, tag_options=tag_options,
-        field_values=field_values,
+        selected_type=selected_type, field_defs=field_defs,
+        tag_options=tag_options, field_values=field_values,
         today=dt.date.today().isoformat(),
         msg=None, msg_type=None, last_line=None)
 
-
 @app.route("/add", methods=["POST"])
 def add_post():
-    schema = ptos.get_schema()
+    try:
+        schema = ptos.get_schema()
+    except PTOSError:
+        schema = {"types": {"allowed": []}}
     types  = schema.get("types", {}).get("allowed", [])
     presets = {k: v for k, v in ptos.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
-
-    rtype      = request.form.get("type","").strip()
-    date_str   = request.form.get("date", dt.date.today().isoformat()).strip()
-    note       = request.form.get("note","").strip() or None
+    rtype     = request.form.get("type","").strip()
+    date_str  = request.form.get("date", dt.date.today().isoformat()).strip()
+    note      = request.form.get("note","").strip() or None
     custom_tags = [t.strip().replace(" ","_")
                    for t in request.form.get("custom_tags","").split(",") if t.strip()]
-
     record = {"type": rtype}
     ts     = schema.get("type", {}).get(rtype, {})
     all_f  = list(ts.get("required",[]))
@@ -309,20 +195,17 @@ def add_post():
         if val: record[fname] = val.replace(" ","_")
     tags = request.form.getlist("tag") + custom_tags
     if tags: record["tag"] = tags
-
     try:   problems = ptos.validate_record(schema, record)
     except PTOSError as e: problems = [str(e)]
-
     if problems:
-        fd  = _build_field_defs(schema, rtype, record)
-        tag_opts = ptos.resolve_tags(schema, ts, record)
+        fd = _build_field_defs(schema, rtype, record)
         return render_template("add.html",
             tab="add", title="Add Record", now=_now_str(),
             types=types, presets=sorted(presets.keys()),
-            selected_type=rtype, field_defs=fd, tag_options=tag_opts,
+            selected_type=rtype, field_defs=fd,
+            tag_options=ptos.resolve_tags(schema, ts, record),
             field_values=record, today=dt.date.today().isoformat(),
             msg=" | ".join(problems), msg_type="error", last_line=None)
-
     try:
         line = ptos.build_record_line(date_str, record, note)
         ptos.append_record(line)
@@ -335,7 +218,6 @@ def add_post():
             tag_options=ptos.resolve_tags(schema, ts, record),
             field_values=record, today=dt.date.today().isoformat(),
             msg=str(e), msg_type="error", last_line=None)
-
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, presets=sorted(presets.keys()),
@@ -357,14 +239,12 @@ def journal_get():
     date_str  = date.isoformat()
     prev_date = (date - dt.timedelta(days=1)).isoformat()
     next_date = (date + dt.timedelta(days=1)).isoformat()
-
     year_dir = os.path.join(ptos.JOURNAL_DIR, date_str[:4])
     os.makedirs(year_dir, exist_ok=True)
     path = os.path.join(year_dir, f"{date_str}.md")
     if not os.path.exists(path) and date == today_d:
         path = ptos.get_today_journal()
     content = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
-
     return render_template("journal.html",
         tab="journal", title="Journal", now=_now_str(),
         date=date_str, today=today_d.isoformat(),
@@ -373,16 +253,16 @@ def journal_get():
 
 @app.route("/journal/save", methods=["POST"])
 def journal_save():
-    data    = request.get_json(silent=True) or {}
-    date    = data.get("date", dt.date.today().isoformat())
+    data = request.get_json(silent=True) or {}
+    date = data.get("date", dt.date.today().isoformat())
     content = data.get("content","")
-    try:    dt.date.fromisoformat(date)
+    try: dt.date.fromisoformat(date)
     except: return jsonify(ok=False, error="Invalid date")
     year_dir = os.path.join(ptos.JOURNAL_DIR, date[:4])
     os.makedirs(year_dir, exist_ok=True)
     path = os.path.join(year_dir, f"{date}.md")
     ptos._backup_file(path)
-    with open(path, "w", encoding="utf-8") as f: f.write(content)
+    with open(path,"w",encoding="utf-8") as f: f.write(content)
     return jsonify(ok=True)
 
 
@@ -406,54 +286,24 @@ def queries_get():
 
 @app.route("/queries/run", methods=["POST"])
 def queries_run():
-    data  = request.get_json(silent=True) or {}
-    kind  = data.get("kind","q")
-    name  = data.get("name","")
-    time  = data.get("time","")
+    data = request.get_json(silent=True) or {}
+    kind = data.get("kind","q")
+    name = data.get("name","")
+    time = data.get("time","") or None
     try:
-        queries = ptos.get_queries()
-        cycles  = _cycles()
-        start, end = _resolve_time(time) if time else _resolve_time("tm")
-
         if kind == "d":
-            if not time:
-                db  = queries.get("dashboards",{}).get(name,{})
-                start, end = _resolve_time(db.get("time","tm") if isinstance(db,dict) else "tm")
-            result = _capture(ptos.run_dashboard, name, queries, start, end, cycles)
+            result = svc.get_dashboard(name, time or "tm")
+            result["kind"] = "dashboard"
         elif kind == "m":
-            result = _capture(ptos.run_metric, name, queries, start, end, cycles)
+            result = svc.get_metric(name, time or "tm")
+            result["kind"] = "metric"
         else:
-            q_def   = queries.get(name, {})
-            if not isinstance(q_def, dict):
-                return jsonify(result=f"Query '{name}' not found.")
-            if not time:
-                start, end = _resolve_time(q_def.get("time","tm"))
-            filters = q_def.get("where","").split()
-            results, total = ptos.scan_records(start, end, filters, None)
-            if not results:
-                return jsonify(result="No records found.")
-            out = io.StringIO(); old = sys.stdout; sys.stdout = out
-            if "group" in q_def:
-                ptos.render_summary(results,start,end,time or q_def.get("time","tm"),filters,total)
-                c,s,h = ptos.group_results(results, q_def["group"])
-                ptos.render_group(c,s,h,q_def["group"])
-            elif "pivot" in q_def and len(q_def["pivot"]) >= 2:
-                row,col = q_def["pivot"][:2]
-                ptos.render_summary(results,start,end,time or q_def.get("time","tm"),filters,total)
-                t2,cols2,rows2 = ptos.pivot_results(results,row,col,q_def.get("count",False))
-                ptos.render_pivot(t2,cols2,rows2,row)
-            elif q_def.get("trend"):
-                sys.stdout = old
-                return jsonify(result=_capture(ptos.run_trend,filters,
-                               q_def.get("time","tm"),int(q_def["trend"]),cycles))
-            else:
-                ptos.render_summary(results,start,end,time or q_def.get("time","tm"),filters,total)
-                for line in results: print(line)
-            sys.stdout = old
-            result = out.getvalue()
-    except (PTOSError, Exception) as e:
-        result = f"Error: {e}"
-    return jsonify(result=result)
+            result = svc.run_query(name, time)
+        return jsonify(ok=True, data=result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -462,8 +312,11 @@ def queries_run():
 
 @app.route("/browse")
 def browse_get():
-    schema    = ptos.get_schema()
-    types     = schema.get("types",{}).get("allowed",[])
+    try:
+        schema = ptos.get_schema()
+        types  = schema.get("types",{}).get("allowed",[])
+    except PTOSError as e:
+        types = []
     log_files = sorted(f for f in os.listdir(ptos.RECORDS_DIR)
                        if f.endswith(".log")) if os.path.exists(ptos.RECORDS_DIR) else []
     return render_template("browse.html",
@@ -476,37 +329,22 @@ def browse_run():
     where  = data.get("where",[])
     time   = data.get("time","tm")
     search = data.get("search","") or None
-    group  = data.get("group","")
+    group  = data.get("group","") or None
     sort   = data.get("sort","") or None
     file   = data.get("file","") or None
     try:
-        start, end = _resolve_time(time)
-        results, total = ptos.scan_records(start, end, where, search, from_file=file)
-        if not results: return jsonify(result="No records found.")
-        out = io.StringIO(); old = sys.stdout; sys.stdout = out
-        tl  = _TIME_DICT.get(time, time)
         if group:
-            ptos.render_summary(results,start,end,tl,where,total)
-            c,s,h = ptos.group_results(results,[group])
-            print(f"\nGrouped by: {group}\n")
-            ptos.render_group(c,s,h,[group])
+            result = svc.get_group(where, time, [group], from_file=file)
+            result["kind"] = "group"
         else:
-            if sort:
-                def sk(line):
-                    p = ptos.safe_parse_line(line)
-                    if not p: return (1,0,"")
-                    v = p[1].get(sort,"")
-                    if isinstance(v,list): v = v[0] if v else ""
-                    try:    return (0,int(v),"")
-                    except: return (1,0,str(v).lower())
-                results = sorted(results, key=sk)
-            for line in results: print(line)
-            ptos.render_summary(results,start,end,tl,where,total)
-        sys.stdout = old
-        result = out.getvalue()
-    except (PTOSError, Exception) as e:
-        result = f"Error: {e}"
-    return jsonify(result=result)
+            result = svc.get_records(where, time, search=search,
+                                     sort=sort, from_file=file)
+            result["kind"] = "records"
+        return jsonify(ok=True, data=result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
 
 @app.route("/browse/export", methods=["POST"])
 def browse_export():
@@ -516,31 +354,17 @@ def browse_export():
     search = params.get("search","") or None
     file   = params.get("file","") or None
     try:
-        start, end = _resolve_time(time)
-        results, _ = ptos.scan_records(start, end, where, search, from_file=file)
-        tl = _TIME_DICT.get(time, time)
-        tmp = tempfile.NamedTemporaryFile(mode="w",suffix=".csv",delete=False,
-                                          encoding="utf-8",newline="")
+        data = svc.get_records(where, time, search=search, from_file=file)
+        records = data["records"]
+        cols    = data["columns"]
+        tl      = _TIME_DICT.get(time, time)
         type_part = next((f.split("=")[1] for f in where if f.startswith("type=")),"records")
         filename  = f"{type_part}_{tl}.csv"
-        cols = ["date"]; seen = {"date"}
-        for line in results:
-            p = ptos.safe_parse_line(line)
-            if p:
-                for k in p[1]:
-                    if k not in seen: cols.append(k); seen.add(k)
-        has_note = any(ptos.safe_parse_line(l) and ptos.safe_parse_line(l)[2] for l in results)
-        if has_note: cols.append("note")
-        writer = csv.DictWriter(tmp, fieldnames=cols)
+        tmp = tempfile.NamedTemporaryFile(mode="w",suffix=".csv",delete=False,
+                                          encoding="utf-8",newline="")
+        writer = csv.DictWriter(tmp, fieldnames=cols, extrasaction="ignore")
         writer.writeheader()
-        for line in results:
-            p = ptos.safe_parse_line(line)
-            if not p: continue
-            d,kv,note = p
-            row = {"date":str(d)}
-            for k,v in kv.items(): row[k] = ",".join(v) if isinstance(v,list) else str(v)
-            if has_note: row["note"] = note or ""
-            writer.writerow(row)
+        for row in records: writer.writerow(row)
         tmp.close()
         return send_file(tmp.name, as_attachment=True,
                          download_name=filename, mimetype="text/csv")
@@ -556,13 +380,13 @@ def browse_export():
 def editor_get():
     log_files = sorted(f for f in os.listdir(ptos.RECORDS_DIR)
                        if f.endswith(".log")) if os.path.exists(ptos.RECORDS_DIR) else []
-    current   = request.args.get("file","")
+    current = request.args.get("file","")
     if not current and log_files: current = log_files[-1]
     content = ""
     if current:
         path = os.path.join(ptos.RECORDS_DIR, current)
         if os.path.exists(path):
-            with open(path, encoding="utf-8") as f: content = f.read()
+            with open(path,encoding="utf-8") as f: content = f.read()
     return render_template("editor.html",
         tab="editor", title="Log Editor", now=_now_str(),
         log_files=log_files, current_file=current, content=content, msg=None)
@@ -602,6 +426,6 @@ def api_type_fields(rtype):
 # ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    print("\nPTOS Web UI  —  mobile-first, responsive")
+    print("\nPTOS Web UI")
     print("Open: http://localhost:5000\n")
     app.run(debug=False, host="127.0.0.1", port=5000)

@@ -11,7 +11,6 @@
       {% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
     </select>
   </div>
-
   <div class="field-row-2">
     <div class="field-group">
       <label>Time</label>
@@ -23,21 +22,15 @@
     </div>
     <div class="field-group">
       <label>Group by</label>
-      <select id="b-group">
-        <option value="">(none)</option>
-      </select>
+      <select id="b-group"><option value="">(none)</option></select>
     </div>
   </div>
-
   <div class="field-group">
     <label>Search</label>
     <input type="text" id="b-search" placeholder="full-text search…"
            onkeydown="if(event.key==='Enter') runBrowse()">
   </div>
-
-  <!-- dynamic field filters -->
   <div id="field-filters" style="display:none;"></div>
-
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-primary btn-sm" onclick="runBrowse()" id="run-btn">⟳ Search</button>
     <button class="btn btn-success btn-sm" onclick="exportCSV()">↓ CSV</button>
@@ -45,9 +38,7 @@
   </div>
 </div>
 
-<div class="card" style="padding:0;">
-  <pre class="output" id="output" style="border-radius:12px;min-height:100px;">Set filters and press Search.</pre>
-</div>
+<div id="result-area"></div>
 
 <script>
 function onTypeChange() {
@@ -57,22 +48,21 @@ function onTypeChange() {
   grp.innerHTML = '<option value="">(none)</option>';
   ff.innerHTML  = ""; ff.style.display = "none";
   if (!type) return;
-
   fetch("/api/type_fields/" + encodeURIComponent(type))
   .then(r => r.json())
   .then(data => {
-    (data.dimensions || []).forEach(f => {
+    (data.dimensions||[]).forEach(f => {
       const o = document.createElement("option");
       o.value = f; o.textContent = f; grp.appendChild(o);
     });
-    (data.fields || []).forEach(f => {
-      if (!f.options || !f.options.length) return;
+    (data.fields||[]).forEach(f => {
+      if (!f.options||!f.options.length) return;
       const wrap = document.createElement("div");
       wrap.className = "field-group";
       wrap.innerHTML = `<label>${f.name}</label>
         <select id="ff-${f.name}">
           <option value="">(any)</option>
-          ${f.options.map(o => `<option value="${o}">${o}</option>`).join("")}
+          ${f.options.map(o=>`<option value="${o}">${o}</option>`).join("")}
         </select>`;
       ff.appendChild(wrap);
     });
@@ -81,11 +71,11 @@ function onTypeChange() {
 }
 
 function _params() {
-  const type   = document.getElementById("b-type").value;
-  const time   = document.getElementById("b-time").value;
-  const search = document.getElementById("b-search").value.trim();
-  const group  = document.getElementById("b-group").value;
-  const where  = [];
+  const type  = document.getElementById("b-type").value;
+  const time  = document.getElementById("b-time").value;
+  const search= document.getElementById("b-search").value.trim();
+  const group = document.getElementById("b-group").value;
+  const where = [];
   if (type) where.push("type=" + type);
   document.querySelectorAll("[id^='ff-']").forEach(sel => {
     if (sel.value) where.push(sel.id.replace("ff-","") + "=" + sel.value);
@@ -94,24 +84,23 @@ function _params() {
 }
 
 function runBrowse() {
-  const out = document.getElementById("output");
-  const btn = document.getElementById("run-btn");
+  const btn  = document.getElementById("run-btn");
+  const area = document.getElementById("result-area");
   btn.disabled = true; btn.textContent = "Loading…";
-  out.textContent = "Loading…";
-
+  area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
   fetch("/browse/run", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
+    method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify(_params())
   })
   .then(r => r.json())
   .then(d => {
-    out.textContent = d.result || d.error || "(no results)";
     btn.disabled = false; btn.textContent = "⟳ Search";
+    if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
+    area.innerHTML = renderResult(d.data);
   })
   .catch(e => {
-    out.textContent = "Error: " + e;
     btn.disabled = false; btn.textContent = "⟳ Search";
+    area.innerHTML = errorCard(String(e));
   });
 }
 
@@ -122,18 +111,72 @@ function exportCSV() {
   inp.type = "hidden"; inp.name = "params";
   inp.value = JSON.stringify(_params());
   form.appendChild(inp);
-  document.body.appendChild(form); form.submit();
-  document.body.removeChild(form);
+  document.body.appendChild(form); form.submit(); document.body.removeChild(form);
 }
 
 function clearBrowse() {
-  ["b-type","b-time","b-search","b-group"].forEach(id => {
+  ["b-type","b-search","b-group"].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.value = id === "b-time" ? "tm" : "";
+    if (el) el.value = "";
   });
+  document.getElementById("b-time").value = "tm";
   document.getElementById("field-filters").innerHTML = "";
   document.getElementById("field-filters").style.display = "none";
-  document.getElementById("output").textContent = "Set filters and press Search.";
+  document.getElementById("result-area").innerHTML = "";
+}
+
+function errorCard(msg) {
+  return `<div class="card"><div class="msg msg-error">${msg}</div></div>`;
+}
+
+function summaryBar(d) {
+  const parts = [];
+  if (d.count !== undefined) parts.push(`<span>${d.count} records</span>`);
+  if (d.total_fmt) parts.push(`<span>Total: <strong>${d.total_fmt}</strong></span>`);
+  if (d.avg_fmt)   parts.push(`<span>Avg: <strong>${d.avg_fmt}</strong></span>`);
+  if (d.time_label) parts.push(`<span style="color:var(--sub)">${d.time_label}</span>`);
+  return parts.length
+    ? `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin-bottom:10px;">${parts.join("")}</div>`
+    : "";
+}
+
+function renderResult(d) {
+  if (!d) return errorCard("No data");
+  if (d.kind === "group") return renderGroup(d);
+  return renderRecords(d);
+}
+
+function renderGroup(d) {
+  const hasTot = d.has_amount;
+  const heads  = hasTot
+    ? `<th>Group</th><th style="text-align:right">Count</th><th style="text-align:right">Total</th>`
+    : `<th>Group</th><th style="text-align:right">Count</th>`;
+  const rows = (d.rows||[]).map(r => hasTot
+    ? `<tr><td>${r.key}</td><td style="text-align:right">${r.count}</td><td style="text-align:right">${r.total_fmt}</td></tr>`
+    : `<tr><td>${r.key}</td><td style="text-align:right">${r.count}</td></tr>`).join("");
+  const foot = hasTot
+    ? `<tr style="font-weight:700;border-top:2px solid var(--border)"><td>Total</td><td style="text-align:right">${d.grand_count}</td><td style="text-align:right">${d.grand_total_fmt}</td></tr>`
+    : `<tr style="font-weight:700;border-top:2px solid var(--border)"><td>Total</td><td style="text-align:right">${d.grand_count}</td></tr>`;
+  return `<div class="card">
+    <div class="card-title">Grouped by ${(d.fields||[]).join(", ")} · ${d.time_label}</div>
+    ${summaryBar(d)}
+    <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${heads}</tr></thead><tbody>${rows}${foot}</tbody></table></div>
+  </div>`;
+}
+
+function renderRecords(d) {
+  if (!d.records||!d.records.length)
+    return `<div class="card" style="color:var(--sub);text-align:center;padding:32px;">No records found.</div>`;
+  const cols  = d.columns||[];
+  const heads = cols.map(c=>`<th>${c}</th>`).join("");
+  const rows  = d.records.map(r =>
+    `<tr>${cols.map(c=>`<td>${r[c]||""}</td>`).join("")}</tr>`).join("");
+  return `<div class="card">
+    ${summaryBar(d)}
+    <div style="overflow-x:auto;"><table class="data-table">
+      <thead><tr>${heads}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+  </div>`;
 }
 </script>
-{% endblock %}
