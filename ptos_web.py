@@ -41,12 +41,13 @@ def _build_field_defs(schema, rtype, current_record=None):
     for f in type_schema.get("conditions", {}):
         if f not in all_fields: all_fields.append(f)
 
-    # collect which fields are parents of other fields
-    parent_fields = {
-        field_def.get("parent")
-        for field_def in type_schema.get("fields", {}).values()
-        if isinstance(field_def, dict) and field_def.get("parent")
+    # collect which fields trigger tags and which are parents of other fields
+    parent_fields  = {
+        fd.get("parent")
+        for fd in type_schema.get("fields", {}).values()
+        if isinstance(fd, dict) and fd.get("parent")
     }
+    tag_triggers = set(type_schema.get("tags", {}).keys())
 
     defs   = []
     record = current_record or {}
@@ -58,7 +59,8 @@ def _build_field_defs(schema, rtype, current_record=None):
         field_def  = type_schema.get("fields", {}).get(fname, {})
         parent     = field_def.get("parent")
         has_parent = bool(parent)
-        is_parent  = fname in parent_fields
+        is_parent      = fname in parent_fields
+        is_tag_trigger = fname in tag_triggers
 
         if parent:
             parent_val = record.get(parent, "")
@@ -67,14 +69,15 @@ def _build_field_defs(schema, rtype, current_record=None):
             options = ptos.resolve_options(schema, type_schema, fname) or []
 
         defs.append({
-            "name":       fname,
-            "required":   fname in required,
-            "options":    options,
-            "is_int":     is_int,
-            "unit":       unit,
-            "parent":     parent or "",
-            "has_parent": has_parent,
-            "is_parent":  is_parent,
+            "name":           fname,
+            "required":       fname in required,
+            "options":        options,
+            "is_int":         is_int,
+            "unit":           unit,
+            "parent":         parent or "",
+            "has_parent":     has_parent,
+            "is_parent":      is_parent,
+            "is_tag_trigger": is_tag_trigger,
         })
     return defs
 
