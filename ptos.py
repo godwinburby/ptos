@@ -1309,13 +1309,51 @@ def quick_add(args):
             print()
             return
         for name in sorted(presets):
-            print(" ", name)
+            p = presets[name]
+            if isinstance(p, dict) and "alias" in p:
+                print(f"  {name} → {p['alias']}")
+            elif isinstance(p, dict) and "records" in p:
+                print(f"  {name} [{len(p['records'])} records]")
+            else:
+                print(" ", name)
         print()
         return
+
     name = args.preset[0]
     if name not in presets:
         sys.exit(f"Unknown preset: {name}")
-    record = dict(presets[name])
+
+    # resolve alias
+    if isinstance(presets[name], dict) and "alias" in presets[name]:
+        target = presets[name]["alias"]
+        if target not in presets:
+            sys.exit(f"Preset alias '{name}' points to '{target}' which does not exist.")
+        name = target
+
+    preset_data = presets[name]
+
+    # ── multi-record preset ───────────────────────────────────────────────────
+    if isinstance(preset_data, dict) and "records" in preset_data:
+        schema    = get_schema()
+        date_str  = resolve_date(args.date)
+        added     = []
+        print(f"\nMulti-record preset '{name}' — {len(preset_data['records'])} record(s)\n")
+        for i, rec_template in enumerate(preset_data["records"], 1):
+            print(f"── Record {i} ──────────────────────────────")
+            record = dict(rec_template)
+            record, note = complete_record(schema, record)
+            problems = validate_record(schema, record)
+            if problems:
+                sys.exit(f"Record {i}: {problems[0]}")
+            line = build_record_line(date_str, record, note if note else args.note)
+            append_record(line)
+            added.append(line)
+            print(f"✔  {line}\n")
+        print(f"\n{len(added)} record(s) added.")
+        return
+
+    # ── single-record preset ──────────────────────────────────────────────────
+    record = dict(preset_data)
     for item in args.preset[1:]:
         if "=" not in item:
             continue
@@ -1780,6 +1818,14 @@ def resolve_query_context(args, queries):
     Mutates args.time / args.date_from / args.date_to only when
     the CLI left them at their defaults.
     """
+    # resolve alias first
+    q_raw = queries.get(args.query, {})
+    if isinstance(q_raw, dict) and "alias" in q_raw:
+        target = q_raw["alias"]
+        if target not in queries:
+            sys.exit(f"Alias '{args.query}' points to '{target}' which does not exist.")
+        args.query = target
+
     metrics    = queries.get("metrics",    {})
     dashboards = queries.get("dashboards", {})
 
@@ -1808,7 +1854,10 @@ def resolve_query_context(args, queries):
         if q.get("count"):              args.count = True
         if "sort"  in q:                args.sort  = q["sort"]
         if "trend" in q and args.trend is None:
-            args.trend = int(q["trend"])
+            try:
+                args.trend = int(q["trend"])
+            except (ValueError, TypeError):
+                sys.exit(f"Query '{args.query}': 'trend' must be an integer, got {q['trend']!r}")
 
     return query_filters, metric_mode, dashboard_mode
 
