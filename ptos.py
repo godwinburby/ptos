@@ -301,62 +301,201 @@ def build_record_line(date, record, note=None):
         line += " | " + note
     return line
 
-def apply_where(kv, filters):
-    """Return True if kv matches all filter expressions.
-    Supports | for OR values on = and != operators (quote on Linux):
-      domain=self|home       -> domain is self OR home
-      outcome!=trial|decision -> outcome is neither trial nor decision
+def _tok_where(expr):
+    """Tokenize a filter expression string into a list of tokens.
+    Token types: AND, OR, NOT, LPAREN, RPAREN, COND(string).
     """
+    tokens = []
+    i = 0
+    s = expr.strip()
+    while i < len(s):
+        if s[i].isspace():
+            i += 1
+            continue
+        if s[i] == '(':
+            tokens.append(('LPAREN', '('))
+            i += 1
+        elif s[i] == ')':
+            tokens.append(('RPAREN', ')'))
+            i += 1
+        elif s[i:i+3].upper() == 'AND' and (i+3 >= len(s) or not s[i+3].isalnum()):
+            tokens.append(('AND', 'AND'))
+            i += 3
+        elif s[i:i+2].upper() == 'OR' and (i+2 >= len(s) or not s[i+2].isalnum()):
+            tokens.append(('OR', 'OR'))
+            i += 2
+        elif s[i:i+3].upper() == 'NOT' and (i+3 >= len(s) or not s[i+3].isalnum()):
+            tokens.append(('NOT', 'NOT'))
+            i += 3
+        else:
+            j = i
+            in_quote = False
+            while j < len(s):
+                if s[j] in ('"', "'"):
+                    in_quote = not in_quote
+                if not in_quote and (s[j].isspace() or s[j] in ('(', ')')):
+                    break
+                j += 1
+            tok = s[i:j].strip('"\'')
+            if tok:
+                tokens.append(('COND', tok))
+            i = j
+    return tokens
+
+
+def _eval_cond(kv, cond):
+    """Evaluate a single condition string against kv dict.
+    Operators: =  !=  >  <  >=  <=  ~(contains)  !~(not contains)
+    Numeric fields coerced to int; date fields coerced to date; else string compare.
+    """
+    m = re.match(r"(\w+)(!~|!=|>=|<=|~|=|>|<)(.+)", cond)
+    if not m:
+        return True  # unparseable — skip silently
+    key, op, val = m.groups()
+    val = val.strip('"\'')
+
+    cur = kv.get(key, "")
+    cur_list = cur if isinstance(cur, list) else [cur]
+
+    if op == "~":
+        return any(val.lower() in v.lower() for v in cur_list)
+    if op == "!~":
+        return all(val.lower() not in v.lower() for v in cur_list)
+
+    if key not in kv:
+        return False
+
+    if op == "=":
+        return val in cur_list
+    if op == "!=":
+        return val not in cur_list
+
+    # ordered operators — coerce scalar
+    cur_scalar = cur_list[0] if cur_list else ""
+    if key in numeric_fields():
+        try:
+            cur_scalar, val = int(cur_scalar), int(val)
+        except (ValueError, TypeError):
+            pass
+    else:
+        try:
+            cur_scalar = parse_date(str(cur_scalar))
+            val = parse_date(str(val))
+        except (ValueError, TypeError):
+            pass
+
     ops = {
-        "=":  lambda a, b: a == b,
-        "!=": lambda a, b: a != b,
         ">":  lambda a, b: a > b,
         "<":  lambda a, b: a < b,
         ">=": lambda a, b: a >= b,
         "<=": lambda a, b: a <= b,
     }
+    fn = ops.get(op)
+    if fn is None:
+        return True
+    try:
+        return fn(cur_scalar, val)
+    except TypeError:
+        return False
+
+
+def _parse_expr(tokens, pos):
+    """Recursive descent: expr := term (OR term)*"""
+    node, pos = _parse_term(tokens, pos)
+    while pos < len(tokens) and tokens[pos][0] == 'OR':
+        pos += 1
+        right, pos = _parse_term(tokens, pos)
+        node = ('OR', node, right)
+    return node, pos
+
+
+def _parse_term(tokens, pos):
+    """term := factor (AND factor)*"""
+    node, pos = _parse_factor(tokens, pos)
+    while pos < len(tokens) and tokens[pos][0] == 'AND':
+        pos += 1
+        right, pos = _parse_factor(tokens, pos)
+        node = ('AND', node, right)
+    return node, pos
+
+
+def _parse_factor(tokens, pos):
+    """factor := NOT factor | LPAREN expr RPAREN | COND"""
+    if pos >= len(tokens):
+        return ('COND', ''), pos
+    typ, val = tokens[pos]
+    if typ == 'NOT':
+        child, pos = _parse_factor(tokens, pos + 1)
+        return ('NOT', child), pos
+    if typ == 'LPAREN':
+        node, pos = _parse_expr(tokens, pos + 1)
+        if pos < len(tokens) and tokens[pos][0] == 'RPAREN':
+            pos += 1
+        return node, pos
+    if typ == 'COND':
+        return ('COND', val), pos + 1
+    return ('COND', ''), pos + 1
+
+
+def _eval_node(node, kv):
+    """Walk AST and evaluate against kv dict."""
+    kind = node[0]
+    if kind == 'COND':
+        return _eval_cond(kv, node[1])
+    if kind == 'AND':
+        return _eval_node(node[1], kv) and _eval_node(node[2], kv)
+    if kind == 'OR':
+        return _eval_node(node[1], kv) or _eval_node(node[2], kv)
+    if kind == 'NOT':
+        return not _eval_node(node[1], kv)
+    return True
+
+
+def _is_expression(s):
+    """True if string contains boolean keywords or grouping parens."""
+    upper = s.upper()
+    return (
+        '(' in s or ')' in s
+        or re.search(r'\bAND\b', upper)
+        or re.search(r'\bOR\b',  upper)
+        or re.search(r'\bNOT\b', upper)
+    )
+
+
+def apply_where(kv, filters):
+    """Return True if kv matches the filter expression(s).
+
+    Two modes — detected automatically:
+
+    Expression mode (single string with AND / OR / NOT / parentheses):
+      --where "(category=home OR category=household) AND amount>100"
+      --where "NOT stage=closed AND amount>=500"
+
+    Legacy mode (multiple simple conditions, ANDed together — backward compatible):
+      --where category=home --where amount>100
+
+    Operators: =  !=  >  <  >=  <=  ~(contains)  !~(not contains)
+    """
+    if not filters:
+        return True
+
+    if len(filters) == 1 and _is_expression(filters[0]):
+        tokens = _tok_where(filters[0])
+        node, _ = _parse_expr(tokens, 0)
+        return _eval_node(node, kv)
+
+    # Legacy AND-chain
     for cond in filters:
-        m = re.match(r"(\w+)(!=|>=|<=|~|=|>|<)(.+)", cond)
-        if not m:
+        tokens = _tok_where(cond)
+        if not tokens:
             continue
-        key, op, val = m.groups()
-        # ~ operator: field contains substring (case-insensitive)
-        if op == "~":
-            cur = kv.get(key, "")
-            if isinstance(cur, list):
-                if not any(val.lower() in v.lower() for v in cur):
-                    return False
-            else:
-                if val.lower() not in cur.lower():
-                    return False
-            continue
-        # | operator: OR across multiple values (= and != only)
-        or_vals = val.split("|") if "|" in val and op in ("=", "!=") else None
-        if or_vals:
-            cur = kv.get(key, "")
-            cur_list = cur if isinstance(cur, list) else [cur]
-            if op == "=":
-                if not any(v in or_vals for v in cur_list):
-                    return False
-            else:  # !=
-                if any(v in or_vals for v in cur_list):
-                    return False
-            continue
-        if key not in kv:
-            return False
-        cur = kv[key]
-        if isinstance(cur, list):
-            if op == "="  and val not in cur: return False
-            if op == "!=" and val in cur:     return False
-            if op not in ("=", "!="):         return False
-            continue
-        if key in numeric_fields():
-            try:
-                cur, val = int(cur), int(val)
-            except (ValueError, TypeError):
-                pass
-        if op not in ops or not ops[op](cur, val):
-            return False
+        if len(tokens) == 1 and tokens[0][0] == 'COND':
+            if not _eval_cond(kv, tokens[0][1]):
+                return False
+        else:
+            node, _ = _parse_expr(tokens, 0)
+            if not _eval_node(node, kv):
+                return False
     return True
 
 # --------------------------------------------------
@@ -2439,7 +2578,7 @@ def main():
             known = {k for line in all_results for p in [safe_parse_line(line)] if p for k in p[1]}
             known.update({"type", "tag"})
             for f in final_filters:
-                m = re.match(r"(\w+)(!=|>=|<=|~|=|>|<)", f)
+                m = re.match(r"(\w+)(!~|!=|>=|<=|~|=|>|<)", f)
                 if m and m.group(1) not in known:
                     print(f"  Note: '{m.group(1)}' not found in any record — check spelling.")
             print()
