@@ -53,12 +53,17 @@ max = "prescriptions"
 [metrics.lowest_sale]
 min = "prescriptions"
 
+[metrics.personal_expense]
+sum = "expense"
+
 # --------------------------------------------------
 # DASHBOARDS
 # --------------------------------------------------
 
 [dashboards.clinic]
 metrics = [
+  "personal_expense",
+  "expense_today",
   "assessments",
   "prescriptions",
   "loss_ratio",
@@ -157,14 +162,14 @@ exclude_results = ["fix_appointment", "deceased", "not_relevant", "another_provi
 where = "domain=self category=transport type=expense"
 time  = "this-month"
 
-[expense_tag]
+[expense_today]
 where = "type=expense domain!=work"
 time  = "td"
 group = ["tag"]
 sum   = true
 
 [exptag]
-alias = "expense_tag"
+alias = "expense_today"
 
 [auto]
 where = "domain=self category=transport tag=auto type=expense"
