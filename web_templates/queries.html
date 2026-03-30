@@ -29,7 +29,6 @@
     </select>
   </div>
   <div style="display:flex;gap:8px;">
-    <button class="btn btn-primary btn-sm" onclick="runQuery()" id="run-btn">⟳ Run</button>
     <button class="btn btn-ghost btn-sm" onclick="clearOut()">✕ Clear</button>
   </div>
 </div>
@@ -37,18 +36,13 @@
 <div id="result-area"></div>
 
 <script>
-document.getElementById("q-select").addEventListener("change", runQuery);
-document.getElementById("q-time").addEventListener("change", runQuery);
-
 function runQuery() {
   const raw  = document.getElementById("q-select").value;
   const time = document.getElementById("q-time").value;
-  const btn  = document.getElementById("run-btn");
   const area = document.getElementById("result-area");
   if (!raw) return;
   const [kind, ...rest] = raw.split(":");
   const name = rest.join(":");
-  btn.disabled = true; btn.textContent = "Running…";
   area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
 
   fetch("/queries/run", {
@@ -57,12 +51,10 @@ function runQuery() {
   })
   .then(r => r.json())
   .then(d => {
-    btn.disabled = false; btn.textContent = "⟳ Run";
     if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
     area.innerHTML = renderResult(d.data);
   })
   .catch(e => {
-    btn.disabled = false; btn.textContent = "⟳ Run";
     area.innerHTML = errorCard(String(e));
   });
 }

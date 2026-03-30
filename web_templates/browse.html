@@ -28,11 +28,10 @@
   <div class="field-group">
     <label>Search</label>
     <input type="text" id="b-search" placeholder="full-text search…"
-           onkeydown="if(event.key==='Enter') runBrowse()">
+           oninput="debouncedBrowse()">
   </div>
   <div id="field-filters" style="display:none;"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <button class="btn btn-primary btn-sm" onclick="runBrowse()" id="run-btn">⟳ Search</button>
     <button class="btn btn-success btn-sm" onclick="exportCSV()">↓ CSV</button>
     <button class="btn btn-ghost btn-sm"   onclick="clearBrowse()">✕ Clear</button>
   </div>
@@ -47,7 +46,7 @@ function onTypeChange() {
   const grp  = document.getElementById("b-group");
   grp.innerHTML = '<option value="">(none)</option>';
   ff.innerHTML  = ""; ff.style.display = "none";
-  if (!type) return;
+  if (!type) { runBrowse(); return; }
   fetch("/api/type_fields/" + encodeURIComponent(type))
   .then(r => r.json())
   .then(data => {
@@ -60,14 +59,26 @@ function onTypeChange() {
       const wrap = document.createElement("div");
       wrap.className = "field-group";
       wrap.innerHTML = `<label>${f.name}</label>
-        <select id="ff-${f.name}">
+        <select id="ff-${f.name}" onchange="runBrowse()">
           <option value="">(any)</option>
           ${f.options.map(o=>`<option value="${o}">${o}</option>`).join("")}
         </select>`;
       ff.appendChild(wrap);
     });
     ff.style.display = ff.children.length ? "block" : "none";
+    runBrowse();
   });
+}
+
+// wire time and group selects
+document.getElementById("b-time").addEventListener("change", runBrowse);
+document.getElementById("b-group").addEventListener("change", runBrowse);
+
+// debounce for search input — wait 500ms after user stops typing
+let _searchTimer = null;
+function debouncedBrowse() {
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(runBrowse, 500);
 }
 
 function _params() {
@@ -84,9 +95,7 @@ function _params() {
 }
 
 function runBrowse() {
-  const btn  = document.getElementById("run-btn");
   const area = document.getElementById("result-area");
-  btn.disabled = true; btn.textContent = "Loading…";
   area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
   fetch("/browse/run", {
     method:"POST", headers:{"Content-Type":"application/json"},
@@ -94,12 +103,10 @@ function runBrowse() {
   })
   .then(r => r.json())
   .then(d => {
-    btn.disabled = false; btn.textContent = "⟳ Search";
     if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
     area.innerHTML = renderResult(d.data);
   })
   .catch(e => {
-    btn.disabled = false; btn.textContent = "⟳ Search";
     area.innerHTML = errorCard(String(e));
   });
 }
