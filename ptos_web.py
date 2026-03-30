@@ -40,6 +40,14 @@ def _build_field_defs(schema, rtype, current_record=None):
         if f not in all_fields: all_fields.append(f)
     for f in type_schema.get("conditions", {}):
         if f not in all_fields: all_fields.append(f)
+
+    # collect which fields are parents of other fields
+    parent_fields = {
+        field_def.get("parent")
+        for field_def in type_schema.get("fields", {}).values()
+        if isinstance(field_def, dict) and field_def.get("parent")
+    }
+
     defs   = []
     record = current_record or {}
     for fname in all_fields:
@@ -50,12 +58,11 @@ def _build_field_defs(schema, rtype, current_record=None):
         field_def  = type_schema.get("fields", {}).get(fname, {})
         parent     = field_def.get("parent")
         has_parent = bool(parent)
+        is_parent  = fname in parent_fields
 
         if parent:
             parent_val = record.get(parent, "")
             options    = ptos.resolve_options_for_value(type_schema, fname, parent_val)
-            # options is [] when parent has no value yet — keep has_parent True
-            # so template shows the "select parent first" placeholder dropdown
         else:
             options = ptos.resolve_options(schema, type_schema, fname) or []
 
@@ -67,6 +74,7 @@ def _build_field_defs(schema, rtype, current_record=None):
             "unit":       unit,
             "parent":     parent or "",
             "has_parent": has_parent,
+            "is_parent":  is_parent,
         })
     return defs
 

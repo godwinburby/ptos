@@ -92,7 +92,8 @@
       </label>
       {% if f.options %}
       <select name="{{ f.name }}" id="field-{{ f.name }}"
-              {% if f.parent %}data-parent="{{ f.parent }}" onchange="onParentChange('{{ f.name }}')"{% endif %}>
+              {% if f.is_parent %}onchange="onParentChange('{{ f.name }}')"{% endif %}
+              {% if f.parent %}data-parent="{{ f.parent }}"{% endif %}>
         <option value="">— select {{ f.name }} —</option>
         {% for opt in f.options %}
         <option value="{{ opt }}"
@@ -155,15 +156,15 @@
 </form>
 
 <script>
-// when a parent field changes, reload page preserving other values
+// when a parent field changes, reload page preserving all current values
 function onParentChange(fieldName) {
   const form   = document.getElementById("add-form");
   const fd     = new FormData(form);
-  const type   = fd.get("type");
   const params = new URLSearchParams();
-  params.set("type", type);
+  params.set("type", fd.get("type"));
   for (const [k, v] of fd.entries()) {
-    if (k !== "custom_tags") params.append(k, v);
+    if (k !== "type" && k !== "custom_tags" && v)
+      params.append(k, v);
   }
   window.location = "/add?" + params.toString();
 }
