@@ -152,8 +152,31 @@
   </div>
 
   <button type="submit" class="btn btn-primary btn-full" id="save-btn">Save Record</button>
+  <button type="button" class="btn btn-ghost btn-full" style="margin-top:10px;"
+          onclick="showSavePreset()">☆ Save as Preset</button>
   <a href="/add" class="btn btn-ghost btn-full" style="margin-top:10px;">✕ Cancel</a>
 </form>
+
+<!-- Save as Preset dialog -->
+<div id="preset-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
+     z-index:500;display:none;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:320px;
+              box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="font-size:16px;font-weight:700;margin-bottom:14px;">Save as Preset</div>
+    <div class="field-group">
+      <label>Preset name</label>
+      <input type="text" id="preset-name-input" placeholder="e.g. commute"
+             style="text-transform:lowercase;"
+             oninput="this.value=this.value.replace(/[^a-z0-9_]/g,'')">
+      <div class="hint">lowercase letters, numbers, underscores</div>
+    </div>
+    <div id="preset-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" style="flex:1" onclick="doSavePreset()">Save</button>
+      <button class="btn btn-ghost"   style="flex:1" onclick="hidePresetDialog()">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <script>
 // when a parent field changes, reload page preserving all current values
@@ -173,6 +196,74 @@ function onParentChange(fieldName) {
 document.getElementById("add-form").addEventListener("submit", function() {
   document.getElementById("save-btn").disabled = true;
   document.getElementById("save-btn").textContent = "Saving…";
+});
+
+// ── Save as Preset ────────────────────────────────────────────────────────────
+function _currentRecord() {
+  const fd = new FormData(document.getElementById("add-form"));
+  const rec = {};
+  for (const [k, v] of fd.entries()) {
+    if (!v || k === "date" || k === "note" || k === "custom_tags") continue;
+    if (k === "tag") {
+      if (!rec.tag) rec.tag = [];
+      rec.tag.push(v);
+    } else {
+      rec[k] = v;
+    }
+  }
+  return rec;
+}
+
+function showSavePreset() {
+  const rec = _currentRecord();
+  if (!rec.type) {
+    alert("Select a record type first.");
+    return;
+  }
+  document.getElementById("preset-name-input").value = "";
+  document.getElementById("preset-msg").style.display = "none";
+  const dlg = document.getElementById("preset-dialog");
+  dlg.style.display = "flex";
+  document.getElementById("preset-name-input").focus();
+}
+
+function hidePresetDialog() {
+  document.getElementById("preset-dialog").style.display = "none";
+}
+
+function doSavePreset() {
+  const name = document.getElementById("preset-name-input").value.trim();
+  const msg  = document.getElementById("preset-msg");
+  if (!name) { msg.textContent = "Enter a name."; msg.style.display="block"; return; }
+  const record = _currentRecord();
+  fetch("/api/save_preset", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({name, record})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      hidePresetDialog();
+      // briefly show confirmation
+      const btn = document.querySelector('[onclick="showSavePreset()"]');
+      btn.textContent = `✔ Saved as '${d.name}'`;
+      btn.style.color = "var(--success)";
+      setTimeout(() => { btn.textContent = "☆ Save as Preset"; btn.style.color = ""; }, 3000);
+    } else {
+      msg.textContent = d.error;
+      msg.style.display = "block";
+    }
+  })
+  .catch(e => { msg.textContent = String(e); msg.style.display="block"; });
+}
+
+// close dialog on backdrop click
+document.getElementById("preset-dialog").addEventListener("click", function(e) {
+  if (e.target === this) hidePresetDialog();
+});
+document.getElementById("preset-name-input").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") doSavePreset();
+  if (e.key === "Escape") hidePresetDialog();
 });
 </script>
 {% endif %}

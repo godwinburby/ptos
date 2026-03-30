@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, datetime as dt, json, csv, tempfile
+import sys, os, re, datetime as dt, json, csv, tempfile
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
@@ -443,6 +443,78 @@ def api_type_fields(rtype):
         return jsonify(fields=defs, dimensions=dimensions)
     except Exception as e:
         return jsonify(fields=[], dimensions=[], error=str(e))
+
+
+@app.route("/api/save_preset", methods=["POST"])
+def api_save_preset():
+    """Save current add-record form state as a preset."""
+    data   = request.get_json(silent=True) or {}
+    name   = data.get("name","").strip().replace(" ","_").lower()
+    record = data.get("record", {})
+
+    if not name:
+        return jsonify(ok=False, error="Preset name cannot be empty")
+    if not re.match(r'^[a-z0-9_]+$', name):
+        return jsonify(ok=False, error="Name must be lowercase letters, numbers and underscores only")
+
+    existing = ptos.get_presets()
+    if name in existing:
+        return jsonify(ok=False, error=f"Preset '{name}' already exists")
+    if not record.get("type"):
+        return jsonify(ok=False, error="No record type in form — fill at least the type field")
+
+    try:
+        ptos._CACHE.pop("presets", None)   # invalidate cache before write
+        ptos.save_as_preset(name, record)
+        ptos._CACHE.pop("presets", None)   # invalidate cache after write
+        return jsonify(ok=True, name=name)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/save_query", methods=["POST"])
+def api_save_query():
+    """Save current browse filter state as a named query in queries.toml."""
+    data    = request.get_json(silent=True) or {}
+    name    = data.get("name","").strip().replace(" ","_").lower()
+    where   = data.get("where", [])   # list of filter strings e.g. ["type=expense"]
+    time    = data.get("time", "tm")
+    group   = data.get("group", "")
+    search  = data.get("search", "")
+
+    if not name:
+        return jsonify(ok=False, error="Query name cannot be empty")
+    if not re.match(r'^[a-z0-9_]+$', name):
+        return jsonify(ok=False, error="Name must be lowercase letters, numbers and underscores only")
+
+    try:
+        queries = ptos.get_queries()
+        if name in queries:
+            return jsonify(ok=False, error=f"Query '{name}' already exists in queries.toml")
+    except PTOSError:
+        pass
+
+    lines = [f"\n[{name}]"]
+    if where:
+        lines.append(f'where = "{" ".join(where)}"')
+    lines.append(f'time  = "{time}"')
+    if group:
+        lines.append(f'group = ["{group}"]')
+    if search:
+        lines.append(f'search = "{search}"')
+
+    try:
+        ptos._backup_file(ptos.QUERIES_PATH)
+        with open(ptos.QUERIES_PATH, "a", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        ptos._CACHE.pop("queries", None)   # invalidate cache
+        return jsonify(ok=True, name=name)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
