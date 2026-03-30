@@ -151,7 +151,7 @@ options.work   = ["admin", "books", "electricity", "courier", "postage", "office
 options.food          = ["snacks", "tea", "coffee", "restaurant", "bakery", "fruits", "quick_delivery", "dessert"]
 options.transport     = ["auto", "bus", "metro", "taxi", "uber", "rapido", "petrol"]
 options.grocery       = ["vegetables", "milk", "rice", "fruits", "super_market", "quick_delivery", "thykoodam"]
-options.household     = ["bakery", "snacks", "restaurant"]
+options.household     = ["bakery", "snacks", "restaurant", "maintenance", "truss_work"]
 options.staff_welfare = ["snacks"]
 
 # ----------------------

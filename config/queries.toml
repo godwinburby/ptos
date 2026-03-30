@@ -166,12 +166,6 @@ sum   = true
 [exptag]
 alias = "expense_tag"
 
-[ass_qtr]
-where = "type=assessment"
-time  = "tq"
-sort  = "outcome"
-
-
 [auto]
 where = "domain=self category=transport tag=auto type=expense"
 time  = "this-month"

@@ -92,7 +92,7 @@
       </label>
       {% if f.options %}
       <select name="{{ f.name }}" id="field-{{ f.name }}"
-              {% if f.is_parent %}onchange="onParentChange('{{ f.name }}')"{% endif %}
+              {% if f.is_parent or f.is_tag_trigger %}onchange="onParentChange('{{ f.name }}')"{% endif %}
               {% if f.parent %}data-parent="{{ f.parent }}"{% endif %}>
         <option value="">— select {{ f.name }} —</option>
         {% for opt in f.options %}
@@ -121,10 +121,10 @@
     {% endfor %}
 
     <!-- tags -->
-    {% if tag_options %}
     <div class="divider"></div>
     <div class="field-group">
       <label>Tags</label>
+      {% if tag_options %}
       <div class="chip-group" style="margin-top:4px;">
         {% for tag in tag_options %}
         <label class="chip {% if field_values and tag in (field_values.get('tag') or []) %}selected{% endif %}">
@@ -135,11 +135,11 @@
         </label>
         {% endfor %}
       </div>
-      <input type="text" name="custom_tags" placeholder="other tags, comma separated"
-             style="margin-top:10px;"
+      {% endif %}
+      <input type="text" name="custom_tags" placeholder="tags, comma separated"
+             style="margin-top:{% if tag_options %}10px{% else %}4px{% endif %};"
              value="{{ field_values.get('custom_tags','') if field_values else '' }}">
     </div>
-    {% endif %}
 
     <!-- note -->
     <div class="divider"></div>
