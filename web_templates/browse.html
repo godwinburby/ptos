@@ -33,7 +33,32 @@
   <div id="field-filters" style="display:none;"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-success btn-sm" onclick="exportCSV()">↓ CSV</button>
+    <button class="btn btn-primary btn-sm" onclick="showSaveQuery()">💾 Save as Query</button>
     <button class="btn btn-ghost btn-sm"   onclick="clearBrowse()">✕ Clear</button>
+  </div>
+</div>
+
+<!-- Save as Query dialog -->
+<div id="query-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
+     z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:320px;
+              box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="font-size:16px;font-weight:700;margin-bottom:14px;">Save as Query</div>
+    <div class="field-group">
+      <label>Query name</label>
+      <input type="text" id="query-name-input" placeholder="e.g. my_expenses"
+             style="text-transform:lowercase;"
+             oninput="this.value=this.value.replace(/[^a-z0-9_]/g,'')">
+      <div class="hint">lowercase letters, numbers, underscores</div>
+    </div>
+    <div id="query-preview" style="font-size:12px;color:var(--sub);
+         background:var(--bg);padding:8px;border-radius:6px;
+         margin-bottom:10px;font-family:monospace;word-break:break-all;"></div>
+    <div id="query-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" style="flex:1" onclick="doSaveQuery()">Save</button>
+      <button class="btn btn-ghost"   style="flex:1" onclick="hideQueryDialog()">Cancel</button>
+    </div>
   </div>
 </div>
 
@@ -186,5 +211,61 @@ function renderRecords(d) {
     </table></div>
   </div>`;
 }
+
+// ── Save as Query ─────────────────────────────────────────────────────────────
+function showSaveQuery() {
+  const p = _params();
+  const msg = document.getElementById("query-msg");
+  msg.style.display = "none";
+  document.getElementById("query-name-input").value = "";
+  // show preview of what will be saved
+  const parts = [];
+  if (p.where.length) parts.push(`where = "${p.where.join(" ")}"`);
+  parts.push(`time  = "${p.time}"`);
+  if (p.group) parts.push(`group = ["${p.group}"]`);
+  if (p.search) parts.push(`search = "${p.search}"`);
+  document.getElementById("query-preview").textContent = parts.join("\n");
+  const dlg = document.getElementById("query-dialog");
+  dlg.style.display = "flex";
+  document.getElementById("query-name-input").focus();
+}
+
+function hideQueryDialog() {
+  document.getElementById("query-dialog").style.display = "none";
+}
+
+function doSaveQuery() {
+  const name = document.getElementById("query-name-input").value.trim();
+  const msg  = document.getElementById("query-msg");
+  if (!name) { msg.textContent = "Enter a name."; msg.style.display="block"; return; }
+  const p = _params();
+  fetch("/api/save_query", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({name, where: p.where, time: p.time,
+                          group: p.group, search: p.search})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      hideQueryDialog();
+      const btn = document.querySelector('[onclick="showSaveQuery()"]');
+      btn.textContent = `✔ Saved as '${d.name}'`;
+      btn.style.background = "var(--success)";
+      setTimeout(() => { btn.textContent = "💾 Save as Query"; btn.style.background = ""; }, 3000);
+    } else {
+      msg.textContent = d.error;
+      msg.style.display = "block";
+    }
+  })
+  .catch(e => { msg.textContent = String(e); msg.style.display="block"; });
+}
+
+document.getElementById("query-dialog").addEventListener("click", function(e) {
+  if (e.target === this) hideQueryDialog();
+});
+document.getElementById("query-name-input").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") doSaveQuery();
+  if (e.key === "Escape") hideQueryDialog();
+});
 </script>
 {% endblock %}

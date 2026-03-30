@@ -182,3 +182,13 @@ time  = "this-month"
 [autobus]
 where = "domain=self category=transport tag=auto|bus type=expense"
 time  = "this-month"
+
+[expense_domain]
+where = "type=expense"
+time  = "tm"
+group = ["domain"]
+
+[expense_jayden]
+where = "type=expense"
+time  = "tm"
+search = "jayden"
