@@ -7,25 +7,6 @@
 #         ptos --preset <name> --date yesterday
 # --------------------------------------------------
 
-[presets.commute]
-
-[[presets.commute.records]]
-type     = "expense"
-domain   = "self"
-category = "transport"
-amount   = 60
-tag      = ["auto"]
-
-[[presets.commute.records]]
-type     = "expense"
-domain   = "self"
-category = "transport"
-amount   = 30
-tag      = ["bus"]
-
-[presets.cm]
-alias = "commute"
-
 [presets.auto]
 type     = "expense"
 domain   = "self"
@@ -39,6 +20,12 @@ domain   = "self"
 category = "transport"
 amount   = 30
 tag      = ["bus"]
+
+[presets.commute]
+records = ["auto", "bus"]
+
+[presets.cm]
+alias = "commute"
 
 [presets.snacks]
 type     = "expense"
