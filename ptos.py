@@ -1724,7 +1724,9 @@ def quick_add(args):
             if isinstance(p, dict) and "alias" in p:
                 print(f"  {name} → {p['alias']}")
             elif isinstance(p, dict) and "records" in p:
-                print(f"  {name} [{len(p['records'])} records]")
+                items = p["records"]
+                names = [x if isinstance(x, str) else "…" for x in items]
+                print(f"  {name} [{', '.join(names)}]")
             else:
                 print(" ", name)
         print()
@@ -1745,11 +1747,30 @@ def quick_add(args):
 
     # ── multi-record preset ───────────────────────────────────────────────────
     if isinstance(preset_data, dict) and "records" in preset_data:
-        schema    = get_schema()
-        date_str  = resolve_date(args.date)
-        added     = []
-        print(f"\nMulti-record preset '{name}' — {len(preset_data['records'])} record(s)\n")
-        for i, rec_template in enumerate(preset_data["records"], 1):
+        schema   = get_schema()
+        date_str = resolve_date(args.date)
+        added    = []
+
+        # records is a list of preset names — each must resolve to a single-record preset
+        resolved = []
+        for item in preset_data["records"]:
+            if not isinstance(item, str):
+                sys.exit(f"Preset '{name}': records list must contain preset names (strings), not inline dicts.\n"
+                         f"  Define each record as its own preset and reference it by name.")
+            if item not in presets:
+                sys.exit(f"Preset '{name}': references unknown preset '{item}'")
+            ref = presets[item]
+            if isinstance(ref, dict) and "alias" in ref:
+                target = ref["alias"]
+                if target not in presets:
+                    sys.exit(f"Preset '{item}' alias points to unknown preset '{target}'")
+                ref = presets[target]
+            if isinstance(ref, dict) and "records" in ref:
+                sys.exit(f"Preset '{name}': nested multi-record presets not supported ('{item}')")
+            resolved.append(dict(ref))
+
+        print(f"\nMulti-record preset '{name}' — {len(resolved)} record(s)\n")
+        for i, rec_template in enumerate(resolved, 1):
             print(f"── Record {i} ──────────────────────────────")
             record = dict(rec_template)
             record, note = complete_record(schema, record)

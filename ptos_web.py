@@ -81,10 +81,55 @@ def _build_field_defs(schema, rtype, current_record=None):
         })
     return defs
 
+def _resolve_multi_preset(name):
+    """Resolve a multi-record preset to a list of record dicts.
+    Returns (records, error_str) — error_str is None if all records are complete.
+    A preset is considered complete if all its fields are specified
+    (no schema-required fields missing).
+    """
+    presets = ptos.get_presets()
+    pd = presets.get(name, {})
+    if isinstance(pd, dict) and "alias" in pd:
+        pd = presets.get(pd["alias"], {})
+    if not isinstance(pd, dict) or "records" not in pd:
+        return None, f"'{name}' is not a multi-record preset"
+    try:
+        schema = ptos.get_schema()
+    except Exception as e:
+        return None, str(e)
+    resolved = []
+    for item in pd["records"]:
+        if not isinstance(item, str):
+            return None, f"records list must contain preset names"
+        if item not in presets:
+            return None, f"references unknown preset '{item}'"
+        ref = presets[item]
+        if isinstance(ref, dict) and "alias" in ref:
+            ref = presets.get(ref["alias"], {})
+        if isinstance(ref, dict) and "records" in ref:
+            return None, f"nested multi-record presets not supported"
+        record = dict(ref)
+        problems = ptos.validate_record(schema, record)
+        if problems:
+            return None, f"preset '{item}': {problems[0]}"
+        resolved.append(record)
+    return resolved, None
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Home
-# ══════════════════════════════════════════════════════════════════════════════
+
+def _multi_presets():
+    """Return dict of multi-record presets that are fully specified (no missing fields)."""
+    result = {}
+    for name, p in ptos.get_presets().items():
+        if not isinstance(p, dict) or "records" not in p:
+            continue
+        records, err = _resolve_multi_preset(name)
+        if records is not None:
+            refs = p["records"]
+            result[name] = ", ".join(refs) if isinstance(refs, list) else ""
+    return result
+
+
+
 
 @app.route("/")
 def home():
@@ -92,8 +137,7 @@ def home():
     except: schema = {}
     presets = {k: v for k, v in ptos.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
-
-    # due list
+    multi_presets = _multi_presets()
     try:
         due_data  = svc.get_due()
         due_rows  = due_data["rows"]
@@ -128,6 +172,7 @@ def home():
     return render_template("home.html",
         tab="home", title="Home", now=_now_str(), greeting=_greeting(),
         presets=sorted(presets.keys())[:8],
+        multi_presets=multi_presets,
         due_count=due_count, due_rows=due_rows[:5],
         stats=stats,
         recent_rows=recent_rows, recent_cols=recent_cols)
@@ -165,7 +210,7 @@ def add_get():
     types   = schema.get("types", {}).get("allowed", [])
     presets = {k: v for k, v in ptos.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
-    selected_type = request.args.get("type", "")
+    multi_presets = _multi_presets()
     preset_name   = request.args.get("preset", "")
     field_values  = {k: v for k, v in request.args.items()
                      if k not in ("type","preset","date")}
@@ -187,6 +232,7 @@ def add_get():
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, presets=sorted(presets.keys()),
+        multi_presets=multi_presets,
         selected_type=selected_type, field_defs=field_defs,
         tag_options=tag_options, field_values=field_values,
         today=dt.date.today().isoformat(),
@@ -483,7 +529,34 @@ def api_type_fields(rtype):
         return jsonify(fields=[], dimensions=[], error=str(e))
 
 
-@app.route("/api/save_preset", methods=["POST"])
+@app.route("/api/preset_add", methods=["POST"])
+def api_preset_add():
+    """Add all records from a multi-record preset in one shot."""
+    data     = request.get_json(silent=True) or {}
+    name     = data.get("name", "").strip()
+    date_str = data.get("date", dt.date.today().isoformat()).strip()
+    note     = data.get("note", "").strip() or None
+
+    if not name:
+        return jsonify(ok=False, error="Preset name required")
+
+    records, err = _resolve_multi_preset(name)
+    if err:
+        return jsonify(ok=False, error=err)
+
+    added = []
+    try:
+        for record in records:
+            line = ptos.build_record_line(date_str, record, note)
+            ptos.append_record(line)
+            added.append(line)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+    return jsonify(ok=True, added=added, count=len(added))
+
+
+
 def api_save_preset():
     """Save current add-record form state as a preset."""
     data   = request.get_json(silent=True) or {}
