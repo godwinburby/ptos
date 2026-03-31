@@ -719,7 +719,10 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
         return
 
     # ---- apply ----
-    for filepath, lineno, old_line, new_line, changed_date in plan:
+    # Sort in reverse lineno order so deletions from bottom don't shift
+    # the line numbers of records yet to be processed above them.
+    plan_sorted = sorted(plan, key=lambda x: (x[0], -(x[1] if x[1] is not None else 0)))
+    for filepath, lineno, old_line, new_line, changed_date in plan_sorted:
         if new_line is None:
             rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
             print(f"  Deleted: {old_line}")
