@@ -193,3 +193,7 @@ where = "type=expense"
 time  = "tm"
 search = "jayden"
 
+[jayden]
+where = "type=expense"
+time  = "this-month"
+search = "jayden"
