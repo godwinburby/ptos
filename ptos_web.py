@@ -211,6 +211,7 @@ def add_get():
     presets = {k: v for k, v in ptos.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
     multi_presets = _multi_presets()
+    selected_type = request.args.get("type", "")
     preset_name   = request.args.get("preset", "")
     field_values  = {k: v for k, v in request.args.items()
                      if k not in ("type","preset","date")}
@@ -557,6 +558,7 @@ def api_preset_add():
 
 
 
+@app.route("/api/save_preset", methods=["POST"])
 def api_save_preset():
     """Save current add-record form state as a preset."""
     data   = request.get_json(silent=True) or {}
@@ -616,6 +618,95 @@ def api_save_query():
             group=group, search=search
         )
         return jsonify(ok=True, name=result["name"])
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Edit / Delete
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/records/find", methods=["POST"])
+def api_records_find():
+    """Find records matching filters for edit/delete UI.
+    Body: {expr: str, where: [str], time: str, search: str}
+    Returns: {ok, matches: [{filepath, filename, line, parsed}]}
+    """
+    data   = request.get_json(silent=True) or {}
+    expr   = data.get("expr", "").strip()
+    where  = data.get("where", [])
+    time   = data.get("time", "all")
+    search = data.get("search", "") or None
+
+    if isinstance(where, str):
+        where = [where] if where.strip() else []
+
+    if expr and where:
+        combined = ptos._filters_to_expr(where)
+        filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
+    elif expr:
+        filters = [expr]
+    elif where:
+        filters = where
+    else:
+        return jsonify(ok=False, error="No filters provided")
+
+    try:
+        matches = svc.find_records(filters, time=time, search=search)
+        return jsonify(ok=True, matches=matches)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/records/edit", methods=["POST"])
+def api_records_edit():
+    """Edit one record in place.
+    Body: {filepath, old_line, set: ["key=val", ...], note: str|null}
+    Returns: {ok, old_line, new_line, changed_date}
+    """
+    data     = request.get_json(silent=True) or {}
+    filepath = data.get("filepath", "")
+    old_line = data.get("old_line", "")
+    set_args = data.get("set", [])
+    new_note = data.get("note", None)
+
+    if not filepath or not old_line:
+        return jsonify(ok=False, error="filepath and old_line required")
+    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+        return jsonify(ok=False, error="Invalid filepath")
+
+    try:
+        result = svc.edit_record(filepath, old_line,
+                                 set_args=set_args, new_note=new_note)
+        return jsonify(ok=True, **result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/records/delete", methods=["POST"])
+def api_records_delete():
+    """Delete one record.
+    Body: {filepath, old_line}
+    Returns: {ok, deleted_line}
+    """
+    data     = request.get_json(silent=True) or {}
+    filepath = data.get("filepath", "")
+    old_line = data.get("old_line", "")
+
+    if not filepath or not old_line:
+        return jsonify(ok=False, error="filepath and old_line required")
+    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+        return jsonify(ok=False, error="Invalid filepath")
+
+    try:
+        result = svc.delete_record(filepath, old_line)
+        return jsonify(ok=True, **result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
     except Exception as e:

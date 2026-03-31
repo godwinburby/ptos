@@ -78,6 +78,18 @@ def get_records(filters, time="tm", search=None, sort=None,
     except Exception as e:
         raise PTOSError(str(e))
 
+    # build line→filepath map for edit/delete support
+    try:
+        if filters or search:
+            loc_matches = ptos.find_records_with_location(
+                filters, search=search, start=start, end=end)
+        else:
+            loc_matches = ptos.find_records_with_location(
+                [], search=None, start=start, end=end)
+        line_to_filepath = {line: fp for fp, _idx, line in loc_matches}
+    except Exception:
+        line_to_filepath = {}
+
     if sort:
         def _sk(line):
             p = ptos.safe_parse_line(line)
@@ -96,9 +108,11 @@ def get_records(filters, time="tm", search=None, sort=None,
         row = _parse_record(line)
         if not row:
             continue
+        row["_line"]     = line
+        row["_filepath"] = line_to_filepath.get(line, "")
         records.append(row)
         for k in row:
-            if k not in col_set:
+            if k not in col_set and not k.startswith("_"):
                 col_seen.append(k)
                 col_set.add(k)
 
@@ -722,3 +736,81 @@ def save_query(name, where_expr, time="tm", group=None, search=None,
     ptos._CACHE.pop("queries", None)   # invalidate cache
 
     return {"ok": True, "name": name}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Edit / Delete
+# ══════════════════════════════════════════════════════════════════════════════
+
+def find_records(filters, time="all", search=None):
+    """Find records matching filters + time + search.
+    Returns list of {filepath, filename, line, parsed} dicts.
+    parsed is a flat dict of the record fields for display.
+    """
+    try:
+        start, end = _resolve_time(time)
+    except PTOSError:
+        start, end = __import__("datetime").date.min, __import__("datetime").date.max
+
+    matches = ptos.find_records_with_location(filters, search=search,
+                                               start=start, end=end)
+    results = []
+    for filepath, _idx, line in matches:
+        row = _parse_record(line)
+        results.append({
+            "filepath": filepath,
+            "filename": os.path.basename(filepath),
+            "line":     line,
+            "parsed":   row or {},
+        })
+    return results
+
+
+def edit_record(filepath, old_line, set_args=None, new_note=None):
+    """Apply --set changes and/or note replacement to one record.
+    set_args: list of "key=value", "key+=value", "key-=value" strings.
+    Returns {"old_line", "new_line", "changed_date"} or raises PTOSError.
+    """
+    try:
+        new_line, changed_date = ptos.apply_set(old_line, set_args or [], new_note)
+    except SystemExit as e:
+        raise PTOSError(str(e))
+    except Exception as e:
+        raise PTOSError(str(e))
+
+    if new_line == old_line:
+        raise PTOSError("No changes — new record is identical to old.")
+
+    try:
+        if changed_date:
+            import os as _os
+            old_year = _os.path.basename(filepath)[:4]
+            new_year = changed_date[:4]
+            ptos.rewrite_line_in_file(filepath, old_line, None)
+            new_path = _os.path.join(ptos.RECORDS_DIR, f"{new_year}.log")
+            ptos._backup_file(new_path)
+            with open(new_path, "a", encoding="utf-8") as f:
+                f.write(new_line + "\n")
+        else:
+            ptos.rewrite_line_in_file(filepath, old_line, new_line)
+    except ValueError as e:
+        raise PTOSError(str(e))
+    except Exception as e:
+        raise PTOSError(str(e))
+
+    return {"old_line": old_line, "new_line": new_line,
+            "changed_date": changed_date}
+
+
+def delete_record(filepath, old_line):
+    """Delete one record line from its log file.
+    Returns {"deleted_line"} or raises PTOSError.
+    """
+    try:
+        ptos.rewrite_line_in_file(filepath, old_line, None)
+    except ValueError as e:
+        raise PTOSError(str(e))
+    except Exception as e:
+        raise PTOSError(str(e))
+    return {"deleted_line": old_line}
+
