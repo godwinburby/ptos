@@ -537,27 +537,41 @@ def find_records_with_location(filters, search=None, start=None, end=None):
     return matches
 
 
-def rewrite_line_in_file(filepath, old_line, new_line):
+def rewrite_line_in_file(filepath, old_line, new_line, lineno=None):
     """Replace or delete one exact line in a log file.
-    old_line: the stripped line to find (must match exactly once).
-    new_line: replacement string, or None to delete the line.
+    old_line:  the stripped line content (used for verification).
+    new_line:  replacement string, or None to delete the line.
+    lineno:    0-based index into the file — if provided, targets this line
+               directly without searching, enabling safe edits of duplicate lines.
     Backs up the file before writing.
-    Raises ValueError if old_line not found or found more than once.
+    Raises ValueError if the line cannot be found or verified.
     """
     with open(filepath, encoding="utf-8") as f:
         lines = f.readlines()
 
-    hits = [i for i, l in enumerate(lines) if l.strip() == old_line]
-    if not hits:
-        raise ValueError(f"Line not found in {filepath}:\n  {old_line}")
-    if len(hits) > 1:
-        raise ValueError(
-            f"Line appears {len(hits)} times in {filepath} — cannot safely edit.\n"
-            f"  {old_line}"
-        )
+    if lineno is not None:
+        # precise index — verify content matches as a safety check
+        if lineno >= len(lines):
+            raise ValueError(f"Line {lineno} out of range in {filepath}")
+        if lines[lineno].strip() != old_line:
+            raise ValueError(
+                f"Line {lineno} content mismatch in {filepath}.\n"
+                f"  Expected: {old_line}\n"
+                f"  Found:    {lines[lineno].strip()}"
+            )
+        idx = lineno
+    else:
+        hits = [i for i, l in enumerate(lines) if l.strip() == old_line]
+        if not hits:
+            raise ValueError(f"Line not found in {filepath}:\n  {old_line}")
+        if len(hits) > 1:
+            raise ValueError(
+                f"Line appears {len(hits)} times in {filepath} — "
+                f"use lineno to target a specific occurrence.\n  {old_line}"
+            )
+        idx = hits[0]
 
     _backup_file(filepath)
-    idx = hits[0]
     if new_line is None:
         lines.pop(idx)
     else:
@@ -674,25 +688,23 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
                 sys.exit("Invalid selection.")
 
     # ---- build changes and confirm ----
-    plan = []  # list of (filepath, old_line, new_line_or_None)
-    for filepath, _, old_line in targets:
+    plan = []  # (filepath, lineno, old_line, new_line, changed_date)
+    for filepath, lineno, old_line in targets:
         if do_delete:
-            plan.append((filepath, old_line, None))
+            plan.append((filepath, lineno, old_line, None, None))
         else:
             new_line, changed_date = apply_set(old_line, set_args, new_note)
             if new_line == old_line:
                 print(f"  (no change)  {old_line}")
                 continue
-            plan.append((filepath, old_line, new_line, changed_date))
+            plan.append((filepath, lineno, old_line, new_line, changed_date))
 
     if not plan:
         print("\nNothing to change.\n")
         return
 
     print()
-    for item in plan:
-        filepath, old_line = item[0], item[1]
-        new_line = item[2]
+    for filepath, lineno, old_line, new_line, changed_date in plan:
         print(f"  file : {os.path.basename(filepath)}")
         print(f"  old  : {old_line}")
         if new_line is None:
@@ -707,19 +719,14 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
         return
 
     # ---- apply ----
-    for item in plan:
-        filepath, old_line, new_line = item[0], item[1], item[2]
-        changed_date = item[3] if len(item) > 3 else None
-
+    for filepath, lineno, old_line, new_line, changed_date in plan:
         if new_line is None:
-            # delete
-            rewrite_line_in_file(filepath, old_line, None)
+            rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
             print(f"  Deleted: {old_line}")
         elif changed_date:
-            # date changed — may need to move to a different year file
             old_year = os.path.basename(filepath)[:4]
             new_year = changed_date[:4]
-            rewrite_line_in_file(filepath, old_line, None)  # remove from old file
+            rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
             new_path = os.path.join(RECORDS_DIR, f"{new_year}.log")
             _backup_file(new_path)
             with open(new_path, "a", encoding="utf-8") as f:
@@ -727,7 +734,7 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
             moved = f" (moved {old_year}.log → {new_year}.log)" if old_year != new_year else ""
             print(f"  Updated{moved}: {new_line}")
         else:
-            rewrite_line_in_file(filepath, old_line, new_line)
+            rewrite_line_in_file(filepath, old_line, new_line, lineno=lineno)
             print(f"  Updated: {new_line}")
 
     print()

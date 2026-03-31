@@ -673,6 +673,10 @@ def api_records_edit():
     old_line = data.get("old_line", "")
     set_args = data.get("set", [])
     new_note = data.get("note", None)
+    lineno   = data.get("lineno", None)
+    if lineno is not None:
+        try: lineno = int(lineno)
+        except: lineno = None
 
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
@@ -681,7 +685,7 @@ def api_records_edit():
 
     try:
         result = svc.edit_record(filepath, old_line,
-                                 set_args=set_args, new_note=new_note)
+                                 set_args=set_args, new_note=new_note, lineno=lineno)
         return jsonify(ok=True, **result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -698,6 +702,10 @@ def api_records_delete():
     data     = request.get_json(silent=True) or {}
     filepath = data.get("filepath", "")
     old_line = data.get("old_line", "")
+    lineno   = data.get("lineno", None)
+    if lineno is not None:
+        try: lineno = int(lineno)
+        except: lineno = None
 
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
@@ -705,7 +713,7 @@ def api_records_delete():
         return jsonify(ok=False, error="Invalid filepath")
 
     try:
-        result = svc.delete_record(filepath, old_line)
+        result = svc.delete_record(filepath, old_line, lineno=lineno)
         return jsonify(ok=True, **result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
