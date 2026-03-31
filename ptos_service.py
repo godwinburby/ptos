@@ -633,6 +633,8 @@ def run_query(name, time=None):
     else:
         filters = []
 
+    effective_search = q.get("search") or None
+
     if "group" in q:
         result = get_group(filters, effective_time, q["group"],
                            sum_field=q.get("sum_field"))
@@ -652,7 +654,7 @@ def run_query(name, time=None):
         result["kind"] = "trend"
         return result
 
-    result = get_records(filters, effective_time)
+    result = get_records(filters, effective_time, search=effective_search)
     result["kind"] = "records"
     return result
 

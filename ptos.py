@@ -2283,6 +2283,8 @@ def resolve_query_context(args, queries):
         if "pivot" in q:                args.pivot = q["pivot"]
         if q.get("count"):              args.count = True
         if "sort"  in q:                args.sort  = q["sort"]
+        if "search" in q and not args.search:
+            args.search = q["search"]
         if "trend" in q and args.trend is None:
             try:
                 args.trend = int(q["trend"])
