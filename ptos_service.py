@@ -622,7 +622,16 @@ def run_query(name, time=None):
         raise PTOSError(f"Query '{name}' not found")
 
     effective_time = time or q.get("time", "tm")
-    filters = q.get("where", "").split()
+
+    raw_where = q.get("where")
+    if isinstance(raw_where, list):
+        # old array format — convert to single expression
+        expr = ptos._filters_to_expr(raw_where)
+        filters = [expr] if expr else []
+    elif isinstance(raw_where, str) and raw_where.strip():
+        filters = [raw_where]
+    else:
+        filters = []
 
     if "group" in q:
         result = get_group(filters, effective_time, q["group"],
@@ -646,3 +655,68 @@ def run_query(name, time=None):
     result = get_records(filters, effective_time)
     result["kind"] = "records"
     return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Save query
+# ══════════════════════════════════════════════════════════════════════════════
+
+def save_query(name, where_expr, time="tm", group=None, search=None,
+               pivot=None, count=False, sort=None, trend=None, overwrite=False):
+    """Save a named query to queries.toml in unified expression format.
+
+    where_expr: a single expression string already in canonical form,
+                e.g. "type=expense AND domain!=work"
+                Callers should use ptos._filters_to_expr() to build this
+                from a list of conditions if needed.
+
+    Returns: {"ok": True, "name": name}
+    Raises:  PTOSError on failure or name conflict (when overwrite=False).
+    """
+    import re as _re
+    name = name.strip().replace(" ", "_").lower()
+    if not name:
+        raise PTOSError("Query name cannot be empty")
+    if not _re.match(r'^[a-z0-9_]+$', name):
+        raise PTOSError("Name must be lowercase letters, numbers and underscores only")
+
+    try:
+        queries = ptos.get_queries()
+    except PTOSError:
+        queries = {}
+
+    if name in queries and not overwrite:
+        raise PTOSError(f"Query '{name}' already exists in queries.toml")
+
+    lines = [f"\n[{name}]"]
+
+    if where_expr and where_expr.strip():
+        val = where_expr.strip().replace('"', '\\"')
+        lines.append(f'where = "{val}"')
+
+    lines.append(f'time  = "{time}"')
+
+    if group:
+        items = ", ".join(f'"{g}"' for g in (group if isinstance(group, list) else [group]))
+        lines.append(f"group = [{items}]")
+
+    if search:
+        lines.append(f'search = "{search}"')
+
+    if pivot and len(pivot) >= 2:
+        items = ", ".join(f'"{p}"' for p in pivot)
+        lines.append(f"pivot = [{items}]")
+        if count:
+            lines.append("count = true")
+        if sort:
+            lines.append(f'sort  = "{sort}"')
+
+    if trend is not None:
+        lines.append(f"trend = {trend}")
+
+    ptos._backup_file(ptos.QUERIES_PATH)
+    with open(ptos.QUERIES_PATH, "a", encoding="utf-8") as f:
+        f.write("\n".join(lines) + "\n")
+    ptos._CACHE.pop("queries", None)   # invalidate cache
+
+    return {"ok": True, "name": name}

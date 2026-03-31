@@ -350,18 +350,39 @@ def browse_get():
 @app.route("/browse/run", methods=["POST"])
 def browse_run():
     data   = request.get_json(silent=True) or {}
-    where  = data.get("where",[])
     time   = data.get("time","tm")
     search = data.get("search","") or None
     group  = data.get("group","") or None
     sort   = data.get("sort","") or None
     file   = data.get("file","") or None
+
+    # Accept both formats:
+    #   expr  (string) — expression from expression input bar
+    #   where (list)   — legacy field-level dropdown filters
+    # Merge into a single filter list for the service layer.
+    expr  = data.get("expr","").strip()
+    where = data.get("where",[])
+    if isinstance(where, str):
+        where = [where] if where.strip() else []
+
+    # Build unified filter list
+    if expr and where:
+        # combine: wrap existing conditions with AND
+        combined = ptos._filters_to_expr(where)
+        filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
+    elif expr:
+        filters = [expr]
+    elif where:
+        filters = where
+    else:
+        filters = []
+
     try:
         if group:
-            result = svc.get_group(where, time, [group], from_file=file)
+            result = svc.get_group(filters, time, [group], from_file=file)
             result["kind"] = "group"
         else:
-            result = svc.get_records(where, time, search=search,
+            result = svc.get_records(filters, time, search=search,
                                      sort=sort, from_file=file)
             result["kind"] = "records"
         return jsonify(ok=True, data=result)
@@ -373,16 +394,33 @@ def browse_run():
 @app.route("/browse/export", methods=["POST"])
 def browse_export():
     params = json.loads(request.form.get("params","{}"))
+    expr   = params.get("expr","").strip()
     where  = params.get("where",[])
     time   = params.get("time","tm")
     search = params.get("search","") or None
     file   = params.get("file","") or None
+
+    if isinstance(where, str):
+        where = [where] if where.strip() else []
+
+    if expr and where:
+        combined = ptos._filters_to_expr(where)
+        filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
+    elif expr:
+        filters = [expr]
+    elif where:
+        filters = where
+    else:
+        filters = []
+
     try:
-        data = svc.get_records(where, time, search=search, from_file=file)
+        data    = svc.get_records(filters, time, search=search, from_file=file)
         records = data["records"]
         cols    = data["columns"]
         tl      = _TIME_DICT.get(time, time)
-        type_part = next((f.split("=")[1] for f in where if f.startswith("type=")),"records")
+        # derive type label from expression for filename
+        m = re.search(r'type=(\w+)', expr or " ".join(filters))
+        type_part = m.group(1) if m else "records"
         filename  = f"{type_part}_{tl}.csv"
         tmp = tempfile.NamedTemporaryFile(mode="w",suffix=".csv",delete=False,
                                           encoding="utf-8",newline="")
@@ -479,38 +517,32 @@ def api_save_query():
     """Save current browse filter state as a named query in queries.toml."""
     data    = request.get_json(silent=True) or {}
     name    = data.get("name","").strip().replace(" ","_").lower()
-    where   = data.get("where", [])   # list of filter strings e.g. ["type=expense"]
+    expr    = data.get("expr","").strip()      # expression string from expr bar
+    where   = data.get("where", [])            # legacy list from dropdowns
     time    = data.get("time", "tm")
-    group   = data.get("group", "")
-    search  = data.get("search", "")
+    group   = data.get("group", "") or None
+    search  = data.get("search", "") or None
 
-    if not name:
-        return jsonify(ok=False, error="Query name cannot be empty")
-    if not re.match(r'^[a-z0-9_]+$', name):
-        return jsonify(ok=False, error="Name must be lowercase letters, numbers and underscores only")
+    if isinstance(where, str):
+        where = [where] if where.strip() else []
 
-    try:
-        queries = ptos.get_queries()
-        if name in queries:
-            return jsonify(ok=False, error=f"Query '{name}' already exists in queries.toml")
-    except PTOSError:
-        pass
-
-    lines = [f"\n[{name}]"]
-    if where:
-        lines.append(f'where = "{" ".join(where)}"')
-    lines.append(f'time  = "{time}"')
-    if group:
-        lines.append(f'group = ["{group}"]')
-    if search:
-        lines.append(f'search = "{search}"')
+    # Build unified expression string
+    if expr and where:
+        combined = ptos._filters_to_expr(where)
+        where_expr = f"({combined}) AND ({expr})" if combined else expr
+    elif expr:
+        where_expr = expr
+    elif where:
+        where_expr = ptos._filters_to_expr(where)
+    else:
+        where_expr = ""
 
     try:
-        ptos._backup_file(ptos.QUERIES_PATH)
-        with open(ptos.QUERIES_PATH, "a", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
-        ptos._CACHE.pop("queries", None)   # invalidate cache
-        return jsonify(ok=True, name=name)
+        result = svc.save_query(
+            name, where_expr, time=time,
+            group=group, search=search
+        )
+        return jsonify(ok=True, name=result["name"])
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
     except Exception as e:
