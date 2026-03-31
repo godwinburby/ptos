@@ -30,6 +30,13 @@
     <input type="text" id="b-search" placeholder="full-text search…"
            oninput="debouncedBrowse()">
   </div>
+  <div class="field-group">
+    <label>Expression filter</label>
+    <input type="text" id="b-expr"
+           placeholder='e.g. type=expense AND (domain=self OR domain=home)'
+           oninput="debouncedBrowse()" style="font-family:monospace;font-size:13px;">
+    <div class="hint">Operators: = != &gt; &lt; &gt;= &lt;= ~(contains) !~(not contains) · AND OR NOT ( )</div>
+  </div>
   <div id="field-filters" style="display:none;"></div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-success btn-sm" onclick="exportCSV()">↓ CSV</button>
@@ -111,12 +118,13 @@ function _params() {
   const time  = document.getElementById("b-time").value;
   const search= document.getElementById("b-search").value.trim();
   const group = document.getElementById("b-group").value;
+  const expr  = document.getElementById("b-expr").value.trim();
   const where = [];
   if (type) where.push("type=" + type);
   document.querySelectorAll("[id^='ff-']").forEach(sel => {
     if (sel.value) where.push(sel.id.replace("ff-","") + "=" + sel.value);
   });
-  return {where, time, search, group};
+  return {where, expr, time, search, group};
 }
 
 function runBrowse() {
@@ -147,7 +155,7 @@ function exportCSV() {
 }
 
 function clearBrowse() {
-  ["b-type","b-search","b-group"].forEach(id => {
+  ["b-type","b-search","b-group","b-expr"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
@@ -218,13 +226,27 @@ function showSaveQuery() {
   const msg = document.getElementById("query-msg");
   msg.style.display = "none";
   document.getElementById("query-name-input").value = "";
-  // show preview of what will be saved
+
+  // build unified expression preview (mirrors server-side _filters_to_expr)
   const parts = [];
-  if (p.where.length) parts.push(`where = "${p.where.join(" ")}"`);
-  parts.push(`time  = "${p.time}"`);
-  if (p.group) parts.push(`group = ["${p.group}"]`);
-  if (p.search) parts.push(`search = "${p.search}"`);
-  document.getElementById("query-preview").textContent = parts.join("\n");
+  if (p.where.length) parts.push(...p.where);
+  let exprPreview = "";
+  if (p.expr && parts.length) {
+    const combined = parts.join(" AND ");
+    exprPreview = `(${combined}) AND (${p.expr})`;
+  } else if (p.expr) {
+    exprPreview = p.expr;
+  } else if (parts.length) {
+    exprPreview = parts.join(" AND ");
+  }
+
+  const previewLines = [];
+  if (exprPreview) previewLines.push(`where = "${exprPreview}"`);
+  previewLines.push(`time  = "${p.time}"`);
+  if (p.group)  previewLines.push(`group = ["${p.group}"]`);
+  if (p.search) previewLines.push(`search = "${p.search}"`);
+  document.getElementById("query-preview").textContent = previewLines.join("\n");
+
   const dlg = document.getElementById("query-dialog");
   dlg.style.display = "flex";
   document.getElementById("query-name-input").focus();
@@ -241,7 +263,7 @@ function doSaveQuery() {
   const p = _params();
   fetch("/api/save_query", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({name, where: p.where, time: p.time,
+    body: JSON.stringify({name, where: p.where, expr: p.expr, time: p.time,
                           group: p.group, search: p.search})
   })
   .then(r => r.json())
