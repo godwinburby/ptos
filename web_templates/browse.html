@@ -71,6 +71,54 @@
 
 <div id="result-area"></div>
 
+<!-- Edit modal -->
+<div id="ed-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+     z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:340px;
+              box-shadow:0 8px 32px rgba(0,0,0,.2);max-height:90vh;overflow-y:auto;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px;">Edit Record</div>
+    <div style="font-size:11px;color:var(--sub);margin-bottom:4px;">Current</div>
+    <div id="ed-old-line" style="font-family:monospace;font-size:12px;background:var(--bg);
+         padding:8px;border-radius:6px;word-break:break-all;margin-bottom:12px;"></div>
+    <div class="field-group">
+      <label>Set fields <span style="color:var(--sub);font-weight:400;">(space-separated)</span></label>
+      <input type="text" id="ed-set-input"
+             placeholder="amount=500 category=dining tag+=urgent"
+             style="font-family:monospace;font-size:13px;">
+      <div class="hint">key=val · key+=val · key-=val · date=YYYY-MM-DD</div>
+    </div>
+    <div class="field-group">
+      <label>Note</label>
+      <input type="text" id="ed-note-input" placeholder="leave blank to clear note">
+    </div>
+    <div id="ed-new-line" style="display:none;font-family:monospace;font-size:12px;
+         background:var(--bg);padding:8px;border-radius:6px;word-break:break-all;
+         color:var(--success);margin-bottom:10px;"></div>
+    <div id="ed-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" style="flex:1" onclick="doEdit()">Save</button>
+      <button class="btn btn-ghost"   style="flex:1" onclick="closeEdit()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Delete modal -->
+<div id="del-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+     z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:340px;
+              box-shadow:0 8px 32px rgba(0,0,0,.2);">
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--error);">Delete Record</div>
+    <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">This cannot be undone (backup is kept).</div>
+    <div id="del-line" style="font-family:monospace;font-size:12px;background:var(--bg);
+         padding:8px;border-radius:6px;word-break:break-all;margin-bottom:14px;"></div>
+    <div id="del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" style="flex:1;background:var(--error);" onclick="doDelete()">Delete</button>
+      <button class="btn btn-ghost"   style="flex:1;" onclick="closeDelete()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 function onTypeChange() {
   const type = document.getElementById("b-type").value;
@@ -208,9 +256,21 @@ function renderRecords(d) {
   if (!d.records||!d.records.length)
     return `<div class="card" style="color:var(--sub);text-align:center;padding:32px;">No records found.</div>`;
   const cols  = d.columns||[];
-  const heads = cols.map(c=>`<th>${c}</th>`).join("");
-  const rows  = d.records.map(r =>
-    `<tr>${cols.map(c=>`<td>${r[c]||""}</td>`).join("")}</tr>`).join("");
+  const heads = cols.map(c=>`<th>${c}</th>`).join("") + `<th style="width:80px"></th>`;
+  const rows  = d.records.map((r,i) => {
+    const cells = cols.map(c=>`<td>${r[c]||""}</td>`).join("");
+    const acts  = r._line
+      ? `<td style="white-space:nowrap;">
+           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
+             onclick='openEdit(${i})'>✎</button>
+           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
+             onclick='openDelete(${i})'>✕</button>
+         </td>`
+      : `<td></td>`;
+    return `<tr>${cells}${acts}</tr>`;
+  }).join("");
+  // store records for modal access
+  window._browseRecords = d.records;
   return `<div class="card">
     ${summaryBar(d)}
     <div style="overflow-x:auto;"><table class="data-table">
@@ -219,6 +279,86 @@ function renderRecords(d) {
     </table></div>
   </div>`;
 }
+
+// ── Edit / Delete modal ───────────────────────────────────────────────────────
+let _editRecord = null;
+
+function openEdit(idx) {
+  const r = (window._browseRecords || [])[idx];
+  if (!r || !r._line) return;
+  _editRecord = r;
+  document.getElementById("ed-old-line").textContent  = r._line;
+  document.getElementById("ed-set-input").value       = "";
+  document.getElementById("ed-note-input").value      = r.note || "";
+  document.getElementById("ed-msg").style.display     = "none";
+  document.getElementById("ed-new-line").style.display= "none";
+  document.getElementById("ed-dialog").style.display  = "flex";
+  document.getElementById("ed-set-input").focus();
+}
+
+function openDelete(idx) {
+  const r = (window._browseRecords || [])[idx];
+  if (!r || !r._line) return;
+  _editRecord = r;
+  document.getElementById("del-line").textContent   = r._line;
+  document.getElementById("del-msg").style.display  = "none";
+  document.getElementById("del-dialog").style.display = "flex";
+}
+
+function closeEdit()   { document.getElementById("ed-dialog").style.display  = "none"; }
+function closeDelete() { document.getElementById("del-dialog").style.display = "none"; }
+
+function doEdit() {
+  if (!_editRecord) return;
+  const setRaw  = document.getElementById("ed-set-input").value.trim();
+  const note    = document.getElementById("ed-note-input").value;
+  const msg     = document.getElementById("ed-msg");
+  const setArgs = setRaw ? setRaw.split(/\s+/) : [];
+  if (!setArgs.length && note === (_editRecord.note || "")) {
+    msg.textContent = "Nothing to change.";
+    msg.style.display = "block"; return;
+  }
+  fetch("/api/records/edit", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      filepath: _editRecord._filepath,
+      old_line: _editRecord._line,
+      set:      setArgs,
+      note:     note !== (_editRecord.note || "") ? note : null
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      document.getElementById("ed-new-line").textContent   = d.new_line;
+      document.getElementById("ed-new-line").style.display = "block";
+      msg.style.display = "none";
+      setTimeout(() => { closeEdit(); runBrowse(); }, 1200);
+    } else {
+      msg.textContent = d.error; msg.style.display = "block";
+    }
+  })
+  .catch(e => { msg.textContent = String(e); msg.style.display = "block"; });
+}
+
+function doDelete() {
+  if (!_editRecord) return;
+  const msg = document.getElementById("del-msg");
+  fetch("/api/records/delete", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      filepath: _editRecord._filepath,
+      old_line: _editRecord._line
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) { closeDelete(); runBrowse(); }
+    else { msg.textContent = d.error; msg.style.display = "block"; }
+  })
+  .catch(e => { msg.textContent = String(e); msg.style.display = "block"; });
+}
+
 
 // ── Save as Query ─────────────────────────────────────────────────────────────
 function showSaveQuery() {
@@ -288,6 +428,16 @@ document.getElementById("query-dialog").addEventListener("click", function(e) {
 document.getElementById("query-name-input").addEventListener("keydown", function(e) {
   if (e.key === "Enter") doSaveQuery();
   if (e.key === "Escape") hideQueryDialog();
+});
+document.getElementById("ed-dialog").addEventListener("click", function(e) {
+  if (e.target === this) closeEdit();
+});
+document.getElementById("ed-set-input").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") doEdit();
+  if (e.key === "Escape") closeEdit();
+});
+document.getElementById("del-dialog").addEventListener("click", function(e) {
+  if (e.target === this) closeDelete();
 });
 </script>
 {% endblock %}

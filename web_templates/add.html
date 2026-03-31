@@ -35,6 +35,21 @@
   <div class="divider"></div>
   {% endif %}
 
+  {% if multi_presets %}
+  <div style="margin-bottom:16px;">
+    <div style="font-size:12px;color:var(--sub);font-weight:600;margin-bottom:8px;">MULTI PRESETS</div>
+    <div class="chip-group">
+      {% for name, refs in multi_presets.items() %}
+      <button class="preset-chip" onclick="addMultiPreset('{{ name }}', this)">
+        + {{ name }} <span style="opacity:.6;font-size:11px;">({{ refs }})</span>
+      </button>
+      {% endfor %}
+    </div>
+    <div id="multi-msg-add" style="font-size:13px;margin-top:8px;display:none;"></div>
+  </div>
+  <div class="divider"></div>
+  {% endif %}
+
   <div class="type-grid">
     {% for t in types %}
     <a href="/add?type={{ t }}" class="type-card" style="display:block;text-decoration:none;">
@@ -265,6 +280,49 @@ document.getElementById("preset-name-input").addEventListener("keydown", functio
   if (e.key === "Enter") doSavePreset();
   if (e.key === "Escape") hidePresetDialog();
 });
+</script>
+{% endif %}
+
+{% if multi_presets %}
+<script>
+function addMultiPreset(name, btn) {
+  const today = new Date().toISOString().split("T")[0];
+  const msg   = document.getElementById("multi-msg-add");
+  btn.disabled = true;
+  const orig = btn.innerHTML;
+  btn.textContent = "Adding…";
+  fetch("/api/preset_add", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name, date: today})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      btn.textContent = `✔ ${d.count} added`;
+      btn.style.background = "var(--success)";
+      msg.style.display = "none";
+      setTimeout(() => {
+        btn.innerHTML = orig;
+        btn.style.background = "";
+        btn.disabled = false;
+      }, 3000);
+    } else {
+      btn.innerHTML = orig;
+      btn.disabled = false;
+      msg.textContent = d.error;
+      msg.style.color = "var(--error)";
+      msg.style.display = "block";
+    }
+  })
+  .catch(e => {
+    btn.innerHTML = orig;
+    btn.disabled = false;
+    msg.textContent = String(e);
+    msg.style.color = "var(--error)";
+    msg.style.display = "block";
+  });
+}
 </script>
 {% endif %}
 
