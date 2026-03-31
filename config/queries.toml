@@ -15,7 +15,7 @@
 where = "type=assessment"
 
 [deferred]
-where = "type=assessment outcome=deferred"
+where = "type=assessment AND outcome=deferred"
 
 [prescriptions]
 where = "type=prescription"
@@ -24,7 +24,7 @@ where = "type=prescription"
 where = "type=followup"
 
 [binaural]
-where = "type=prescription fit=binaural"
+where = "type=prescription AND fit=binaural"
 
 # --------------------------------------------------
 # METRICS
@@ -93,7 +93,7 @@ alias = "followups"
 # --------------------------------------------------
 
 [expense]
-where = "type=expense domain!=work"
+where = "type=expense AND domain!=work"
 time  = "tm"
 sum   = true
 
@@ -101,7 +101,7 @@ sum   = true
 alias = "expense"
 
 [expense_work]
-where = "type=expense domain=work tag!=snacks"
+where = "type=expense AND domain=work AND tag!=snacks"
 time  = "clinic"
 sum   = true
 
@@ -109,7 +109,7 @@ sum   = true
 alias = "expense_work"
 
 [snacks_work]
-where = "type=expense domain=work tag=snacks"
+where = "type=expense AND domain=work AND tag=snacks"
 time  = "clinic"
 sum   = true
 
@@ -117,7 +117,7 @@ sum   = true
 alias = "snacks_work"
 
 [snacks]
-where = "type=expense domain!=work tag=snacks"
+where = "type=expense AND domain!=work AND tag=snacks"
 time  = "tm"
 sum   = true
 
@@ -138,7 +138,7 @@ pivot = ["model", "source"]
 sum   = true
 
 [expense_category]
-where = "type=expense domain!=work"
+where = "type=expense AND domain!=work"
 time  = "tm"
 group = ["category"]
 sum   = true
@@ -159,11 +159,11 @@ exclude_results = ["fix_appointment", "deceased", "not_relevant", "another_provi
 # trial → decision → assessment → mgm
 
 [transport]
-where = "domain=self category=transport type=expense"
+where = "domain=self AND category=transport AND type=expense"
 time  = "this-month"
 
 [expense_today]
-where = "type=expense domain!=work"
+where = "type=expense AND domain!=work"
 time  = "td"
 group = ["tag"]
 sum   = true
@@ -172,15 +172,15 @@ sum   = true
 alias = "expense_today"
 
 [auto]
-where = "domain=self category=transport tag=auto type=expense"
+where = "domain=self AND category=transport AND tag=auto AND type=expense"
 time  = "this-month"
 
 [bus]
-where = "domain=self category=transport tag=bus type=expense"
+where = "domain=self AND category=transport AND tag=bus AND type=expense"
 time  = "this-month"
 
 [autobus]
-where = "domain=self category=transport tag=auto|bus type=expense"
+where = "domain=self AND category=transport AND (tag=auto OR tag=bus) AND type=expense"
 time  = "this-month"
 
 [expense_domain]
@@ -192,3 +192,4 @@ group = ["domain"]
 where = "type=expense"
 time  = "tm"
 search = "jayden"
+

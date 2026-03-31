@@ -499,6 +499,241 @@ def apply_where(kv, filters):
     return True
 
 # --------------------------------------------------
+# Edit / delete engine
+# --------------------------------------------------
+
+def find_records_with_location(filters, search=None, start=None, end=None):
+    """Scan all log files and return list of (filepath, line_number, raw_line)
+    for every record matching filters + optional date range + optional search.
+    """
+    if start is None: start = dt.date.min
+    if end   is None: end   = dt.date.max
+    matches = []
+    os.makedirs(RECORDS_DIR, exist_ok=True)
+    fnames = sorted(f for f in os.listdir(RECORDS_DIR) if f.endswith(".log"))
+    for fname in fnames:
+        if fname[:4].isdigit():
+            year = int(fname[:4])
+            if year < start.year or year > end.year:
+                continue
+        path = os.path.join(RECORDS_DIR, fname)
+        with open(path, encoding="utf-8") as f:
+            lines = f.readlines()
+        for idx, raw in enumerate(lines):
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                d, kv, note = parse_line(line)
+            except (ValueError, IndexError):
+                continue
+            if not (start <= d <= end):
+                continue
+            if search and search.lower() not in line.lower():
+                continue
+            if not apply_where(kv, filters):
+                continue
+            matches.append((path, idx, line))
+    return matches
+
+
+def rewrite_line_in_file(filepath, old_line, new_line):
+    """Replace or delete one exact line in a log file.
+    old_line: the stripped line to find (must match exactly once).
+    new_line: replacement string, or None to delete the line.
+    Backs up the file before writing.
+    Raises ValueError if old_line not found or found more than once.
+    """
+    with open(filepath, encoding="utf-8") as f:
+        lines = f.readlines()
+
+    hits = [i for i, l in enumerate(lines) if l.strip() == old_line]
+    if not hits:
+        raise ValueError(f"Line not found in {filepath}:\n  {old_line}")
+    if len(hits) > 1:
+        raise ValueError(
+            f"Line appears {len(hits)} times in {filepath} — cannot safely edit.\n"
+            f"  {old_line}"
+        )
+
+    _backup_file(filepath)
+    idx = hits[0]
+    if new_line is None:
+        lines.pop(idx)
+    else:
+        lines[idx] = new_line + "\n"
+
+    with open(filepath, "w", encoding="utf-8") as f:
+        f.writelines(lines)
+
+
+def apply_set(old_line, set_args, new_note):
+    """Build a new record line from old_line by applying --set changes and/or --set-note.
+    set_args: list of assignment strings. Three forms:
+      key=value   replace field entirely (or set date)
+      key+=value  append value to a list field (e.g. tag+=urgent)
+      key-=value  remove value from a list field (e.g. tag-=urgent)
+    new_note: replacement note string, or None to leave unchanged.
+    Returns (new_line, changed_date) where changed_date is the new date string
+    if the date field was changed (may require moving to a different year file),
+    or None otherwise.
+    """
+    d, kv, note = parse_line(old_line)
+    date_str = str(d)
+    changed_date = None
+
+    for item in (set_args or []):
+        # detect operator: +=  -=  =
+        m = re.match(r"(\w+)(\+=|-=|=)(.+)", item)
+        if not m:
+            sys.exit(f"--set: expected key=value, key+=value, or key-=value — got '{item}'")
+        k, op, v = m.groups()
+
+        if op == "=":
+            if k == "date":
+                try:
+                    parse_date(v)
+                except ValueError:
+                    sys.exit(f"--set date: invalid date '{v}' — use YYYY-MM-DD")
+                date_str = v
+                changed_date = v
+            else:
+                kv[k] = v
+
+        elif op == "+=":
+            if k == "date":
+                sys.exit("--set: date does not support += modifier")
+            cur = kv.get(k)
+            if cur is None:
+                kv[k] = v                        # field didn't exist — just set it
+            elif isinstance(cur, list):
+                if v not in cur:
+                    kv[k] = cur + [v]            # append only if not already present
+            else:
+                if cur != v:
+                    kv[k] = [cur, v]             # promote scalar to list
+
+        elif op == "-=":
+            if k == "date":
+                sys.exit("--set: date does not support -= modifier")
+            cur = kv.get(k)
+            if cur is None:
+                pass                             # field not present — nothing to remove
+            elif isinstance(cur, list):
+                remaining = [x for x in cur if x != v]
+                if not remaining:
+                    del kv[k]                    # removed last value — drop field entirely
+                elif len(remaining) == 1:
+                    kv[k] = remaining[0]         # collapse back to scalar
+                else:
+                    kv[k] = remaining
+            else:
+                if cur == v:
+                    del kv[k]                    # removed only value — drop field
+
+    if new_note is not None:
+        note = new_note
+
+    return build_record_line(date_str, kv, note if note else None), changed_date
+
+
+def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
+    """Core edit/delete workflow called from main().
+    1. Find matching records within the date range.
+    2. If >1 and not --all: show list and ask user to pick by number.
+    3. Show old → new diff and ask confirmation.
+    4. Rewrite (or delete) in place; handle cross-year date moves.
+    """
+    matches = find_records_with_location(filters, start=start, end=end)
+
+    if not matches:
+        print("\nNo records found matching the filter.\n")
+        return
+
+    # ---- select targets ----
+    if do_all:
+        targets = matches
+    elif len(matches) == 1:
+        targets = matches
+    else:
+        print(f"\n{len(matches)} records matched:\n")
+        for i, (fp, ln, line) in enumerate(matches, 1):
+            print(f"  [{i}]  {line}")
+        print()
+        raw = input("Pick number(s) to edit (e.g. 1 or 1,3) or 'all' or Enter to cancel: ").strip()
+        if not raw:
+            print("Cancelled.")
+            return
+        if raw.lower() == "all":
+            targets = matches
+        else:
+            try:
+                chosen = [int(x.strip()) for x in raw.replace(",", " ").split()]
+                targets = [matches[i - 1] for i in chosen]
+            except (ValueError, IndexError):
+                sys.exit("Invalid selection.")
+
+    # ---- build changes and confirm ----
+    plan = []  # list of (filepath, old_line, new_line_or_None)
+    for filepath, _, old_line in targets:
+        if do_delete:
+            plan.append((filepath, old_line, None))
+        else:
+            new_line, changed_date = apply_set(old_line, set_args, new_note)
+            if new_line == old_line:
+                print(f"  (no change)  {old_line}")
+                continue
+            plan.append((filepath, old_line, new_line, changed_date))
+
+    if not plan:
+        print("\nNothing to change.\n")
+        return
+
+    print()
+    for item in plan:
+        filepath, old_line = item[0], item[1]
+        new_line = item[2]
+        print(f"  file : {os.path.basename(filepath)}")
+        print(f"  old  : {old_line}")
+        if new_line is None:
+            print(f"  new  : [DELETE]")
+        else:
+            print(f"  new  : {new_line}")
+        print()
+
+    confirm = input("Apply? [y/N]: ").strip().lower()
+    if confirm != "y":
+        print("Cancelled.")
+        return
+
+    # ---- apply ----
+    for item in plan:
+        filepath, old_line, new_line = item[0], item[1], item[2]
+        changed_date = item[3] if len(item) > 3 else None
+
+        if new_line is None:
+            # delete
+            rewrite_line_in_file(filepath, old_line, None)
+            print(f"  Deleted: {old_line}")
+        elif changed_date:
+            # date changed — may need to move to a different year file
+            old_year = os.path.basename(filepath)[:4]
+            new_year = changed_date[:4]
+            rewrite_line_in_file(filepath, old_line, None)  # remove from old file
+            new_path = os.path.join(RECORDS_DIR, f"{new_year}.log")
+            _backup_file(new_path)
+            with open(new_path, "a", encoding="utf-8") as f:
+                f.write(new_line + "\n")
+            moved = f" (moved {old_year}.log → {new_year}.log)" if old_year != new_year else ""
+            print(f"  Updated{moved}: {new_line}")
+        else:
+            rewrite_line_in_file(filepath, old_line, new_line)
+            print(f"  Updated: {new_line}")
+
+    print()
+
+
+# --------------------------------------------------
 # Query engine
 # --------------------------------------------------
 
@@ -1340,8 +1575,36 @@ def complete_record(schema, record):
     return record, note
 
 
+def _filters_to_expr(filters):
+    """Convert a list of filter conditions to a single expression string.
+    Single expression strings are kept as-is.
+    Multiple plain conditions are joined with AND.
+    Mixed (expression + plain conditions) wraps the expression in parens then ANDs.
+    """
+    if not filters:
+        return ""
+    if len(filters) == 1:
+        return filters[0]
+    parts = []
+    for f in filters:
+        # wrap sub-expressions in parens if they contain OR (to preserve precedence)
+        if _is_expression(f) and re.search(r'\bOR\b', f.upper()):
+            parts.append(f"({f})")
+        else:
+            parts.append(f)
+    return " AND ".join(parts)
+
+
 def save_query(name, args, extra_filters):
-    """Append a new saved query block to queries.toml from current CLI args."""
+    """Append a new saved query block to queries.toml from current CLI args.
+
+    where is always saved as a single expression string:
+      where = "type=expense AND domain=self"
+      where = "tag=jayden AND tag=fruits AND type=expense"
+      where = "(category=home OR category=household) AND amount>100"
+
+    This single format is unambiguous and easy for any UI to consume.
+    """
     queries = get_queries()
     if name in queries:
         ans = input(f"Query '{name}' already exists. Overwrite? (y/N): ").strip().lower()
@@ -1351,9 +1614,18 @@ def save_query(name, args, extra_filters):
 
     lines = [f"\n[{name}]"]
 
-    where_str = " ".join(extra_filters)
-    if where_str:
-        lines.append(f'where = "{where_str}"')
+    # Reconstruct --where filters only (not -y / --tag injections)
+    where_filters = [item for group in (args.where or []) for item in group]
+
+    # Conditions added by -y and --tag shortcuts
+    type_filter = [f"type={args.type}"] if getattr(args, "type", None) else []
+    tag_filters = [f"tag={t}" for t in (args.tag or [])]
+
+    all_conditions = where_filters + type_filter + tag_filters
+    expr = _filters_to_expr(all_conditions)
+    if expr:
+        val = expr.replace('"', '\\"')
+        lines.append(f'where = "{val}"')
 
     if getattr(args, "date_from", None) or getattr(args, "date_to", None):
         if getattr(args, "date_from", None):
@@ -1909,7 +2181,7 @@ def build_parser(cycles):
 
     qry = p.add_argument_group("Query")
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
-    qry.add_argument("-w", "--where",  nargs="+", action="append",  help="Filter expressions — operators: = != > < >= <= ~(contains)")
+    qry.add_argument("-w", "--where",  nargs="+", action="append",  help="Filter expressions — operators: = != > < >= <= ~(contains) !~(not contains)\n  Simple: --where type=expense --where amount>100\n  Expression: --where \"(category=home OR category=household) AND amount>100\"")
     qry.add_argument("-t", "--time",   default="this-month",        help="Time window — full or short: td yd tw lw tm lm tq lq ty ly YYYY-MM, or custom cycles from config.toml")
     qry.add_argument("-f", "--from",   dest="date_from",            help="Start date YYYY-MM-DD")
     qry.add_argument("-T", "--to",     dest="date_to",              help="End date YYYY-MM-DD")
@@ -1941,6 +2213,17 @@ def build_parser(cycles):
     utl.add_argument("-j", "--journal", action="store_true", help="Open today's journal")
     utl.add_argument("-e", "--edit",    nargs="?", const="records", metavar="TARGET",
                      help="Edit a workspace file  (r s q c p d/j x)")
+    utl.add_argument("--set",      nargs="+", metavar="KEY=VALUE",
+                     help="Edit matched record(s)  (use with --where)\n"
+                          "  key=value   replace field\n"
+                          "  key+=value  append to list field (e.g. tag+=urgent)\n"
+                          "  key-=value  remove from list field (e.g. tag-=urgent)")
+    utl.add_argument("--set-note", dest="set_note", metavar="TEXT",
+                     help="Replace the note on matched record(s)  (use with --where)")
+    utl.add_argument("--delete",   action="store_true",
+                     help="Delete matched record(s)  (use with --where)")
+    utl.add_argument("--all",      action="store_true",
+                     help="Apply --set/--delete to all matched records without interactive pick")
     utl.add_argument("--fields", action="store_true", help="Show field discovery report")
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
 
@@ -1977,7 +2260,15 @@ def resolve_query_context(args, queries):
 
     query_filters = []
     if q:
-        query_filters = q.get("where", "").split()
+        raw_where = q.get("where")
+        if isinstance(raw_where, list):
+            # old array format — convert to single expression for apply_where
+            expr = _filters_to_expr(raw_where)
+            query_filters = [expr] if expr else []
+        elif isinstance(raw_where, str) and raw_where.strip():
+            query_filters = [raw_where]
+        else:
+            query_filters = []
         cli_time_default = (
             args.date_from is None and
             args.date_to   is None and
@@ -2543,6 +2834,21 @@ def main():
                 + (f"\nCustom cycles:\n{cycle_names}" if cycle_names else "")
             )
         time_label = _TIME_ALIASES.get(args.time, args.time)
+
+    # ---- edit / delete mode ----
+    if getattr(args, "set", None) or getattr(args, "set_note", None) or getattr(args, "delete", False):
+        if not final_filters:
+            sys.exit("--set/--delete requires at least one filter (--where, --type, or --tag).")
+        run_set(
+            final_filters,
+            start     = start,
+            end       = end,
+            set_args  = getattr(args, "set",      None),
+            new_note  = getattr(args, "set_note",  None),
+            do_delete = getattr(args, "delete",    False),
+            do_all    = getattr(args, "all",       False),
+        )
+        return
 
     # ---- trend mode ----
     if args.trend is not None:

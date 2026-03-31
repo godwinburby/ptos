@@ -40,20 +40,6 @@ category = "transport"
 amount   = 30
 tag      = ["bus"]
 
-[[presets.commute.records]]
-type     = "expense"
-domain   = "self"
-category = "transport"
-amount   = 30
-tag      = ["bus"]
-
-[[presets.commute.records]]
-type     = "expense"
-domain   = "self"
-category = "transport"
-amount   = 30
-tag      = ["bus"]
-
 [presets.snacks]
 type     = "expense"
 domain   = "home"
