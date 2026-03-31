@@ -86,9 +86,11 @@ def get_records(filters, time="tm", search=None, sort=None,
         else:
             loc_matches = ptos.find_records_with_location(
                 [], search=None, start=start, end=end)
-        line_to_filepath = {line: fp for fp, _idx, line in loc_matches}
+        line_to_filepath = {line: fp   for fp, idx, line in loc_matches}
+        line_to_lineno   = {line: idx  for fp, idx, line in loc_matches}
     except Exception:
         line_to_filepath = {}
+        line_to_lineno   = {}
 
     if sort:
         def _sk(line):
@@ -110,6 +112,7 @@ def get_records(filters, time="tm", search=None, sort=None,
             continue
         row["_line"]     = line
         row["_filepath"] = line_to_filepath.get(line, "")
+        row["_lineno"]   = line_to_lineno.get(line, -1)
         records.append(row)
         for k in row:
             if k not in col_set and not k.startswith("_"):
@@ -766,9 +769,9 @@ def find_records(filters, time="all", search=None):
     return results
 
 
-def edit_record(filepath, old_line, set_args=None, new_note=None):
+def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
     """Apply --set changes and/or note replacement to one record.
-    set_args: list of "key=value", "key+=value", "key-=value" strings.
+    lineno: 0-based file line index for precise targeting (handles duplicates).
     Returns {"old_line", "new_line", "changed_date"} or raises PTOSError.
     """
     try:
@@ -786,13 +789,13 @@ def edit_record(filepath, old_line, set_args=None, new_note=None):
             import os as _os
             old_year = _os.path.basename(filepath)[:4]
             new_year = changed_date[:4]
-            ptos.rewrite_line_in_file(filepath, old_line, None)
+            ptos.rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
             new_path = _os.path.join(ptos.RECORDS_DIR, f"{new_year}.log")
             ptos._backup_file(new_path)
             with open(new_path, "a", encoding="utf-8") as f:
                 f.write(new_line + "\n")
         else:
-            ptos.rewrite_line_in_file(filepath, old_line, new_line)
+            ptos.rewrite_line_in_file(filepath, old_line, new_line, lineno=lineno)
     except ValueError as e:
         raise PTOSError(str(e))
     except Exception as e:
@@ -802,12 +805,13 @@ def edit_record(filepath, old_line, set_args=None, new_note=None):
             "changed_date": changed_date}
 
 
-def delete_record(filepath, old_line):
+def delete_record(filepath, old_line, lineno=None):
     """Delete one record line from its log file.
+    lineno: 0-based file line index for precise targeting (handles duplicates).
     Returns {"deleted_line"} or raises PTOSError.
     """
     try:
-        ptos.rewrite_line_in_file(filepath, old_line, None)
+        ptos.rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
     except ValueError as e:
         raise PTOSError(str(e))
     except Exception as e:

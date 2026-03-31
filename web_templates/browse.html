@@ -323,6 +323,7 @@ function doEdit() {
     body: JSON.stringify({
       filepath: _editRecord._filepath,
       old_line: _editRecord._line,
+      lineno:   _editRecord._lineno,
       set:      setArgs,
       note:     note !== (_editRecord.note || "") ? note : null
     })
@@ -348,7 +349,8 @@ function doDelete() {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({
       filepath: _editRecord._filepath,
-      old_line: _editRecord._line
+      old_line: _editRecord._line,
+      lineno:   _editRecord._lineno
     })
   })
   .then(r => r.json())
