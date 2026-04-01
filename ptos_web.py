@@ -625,7 +625,174 @@ def api_save_query():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Edit / Delete
+# Edit Record (full form)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/edit", methods=["GET"])
+def edit_get():
+    """Show a pre-filled edit form for one record."""
+    filepath = request.args.get("filepath", "")
+    lineno   = request.args.get("lineno", "")
+    line     = request.args.get("line", "")
+
+    if not filepath or not line:
+        return redirect(url_for("browse_get"))
+
+    try:
+        lineno_int = int(lineno) if lineno else None
+    except ValueError:
+        lineno_int = None
+
+    parsed = ptos.safe_parse_line(line)
+    if not parsed:
+        return redirect(url_for("browse_get"))
+    d, kv, note = parsed
+    rtype = kv.get("type", "")
+
+    try:
+        schema = ptos.get_schema()
+    except PTOSError:
+        schema = {}
+
+    # flatten kv for field_values — keep tag as a list for correct checkbox matching
+    field_values = {"type": rtype}
+    for k, v in kv.items():
+        if k == "tag":
+            field_values[k] = v if isinstance(v, list) else [v]
+        else:
+            field_values[k] = ", ".join(v) if isinstance(v, list) else str(v)
+    if note:
+        field_values["note"] = note
+    field_values["date"] = str(d)
+
+    field_defs  = _build_field_defs(schema, rtype, field_values)
+    current_tags = field_values.get("tag", [])
+    if isinstance(current_tags, str):
+        current_tags = [t.strip() for t in current_tags.split(",") if t.strip()]
+
+    # get schema tag options, then merge — current tags always shown even if not in schema
+    schema_tag_options = []
+    if rtype:
+        ts = schema.get("type", {}).get(rtype, {})
+        schema_tag_options = ptos.resolve_tags(schema, ts, field_values)
+
+    # all tags to display: current record tags first, then remaining schema options
+    tag_options = list(current_tags) + [t for t in schema_tag_options if t not in current_tags]
+
+    return render_template("edit.html",
+        tab="browse", title="Edit Record", now=_now_str(),
+        filepath=filepath, lineno=lineno_int, old_line=line,
+        rtype=rtype, field_defs=field_defs,
+        tag_options=tag_options, field_values=field_values,
+        today=dt.date.today().isoformat(),
+        msg=None, msg_type=None)
+
+
+@app.route("/edit", methods=["POST"])
+def edit_post():
+    """Apply edits from the populated edit form."""
+    filepath  = request.form.get("filepath", "")
+    old_line  = request.form.get("old_line", "")
+    lineno    = request.form.get("lineno", "")
+    rtype     = request.form.get("type", "").strip()
+    date_str  = request.form.get("date", dt.date.today().isoformat()).strip()
+    note      = request.form.get("note", "").strip() or None
+    custom_tags = [t.strip().replace(" ", "_")
+                   for t in request.form.get("custom_tags", "").split(",") if t.strip()]
+
+    try:
+        lineno_int = int(lineno) if lineno else None
+    except ValueError:
+        lineno_int = None
+
+    try:
+        schema = ptos.get_schema()
+    except PTOSError:
+        schema = {}
+
+    # build new record dict from form
+    ts    = schema.get("type", {}).get(rtype, {})
+    all_f = list(ts.get("required", []))
+    for f in ts.get("fields", {}):
+        if f not in all_f: all_f.append(f)
+    for f in ts.get("conditions", {}):
+        if f not in all_f: all_f.append(f)
+
+    new_record = {"type": rtype}
+    for fname in all_f:
+        if fname == "tag": continue
+        val = request.form.get(fname, "").strip()
+        if val: new_record[fname] = val.replace(" ", "_")
+    tags = request.form.getlist("tag") + custom_tags
+    if tags: new_record["tag"] = tags
+
+    # build set_args by diffing old vs new record
+    parsed = ptos.safe_parse_line(old_line)
+    if not parsed:
+        return redirect(url_for("browse_get"))
+    old_d, old_kv, old_note = parsed
+
+    set_args = []
+    # date change
+    if date_str != str(old_d):
+        set_args.append(f"date={date_str}")
+    # field changes
+    all_keys = set(list(old_kv.keys()) + list(new_record.keys())) - {"type"}
+    for k in all_keys:
+        old_v = old_kv.get(k)
+        new_v = new_record.get(k)
+        if old_v is None and new_v is None:
+            continue
+        old_str = ", ".join(old_v) if isinstance(old_v, list) else str(old_v or "")
+        new_str = ", ".join(new_v) if isinstance(new_v, list) else str(new_v or "")
+        if old_str != new_str:
+            # handle list fields (tag) — use += / -= for individual changes
+            if isinstance(new_v, list) or isinstance(old_v, list):
+                old_list = old_v if isinstance(old_v, list) else ([old_v] if old_v else [])
+                new_list = new_v if isinstance(new_v, list) else ([new_v] if new_v else [])
+                for item in set(new_list) - set(old_list):
+                    set_args.append(f"{k}+={item}")
+                for item in set(old_list) - set(new_list):
+                    set_args.append(f"{k}-={item}")
+            else:
+                set_args.append(f"{k}={new_v}" if new_v else f"{k}=")
+
+    # note change
+    new_note = note if note != (old_note or "") else None
+
+    if not set_args and new_note is None:
+        # nothing changed — go back
+        return redirect(url_for("browse_get"))
+
+    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+        return redirect(url_for("browse_get"))
+
+    try:
+        svc.edit_record(filepath, old_line,
+                        set_args=set_args, new_note=new_note, lineno=lineno_int)
+        return redirect(url_for("browse_get"))
+    except PTOSError as e:
+        try:
+            schema = ptos.get_schema()
+        except Exception:
+            schema = {}
+        field_values = dict(new_record)
+        field_values["date"] = date_str
+        if note: field_values["note"] = note
+        field_defs  = _build_field_defs(schema, rtype, field_values)
+        ts = schema.get("type", {}).get(rtype, {})
+        tag_options = ptos.resolve_tags(schema, ts, field_values)
+        return render_template("edit.html",
+            tab="browse", title="Edit Record", now=_now_str(),
+            filepath=filepath, lineno=lineno_int, old_line=old_line,
+            rtype=rtype, field_defs=field_defs,
+            tag_options=tag_options, field_values=field_values,
+            today=dt.date.today().isoformat(),
+            msg=str(e), msg_type="error")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Edit / Delete API
 # ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/api/records/find", methods=["POST"])
