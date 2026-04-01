@@ -305,11 +305,109 @@ class ResultPane(tk.Frame):
             tk.Label(f, text="No records found.", font=F_LABEL,
                      fg=SUBTEXT, bg=BG).pack(anchor="w", padx=8, pady=8)
             return
+        self._records_data = data.get("records", [])
         self._summary_bar(f, data).pack(fill="x")
-        cols = data.get("columns", [])
-        self._make_tree(f, cols, data["records"])
+        cols = [c for c in (data.get("columns") or []) if not c.startswith("_")]
+        tree_frame = self._make_tree(f, cols, data["records"])
 
-    def _show_group(self, data):
+        # action bar
+        act = tk.Frame(f, bg=CARD, pady=6, padx=HPAD)
+        act.pack(fill="x", side="bottom")
+        self._edit_btn = tk.Button(act, text="✎  Edit", state="disabled",
+            font=F_BTN, bg=CARD, fg=ACCENT, activeforeground=ACCENT_HO,
+            relief="flat", bd=0, cursor="hand2", padx=12, pady=6,
+            command=self._edit_selected)
+        self._edit_btn.pack(side="left", padx=(0, 8))
+        self._del_btn = tk.Button(act, text="✕  Delete", state="disabled",
+            font=F_BTN, bg=CARD, fg=ERROR_COL, activeforeground=ERROR_COL,
+            relief="flat", bd=0, cursor="hand2", padx=12, pady=6,
+            command=self._delete_selected)
+        self._del_btn.pack(side="left")
+        tk.Label(act, text="Select a row to edit or delete",
+            font=F_SMALL, fg=SUBTEXT, bg=CARD).pack(side="left", padx=16)
+
+        # find treeview inside tree_frame
+        tree = None
+        for w in tree_frame.winfo_children():
+            if isinstance(w, ttk.Treeview):
+                tree = w
+                break
+        if tree is None:
+            for w in tree_frame.winfo_descendants() if hasattr(tree_frame, 'winfo_descendants') else []:
+                if isinstance(w, ttk.Treeview):
+                    tree = w
+                    break
+
+        if tree:
+            self._tree = tree
+            def _on_select(_=None):
+                sel = tree.selection()
+                state = "normal" if sel else "disabled"
+                self._edit_btn.config(state=state)
+                self._del_btn.config(state=state)
+            tree.bind("<<TreeviewSelect>>", _on_select)
+            tree.bind("<Double-1>", lambda _: self._edit_selected())
+
+    def set_refresh_callback(self, cb):
+        """Register a callback to refresh results after edit/delete."""
+        self._refresh_cb = cb
+
+    def _selected_record(self):
+        """Return the full record dict for the selected tree row, or None."""
+        tree = getattr(self, "_tree", None)
+        if not tree:
+            return None
+        sel = tree.selection()
+        if not sel:
+            return None
+        idx = tree.index(sel[0])
+        records = getattr(self, "_records_data", [])
+        if idx < len(records):
+            return records[idx]
+        return None
+
+    def _edit_selected(self):
+        rec = self._selected_record()
+        if not rec:
+            return
+        if not rec.get("_line") or not rec.get("_filepath"):
+            messagebox.showwarning("Edit", "Record location unavailable — re-run the query and try again.")
+            return
+        def _on_saved():
+            cb = getattr(self, "_refresh_cb", None)
+            if cb:
+                cb()
+        EditRecordDialog(self, rec, _on_saved)
+
+    def _delete_selected(self):
+        rec = self._selected_record()
+        if not rec:
+            return
+        if not rec.get("_line") or not rec.get("_filepath"):
+            messagebox.showwarning("Delete", "Record location unavailable — re-run the query and try again.")
+            return
+        line_preview = rec.get("_line", "")
+        if len(line_preview) > 80:
+            line_preview = line_preview[:80] + "…"
+        confirmed = messagebox.askyesno(
+            "Delete Record",
+            f"Delete this record?\n\n{line_preview}\n\nThis cannot be undone (backup kept).",
+            icon="warning")
+        if not confirmed:
+            return
+        try:
+            svc.delete_record(
+                rec["_filepath"], rec["_line"],
+                lineno=rec.get("_lineno"))
+            cb = getattr(self, "_refresh_cb", None)
+            if cb:
+                cb()
+        except PTOSError as e:
+            messagebox.showerror("Delete Failed", str(e))
+        except Exception as e:
+            messagebox.showerror("Delete Failed", str(e))
+
+
         f = tk.Frame(self, bg=BG)
         f.pack(fill="both", expand=True)
         self._inner = f
@@ -1104,6 +1202,332 @@ class QueryTab(tk.Frame):
 # Browse Tab
 # ══════════════════════════════════════════════════════════════════════════════
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Edit Record Dialog
+# ══════════════════════════════════════════════════════════════════════════════
+
+class EditRecordDialog(tk.Toplevel):
+    """Pre-filled edit form for a single record.
+    Builds the same field widgets as AddRecordTab but populated from
+    the existing record. On save, diffs old vs new and calls svc.edit_record.
+    """
+
+    def __init__(self, parent, record, on_saved=None):
+        super().__init__(parent, bg=BG)
+        self.title("Edit Record")
+        self.resizable(True, True)
+        self.grab_set()
+        self.minsize(480, 400)
+
+        self._record   = record          # full dict incl _line _filepath _lineno
+        self._on_saved = on_saved
+        self._old_line = record.get("_line", "")
+        self._filepath = record.get("_filepath", "")
+        self._lineno   = record.get("_lineno")
+
+        try:
+            self._schema = ptos.get_schema()
+        except Exception:
+            self._schema = {}
+
+        self._rtype = record.get("type", "")
+        self._type_schema = self._schema.get("type", {}).get(self._rtype, {})
+
+        self.field_vars = {}
+        self.field_rows = {}
+        self.tag_vars   = {}
+
+        self._build()
+        self._populate()
+
+    def _build(self):
+        # header
+        hdr = tk.Frame(self, bg=CARD, pady=14, padx=HPAD)
+        hdr.pack(fill="x")
+        tk.Label(hdr, text=f"Edit  ·  {self._rtype}",
+                 font=F_HEAD, fg=TEXT, bg=CARD).pack(side="left")
+        tk.Button(hdr, text="✕", command=self.destroy,
+                  font=F_BTN, bg=CARD, fg=SUBTEXT,
+                  relief="flat", bd=0, cursor="hand2").pack(side="right")
+
+        # original line for reference
+        ref = tk.Frame(self, bg=BG, padx=HPAD, pady=6)
+        ref.pack(fill="x")
+        tk.Label(ref, text="Original:", font=F_SMALL, fg=SUBTEXT, bg=BG).pack(anchor="w")
+        tk.Label(ref, text=self._old_line, font=F_MONO, fg=SUBTEXT, bg=BG,
+                 wraplength=560, justify="left").pack(anchor="w")
+
+        hsep(self).pack(fill="x")
+
+        # scrollable body
+        self._body = ScrollBody(self, bg=BG)
+
+        # footer
+        hsep(self).pack(fill="x", side="bottom")
+        foot = tk.Frame(self, bg=CARD, pady=12, padx=HPAD)
+        foot.pack(fill="x", side="bottom")
+        self._status = tk.Label(foot, text="", font=F_LABEL,
+                                fg=SUCCESS, bg=CARD, wraplength=380, justify="left")
+        self._status.pack(side="left", fill="x", expand=True)
+        tk.Button(foot, text="Cancel", command=self.destroy,
+                  font=F_BTN, bg=CARD, fg=SUBTEXT, relief="flat",
+                  bd=0, cursor="hand2", padx=12, pady=8).pack(side="right", padx=(8, 0))
+        _make_button(foot, "Save Changes", self._save).pack(side="right")
+
+        self._build_fields()
+
+    def _build_fields(self):
+        required   = self._type_schema.get("required", [])
+        all_fields = list(required)
+        for f in self._type_schema.get("fields", {}):
+            if f not in all_fields: all_fields.append(f)
+        for f in self._type_schema.get("conditions", {}):
+            if f not in all_fields: all_fields.append(f)
+
+        for field in all_fields:
+            self._add_field_row(field, field in required)
+
+        self._update_conditionals()
+        self._add_tag_section()
+        self._add_date_note_section()
+        self._body.reset()
+
+    def _add_field_row(self, field, required):
+        frame = tk.Frame(self._body, bg=BG, pady=5)
+        frame.pack(fill="x", padx=HPAD)
+        self.field_rows[field] = frame
+
+        cap  = field.replace("_", " ").title()
+        mark = "  *" if required else ""
+        lbl(frame, f"{cap}{mark}", font=F_LABEL,
+            fg=TEXT if required else SUBTEXT).pack(anchor="w")
+
+        field_meta = self._schema.get("fields", {}).get(field, {})
+        is_int     = isinstance(field_meta, dict) and field_meta.get("type") == "int"
+        opts       = self._resolve_opts(field)
+        var        = tk.StringVar()
+        self.field_vars[field] = var
+
+        if is_int:
+            unit = field_meta.get("unit", "")
+            vcmd = (frame.register(lambda s: s == "" or s.isdigit()), "%P")
+            int_row = tk.Frame(frame, bg=BG)
+            int_row.pack(anchor="w", pady=(3, 0))
+            wf, we = _make_entry(int_row, textvariable=var, width=12)
+            we.config(validate="key", validatecommand=vcmd)
+            wf.pack(side="left")
+            if unit:
+                tk.Label(int_row, text=unit, font=F_LABEL, fg=SUBTEXT,
+                         bg=BG).pack(side="left", padx=(8, 0))
+        elif opts is not None:
+            c = _make_combo(frame, opts, textvariable=var, width=32)
+            c.pack(anchor="w", pady=(3, 0))
+            c.bind("<<ComboboxSelected>>", lambda _: self._on_field_change())
+        else:
+            wf, fe = _make_entry(frame, textvariable=var, width=36)
+            fe.bind("<Control-Return>", lambda _: self._save())
+            wf.pack(anchor="w", pady=(3, 0))
+
+    def _resolve_opts(self, field):
+        fd   = self._type_schema.get("fields", {}).get(field, {})
+        if "use" in fd:
+            key = fd["use"].split(".", 1)[1]
+            s   = self._schema.get("shared", {}).get(key, {})
+            o   = s.get("options")
+            return o if isinstance(o, list) else None
+        opts = fd.get("options")
+        if isinstance(opts, list):
+            return opts
+        if isinstance(opts, dict):
+            parent = fd.get("parent")
+            pval   = self.field_vars.get(parent, tk.StringVar()).get() if parent else ""
+            return opts.get(pval, [])
+        return None
+
+    def _on_field_change(self):
+        record = {f: v.get() for f, v in self.field_vars.items()}
+        for field in list(self.field_vars):
+            fd = self._type_schema.get("fields", {}).get(field, {})
+            if isinstance(fd.get("options"), dict):
+                parent  = fd.get("parent")
+                pval    = record.get(parent, "")
+                new_opts = fd["options"].get(pval, [])
+                row = self.field_rows.get(field)
+                if row:
+                    for w in row.winfo_children():
+                        if isinstance(w, ttk.Combobox):
+                            if w.get() not in new_opts:
+                                w.set("")
+                                self.field_vars[field].set("")
+                            w["values"] = new_opts
+        self._update_conditionals()
+        self._refresh_tags()
+
+    def _update_conditionals(self):
+        record = {f: v.get() for f, v in self.field_vars.items()}
+        for field, rule in self._type_schema.get("conditions", {}).items():
+            show = all(record.get(k) == v for k, v in rule.get("when", {}).items())
+            row  = self.field_rows.get(field)
+            if row:
+                if show: row.pack(fill="x", padx=HPAD)
+                else:
+                    row.pack_forget()
+                    self.field_vars.get(field, tk.StringVar()).set("")
+
+    def _add_tag_section(self):
+        hsep(self._body).pack(fill="x", padx=HPAD, pady=8)
+        outer = tk.Frame(self._body, bg=BG, pady=5)
+        outer.pack(fill="x", padx=HPAD)
+        lbl(outer, "Tags", font=F_LABEL, fg=SUBTEXT).pack(anchor="w")
+        inp_row = tk.Frame(outer, bg=BG)
+        inp_row.pack(anchor="w", pady=(3, 0))
+        self._custom_tag_var = tk.StringVar()
+        wf, _ = _make_entry(inp_row, textvariable=self._custom_tag_var, width=30)
+        wf.pack(side="left")
+        sublbl(inp_row, "  comma separated").pack(side="left", padx=(8, 0))
+        self._tag_frame = tk.Frame(outer, bg=BG)
+        self._tag_frame.pack(anchor="w", pady=(6, 0))
+        self._refresh_tags()
+
+    def _refresh_tags(self):
+        if not hasattr(self, "_tag_frame"):
+            return
+        for w in self._tag_frame.winfo_children():
+            w.destroy()
+        self.tag_vars = {}
+        record = {f: v.get() for f, v in self.field_vars.items()}
+        record["type"] = self._rtype
+        tags = ptos.resolve_tags(self._schema, self._type_schema, record)
+        for tag in tags:
+            var = tk.IntVar()
+            self.tag_vars[tag] = var
+            tk.Checkbutton(self._tag_frame, text=tag, variable=var,
+                           font=F_LABEL, bg=BG, fg=TEXT,
+                           activebackground=BG,
+                           selectcolor=ENTRY_BG).pack(side="left", padx=(0, 10))
+
+    def _add_date_note_section(self):
+        hsep(self._body).pack(fill="x", padx=HPAD, pady=8)
+        dr = tk.Frame(self._body, bg=BG, pady=5)
+        dr.pack(fill="x", padx=HPAD)
+        lbl(dr, "Date", font=F_LABEL, fg=SUBTEXT).pack(anchor="w")
+        date_row = tk.Frame(dr, bg=BG)
+        date_row.pack(anchor="w", pady=(3, 0))
+        self._date_var = tk.StringVar(value=dt.date.today().isoformat())
+        wf, de = _make_entry(date_row, textvariable=self._date_var, width=14)
+        wf.pack(side="left")
+        sublbl(date_row, "  YYYY-MM-DD").pack(side="left", padx=(8, 0))
+        cal_btn = tk.Button(date_row, text="📅", font=F_LABEL,
+                            bg=BG, fg=ACCENT, relief="flat", bd=0, cursor="hand2",
+                            command=lambda: DatePicker(cal_btn, self._date_var))
+        cal_btn.pack(side="left", padx=(6, 0))
+        nr = tk.Frame(self._body, bg=BG, pady=5)
+        nr.pack(fill="x", padx=HPAD)
+        lbl(nr, "Note", font=F_LABEL, fg=SUBTEXT).pack(anchor="w")
+        self._note_var = tk.StringVar()
+        wf, ne = _make_entry(nr, textvariable=self._note_var, width=48)
+        ne.bind("<Control-Return>", lambda _: self._save())
+        wf.pack(anchor="w", pady=(3, 0))
+        tk.Frame(self._body, bg=BG, height=16).pack()
+
+    def _populate(self):
+        """Fill all widgets with values from the existing record."""
+        rec = self._record
+        # fields
+        for field, var in self.field_vars.items():
+            val = rec.get(field, "")
+            if isinstance(val, list):
+                val = val[0] if val else ""
+            var.set(str(val))
+        # rebuild tags after fields are set (so context-dependent tags resolve)
+        self._update_conditionals()
+        self._refresh_tags()
+        # tick current tags
+        raw_tags = rec.get("tag", [])
+        if isinstance(raw_tags, str):
+            raw_tags = [raw_tags]
+        for tag in raw_tags:
+            if tag in self.tag_vars:
+                self.tag_vars[tag].set(1)
+            else:
+                existing = self._custom_tag_var.get().strip()
+                self._custom_tag_var.set(f"{existing},{tag}" if existing else tag)
+        # date and note
+        self._date_var.set(rec.get("date", dt.date.today().isoformat()))
+        self._note_var.set(rec.get("note", ""))
+
+    def _save(self):
+        # build new record dict from current widget state
+        new_record = {"type": self._rtype}
+        for f, var in self.field_vars.items():
+            v = var.get().strip()
+            if v:
+                new_record[f] = v
+        tags = [t for t, v in self.tag_vars.items() if v.get()]
+        for t in self._custom_tag_var.get().split(","):
+            t = t.strip().replace(" ", "_")
+            if t and t not in tags:
+                tags.append(t)
+        if tags:
+            new_record["tag"] = tags
+
+        new_date = self._date_var.get().strip()
+        new_note = self._note_var.get().strip() or None
+
+        # parse old record to diff
+        parsed = ptos.safe_parse_line(self._old_line)
+        if not parsed:
+            self._status.config(text="Could not parse original record.", fg=ERROR_COL)
+            return
+        old_d, old_kv, old_note = parsed
+
+        set_args = []
+        if new_date != str(old_d):
+            set_args.append(f"date={new_date}")
+
+        all_keys = set(list(old_kv.keys()) + list(new_record.keys())) - {"type"}
+        for k in all_keys:
+            old_v = old_kv.get(k)
+            new_v = new_record.get(k)
+            if old_v is None and new_v is None:
+                continue
+            is_list = k == "tag" or isinstance(old_v, list) or isinstance(new_v, list)
+            if is_list:
+                old_list = old_v if isinstance(old_v, list) else ([old_v] if old_v else [])
+                new_list = new_v if isinstance(new_v, list) else ([new_v] if new_v else [])
+                if set(old_list) != set(new_list):
+                    for item in set(new_list) - set(old_list):
+                        set_args.append(f"{k}+={item}")
+                    for item in set(old_list) - set(new_list):
+                        set_args.append(f"{k}-={item}")
+            else:
+                old_s = str(old_v or "")
+                new_s = str(new_v or "")
+                if old_s != new_s:
+                    set_args.append(f"{k}={new_v}" if new_v else f"{k}=")
+
+        note_changed = new_note != (old_note or "")
+        effective_note = new_note if note_changed else None
+
+        if not set_args and effective_note is None:
+            self._status.config(text="No changes to save.", fg=SUBTEXT)
+            return
+
+        try:
+            svc.edit_record(self._filepath, self._old_line,
+                            set_args=set_args, new_note=effective_note,
+                            lineno=self._lineno)
+            self._status.config(text="✔  Saved.", fg=SUCCESS)
+            if self._on_saved:
+                self._on_saved()
+            self.after(800, self.destroy)
+        except PTOSError as e:
+            self._status.config(text=str(e), fg=ERROR_COL)
+        except Exception as e:
+            self._status.config(text=str(e), fg=ERROR_COL)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 class BrowseTab(tk.Frame):
     def __init__(self, parent):
         super().__init__(parent, bg=BG)
@@ -1228,6 +1652,7 @@ class BrowseTab(tk.Frame):
 
         self._result = ResultPane(self)
         self._result.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
+        self._result.set_refresh_callback(self._run)
 
     def _run_due(self):
         """Show due list using service layer — renders as Treeview."""
