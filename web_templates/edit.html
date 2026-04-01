@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-title">Edit Record</div>
+
+{% if msg %}
+<div class="msg msg-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<!-- type indicator -->
+<div class="card" style="padding:12px 18px;margin-bottom:14px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div>
+      <span style="font-size:12px;color:var(--sub);font-weight:600;">TYPE</span>
+      <span style="font-size:16px;font-weight:800;margin-left:10px;color:var(--accent);">{{ rtype }}</span>
+    </div>
+    <a href="/browse" style="font-size:13px;color:var(--sub);text-decoration:none;font-weight:600;">↩ Browse</a>
+  </div>
+</div>
+
+<!-- original record for reference -->
+<div class="card" style="padding:10px 16px;margin-bottom:14px;border-color:var(--border);">
+  <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:4px;">ORIGINAL</div>
+  <div style="font-family:monospace;font-size:12px;color:var(--sub);word-break:break-all;">{{ old_line }}</div>
+</div>
+
+<form method="POST" action="/edit" id="edit-form">
+  <input type="hidden" name="filepath" value="{{ filepath }}">
+  <input type="hidden" name="lineno"   value="{{ lineno }}">
+  <input type="hidden" name="old_line" value="{{ old_line }}">
+  <input type="hidden" name="type"     value="{{ rtype }}">
+
+  <div class="card">
+    <!-- date -->
+    <div class="field-group">
+      <label>Date</label>
+      <input type="date" name="date" value="{{ field_values.get('date', today) }}" max="{{ today }}">
+    </div>
+
+    <div class="divider"></div>
+
+    <!-- dynamic fields -->
+    {% for f in field_defs %}
+    <div class="field-group" id="field-row-{{ f.name }}">
+      <label>
+        {{ f.name }}
+        {% if f.required %}<span class="req">*</span>{% endif %}
+        {% if f.unit %}<span style="color:var(--sub);font-weight:400;"> · {{ f.unit }}</span>{% endif %}
+      </label>
+      {% if f.options %}
+      <select name="{{ f.name }}" id="field-{{ f.name }}"
+              {% if f.is_parent or f.is_tag_trigger %}onchange="onParentChange('{{ f.name }}')"{% endif %}
+              {% if f.parent %}data-parent="{{ f.parent }}"{% endif %}>
+        <option value="">— select {{ f.name }} —</option>
+        {% for opt in f.options %}
+        <option value="{{ opt }}"
+          {% if field_values.get(f.name) == opt %}selected{% endif %}>
+          {{ opt }}
+        </option>
+        {% endfor %}
+      </select>
+      {% elif f.has_parent %}
+      <select name="{{ f.name }}" id="field-{{ f.name }}"
+              data-parent="{{ f.parent }}" onchange="onParentChange('{{ f.name }}')">
+        <option value="">— select {{ f.parent }} first —</option>
+      </select>
+      {% elif f.is_int %}
+      <input type="number" name="{{ f.name }}" min="0" inputmode="numeric"
+             value="{{ field_values.get(f.name, '') }}" placeholder="0">
+      {% else %}
+      <input type="text" name="{{ f.name }}"
+             value="{{ field_values.get(f.name, '') }}"
+             placeholder="{{ f.name }}">
+      {% endif %}
+    </div>
+    {% endfor %}
+
+    <!-- tags -->
+    <div class="divider"></div>
+    <div class="field-group">
+      <label>Tags</label>
+      {% set current_tags = field_values.get('tag', []) %}
+      {% if tag_options %}
+      <div class="chip-group" style="margin-top:4px;">
+        {% for tag in tag_options %}
+        {% set is_checked = tag in current_tags %}
+        <label class="chip {% if is_checked %}selected{% endif %}">
+          <input type="checkbox" name="tag" value="{{ tag }}"
+            {% if is_checked %}checked{% endif %}
+            onchange="this.closest('.chip').classList.toggle('selected', this.checked)">
+          {{ tag }}
+        </label>
+        {% endfor %}
+      </div>
+      {% endif %}
+      <input type="text" name="custom_tags"
+             placeholder="more tags, comma separated"
+             style="margin-top:{% if tag_options %}10px{% else %}4px{% endif %};">
+    </div>
+
+    <!-- note -->
+    <div class="divider"></div>
+    <div class="field-group">
+      <label>Note <span style="color:var(--sub);font-weight:400;">(optional)</span></label>
+      <input type="text" name="note"
+             value="{{ field_values.get('note', '') }}"
+             placeholder="brief context">
+    </div>
+  </div>
+
+  <button type="submit" class="btn btn-primary btn-full" id="save-btn">Save Changes</button>
+  <a href="/browse" class="btn btn-ghost btn-full" style="margin-top:10px;">✕ Cancel</a>
+</form>
+
+<script>
+function onParentChange(fieldName) {
+  const form   = document.getElementById("edit-form");
+  const fd     = new FormData(form);
+  const params = new URLSearchParams();
+  params.set("filepath", fd.get("filepath"));
+  params.set("lineno",   fd.get("lineno"));
+  params.set("line",     fd.get("old_line"));
+  window.location = "/edit?" + params.toString();
+}
+
+document.getElementById("edit-form").addEventListener("submit", function() {
+  document.getElementById("save-btn").disabled = true;
+  document.getElementById("save-btn").textContent = "Saving…";
+});
+</script>
+
+{% endblock %}
