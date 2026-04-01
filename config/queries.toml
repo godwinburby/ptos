@@ -183,17 +183,3 @@ time  = "this-month"
 where = "domain=self AND category=transport AND (tag=auto OR tag=bus) AND type=expense"
 time  = "this-month"
 
-[expense_domain]
-where = "type=expense"
-time  = "tm"
-group = ["domain"]
-
-[expense_jayden]
-where = "type=expense"
-time  = "tm"
-search = "jayden"
-
-[jayden]
-where = "type=expense"
-time  = "this-month"
-search = "jayden"

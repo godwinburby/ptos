@@ -79,6 +79,8 @@
     <div class="divider"></div>
     <div class="field-group">
       <label>Tags</label>
+      <!-- sentinel: always submitted so edit_post knows tag field was present -->
+      <input type="hidden" name="tag_field_present" value="1">
       {% set current_tags = field_values.get('tag', []) %}
       {% if tag_options %}
       <div class="chip-group" style="margin-top:4px;">
