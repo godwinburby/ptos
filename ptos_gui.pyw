@@ -819,6 +819,20 @@ class AddRecordTab(tk.Frame):
         preset  = presets.get(name, {})
         if not preset:
             return
+
+        # resolve alias
+        if isinstance(preset, dict) and "alias" in preset:
+            preset = presets.get(preset["alias"], {})
+
+        # multi-record preset — cannot populate a single form; show message
+        if isinstance(preset, dict) and "records" in preset:
+            refs = preset["records"]
+            label = ", ".join(refs) if isinstance(refs, list) else str(refs)
+            self._status.config(
+                text=f"'{name}' is a multi-record preset ({label}). "
+                     f"Use the CLI: ptos -p {name}", fg=ACCENT)
+            self._preset_var.set("—")
+            return
         rtype = preset.get("type", "")
         if rtype:
             self._type_var.set(rtype)
@@ -1434,7 +1448,8 @@ class BrowseTab(tk.Frame):
 
         preview_parts = []
         if filters:
-            preview_parts.append("where: " + " ".join(filters))
+            expr_preview = ptos._filters_to_expr(filters)
+            preview_parts.append("where: " + expr_preview)
         preview_parts.append("time:  " + time_code)
         if search:
             preview_parts.append("search: " + search)
@@ -1477,7 +1492,9 @@ class BrowseTab(tk.Frame):
                 pass
             lines = [f"\n[{name}]"]
             if filters:
-                lines.append("where = \"" + " ".join(filters) + "\"")
+                expr = ptos._filters_to_expr(filters)
+                val  = expr.replace('"', '\\"')
+                lines.append(f'where = "{val}"')
             lines.append("time  = \"" + time_code + "\"")
             if search:
                 lines.append("search = \"" + search + "\"")
@@ -1538,6 +1555,9 @@ class BrowseTab(tk.Frame):
 # ══════════════════════════════════════════════════════════════════════════════
 # Log Editor Tab
 # ══════════════════════════════════════════════════════════════════════════════
+
+class LogEditorTab(tk.Frame):
+    """Plain-text editor for records and config files."""
 
     # label → relative path from PTOS_HOME (None = current year records)
     _FILE_TARGETS = [

@@ -597,8 +597,8 @@ def apply_set(old_line, set_args, new_note):
     changed_date = None
 
     for item in (set_args or []):
-        # detect operator: +=  -=  =
-        m = re.match(r"(\w+)(\+=|-=|=)(.+)", item)
+        # detect operator: +=  -=  =  (value may be empty for = to delete field)
+        m = re.match(r"(\w+)(\+=|-=|=)(.*)", item)
         if not m:
             sys.exit(f"--set: expected key=value, key+=value, or key-=value — got '{item}'")
         k, op, v = m.groups()
@@ -611,6 +611,9 @@ def apply_set(old_line, set_args, new_note):
                     sys.exit(f"--set date: invalid date '{v}' — use YYYY-MM-DD")
                 date_str = v
                 changed_date = v
+            elif v == "":
+                # empty value — delete the field entirely
+                kv.pop(k, None)
             else:
                 kv[k] = v
 

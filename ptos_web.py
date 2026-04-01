@@ -743,18 +743,20 @@ def edit_post():
         new_v = new_record.get(k)
         if old_v is None and new_v is None:
             continue
-        old_str = ", ".join(old_v) if isinstance(old_v, list) else str(old_v or "")
-        new_str = ", ".join(new_v) if isinstance(new_v, list) else str(new_v or "")
-        if old_str != new_str:
-            # handle list fields (tag) — use += / -= for individual changes
-            if isinstance(new_v, list) or isinstance(old_v, list):
-                old_list = old_v if isinstance(old_v, list) else ([old_v] if old_v else [])
-                new_list = new_v if isinstance(new_v, list) else ([new_v] if new_v else [])
+        # always treat tag (and any list field) as a list for diffing
+        is_list_field = k == "tag" or isinstance(old_v, list) or isinstance(new_v, list)
+        if is_list_field:
+            old_list = old_v if isinstance(old_v, list) else ([old_v] if old_v else [])
+            new_list = new_v if isinstance(new_v, list) else ([new_v] if new_v else [])
+            if set(old_list) != set(new_list):
                 for item in set(new_list) - set(old_list):
                     set_args.append(f"{k}+={item}")
                 for item in set(old_list) - set(new_list):
                     set_args.append(f"{k}-={item}")
-            else:
+        else:
+            old_str = str(old_v or "")
+            new_str = str(new_v or "")
+            if old_str != new_str:
                 set_args.append(f"{k}={new_v}" if new_v else f"{k}=")
 
     # note change
