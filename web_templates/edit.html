@@ -14,7 +14,7 @@
       <span style="font-size:12px;color:var(--sub);font-weight:600;">TYPE</span>
       <span style="font-size:16px;font-weight:800;margin-left:10px;color:var(--accent);">{{ rtype }}</span>
     </div>
-    <a href="/browse" style="font-size:13px;color:var(--sub);text-decoration:none;font-weight:600;">↩ Browse</a>
+    <a href="{{ return_to }}" style="font-size:13px;color:var(--sub);text-decoration:none;font-weight:600;">↩ Back</a>
   </div>
 </div>
 
@@ -29,6 +29,7 @@
   <input type="hidden" name="lineno"   value="{{ lineno }}">
   <input type="hidden" name="old_line" value="{{ old_line }}">
   <input type="hidden" name="type"     value="{{ rtype }}">
+  <input type="hidden" name="return_to" value="{{ return_to }}">
 
   <div class="card">
     <!-- date -->
@@ -111,7 +112,7 @@
   </div>
 
   <button type="submit" class="btn btn-primary btn-full" id="save-btn">Save Changes</button>
-  <a href="/browse" class="btn btn-ghost btn-full" style="margin-top:10px;">✕ Cancel</a>
+  <a href="{{ return_to }}" class="btn btn-ghost btn-full" style="margin-top:10px;">✕ Cancel</a>
 </form>
 
 <script>

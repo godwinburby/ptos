@@ -229,6 +229,11 @@ function _currentRecord() {
   return rec;
 }
 
+function _currentNote() {
+  const fd = new FormData(document.getElementById("add-form"));
+  return fd.get("note") || "";
+}
+
 function showSavePreset() {
   const rec = _currentRecord();
   if (!rec.type) {
@@ -251,9 +256,10 @@ function doSavePreset() {
   const msg  = document.getElementById("preset-msg");
   if (!name) { msg.textContent = "Enter a name."; msg.style.display="block"; return; }
   const record = _currentRecord();
+  const note   = _currentNote();
   fetch("/api/save_preset", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({name, record})
+    body: JSON.stringify({name, record, note})
   })
   .then(r => r.json())
   .then(d => {

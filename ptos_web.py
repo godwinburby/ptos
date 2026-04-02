@@ -560,26 +560,25 @@ def api_preset_add():
 
 @app.route("/api/save_preset", methods=["POST"])
 def api_save_preset():
-    """Save current add-record form state as a preset."""
+    """Save current add-record form state as a preset.
+    Overwrites existing preset with same name.
+    """
     data   = request.get_json(silent=True) or {}
     name   = data.get("name","").strip().replace(" ","_").lower()
     record = data.get("record", {})
+    note   = data.get("note","").strip() or None
 
     if not name:
         return jsonify(ok=False, error="Preset name cannot be empty")
     if not re.match(r'^[a-z0-9_]+$', name):
         return jsonify(ok=False, error="Name must be lowercase letters, numbers and underscores only")
-
-    existing = ptos.get_presets()
-    if name in existing:
-        return jsonify(ok=False, error=f"Preset '{name}' already exists")
     if not record.get("type"):
         return jsonify(ok=False, error="No record type in form — fill at least the type field")
 
     try:
-        ptos._CACHE.pop("presets", None)   # invalidate cache before write
-        ptos.save_as_preset(name, record)
-        ptos._CACHE.pop("presets", None)   # invalidate cache after write
+        ptos._CACHE.pop("presets", None)
+        ptos.save_as_preset(name, record, note=note)
+        ptos._CACHE.pop("presets", None)
         return jsonify(ok=True, name=name)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -679,9 +678,12 @@ def edit_get():
     # all tags to display: current record tags first, then remaining schema options
     tag_options = list(current_tags) + [t for t in schema_tag_options if t not in current_tags]
 
+    return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
+
     return render_template("edit.html",
         tab="browse", title="Edit Record", now=_now_str(),
         filepath=filepath, lineno=lineno_int, old_line=line,
+        return_to=return_to,
         rtype=rtype, field_defs=field_defs,
         tag_options=tag_options, field_values=field_values,
         today=dt.date.today().isoformat(),
@@ -762,17 +764,19 @@ def edit_post():
     # note change
     new_note = note if note != (old_note or "") else None
 
+    # where to redirect after save — referrer or browse
+    return_to = request.form.get("return_to", "") or url_for("browse_get")
+
     if not set_args and new_note is None:
-        # nothing changed — go back
-        return redirect(url_for("browse_get"))
+        return redirect(return_to)
 
     if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
-        return redirect(url_for("browse_get"))
+        return redirect(return_to)
 
     try:
         svc.edit_record(filepath, old_line,
                         set_args=set_args, new_note=new_note, lineno=lineno_int)
-        return redirect(url_for("browse_get"))
+        return redirect(return_to)
     except PTOSError as e:
         try:
             schema = ptos.get_schema()

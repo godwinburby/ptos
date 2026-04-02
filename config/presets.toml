@@ -118,3 +118,25 @@ category = "medical"
 amount   = 288
 tag      = ["eye_drops", "medicine", "lubimoist"]
 
+
+[presets.hdfc_mutual_fund]
+type     = "investment"
+instrument = "mutual_fund"
+provider = "hdfc_mf"
+amount   = 5000
+tag      = ["sip"]
+
+[presets.motilal_mutual_fund]
+type     = "investment"
+instrument = "mutual_fund"
+provider = "motilal_oswald_mf"
+amount   = 2000
+tag      = ["sip"]
+note     = "motilal oswald mid cap fund"
+
+[presets.rd_cordial_gramin]
+type     = "investment"
+instrument = "rd"
+provider = "cordial_gramin"
+amount   = 2000
+

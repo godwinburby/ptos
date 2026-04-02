@@ -958,6 +958,9 @@ class AddRecordTab(tk.Frame):
                     existing = self._custom_tag_var.get().strip()
                     self._custom_tag_var.set(
                         f"{existing},{tag}" if existing else tag)
+        # load note from preset if present
+        if "note" in preset and hasattr(self, "_note_var"):
+            self._note_var.set(preset["note"])
         self._status.config(
             text=f"Preset '{name}' loaded — edit fields then save.", fg=ACCENT)
 
@@ -975,6 +978,7 @@ class AddRecordTab(tk.Frame):
                 tags.append(t)
         if tags:
             record["tag"] = tags
+        note = getattr(self, "_note_var", tk.StringVar()).get().strip() or None
 
         dlg = tk.Toplevel(self)
         dlg.title("Save as Preset")
@@ -986,7 +990,7 @@ class AddRecordTab(tk.Frame):
         name_var = tk.StringVar()
         ef, entry_w = _make_entry(dlg, textvariable=name_var, width=28)
         ef.pack(padx=20, pady=(0, 4))
-        tk.Label(dlg, text="lowercase, use _ for spaces",
+        tk.Label(dlg, text="lowercase, use _ for spaces — overwrites if exists",
                  font=F_SMALL, fg=SUBTEXT, padx=20).pack(anchor="w")
         status = tk.Label(dlg, text="", font=F_SMALL, fg=ERROR_COL, padx=20)
         status.pack(anchor="w")
@@ -996,11 +1000,10 @@ class AddRecordTab(tk.Frame):
             if not name:
                 status.config(text="Name cannot be empty.")
                 return
-            if name in ptos.get_presets():
-                status.config(text=f"'{name}' already exists — choose another name.")
-                return
             try:
-                ptos.save_as_preset(name, record)
+                ptos._CACHE.pop("presets", None)
+                ptos.save_as_preset(name, record, note=note)
+                ptos._CACHE.pop("presets", None)
                 self._preset_combo["values"] = ["—"] + sorted(ptos.get_presets().keys())
                 self._status.config(
                     text=f"✔  Preset '{name}' saved.", fg=SUCCESS)

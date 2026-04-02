@@ -183,3 +183,7 @@ time  = "this-month"
 where = "domain=self AND category=transport AND (tag=auto OR tag=bus) AND type=expense"
 time  = "this-month"
 
+
+[investments]
+where = "type=investment"
+time  = "tm"
