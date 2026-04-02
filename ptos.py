@@ -1677,27 +1677,71 @@ def save_query(name, args, extra_filters):
     print(f"\nQuery '{name}' saved to queries.toml")
     print(f"Run with: ptos -q {name}")
 
-def save_as_preset(name, record):
-    """Append a new preset to presets.toml from a record dict."""
+def save_as_preset(name, record, note=None):
+    """Write a preset to presets.toml.
+    If a preset with the same name already exists it is replaced.
+    note: optional note string to store alongside the record fields.
+    """
     presets_path = os.path.join(CONFIG_DIR, "presets.toml")
-    lines = []
-    lines.append(f"\n[presets.{name}]")
+
+    # build the new block lines
+    block_lines = [f"[presets.{name}]"]
     for k, v in record.items():
         if k == "tag":
             if isinstance(v, list):
                 tags = ", ".join(f'"{t}"' for t in v)
-                lines.append(f"tag      = [{tags}]")
+                block_lines.append(f"tag      = [{tags}]")
             else:
-                lines.append(f'tag      = ["{v}"]')
+                block_lines.append(f'tag      = ["{v}"]')
         elif k == "amount":
-            lines.append(f"amount   = {v}")
+            block_lines.append(f"amount   = {v}")
         else:
-            lines.append("{:<8} = \"{}\"".format(k, v))
-    lines.append("# amount omitted — will be prompted each time" if "amount" not in record else "")
-    block = "\n".join(l for l in lines if l is not None)
+            block_lines.append("{:<8} = \"{}\"".format(k, v))
+    if note:
+        escaped = note.replace('"', '\\"')
+        block_lines.append(f'note     = "{escaped}"')
+    if "amount" not in record:
+        block_lines.append("# amount omitted — will be prompted each time")
+    new_block = "\n".join(block_lines) + "\n"
+
     _backup_file(presets_path)
+
+    # replace existing block if name already exists — line-by-line safe replacement
+    if os.path.exists(presets_path):
+        with open(presets_path, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+
+        header = f"[presets.{name}]"
+        start_idx = None
+        for i, line in enumerate(lines):
+            if line.strip() == header:
+                start_idx = i
+                break
+
+        if start_idx is not None:
+            # find end of this block — next [section] header or EOF
+            end_idx = len(lines)
+            for i in range(start_idx + 1, len(lines)):
+                stripped = lines[i].strip()
+                if stripped.startswith("[") and not stripped.startswith("#"):
+                    end_idx = i
+                    break
+
+            # rebuild file: everything before + new block + blank line + everything after
+            before = lines[:start_idx]
+            after  = lines[end_idx:]
+            # strip trailing blank lines from before
+            while before and before[-1].strip() == "":
+                before.pop()
+            result = before + ["\n", new_block + "\n"] + after
+            with open(presets_path, "w", encoding="utf-8") as f:
+                f.writelines(result)
+            print(f"Preset '{name}' updated in presets.toml")
+            return
+
+    # no existing block — append
     with open(presets_path, "a", encoding="utf-8") as f:
-        f.write(block + "\n")
+        f.write("\n" + new_block)
     print(f"Preset '{name}' saved to presets.toml")
 
 def interactive_add(schema, date=None, save_preset_name=None):
