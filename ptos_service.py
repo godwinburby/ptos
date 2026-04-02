@@ -651,11 +651,14 @@ def run_query(name, time=None):
         filters = []
 
     effective_search = q.get("search") or None
+    where_expr = filters[0] if filters else ""
 
     if "group" in q:
         result = get_group(filters, effective_time, q["group"],
                            sum_field=q.get("sum_field"))
-        result["kind"] = "group"
+        result["kind"]       = "group"
+        result["query_name"] = name
+        result["where_expr"] = where_expr
         return result
 
     if "pivot" in q and len(q["pivot"]) >= 2:
@@ -663,16 +666,22 @@ def run_query(name, time=None):
                            q["pivot"][0], q["pivot"][1],
                            count_mode=q.get("count", False),
                            sort_col=q.get("sort"))
-        result["kind"] = "pivot"
+        result["kind"]       = "pivot"
+        result["query_name"] = name
+        result["where_expr"] = where_expr
         return result
 
     if "trend" in q:
         result = get_trend(filters, effective_time, int(q["trend"]))
-        result["kind"] = "trend"
+        result["kind"]       = "trend"
+        result["query_name"] = name
+        result["where_expr"] = where_expr
         return result
 
     result = get_records(filters, effective_time, search=effective_search)
-    result["kind"] = "records"
+    result["kind"]       = "records"
+    result["query_name"] = name
+    result["where_expr"] = where_expr
     return result
 
 
