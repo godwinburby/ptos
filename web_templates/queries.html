@@ -33,6 +33,23 @@
   </div>
 </div>
 
+<!-- Delete modal -->
+<div id="q-del-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+     z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:340px;
+              box-shadow:0 8px 32px rgba(0,0,0,.2);">
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--error);">Delete Record</div>
+    <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">This cannot be undone (backup is kept).</div>
+    <div id="q-del-line" style="font-family:monospace;font-size:12px;background:var(--bg);
+         padding:8px;border-radius:6px;word-break:break-all;margin-bottom:14px;"></div>
+    <div id="q-del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" style="flex:1;background:var(--error);" onclick="qDoDelete()">Delete</button>
+      <button class="btn btn-ghost"   style="flex:1;" onclick="qCloseDelete()">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <div id="result-area"></div>
 
 <script>
@@ -82,6 +99,19 @@ function renderResult(d) {
   }
 }
 
+function exprBadge(d) {
+  if (!d.where_expr && !d.query_name) return "";
+  const name = d.query_name ? `<strong>${d.query_name}</strong>` : "";
+  const expr = d.where_expr
+    ? `<code style="font-size:11px;background:var(--bg);padding:2px 8px;
+         border-radius:4px;color:var(--sub);word-break:break-all;">${d.where_expr}</code>`
+    : "";
+  return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+               font-size:13px;color:var(--sub);margin-bottom:10px;">
+    ${name}${expr}
+  </div>`;
+}
+
 function renderDashboard(d) {
   const items = (d.items||[]).map(i =>
     `<div class="stat-card">
@@ -114,6 +144,7 @@ function renderGroup(d) {
     : `<tr style="font-weight:700;border-top:2px solid var(--border)"><td>Total</td><td style="text-align:right">${d.grand_count}</td></tr>`;
   return `<div class="card">
     <div class="card-title">Grouped by ${(d.fields||[]).join(", ")} · ${d.time_label}</div>
+    ${exprBadge(d)}
     <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${heads}</tr></thead><tbody>${rows}${foot}</tbody></table></div>
     ${summaryBar(d)}
   </div>`;
@@ -130,6 +161,7 @@ function renderPivot(d) {
   const foot = `<tr style="font-weight:700;border-top:2px solid var(--border)"><td>Total</td>${totCells}<td style="text-align:right">${d.grand}</td></tr>`;
   return `<div class="card">
     <div class="card-title">Pivot · ${d.row_field} × ${d.col_field} · ${d.time_label}</div>
+    ${exprBadge(d)}
     <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${heads}</tr></thead><tbody>${rows}${foot}</tbody></table></div>
   </div>`;
 }
@@ -144,20 +176,36 @@ function renderTrend(d) {
     : `<tr><td>${p.label}</td><td style="text-align:right">${p.count}</td></tr>`).join("");
   return `<div class="card">
     <div class="card-title">Trend · ${d.filter_str}</div>
+    ${exprBadge(d)}
     <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
 }
 
+// ── Records with edit/delete ──────────────────────────────────────────────────
+let _qRecords = [];
+
 function renderRecords(d) {
   if (!d.records || !d.records.length)
     return `<div class="card" style="color:var(--sub);text-align:center;padding:24px;">No records found.</div>`;
-  const cols = d.columns || [];
-  const heads = cols.map(c=>`<th>${c}</th>`).join("");
-  const rows  = d.records.map(r =>
-    `<tr>${cols.map(c=>`<td>${r[c]||""}</td>`).join("")}</tr>`).join("");
+  _qRecords = d.records;
+  const cols  = (d.columns || []).filter(c => !c.startsWith("_"));
+  const heads = cols.map(c=>`<th>${c}</th>`).join("") + `<th style="width:80px"></th>`;
+  const rows  = d.records.map((r,i) => {
+    const cells = cols.map(c=>`<td>${r[c]||""}</td>`).join("");
+    const acts  = r._line
+      ? `<td style="white-space:nowrap;">
+           <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
+             href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}">✎</a>
+           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
+             onclick="qOpenDelete(${i})">✕</button>
+         </td>`
+      : `<td></td>`;
+    return `<tr>${cells}${acts}</tr>`;
+  }).join("");
   return `<div class="card">
+    ${exprBadge(d)}
     ${summaryBar(d)}
-    <div style="overflow-x:auto;margin-top:12px;"><table class="data-table">
+    <div style="overflow-x:auto;margin-top:8px;"><table class="data-table">
       <thead><tr>${heads}</tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
@@ -174,5 +222,44 @@ function summaryBar(d) {
     ? `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin-bottom:8px;">${parts.join("")}</div>`
     : "";
 }
+
+// ── Delete modal ──────────────────────────────────────────────────────────────
+let _qDelRecord = null;
+
+function qOpenDelete(idx) {
+  const r = _qRecords[idx];
+  if (!r || !r._line) return;
+  _qDelRecord = r;
+  document.getElementById("q-del-line").textContent  = r._line;
+  document.getElementById("q-del-msg").style.display = "none";
+  document.getElementById("q-del-dialog").style.display = "flex";
+}
+
+function qCloseDelete() {
+  document.getElementById("q-del-dialog").style.display = "none";
+}
+
+function qDoDelete() {
+  if (!_qDelRecord) return;
+  const msg = document.getElementById("q-del-msg");
+  fetch("/api/records/delete", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({
+      filepath: _qDelRecord._filepath,
+      old_line: _qDelRecord._line,
+      lineno:   _qDelRecord._lineno
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) { qCloseDelete(); runQuery(); }
+    else { msg.textContent = d.error; msg.style.display = "block"; }
+  })
+  .catch(e => { msg.textContent = String(e); msg.style.display = "block"; });
+}
+
+document.getElementById("q-del-dialog").addEventListener("click", function(e) {
+  if (e.target === this) qCloseDelete();
+});
 </script>
 {% endblock %}
