@@ -132,7 +132,7 @@ instrument = "mutual_fund"
 provider = "motilal_oswald_mf"
 amount   = 2000
 tag      = ["sip"]
-note     = "motilal oswald mid cap fund"
+note     = "motilal oswald mid cap funds"
 
 [presets.rd_cordial_gramin]
 type     = "investment"

@@ -130,6 +130,88 @@ document.getElementById("edit-form").addEventListener("submit", function() {
   document.getElementById("save-btn").disabled = true;
   document.getElementById("save-btn").textContent = "Saving…";
 });
+
+// ── History suggestions ───────────────────────────────────────────────────────
+(function() {
+  const rtype = "{{ rtype }}";
+  if (!rtype) return;
+
+  fetch("/api/type_fields/" + encodeURIComponent(rtype))
+  .then(r => r.json())
+  .then(data => {
+    // datalists for free-text fields
+    const histFields = data.history_fields || {};
+    for (const [field, values] of Object.entries(histFields)) {
+      if (!values.length) continue;
+      const input = document.querySelector(`input[name="${field}"]`);
+      if (!input) continue;
+      const dlId = `hist-dl-${field}`;
+      let dl = document.getElementById(dlId);
+      if (!dl) {
+        dl = document.createElement("datalist");
+        dl.id = dlId;
+        document.body.appendChild(dl);
+      }
+      dl.innerHTML = values.map(v => `<option value="${v}">`).join("");
+      input.setAttribute("list", dlId);
+      input.setAttribute("autocomplete", "off");
+    }
+
+    // extra historical tags not in schema chips
+    const histTags = data.history_tags || [];
+    if (!histTags.length) return;
+    const chipGroup = document.querySelector(".chip-group");
+    if (!chipGroup) return;
+    const existing = new Set(
+      [...chipGroup.querySelectorAll("input[name='tag']")].map(i => i.value)
+    );
+    const extra = histTags.filter(t => !existing.has(t));
+    if (!extra.length) return;
+    const divLabel = document.createElement("span");
+    divLabel.style.cssText = "font-size:11px;color:var(--sub);width:100%;margin-top:6px;display:block;";
+    divLabel.textContent = "from history:";
+    chipGroup.appendChild(divLabel);
+    extra.forEach(tag => {
+      const label = document.createElement("label");
+      label.className = "chip";
+      label.style.opacity = "0.75";
+      label.innerHTML = `<input type="checkbox" name="tag" value="${tag}"
+        onchange="this.closest('.chip').classList.toggle('selected', this.checked)">
+        ${tag}`;
+      chipGroup.appendChild(label);
+    });
+  })
+  .catch(() => {});
+})();
+
+// ── Cascade field suggestions ─────────────────────────────────────────────────
+(function() {
+  const rtype = "{{ rtype }}";
+  if (!rtype) return;
+
+  function softFill(suggestions) {
+    for (const [field, value] of Object.entries(suggestions || {})) {
+      const sel = document.querySelector(`select[name="${field}"]`);
+      if (sel && !sel.value) {
+        const opt = [...sel.options].find(o => o.value === value);
+        if (opt) sel.value = value;
+      }
+    }
+  }
+
+  document.querySelectorAll("select[name]").forEach(sel => {
+    const fname = sel.getAttribute("name");
+    if (!fname || fname === "type") return;
+    sel.addEventListener("change", function() {
+      const val = this.value;
+      if (!val) return;
+      fetch(`/api/field_suggest/${encodeURIComponent(rtype)}/${encodeURIComponent(fname)}/${encodeURIComponent(val)}`)
+      .then(r => r.json())
+      .then(d => { if (d.ok) softFill(d.suggestions); })
+      .catch(() => {});
+    });
+  });
+})();
 </script>
 
 {% endblock %}
