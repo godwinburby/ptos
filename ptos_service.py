@@ -53,7 +53,142 @@ def _parse_record(line):
 # ══════════════════════════════════════════════════════════════════════════════
 # Records
 # ══════════════════════════════════════════════════════════════════════════════
+# History suggestions
+# ══════════════════════════════════════════════════════════════════════════════
 
+def get_history_suggestions(rtype):
+    """Scan all records of the given type and return:
+      tags:           sorted list of all tags ever used for this type
+      field_values:   {fieldname: [values by freq]} for free-text fields
+      field_defaults: {fieldname: most_common_value} for schema option fields
+                      — used to pre-select the most likely value on type selection
+
+    Single scan, results suitable for caching by the caller.
+    """
+    try:
+        schema      = ptos.get_schema()
+        type_schema = schema.get("type", {}).get(rtype, {})
+    except Exception:
+        schema = {}
+        type_schema = {}
+
+    # separate fields into: has schema options vs free-text vs numeric
+    fields_with_options = set()
+    numeric_fields      = set()
+    for fname, fdef in type_schema.get("fields", {}).items():
+        if isinstance(fdef, dict):
+            if fdef.get("options") or fdef.get("use"):
+                fields_with_options.add(fname)
+    for fname, fdef in schema.get("fields", {}).items():
+        if isinstance(fdef, dict) and fdef.get("type") == "int":
+            numeric_fields.add(fname)
+
+    try:
+        raw, _ = ptos.scan_records(
+            dt.date.min, dt.date.max,
+            [f"type={rtype}"], None)
+    except Exception:
+        return {"tags": [], "field_values": {}, "field_defaults": {}}
+
+    from collections import Counter
+    tag_set      = set()
+    field_counts = {}   # {fieldname: Counter} — all fields
+
+    for line in raw:
+        parsed = ptos.safe_parse_line(line)
+        if not parsed:
+            continue
+        _, kv, _ = parsed
+        # tags
+        tv = kv.get("tag")
+        if tv:
+            for t in (tv if isinstance(tv, list) else [tv]):
+                tag_set.add(t)
+        # all non-type, non-numeric fields
+        for k, v in kv.items():
+            if k in ("type", "tag") or k in numeric_fields:
+                continue
+            vals = v if isinstance(v, list) else [v]
+            if k not in field_counts:
+                field_counts[k] = Counter()
+            for val in vals:
+                field_counts[k][val] += 1
+
+    # free-text fields: top 20 values for datalist autocomplete
+    field_values = {
+        k: [v for v, _ in counter.most_common(20)]
+        for k, counter in field_counts.items()
+        if counter and k not in fields_with_options
+    }
+
+    # schema option fields: single most common value for pre-selection
+    field_defaults = {}
+    for k, counter in field_counts.items():
+        if k in fields_with_options and counter:
+            field_defaults[k] = counter.most_common(1)[0][0]
+
+    return {
+        "tags":           sorted(tag_set),
+        "field_values":   field_values,
+        "field_defaults": field_defaults,
+    }
+
+
+def get_conditional_suggestions(rtype, field, value):
+    """Given a known field=value, return the most common value for every
+    other schema-option field across matching history records.
+    Used for cascade pre-fill: user picks source=mgm → suggest booked_by=cso.
+    Returns: {fieldname: most_common_value}
+    """
+    from collections import Counter
+
+    try:
+        schema      = ptos.get_schema()
+        type_schema = schema.get("type", {}).get(rtype, {})
+    except Exception:
+        return {}
+
+    # only suggest for fields that have schema options
+    fields_with_options = set()
+    for fname, fdef in type_schema.get("fields", {}).items():
+        if isinstance(fdef, dict) and (fdef.get("options") or fdef.get("use")):
+            fields_with_options.add(fname)
+
+    try:
+        raw, _ = ptos.scan_records(
+            dt.date.min, dt.date.max,
+            [f"type={rtype}", f"{field}={value}"], None)
+    except Exception:
+        return {}
+
+    if not raw:
+        return {}
+
+    field_counts = {}
+    for line in raw:
+        parsed = ptos.safe_parse_line(line)
+        if not parsed:
+            continue
+        _, kv, _ = parsed
+        for k, v in kv.items():
+            if k in ("type", "tag", field):
+                continue
+            if k not in fields_with_options:
+                continue
+            vals = v if isinstance(v, list) else [v]
+            if k not in field_counts:
+                field_counts[k] = Counter()
+            for val in vals:
+                field_counts[k][val] += 1
+
+    return {
+        k: counter.most_common(1)[0][0]
+        for k, counter in field_counts.items()
+        if counter
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 def get_records(filters, time="tm", search=None, sort=None,
                 from_file=None, sum_field=None, select=None):
     """
@@ -637,6 +772,16 @@ def run_query(name, time=None):
     q = queries.get(name)
     if not q or not isinstance(q, dict):
         raise PTOSError(f"Query '{name}' not found")
+
+    # resolve alias — follow one level
+    if "alias" in q:
+        target = q["alias"]
+        if target not in queries:
+            raise PTOSError(f"Alias '{name}' points to '{target}' which does not exist")
+        name = target
+        q    = queries[target]
+        if not isinstance(q, dict):
+            raise PTOSError(f"Query '{name}' not found")
 
     effective_time = time or q.get("time", "tm")
 

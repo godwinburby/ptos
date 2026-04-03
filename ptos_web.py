@@ -81,55 +81,10 @@ def _build_field_defs(schema, rtype, current_record=None):
         })
     return defs
 
-def _resolve_multi_preset(name):
-    """Resolve a multi-record preset to a list of record dicts.
-    Returns (records, error_str) — error_str is None if all records are complete.
-    A preset is considered complete if all its fields are specified
-    (no schema-required fields missing).
-    """
-    presets = ptos.get_presets()
-    pd = presets.get(name, {})
-    if isinstance(pd, dict) and "alias" in pd:
-        pd = presets.get(pd["alias"], {})
-    if not isinstance(pd, dict) or "records" not in pd:
-        return None, f"'{name}' is not a multi-record preset"
-    try:
-        schema = ptos.get_schema()
-    except Exception as e:
-        return None, str(e)
-    resolved = []
-    for item in pd["records"]:
-        if not isinstance(item, str):
-            return None, f"records list must contain preset names"
-        if item not in presets:
-            return None, f"references unknown preset '{item}'"
-        ref = presets[item]
-        if isinstance(ref, dict) and "alias" in ref:
-            ref = presets.get(ref["alias"], {})
-        if isinstance(ref, dict) and "records" in ref:
-            return None, f"nested multi-record presets not supported"
-        record = dict(ref)
-        problems = ptos.validate_record(schema, record)
-        if problems:
-            return None, f"preset '{item}': {problems[0]}"
-        resolved.append(record)
-    return resolved, None
 
-
-def _multi_presets():
-    """Return dict of multi-record presets that are fully specified (no missing fields)."""
-    result = {}
-    for name, p in ptos.get_presets().items():
-        if not isinstance(p, dict) or "records" not in p:
-            continue
-        records, err = _resolve_multi_preset(name)
-        if records is not None:
-            refs = p["records"]
-            result[name] = ", ".join(refs) if isinstance(refs, list) else ""
-    return result
-
-
-
+# ══════════════════════════════════════════════════════════════════════════════
+# Home
+# ══════════════════════════════════════════════════════════════════════════════
 
 @app.route("/")
 def home():
@@ -137,7 +92,8 @@ def home():
     except: schema = {}
     presets = {k: v for k, v in ptos.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
-    multi_presets = _multi_presets()
+
+    # due list
     try:
         due_data  = svc.get_due()
         due_rows  = due_data["rows"]
@@ -172,7 +128,6 @@ def home():
     return render_template("home.html",
         tab="home", title="Home", now=_now_str(), greeting=_greeting(),
         presets=sorted(presets.keys())[:8],
-        multi_presets=multi_presets,
         due_count=due_count, due_rows=due_rows[:5],
         stats=stats,
         recent_rows=recent_rows, recent_cols=recent_cols)
@@ -210,7 +165,6 @@ def add_get():
     types   = schema.get("types", {}).get("allowed", [])
     presets = {k: v for k, v in ptos.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
-    multi_presets = _multi_presets()
     selected_type = request.args.get("type", "")
     preset_name   = request.args.get("preset", "")
     field_values  = {k: v for k, v in request.args.items()
@@ -233,7 +187,6 @@ def add_get():
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, presets=sorted(presets.keys()),
-        multi_presets=multi_presets,
         selected_type=selected_type, field_defs=field_defs,
         tag_options=tag_options, field_values=field_values,
         today=dt.date.today().isoformat(),
@@ -525,60 +478,51 @@ def api_type_fields(rtype):
         bad        = ptos.non_dimension_fields()
         defs       = _build_field_defs(schema, rtype)
         dimensions = [f["name"] for f in defs if f["name"] not in bad and f["options"]]
-        return jsonify(fields=defs, dimensions=dimensions)
+        history    = svc.get_history_suggestions(rtype)
+        return jsonify(fields=defs, dimensions=dimensions,
+                       history_tags=history["tags"],
+                       history_fields=history["field_values"],
+                       history_defaults=history["field_defaults"])
     except Exception as e:
-        return jsonify(fields=[], dimensions=[], error=str(e))
+        return jsonify(fields=[], dimensions=[], history_tags=[],
+                       history_fields={}, history_defaults={}, error=str(e))
 
 
-@app.route("/api/preset_add", methods=["POST"])
-def api_preset_add():
-    """Add all records from a multi-record preset in one shot."""
-    data     = request.get_json(silent=True) or {}
-    name     = data.get("name", "").strip()
-    date_str = data.get("date", dt.date.today().isoformat()).strip()
-    note     = data.get("note", "").strip() or None
-
-    if not name:
-        return jsonify(ok=False, error="Preset name required")
-
-    records, err = _resolve_multi_preset(name)
-    if err:
-        return jsonify(ok=False, error=err)
-
-    added = []
-    try:
-        for record in records:
-            line = ptos.build_record_line(date_str, record, note)
-            ptos.append_record(line)
-            added.append(line)
-    except Exception as e:
-        return jsonify(ok=False, error=str(e))
-
-    return jsonify(ok=True, added=added, count=len(added))
-
-
-
-@app.route("/api/save_preset", methods=["POST"])
-def api_save_preset():
-    """Save current add-record form state as a preset.
-    Overwrites existing preset with same name.
+@app.route("/api/field_suggest/<rtype>/<field>/<path:value>")
+def api_field_suggest(rtype, field, value):
+    """Return most common co-occurring field values given rtype + field=value.
+    Used for cascade pre-fill in add form.
+    Returns: {ok, suggestions: {fieldname: most_common_value}}
     """
+    try:
+        suggestions = svc.get_conditional_suggestions(rtype, field, value)
+        return jsonify(ok=True, suggestions=suggestions)
+    except Exception as e:
+        return jsonify(ok=False, suggestions={}, error=str(e))
+
+
+
+def api_save_preset():
+    """Save current add-record form state as a preset."""
     data   = request.get_json(silent=True) or {}
     name   = data.get("name","").strip().replace(" ","_").lower()
     record = data.get("record", {})
-    note   = data.get("note","").strip() or None
 
     if not name:
         return jsonify(ok=False, error="Preset name cannot be empty")
     if not re.match(r'^[a-z0-9_]+$', name):
         return jsonify(ok=False, error="Name must be lowercase letters, numbers and underscores only")
+
+    existing = ptos.get_presets()
+    if name in existing:
+        return jsonify(ok=False, error=f"Preset '{name}' already exists")
     if not record.get("type"):
         return jsonify(ok=False, error="No record type in form — fill at least the type field")
 
     try:
-        ptos._CACHE.pop("presets", None)
-        ptos.save_as_preset(name, record, note=note)
-        ptos._CACHE.pop("presets", None)
+        ptos._CACHE.pop("presets", None)   # invalidate cache before write
+        ptos.save_as_preset(name, record)
+        ptos._CACHE.pop("presets", None)   # invalidate cache after write
         return jsonify(ok=True, name=name)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -617,277 +561,6 @@ def api_save_query():
             group=group, search=search
         )
         return jsonify(ok=True, name=result["name"])
-    except PTOSError as e:
-        return jsonify(ok=False, error=str(e))
-    except Exception as e:
-        return jsonify(ok=False, error=str(e))
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Edit Record (full form)
-# ══════════════════════════════════════════════════════════════════════════════
-
-@app.route("/edit", methods=["GET"])
-def edit_get():
-    """Show a pre-filled edit form for one record."""
-    filepath = request.args.get("filepath", "")
-    lineno   = request.args.get("lineno", "")
-    line     = request.args.get("line", "")
-
-    if not filepath or not line:
-        return redirect(url_for("browse_get"))
-
-    try:
-        lineno_int = int(lineno) if lineno else None
-    except ValueError:
-        lineno_int = None
-
-    parsed = ptos.safe_parse_line(line)
-    if not parsed:
-        return redirect(url_for("browse_get"))
-    d, kv, note = parsed
-    rtype = kv.get("type", "")
-
-    try:
-        schema = ptos.get_schema()
-    except PTOSError:
-        schema = {}
-
-    # flatten kv for field_values — keep tag as a list for correct checkbox matching
-    field_values = {"type": rtype}
-    for k, v in kv.items():
-        if k == "tag":
-            field_values[k] = v if isinstance(v, list) else [v]
-        else:
-            field_values[k] = ", ".join(v) if isinstance(v, list) else str(v)
-    if note:
-        field_values["note"] = note
-    field_values["date"] = str(d)
-
-    field_defs  = _build_field_defs(schema, rtype, field_values)
-    current_tags = field_values.get("tag", [])
-    if isinstance(current_tags, str):
-        current_tags = [t.strip() for t in current_tags.split(",") if t.strip()]
-
-    # get schema tag options, then merge — current tags always shown even if not in schema
-    schema_tag_options = []
-    if rtype:
-        ts = schema.get("type", {}).get(rtype, {})
-        schema_tag_options = ptos.resolve_tags(schema, ts, field_values)
-
-    # all tags to display: current record tags first, then remaining schema options
-    tag_options = list(current_tags) + [t for t in schema_tag_options if t not in current_tags]
-
-    return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
-
-    return render_template("edit.html",
-        tab="browse", title="Edit Record", now=_now_str(),
-        filepath=filepath, lineno=lineno_int, old_line=line,
-        return_to=return_to,
-        rtype=rtype, field_defs=field_defs,
-        tag_options=tag_options, field_values=field_values,
-        today=dt.date.today().isoformat(),
-        msg=None, msg_type=None)
-
-
-@app.route("/edit", methods=["POST"])
-def edit_post():
-    """Apply edits from the populated edit form."""
-    filepath  = request.form.get("filepath", "")
-    old_line  = request.form.get("old_line", "")
-    lineno    = request.form.get("lineno", "")
-    rtype     = request.form.get("type", "").strip()
-    date_str  = request.form.get("date", dt.date.today().isoformat()).strip()
-    note      = request.form.get("note", "").strip() or None
-    custom_tags = [t.strip().replace(" ", "_")
-                   for t in request.form.get("custom_tags", "").split(",") if t.strip()]
-
-    try:
-        lineno_int = int(lineno) if lineno else None
-    except ValueError:
-        lineno_int = None
-
-    try:
-        schema = ptos.get_schema()
-    except PTOSError:
-        schema = {}
-
-    # build new record dict from form
-    ts    = schema.get("type", {}).get(rtype, {})
-    all_f = list(ts.get("required", []))
-    for f in ts.get("fields", {}):
-        if f not in all_f: all_f.append(f)
-    for f in ts.get("conditions", {}):
-        if f not in all_f: all_f.append(f)
-
-    new_record = {"type": rtype}
-    for fname in all_f:
-        if fname == "tag": continue
-        val = request.form.get(fname, "").strip()
-        if val: new_record[fname] = val.replace(" ", "_")
-    tags = request.form.getlist("tag") + custom_tags
-    if tags: new_record["tag"] = tags
-
-    # build set_args by diffing old vs new record
-    parsed = ptos.safe_parse_line(old_line)
-    if not parsed:
-        return redirect(url_for("browse_get"))
-    old_d, old_kv, old_note = parsed
-
-    set_args = []
-    # date change
-    if date_str != str(old_d):
-        set_args.append(f"date={date_str}")
-    # field changes
-    all_keys = set(list(old_kv.keys()) + list(new_record.keys())) - {"type"}
-    for k in all_keys:
-        old_v = old_kv.get(k)
-        new_v = new_record.get(k)
-        if old_v is None and new_v is None:
-            continue
-        # always treat tag (and any list field) as a list for diffing
-        is_list_field = k == "tag" or isinstance(old_v, list) or isinstance(new_v, list)
-        if is_list_field:
-            old_list = old_v if isinstance(old_v, list) else ([old_v] if old_v else [])
-            new_list = new_v if isinstance(new_v, list) else ([new_v] if new_v else [])
-            if set(old_list) != set(new_list):
-                for item in set(new_list) - set(old_list):
-                    set_args.append(f"{k}+={item}")
-                for item in set(old_list) - set(new_list):
-                    set_args.append(f"{k}-={item}")
-        else:
-            old_str = str(old_v or "")
-            new_str = str(new_v or "")
-            if old_str != new_str:
-                set_args.append(f"{k}={new_v}" if new_v else f"{k}=")
-
-    # note change
-    new_note = note if note != (old_note or "") else None
-
-    # where to redirect after save — referrer or browse
-    return_to = request.form.get("return_to", "") or url_for("browse_get")
-
-    if not set_args and new_note is None:
-        return redirect(return_to)
-
-    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
-        return redirect(return_to)
-
-    try:
-        svc.edit_record(filepath, old_line,
-                        set_args=set_args, new_note=new_note, lineno=lineno_int)
-        return redirect(return_to)
-    except PTOSError as e:
-        try:
-            schema = ptos.get_schema()
-        except Exception:
-            schema = {}
-        field_values = dict(new_record)
-        field_values["date"] = date_str
-        if note: field_values["note"] = note
-        field_defs  = _build_field_defs(schema, rtype, field_values)
-        ts = schema.get("type", {}).get(rtype, {})
-        tag_options = ptos.resolve_tags(schema, ts, field_values)
-        return render_template("edit.html",
-            tab="browse", title="Edit Record", now=_now_str(),
-            filepath=filepath, lineno=lineno_int, old_line=old_line,
-            rtype=rtype, field_defs=field_defs,
-            tag_options=tag_options, field_values=field_values,
-            today=dt.date.today().isoformat(),
-            msg=str(e), msg_type="error")
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Edit / Delete API
-# ══════════════════════════════════════════════════════════════════════════════
-
-@app.route("/api/records/find", methods=["POST"])
-def api_records_find():
-    """Find records matching filters for edit/delete UI.
-    Body: {expr: str, where: [str], time: str, search: str}
-    Returns: {ok, matches: [{filepath, filename, line, parsed}]}
-    """
-    data   = request.get_json(silent=True) or {}
-    expr   = data.get("expr", "").strip()
-    where  = data.get("where", [])
-    time   = data.get("time", "all")
-    search = data.get("search", "") or None
-
-    if isinstance(where, str):
-        where = [where] if where.strip() else []
-
-    if expr and where:
-        combined = ptos._filters_to_expr(where)
-        filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
-    elif expr:
-        filters = [expr]
-    elif where:
-        filters = where
-    else:
-        return jsonify(ok=False, error="No filters provided")
-
-    try:
-        matches = svc.find_records(filters, time=time, search=search)
-        return jsonify(ok=True, matches=matches)
-    except PTOSError as e:
-        return jsonify(ok=False, error=str(e))
-    except Exception as e:
-        return jsonify(ok=False, error=str(e))
-
-
-@app.route("/api/records/edit", methods=["POST"])
-def api_records_edit():
-    """Edit one record in place.
-    Body: {filepath, old_line, set: ["key=val", ...], note: str|null}
-    Returns: {ok, old_line, new_line, changed_date}
-    """
-    data     = request.get_json(silent=True) or {}
-    filepath = data.get("filepath", "")
-    old_line = data.get("old_line", "")
-    set_args = data.get("set", [])
-    new_note = data.get("note", None)
-    lineno   = data.get("lineno", None)
-    if lineno is not None:
-        try: lineno = int(lineno)
-        except: lineno = None
-
-    if not filepath or not old_line:
-        return jsonify(ok=False, error="filepath and old_line required")
-    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
-        return jsonify(ok=False, error="Invalid filepath")
-
-    try:
-        result = svc.edit_record(filepath, old_line,
-                                 set_args=set_args, new_note=new_note, lineno=lineno)
-        return jsonify(ok=True, **result)
-    except PTOSError as e:
-        return jsonify(ok=False, error=str(e))
-    except Exception as e:
-        return jsonify(ok=False, error=str(e))
-
-
-@app.route("/api/records/delete", methods=["POST"])
-def api_records_delete():
-    """Delete one record.
-    Body: {filepath, old_line}
-    Returns: {ok, deleted_line}
-    """
-    data     = request.get_json(silent=True) or {}
-    filepath = data.get("filepath", "")
-    old_line = data.get("old_line", "")
-    lineno   = data.get("lineno", None)
-    if lineno is not None:
-        try: lineno = int(lineno)
-        except: lineno = None
-
-    if not filepath or not old_line:
-        return jsonify(ok=False, error="filepath and old_line required")
-    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
-        return jsonify(ok=False, error="Invalid filepath")
-
-    try:
-        result = svc.delete_record(filepath, old_line, lineno=lineno)
-        return jsonify(ok=True, **result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
     except Exception as e:
