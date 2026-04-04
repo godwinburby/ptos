@@ -56,6 +56,20 @@ min = "prescriptions"
 [metrics.personal_expense]
 sum = "expense"
 
+[metrics.income]
+sum = "income"
+
+[metrics.investment]
+sum = "investment"
+
+[metrics.balance]
+derived = "income - (personal_expense - investment)"
+
+[metrics.net_clinic]
+derived = "total_revenue - expense_work"
+
+[metrics.savings_rate]
+derived = "balance / income * 100"
 # --------------------------------------------------
 # DASHBOARDS
 # --------------------------------------------------
@@ -120,6 +134,12 @@ alias = "snacks_work"
 where = "type=expense AND domain!=work AND tag=snacks"
 time  = "tm"
 sum   = true
+
+[income]
+where = "type=income AND domain!=work"
+
+[investment]
+where = "type=investment AND domain!=work"
 
 # --------------------------------------------------
 # ANALYSIS  (use --time to change window)

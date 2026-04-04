@@ -611,6 +611,37 @@ def get_metric(name, time="tm"):
             raw = max(values) if key == "max" else min(values)
             return {"name": name, "value": ptos.fmt(raw), "raw": raw}
 
+        if "derived" in m:
+            # Evaluate arithmetic expression referencing other metric names.
+            # e.g. derived = "income - (expense + investment)"
+            # Each metric name is resolved to its raw value then the expression
+            # is evaluated with only arithmetic operators allowed.
+            import re as _re
+            expr = m["derived"]
+            # collect all metric name tokens (word sequences) from expression
+            tokens = _re.findall(r'[a-z][a-z0-9_]*', expr)
+            resolved = {}
+            for token in tokens:
+                if token in metrics and token not in resolved:
+                    dep = get_metric(token, time)
+                    raw_val = dep.get("raw")
+                    if raw_val is None:
+                        return {"name": name, "value": "no data (dependency missing)", "raw": None}
+                    resolved[token] = raw_val
+            # substitute metric names with their values
+            eval_expr = expr
+            for token, val in resolved.items():
+                eval_expr = _re.sub(rf'\b{token}\b', str(val), eval_expr)
+            # safe eval — only allow digits, spaces, and arithmetic operators
+            if not _re.match(r'^[\d\s\.\+\-\*\/\(\)]+$', eval_expr):
+                return {"name": name, "value": f"unsafe expression: {eval_expr}", "raw": None}
+            try:
+                raw = float(eval(eval_expr))  # noqa: S307
+                formatted = ptos.fmt(int(raw)) if raw == int(raw) else ptos.fmt_avg(raw)
+                return {"name": name, "value": formatted, "raw": raw}
+            except Exception as e:
+                return {"name": name, "value": f"eval error: {e}", "raw": None}
+
     except Exception as e:
         return {"name": name, "value": f"error: {e}", "raw": None}
 

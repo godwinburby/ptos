@@ -1189,6 +1189,48 @@ def run_metric(name, queries, start, end, cycles):
             print(f"{name:<24} {fmt(result)}")
         return True
 
+    if "derived" in m:
+        # Evaluate arithmetic expression referencing other metric names.
+        # e.g.  derived = "income - (expense + investment)"
+        expr = m["derived"]
+        tokens = re.findall(r'[a-z][a-z0-9_]*', expr)
+        resolved = {}
+        for token in tokens:
+            if token in metrics and token not in resolved:
+                # temporarily capture stdout by running the metric and reading raw value
+                dep_m = metrics[token]
+                if "sum" in dep_m:
+                    _, val = _run_base_query(dep_m["sum"], queries, start, end, cycles)
+                elif "ratio" in dep_m:
+                    c1, _ = _run_base_query(dep_m["ratio"][0], queries, start, end, cycles)
+                    c2, _ = _run_base_query(dep_m["ratio"][1], queries, start, end, cycles)
+                    val = (c1 / c2 * 100) if c2 else 0
+                elif "avg" in dep_m:
+                    cnt, total = _run_base_query(dep_m["avg"], queries, start, end, cycles)
+                    val = (total / cnt) if cnt else 0
+                elif "max" in dep_m or "min" in dep_m:
+                    key2 = "max" if "max" in dep_m else "min"
+                    dep_lines, _ = _run_base_query_lines(dep_m[key2], queries, start, end, cycles)
+                    dep_vals = [numeric_value(parse_line(l)[1]) for l in dep_lines]
+                    dep_vals = [v for v in dep_vals if v is not None]
+                    val = (max(dep_vals) if key2 == "max" else min(dep_vals)) if dep_vals else 0
+                else:
+                    val = 0
+                resolved[token] = val
+        eval_expr = expr
+        for token, val in resolved.items():
+            eval_expr = re.sub(rf'\b{token}\b', str(val), eval_expr)
+        if not re.match(r'^[\d\s\.\+\-\*\/\(\)]+$', eval_expr):
+            print(f"{name:<24} unsafe expression")
+            return True
+        try:
+            result = float(eval(eval_expr))  # noqa: S307
+            formatted = fmt(int(result)) if result == int(result) else fmt_avg(result)
+            print(f"{name:<24} {formatted}")
+        except Exception as e:
+            print(f"{name:<24} error: {e}")
+        return True
+
     return False
 
 def run_dashboard(name, queries, start, end, cycles):

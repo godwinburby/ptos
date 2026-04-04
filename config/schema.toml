@@ -165,7 +165,7 @@ required = ["source", "amount"]
 options = ["salary", "extra"]
 
 [type.income.tags.source]
-options.salary = ["bonus", "commission"]
+options.salary = ["bonus", "commission", "salary"]
 options.extra  = ["gift", "refund","cash_back"]
 
 # ----------------------
