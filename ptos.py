@@ -1108,7 +1108,7 @@ def _run_base_query(name, queries, start, end, cycles):
     where = q.get("where", "") if isinstance(q, dict) else ""
     if not isinstance(where, str):
         sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
-    filters = where.split()
+    filters = [where] if where.strip() else []
     if "time" in q:
         start, end = resolve_time(q["time"], cycles)
     results, total = scan_records(start, end, filters, None)
@@ -1119,7 +1119,7 @@ def _run_base_query_lines(name, queries, start, end, cycles):
     where = q.get("where", "") if isinstance(q, dict) else ""
     if not isinstance(where, str):
         sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
-    filters = where.split()
+    filters = [where] if where.strip() else []
     if "time" in q:
         start, end = resolve_time(q["time"], cycles)
     return scan_records(start, end, filters, None)
@@ -1220,8 +1220,8 @@ def run_metric(name, queries, start, end, cycles):
         eval_expr = expr
         for token, val in resolved.items():
             eval_expr = re.sub(rf'\b{token}\b', str(val), eval_expr)
-        if not re.match(r'^[\d\s\.\+\-\*\/\(\)]+$', eval_expr):
-            print(f"{name:<24} unsafe expression")
+        if not re.match(r'^[\d\s\.\+\-\*\/\(\)e]+$', eval_expr):
+            print(f"{name:<24} unsafe: [{eval_expr!r}]")
             return True
         try:
             result = float(eval(eval_expr))  # noqa: S307
