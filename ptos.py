@@ -141,6 +141,63 @@ def numeric_value_for(kv, field):
     except (ValueError, TypeError):
         return None
 
+
+def derived_fields():
+    """Return dict of {field_name: expression_str} for all derived fields in schema.
+    Derived fields are declared with a 'derived' key in [fields.X]:
+      [fields.net]
+      derived = "amount - advance"
+      type = "int"
+    """
+    if "derived_fields" not in _CACHE:
+        _CACHE["derived_fields"] = {
+            f: meta["derived"]
+            for f, meta in get_schema().get("fields", {}).items()
+            if isinstance(meta, dict) and "derived" in meta
+        }
+    return _CACHE["derived_fields"]
+
+
+def compute_derived(kv):
+    """Compute all derived field values for a record kv dict.
+    Returns a dict of {derived_field_name: value} — numeric where possible.
+    Safe: any expression error returns None for that field silently.
+    Supports arithmetic operators +  -  *  /  and field names as operands.
+    """
+    import re as _re
+    results = {}
+    for fname, expr in derived_fields().items():
+        try:
+            # substitute field names with their numeric values
+            eval_expr = expr
+            # find all word tokens in expression
+            tokens = _re.findall(r'[a-z][a-z0-9_]*', expr)
+            for token in tokens:
+                val = kv.get(token)
+                if val is None:
+                    eval_expr = None
+                    break
+                if isinstance(val, list):
+                    val = val[0]
+                try:
+                    num = float(val)
+                except (ValueError, TypeError):
+                    eval_expr = None
+                    break
+                eval_expr = _re.sub(rf'\b{token}\b', str(num), eval_expr)
+            if eval_expr is None:
+                results[fname] = None
+                continue
+            # safety check — only allow digits, spaces, arithmetic operators
+            if not _re.match(r'^[\d\s\.\+\-\*\/\(\)e]+$', eval_expr):
+                results[fname] = None
+                continue
+            raw = float(eval(eval_expr))  # noqa: S307
+            results[fname] = int(raw) if raw == int(raw) else raw
+        except Exception:
+            results[fname] = None
+    return results
+
 def detect_value_field(results):
     """Return the name of the first numeric field found across results."""
     for line in results:
@@ -475,9 +532,22 @@ def apply_where(kv, filters):
       --where category=home --where amount>100
 
     Operators: =  !=  >  <  >=  <=  ~(contains)  !~(not contains)
+
+    Derived fields from schema are computed and merged into kv so they
+    can be used in filters just like real fields:
+      --where net>1000   (where net = amount - advance)
     """
     if not filters:
         return True
+
+    # merge derived field values into a copy of kv so filters can use them
+    dfields = derived_fields()
+    if dfields:
+        computed = compute_derived(kv)
+        kv = dict(kv)
+        for fname, val in computed.items():
+            if val is not None:
+                kv[fname] = str(val)
 
     if len(filters) == 1 and _is_expression(filters[0]):
         tokens = _tok_where(filters[0])
@@ -2681,15 +2751,21 @@ def _render_single_table(lines, label=None):
     def trunc(s, w):
         return s[:w] + "…" if len(s) > w else s
 
-    # collect fields in encounter order
+    # collect fields in encounter order — include derived fields
     all_fields = ["date"]
     seen = set()
+    dfields = derived_fields()
     for line in lines:
         _, kv, _ = parse_line(line)
         for k in kv:
-            if k not in seen and k != "type":  # type shown in label, skip column
+            if k not in seen and k != "type":
                 all_fields.append(k)
                 seen.add(k)
+        # add derived field names after real fields
+        for fname in dfields:
+            if fname not in seen:
+                all_fields.append(fname)
+                seen.add(fname)
 
     has_note = any(parse_line(l)[2] for l in lines)
     if has_note:
@@ -2704,6 +2780,11 @@ def _render_single_table(lines, label=None):
             if k == "type":
                 continue
             row[k] = ",".join(v) if isinstance(v, list) else str(v)
+        # add derived values
+        computed = compute_derived(kv)
+        for fname, val in computed.items():
+            if val is not None:
+                row[fname] = str(val)
         if has_note:
             row["note"] = note or ""
         rows.append(row)
