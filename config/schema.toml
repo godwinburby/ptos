@@ -100,6 +100,10 @@ type      = "string"
 dimension = true
 multi     = true
 
+[fields.balance]
+derived = "amount - advance"
+type = "int"
+
 # --------------------------------------------------
 # SHARED FIELD DEFINITIONS
 # Define once, reference with  use = "shared.X"

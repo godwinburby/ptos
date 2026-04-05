@@ -56,14 +56,14 @@ min = "prescriptions"
 [metrics.personal_expense]
 sum = "expense"
 
-[metrics.income]
+[metrics.personal_income]
 sum = "income"
 
-[metrics.investment]
+[metrics.personal_investment]
 sum = "investment"
 
 [metrics.balance]
-derived = "income - (personal_expense - investment)"
+derived = "personal_income - personal_expense - personal_investment"
 
 [metrics.net_clinic]
 derived = "total_revenue - expense_work"

@@ -37,7 +37,9 @@ def _resolve_time(code):
 
 
 def _parse_record(line):
-    """Parse a raw log line into a flat dict suitable for UI rendering."""
+    """Parse a raw log line into a flat dict suitable for UI rendering.
+    Derived fields from schema are computed and added as virtual columns.
+    """
     parsed = ptos.safe_parse_line(line)
     if not parsed:
         return None
@@ -45,6 +47,11 @@ def _parse_record(line):
     row = {"date": str(d)}
     for k, v in kv.items():
         row[k] = ", ".join(v) if isinstance(v, list) else str(v)
+    # append derived fields
+    computed = ptos.compute_derived(kv)
+    for fname, val in computed.items():
+        if val is not None:
+            row[fname] = str(val)
     if note:
         row["note"] = note
     return row
