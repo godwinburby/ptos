@@ -53,18 +53,6 @@ max = "prescriptions"
 [metrics.lowest_sale]
 min = "prescriptions"
 
-[metrics.personal_expense]
-sum = "expense"
-
-[metrics.personal_income]
-sum = "income"
-
-[metrics.personal_investment]
-sum = "investment"
-
-[metrics.personal_balance]
-derived = "personal_income - personal_expense - personal_investment"
-
 [metrics.balance]
 derived = "income - expense - investment"
 

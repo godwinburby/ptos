@@ -635,6 +635,20 @@ def get_metric(name, time="tm"):
                     if raw_val is None:
                         return {"name": name, "value": "no data (dependency missing)", "raw": None}
                     resolved[token] = raw_val
+                elif token in queries and token not in resolved:
+                    # resolve as base query — use its own time window
+                    q = queries[token]
+                    query_name = token
+                    if isinstance(q, dict) and "alias" in q:
+                        target = q["alias"]
+                        if target in queries:
+                            query_name = target
+                    q_resolved = queries.get(query_name, {})
+                    if isinstance(q_resolved, dict) and "where" in q_resolved:
+                        _, val = ptos._run_base_query(query_name, queries, start, end, cycles)
+                        resolved[token] = val
+                    else:
+                        resolved[token] = 0
             # substitute metric names with their values
             eval_expr = expr
             for token, val in resolved.items():
