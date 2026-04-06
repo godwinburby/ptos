@@ -143,59 +143,128 @@ def numeric_value_for(kv, field):
 
 
 def derived_fields():
-    """Return dict of {field_name: expression_str} for all derived fields in schema.
-    Derived fields are declared with a 'derived' key in [fields.X]:
-      [fields.net]
-      derived = "amount - advance"
-      type = "int"
+    """Return dict of {field_name: {"expr": str, "rtype": str|None}}.
+    Reads both global [fields.X] and type-scoped [type.X.fields.Y] definitions.
+
+    Global:  [fields.net]         derived = "amount - advance"
+    Scoped:  [type.prescription.fields.net]  derived = "amount - advance"
+
+    Type-scoped fields are only computed for records of that type.
     """
     if "derived_fields" not in _CACHE:
-        _CACHE["derived_fields"] = {
-            f: meta["derived"]
-            for f, meta in get_schema().get("fields", {}).items()
-            if isinstance(meta, dict) and "derived" in meta
-        }
+        schema  = get_schema()
+        result  = {}
+        # global fields
+        for f, meta in schema.get("fields", {}).items():
+            if isinstance(meta, dict) and "derived" in meta:
+                result[f] = {"expr": meta["derived"], "rtype": None}
+        # type-scoped fields
+        for rtype, type_schema in schema.get("type", {}).items():
+            for f, meta in type_schema.get("fields", {}).items():
+                if isinstance(meta, dict) and "derived" in meta:
+                    key = f"{rtype}.{f}" if f in result else f
+                    result[key] = {"expr": meta["derived"], "rtype": rtype}
+        _CACHE["derived_fields"] = result
     return _CACHE["derived_fields"]
 
 
-def compute_derived(kv):
+def compute_derived(kv, record_date=None):
     """Compute all derived field values for a record kv dict.
-    Returns a dict of {derived_field_name: value} — numeric where possible.
-    Safe: any expression error returns None for that field silently.
-    Supports arithmetic operators +  -  *  /  and field names as operands.
+    Returns {field_name: value}. None on any error (silent).
+    Type-scoped derived fields are only computed for matching record type.
     """
     import re as _re
+    import datetime as _dt
+
+    _today  = _dt.date.today()
+    rtype   = kv.get("type", "")
     results = {}
-    for fname, expr in derived_fields().items():
+
+    for fname, defn in derived_fields().items():
+        expr       = defn["expr"]
+        field_rtype = defn["rtype"]
+
+        # skip type-scoped fields that don't match this record's type
+        if field_rtype is not None and field_rtype != rtype:
+            continue
+
+        # output key — strip "rtype." prefix if present
+        out_key = fname.split(".", 1)[1] if "." in fname else fname
+
         try:
-            # substitute field names with their numeric values
-            eval_expr = expr
-            # find all word tokens in expression
-            tokens = _re.findall(r'[a-z][a-z0-9_]*', expr)
-            for token in tokens:
-                val = kv.get(token)
-                if val is None:
-                    eval_expr = None
-                    break
-                if isinstance(val, list):
-                    val = val[0]
-                try:
-                    num = float(val)
-                except (ValueError, TypeError):
-                    eval_expr = None
-                    break
-                eval_expr = _re.sub(rf'\b{token}\b', str(num), eval_expr)
-            if eval_expr is None:
-                results[fname] = None
-                continue
-            # safety check — only allow digits, spaces, arithmetic operators
-            if not _re.match(r'^[\d\s\.\+\-\*\/\(\)e]+$', eval_expr):
-                results[fname] = None
-                continue
-            raw = float(eval(eval_expr))  # noqa: S307
-            results[fname] = int(raw) if raw == int(raw) else raw
+            uses_date  = bool(_re.search(r'\bdate\b', expr))
+            uses_today = 'today' in expr
+
+            if uses_date or uses_today:
+                if record_date is None:
+                    results[out_key] = None
+                    continue
+
+                clean_expr = _re.sub(r'(\d+)d\b', r'\1', expr)
+
+                # auto-convert (today - date) to .days for integer comparison
+                clean_expr = _re.sub(
+                    r'\(today\s*-\s*date\)',
+                    '(today - date).days',
+                    clean_expr
+                )
+                clean_expr = _re.sub(
+                    r'(?<![.\w])today\s*-\s*date(?!\s*[.\w])',
+                    '(today - date).days',
+                    clean_expr
+                )
+
+                namespace = {
+                    "today":     _today,
+                    "date":      record_date,
+                    "timedelta": _dt.timedelta,
+                }
+                for token in _re.findall(r'\b[a-z][a-z0-9_]*\b', clean_expr):
+                    if token in ("today", "date", "timedelta", "days"):
+                        continue
+                    val = kv.get(token)
+                    if val is not None:
+                        if isinstance(val, list): val = val[0]
+                        try: namespace[token] = float(val)
+                        except (ValueError, TypeError): pass
+
+                raw = eval(clean_expr, {"__builtins__": {}}, namespace)  # noqa: S307
+
+                if isinstance(raw, _dt.timedelta):
+                    results[out_key] = raw.days
+                elif isinstance(raw, bool):
+                    results[out_key] = "true" if raw else "false"
+                elif isinstance(raw, (int, float)):
+                    results[out_key] = int(raw) if raw == int(raw) else raw
+                else:
+                    results[out_key] = str(raw)
+
+            else:
+                eval_expr = expr
+                tokens = _re.findall(r'[a-z][a-z0-9_]*', expr)
+                failed = False
+                for token in tokens:
+                    val = kv.get(token)
+                    if val is None:
+                        failed = True; break
+                    if isinstance(val, list): val = val[0]
+                    try:
+                        num = float(val)
+                    except (ValueError, TypeError):
+                        failed = True; break
+                    eval_expr = _re.sub(rf'\b{token}\b', str(num), eval_expr)
+                if failed:
+                    results[out_key] = None
+                    continue
+                if not _re.match(r'^[\d\s\.\+\-\*\/\(\)e]+$', eval_expr):
+                    results[out_key] = None
+                    continue
+                raw = float(eval(eval_expr, {"__builtins__": {}}, {}))  # noqa: S307
+                results[out_key] = int(raw) if raw == int(raw) else raw
+
         except Exception:
-            results[fname] = None
+            results[out_key] = None
+
     return results
 
 def detect_value_field(results):
@@ -428,18 +497,21 @@ def _eval_cond(kv, cond):
         return val not in cur_list
 
     # ordered operators — coerce scalar
+    # Try: numeric first (covers both schema numeric fields and derived int fields),
+    # then date, then fall back to string comparison.
     cur_scalar = cur_list[0] if cur_list else ""
-    if key in numeric_fields():
-        try:
+    try:
+        cur_scalar, val = float(cur_scalar), float(val)
+        # use int if both are whole numbers for cleaner comparison
+        if cur_scalar == int(cur_scalar) and float(val) == int(float(val)):
             cur_scalar, val = int(cur_scalar), int(val)
-        except (ValueError, TypeError):
-            pass
-    else:
+    except (ValueError, TypeError):
+        # not numeric — try date
         try:
             cur_scalar = parse_date(str(cur_scalar))
             val = parse_date(str(val))
         except (ValueError, TypeError):
-            pass
+            pass  # fall through to string comparison
 
     ops = {
         ">":  lambda a, b: a > b,
@@ -543,11 +615,13 @@ def apply_where(kv, filters):
     # merge derived field values into a copy of kv so filters can use them
     dfields = derived_fields()
     if dfields:
-        computed = compute_derived(kv)
+        # extract date from kv if available (scan_records passes date in kv context)
+        rec_date = kv.get("_date")  # injected by scan_records
+        computed = compute_derived(kv, record_date=rec_date)
         kv = dict(kv)
         for fname, val in computed.items():
             if val is not None:
-                kv[fname] = str(val)
+                kv[fname] = str(val) if not isinstance(val, str) else val
 
     if len(filters) == 1 and _is_expression(filters[0]):
         tokens = _tok_where(filters[0])
@@ -601,7 +675,8 @@ def find_records_with_location(filters, search=None, start=None, end=None):
                 continue
             if search and search.lower() not in line.lower():
                 continue
-            if not apply_where(kv, filters):
+            kv_with_date = dict(kv); kv_with_date["_date"] = d
+            if not apply_where(kv_with_date, filters):
                 continue
             matches.append((path, idx, line))
     return matches
@@ -857,7 +932,10 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
                     continue
                 if search and search.lower() not in line.lower():
                     continue
-                if not apply_where(kv, filters):
+                # inject date for derived field date arithmetic
+                kv_with_date = dict(kv)
+                kv_with_date["_date"] = d
+                if not apply_where(kv_with_date, filters):
                     continue
                 results.append(line)
                 val = numeric_value_for(kv, sum_field) if sum_field else numeric_value(kv)
@@ -2755,17 +2833,26 @@ def _render_single_table(lines, label=None):
     all_fields = ["date"]
     seen = set()
     dfields = derived_fields()
+    # determine record type from first line
+    first_rtype = ""
+    if lines:
+        try: _, fkv, _ = parse_line(lines[0]); first_rtype = fkv.get("type","")
+        except: pass
+
     for line in lines:
         _, kv, _ = parse_line(line)
         for k in kv:
             if k not in seen and k != "type":
                 all_fields.append(k)
                 seen.add(k)
-        # add derived field names after real fields
-        for fname in dfields:
-            if fname not in seen:
-                all_fields.append(fname)
-                seen.add(fname)
+
+    # add derived field names relevant to this type
+    for fname, defn in dfields.items():
+        out_key = fname.split(".", 1)[1] if "." in fname else fname
+        if defn["rtype"] is None or defn["rtype"] == first_rtype:
+            if out_key not in seen:
+                all_fields.append(out_key)
+                seen.add(out_key)
 
     has_note = any(parse_line(l)[2] for l in lines)
     if has_note:
@@ -2781,10 +2868,10 @@ def _render_single_table(lines, label=None):
                 continue
             row[k] = ",".join(v) if isinstance(v, list) else str(v)
         # add derived values
-        computed = compute_derived(kv)
+        computed = compute_derived(kv, record_date=d)
         for fname, val in computed.items():
             if val is not None:
-                row[fname] = str(val)
+                row[fname] = str(val) if not isinstance(val, str) else val
         if has_note:
             row["note"] = note or ""
         rows.append(row)

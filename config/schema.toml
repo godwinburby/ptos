@@ -100,9 +100,25 @@ type      = "string"
 dimension = true
 multi     = true
 
-[fields.balance]
+# Type scoped - only on prescription records
+[type.prescription.fields.balance]
 derived = "amount - advance"
 type = "int"
+
+# Global - applies to any record
+[fields.days_since]
+derived = "today - date"
+type = "int"
+
+# type scoped date arithmentic in days
+[type.followup.fields.is_overdue]
+derived = "(today - date) > 30"
+type = "bool"
+
+# type scoped date arithmentic in days
+[type.assessment.fields.is_overdue]
+derived = "(today - date) > 30"
+type = "bool"
 
 # --------------------------------------------------
 # SHARED FIELD DEFINITIONS
