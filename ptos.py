@@ -162,7 +162,7 @@ def derived_fields():
         for rtype, type_schema in schema.get("type", {}).items():
             for f, meta in type_schema.get("fields", {}).items():
                 if isinstance(meta, dict) and "derived" in meta:
-                    key = f"{rtype}.{f}" if f in result else f
+                    key = f"{rtype}.{f}"
                     result[key] = {"expr": meta["derived"], "rtype": rtype}
         _CACHE["derived_fields"] = result
     return _CACHE["derived_fields"]
@@ -203,13 +203,9 @@ def compute_derived(kv, record_date=None):
                 clean_expr = _re.sub(r'(\d+)d\b', r'\1', expr)
 
                 # auto-convert (today - date) to .days for integer comparison
+                # handles both "(today - date)" and "today - date" (with word boundaries)
                 clean_expr = _re.sub(
-                    r'\(today\s*-\s*date\)',
-                    '(today - date).days',
-                    clean_expr
-                )
-                clean_expr = _re.sub(
-                    r'(?<![.\w])today\s*-\s*date(?!\s*[.\w])',
+                    r'\(?\s*today\s*-\s*date\s*\)?(?!\s*\.)',
                     '(today - date).days',
                     clean_expr
                 )
@@ -1338,7 +1334,8 @@ def run_metric(name, queries, start, end, cycles):
         return True
 
     if "derived" in m:
-        # Evaluate arithmetic expression referencing other metric names.
+        # Evaluate arithmetic expression referencing other metric names
+        # or base queries.
         # e.g.  derived = "income - (expense + investment)"
         expr = m["derived"]
         tokens = re.findall(r'[a-z][a-z0-9_]*', expr)
@@ -1365,6 +1362,20 @@ def run_metric(name, queries, start, end, cycles):
                 else:
                     val = 0
                 resolved[token] = val
+            elif token in queries and token not in resolved:
+                # resolve as base query — use its own time window
+                q = queries[token]
+                query_name = token
+                if isinstance(q, dict) and "alias" in q:
+                    target = q["alias"]
+                    if target in queries:
+                        query_name = target
+                q_resolved = queries.get(query_name, {})
+                if isinstance(q_resolved, dict) and "where" in q_resolved:
+                    _, val = _run_base_query(query_name, queries, start, end, cycles)
+                    resolved[token] = val
+                else:
+                    resolved[token] = 0
         eval_expr = expr
         for token, val in resolved.items():
             eval_expr = re.sub(rf'\b{token}\b', str(val), eval_expr)

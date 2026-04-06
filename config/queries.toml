@@ -62,8 +62,11 @@ sum = "income"
 [metrics.personal_investment]
 sum = "investment"
 
-[metrics.balance]
+[metrics.personal_balance]
 derived = "personal_income - personal_expense - personal_investment"
+
+[metrics.balance]
+derived = "income - expense - investment"
 
 [metrics.net_clinic]
 derived = "total_revenue - expense_work"
@@ -76,7 +79,7 @@ derived = "balance / income * 100"
 
 [dashboards.clinic]
 metrics = [
-  "personal_expense",
+  "expense",
   "expense_today",
   "assessments",
   "prescriptions",
