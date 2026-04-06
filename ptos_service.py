@@ -47,11 +47,11 @@ def _parse_record(line):
     row = {"date": str(d)}
     for k, v in kv.items():
         row[k] = ", ".join(v) if isinstance(v, list) else str(v)
-    # append derived fields
-    computed = ptos.compute_derived(kv)
+    # append derived fields — pass record date for date arithmetic
+    computed = ptos.compute_derived(kv, record_date=d)
     for fname, val in computed.items():
         if val is not None:
-            row[fname] = str(val)
+            row[fname] = str(val) if not isinstance(val, str) else val
     if note:
         row["note"] = note
     return row
