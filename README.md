@@ -79,15 +79,19 @@ If you want the GUI front-end, also download `ptos_gui.pyw` into the same folder
 
 ```
 ptos/
-├── ptos.py
+├── ptos.py              # Core CLI engine
+├── ptos_gui.pyw         # Windows GUI (optional)
+├── ptos_web.py          # Web UI (optional)
+├── ptos_service.py     # Data layer (used by GUI and web)
 ├── config/
-│   ├── config.toml      ← editor, currency, billing cycles
-│   ├── schema.toml      ← record types, field definitions, validation rules
-│   ├── queries.toml     ← saved queries, metrics, dashboards, due config
-│   └── presets.toml     ← quick-add shortcuts
+│   ├── config.toml      # Editor, currency, cycles, dashboard
+│   ├── schema.toml      # Record types, fields, validation
+│   ├── queries.toml     # Saved queries, metrics, dashboards, due
+│   └── presets.toml     # Quick-add shortcuts
 ├── records/
-│   └── 2026.log         ← one file per year, append-only
-├── exports/             ← CSV exports from --export (auto-created on first use)
+│   └── 2026.log         # One file per year
+├── exports/             # CSV exports
+├── web_templates/      # HTML templates for web UI
 ├── journal/
 │   └── 2026/
 │       └── 2026-03-10.md
@@ -183,6 +187,48 @@ If the GUI crashes or a callback raises an error, the full traceback is written 
 ### Requirements
 
 Same as `ptos.py` — Python 3.11+, standard library only. No extra packages needed.
+
+---
+
+## Web Interface (ptos_web.py)
+
+PTOS includes a Flask-based web UI that's mobile-first and responsive.
+
+### Running the Web UI
+
+```bash
+python ptos_web.py
+```
+
+Then open http://localhost:5000 in your browser.
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `ptos_web.py` | Flask web application |
+| `ptos_service.py` | Data layer — shared with GUI and CLI |
+| `web_templates/` | HTML templates |
+
+### Pages
+
+- **Home** — Dashboard stats, overdue summary, quick add presets, recent records
+- **+ Add Record** — Dynamic form based on schema
+- **Browse** — Filter records, search, group, export CSV
+- **Queries** — Run saved queries, metrics, dashboards
+- **Due** — Overdue followup list with priority and heat indicators
+- **Journal** — Daily markdown journal editor
+
+### Dashboard Selector
+
+The home page shows a dropdown to switch between dashboards. The default dashboard is configured in `config.toml`:
+
+```toml
+[dashboard]
+default = "clinic"
+```
+
+If not configured, uses the first dashboard in `queries.toml`.
 
 ---
 
@@ -324,72 +370,43 @@ ptos --query monthly_expenses --trend --time tm
 Custom cycles let you define a billing or reporting period that starts on a fixed day of the month rather than the 1st. `salary-1` means one cycle back, `salary-2` two cycles back, and so on.
 
 ```toml
-# config.toml
-[cycles]
-salary = 26   # cycle runs 26th → 25th next month
-billing = 1   # same as calendar month
-```
-
----
-
-## Schema
-
-The schema is the only file you need to edit to make PTOS work for your domain. Everything else — the engine, queries, presets — adapts automatically.
-
-### Every type follows the same four-section pattern
-
-```toml
-[type.expense]
-required = ["domain", "category", "amount"]   # flat list
-
-[type.expense.fields.domain]
-options = ["self", "home", "work"]             # flat options
-
-[type.expense.fields.category]
-parent       = "domain"                        # options depend on domain
-options.self = ["food", "transport", "health"]
-options.home = ["grocery", "utilities", "rent"]
-options.work = ["admin", "supplies", "meals"]
-
-[type.expense.tags.category]                   # tags triggered by field value
-options.food      = ["snacks", "coffee", "restaurant"]
-options.transport = ["auto", "bus", "taxi"]
-
-[type.sale.conditions.warranty]                 # conditionally required field
-when = { category = "appliance" }              # warranty required only for appliances
-```
-
-### Shared field definitions — define once, reuse everywhere
-
-```toml
-[shared.source]
-options = ["referral", "walkin", "online", "marketing"]
-
-# Then in any type:
-[type.lead.fields.source]
-use = "shared.source"
-
-[type.sale.fields.source]
-use = "shared.source"
-```
-
-Changing `shared.source` updates it everywhere it's referenced.
-
-### Global field metadata
-
-Fields declared in `[fields]` control how PTOS handles them across all types:
-
-```toml
-[fields.amount]
-type         = "int"          # validated as integer, summed in group/pivot
-dimension    = false          # excluded from grouping suggestions
-aggregatable = true
-
 [fields.tag]
 type      = "string"
 dimension = true
 multi     = true              # a record can have multiple tag= entries
 ```
+
+### Derived Fields
+
+Fields whose values are computed from other field values or date arithmetic.
+
+**Global derived fields** apply to any record type:
+
+```toml
+[fields.days_since]
+derived = "today - date"
+type    = "int"
+```
+
+**Type-scoped derived fields** apply only to specific record types:
+
+```toml
+[type.followup.fields.is_overdue]
+derived = "(today - date) > 30"
+type    = "bool"
+
+[type.assessment.fields.is_overdue]
+derived = "(today - date) > 30"
+type    = "bool"
+```
+
+The expression supports:
+- `today` — current date
+- `date` — record's date field
+- `today - date` — returns number of days
+- Any numeric field from the record
+
+Boolean results display as `true`/`false` in table view. Derived fields appear automatically in `--table` output and can be used in filters.
 
 ---
 
@@ -425,6 +442,27 @@ min = "expenses"                 # lowest single record amount
 ```
 
 `avg` also supports weighted averaging via `unit_field` and `unit_weights` — see the weighted average section below.
+
+### Derived Metrics
+
+Metrics can compute values from other metrics or base queries:
+
+```toml
+[metrics.balance]
+derived = "income - expense - investment"
+
+[metrics.net_clinic]
+derived = "total_revenue - expense_work"
+
+[metrics.savings_rate]
+derived = "balance / income * 100"
+```
+
+Derived metrics can reference:
+- **Other metrics** — e.g., `total_revenue`, `balance`
+- **Base queries directly** — e.g., `income`, `expense`, `investment`
+
+The base query uses its own time window defined in queries.toml, not the metric's time window.
 
 ### Dashboards — named collection of metrics and base queries
 
@@ -884,7 +922,10 @@ command = "nvim"        # falls back to $EDITOR, then notepad/nvim by OS
 currency = "₹"          # prefix shown on all numeric output
 
 [cycles]
-salary = 26             # billing cycle starting on the 26th
+clinic = 26             # billing cycle starting on the 26th
+
+[dashboard]
+default = "clinic"      # default dashboard for web UI
 ```
 
 ### PTOS_HOME environment variable
