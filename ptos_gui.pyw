@@ -23,6 +23,7 @@ CARD      = "#FFFFFF"   # card / panel background
 BORDER    = "#E2E4EA"   # separator / border
 ACCENT    = "#4F6BED"   # primary blue
 ACCENT_HO = "#3A54D4"   # hover
+ACCENT_LT = "#EEF1FB"   # light accent (for chips)
 SUCCESS   = "#2E7D56"   # saved message
 ERROR_COL = "#C0392B"   # error message
 TEXT      = "#1A1D2E"   # primary text
@@ -644,11 +645,28 @@ class AddRecordTab(tk.Frame):
         row = tk.Frame(self, bg=BG, pady=PAD)
         row.pack(fill="x", padx=HPAD)
 
+        # ── Quick presets chips ───────────────────────────────────────────────
+        presets = ptos.get_presets()
+        simple_presets = {k: v for k, v in presets.items()
+                         if isinstance(v, dict) and "type" in v}
+        if simple_presets:
+            preset_row = tk.Frame(self, bg=BG, pady=8)
+            preset_row.pack(fill="x", padx=HPAD)
+            lbl(preset_row, "Quick Presets", fg=SUBTEXT, font=F_SMALL).pack(anchor="w")
+            chip_frame = tk.Frame(preset_row, bg=BG)
+            chip_frame.pack(anchor="w", pady=4)
+            for pname in sorted(simple_presets.keys())[:8]:
+                btn = tk.Button(chip_frame, text=f"+ {pname}",
+                               font=("Segoe UI", 11), fg=ACCENT, bg=ACCENT_LT,
+                               activebackground=ACCENT, activeforeground="white",
+                               relief="flat", cursor="hand2", padx=10, pady=4, bd=0,
+                               command=lambda n=pname: self._load_preset_by_name(n))
+                btn.pack(side="left", padx=(0, 6))
+
         preset_col = tk.Frame(row, bg=BG)
         preset_col.pack(side="left", padx=(0, 32))
         lbl(preset_col, "Load preset", fg=SUBTEXT, font=F_LABEL).pack(anchor="w")
         self._preset_var = tk.StringVar()
-        presets = ptos.get_presets()
         preset_names = ["—"] + sorted(presets.keys())
         self._preset_combo = _make_combo(preset_col, preset_names,
                                          textvariable=self._preset_var, width=22)
@@ -963,6 +981,13 @@ class AddRecordTab(tk.Frame):
             self._note_var.set(preset["note"])
         self._status.config(
             text=f"Preset '{name}' loaded — edit fields then save.", fg=ACCENT)
+
+    def _load_preset_by_name(self, name):
+        """Load a preset by name (called from quick preset chips)."""
+        if not name:
+            return
+        self._preset_var.set(name)
+        self._on_preset_change()
 
     def _save_as_preset(self):
         rtype = self._type_var.get()
@@ -1589,9 +1614,20 @@ class BrowseTab(tk.Frame):
         self._search_var = tk.StringVar()
         tk.Label(row1, text="Search", font=F_LABEL, fg=SUBTEXT,
                  bg=CARD).pack(side="left", padx=(0, 4))
-        sf, search_entry = _make_entry(row1, textvariable=self._search_var, width=22)
-        sf.pack(side="left", padx=(0, 0))
+        sf, search_entry = _make_entry(row1, textvariable=self._search_var, width=18)
+        sf.pack(side="left", padx=(0, 4))
         search_entry.bind("<Return>", lambda _: self._run())
+        # Debounce search - auto-run after 500ms
+        self._search_var.trace_add("write", lambda *_: self._debounce_search())
+
+        # Expression filter input
+        self._expr_var = tk.StringVar()
+        tk.Label(row1, text="Filter", font=F_LABEL, fg=SUBTEXT,
+                 bg=CARD).pack(side="left", padx=(0, 4))
+        sf3, expr_entry = _make_entry(row1, textvariable=self._expr_var, width=20)
+        sf3.pack(side="left", padx=(0, 4))
+        expr_entry.bind("<Return>", lambda _: self._run())
+        sublbl(row1, "e.g. domain=self AND amount>100").pack(side="left", padx=(0, 8))
 
         # ── row 1b: file + sort ───────────────────────────────────────────────
         row1b = tk.Frame(self, bg=CARD, pady=4, padx=HPAD)
@@ -1724,7 +1760,15 @@ class BrowseTab(tk.Frame):
         t = self._type_var.get()
         if t and t != "All types":
             filters.append(f"type={t}")
-        filters += self._get_field_filters()
+        # Combine field filters with expression filter
+        field_filters = self._get_field_filters()
+        expr = self._expr_var.get().strip()
+        if field_filters:
+            filters.extend(field_filters)
+        if expr:
+            # Expression filter is added as-is (ptos.py will parse it)
+            # It can contain AND, OR, operators like =, !=, >, <, ~, etc.
+            filters.append(expr)
         time_code = _TIME_CODE.get(self._time_var.get(), self._time_var.get())
         group_f   = self._get_group_by()
         try:
@@ -1743,6 +1787,12 @@ class BrowseTab(tk.Frame):
             self._result.show_error(str(e))
         except Exception as e:
             self._result.show_error(str(e))
+
+    def _debounce_search(self):
+        """Debounce search - cancel previous timer and start new one."""
+        if hasattr(self, '_search_timer') and self._search_timer:
+            self.after_cancel(self._search_timer)
+        self._search_timer = self.after(500, self._run)
 
     def _build_field_filters(self):
         """Populate row1c with filter widgets for dimension fields of selected type."""
@@ -1864,6 +1914,9 @@ class BrowseTab(tk.Frame):
         if t and t != "All types":
             filters.append(f"type={t}")
         filters += self._get_field_filters()
+        expr = self._expr_var.get().strip()
+        if expr:
+            filters.append(expr)
 
         if not filters and not search:
             self._result.show_message("Nothing to save — set at least a type or filter first.")
