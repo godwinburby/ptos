@@ -650,18 +650,16 @@ class AddRecordTab(tk.Frame):
         simple_presets = {k: v for k, v in presets.items()
                          if isinstance(v, dict) and "type" in v}
         if simple_presets:
-            preset_row = tk.Frame(self, bg=BG, pady=8)
-            preset_row.pack(fill="x", padx=HPAD)
-            lbl(preset_row, "Quick Presets", fg=SUBTEXT, font=F_SMALL).pack(anchor="w")
-            chip_frame = tk.Frame(preset_row, bg=BG)
-            chip_frame.pack(anchor="w", pady=4)
-            for pname in sorted(simple_presets.keys())[:8]:
-                btn = tk.Button(chip_frame, text=f"+ {pname}",
-                               font=("Segoe UI", 11), fg=ACCENT, bg=ACCENT_LT,
+            # Compact preset row - minimal vertical space
+            chip_frame = tk.Frame(self, bg=BG)
+            chip_frame.pack(fill="x", padx=HPAD, pady=(4, 2))
+            for pname in sorted(simple_presets.keys()):
+                btn = tk.Button(chip_frame, text=f"+{pname}",
+                               font=("Segoe UI", 10), fg=ACCENT, bg=ACCENT_LT,
                                activebackground=ACCENT, activeforeground="white",
-                               relief="flat", cursor="hand2", padx=10, pady=4, bd=0,
+                               relief="flat", cursor="hand2", padx=6, pady=2, bd=0,
                                command=lambda n=pname: self._load_preset_by_name(n))
-                btn.pack(side="left", padx=(0, 6))
+                btn.pack(side="left", padx=2)
 
         preset_col = tk.Frame(row, bg=BG)
         preset_col.pack(side="left", padx=(0, 32))
