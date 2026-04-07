@@ -50,6 +50,7 @@ A record missing a date or type is broken — `--lint` will error.
 
 - Python 3.11+ (uses `tomllib` from the standard library)
 - Works on Windows, Linux, macOS, Android (Termux)
+- Web UI additionally requires Flask: `pip install flask`
 
 ---
 
@@ -71,8 +72,6 @@ alias ptos="python ~/ptos/ptos.py"
 
 `--init` is safe to run more than once. It will not overwrite existing files.
 
-If you want the GUI front-end, also download `ptos_gui.pyw` into the same folder. The GUI requires `ptos.py` to be present alongside it — it imports it directly at runtime.
-
 ---
 
 ## Folder structure after init
@@ -80,9 +79,9 @@ If you want the GUI front-end, also download `ptos_gui.pyw` into the same folder
 ```
 ptos/
 ├── ptos.py              # Core CLI engine
-├── ptos_gui.pyw         # Windows GUI (optional)
+├── ptos_service.py      # Data layer (used by web UI and GUI)
 ├── ptos_web.py          # Web UI (optional)
-├── ptos_service.py     # Data layer (used by GUI and web)
+├── ptos_gui.pyw         # Desktop GUI (optional, Windows)
 ├── config/
 │   ├── config.toml      # Editor, currency, cycles, dashboard
 │   ├── schema.toml      # Record types, fields, validation
@@ -90,145 +89,14 @@ ptos/
 │   └── presets.toml     # Quick-add shortcuts
 ├── records/
 │   └── 2026.log         # One file per year
-├── exports/             # CSV exports
-├── web_templates/      # HTML templates for web UI
+├── exports/             # CSV exports land here
+├── web_templates/       # HTML templates for web UI
 ├── journal/
 │   └── 2026/
 │       └── 2026-03-10.md
 └── templates/
-    └── daily.md
+    └── daily.md         # Journal template (optional override)
 ```
-
----
-
-## GUI front-end (Windows)
-
-For users who prefer not to use the terminal, PTOS includes a graphical interface — `ptos_gui.pyw` — that runs on any Windows machine with Python installed.
-
-### Files
-
-| File | Purpose |
-|------|---------|
-| `ptos.py` | The core engine — required by both CLI and GUI |
-| `ptos_gui.pyw` | The GUI application — requires `ptos.py` in the same folder |
-| `ptg.bat` | Windows launcher — runs the GUI without a console window |
-| `ptos_init.bat` | First-time setup — creates folders, config files, and first log file |
-| `README_START_HERE.md` | Plain-English guide for non-technical users |
-
-### Launching
-
-Double-click `ptg.bat`, or from the terminal:
-
-```cmd
-python ptos_gui.pyw
-```
-
-### Tabs
-
-**+ Add Record** — schema-driven form that renders dynamically from `schema.toml`. Select a record type and all fields appear. Supports presets, date picker, tag checkboxes, and note. Validates the record before saving.
-
-**Queries** — run any named query, metric, or dashboard from `queries.toml`. Selecting a query or changing the time window runs it immediately. Reload button refreshes the query list if `queries.toml` has changed.
-
-**Browse** — filter records by type, time window, and field values. When a type is selected, dimension field dropdowns appear automatically for filtering. Also supports free-text search, sort, file selection, and a Group by dropdown for grouped output. Due List button shows overdue records from the `[due]` config in `queries.toml`. Export CSV exports current results. **Save as Query** saves the current filter state as a named query to `queries.toml` — accessible from the Queries tab immediately after saving.
-
-**Journal** — daily journal editor. Opens today's journal automatically. Navigate with ◀ Prev / Next ▶ or click the date label / 📅 icon to jump to any date. Forward navigation is blocked past today. For past dates with no entry, a **+ Create Entry for This Date** button appears. Ctrl+S saves; Ctrl+Enter toggles checkbox items. Markdown syntax colouring for headings, checkboxes, bold, italic, and rules. A `.bak` backup is written before every save.
-
-**Log Editor** — view and edit any `.log` file in the `records/` folder. A dropdown at the top lets you switch between files (one per year). Full undo support. Save with the button or Ctrl+S. A `.bak` backup is written automatically before every save.
-
-### Add Record — form behaviour
-
-- **Dropdowns** — fields with defined options render as dropdowns. Parent-dependent dropdowns (e.g. `category` depending on `domain`) update automatically when the parent changes.
-- **Conditional fields** — fields that only apply under certain conditions appear and disappear automatically (e.g. `fit` appears only when `outcome=prescribed`).
-- **Number fields** — `int` fields only accept digits. A unit label appears to the right (e.g. `₹` for `amount` and `advance`, `min` for `duration`).
-- **Date picker** — click the 📅 icon to open a popup calendar. Navigate months with ◀ ▶, click a date to select. Today shortcut at the bottom.
-- **Tags** — schema-defined tags appear as checkboxes. Additional custom tags can be typed as comma-separated values.
-- **Text fields** — spaces are converted to underscores automatically before saving, since the plain-text log format uses spaces as field separators. Notes are exempt — spaces in notes are preserved.
-
-### Presets in the GUI
-
-The **Load preset** dropdown at the top of the Add Record form pre-fills the form with any preset from `presets.toml`. Only the fields defined in the preset are filled — blank fields stay empty for you to complete. Tags defined in the preset are ticked automatically.
-
-The **Save as Preset** button (footer, next to Save Record) saves the current form state as a new preset. Only filled fields are saved — intentionally blank fields are omitted, so the preset will prompt for them when loaded. The preset dropdown refreshes immediately after saving.
-
-### Unit labels in schema
-
-To show a unit hint next to a numeric field, add a `unit` key to the field's global metadata in `schema.toml`:
-
-```toml
-[fields.amount]
-type         = "int"
-dimension    = false
-aggregatable = true
-unit         = "₹"
-
-[fields.duration]
-type         = "int"
-dimension    = false
-aggregatable = true
-unit         = "min"
-```
-
-The `unit` key is ignored by `ptos.py` — it is only read by the GUI.
-
-### Ignore patterns
-
-Add these to Syncthing and `.gitignore` for the PTOS folder:
-
-```
-*.tmp
-*.bak
-ptos_error.log
-```
-
-### Error log
-
-If the GUI crashes or a callback raises an error, the full traceback is written to `ptos_error.log` in the PTOS folder and shown in a popup with a **Copy to Clipboard** button. The app continues running after the error is dismissed.
-
-### Requirements
-
-Same as `ptos.py` — Python 3.11+, standard library only. No extra packages needed.
-
----
-
-## Web Interface (ptos_web.py)
-
-PTOS includes a Flask-based web UI that's mobile-first and responsive.
-
-### Running the Web UI
-
-```bash
-python ptos_web.py
-```
-
-Then open http://localhost:5000 in your browser.
-
-### Files
-
-| File | Purpose |
-|------|---------|
-| `ptos_web.py` | Flask web application |
-| `ptos_service.py` | Data layer — shared with GUI and CLI |
-| `web_templates/` | HTML templates |
-
-### Pages
-
-- **Home** — Dashboard stats, overdue summary, quick add presets, recent records
-- **+ Add Record** — Dynamic form based on schema
-- **Browse** — Filter records, search, group, export CSV
-- **Queries** — Run saved queries, metrics, dashboards
-- **Due** — Overdue followup list with priority and heat indicators
-- **Journal** — Daily markdown journal editor
-
-### Dashboard Selector
-
-The home page shows a dropdown to switch between dashboards. The default dashboard is configured in `config.toml`:
-
-```toml
-[dashboard]
-default = "clinic"
-```
-
-If not configured, uses the first dashboard in `queries.toml`.
 
 ---
 
@@ -238,7 +106,7 @@ If not configured, uses the first dashboard in `queries.toml`.
 # Add a record
 ptos --add type=expense domain=self category=food amount=120
 
-# Add with a date (today is default)
+# Add with a specific date (today is default)
 ptos --add type=expense domain=self category=food amount=120 --date yesterday
 ptos --add type=expense domain=self category=food amount=120 --date 2026-03-08
 
@@ -259,7 +127,7 @@ ptos --query monthly_expenses --time last-quarter
 # Open today's journal
 ptos --journal
 
-# Edit config files
+# Edit config files in your editor
 ptos --edit s        # schema.toml
 ptos --edit q        # queries.toml
 ptos --edit c        # config.toml
@@ -281,7 +149,7 @@ ptos --edit x        # ptos.py itself
 | `--add [field=value ...]` | `-a` | Add a record. No arguments = interactive mode |
 | `--note "note text"` | `-n` | Attach a note to the record |
 | `--date DATE` | `-d` | Date for the record. Accepts `YYYY-MM-DD`, `today`, `yesterday` (default: today) |
-| `--preset [preset] [field=value ...]` | `-p` | Quick-add from preset. Override fields inline |
+| `--preset [name] [field=value ...]` | `-p` | Quick-add from preset. Override fields inline |
 | `--save-preset NAME` | | Save the record being added as a preset under this name |
 
 ### Query
@@ -289,7 +157,7 @@ ptos --edit x        # ptos.py itself
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--query [name]` | `-q` | Run a saved query. No name = list all queries, metrics, dashboards |
-| `--where field=value ...` | `-w` | Filter by field. Overrides saved query filters |
+| `--where expr ...` | `-w` | Filter expressions. Simple: `field=value`. Boolean: `"field=a AND field!=b"` |
 | `--time TIME` | `-t` | Time window (see below). Default: `this-month` |
 | `--from YYYY-MM-DD` | `-f` | Start date (use with `--to` for custom ranges) |
 | `--to YYYY-MM-DD` | `-T` | End date |
@@ -297,33 +165,71 @@ ptos --edit x        # ptos.py itself
 | `--tag TAG` | `-g` | Filter by tag (repeatable: `--tag auto --tag bus`) |
 | `--search text` | `-S` | Full-text search |
 | `--save NAME` | | Save current query filters and analysis to queries.toml |
-| `--file FILENAME` | | Read from a specific file in `records/` folder (e.g. `2025.log`). Full filename with extension. No spaces. |
-| `--select field ...` | | Show only specified fields in output. Date, type, and note always included. Log format preserved. |
+| `--file FILENAME` | | Read from a specific file in `records/` (e.g. `2025.log`) |
+| `--select field ...` | | Show only specified fields. Date, type always included; add `note` to include notes |
 
 ### Analyse
 
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--group field [field ...]` | `-G` | Group by one or more fields. Counts records; sums numeric fields when present |
+| `--group ?` | | Discover available group fields for current results |
 | `--pivot ROW COL` | `-v` | Pivot table |
-| `--count` | | Count records instead of summing numeric fields. Works with both `--group` and `--pivot` |
-| `--sort COL` | | Sort records or pivot rows by a column. Works for plain list, table view, and pivot |
-| `--sum-field FIELD` | | Sum a specific numeric field instead of auto-detecting the first one |
-| `--trend [N]` | | Show last N periods side by side (default: 6). Also works with `--from`/`--to`: divides the custom range into N equal slices |
+| `--pivot ?` | | Discover available pivot fields |
+| `--count` | | Count records instead of summing numeric fields. Works with `--group` and `--pivot` |
+| `--sort COL` | | Sort results or pivot rows by a column |
+| `--sum-field FIELD` | | Sum a specific numeric field instead of auto-detecting |
+| `--trend [N]` | | Show last N periods side by side (default: 6) |
 | `--due [NAME\|DAYS]` | | Show overdue records. Optional: named due config or days override |
 | `--table` | | Display results as a formatted table instead of raw lines |
-| `--export [FILENAME]` | | Export results to CSV in `exports/` folder. Works with raw records, `--group`, and `--pivot`. Optional filename without extension. Auto-named if omitted. |
+| `--export [FILENAME]` | | Export to CSV in `exports/`. Auto-named if no filename given |
+| `--fields` | | Field discovery report for current results |
+
+### Edit / Delete
+
+| Flag | Description |
+|------|-------------|
+| `--set key=value ...` | Edit matched records. Shows diff and asks for confirmation |
+| `--set key+=value` | Append a value to a list field (e.g. add a tag) |
+| `--set key-=value` | Remove a value from a list field |
+| `--set key=` | Delete a field entirely (empty value) |
+| `--set date=YYYY-MM-DD` | Change the date — moves record to the correct year file automatically |
+| `--set-note "text"` | Replace the note on matched records |
+| `--delete` | Delete matched records |
+| `--all` | Apply `--set` or `--delete` to all matched records without interactive pick |
+
+`--set` and `--delete` require at least one filter (`--where`, `--type`, or `--tag`).
+When multiple records match and `--all` is not given, PTOS lists them and asks you to pick by number.
+
+```bash
+# Fix a typo in a field
+ptos -y expense -t td --set category=food
+
+# Add a tag to a specific record
+ptos -w "type=expense domain=self" -t td --set tag+=urgent
+
+# Remove a tag
+ptos -w type=followup --set tag-=pending
+
+# Change the date of a record (moves to correct year file if needed)
+ptos -w "type=expense amount=120" --set date=2026-03-15
+
+# Replace the note
+ptos -y expense -t td --set-note "corrected note here"
+
+# Delete all of today's test records
+ptos -y test -t td --delete --all
+```
 
 ### Utilities
 
 | Flag | Short | Description |
 |------|-------|-------------|
 | `--lint` | `-l` | Lint all records against schema |
-| `--lint --fix` | | Open each log file that contains errors in the editor after linting |
+| `--lint --fix` | | Open each log file that has errors in the editor after linting |
 | `--journal` | `-j` | Open today's journal (creates from template if new) |
-| `--edit [TARGET]` | `-e` | Edit a workspace file — r s q c p d/j x |
-| `--fields` | | Field discovery report for current results |
-| `--init` | | Initialise workspace (safe to run again — will not overwrite existing files) |
+| `--edit [TARGET]` | `-e` | Edit a workspace file — `r s q c p d/j x` |
+| `--init` | | Initialise workspace (safe to re-run — will not overwrite existing files) |
 
 ---
 
@@ -343,9 +249,9 @@ ptos --edit x        # ptos.py itself
 | `last-year` | Previous year |
 | `YYYY-MM` | Specific month, e.g. `2026-03` |
 | `all` | No date filter |
-| Custom cycles | Defined in `config.toml` — e.g. `salary`, `salary-1` |
+| Custom cycles | Defined in `config.toml` — e.g. `clinic`, `clinic-1` |
 
-Short aliases are available for faster typing:
+Short aliases:
 
 | Alias | Expands to |
 |-------|------------|
@@ -360,27 +266,98 @@ Short aliases are available for faster typing:
 | `ty` | `this-year` |
 | `ly` | `last-year` |
 
-```bash
-ptos --query monthly_expenses --time lm       # last month
-ptos --query monthly_expenses --time tq       # this quarter
-ptos --type expense --time td                 # today
-ptos --query monthly_expenses --trend --time tm
-```
-
-Custom cycles let you define a billing or reporting period that starts on a fixed day of the month rather than the 1st. `salary-1` means one cycle back, `salary-2` two cycles back, and so on.
+Custom cycles let you define a billing or reporting period that starts on a fixed day of the month rather than the 1st. `clinic-1` means one cycle back, `clinic-2` two cycles back, and so on.
 
 ```toml
-[fields.tag]
-type      = "string"
-dimension = true
-multi     = true              # a record can have multiple tag= entries
+[cycles]
+clinic = 26    # billing cycle starting on the 26th of each month
 ```
 
-### Derived Fields
+---
 
-Fields whose values are computed from other field values or date arithmetic.
+## Filter expressions
 
-**Global derived fields** apply to any record type:
+Filters go with `-w` / `--where`, or inside `where =` in saved queries.
+
+```bash
+ptos --where type=expense                        # equality
+ptos --where type=expense domain=self            # multiple conditions (AND)
+ptos --where type=expense domain!=work           # not equal
+ptos --where type=expense amount>=500            # numeric comparison
+ptos --where type=expense tag=restaurant         # tag match
+ptos --where "type=sale product~comfort"         # field contains (case-insensitive)
+```
+
+**Operators:** `=` `!=` `>` `<` `>=` `<=` `~` (contains) `!~` (not contains)
+
+**OR values** — use `|` to match any of several values on `=` and `!=`:
+
+```bash
+ptos --where domain=self|home                    # self OR home
+ptos --where type=assessment|prescription        # two types
+ptos --where outcome!=deferred|not_interested    # exclude both
+```
+
+**Boolean expressions** — full `AND`, `OR`, `NOT`, and parentheses:
+
+```bash
+ptos --where "(category=home OR category=household) AND amount>100"
+ptos --where "type=expense AND NOT domain=work"
+ptos --where "(tag=auto OR tag=bus) AND domain=self"
+```
+
+Boolean expressions and simple `field=value` conditions can be mixed freely. Works in saved queries too:
+
+```toml
+[home_spend]
+where = "type=expense AND (domain=self OR domain=home)"
+```
+
+**Derived fields in filters** — virtual fields computed per record are fully filterable:
+
+```bash
+ptos -y followup --where is_overdue=true         # all overdue followups
+ptos -y followup --where "is_overdue=true AND intent=trial"
+ptos -y expense --where "days_since>30"          # global derived field
+```
+
+---
+
+## Table view
+
+`--table` renders results as a formatted table instead of raw log lines.
+
+```bash
+ptos -y expense -t tm --table
+ptos -q leads --table --sort name
+ptos -w type=sale -t tq --table
+```
+
+Columns are auto-detected from the fields present in the result set. When results contain multiple record types, each type gets its own sub-table — no empty cells from mismatched fields.
+
+```
+[ expense ]
+date        domain  category   amount  tag      note
+-----------------------------------------------------
+2026-03-10  work    food       32      snacks   coffee and biscuits
+2026-03-11  home    grocery    190     fruits   weekly fruits
+
+[ sale ]
+date        client  name         product          amount  advance
+-----------------------------------------------------------------
+2026-01-03  Al001   alice_m      comfort_pro_l    83000   10000
+2026-01-10  Bo002   bob_k        comfort_pro_xl   98000   98000
+```
+
+Width is adaptive — `note` column shrinks first when the terminal is narrow. `--sort` sorts numerically or alphabetically; records missing the sort field sort last.
+
+---
+
+## Derived fields
+
+Fields whose values are computed from other fields or date arithmetic. Defined in `schema.toml`, available automatically in `--table` output and in filters.
+
+**Global derived fields** — apply to any record type:
 
 ```toml
 [fields.days_since]
@@ -388,25 +365,19 @@ derived = "today - date"
 type    = "int"
 ```
 
-**Type-scoped derived fields** apply only to specific record types:
+**Type-scoped derived fields** — apply only to a specific type:
 
 ```toml
 [type.followup.fields.is_overdue]
 derived = "(today - date) > 30"
 type    = "bool"
 
-[type.assessment.fields.is_overdue]
-derived = "(today - date) > 30"
-type    = "bool"
+[type.prescription.fields.balance]
+derived = "amount - advance"
+type    = "int"
 ```
 
-The expression supports:
-- `today` — current date
-- `date` — record's date field
-- `today - date` — returns number of days
-- Any numeric field from the record
-
-Boolean results display as `true`/`false` in table view. Derived fields appear automatically in `--table` output and can be used in filters.
+Expressions support: `today`, `date`, `today - date` (returns days as int), and any numeric field from the record. Boolean results display as `true`/`false`.
 
 ---
 
@@ -429,23 +400,28 @@ where = "type=expense category=food"
 ratio = ["food", "expenses"]     # food spend as % of total expenses
 
 [metrics.avg_spend]
-avg = "expenses"                 # average spend per record
+avg = "expenses"                 # average amount per record
 
 [metrics.total_spend]
-sum = "expenses"                 # total amount across all matched records
+sum = "expenses"                 # total amount across matched records
 
 [metrics.highest_spend]
-max = "expenses"                 # highest single record amount
+max = "expenses"                 # highest single record
 
 [metrics.lowest_spend]
-min = "expenses"                 # lowest single record amount
+min = "expenses"                 # lowest single record
 ```
 
-`avg` also supports weighted averaging via `unit_field` and `unit_weights` — see the weighted average section below.
+`avg` also supports weighted averaging — useful when records represent different unit counts:
 
-### Derived Metrics
+```toml
+[metrics.asp]
+avg          = "prescriptions"
+unit_field   = "fit"
+unit_weights = { monaural = 1, binaural = 2 }
+```
 
-Metrics can compute values from other metrics or base queries:
+### Derived metrics — arithmetic over other metrics and base queries
 
 ```toml
 [metrics.balance]
@@ -458,22 +434,18 @@ derived = "total_revenue - expense_work"
 derived = "balance / income * 100"
 ```
 
-Derived metrics can reference:
-- **Other metrics** — e.g., `total_revenue`, `balance`
-- **Base queries directly** — e.g., `income`, `expense`, `investment`
+Tokens in the expression can be **other metrics** (e.g. `total_revenue`) or **base queries directly** (e.g. `income`, `expense`). Base queries used in derived metrics yield their numeric total. The base query's own time window applies when it has one defined.
 
-The base query uses its own time window defined in queries.toml, not the metric's time window.
-
-### Dashboards — named collection of metrics and base queries
+### Dashboards — named collections of metrics and queries
 
 ```toml
-[dashboards.monthly]
-metrics = ["leads", "sales", "conversion_ratio", "avg_sale"]
+[dashboards.clinic]
+metrics = ["assessments", "prescriptions", "total_revenue", "asp", "prescription_ratio"]
 ```
 
-Run with: `ptos --query monthly`
+Run with: `ptos --query clinic`
 
-### Saved queries — any combination of filters, time, analysis
+### Saved queries — any combination of filters, time, and analysis
 
 ```toml
 [monthly_expenses]
@@ -495,20 +467,18 @@ group = ["category"]
 [sales_trend]
 where = "type=sale"
 time  = "this-month"
-trend = 6          # run as trend automatically when queried
-sum   = true
+trend = 6
 ```
 
-**Saved queries compose with `--time`** — the saved query defines the default time, but you can always override it at the CLI:
+**Override time at runtime** — the saved query defines the default, you can always change it:
 
 ```bash
-ptos --query monthly_expenses                       # uses the query's own time setting
-ptos --query monthly_expenses --time last-month     # same filters, different window
-ptos --query monthly_expenses --time last-quarter
+ptos --query monthly_expenses                       # uses the query's own time
+ptos --query monthly_expenses --time last-month
 ptos --query monthly_expenses --time 2026-01
 ```
 
-**Save any CLI command as a query with `--save`** — the query runs normally and is appended to queries.toml in one step:
+**Save any CLI command as a query with `--save`:**
 
 ```bash
 ptos -w type=expense domain!=work -G category -t tm --save exp_cat
@@ -520,19 +490,12 @@ ptos -y lead -t tq -v source outcome --count --save funnel
 
 ## Trend analysis
 
-`--trend` runs your filters across the last N consecutive periods and shows them side by side. Works with any time window that has a natural predecessor.
+`--trend` runs your filters across the last N consecutive periods and shows them side by side.
 
 ```bash
-# Expenses over last 6 months (default)
 ptos --where type=expense --trend
-
-# Expenses by calendar month, last 3 months
 ptos --where type=expense --trend 3 --time this-month
-
-# Work expenses over last 4 months
 ptos --where type=expense domain=work --trend 4 --time this-month
-
-# Any saved query + trend
 ptos --query monthly_expenses --trend
 ```
 
@@ -551,45 +514,7 @@ period              count      total        avg
 2026-03                10      ₹2,153       ₹215
 ```
 
-Supported time windows for `--trend`: custom cycles (e.g. `salary`, `salary-1`…), `this-month`, `last-month`, `this-week`, `this-quarter`, `YYYY-MM`.
-
----
-
-## Table view
-
-`--table` renders results as a formatted table instead of raw log lines.
-
-```bash
-ptos -y expense -t tm --table
-ptos -q leads --table --sort name
-ptos -w type=sale -t tq --table
-```
-
-Columns are auto-detected from the fields present in the result set. When results contain multiple record types, each type gets its own sub-table with only its relevant columns shown — no empty cells from mismatched fields.
-
-```
-[ expense ]
-date        domain  category   amount  tag      note
------------------------------------------------------
-2026-03-10  work    food       32      snacks   coffee and biscuits
-2026-03-11  home    grocery    190     fruits   weekly fruits
-
-[ sale ]
-date        client  name         product          amount  advance  category
---------------------------------------------------------------------------
-2026-01-03  Al001   alice_m      comfort_pro_l    83000   10000    appliance
-2026-01-10  Bo002   bob_k        comfort_pro_xl   98000   98000    appliance
-```
-
-Width is adaptive — if the full table fits in your terminal, nothing is truncated. If the terminal is too narrow, the `note` column shrinks first, then other wide columns, with a minimum of 6 characters per column.
-
-`--sort` works with `--table` and with plain list view. Numbers sort numerically, strings sort alphabetically. Records missing the sort field sort last.
-
-```bash
-ptos -q leads --table --sort name      # alphabetical by name
-ptos -q leads --table --sort status    # by status field
-ptos -y expense -t tm --table --sort amount   # low to high
-```
+Supported time windows for `--trend`: custom cycles, `this-month`, `last-month`, `this-week`, `this-quarter`, `YYYY-MM`.
 
 ---
 
@@ -597,20 +522,18 @@ ptos -y expense -t tm --table --sort amount   # low to high
 
 `--due` scans a configured record type, finds the most recent entry per unique key (e.g. client), and surfaces those not updated within N days — sorted by priority.
 
-Priority order is read directly from your schema field options. The first option in the list is the most urgent. No hardcoding in the script.
+Priority order is read from your schema field options. The first option listed is the most urgent. No hardcoding in the script.
 
 ### Configure in queries.toml
-
-You can have a single default `[due]` block, or multiple named configs under `[due.NAME]`:
 
 ```toml
 # default — used by: ptos --due
 [due]
-type            = "lead"       # record type to scan
-key             = "client"     # field that identifies each unique entity
-sort_by         = "status"     # field whose schema option order defines priority
-days            = 7            # default overdue threshold
-exclude_results = ["fix_appointment", "deceased"]  # skip these result values entirely
+type            = "followup"
+key             = "client"
+sort_by         = "intent"
+days            = 7
+exclude_results = ["fix_appointment", "deceased", "not_relevant"]
 
 # named — used by: ptos --due outreach
 [due.outreach]
@@ -619,85 +542,28 @@ key     = "place"
 days    = 14
 ```
 
-The `sort_by` field's options in `schema.toml` define the priority order:
+The `sort_by` field's options in `schema.toml` define priority order:
 
 ```toml
-[type.lead.fields.status]
-options = ["trial", "decision", "negotiation", "deferred", "unattended"]
-#           ↑ most urgent                                 ↑ least urgent
+[type.followup.fields.intent]
+options = ["trial", "decision", "assessment", "mgm"]
+#           ↑ most urgent                   ↑ least urgent
 ```
 
 ### Usage
 
 ```bash
-ptos --due                  # use default [due] block, default days
-ptos --due 3                # use default [due] block, override to 3 days
+ptos --due                  # default [due] config, default days
+ptos --due 3                # override threshold to 3 days
 ptos --due 0                # show everyone (morning review)
 ptos --due outreach         # use [due.outreach] named config
 ```
-
-Output:
-
-```
-Due  (>3 days)  type=lead
-
-   last  status      client          note
---------------------------------------------------------------------
-      5d  trial       alice_m         trialling comfort_pro, happy so far
-      5d  decision    bob_k           discussing with family
-      4d  negotiation carol_r         said will call back next week
-      3d  negotiation david_s         takes calls, asks for discount
-```
-
-### Adapting for other domains
-
-A sales person tracking leads:
-
-```toml
-[due]
-type    = "lead"
-key     = "company"
-sort_by = "status"
-days    = 3
-```
-
-A habit tracker:
-
-```toml
-[due]
-type    = "habit"
-key     = "name"
-sort_by = "category"
-days    = 30
-```
-
----
-
-## Journal
-
-`--journal` (or `--edit j` / `--edit d`) opens today's journal in your editor. If the file does not exist it is created from a template automatically.
-
-```bash
-ptos --journal        # open today's journal
-ptos -j               # same, short form
-ptos --edit j         # same via edit shortcut
-```
-
-The built-in template follows an ARRIVE → ENGAGE → RELEASE structure:
-
-- **ARRIVE** — ground yourself before the day starts: reality check, body, mood, a word or verse, intention, prayer
-- **ENGAGE** — top 3 tasks, home/personal item, one person to love well, habits, drift checks at 11 / 2 / 5
-- **RELEASE** — end of day: wins, where you drifted, gratitude, one thing to carry forward
-
-The template is embedded in `ptos.py` so it works even without a `templates/daily.md` file. If you place your own `templates/daily.md` that will be used instead.
-
-Journal files are stored at `journal/YYYY/YYYY-MM-DD.md` — one file per day, plain markdown.
 
 ---
 
 ## Presets
 
-Shortcuts for entries you add frequently. Any field can be omitted — PTOS will prompt for it interactively.
+Shortcuts for entries you add frequently. Any field can be omitted — PTOS will prompt for it.
 
 ```toml
 [presets.commute]
@@ -715,50 +581,31 @@ tag      = ["snacks"]
 # amount omitted — will be prompted each time
 ```
 
-**Save a preset directly from the command line** using `--save-preset`:
+**Save a preset from the command line:**
 
 ```bash
-# inline add — record is saved and preset is created in one step
 ptos --add type=expense domain=work category=staff_welfare tag=snacks --save-preset snacks
-
-# interactive add — skips the end-of-session prompt, uses the provided name directly
-ptos --add --save-preset my_preset
+ptos --add --save-preset my_preset    # interactive add, named preset saved immediately
 ```
 
-Override any preset field inline:
+**Override any preset field inline:**
 
 ```bash
-ptos --preset commute amount=120        # different amount
-ptos --preset commute tag=uber          # different tag
-ptos --preset commute --date yesterday  # different date
+ptos --preset commute amount=120
+ptos --preset commute tag=uber
+ptos --preset commute --date yesterday
 ```
 
-**Tags are always prompted when using a preset** — even if the preset already has tags defined. The existing tags are shown first so you can press Enter to keep them, or type new ones to extend or replace. This lets you add a one-off tag to a preset without editing the preset file.
+Tags are always prompted when using a preset — existing tags are shown first so you can keep or extend them.
 
 ### Preset aliases
 
-An alias is a shorthand name that points to another preset. Useful when you want a short nickname without duplicating the full definition.
-
 ```toml
-[presets.commute]
-type     = "expense"
-domain   = "self"
-category = "transport"
-amount   = 90
-tag      = ["auto"]
-
 [presets.c]
 alias = "commute"    # ptos -p c  runs the commute preset
 ```
 
-```bash
-ptos -p c            # same as: ptos -p commute
-ptos -p c amount=120 # override works on aliases too
-```
-
 ### Multi-record presets
-
-A multi-record preset saves a group of related records that are always added together — for example a morning routine or a recurring set of clinic entries.
 
 ```toml
 [presets.morning]
@@ -769,11 +616,62 @@ records = [
 ```
 
 ```bash
-ptos -p morning         # prompts for any missing fields in each record, then saves both
-ptos -p morning -d yd   # adds both records dated yesterday
+ptos -p morning         # prompts for missing fields in each record, saves both
+ptos -p morning -d yd   # both records dated yesterday
 ```
 
-Each record in the group is completed interactively if it has missing fields, then saved in sequence. The preset shows a preview line for each record as it is saved.
+---
+
+## Exporting to CSV
+
+`--export` saves results to the `exports/` folder. Works in all output modes.
+
+```bash
+ptos -y expense -t tm --export                  # exports/expense_this-month.csv
+ptos -y expense -t tm --export march_spend      # exports/march_spend.csv
+ptos -y expense -t tm -G category --export      # exports/expense_this-month_grouped.csv
+ptos -y sale -t tq -v source outcome --export   # exports/sale_this-quarter_pivot.csv
+```
+
+All filters, `--select`, `--sort`, and `--sum-field` apply before export — what you see is what gets exported. Multi-value fields like `tag` are joined with a comma.
+
+---
+
+## Summing a specific field
+
+By default PTOS auto-detects the first numeric field and sums it. Use `--sum-field` when a record type has more than one numeric field.
+
+```bash
+ptos -y sale -t tm --sum-field advance
+ptos -y sale -t tm --group category --sum-field advance
+ptos -y sale -t tm --pivot source category --sum-field amount
+```
+
+`--sum-field` works with list view, `--group`, `--pivot`, `--trend`, and `--export`.
+
+---
+
+## Reading from a specific file
+
+```bash
+ptos -y expense --file 2025.log              # all expenses from 2025.log
+ptos -y expense --file 2025.log -t lq        # last quarter from that file
+ptos --file archive.log -w type=sale         # query an archive
+```
+
+Full filename including extension is required. No spaces. The file must exist in `records/`.
+
+---
+
+## Selecting output fields
+
+```bash
+ptos -y followup -t tm --select name intent result
+ptos -y followup -t tm --select name intent result --table
+ptos -y followup -t tm --select name intent --sort intent
+```
+
+Date and type are always included. Add `note` to `--select` to include notes.
 
 ---
 
@@ -783,130 +681,59 @@ Each record in the group is completed interactively if it has missing fields, th
 # Group expenses by category this month
 ptos --type expense --group category
 
-# Group by domain and category together
+# Group by multiple fields
 ptos --type expense --group domain category
 
 # Group expenses by month over the year
 ptos --type expense --time this-year --group month
 
-# Pivot expenses: domain vs category
+# Pivot: domain vs category
 ptos --type expense --pivot domain category --count
 
-# Pivot leads: source vs outcome, summing amount
-ptos --type lead --pivot source outcome
+# Pivot with amount sums
+ptos --type sale -t tq -v source outcome
 
-# Discover what fields are available in your current results
+# Trend: expenses over last 6 months
+ptos --where type=expense --trend
+
+# Discover what fields are available
 ptos --type expense --fields
-
-# Discover available group fields
 ptos --type expense --group ?
-
-# Discover available pivot fields
 ptos --type expense --pivot ?
 ```
 
 ---
 
-## Filter expressions
-
-Filters go with `-w` or inside `where =` in queries.
+## Validation
 
 ```bash
-ptos --where type=expense                        # equality
-ptos --where type=expense domain=self            # multiple filters (AND)
-ptos --where type=expense domain!=work           # not equal
-ptos --where type=expense amount>=500            # numeric comparison
-ptos --where type=expense tag=restaurant         # tag match
-ptos --where type=sale product~comfort      # field contains text
-ptos --where type=sale product~comfort --group product  # group by variant
+ptos --lint          # check all records against schema
+ptos --lint --fix    # open files with errors in the editor
 ```
 
-Operators: `=` `!=` `>` `<` `>=` `<=` `~` (contains, case-insensitive)
-
-The `~` operator is useful when field values share a common prefix — for example `product~comfort` matches `comfort_pro_l`, `comfort_pro_xl`, and any future comfort variants without listing each one.
-
-**OR values** — use `|` to match any of several values on `=` and `!=`:
-
-```bash
-ptos --where domain=self|home                    # self OR home
-ptos --where type=assessment|prescription        # two types
-ptos --where outcome!=deferred|not_interested    # exclude both
-```
-
-Works in saved queries too: `where = "type=expense domain=self|home"`
+Lint catches: missing required fields, invalid field values, unknown fields, conditional required violations (e.g. `fit` missing when `outcome=prescribed`).
 
 ---
 
-## Reading from a specific file
+## Journal
 
-By default PTOS reads all `.log` files in `records/`. Use `--file` to read from one specific file — useful for querying a past year or an archive.
-
-```bash
-ptos -y expense --file 2025.log              # all expenses from 2025.log
-ptos -y expense --file 2025.log -t lq        # last quarter of 2025
-ptos --file archive.log -w type=sale         # query an archive file
-```
-
-The full filename including extension is required. No spaces allowed. The file must exist in the `records/` folder.
-
----
-
-## Selecting output fields
-
-By default PTOS prints the full raw record line. Use `--select` to show only the fields you care about. Date, type, and note are always included regardless of what you specify.
+`--journal` opens today's journal in your editor. Creates the file from a template if it doesn't exist.
 
 ```bash
-ptos -y followup -t tm --select name intent result
-ptos -y followup -t tm --select name intent result --table
-ptos -y followup -t tm --select name intent --sort intent
+ptos --journal        # open today's journal
+ptos -j               # short form
+ptos --edit j         # same via edit shortcut
 ```
 
-Output keeps log format with only the selected fields:
+The built-in template follows an ARRIVE → ENGAGE → RELEASE structure:
 
-```
-2026-03-11 type=followup name=george_joseph intent=trial | will call back next week
-2026-03-11 type=followup name=alice_m intent=decision | discussing with family
-```
+- **ARRIVE** — ground yourself before the day: reality check, body, mood, a word or verse, intention, prayer
+- **ENGAGE** — top 3 tasks, home item, one person to love well, habits, drift checks at 11 / 2 / 5
+- **RELEASE** — end of day: wins, where you drifted, gratitude, one thing to carry forward
 
-`--select` works with `--table`, `--sort`, and `--due`. Position in the command does not matter.
+The template is embedded in `ptos.py` — it works without a `templates/daily.md` file. Place your own `templates/daily.md` to override it.
 
----
-
-## Exporting to CSV
-
-`--export` saves results to a `.csv` file in the `exports/` folder. It works in all three output modes — raw records, grouped, and pivot.
-
-```bash
-# raw records
-ptos -y expense -t tm --export              # exports/expense_this-month.csv
-ptos -y expense -t tm --export march_spend  # exports/march_spend.csv
-
-# grouped output
-ptos -y expense -t tm -G category --export         # exports/expense_this-month_grouped.csv
-ptos -y sale -t tq -G domain --export q3_by_domain # exports/q3_by_domain.csv
-
-# pivot output
-ptos -y sale -t tq -v source outcome --export      # exports/sale_this-quarter_pivot.csv
-```
-
-Auto-naming appends `_grouped` or `_pivot` as a suffix when in those modes so the filename tells you what's in it. All filters, `--select`, `--sort`, and `--sum-field` apply before export — what you see is what gets exported.
-
-Columns are auto-detected from fields present in results. Multi-value fields like `tag` are joined with a comma. The file can be opened directly in Excel or any spreadsheet app.
-
----
-
-## Summing a specific field
-
-By default PTOS auto-detects the first numeric field in results and sums it. Use `--sum-field` to target a specific field — useful when a record type has more than one numeric field.
-
-```bash
-ptos -y sale -t tm --sum-field advance       # sum advance payments, not sale amount
-ptos -y sale -t tm --sum-field amount        # sum full sale amounts
-ptos -y sale -t tm --group category --sum-field advance   # group + sum a specific field
-ptos -y sale -t tm --pivot source category --sum-field amount
-```
-
-`--sum-field` works with plain list view, `--group`, `--pivot`, `--trend`, and `--export`. It must be a field declared as `type = "int"` in `schema.toml` — PTOS will exit with an error listing valid numeric fields if you specify an unknown one.
+Journal files are stored at `journal/YYYY/YYYY-MM-DD.md`.
 
 ---
 
@@ -925,7 +752,7 @@ currency = "₹"          # prefix shown on all numeric output
 clinic = 26             # billing cycle starting on the 26th
 
 [dashboard]
-default = "clinic"      # default dashboard for web UI
+default = "clinic"      # default dashboard shown on web UI home page
 ```
 
 ### PTOS_HOME environment variable
@@ -937,39 +764,27 @@ export PTOS_HOME=/data/ptos    # Linux / macOS / Termux
 set PTOS_HOME=C:\ptos          # Windows
 ```
 
-Useful when you want to keep the script somewhere on `PATH` but your data in a synced folder.
-
----
-
-## Validation
-
-```bash
-ptos --lint          # check all records against schema
-```
-
-Lint catches: missing required fields, invalid field values, unknown fields, conditional required violations (e.g. `warranty` missing when `category=appliance`).
+Useful when the script is on `PATH` but data lives in a synced folder.
 
 ---
 
 ## Automatic backups
 
-Every write operation — `--add`, `--preset`, and journal saves from the GUI — creates a `.bak` file alongside the original before writing. For example, before appending to `records/2026.log`, PTOS writes `records/2026.log.bak`.
+Every write operation — `--add`, `--preset`, `--set`, `--delete`, log editor saves from both the web UI and the GUI, and journal saves — creates a `.bak` file alongside the original before writing. For example, before modifying `records/2026.log`, PTOS writes `records/2026.log.bak`.
 
-This means every record file and journal file always has a one-step-behind backup at all times. No configuration needed.
-
-Add `*.bak` to your `.gitignore` and Syncthing ignore patterns to keep backups off version control.
+Add `*.bak` to your `.gitignore` and Syncthing ignore patterns.
 
 ---
 
 ## Sharing and sync
 
-Records are plain text — one line per entry, one file per year. They work well with any sync tool:
+Records are plain text — one line per entry, one file per year.
 
 - **Git** — commit `records/` after each session. Full history, diff-friendly.
 - **Syncthing / Dropbox / iCloud** — sync the whole `ptos/` folder.
 - **Termux** — run the same script on Android. Set `PTOS_HOME` to your synced folder.
 
-Multiple devices can safely append to the same log file as long as writes don't overlap. For teams, keep one canonical copy and merge with `sort -u`.
+Multiple devices can safely append to the same log file as long as writes don't overlap.
 
 ---
 
@@ -979,8 +794,6 @@ Multiple devices can safely append to the same log file as long as writes don't 
 2. Define `required`, `fields`, and optionally `tags` and `conditions`
 3. Run `ptos --lint` to verify existing records still pass
 4. Optionally add saved queries in `queries.toml` and presets in `presets.toml`
-
-Example — adding a `mood` type from scratch:
 
 ```toml
 # schema.toml
@@ -1009,4 +822,132 @@ time  = "today"
 ptos --add type=mood rating=4 context=work
 ptos --query mood_today
 ptos --type mood --time this-week --group context
+```
+
+---
+
+## Unit labels in schema
+
+To show a unit hint next to a numeric field in the web UI and GUI add forms:
+
+```toml
+[fields.amount]
+type         = "int"
+dimension    = false
+aggregatable = true
+unit         = "₹"
+
+[fields.duration]
+type         = "int"
+dimension    = false
+aggregatable = true
+unit         = "min"
+```
+
+The `unit` key is read by the web UI and GUI only — `ptos.py` ignores it.
+
+---
+
+## Web Interface
+
+`ptos_web.py` is a mobile-first Flask web UI — the primary interface for phone and browser use. It shares all data and logic with the CLI through `ptos_service.py`.
+
+### Requirements
+
+```bash
+pip install flask
+```
+
+### Running
+
+```bash
+python ptos_web.py
+```
+
+Then open `http://localhost:5000` in your browser (or your device's IP on the local network for mobile access).
+
+### Files
+
+| File | Purpose |
+|------|---------|
+| `ptos_web.py` | Flask application |
+| `ptos_service.py` | Data layer — shared with GUI |
+| `web_templates/` | HTML templates |
+
+### Pages
+
+**Home** — Dashboard stats (first 4 metrics from the configured dashboard), overdue due-list summary (up to 5 rows), quick-add preset buttons, and recent records from today. A dropdown lets you switch between dashboards. The default dashboard is set in `config.toml` under `[dashboard] default`.
+
+**+ Add Record** — Schema-driven add form. Select a record type and all required and optional fields appear. Supports:
+- Dropdowns for fields with defined options
+- Conditional fields that appear/disappear based on other field values
+- Numeric fields with unit labels (e.g. `₹`, `min`)
+- Tag checkboxes plus a custom tags field
+- Preset loading — picks a preset from a dropdown to pre-fill the form
+- Multi-record presets — adds a group of related records in one action
+- History-based defaults — most common values for option fields are pre-selected based on your past records
+- Cascade suggestions — when you pick a field value (e.g. `source=mgm`), related fields suggest their most common co-occurring values from history
+
+**Browse** — Filter, search, and group records. Supports:
+- Type selector and time window
+- Free-text expression filter (full boolean syntax)
+- Free-text search
+- Group by field
+- Sort by field
+- Specific log file selection
+- Inline edit and delete for each result row (opens a full edit form)
+- Export current results to CSV
+
+**Queries** — Run any named query, metric, or dashboard from `queries.toml`. Choose a query from the list, optionally override the time window, and run. Results render inline — records as a table, groups as a summary, metrics as a value, dashboards as a card grid. Save the current browse filter as a named query directly from the web UI.
+
+**Due** — Overdue record list with heat indicators (hot / warm / cool) based on days since last contact. Days threshold can be adjusted on the page.
+
+**Journal** — Daily markdown journal editor. Opens today's journal. Navigate to previous or future dates; forward navigation is blocked past today. Creates a new entry from template for dates with no file. Saves with a `.bak` backup automatically.
+
+**Log Editor** — View and edit any `.log` file in `records/` directly in the browser. File selector dropdown at the top. Saves with a `.bak` backup before every write.
+
+---
+
+## GUI (Desktop fallback)
+
+`ptos_gui.pyw` is a Tkinter desktop GUI for Windows. It is the fallback interface — use the CLI or web UI first; the GUI covers the same ground for users who prefer a native window.
+
+### Requirements
+
+Same as `ptos.py` — Python 3.11+, standard library only. No extra packages. Tkinter is included with most Python distributions on Windows.
+
+### Launching
+
+```cmd
+python ptos_gui.pyw
+```
+
+Or double-click `ptg.bat` (Windows launcher, no console window).
+
+### Tabs
+
+**+ Add Record** — Same schema-driven form as the web UI. Dropdowns, conditional fields, numeric units, tag checkboxes, preset loading and saving. History-based autocomplete on free-text fields.
+
+**Journal** — Daily journal editor. Navigate with ◀ Prev / Next ▶ or click the date to jump. Ctrl+S saves; Ctrl+Enter toggles checkboxes. Markdown syntax highlighting. Creates entry from template for new dates.
+
+**Queries** — Run named queries, metrics, and dashboards. Selecting a query or changing the time window runs it immediately.
+
+**Browse** — Filter records by type, time, and field values. Group by dropdown. Due List button. Export CSV. Inline edit and delete with a full form.
+
+**Log Editor** — Edit any `.log` file with full undo. Saves with `.bak` backup.
+
+### Error log
+
+Crashes and callback errors are written to `ptos_error.log` and shown in a popup with a Copy to Clipboard button. The app continues running after dismissal.
+
+---
+
+## Ignore patterns
+
+Add to `.gitignore` and Syncthing ignore patterns:
+
+```
+*.tmp
+*.bak
+ptos_error.log
 ```
