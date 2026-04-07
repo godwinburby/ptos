@@ -1640,13 +1640,14 @@ class BrowseTab(tk.Frame):
         self._file_combo.bind("<Button-1>", self._refresh_file_list)
         self._file_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
 
-        self._sort_var = tk.StringVar()
+        # Sort by dropdown - will be populated based on type
+        self._sort_var = tk.StringVar(value="(none)")
         tk.Label(row1b, text="Sort by", font=F_LABEL, fg=SUBTEXT,
                  bg=CARD).pack(side="left", padx=(0, 4))
-        sf2, sort_entry = _make_entry(row1b, textvariable=self._sort_var, width=14)
-        sf2.pack(side="left", padx=(0, 4))
-        sort_entry.bind("<Return>", lambda _: self._run())
-        sublbl(row1b, "field name").pack(side="left", padx=(0, 18))
+        self._sort_combo = _make_combo(row1b, ["(none)"],
+                                        textvariable=self._sort_var, width=14)
+        self._sort_combo.pack(side="left", padx=(0, 4))
+        self._sort_combo.bind("<<ComboboxSelected>>", lambda _: self._run())
 
         self._group_var = tk.StringVar(value="(none)")
         tk.Label(row1b, text="Group by", font=F_LABEL, fg=SUBTEXT,
@@ -1690,6 +1691,9 @@ class BrowseTab(tk.Frame):
         self._result = ResultPane(self)
         self._result.pack(fill="both", expand=True, padx=HPAD, pady=HPAD)
         self._result.set_refresh_callback(self._run)
+        
+        # Initialize sort dropdown options
+        self._populate_sort_options()
 
     def _run_due(self):
         """Show due list using service layer — renders as Treeview."""
@@ -2008,7 +2012,23 @@ class BrowseTab(tk.Frame):
 
     def _get_sort(self):
         v = self._sort_var.get().strip()
-        return v if v else None
+        return v if v and v != "(none)" else None
+
+    def _populate_sort_options(self):
+        """Populate sort dropdown with available field names based on type."""
+        rtype = self._type_var.get()
+        if not rtype or rtype == "All types":
+            self._sort_combo["values"] = ["(none)", "date", "type"]
+            self._sort_var.set("(none)")
+            return
+        
+        type_schema = self._schema.get("type", {}).get(rtype, {})
+        fields = list(type_schema.get("fields", {}).keys())
+        
+        # Add common options
+        sort_opts = ["(none)", "date", "type"] + sorted(fields)
+        self._sort_combo["values"] = sort_opts
+        self._sort_var.set("(none)")
 
     def _refresh_file_list(self, _=None):
         try:
@@ -2022,6 +2042,7 @@ class BrowseTab(tk.Frame):
         """Rebuild field filter row and group options when type changes, then run."""
         self._build_field_filters()
         self._build_group_opts()
+        self._populate_sort_options()
         self._run()
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2518,8 +2539,8 @@ class PTOSApp(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title("PTOS")
-        self.geometry("960x800")
-        self.minsize(720, 540)
+        self.geometry("1200x900")
+        self.minsize(800, 600)
         self.configure(bg=BG)
         # Route Tkinter callback errors to our log+popup handler
         self.report_callback_exception = self._on_callback_error
