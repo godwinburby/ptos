@@ -154,8 +154,13 @@ class ScrollBody(tk.Frame):
                           lambda e: self._canvas.itemconfig(
                               self._win, width=e.width))
         self._canvas.bind_all("<MouseWheel>",
-                              lambda e: self._canvas.yview_scroll(
-                                  int(-1 * (e.delta / 120)), "units"))
+                              self._on_mousewheel)
+
+    def _on_mousewheel(self, event):
+        try:
+            self._canvas.yview_scroll(int(-1 * (event.delta / 120)), "units")
+        except Exception:
+            pass  # Widget may have been destroyed, ignore
 
     def reset(self):
         self._canvas.yview_moveto(0)
