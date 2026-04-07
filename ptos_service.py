@@ -733,6 +733,15 @@ def get_dashboard(name, time="tm"):
     }
 
 
+def get_dashboard_names():
+    """Return list of all dashboard names."""
+    try:
+        queries = ptos.get_queries()
+        return list(queries.get("dashboards", {}).keys())
+    except Exception:
+        return []
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Lint
 # ══════════════════════════════════════════════════════════════════════════════

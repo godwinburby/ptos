@@ -3,6 +3,17 @@
 
 <div class="page-title">Good {{ greeting }}, Godwin</div>
 
+<!-- dashboard selector -->
+{% if dashboards %}
+<div style="margin-bottom:16px;">
+  <select onchange="window.location='/?dashboard='+this.value" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;">
+    {% for db in dashboards %}
+    <option value="{{ db }}" {% if db == current_db %}selected{% endif %}>{{ db }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+
 <!-- stat cards -->
 <div class="stat-grid">
   {% if due_count > 0 %}

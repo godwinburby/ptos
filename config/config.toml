@@ -6,3 +6,6 @@ currency = "₹"
 
 [cycles]
 clinic = 26
+
+[dashboard]
+default = "clinic"

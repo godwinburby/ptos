@@ -67,8 +67,6 @@ derived = "balance / income * 100"
 
 [dashboards.clinic]
 metrics = [
-  "expense",
-  "expense_today",
   "assessments",
   "prescriptions",
   "loss_ratio",
@@ -78,6 +76,14 @@ metrics = [
   "asp",
   "highest_sale",
   "lowest_sale"
+]
+
+[dashboards.personal]
+metrics = [
+  "income",
+  "expense",
+  "investment",
+  "balance",
 ]
 
 # --------------------------------------------------
@@ -127,10 +133,10 @@ time  = "tm"
 sum   = true
 
 [income]
-where = "type=income AND domain!=work"
+where = "type=income" 
 
 [investment]
-where = "type=investment AND domain!=work"
+where = "type=investment"
 
 # --------------------------------------------------
 # ANALYSIS  (use --time to change window)
