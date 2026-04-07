@@ -619,42 +619,58 @@ def get_metric(name, time="tm"):
             return {"name": name, "value": ptos.fmt(raw), "raw": raw}
 
         if "derived" in m:
-            # Evaluate arithmetic expression referencing other metric names.
+            # Evaluate arithmetic expression referencing metric names or base query names.
             # e.g. derived = "income - (expense + investment)"
-            # Each metric name is resolved to its raw value then the expression
-            # is evaluated with only arithmetic operators allowed.
+            # Metrics are resolved recursively; base queries yield their total.
             import re as _re
-            expr = m["derived"]
-            # collect all metric name tokens (word sequences) from expression
+            expr   = m["derived"]
             tokens = _re.findall(r'[a-z][a-z0-9_]*', expr)
             resolved = {}
             for token in tokens:
-                if token in metrics and token not in resolved:
-                    dep = get_metric(token, time)
-                    raw_val = dep.get("raw")
-                    if raw_val is None:
-                        return {"name": name, "value": "no data (dependency missing)", "raw": None}
-                    resolved[token] = raw_val
-                elif token in queries and token not in resolved:
-                    # resolve as base query — use its own time window
-                    q = queries[token]
+                if token in resolved:
+                    continue
+                if token in metrics:
+                    dep_m = metrics[token]
+                    if "sum" in dep_m:
+                        _, val = ptos._run_base_query(dep_m["sum"], queries, start, end, cycles)
+                    elif "ratio" in dep_m:
+                        c1, _ = ptos._run_base_query(dep_m["ratio"][0], queries, start, end, cycles)
+                        c2, _ = ptos._run_base_query(dep_m["ratio"][1], queries, start, end, cycles)
+                        val = (c1 / c2 * 100) if c2 else 0
+                    elif "avg" in dep_m:
+                        cnt, total = ptos._run_base_query(dep_m["avg"], queries, start, end, cycles)
+                        val = (total / cnt) if cnt else 0
+                    elif "max" in dep_m or "min" in dep_m:
+                        key2 = "max" if "max" in dep_m else "min"
+                        dep_lines, _ = ptos._run_base_query_lines(dep_m[key2], queries, start, end, cycles)
+                        dep_vals = [ptos.numeric_value(
+                            (ptos.safe_parse_line(l) or (None, {}, None))[1])
+                            for l in dep_lines]
+                        dep_vals = [v for v in dep_vals if v is not None]
+                        val = (max(dep_vals) if key2 == "max" else min(dep_vals)) if dep_vals else 0
+                    else:
+                        val = 0
+                    resolved[token] = val
+                elif token in queries:
+                    # resolve as base query — follow one alias level if needed
+                    q_entry    = queries[token]
                     query_name = token
-                    if isinstance(q, dict) and "alias" in q:
-                        target = q["alias"]
+                    if isinstance(q_entry, dict) and "alias" in q_entry:
+                        target = q_entry["alias"]
                         if target in queries:
                             query_name = target
                     q_resolved = queries.get(query_name, {})
                     if isinstance(q_resolved, dict) and "where" in q_resolved:
                         _, val = ptos._run_base_query(query_name, queries, start, end, cycles)
-                        resolved[token] = val
                     else:
-                        resolved[token] = 0
-            # substitute metric names with their values
+                        val = 0
+                    resolved[token] = val
+            # substitute resolved names with numeric values
             eval_expr = expr
             for token, val in resolved.items():
                 eval_expr = _re.sub(rf'\b{token}\b', str(val), eval_expr)
-            # safe eval — only allow digits, spaces, and arithmetic operators
-            if not _re.match(r'^[\d\s\.\+\-\*\/\(\)]+$', eval_expr):
+            # safe eval — only digits, spaces, and arithmetic operators (including scientific notation e)
+            if not _re.match(r'^[\d\s\.\+\-\*\/\(\)e]+$', eval_expr):
                 return {"name": name, "value": f"unsafe expression: {eval_expr}", "raw": None}
             try:
                 raw = float(eval(eval_expr))  # noqa: S307
