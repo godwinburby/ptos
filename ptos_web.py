@@ -140,13 +140,17 @@ def home():
     try:
         queries    = ptos.get_queries()
         dashboards = queries.get("dashboards", {})
-        db_name    = next((n for n in ("home","monthly","clinic") if n in dashboards),
-                          next(iter(dashboards), None))
-        if db_name:
+        cfg        = ptos.get_config()
+        default_db = cfg.get("dashboard", {}).get("default")
+        # Use query param if provided, otherwise use config default, fallback to first
+        db_name = request.args.get("dashboard", default_db or next(iter(dashboards), None))
+        if db_name and db_name in dashboards:
             db = svc.get_dashboard(db_name, "tm")
             for item in db["items"][:4]:
                 stats.append({"label": item["name"].replace("_"," "),
                                "value": item["value"], "sub": "this month"})
+    except Exception:
+        pass
     except Exception:
         pass
     recent_rows = []
@@ -162,6 +166,8 @@ def home():
         multi_presets=multi_presets,
         due_count=due_count, due_rows=due_rows[:5],
         stats=stats,
+        dashboards=list(dashboards.keys()),
+        current_db=db_name if 'db_name' in locals() else None,
         recent_rows=recent_rows, recent_cols=recent_cols)
 
 
