@@ -1719,6 +1719,7 @@ class BrowseTab(tk.Frame):
             self._result.show_error(str(e))
 
     def _run(self):
+        self._build_field_filters()
         filters = []
         t = self._type_var.get()
         if t and t != "All types":
@@ -1742,6 +1743,8 @@ class BrowseTab(tk.Frame):
             self._result.show_error(str(e))
         except Exception as e:
             self._result.show_error(str(e))
+
+    def _build_field_filters(self):
         """Populate row1c with filter widgets for dimension fields of selected type."""
         for w in self._row1c.winfo_children():
             w.destroy()
@@ -1969,16 +1972,6 @@ class BrowseTab(tk.Frame):
         self._build_field_filters()
         self._build_group_opts()
         self._run()
-
-    def _build_field_filters(self):
-        """Populate row1c with filter widgets for dimension fields of selected type."""
-        for w in self._row1c.winfo_children():
-            w.destroy()
-        self._field_filter_widgets = []
-        rtype = self._type_var.get()
-        if not rtype or rtype == "All types":
-            self._row1c.pack_forget()
-            return
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Log Editor Tab
