@@ -63,12 +63,17 @@ def _parse_record(line):
 # History suggestions
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_history_suggestions(rtype):
+def get_history_suggestions(rtype, context_record=None):
     """Scan all records of the given type and return:
       tags:           sorted list of all tags ever used for this type
+      filtered_tags:  tags filtered by context_record's field cascade (schema + history based)
       field_values:   {fieldname: [values by freq]} for free-text fields
       field_defaults: {fieldname: most_common_value} for schema option fields
                       — used to pre-select the most likely value on type selection
+
+    If context_record is provided, filtered_tags includes:
+    1. Schema-defined tags from resolve_tags() based on context field values
+    2. Historical tags that appeared in past records with matching field values
 
     Single scan, results suitable for caching by the caller.
     """
@@ -95,11 +100,14 @@ def get_history_suggestions(rtype):
             dt.date.min, dt.date.max,
             [f"type={rtype}"], None)
     except Exception:
-        return {"tags": [], "field_values": {}, "field_defaults": {}}
+        return {"tags": [], "filtered_tags": [], "field_values": {}, "field_defaults": {}}
 
     from collections import Counter
     tag_set      = set()
     field_counts = {}   # {fieldname: Counter} — all fields
+    # Track tags per field value for cascade-aware filtering
+    # {fieldname: {fieldvalue: {tags...}}}
+    tags_by_field_value = {}
 
     for line in raw:
         parsed = ptos.safe_parse_line(line)
@@ -109,8 +117,19 @@ def get_history_suggestions(rtype):
         # tags
         tv = kv.get("tag")
         if tv:
-            for t in (tv if isinstance(tv, list) else [tv]):
-                tag_set.add(t)
+            record_tags = set(tv if isinstance(tv, list) else [tv])
+            tag_set.update(record_tags)
+            # Track tags per field value for cascade filtering
+            for f in fields_with_options:
+                fv = kv.get(f)
+                if fv:
+                    fv_list = fv if isinstance(fv, list) else [fv]
+                    for v in fv_list:
+                        if f not in tags_by_field_value:
+                            tags_by_field_value[f] = {}
+                        if v not in tags_by_field_value[f]:
+                            tags_by_field_value[f][v] = set()
+                        tags_by_field_value[f][v].update(record_tags)
         # all non-type, non-numeric fields
         for k, v in kv.items():
             if k in ("type", "tag") or k in numeric_fields:
@@ -134,8 +153,29 @@ def get_history_suggestions(rtype):
         if k in fields_with_options and counter:
             field_defaults[k] = counter.most_common(1)[0][0]
 
+    # Calculate filtered tags based on context_record
+    filtered_tags = set()
+    if context_record:
+        # 1. Schema-defined tags from resolve_tags (based on context field values)
+        schema_tags = ptos.resolve_tags(schema, type_schema, context_record)
+        filtered_tags.update(schema_tags)
+        
+        # 2. Historical tags from records that match context field values
+        for field, value in context_record.items():
+            if field in tags_by_field_value and value:
+                value_str = str(value)
+                if value_str in tags_by_field_value[field]:
+                    filtered_tags.update(tags_by_field_value[field][value_str])
+                # Also check for list values
+                if isinstance(value, list):
+                    for v in value:
+                        v_str = str(v)
+                        if v_str in tags_by_field_value[field]:
+                            filtered_tags.update(tags_by_field_value[field][v_str])
+
     return {
         "tags":           sorted(tag_set),
+        "filtered_tags":  sorted(filtered_tags),
         "field_values":   field_values,
         "field_defaults": field_defaults,
     }
