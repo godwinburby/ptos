@@ -136,6 +136,21 @@ document.getElementById("edit-form").addEventListener("submit", function() {
   const rtype = "{{ rtype }}";
   if (!rtype) return;
 
+  // Use pre-filtered tags from server (already filtered by current cascade context)
+  let histTags = [];
+  {% if history_tags %}
+  histTags = {{ history_tags | tojson }};
+  {% else %}
+  // Fallback: fetch from API (legacy behavior)
+  fetch("/api/type_fields/" + encodeURIComponent(rtype))
+  .then(r => r.json())
+  .then(data => { histTags = data.history_tags || []; addHistoryTagsEdit(histTags); });
+  return; // Exit, let the fallback add tags
+  {% endif %}
+  
+  addHistoryTagsEdit(histTags);
+
+  // Fetch history fields (datalists) from API
   fetch("/api/type_fields/" + encodeURIComponent(rtype))
   .then(r => r.json())
   .then(data => {
@@ -156,9 +171,9 @@ document.getElementById("edit-form").addEventListener("submit", function() {
       input.setAttribute("list", dlId);
       input.setAttribute("autocomplete", "off");
     }
+  });
 
-    // extra historical tags not in schema chips
-    const histTags = data.history_tags || [];
+  function addHistoryTagsEdit(histTags) {
     if (!histTags.length) return;
     const chipGroup = document.querySelector(".chip-group");
     if (!chipGroup) return;
@@ -180,8 +195,7 @@ document.getElementById("edit-form").addEventListener("submit", function() {
         ${tag}`;
       chipGroup.appendChild(label);
     });
-  })
-  .catch(() => {});
+  }
 })();
 
 // ── Cascade field suggestions ─────────────────────────────────────────────────

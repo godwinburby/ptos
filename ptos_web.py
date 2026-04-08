@@ -222,15 +222,25 @@ def add_get():
     # Get history defaults to pre-populate form - this also provides context
     # for resolving parent->child field options correctly
     history_defaults = {}
+    history_filtered_tags = []  # Tags filtered by current field cascade
     if selected_type:
         try:
-            history = svc.get_history_suggestions(selected_type)
-            history_defaults = history.get("field_defaults", {})
+            # Build initial context from history defaults + field_values
+            temp_history = svc.get_history_suggestions(selected_type)
+            history_defaults = temp_history.get("field_defaults", {})
         except Exception:
             pass
     
     # Merge history defaults with field_values (field_values/preset takes priority)
     initial_context = {**history_defaults, **field_values}
+    
+    # Get filtered history tags based on current cascade context
+    if selected_type:
+        try:
+            history_with_context = svc.get_history_suggestions(selected_type, initial_context)
+            history_filtered_tags = history_with_context.get("filtered_tags", [])
+        except Exception:
+            pass
     
     field_defs  = _build_field_defs(schema, selected_type, initial_context)
     tag_options = []
@@ -242,7 +252,8 @@ def add_get():
         types=types, presets=sorted(presets.keys()),
         multi_presets=multi_presets,
         selected_type=selected_type, field_defs=field_defs,
-        tag_options=tag_options, field_values=field_values,
+        tag_options=tag_options, history_tags=history_filtered_tags,
+        field_values=field_values,
         today=dt.date.today().isoformat(),
         msg=None, msg_type=None, last_line=None)
 
@@ -548,6 +559,16 @@ def edit_get():
     current_tags = field_values.get("tag", [])
     if isinstance(current_tags, str):
         current_tags = [t.strip() for t in current_tags.split(",") if t.strip()]
+    
+    # Get filtered history tags based on current field values (cascade context)
+    history_filtered_tags = []
+    if rtype:
+        try:
+            history_with_context = svc.get_history_suggestions(rtype, field_values)
+            history_filtered_tags = history_with_context.get("filtered_tags", [])
+        except Exception:
+            pass
+    
     schema_tag_options = []
     if rtype:
         ts = schema.get("type", {}).get(rtype, {})
@@ -559,7 +580,8 @@ def edit_get():
         filepath=filepath, lineno=lineno_int, old_line=line,
         return_to=return_to,
         rtype=rtype, field_defs=field_defs,
-        tag_options=tag_options, field_values=field_values,
+        tag_options=tag_options, history_tags=history_filtered_tags,
+        field_values=field_values,
         today=dt.date.today().isoformat(),
         msg=None, msg_type=None)
 

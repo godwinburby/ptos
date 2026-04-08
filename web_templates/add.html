@@ -261,30 +261,46 @@ document.getElementById("add-form").addEventListener("submit", function() {
     }
 
     // 3. Add historical tags not already shown as schema chips
-    const histTags = data.history_tags || [];
-    if (!histTags.length) return;
-    const chipGroup = document.querySelector(".chip-group");
-    if (!chipGroup) return;
-    // collect already-shown schema tags
-    const existing = new Set(
-      [...chipGroup.querySelectorAll("input[name='tag']")].map(i => i.value)
-    );
-    const extra = histTags.filter(t => !existing.has(t));
-    if (!extra.length) return;
-    // divider label
-    const divLabel = document.createElement("span");
-    divLabel.style.cssText = "font-size:11px;color:var(--sub);width:100%;margin-top:6px;display:block;";
-    divLabel.textContent = "from history:";
-    chipGroup.appendChild(divLabel);
-    extra.forEach(tag => {
-      const label = document.createElement("label");
-      label.className = "chip";
-      label.style.opacity = "0.75";
-      label.innerHTML = `<input type="checkbox" name="tag" value="${tag}"
-        onchange="this.closest('.chip').classList.toggle('selected', this.checked)">
-        ${tag}`;
-      chipGroup.appendChild(label);
-    });
+    // Use pre-filtered tags from server (already filtered by current cascade context)
+    // If not available from server, fall back to API (for backwards compatibility)
+    let histTags = [];
+    {% if history_tags %}
+    histTags = {{ history_tags | tojson }};
+    {% else %}
+    // Fallback: fetch from API (legacy behavior)
+    fetch("/api/type_fields/" + encodeURIComponent(rtype))
+    .then(r => r.json())
+    .then(data => { histTags = data.history_tags || []; addHistoryTags(histTags); });
+    return; // Exit, let the fallback add tags
+    {% endif %}
+    
+    addHistoryTags(histTags);
+    
+    function addHistoryTags(histTags) {
+      if (!histTags.length) return;
+      const chipGroup = document.querySelector(".chip-group");
+      if (!chipGroup) return;
+      // collect already-shown schema tags
+      const existing = new Set(
+        [...chipGroup.querySelectorAll("input[name='tag']")].map(i => i.value)
+      );
+      const extra = histTags.filter(t => !existing.has(t));
+      if (!extra.length) return;
+      // divider label
+      const divLabel = document.createElement("span");
+      divLabel.style.cssText = "font-size:11px;color:var(--sub);width:100%;margin-top:6px;display:block;";
+      divLabel.textContent = "from history:";
+      chipGroup.appendChild(divLabel);
+      extra.forEach(tag => {
+        const label = document.createElement("label");
+        label.className = "chip";
+        label.style.opacity = "0.75";
+        label.innerHTML = `<input type="checkbox" name="tag" value="${tag}"
+          onchange="this.closest('.chip').classList.toggle('selected', this.checked)">
+          ${tag}`;
+        chipGroup.appendChild(label);
+      });
+    }
   })
   .catch(() => {});  // silent — history is optional
 })();
