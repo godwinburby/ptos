@@ -84,6 +84,7 @@ metrics = [
   "expense",
   "investment",
   "balance",
+  "expense_today"
 ]
 
 # --------------------------------------------------
