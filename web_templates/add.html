@@ -230,7 +230,15 @@ document.getElementById("add-form").addEventListener("submit", function() {
       if (sel && !sel.value) {
         // check the value exists as an option before setting
         const opt = [...sel.options].find(o => o.value === value);
-        if (opt) sel.value = value;
+        if (opt) {
+          sel.value = value;
+          // If this is a parent field, trigger update for child fields
+          // (handles case where history set parent but child needs refresh)
+          if (sel.dataset.parent || sel.getAttribute('data-parent')) {
+            onParentChange(field);
+            return;
+          }
+        }
       }
     }
 

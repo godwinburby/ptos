@@ -218,11 +218,25 @@ def add_get():
             selected_type = pd.get("type", "")
             for k, v in pd.items():
                 if k != "type" and k not in field_values: field_values[k] = v
-    field_defs  = _build_field_defs(schema, selected_type, field_values)
+    
+    # Get history defaults to pre-populate form - this also provides context
+    # for resolving parent->child field options correctly
+    history_defaults = {}
+    if selected_type:
+        try:
+            history = svc.get_history_suggestions(selected_type)
+            history_defaults = history.get("field_defaults", {})
+        except Exception:
+            pass
+    
+    # Merge history defaults with field_values (field_values/preset takes priority)
+    initial_context = {**history_defaults, **field_values}
+    
+    field_defs  = _build_field_defs(schema, selected_type, initial_context)
     tag_options = []
     if selected_type:
         ts = schema.get("type", {}).get(selected_type, {})
-        tag_options = ptos.resolve_tags(schema, ts, field_values)
+        tag_options = ptos.resolve_tags(schema, ts, initial_context)
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, presets=sorted(presets.keys()),
