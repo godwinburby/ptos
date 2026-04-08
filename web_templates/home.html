@@ -14,21 +14,15 @@
 </div>
 {% endif %}
 
-<!-- stat cards -->
-<div class="stat-grid">
-  {% if due_count > 0 %}
-  <div class="stat-card c-warn">
-    <div class="stat-label">Overdue</div>
-    <div class="stat-value">{{ due_count }}</div>
-    <div class="stat-sub"><a href="/due" style="color:#fff;font-weight:700;">View list →</a></div>
+<!-- stat cards - dashboard metrics (2 rows) -->
+<div class="stat-grid" style="grid-template-columns: repeat(3, 1fr);">
+  {% if not stats %}
+  <div class="stat-card">
+    <div class="stat-label">Dashboard</div>
+    <div class="stat-value" style="font-size:14px;color:var(--sub);">No data</div>
+    <div class="stat-sub">Select a dashboard above</div>
   </div>
   {% else %}
-  <div class="stat-card">
-    <div class="stat-label">Due</div>
-    <div class="stat-value" style="font-size:18px;color:var(--success);">All clear ✓</div>
-    <div class="stat-sub">Nothing overdue</div>
-  </div>
-  {% endif %}
   {% for s in stats %}
   <div class="stat-card">
     <div class="stat-label">{{ s.label }}</div>
@@ -36,6 +30,7 @@
     <div class="stat-sub">{{ s.sub }}</div>
   </div>
   {% endfor %}
+  {% endif %}
 </div>
 
 <!-- quick add presets -->

@@ -146,7 +146,8 @@ def home():
         db_name = request.args.get("dashboard", default_db or next(iter(dashboards), None))
         if db_name and db_name in dashboards:
             db = svc.get_dashboard(db_name, "tm")
-            for item in db["items"][:4]:
+            # Show all dashboard items in home (no limit, template handles display)
+            for item in db["items"]:
                 stats.append({"label": item["name"].replace("_"," "),
                                "value": item["value"], "sub": "this month"})
     except Exception:
