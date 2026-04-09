@@ -22,10 +22,12 @@
 <!-- month picker trigger button - on its own row for mobile -->
 <div id="custom-time-div" style="margin-bottom:16px;display:{% if current_time == 'custom' %}block{% else %}none{% endif %};">
   <button id="month-picker-btn" type="button" onclick="toggleMonthPicker(event)"
-          style="padding:6px 14px;border-radius:6px;
-                 border:1px solid var(--border);background:var(--bg);
-                 color:var(--text);font-size:14px;cursor:pointer;min-width:140px;">
-    {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
+          style="display:flex;align-items:center;justify-content:space-between;
+                 padding:9px 12px;border-radius:6px;border:1px solid var(--border);
+                 background:var(--bg);color:var(--text);font-size:14px;font-weight:500;
+                 cursor:pointer;min-width:140px;">
+    <span id="month-text">{% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}</span>
+    <span style="font-size:10px;color:var(--sub);">▼</span>
   </button>
 </div>
 
@@ -79,7 +81,7 @@
       btn.addEventListener("click", function() {
         selMonth = mm;
         close();
-        document.getElementById("month-picker-btn").textContent =
+        document.getElementById("month-text").textContent =
           selYear + "-" + mm;
         updateUrl();
       });
@@ -158,7 +160,7 @@
       if (ct && ct.length >= 7) {
         selYear = parseInt(ct.substring(0, 4));
         selMonth = ct.substring(5, 7);
-        document.getElementById("month-picker-btn").textContent = ct.substring(0, 7);
+        document.getElementById("month-text").textContent = ct.substring(0, 7);
       }
     }
   })();

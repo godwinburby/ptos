@@ -24,6 +24,7 @@ TIME_OPTIONS = [
     ("Custom","custom"),
 ]
 _TIME_DICT = dict(TIME_OPTIONS)
+_VALID_TIME = {code for _, code in TIME_OPTIONS}
 _YEAR_RANGE = list(range(dt.date.today().year - 10, dt.date.today().year + 1))
 
 def _now_str():
@@ -437,7 +438,7 @@ def queries_run():
     name = data.get("name","")
     raw_time = data.get("time","") or None
     # reject any value that is not a known alias and not a valid YYYY-MM
-    if raw_time and raw_time not in dict(TIME_OPTIONS) and \
+    if raw_time and raw_time not in _VALID_TIME and \
        not re.fullmatch(r"\d{4}-\d{2}", raw_time):
         return jsonify(ok=False, error=f"Invalid time window: {raw_time}")
     time = raw_time
@@ -480,7 +481,7 @@ def browse_get():
 def browse_run():
     data   = request.get_json(silent=True) or {}
     raw_time = data.get("time","tm")
-    if raw_time and raw_time not in dict(TIME_OPTIONS) and \
+    if raw_time and raw_time not in _VALID_TIME and \
        not re.fullmatch(r"\d{4}-\d{2}", raw_time):
         raw_time = "tm"
     time = raw_time
