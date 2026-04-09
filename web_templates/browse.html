@@ -14,26 +14,26 @@
   <div class="field-row-2">
     <div class="field-group">
       <label>Time</label>
-      <div style="display:flex;gap:8px;align-items:center;">
-        <select id="b-time" onchange="onBTimeChange(this.value)" style="flex:1;">
-          {% for label, code in time_options %}
-          <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
-          {% endfor %}
-        </select>
-        <div id="b-custom-time" style="display:none;align-items:center;">
-          <button id="b-month-picker-btn" onclick="bTogglePicker(event)"
-                  style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);
-                         background:var(--bg);color:var(--text);font-size:14px;
-                         cursor:pointer;min-width:110px;text-align:left;">
-            {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
-          </button>
-        </div>
-      </div>
+      <select id="b-time" onchange="onBTimeChange(this.value)">
+        {% for label, code in time_options %}
+        <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
     </div>
     <div class="field-group">
       <label>Group by</label>
       <select id="b-group"><option value="">(none)</option></select>
     </div>
+  </div>
+  <!-- month picker on its own row for mobile -->
+  <div id="b-custom-time" class="field-group" style="display:none;">
+    <label>Custom Month</label>
+    <button id="b-month-picker-btn" onclick="bTogglePicker(event)"
+            style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);
+                   background:var(--bg);color:var(--text);font-size:14px;
+                   cursor:pointer;min-width:140px;text-align:left;">
+      {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
+    </button>
   </div>
   <div class="field-group">
     <label>Search</label>
@@ -207,7 +207,8 @@ function debouncedBrowse() {
       var btn  = document.getElementById("b-month-picker-btn");
       var rect = btn.getBoundingClientRect();
       pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
-      pop.style.left = Math.max(4, rect.left) + "px";
+      var POP_W = 260;
+      pop.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - POP_W)) + "px";
       pop.style.display = "block";
     } else { bClose(); }
   };
@@ -228,7 +229,7 @@ function debouncedBrowse() {
       var ct = params.get("custom_time");
       if (ct && ct.length >= 7) {
         document.getElementById("b-time").value = "custom";
-        document.getElementById("b-custom-time").style.display = "flex";
+        document.getElementById("b-custom-time").style.display = "block";
         selYear = parseInt(ct.substring(0, 4));
         selMonth = ct.substring(5, 7);
         document.getElementById("b-month-picker-btn").textContent = ct.substring(0, 7);
@@ -240,7 +241,7 @@ function debouncedBrowse() {
 function onBTimeChange(val) {
   var div = document.getElementById("b-custom-time");
   if (val === "custom") {
-    div.style.display = "flex";
+    div.style.display = "block";
   } else {
     div.style.display = "none";
     window._bCloseMonthPicker();
