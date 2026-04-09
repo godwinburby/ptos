@@ -3,15 +3,77 @@
 
 <div class="page-title">Good {{ greeting }}, Godwin</div>
 
-<!-- dashboard selector -->
+<!-- dashboard + time selector -->
 {% if dashboards %}
-<div style="margin-bottom:16px;">
-  <select onchange="window.location='/?dashboard='+this.value" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;">
+<div style="margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+  <select id="db-select" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;min-width:120px;">
     {% for db in dashboards %}
     <option value="{{ db }}" {% if db == current_db %}selected{% endif %}>{{ db }}</option>
     {% endfor %}
   </select>
+  
+  <select id="time-select" onchange="onTimeChange(this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;min-width:120px;">
+    {% for label, code in time_options %}
+    <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  
+  <div id="custom-time-div" style="display:none;gap:8px;align-items:center;">
+    <select id="custom-year" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;min-width:80px;">
+      {% for y in year_range|reverse %}<option value="{{ y }}" {% if custom_time and custom_time[:4] == y|string %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+    <select id="custom-month" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;min-width:80px;">
+      <option value="01" {% if custom_time and custom_time[5:7] == '01' %}selected{% endif %}>Jan</option>
+      <option value="02" {% if custom_time and custom_time[5:7] == '02' %}selected{% endif %}>Feb</option>
+      <option value="03" {% if custom_time and custom_time[5:7] == '03' %}selected{% endif %}>Mar</option>
+      <option value="04" {% if custom_time and custom_time[5:7] == '04' %}selected{% endif %}>Apr</option>
+      <option value="05" {% if custom_time and custom_time[5:7] == '05' %}selected{% endif %}>May</option>
+      <option value="06" {% if custom_time and custom_time[5:7] == '06' %}selected{% endif %}>Jun</option>
+      <option value="07" {% if custom_time and custom_time[5:7] == '07' %}selected{% endif %}>Jul</option>
+      <option value="08" {% if custom_time and custom_time[5:7] == '08' %}selected{% endif %}>Aug</option>
+      <option value="09" {% if custom_time and custom_time[5:7] == '09' %}selected{% endif %}>Sep</option>
+      <option value="10" {% if custom_time and custom_time[5:7] == '10' %}selected{% endif %}>Oct</option>
+      <option value="11" {% if custom_time and custom_time[5:7] == '11' %}selected{% endif %}>Nov</option>
+      <option value="12" {% if custom_time and custom_time[5:7] == '12' %}selected{% endif %}>Dec</option>
+    </select>
+  </div>
 </div>
+
+<script>
+function onTimeChange(val) {
+  var customDiv = document.getElementById('custom-time-div');
+  if (val === 'custom') {
+    customDiv.style.display = 'flex';
+  } else {
+    customDiv.style.display = 'none';
+    updateUrl();
+  }
+}
+
+function updateUrl() {
+  var db = document.getElementById('db-select').value;
+  var time = document.getElementById('time-select').value;
+  
+  var params = new URLSearchParams();
+  params.set('dashboard', db);
+  
+  if (time === 'custom') {
+    var year = document.getElementById('custom-year').value;
+    var month = document.getElementById('custom-month').value;
+    params.set('time', 'custom');
+    params.set('custom_time', year + '-' + month);
+  } else {
+    params.set('time', time);
+  }
+  
+  window.location = '/?' + params.toString();
+}
+
+// Show custom input if custom time was selected
+if (document.getElementById('time-select').value === 'custom') {
+  document.getElementById('custom-time-div').style.display = 'flex';
+}
+</script>
 {% endif %}
 
 <!-- stat cards - dashboard metrics (2 rows) -->

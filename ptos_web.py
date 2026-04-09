@@ -21,8 +21,10 @@ TIME_OPTIONS = [
     ("Today","td"),("Yesterday","yd"),("This week","tw"),("Last week","lw"),
     ("This month","tm"),("Last month","lm"),("This quarter","tq"),
     ("Last quarter","lq"),("This year","ty"),("Last year","ly"),("All time","all"),
+    ("Custom","custom"),
 ]
 _TIME_DICT = dict(TIME_OPTIONS)
+_YEAR_RANGE = list(range(dt.date.today().year - 10, dt.date.today().year + 1))
 
 def _now_str():
     return dt.datetime.now().strftime("%a %d %b")
@@ -180,8 +182,17 @@ def home():
         default_db = cfg.get("dashboard", {}).get("default")
         # Use query param if provided, otherwise use config default, fallback to first
         db_name = request.args.get("dashboard", default_db or next(iter(dashboards), None))
+        
+        # Get time window from query param, default to this month
+        time_code = request.args.get("time", "tm")
+        if time_code == "custom":
+            custom_time = request.args.get("custom_time", "")
+            if custom_time and re.match(r"\d{4}-\d{2}", custom_time):
+                time_code = custom_time
+        
+        cycles = cfg.get("cycles", {})
         if db_name and db_name in dashboards:
-            db = svc.get_dashboard(db_name, "tm")
+            db = svc.get_dashboard(db_name, time_code)
             # Show all dashboard items in home (no limit, template handles display)
             for item in db["items"]:
                 stats.append({"label": item["name"].replace("_"," "),
@@ -205,6 +216,10 @@ def home():
         stats=stats,
         dashboards=list(dashboards.keys()),
         current_db=db_name if 'db_name' in locals() else None,
+        time_options=TIME_OPTIONS,
+        year_range=_YEAR_RANGE,
+        current_time=request.args.get("time", "tm"),
+        custom_time=request.args.get("custom_time", ""),
         recent_rows=recent_rows, recent_cols=recent_cols)
 
 
@@ -411,7 +426,7 @@ def queries_get():
         queries=named,
         metrics=list(all_q.get("metrics",{}).keys()),
         dashboards=list(all_q.get("dashboards",{}).keys()),
-        time_options=TIME_OPTIONS)
+        time_options=TIME_OPTIONS, year_range=_YEAR_RANGE)
 
 @app.route("/queries/run", methods=["POST"])
 def queries_run():
@@ -450,7 +465,7 @@ def browse_get():
                        if f.endswith(".log")) if os.path.exists(ptos.RECORDS_DIR) else []
     return render_template("browse.html",
         tab="browse", title="Browse", now=_now_str(),
-        types=types, log_files=log_files, time_options=TIME_OPTIONS)
+        types=types, log_files=log_files, time_options=TIME_OPTIONS, year_range=_YEAR_RANGE)
 
 @app.route("/browse/run", methods=["POST"])
 def browse_run():
