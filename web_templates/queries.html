@@ -28,32 +28,38 @@
         <option value="{{ code }}">{{ label }}</option>
         {% endfor %}
       </select>
-      <div id="q-custom-time" style="display:none;flex:1;gap:4px;">
-        <select id="q-custom-year" onchange="runQuery()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
-          <option value="">Year</option>
-          {% for y in year_range|reverse %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
-        </select>
-        <select id="q-custom-month" onchange="runQuery()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
-          <option value="">Month</option>
-          <option value="01">Jan</option>
-          <option value="02">Feb</option>
-          <option value="03">Mar</option>
-          <option value="04">Apr</option>
-          <option value="05">May</option>
-          <option value="06">Jun</option>
-          <option value="07">Jul</option>
-          <option value="08">Aug</option>
-          <option value="09">Sep</option>
-          <option value="10">Oct</option>
-          <option value="11">Nov</option>
-          <option value="12">Dec</option>
-        </select>
+      <div id="q-custom-time" style="display:none;align-items:center;">
+        <button id="q-month-picker-btn" onclick="qTogglePicker(event)"
+                style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);
+                       background:var(--bg);color:var(--text);font-size:14px;
+                       cursor:pointer;min-width:110px;text-align:left;">
+          Pick a month
+        </button>
       </div>
     </div>
   </div>
   <div style="display:flex;gap:8px;">
     <button class="btn btn-ghost btn-sm" onclick="clearOut()">✕ Clear</button>
   </div>
+</div>
+
+<!-- queries month picker popup -->
+<div id="q-month-picker-popup"
+     style="display:none;position:fixed;z-index:600;
+            background:var(--card);border:1px solid var(--border);
+            border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);
+            padding:16px;width:252px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <button onclick="qShiftYear(-1)"
+            style="background:none;border:none;font-size:20px;color:var(--text);
+                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&#8249;</button>
+    <span id="q-picker-year" style="font-weight:700;font-size:15px;color:var(--text);"></span>
+    <button onclick="qShiftYear(1)"
+            style="background:none;border:none;font-size:20px;color:var(--text);
+                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&#8250;</button>
+  </div>
+  <div id="q-picker-grid"
+       style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
 </div>
 
 <!-- Delete modal -->
@@ -76,38 +82,101 @@
 <div id="result-area"></div>
 
 <script>
+// ── Queries month picker ─────────────────────────────────────────────────────
+(function() {
+  var MONTHS  = ["Jan","Feb","Mar","Apr","May","Jun",
+                 "Jul","Aug","Sep","Oct","Nov","Dec"];
+  var yearMin = {{ year_range[0] }};
+  var yearMax = {{ year_range[-1] }};
+  var selYear = new Date().getFullYear();
+  var selMonth = null;
+
+  function render() {
+    document.getElementById("q-picker-year").textContent = selYear;
+    var grid = document.getElementById("q-picker-grid");
+    grid.innerHTML = "";
+    MONTHS.forEach(function(name, i) {
+      var mm = String(i + 1).padStart(2, "0");
+      var active = (selMonth === mm);
+      var btn = document.createElement("button");
+      btn.textContent = name;
+      btn.style.cssText =
+        "padding:9px 0;border-radius:8px;cursor:pointer;font-size:13px;" +
+        "border:1px solid " + (active ? "var(--accent)" : "var(--border)") + ";" +
+        "background:"       + (active ? "var(--accent)" : "var(--bg)")     + ";" +
+        "color:"            + (active ? "#fff"           : "var(--text)")  + ";" +
+        "font-weight:"      + (active ? "700"            : "400")          + ";";
+      btn.addEventListener("click", function() {
+        selMonth = mm;
+        qClose();
+        document.getElementById("q-month-picker-btn").textContent =
+          selYear + "-" + mm;
+        runQuery();
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  window.qShiftYear = function(d) {
+    var n = selYear + d;
+    if (n < yearMin || n > yearMax) return;
+    selYear = n; render();
+  };
+
+  window.qTogglePicker = function(e) {
+    e.stopPropagation();
+    var pop = document.getElementById("q-month-picker-popup");
+    if (pop.style.display === "none") {
+      render();
+      var btn  = document.getElementById("q-month-picker-btn");
+      var rect = btn.getBoundingClientRect();
+      pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
+      pop.style.left = Math.max(4, rect.left) + "px";
+      pop.style.display = "block";
+    } else { qClose(); }
+  };
+
+  function qClose() {
+    document.getElementById("q-month-picker-popup").style.display = "none";
+  }
+  window._qCloseMonthPicker = qClose;
+
+  document.addEventListener("click", function(e) {
+    var pop = document.getElementById("q-month-picker-popup");
+    if (!pop || pop.style.display === "none") return;
+    if (!pop.contains(e.target) && e.target.id !== "q-month-picker-btn") qClose();
+  });
+
+  window._qGetTime = function() {
+    var t = document.getElementById("q-time").value;
+    if (t === "custom") {
+      return (selMonth) ? selYear + "-" + selMonth : null;
+    }
+    return t || null;
+  };
+})();
+
 function onQTimeChange(val) {
-  var customInput = document.getElementById('q-custom-time');
-  if (val === 'custom') {
-    customInput.style.display = 'flex';
+  var div = document.getElementById("q-custom-time");
+  if (val === "custom") {
+    div.style.display = "flex";
   } else {
-    customInput.style.display = 'none';
+    div.style.display = "none";
+    window._qCloseMonthPicker();
     if (val) runQuery();
   }
 }
 
 function runQuery() {
   const raw  = document.getElementById("q-select").value;
-  let time = document.getElementById("q-time").value;
-  const customYear = document.getElementById("q-custom-year").value;
-  const customMonth = document.getElementById("q-custom-month").value;
-  
-  // Don't run query if custom time selected but year/month not both picked
-  if (time === 'custom' && (!customYear || !customMonth)) {
-    return;
-  }
-  
-  // Handle custom time
-  if (time === 'custom' && customYear && customMonth) {
-    time = customYear + "-" + customMonth;
-  }
-  
+  const time = window._qGetTime();
+  // if custom chosen but no month picked yet, wait
+  if (document.getElementById("q-time").value === "custom" && !time) return;
   const area = document.getElementById("result-area");
   if (!raw) return;
   const [kind, ...rest] = raw.split(":");
   const name = rest.join(":");
   area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
-
   fetch("/queries/run", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({kind, name, time})
@@ -117,16 +186,15 @@ function runQuery() {
     if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
     area.innerHTML = renderResult(d.data);
   })
-  .catch(e => {
-    area.innerHTML = errorCard(String(e));
-  });
+  .catch(e => { area.innerHTML = errorCard(String(e)); });
 }
 
 function clearOut() {
   document.getElementById("q-select").value = "";
   document.getElementById("q-time").value = "";
-  document.getElementById("q-custom-time").value = "";
-  document.getElementById("q-custom-time").style.display = 'none';
+  document.getElementById("q-custom-time").style.display = "none";
+  window._qCloseMonthPicker();
+  document.getElementById("q-month-picker-btn").textContent = "Pick a month";
   document.getElementById("result-area").innerHTML = "";
 }
 
