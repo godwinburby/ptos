@@ -751,9 +751,17 @@ class AddRecordTab(tk.Frame):
 
         required   = self.type_schema.get("required", [])
         all_fields = list(required)
-        for f in self.type_schema.get("fields", {}):
-            if f not in all_fields:
-                all_fields.append(f)
+        # skip derived fields — virtual, computed at query time, never user-entered
+        for f, fdef in self.type_schema.get("fields", {}).items():
+            if f in all_fields:
+                continue
+            global_meta = self.schema.get("fields", {}).get(f, {})
+            type_scoped = fdef if isinstance(fdef, dict) else {}
+            if (isinstance(global_meta, dict) and "derived" in global_meta) or \
+               "derived" in type_scoped:
+                continue
+            all_fields.append(f)
+        # conditional fields are real user-entered fields
         for f in self.type_schema.get("conditions", {}):
             if f not in all_fields:
                 all_fields.append(f)

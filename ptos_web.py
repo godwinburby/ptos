@@ -33,19 +33,40 @@ def _greeting():
 
 def _build_field_defs(schema, rtype, current_record=None):
     if not rtype: return []
-    type_schema = schema.get("type", {}).get(rtype, {})
-    required    = type_schema.get("required", [])
-    all_fields  = list(required)
-    for f in type_schema.get("fields", {}):
-        if f not in all_fields: all_fields.append(f)
-    for f in type_schema.get("conditions", {}):
-        if f not in all_fields: all_fields.append(f)
+    type_schema  = schema.get("type", {}).get(rtype, {})
+    required     = type_schema.get("required", [])
+    conditions   = type_schema.get("conditions", {})   # {field: {when: {k: v}}}
+
+    # collect regular fields — skip derived (virtual, computed at query time, never entered)
+    all_fields = list(required)
+    for f, fdef in type_schema.get("fields", {}).items():
+        if f in all_fields:
+            continue
+        global_meta = schema.get("fields", {}).get(f, {})
+        type_scoped = fdef if isinstance(fdef, dict) else {}
+        if (isinstance(global_meta, dict) and "derived" in global_meta) or \
+           "derived" in type_scoped:
+            continue
+        all_fields.append(f)
+
+    # conditional fields are real user-entered fields — shown/hidden by condition
+    for f in conditions:
+        if f not in all_fields:
+            all_fields.append(f)
+
     parent_fields  = {
         fd.get("parent")
         for fd in type_schema.get("fields", {}).values()
         if isinstance(fd, dict) and fd.get("parent")
     }
     tag_triggers = set(type_schema.get("tags", {}).keys())
+    # fields that are keys in any condition's "when" block — changing them
+    # may show/hide conditional fields, so they need onParentChange wired up
+    condition_triggers = {
+        k
+        for rule in conditions.values()
+        for k in rule.get("when", {}).keys()
+    }
     defs   = []
     record = current_record or {}
     for fname in all_fields:
@@ -54,10 +75,23 @@ def _build_field_defs(schema, rtype, current_record=None):
         is_int     = isinstance(field_meta, dict) and field_meta.get("type") == "int"
         unit       = field_meta.get("unit", "") if isinstance(field_meta, dict) else ""
         field_def  = type_schema.get("fields", {}).get(fname, {})
-        parent     = field_def.get("parent")
+        parent     = field_def.get("parent") if isinstance(field_def, dict) else None
         has_parent = bool(parent)
-        is_parent      = fname in parent_fields
-        is_tag_trigger = fname in tag_triggers
+        is_parent             = fname in parent_fields
+        is_tag_trigger        = fname in tag_triggers
+        is_condition_trigger  = fname in condition_triggers
+
+        # show_when: {} = always visible; {k: v} = hide until condition is met
+        cond_rule = conditions.get(fname, {})
+        show_when = cond_rule.get("when", {}) if cond_rule else {}
+        # skip conditional fields whose condition is not currently met —
+        # avoids showing fit when outcome=deferred on initial render.
+        # JS on the template side can re-request field defs when outcome changes.
+        if show_when and not all(
+            record.get(k) == v for k, v in show_when.items()
+        ):
+            continue
+
         if parent:
             parent_val = record.get(parent, "")
             options    = ptos.resolve_options_for_value(type_schema, fname, parent_val)
@@ -71,8 +105,10 @@ def _build_field_defs(schema, rtype, current_record=None):
             "unit":           unit,
             "parent":         parent or "",
             "has_parent":     has_parent,
-            "is_parent":      is_parent,
-            "is_tag_trigger": is_tag_trigger,
+            "is_parent":            is_parent,
+            "is_tag_trigger":       is_tag_trigger,
+            "is_condition_trigger": is_condition_trigger,
+            "show_when":            show_when,
         })
     return defs
 
