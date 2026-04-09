@@ -20,26 +20,13 @@
           <option value="{{ code }}" {% if code=='tm' %}selected{% endif %}>{{ label }}</option>
           {% endfor %}
         </select>
-        <div id="b-custom-time" style="display:none;flex:1;gap:4px;">
-          <select id="b-custom-year" onchange="runBrowse()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
-            <option value="">Year</option>
-            {% for y in year_range|reverse %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
-          </select>
-          <select id="b-custom-month" onchange="runBrowse()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
-            <option value="">Month</option>
-            <option value="01">Jan</option>
-            <option value="02">Feb</option>
-            <option value="03">Mar</option>
-            <option value="04">Apr</option>
-            <option value="05">May</option>
-            <option value="06">Jun</option>
-            <option value="07">Jul</option>
-            <option value="08">Aug</option>
-            <option value="09">Sep</option>
-            <option value="10">Oct</option>
-            <option value="11">Nov</option>
-            <option value="12">Dec</option>
-          </select>
+        <div id="b-custom-time" style="display:none;align-items:center;">
+          <button id="b-month-picker-btn" onclick="bTogglePicker(event)"
+                  style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);
+                         background:var(--bg);color:var(--text);font-size:14px;
+                         cursor:pointer;min-width:110px;text-align:left;">
+            Pick a month
+          </button>
         </div>
       </div>
     </div>
@@ -90,6 +77,25 @@
       <button class="btn btn-ghost"   style="flex:1" onclick="hideQueryDialog()">Cancel</button>
     </div>
   </div>
+</div>
+
+<!-- browse month picker popup -->
+<div id="b-month-picker-popup"
+     style="display:none;position:fixed;z-index:600;
+            background:var(--card);border:1px solid var(--border);
+            border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);
+            padding:16px;width:252px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <button onclick="bShiftYear(-1)"
+            style="background:none;border:none;font-size:20px;color:var(--text);
+                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&#8249;</button>
+    <span id="b-picker-year" style="font-weight:700;font-size:15px;color:var(--text);"></span>
+    <button onclick="bShiftYear(1)"
+            style="background:none;border:none;font-size:20px;color:var(--text);
+                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&#8250;</button>
+  </div>
+  <div id="b-picker-grid"
+       style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
 </div>
 
 <div id="result-area"></div>
@@ -143,7 +149,6 @@ function onTypeChange() {
 }
 
 // wire time and group selects
-document.getElementById("b-time").addEventListener("change", runBrowse);
 document.getElementById("b-group").addEventListener("change", runBrowse);
 
 // debounce for search input — wait 500ms after user stops typing
@@ -153,35 +158,97 @@ function debouncedBrowse() {
   _searchTimer = setTimeout(runBrowse, 500);
 }
 
+// ── Browse month picker ──────────────────────────────────────────────────────
+(function() {
+  var MONTHS  = ["Jan","Feb","Mar","Apr","May","Jun",
+                 "Jul","Aug","Sep","Oct","Nov","Dec"];
+  var yearMin = {{ year_range[0] }};
+  var yearMax = {{ year_range[-1] }};
+  var selYear = new Date().getFullYear();
+  var selMonth = null;
+
+  function render() {
+    document.getElementById("b-picker-year").textContent = selYear;
+    var grid = document.getElementById("b-picker-grid");
+    grid.innerHTML = "";
+    MONTHS.forEach(function(name, i) {
+      var mm = String(i + 1).padStart(2, "0");
+      var active = (selMonth === mm);
+      var btn = document.createElement("button");
+      btn.textContent = name;
+      btn.style.cssText =
+        "padding:9px 0;border-radius:8px;cursor:pointer;font-size:13px;" +
+        "border:1px solid " + (active ? "var(--accent)" : "var(--border)") + ";" +
+        "background:"       + (active ? "var(--accent)" : "var(--bg)")     + ";" +
+        "color:"            + (active ? "#fff"           : "var(--text)")  + ";" +
+        "font-weight:"      + (active ? "700"            : "400")          + ";";
+      btn.addEventListener("click", function() {
+        selMonth = mm;
+        bClose();
+        document.getElementById("b-month-picker-btn").textContent =
+          selYear + "-" + mm;
+        runBrowse();
+      });
+      grid.appendChild(btn);
+    });
+  }
+
+  window.bShiftYear = function(d) {
+    var n = selYear + d;
+    if (n < yearMin || n > yearMax) return;
+    selYear = n; render();
+  };
+
+  window.bTogglePicker = function(e) {
+    e.stopPropagation();
+    var pop = document.getElementById("b-month-picker-popup");
+    if (pop.style.display === "none") {
+      render();
+      var btn  = document.getElementById("b-month-picker-btn");
+      var rect = btn.getBoundingClientRect();
+      pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
+      pop.style.left = Math.max(4, rect.left) + "px";
+      pop.style.display = "block";
+    } else { bClose(); }
+  };
+
+  function bClose() {
+    document.getElementById("b-month-picker-popup").style.display = "none";
+  }
+  window._bCloseMonthPicker = bClose;
+  window._bGetCustomTime = function() {
+    return selMonth ? selYear + "-" + selMonth : null;
+  };
+
+  document.addEventListener("click", function(e) {
+    var pop = document.getElementById("b-month-picker-popup");
+    if (!pop || pop.style.display === "none") return;
+    if (!pop.contains(e.target) && e.target.id !== "b-month-picker-btn") bClose();
+  });
+})();
+
 function onBTimeChange(val) {
-  var customInput = document.getElementById('b-custom-time');
-  if (val === 'custom') {
-    customInput.style.display = 'flex';
+  var div = document.getElementById("b-custom-time");
+  if (val === "custom") {
+    div.style.display = "flex";
   } else {
-    customInput.style.display = 'none';
+    div.style.display = "none";
+    window._bCloseMonthPicker();
     if (val) runBrowse();
   }
 }
 
 function _params() {
   let time = document.getElementById("b-time").value;
-  const customYear = document.getElementById("b-custom-year").value;
-  const customMonth = document.getElementById("b-custom-month").value;
-  
-  // Don't use time if custom selected but year/month not both picked
-  if (time === 'custom' && (!customYear || !customMonth)) {
-    time = 'tm'; // fallback to default
+  if (time === "custom") {
+    const ct = window._bGetCustomTime();
+    time = ct || "tm";   // fallback to this-month if no month picked yet
   }
-  // Handle custom time
-  else if (time === 'custom' && customYear && customMonth) {
-    time = customYear + "-" + customMonth;
-  }
-  
-  const type  = document.getElementById("b-type").value;
-  const search= document.getElementById("b-search").value.trim();
-  const group = document.getElementById("b-group").value;
-  const expr  = document.getElementById("b-expr").value.trim();
-  const where = [];
+  const type   = document.getElementById("b-type").value;
+  const search = document.getElementById("b-search").value.trim();
+  const group  = document.getElementById("b-group").value;
+  const expr   = document.getElementById("b-expr").value.trim();
+  const where  = [];
   if (type) where.push("type=" + type);
   document.querySelectorAll("[id^='ff-']").forEach(sel => {
     if (sel.value) where.push(sel.id.replace("ff-","") + "=" + sel.value);
@@ -222,8 +289,9 @@ function clearBrowse() {
     if (el) el.value = "";
   });
   document.getElementById("b-time").value = "tm";
-  document.getElementById("b-custom-time").value = "";
   document.getElementById("b-custom-time").style.display = "none";
+  window._bCloseMonthPicker();
+  document.getElementById("b-month-picker-btn").textContent = "Pick a month";
   document.getElementById("field-filters").innerHTML = "";
   document.getElementById("field-filters").style.display = "none";
   document.getElementById("result-area").innerHTML = "";
