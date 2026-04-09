@@ -21,22 +21,22 @@
   </div>
     <div class="field-group">
     <label>Time Override</label>
-    <div style="display:flex;gap:8px;align-items:center;">
-      <select id="q-time" onchange="onQTimeChange(this.value)" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
-        <option value="">(query default)</option>
-        {% for label, code in time_options %}
-        <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-      <div id="q-custom-time" style="display:none;align-items:center;">
-        <button id="q-month-picker-btn" onclick="qTogglePicker(event)"
-                style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);
-                       background:var(--bg);color:var(--text);font-size:14px;
-                       cursor:pointer;min-width:110px;text-align:left;">
-          {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
-        </button>
-      </div>
-    </div>
+    <select id="q-time" onchange="onQTimeChange(this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
+      <option value="">(query default)</option>
+      {% for label, code in time_options %}
+      <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
+  </div>
+  <!-- month picker on its own row for mobile -->
+  <div id="q-custom-time" class="field-group" style="display:none;">
+    <label>Custom Month</label>
+    <button id="q-month-picker-btn" onclick="qTogglePicker(event)"
+            style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);
+                   background:var(--bg);color:var(--text);font-size:14px;
+                   cursor:pointer;min-width:140px;text-align:left;">
+      {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
+    </button>
   </div>
   <div style="display:flex;gap:8px;">
     <button class="btn btn-ghost btn-sm" onclick="clearOut()">✕ Clear</button>
@@ -131,7 +131,8 @@
       var btn  = document.getElementById("q-month-picker-btn");
       var rect = btn.getBoundingClientRect();
       pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
-      pop.style.left = Math.max(4, rect.left) + "px";
+      var POP_W = 260;
+      pop.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - POP_W)) + "px";
       pop.style.display = "block";
     } else { qClose(); }
   };
@@ -163,7 +164,7 @@
       var ct = params.get("custom_time");
       if (ct && ct.length >= 7) {
         document.getElementById("q-time").value = "custom";
-        document.getElementById("q-custom-time").style.display = "flex";
+        document.getElementById("q-custom-time").style.display = "block";
         selYear = parseInt(ct.substring(0, 4));
         selMonth = ct.substring(5, 7);
         document.getElementById("q-month-picker-btn").textContent = ct.substring(0, 7);

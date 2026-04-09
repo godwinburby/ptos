@@ -5,7 +5,7 @@
 
 <!-- dashboard + time selector -->
 {% if dashboards %}
-<div style="margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+<div style="margin-bottom:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
   <select id="db-select" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;min-width:120px;">
     {% for db in dashboards %}
     <option value="{{ db }}" {% if db == current_db %}selected{% endif %}>{{ db }}</option>
@@ -17,16 +17,16 @@
     <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
-  
-  <!-- month picker trigger button - always visible when custom time selected -->
-  <div id="custom-time-div" style="display:{% if current_time == 'custom' %}flex{% else %}none{% endif %};align-items:center;">
-    <button id="month-picker-btn" type="button"
-            style="padding:6px 14px;border-radius:6px;
-                   border:1px solid var(--border);background:var(--bg);
-                   color:var(--text);font-size:14px;cursor:pointer;min-width:120px;text-align:left;">
-      {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
-    </button>
-  </div>
+</div>
+
+<!-- month picker trigger button - on its own row for mobile -->
+<div id="custom-time-div" style="margin-bottom:16px;display:{% if current_time == 'custom' %}block{% else %}none{% endif %};">
+  <button id="month-picker-btn" type="button" onclick="toggleMonthPicker(event)"
+          style="padding:6px 14px;border-radius:6px;
+                 border:1px solid var(--border);background:var(--bg);
+                 color:var(--text);font-size:14px;cursor:pointer;min-width:140px;">
+    {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
+  </button>
 </div>
 
 <!-- month picker popup — positioned by JS -->
@@ -58,8 +58,8 @@
                   "Jul","Aug","Sep","Oct","Nov","Dec"];
   var yearMin  = {{ year_range[0] }};
   var yearMax  = {{ year_range[-1] }};
-  var selYear  = {{ "parseInt('" + custom_time[:4] + "')" if custom_time and custom_time|length >= 7 else "new Date().getFullYear()" }};
-  var selMonth = {{ "'" + custom_time[5:7] + "'" if custom_time and custom_time|length >= 7 else "null" }};
+  var selYear  = new Date().getFullYear();
+  var selMonth = null;
 
   function render() {
     document.getElementById("picker-year").textContent = selYear;
@@ -102,7 +102,8 @@
       var btn  = document.getElementById("month-picker-btn");
       var rect = btn.getBoundingClientRect();
       pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
-      pop.style.left = Math.max(4, rect.left) + "px";
+      var POP_W = 260;
+      pop.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - POP_W)) + "px";
       pop.style.display = "block";
     } else {
       close();
@@ -124,7 +125,7 @@
   window.onTimeChange = function(val) {
     var div = document.getElementById("custom-time-div");
     if (val === "custom") {
-      div.style.display = "flex";
+      div.style.display = "block";
     } else {
       div.style.display = "none";
       close();
@@ -148,29 +149,20 @@
   };
 
   // restore on page load
-  if (document.getElementById("time-select").value === "custom") {
-    document.getElementById("custom-time-div").style.display = "flex";
-    // Set button text to show selected month
+  (function() {
     var urlParams = new URLSearchParams(window.location.search);
-    var ct = urlParams.get("custom_time");
-    if (ct) document.getElementById("month-picker-btn").textContent = ct;
-  }
-  
-  // Wire up the month picker button click
-  document.getElementById("month-picker-btn").addEventListener("click", function(e) {
-    e.stopPropagation();
-    var pop = document.getElementById("month-picker-popup");
-    if (pop.style.display === "none") {
-      render();
-      var btn  = document.getElementById("month-picker-btn");
-      var rect = btn.getBoundingClientRect();
-      pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
-      pop.style.left = Math.max(4, rect.left) + "px";
-      pop.style.display = "block";
-    } else {
-      close();
+    var time = urlParams.get("time");
+    if (time === "custom") {
+      document.getElementById("custom-time-div").style.display = "block";
+      var ct = urlParams.get("custom_time");
+      if (ct && ct.length >= 7) {
+        selYear = parseInt(ct.substring(0, 4));
+        selMonth = ct.substring(5, 7);
+        document.getElementById("month-picker-btn").textContent = ct.substring(0, 7);
+      }
     }
-  });
+  })();
+  
 })();
 </script>
 {% endif %}
