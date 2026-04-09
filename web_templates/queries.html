@@ -19,14 +19,37 @@
       </optgroup>{% endif %}
     </select>
   </div>
-  <div class="field-group">
+    <div class="field-group">
     <label>Time Override</label>
-    <select id="q-time" onchange="runQuery()">
-      <option value="">(query default)</option>
-      {% for label, code in time_options %}
-      <option value="{{ code }}">{{ label }}</option>
-      {% endfor %}
-    </select>
+    <div style="display:flex;gap:8px;align-items:center;">
+      <select id="q-time" onchange="onQTimeChange(this.value)" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
+        <option value="">(query default)</option>
+        {% for label, code in time_options %}
+        <option value="{{ code }}">{{ label }}</option>
+        {% endfor %}
+      </select>
+      <div id="q-custom-time" style="display:none;flex:1;gap:4px;">
+        <select id="q-custom-year" onchange="runQuery()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
+          <option value="">Year</option>
+          {% for y in year_range|reverse %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+        </select>
+        <select id="q-custom-month" onchange="runQuery()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
+          <option value="">Month</option>
+          <option value="01">Jan</option>
+          <option value="02">Feb</option>
+          <option value="03">Mar</option>
+          <option value="04">Apr</option>
+          <option value="05">May</option>
+          <option value="06">Jun</option>
+          <option value="07">Jul</option>
+          <option value="08">Aug</option>
+          <option value="09">Sep</option>
+          <option value="10">Oct</option>
+          <option value="11">Nov</option>
+          <option value="12">Dec</option>
+        </select>
+      </div>
+    </div>
   </div>
   <div style="display:flex;gap:8px;">
     <button class="btn btn-ghost btn-sm" onclick="clearOut()">✕ Clear</button>
@@ -53,9 +76,32 @@
 <div id="result-area"></div>
 
 <script>
+function onQTimeChange(val) {
+  var customInput = document.getElementById('q-custom-time');
+  if (val === 'custom') {
+    customInput.style.display = 'flex';
+  } else {
+    customInput.style.display = 'none';
+    if (val) runQuery();
+  }
+}
+
 function runQuery() {
   const raw  = document.getElementById("q-select").value;
-  const time = document.getElementById("q-time").value;
+  let time = document.getElementById("q-time").value;
+  const customYear = document.getElementById("q-custom-year").value;
+  const customMonth = document.getElementById("q-custom-month").value;
+  
+  // Don't run query if custom time selected but year/month not both picked
+  if (time === 'custom' && (!customYear || !customMonth)) {
+    return;
+  }
+  
+  // Handle custom time
+  if (time === 'custom' && customYear && customMonth) {
+    time = customYear + "-" + customMonth;
+  }
+  
   const area = document.getElementById("result-area");
   if (!raw) return;
   const [kind, ...rest] = raw.split(":");
@@ -79,6 +125,8 @@ function runQuery() {
 function clearOut() {
   document.getElementById("q-select").value = "";
   document.getElementById("q-time").value = "";
+  document.getElementById("q-custom-time").value = "";
+  document.getElementById("q-custom-time").style.display = 'none';
   document.getElementById("result-area").innerHTML = "";
 }
 

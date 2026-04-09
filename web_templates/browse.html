@@ -14,11 +14,34 @@
   <div class="field-row-2">
     <div class="field-group">
       <label>Time</label>
-      <select id="b-time">
-        {% for label, code in time_options %}
-        <option value="{{ code }}" {% if code=='tm' %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <select id="b-time" onchange="onBTimeChange(this.value)" style="flex:1;">
+          {% for label, code in time_options %}
+          <option value="{{ code }}" {% if code=='tm' %}selected{% endif %}>{{ label }}</option>
+          {% endfor %}
+        </select>
+        <div id="b-custom-time" style="display:none;flex:1;gap:4px;">
+          <select id="b-custom-year" onchange="runBrowse()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
+            <option value="">Year</option>
+            {% for y in year_range|reverse %}<option value="{{ y }}">{{ y }}</option>{% endfor %}
+          </select>
+          <select id="b-custom-month" onchange="runBrowse()" style="flex:1;padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
+            <option value="">Month</option>
+            <option value="01">Jan</option>
+            <option value="02">Feb</option>
+            <option value="03">Mar</option>
+            <option value="04">Apr</option>
+            <option value="05">May</option>
+            <option value="06">Jun</option>
+            <option value="07">Jul</option>
+            <option value="08">Aug</option>
+            <option value="09">Sep</option>
+            <option value="10">Oct</option>
+            <option value="11">Nov</option>
+            <option value="12">Dec</option>
+          </select>
+        </div>
+      </div>
     </div>
     <div class="field-group">
       <label>Group by</label>
@@ -130,9 +153,31 @@ function debouncedBrowse() {
   _searchTimer = setTimeout(runBrowse, 500);
 }
 
+function onBTimeChange(val) {
+  var customInput = document.getElementById('b-custom-time');
+  if (val === 'custom') {
+    customInput.style.display = 'flex';
+  } else {
+    customInput.style.display = 'none';
+    if (val) runBrowse();
+  }
+}
+
 function _params() {
+  let time = document.getElementById("b-time").value;
+  const customYear = document.getElementById("b-custom-year").value;
+  const customMonth = document.getElementById("b-custom-month").value;
+  
+  // Don't use time if custom selected but year/month not both picked
+  if (time === 'custom' && (!customYear || !customMonth)) {
+    time = 'tm'; // fallback to default
+  }
+  // Handle custom time
+  else if (time === 'custom' && customYear && customMonth) {
+    time = customYear + "-" + customMonth;
+  }
+  
   const type  = document.getElementById("b-type").value;
-  const time  = document.getElementById("b-time").value;
   const search= document.getElementById("b-search").value.trim();
   const group = document.getElementById("b-group").value;
   const expr  = document.getElementById("b-expr").value.trim();
@@ -177,6 +222,8 @@ function clearBrowse() {
     if (el) el.value = "";
   });
   document.getElementById("b-time").value = "tm";
+  document.getElementById("b-custom-time").value = "";
+  document.getElementById("b-custom-time").style.display = "none";
   document.getElementById("field-filters").innerHTML = "";
   document.getElementById("field-filters").style.display = "none";
   document.getElementById("result-area").innerHTML = "";
