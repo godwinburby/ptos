@@ -50,7 +50,7 @@
       </label>
       {% if f.options %}
       <select name="{{ f.name }}" id="field-{{ f.name }}"
-              {% if f.is_parent or f.is_tag_trigger %}onchange="onParentChange('{{ f.name }}')"{% endif %}
+              {% if f.is_parent or f.is_tag_trigger or f.is_condition_trigger %}onchange="onParentChange('{{ f.name }}')"{% endif %}
               {% if f.parent %}data-parent="{{ f.parent }}"{% endif %}>
         <option value="">— select {{ f.name }} —</option>
         {% for opt in f.options %}
