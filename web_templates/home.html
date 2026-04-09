@@ -18,13 +18,13 @@
     {% endfor %}
   </select>
   
-  <!-- month picker trigger button -->
-  <div id="custom-time-div" style="display:none;align-items:center;">
-    <button id="month-picker-btn" onclick="toggleMonthPicker(event)"
+  <!-- month picker trigger button - always visible when custom time selected -->
+  <div id="custom-time-div" style="display:{% if current_time == 'custom' %}flex{% else %}none{% endif %};align-items:center;">
+    <button id="month-picker-btn" type="button"
             style="padding:6px 14px;border-radius:6px;
                    border:1px solid var(--border);background:var(--bg);
                    color:var(--text);font-size:14px;cursor:pointer;min-width:120px;text-align:left;">
-      {{ custom_time if custom_time else 'Pick a month' }}
+      {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
     </button>
   </div>
 </div>
@@ -39,13 +39,13 @@
     <button onclick="shiftYear(-1)"
             style="background:none;border:none;font-size:20px;
                    color:var(--text);cursor:pointer;padding:2px 10px;
-                   border-radius:6px;line-height:1;">&#8249;</button>
+                   border-radius:6px;line-height:1;">&lt;</button>
     <span id="picker-year"
           style="font-weight:700;font-size:15px;color:var(--text);"></span>
     <button onclick="shiftYear(1)"
             style="background:none;border:none;font-size:20px;
                    color:var(--text);cursor:pointer;padding:2px 10px;
-                   border-radius:6px;line-height:1;">&#8250;</button>
+                   border-radius:6px;line-height:1;">&gt;</button>
   </div>
   <div id="picker-grid"
        style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
@@ -148,8 +148,29 @@
   };
 
   // restore on page load
-  if (document.getElementById("time-select").value === "custom")
+  if (document.getElementById("time-select").value === "custom") {
     document.getElementById("custom-time-div").style.display = "flex";
+    // Set button text to show selected month
+    var urlParams = new URLSearchParams(window.location.search);
+    var ct = urlParams.get("custom_time");
+    if (ct) document.getElementById("month-picker-btn").textContent = ct;
+  }
+  
+  // Wire up the month picker button click
+  document.getElementById("month-picker-btn").addEventListener("click", function(e) {
+    e.stopPropagation();
+    var pop = document.getElementById("month-picker-popup");
+    if (pop.style.display === "none") {
+      render();
+      var btn  = document.getElementById("month-picker-btn");
+      var rect = btn.getBoundingClientRect();
+      pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
+      pop.style.left = Math.max(4, rect.left) + "px";
+      pop.style.display = "block";
+    } else {
+      close();
+    }
+  });
 })();
 </script>
 {% endif %}
