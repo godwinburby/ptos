@@ -32,10 +32,12 @@
   <div id="q-custom-time" class="field-group" style="display:none;">
     <label>Custom Month</label>
     <button id="q-month-picker-btn" onclick="qTogglePicker(event)"
-            style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);
-                   background:var(--bg);color:var(--text);font-size:14px;
-                   cursor:pointer;min-width:140px;text-align:left;">
-      {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
+            style="display:flex;align-items:center;justify-content:space-between;
+                   padding:9px 12px;border-radius:6px;border:1px solid var(--border);
+                   background:var(--bg);color:var(--text);font-size:14px;font-weight:500;
+                   cursor:pointer;min-width:140px;">
+      <span id="q-month-text">{% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}</span>
+      <span style="font-size:10px;color:var(--sub);">▼</span>
     </button>
   </div>
   <div style="display:flex;gap:8px;">
@@ -109,7 +111,7 @@
       btn.addEventListener("click", function() {
         selMonth = mm;
         qClose();
-        document.getElementById("q-month-picker-btn").textContent =
+        document.getElementById("q-month-text").textContent =
           selYear + "-" + mm;
         runQuery();
       });
@@ -167,7 +169,7 @@
         document.getElementById("q-custom-time").style.display = "block";
         selYear = parseInt(ct.substring(0, 4));
         selMonth = ct.substring(5, 7);
-        document.getElementById("q-month-picker-btn").textContent = ct.substring(0, 7);
+        document.getElementById("q-month-text").textContent = ct.substring(0, 7);
       }
     }
   })();
@@ -211,7 +213,7 @@ function clearOut() {
   document.getElementById("q-time").value = "";
   document.getElementById("q-custom-time").style.display = "none";
   window._qCloseMonthPicker();
-  document.getElementById("q-month-picker-btn").textContent = "Pick a month";
+  document.getElementById("q-month-text").textContent = "Pick a month";
   document.getElementById("result-area").innerHTML = "";
 }
 

@@ -11,29 +11,28 @@
       {% for t in types %}<option value="{{ t }}">{{ t }}</option>{% endfor %}
     </select>
   </div>
-  <div class="field-row-2">
-    <div class="field-group">
-      <label>Time</label>
-      <select id="b-time" onchange="onBTimeChange(this.value)">
-        {% for label, code in time_options %}
-        <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    <div class="field-group">
-      <label>Group by</label>
-      <select id="b-group"><option value="">(none)</option></select>
-    </div>
+  <div class="field-group">
+    <label>Time</label>
+    <select id="b-time" onchange="onBTimeChange(this.value)">
+      {% for label, code in time_options %}
+      <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
+      {% endfor %}
+    </select>
   </div>
-  <!-- month picker on its own row for mobile -->
   <div id="b-custom-time" class="field-group" style="display:none;">
     <label>Custom Month</label>
     <button id="b-month-picker-btn" onclick="bTogglePicker(event)"
-            style="padding:6px 14px;border-radius:6px;border:1px solid var(--border);
-                   background:var(--bg);color:var(--text);font-size:14px;
-                   cursor:pointer;min-width:140px;text-align:left;">
-      {% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}
+            style="display:flex;align-items:center;justify-content:space-between;
+                   padding:9px 12px;border-radius:6px;border:1px solid var(--border);
+                   background:var(--bg);color:var(--text);font-size:14px;font-weight:500;
+                   cursor:pointer;min-width:140px;">
+      <span id="b-month-text">{% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}</span>
+      <span style="font-size:10px;color:var(--sub);">▼</span>
     </button>
+  </div>
+  <div class="field-group">
+    <label>Group by</label>
+    <select id="b-group"><option value="">(none)</option></select>
   </div>
   <div class="field-group">
     <label>Search</label>
@@ -185,7 +184,7 @@ function debouncedBrowse() {
       btn.addEventListener("click", function() {
         selMonth = mm;
         bClose();
-        document.getElementById("b-month-picker-btn").textContent =
+        document.getElementById("b-month-text").textContent =
           selYear + "-" + mm;
         runBrowse();
       });
@@ -232,7 +231,7 @@ function debouncedBrowse() {
         document.getElementById("b-custom-time").style.display = "block";
         selYear = parseInt(ct.substring(0, 4));
         selMonth = ct.substring(5, 7);
-        document.getElementById("b-month-picker-btn").textContent = ct.substring(0, 7);
+        document.getElementById("b-month-text").textContent = ct.substring(0, 7);
       }
     }
   })();
@@ -302,7 +301,7 @@ function clearBrowse() {
   document.getElementById("b-time").value = "tm";
   document.getElementById("b-custom-time").style.display = "none";
   window._bCloseMonthPicker();
-  document.getElementById("b-month-picker-btn").textContent = "Pick a month";
+  document.getElementById("b-month-text").textContent = "Pick a month";
   document.getElementById("field-filters").innerHTML = "";
   document.getElementById("field-filters").style.display = "none";
   document.getElementById("result-area").innerHTML = "";
