@@ -426,7 +426,9 @@ def queries_get():
         queries=named,
         metrics=list(all_q.get("metrics",{}).keys()),
         dashboards=list(all_q.get("dashboards",{}).keys()),
-        time_options=TIME_OPTIONS, year_range=_YEAR_RANGE)
+        time_options=TIME_OPTIONS, year_range=_YEAR_RANGE,
+        current_time=request.args.get("time", ""),
+        custom_time=request.args.get("custom_time", ""))
 
 @app.route("/queries/run", methods=["POST"])
 def queries_run():
@@ -470,7 +472,9 @@ def browse_get():
                        if f.endswith(".log")) if os.path.exists(ptos.RECORDS_DIR) else []
     return render_template("browse.html",
         tab="browse", title="Browse", now=_now_str(),
-        types=types, log_files=log_files, time_options=TIME_OPTIONS, year_range=_YEAR_RANGE)
+        types=types, log_files=log_files, time_options=TIME_OPTIONS, year_range=_YEAR_RANGE,
+        current_time=request.args.get("time", "tm"),
+        custom_time=request.args.get("custom_time", ""))
 
 @app.route("/browse/run", methods=["POST"])
 def browse_run():
