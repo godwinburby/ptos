@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-title">Lint</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;">
+    <div style="font-size:14px;color:var(--sub);">Validate all records against schema</div>
+    <button class="btn btn-primary btn-sm" onclick="runLint()" id="lint-btn">
+      Run Lint
+    </button>
+  </div>
+</div>
+
+<div id="lint-result"></div>
+
+<script>
+function runLint() {
+  const btn  = document.getElementById("lint-btn");
+  const area = document.getElementById("lint-result");
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Scanning records…</div>';
+
+  fetch("/lint/run", { method:"POST", headers:{"Content-Type":"application/json"} })
+  .then(r => r.json())
+  .then(d => {
+    btn.disabled = false;
+    btn.textContent = "Run Lint";
+    if (!d.ok) {
+      area.innerHTML = `<div class="card"><div class="msg msg-error">${d.error}</div></div>`;
+      return;
+    }
+    area.innerHTML = renderLint(d.data);
+  })
+  .catch(e => {
+    btn.disabled = false;
+    btn.textContent = "Run Lint";
+    area.innerHTML = `<div class="card"><div class="msg msg-error">${e}</div></div>`;
+  });
+}
+
+function renderLint(d) {
+  // ── summary bar ──────────────────────────────────────────────────────────
+  const statusColor  = d.clean ? "var(--success)" : d.error_count ? "var(--error)" : "var(--warn)";
+  const statusText   = d.clean
+    ? "✔ All clean"
+    : d.error_count
+      ? `✖ ${d.error_count} error${d.error_count>1?"s":""}${d.warning_count ? ", " + d.warning_count + " warning" + (d.warning_count>1?"s":"") : ""}`
+      : `⚠ ${d.warning_count} warning${d.warning_count>1?"s":""}`;
+
+  // type counts table
+  const typeRows = Object.entries(d.type_counts||{})
+    .sort((a,b) => b[1]-a[1])
+    .map(([t,n]) =>
+      `<tr><td>${t}</td><td style="text-align:right;font-weight:700;">${n}</td></tr>`)
+    .join("");
+
+  let html = `
+  <div class="card">
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px;">
+      <div style="font-size:18px;font-weight:800;color:${statusColor};">${statusText}</div>
+      <div style="font-size:13px;color:var(--sub);">${d.checked} records checked</div>
+    </div>
+    <div style="overflow-x:auto;">
+      <table class="data-table">
+        <thead><tr><th>Type</th><th style="text-align:right">Count</th></tr></thead>
+        <tbody>${typeRows}</tbody>
+      </table>
+    </div>
+  </div>`;
+
+  // ── errors ────────────────────────────────────────────────────────────────
+  if (d.errors && d.errors.length) {
+    const rows = d.errors.map(e => `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border);">
+        <div style="font-family:monospace;font-size:12px;color:var(--sub);
+                    word-break:break-all;margin-bottom:4px;">${escHtml(e.line)}</div>
+        ${e.problems.map(p =>
+          `<div style="font-size:13px;color:var(--error);font-weight:600;">✖ ${escHtml(p)}</div>`
+        ).join("")}
+      </div>`).join("");
+    html += `
+    <div class="card" style="border-color:var(--error);">
+      <div class="card-title" style="color:var(--error);">
+        Errors (${d.errors.length})
+      </div>
+      ${rows}
+    </div>`;
+  }
+
+  // ── warnings ──────────────────────────────────────────────────────────────
+  if (d.warnings && d.warnings.length) {
+    // collapsed by default — can be large
+    const rows = d.warnings.map(w => `
+      <div style="padding:8px 0;border-bottom:1px solid var(--border);">
+        <div style="font-family:monospace;font-size:12px;color:var(--sub);
+                    word-break:break-all;margin-bottom:4px;">${escHtml(w.line)}</div>
+        ${w.problems.map(p =>
+          `<div style="font-size:13px;color:var(--warn);font-weight:600;">⚠ ${escHtml(p)}</div>`
+        ).join("")}
+      </div>`).join("");
+    html += `
+    <div class="card" style="border-color:var(--warn);">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"
+           onclick="this.nextElementSibling.style.display=
+                    this.nextElementSibling.style.display==='none'?'block':'none';
+                    this.querySelector('.warn-toggle').textContent=
+                    this.nextElementSibling.style.display==='none'?'show':'hide';">
+        <div class="card-title" style="color:var(--warn);margin:0;">
+          Warnings (${d.warnings.length})
+        </div>
+        <span class="warn-toggle"
+              style="font-size:12px;color:var(--warn);font-weight:600;">show</span>
+      </div>
+      <div style="display:none;">${rows}</div>
+    </div>`;
+  }
+
+  return html;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// auto-run on load
+runLint();
+</script>
+{% endblock %}

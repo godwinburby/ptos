@@ -1,68 +1,235 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-  <div class="page-title" style="margin:0;">Journal</div>
-  <div style="display:flex;gap:6px;align-items:center;">
-    <a href="/journal?date={{ prev_date }}" class="btn btn-ghost btn-sm">◀</a>
-    <input type="date" id="date-jump" value="{{ date }}" max="{{ today }}"
-           onchange="if(this.value) window.location='/journal?date='+this.value"
-           style="width:auto;padding:7px 10px;font-size:13px;">
-    {% if next_date <= today %}
-    <a href="/journal?date={{ next_date }}" class="btn btn-ghost btn-sm">▶</a>
+<!-- date nav -->
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+  <a href="/journal?date={{ prev_date }}"
+     style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);
+            background:var(--card);color:var(--text);text-decoration:none;font-size:18px;
+            line-height:1;">‹</a>
+
+  <div style="text-align:center;">
+    <div style="font-size:16px;font-weight:800;color:var(--text);">{{ date }}</div>
+    {% if date == today %}
+    <div style="font-size:11px;color:var(--accent);font-weight:600;">TODAY</div>
     {% endif %}
-    <a href="/journal" class="btn btn-ghost btn-sm">Today</a>
   </div>
+
+  {% if date < today %}
+  <a href="/journal?date={{ next_date }}"
+     style="padding:8px 14px;border-radius:8px;border:1px solid var(--border);
+            background:var(--card);color:var(--text);text-decoration:none;font-size:18px;
+            line-height:1;">›</a>
+  {% else %}
+  <span style="padding:8px 14px;border-radius:8px;border:1px solid transparent;
+               color:var(--border);font-size:18px;line-height:1;">›</span>
+  {% endif %}
 </div>
 
 {% if msg %}
-<div class="msg msg-{{ msg_type }}">{{ msg }}</div>
+<div class="msg msg-{{ 'success' if msg == 'saved' else 'error' }}">
+  {{ '✔ Saved' if msg == 'saved' else msg }}
+</div>
 {% endif %}
 
-<div class="card" style="padding:0;">
-  <textarea id="journal-editor" name="content"
-            style="width:100%;min-height:520px;resize:vertical;
-                   font-family:'Consolas',monospace;font-size:14px;
-                   line-height:1.7;padding:18px;border:none;
-                   border-radius:12px;background:#fff;outline:none;"
-            spellcheck="false">{{ content }}</textarea>
+<!-- mode toggle -->
+<div style="display:flex;gap:8px;margin-bottom:12px;">
+  <button id="btn-edit"    onclick="setMode('edit')"
+          class="btn btn-sm btn-primary">✎ Edit</button>
+  <button id="btn-preview" onclick="setMode('preview')"
+          class="btn btn-sm btn-ghost">👁 Preview</button>
+  <button id="btn-split"   onclick="setMode('split')"
+          class="btn btn-sm btn-ghost"
+          style="display:none;">⬛ Split</button>
+  <button id="save-btn" onclick="saveJournal()"
+          class="btn btn-sm btn-success" style="margin-left:auto;">
+    Save
+  </button>
 </div>
 
-<div style="display:flex;gap:10px;align-items:center;">
-  <button class="btn btn-primary" onclick="saveJournal()" id="save-btn">
-    Save <span style="font-size:11px;opacity:.7;">Ctrl+S</span>
-  </button>
-  <span id="save-status" style="font-size:13px;font-weight:600;"></span>
+<!-- editor + preview pane -->
+<div id="journal-wrap" style="display:flex;gap:12px;">
+
+  <div id="editor-pane" style="flex:1;min-width:0;">
+    <textarea id="journal-editor"
+              style="width:100%;min-height:60vh;padding:14px;
+                     font-family:'Consolas','Courier New',monospace;font-size:14px;
+                     line-height:1.7;background:var(--card);color:var(--text);
+                     border:1.5px solid var(--border);border-radius:10px;
+                     resize:vertical;outline:none;tab-size:2;"
+              placeholder="Start writing…"
+              oninput="onEditorInput()"
+    >{{ content }}</textarea>
+  </div>
+
+  <div id="preview-pane"
+       style="display:none;flex:1;min-width:0;padding:16px;
+              background:var(--card);border:1px solid var(--border);
+              border-radius:10px;min-height:60vh;overflow-y:auto;">
+  </div>
+
 </div>
+
+<div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+  <button onclick="saveJournal()" class="btn btn-success btn-full" id="save-btn-2">
+    Save Journal
+  </button>
+</div>
+
+<!-- marked.js from CDN -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+
+<style>
+  /* markdown preview styles */
+  #preview-pane h1,#preview-pane h2,#preview-pane h3 {
+    font-weight:800;margin:16px 0 8px;color:var(--text);line-height:1.3;
+  }
+  #preview-pane h1 { font-size:20px;border-bottom:2px solid var(--border);padding-bottom:6px; }
+  #preview-pane h2 { font-size:17px; }
+  #preview-pane h3 { font-size:15px;color:var(--accent); }
+  #preview-pane p  { margin:8px 0;line-height:1.7;color:var(--text); }
+  #preview-pane ul,#preview-pane ol { margin:8px 0 8px 20px;line-height:1.7; }
+  #preview-pane li { margin:3px 0; }
+  #preview-pane li input[type=checkbox] { margin-right:6px;accent-color:var(--accent); }
+  #preview-pane code {
+    font-family:'Consolas','Courier New',monospace;font-size:13px;
+    background:var(--bg);padding:2px 6px;border-radius:4px;color:var(--accent);
+  }
+  #preview-pane pre {
+    background:var(--bg);padding:12px;border-radius:8px;overflow-x:auto;margin:10px 0;
+  }
+  #preview-pane pre code { background:none;padding:0;color:var(--text); }
+  #preview-pane blockquote {
+    border-left:3px solid var(--accent);padding:6px 14px;
+    margin:10px 0;color:var(--sub);font-style:italic;background:var(--accent-lt);
+    border-radius:0 6px 6px 0;
+  }
+  #preview-pane hr { border:none;border-top:2px solid var(--border);margin:16px 0; }
+  #preview-pane strong { font-weight:700;color:var(--text); }
+  #preview-pane em { font-style:italic;color:var(--sub); }
+  #preview-pane a { color:var(--accent);text-decoration:none; }
+  #preview-pane table { width:100%;border-collapse:collapse;font-size:13px;margin:10px 0; }
+  #preview-pane th,#preview-pane td {
+    padding:7px 10px;border:1px solid var(--border);text-align:left;
+  }
+  #preview-pane th { background:var(--bg);font-weight:700; }
+
+  /* split mode on desktop */
+  @media (min-width:768px) {
+    #btn-split { display:inline-flex !important; }
+  }
+</style>
 
 <script>
-document.addEventListener("keydown", e => {
-  if (e.ctrlKey && e.key === "s") { e.preventDefault(); saveJournal(); }
-});
+// configure marked for GFM + checkbox lists
+if (typeof marked !== "undefined") {
+  marked.setOptions({
+    gfm: true,
+    breaks: true,
+  });
+  // custom renderer for task list items
+  const renderer = new marked.Renderer();
+  const origListItem = renderer.listitem.bind(renderer);
+  renderer.listitem = function(text, task, checked) {
+    if (task) {
+      return `<li style="list-style:none;margin-left:-20px;">
+        <input type="checkbox" ${checked ? "checked" : ""} disabled> ${text}</li>`;
+    }
+    return origListItem(text, task, checked);
+  };
+  marked.use({ renderer });
+}
 
-function saveJournal() {
-  const content = document.getElementById("journal-editor").value;
-  const btn     = document.getElementById("save-btn");
-  const status  = document.getElementById("save-status");
-  btn.disabled  = true; btn.textContent = "Saving…";
+var _mode = "edit";
+var _saveTimer = null;
+
+function renderPreview() {
+  var src  = document.getElementById("journal-editor").value;
+  var pane = document.getElementById("preview-pane");
+  if (typeof marked !== "undefined") {
+    pane.innerHTML = marked.parse(src);
+  } else {
+    // fallback: plain text with line breaks
+    pane.innerHTML = "<pre style='white-space:pre-wrap;font-size:14px;'>" +
+      src.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>";
+  }
+}
+
+function setMode(mode) {
+  _mode = mode;
+  var editor  = document.getElementById("editor-pane");
+  var preview = document.getElementById("preview-pane");
+
+  document.getElementById("btn-edit").className    = "btn btn-sm " + (mode==="edit"    ? "btn-primary" : "btn-ghost");
+  document.getElementById("btn-preview").className = "btn btn-sm " + (mode==="preview" ? "btn-primary" : "btn-ghost");
+  document.getElementById("btn-split").className   = "btn btn-sm " + (mode==="split"   ? "btn-primary" : "btn-ghost");
+
+  if (mode === "edit") {
+    editor.style.display  = "block"; editor.style.flex = "1";
+    preview.style.display = "none";
+  } else if (mode === "preview") {
+    renderPreview();
+    editor.style.display  = "none";
+    preview.style.display = "block"; preview.style.flex = "1";
+  } else {
+    // split — side by side on desktop
+    renderPreview();
+    editor.style.display  = "block"; editor.style.flex = "1";
+    preview.style.display = "block"; preview.style.flex = "1";
+  }
+}
+
+function onEditorInput() {
+  if (_mode === "preview" || _mode === "split") renderPreview();
+  // auto-save after 2s of inactivity
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(function() { saveJournal(true); }, 2000);
+}
+
+function saveJournal(silent) {
+  clearTimeout(_saveTimer);
+  var content = document.getElementById("journal-editor").value;
+  var btns = [document.getElementById("save-btn"), document.getElementById("save-btn-2")];
+  if (!silent) btns.forEach(function(b) { if(b) { b.disabled=true; b.textContent="Saving…"; } });
 
   fetch("/journal/save", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({date: "{{ date }}", content})
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({date:"{{ date }}", content: content})
   })
-  .then(r => r.json())
-  .then(d => {
-    status.textContent = d.ok ? "✔ Saved" : "✖ " + d.error;
-    status.style.color = d.ok ? "var(--success)" : "var(--error)";
-    btn.disabled = false; btn.textContent = "Save";
-    setTimeout(() => status.textContent = "", 2500);
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (!silent) {
+      btns.forEach(function(b) {
+        if (!b) return;
+        b.disabled = false;
+        if (d.ok) {
+          b.textContent = "✔ Saved";
+          setTimeout(function() {
+            b.textContent = b.id === "save-btn" ? "Save" : "Save Journal";
+          }, 2000);
+        } else {
+          b.textContent = "Error";
+          setTimeout(function() {
+            b.textContent = b.id === "save-btn" ? "Save" : "Save Journal";
+          }, 3000);
+        }
+      });
+    }
   })
-  .catch(() => {
-    status.textContent = "✖ Failed";
-    status.style.color = "var(--error)";
-    btn.disabled = false; btn.textContent = "Save";
+  .catch(function() {
+    if (!silent) btns.forEach(function(b) {
+      if (b) { b.disabled=false; b.textContent="Save Journal"; }
+    });
   });
 }
+
+// Ctrl+S / Cmd+S to save
+document.addEventListener("keydown", function(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+    e.preventDefault();
+    saveJournal(false);
+  }
+});
 </script>
+
 {% endblock %}
