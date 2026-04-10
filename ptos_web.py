@@ -194,10 +194,15 @@ def home():
         cycles = cfg.get("cycles", {})
         if db_name and db_name in dashboards:
             db = svc.get_dashboard(db_name, time_code)
-            # Show all dashboard items in home (no limit, template handles display)
+            raw_time_arg = request.args.get("time", "tm")
+            custom_time_arg = request.args.get("custom_time", "")
+            if raw_time_arg == "custom" and custom_time_arg:
+                time_label = custom_time_arg[:7]
+            else:
+                time_label = dict(TIME_OPTIONS).get(raw_time_arg, raw_time_arg)
             for item in db["items"]:
                 stats.append({"label": item["name"].replace("_"," "),
-                               "value": item["value"], "sub": "this month"})
+                               "value": item["value"], "sub": time_label.lower()})
     except Exception:
         pass
     except Exception:
