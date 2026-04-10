@@ -1,62 +1,221 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-  <div class="page-title" style="margin:0;">Log Editor</div>
-  <select id="file-select" onchange="window.location='/editor?file='+this.value"
-          style="width:auto;padding:7px 10px;font-size:13px;">
-    {% for f in log_files %}
-    <option value="{{ f }}" {% if f==current_file %}selected{% endif %}>{{ f }}</option>
-    {% endfor %}
-  </select>
+<div class="page-title">Log Editor</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <select id="file-select" onchange="loadFile()"
+            style="flex:1;min-width:120px;padding:8px 12px;border-radius:8px;
+                   border:1px solid var(--border);background:var(--bg);
+                   color:var(--text);font-size:15px;">
+      {% for f in log_files %}
+      <option value="{{ f }}" {% if f == current_file %}selected{% endif %}>{{ f }}</option>
+      {% endfor %}
+    </select>
+    <button onclick="saveFile()" id="save-btn"
+            class="btn btn-success btn-sm">Save</button>
+    <button onclick="toggleHighlight()" id="hl-btn"
+            class="btn btn-ghost btn-sm" title="Toggle colour coding">🎨</button>
+  </div>
+  {% if msg %}
+  <div class="msg msg-{{ 'success' if msg == 'ok' else 'error' }}"
+       style="margin-top:10px;">
+    {{ '✔ Saved' if msg == 'ok' else msg }}
+  </div>
+  {% endif %}
 </div>
 
-{% if msg %}<div class="msg msg-{{ msg_type }}">{{ msg }}</div>{% endif %}
+<!-- editor / highlighted view toggle -->
+<div id="editor-card" class="card" style="padding:0;overflow:hidden;">
 
-<div class="card" style="padding:0;">
-  <textarea id="log-editor" spellcheck="false"
-            style="width:100%;min-height:520px;resize:vertical;
-                   font-family:'Consolas',monospace;font-size:13px;
-                   line-height:1.65;padding:16px;border:none;
-                   border-radius:12px;background:#fff;outline:none;">{{ content }}</textarea>
+  <!-- raw textarea (edit mode) -->
+  <textarea id="log-editor"
+            style="width:100%;min-height:70vh;padding:14px 16px;
+                   font-family:'Consolas','Courier New',monospace;
+                   font-size:14px;line-height:1.7;
+                   background:#1E2130;color:#D4D8E8;
+                   border:none;border-radius:10px;
+                   resize:vertical;outline:none;
+                   display:block;"
+            spellcheck="false"
+            oninput="_dirty=true">{{ content }}</textarea>
+
+  <!-- highlighted overlay (view mode) — hidden by default -->
+  <pre id="log-highlight"
+       style="display:none;width:100%;min-height:70vh;padding:14px 16px;
+              font-family:'Consolas','Courier New',monospace;
+              font-size:14px;line-height:1.7;
+              background:#1E2130;color:#D4D8E8;
+              border:none;border-radius:10px;
+              overflow:auto;margin:0;white-space:pre;cursor:text;"
+       onclick="setEditMode()"
+       title="Click to edit"></pre>
 </div>
 
-<div style="display:flex;gap:10px;align-items:center;">
-  <button class="btn btn-primary" onclick="saveFile()" id="save-btn">
-    Save <span style="font-size:11px;opacity:.7;">Ctrl+S</span>
+<div style="margin-top:10px;display:flex;gap:8px;">
+  <button onclick="saveFile()" class="btn btn-success" style="flex:1;" id="save-btn-2">
+    Save
   </button>
-  <span id="save-status" style="font-size:13px;font-weight:600;"></span>
-  <span style="font-size:11px;color:var(--sub);margin-left:auto;">.bak written before each save</span>
+  <a href="/editor" class="btn btn-ghost" style="flex:1;">Reload</a>
 </div>
+
+<style>
+  /* ── Log syntax colours ── */
+  /* based on a dark theme that matches the existing output pane */
+  .log-date    { color: #7EC8E3; font-weight:600; }       /* date — steel blue  */
+  .log-type    { color: #C792EA; font-weight:700; }       /* type=X — purple    */
+  .log-key     { color: #82AAFF; }                        /* key=   — blue      */
+  .log-val     { color: #C3E88D; }                        /* =value — green     */
+  .log-amount  { color: #FFCB6B; font-weight:600; }       /* amount/numeric — gold */
+  .log-note    { color: #697098; font-style:italic; }     /* | note — muted     */
+  .log-pipe    { color: #546E7A; }                        /* | separator        */
+  .log-comment { color: #546E7A; font-style:italic; }     /* # comment lines    */
+  .log-tag     { color: #F07178; }                        /* tag=X — coral      */
+</style>
 
 <script>
-document.addEventListener("keydown", e => {
-  if (e.ctrlKey && e.key === "s") { e.preventDefault(); saveFile(); }
-});
+var _dirty     = false;
+var _hlMode    = false;
+var _NUMERICS  = new Set(["amount","advance","duration","balance","units","qty","price","total"]);
+
+// ── Syntax highlighter ────────────────────────────────────────────────────────
+function highlightLog(raw) {
+  return raw.split("\n").map(function(line) {
+    if (!line.trim()) return "";
+    // comment lines
+    if (line.trimStart().startsWith("#"))
+      return '<span class="log-comment">' + escHtml(line) + '</span>';
+
+    var parts = line.split("|");
+    var main  = parts[0];
+    var note  = parts.slice(1).join("|");
+
+    var tokens  = main.split(" ");
+    var out     = [];
+    var isFirst = true;
+
+    tokens.forEach(function(tok) {
+      if (!tok) { out.push(" "); return; }
+      if (isFirst) {
+        // date token
+        out.push('<span class="log-date">' + escHtml(tok) + '</span>');
+        isFirst = false; return;
+      }
+      var eq = tok.indexOf("=");
+      if (eq === -1) { out.push(escHtml(tok)); return; }
+
+      var key = tok.substring(0, eq);
+      var val = tok.substring(eq + 1);
+
+      if (key === "type") {
+        out.push('<span class="log-key">' + escHtml(key) + '</span>' +
+                 '=<span class="log-type">' + escHtml(val) + '</span>');
+      } else if (key === "tag") {
+        out.push('<span class="log-key">' + escHtml(key) + '</span>' +
+                 '=<span class="log-tag">' + escHtml(val) + '</span>');
+      } else if (_NUMERICS.has(key) || /^\d+$/.test(val)) {
+        out.push('<span class="log-key">' + escHtml(key) + '</span>' +
+                 '=<span class="log-amount">' + escHtml(val) + '</span>');
+      } else {
+        out.push('<span class="log-key">' + escHtml(key) + '</span>' +
+                 '=<span class="log-val">' + escHtml(val) + '</span>');
+      }
+    });
+
+    var result = out.join(" ");
+    if (note !== undefined && parts.length > 1) {
+      result += '<span class="log-pipe"> |</span>' +
+                '<span class="log-note">' + escHtml(note) + '</span>';
+    }
+    return result;
+  }).join("\n");
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;")
+    .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+// ── Mode switching ────────────────────────────────────────────────────────────
+function toggleHighlight() {
+  _hlMode ? setEditMode() : setHighlightMode();
+}
+
+function setHighlightMode() {
+  _hlMode = true;
+  var editor = document.getElementById("log-editor");
+  var hl     = document.getElementById("log-highlight");
+  hl.innerHTML   = highlightLog(editor.value);
+  editor.style.display = "none";
+  hl.style.display     = "block";
+  document.getElementById("hl-btn").style.background = "var(--accent-lt)";
+  document.getElementById("hl-btn").style.borderColor = "var(--accent)";
+}
+
+function setEditMode() {
+  _hlMode = false;
+  document.getElementById("log-editor").style.display   = "block";
+  document.getElementById("log-highlight").style.display = "none";
+  document.getElementById("hl-btn").style.background  = "";
+  document.getElementById("hl-btn").style.borderColor = "";
+  document.getElementById("log-editor").focus();
+}
+
+// ── File loading ──────────────────────────────────────────────────────────────
+function loadFile() {
+  if (_dirty && !confirm("Unsaved changes — load new file anyway?")) {
+    // revert select
+    document.getElementById("file-select").value = "{{ current_file }}";
+    return;
+  }
+  var file = document.getElementById("file-select").value;
+  window.location = "/editor?file=" + encodeURIComponent(file);
+}
+
+// ── Saving ────────────────────────────────────────────────────────────────────
 function saveFile() {
-  const file    = "{{ current_file }}";
-  const content = document.getElementById("log-editor").value;
-  const btn     = document.getElementById("save-btn");
-  const status  = document.getElementById("save-status");
-  btn.disabled  = true; btn.textContent = "Saving…";
+  // if in highlight mode, switch to edit to grab content
+  if (_hlMode) setEditMode();
+  var file    = document.getElementById("file-select").value;
+  var content = document.getElementById("log-editor").value;
+  var btns    = ["save-btn","save-btn-2"].map(function(id) {
+    return document.getElementById(id);
+  });
+  btns.forEach(function(b) { if(b) { b.disabled=true; b.textContent="Saving…"; } });
 
   fetch("/editor/save", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({file, content})
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({file:file, content:content})
   })
-  .then(r => r.json())
-  .then(d => {
-    status.textContent = d.ok ? "✔ Saved" : "✖ " + d.error;
-    status.style.color = d.ok ? "var(--success)" : "var(--error)";
-    btn.disabled = false; btn.textContent = "Save";
-    setTimeout(() => status.textContent = "", 2500);
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    _dirty = false;
+    btns.forEach(function(b) {
+      if (!b) return;
+      b.disabled = false;
+      b.textContent = d.ok ? "✔ Saved" : "Error";
+      setTimeout(function() {
+        b.textContent = b.id === "save-btn" ? "Save" : "Save";
+      }, d.ok ? 2000 : 3000);
+    });
+    if (d.ok && _hlMode) setHighlightMode(); // refresh highlight
   })
-  .catch(() => {
-    status.textContent = "✖ Failed";
-    status.style.color = "var(--error)";
-    btn.disabled = false; btn.textContent = "Save";
+  .catch(function() {
+    btns.forEach(function(b) {
+      if(b) { b.disabled=false; b.textContent="Save"; }
+    });
   });
 }
+
+// Ctrl+S
+document.addEventListener("keydown", function(e) {
+  if ((e.ctrlKey||e.metaKey) && e.key==="s") { e.preventDefault(); saveFile(); }
+});
+
+window.addEventListener("beforeunload", function(e) {
+  if (_dirty) { e.preventDefault(); e.returnValue=""; }
+});
 </script>
 {% endblock %}
