@@ -178,7 +178,7 @@
 function onQTimeChange(val) {
   var div = document.getElementById("q-custom-time");
   if (val === "custom") {
-    div.style.display = "block";
+    div.style.display = "flex";
   } else {
     div.style.display = "none";
     window._qCloseMonthPicker();
@@ -396,5 +396,45 @@ function qDoDelete() {
 document.getElementById("q-del-dialog").addEventListener("click", function(e) {
   if (e.target === this) qCloseDelete();
 });
+
+// ── Auto-run from URL params (?run=name&time=code) ────────────────────────────
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var run    = params.get("run");
+  var time   = params.get("time") || "";
+  if (!run) return;
+
+  // find the matching option in q-select
+  var sel = document.getElementById("q-select");
+  var found = null;
+  for (var i = 0; i < sel.options.length; i++) {
+    var opt = sel.options[i];
+    // options are formatted as "q:name", "m:name", "d:name"
+    var parts = opt.value.split(":");
+    if (parts.length >= 2 && parts.slice(1).join(":") === run) {
+      found = opt.value; break;
+    }
+  }
+  if (!found) return;
+  sel.value = found;
+
+  // set time override if provided
+  var timeSel = document.getElementById("q-time");
+  if (time && timeSel) {
+    // check if it's a valid option
+    for (var j = 0; j < timeSel.options.length; j++) {
+      if (timeSel.options[j].value === time) {
+        timeSel.value = time; break;
+      }
+    }
+  }
+
+  // scroll results into view after run
+  runQuery();
+  setTimeout(function() {
+    var area = document.getElementById("result-area");
+    if (area) area.scrollIntoView({behavior:"smooth", block:"start"});
+  }, 600);
+})();
 </script>
 {% endblock %}

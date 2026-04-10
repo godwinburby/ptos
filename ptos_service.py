@@ -753,18 +753,23 @@ def get_dashboard(name, time="tm"):
     for item_name in dashboards[name].get("metrics", []):
         metrics = queries.get("metrics", {})
         if item_name in metrics:
-            items.append(get_metric(item_name, time))
+            item = get_metric(item_name, time)
+            item["kind"] = "metric"
+            items.append(item)
         elif item_name in queries:
             try:
                 cnt, total = ptos._run_base_query(item_name, queries, start, end, cycles)
                 value = str(cnt)
                 if total > 0:
                     value += f"  ({ptos.fmt(total)})"
-                items.append({"name": item_name, "value": value, "raw": cnt})
+                items.append({"name": item_name, "value": value, "raw": cnt,
+                               "kind": "query"})
             except Exception as e:
-                items.append({"name": item_name, "value": f"error: {e}", "raw": None})
+                items.append({"name": item_name, "value": f"error: {e}", "raw": None,
+                               "kind": "query"})
         else:
-            items.append({"name": item_name, "value": "not found", "raw": None})
+            items.append({"name": item_name, "value": "not found", "raw": None,
+                           "kind": "unknown"})
 
     return {
         "name":   name,

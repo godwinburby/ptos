@@ -5,7 +5,7 @@
 
 <!-- dashboard + time selector -->
 {% if dashboards %}
-<div style="margin-bottom:8px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
+<div style="margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
   <select id="db-select" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;min-width:120px;">
     {% for db in dashboards %}
     <option value="{{ db }}" {% if db == current_db %}selected{% endif %}>{{ db }}</option>
@@ -17,155 +17,62 @@
     <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
-</div>
-
-<!-- month picker trigger button - on its own row for mobile -->
-<div id="custom-time-div" style="margin-bottom:16px;display:{% if current_time == 'custom' %}block{% else %}none{% endif %};">
-  <button id="month-picker-btn" type="button" onclick="toggleMonthPicker(event)"
-          style="display:flex;align-items:center;justify-content:space-between;
-                 padding:9px 12px;border-radius:6px;border:1px solid var(--border);
-                 background:var(--bg);color:var(--text);font-size:14px;font-weight:500;
-                 cursor:pointer;min-width:140px;">
-    <span id="month-text">{% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}</span>
-    <span style="font-size:10px;color:var(--sub);">▼</span>
-  </button>
-</div>
-
-<!-- month picker popup — positioned by JS -->
-<div id="month-picker-popup"
-     style="display:none;position:fixed;z-index:600;
-            background:var(--card);border:1px solid var(--border);
-            border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);
-            padding:16px;width:252px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-    <button onclick="shiftYear(-1)"
-            style="background:none;border:none;font-size:20px;
-                   color:var(--text);cursor:pointer;padding:2px 10px;
-                   border-radius:6px;line-height:1;">&lt;</button>
-    <span id="picker-year"
-          style="font-weight:700;font-size:15px;color:var(--text);"></span>
-    <button onclick="shiftYear(1)"
-            style="background:none;border:none;font-size:20px;
-                   color:var(--text);cursor:pointer;padding:2px 10px;
-                   border-radius:6px;line-height:1;">&gt;</button>
-  </div>
-  <div id="picker-grid"
-       style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;">
+  
+  <div id="custom-time-div" style="display:none;gap:8px;align-items:center;">
+    <select id="custom-year" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;min-width:80px;">
+      {% for y in year_range|reverse %}<option value="{{ y }}" {% if custom_time and custom_time[:4] == y|string %}selected{% endif %}>{{ y }}</option>{% endfor %}
+    </select>
+    <select id="custom-month" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;min-width:80px;">
+      <option value="01" {% if custom_time and custom_time[5:7] == '01' %}selected{% endif %}>Jan</option>
+      <option value="02" {% if custom_time and custom_time[5:7] == '02' %}selected{% endif %}>Feb</option>
+      <option value="03" {% if custom_time and custom_time[5:7] == '03' %}selected{% endif %}>Mar</option>
+      <option value="04" {% if custom_time and custom_time[5:7] == '04' %}selected{% endif %}>Apr</option>
+      <option value="05" {% if custom_time and custom_time[5:7] == '05' %}selected{% endif %}>May</option>
+      <option value="06" {% if custom_time and custom_time[5:7] == '06' %}selected{% endif %}>Jun</option>
+      <option value="07" {% if custom_time and custom_time[5:7] == '07' %}selected{% endif %}>Jul</option>
+      <option value="08" {% if custom_time and custom_time[5:7] == '08' %}selected{% endif %}>Aug</option>
+      <option value="09" {% if custom_time and custom_time[5:7] == '09' %}selected{% endif %}>Sep</option>
+      <option value="10" {% if custom_time and custom_time[5:7] == '10' %}selected{% endif %}>Oct</option>
+      <option value="11" {% if custom_time and custom_time[5:7] == '11' %}selected{% endif %}>Nov</option>
+      <option value="12" {% if custom_time and custom_time[5:7] == '12' %}selected{% endif %}>Dec</option>
+    </select>
   </div>
 </div>
 
 <script>
-(function() {
-  var MONTHS   = ["Jan","Feb","Mar","Apr","May","Jun",
-                  "Jul","Aug","Sep","Oct","Nov","Dec"];
-  var yearMin  = {{ year_range[0] }};
-  var yearMax  = {{ year_range[-1] }};
-  var selYear  = new Date().getFullYear();
-  var selMonth = null;
-
-  function render() {
-    document.getElementById("picker-year").textContent = selYear;
-    var grid = document.getElementById("picker-grid");
-    grid.innerHTML = "";
-    MONTHS.forEach(function(name, i) {
-      var mm  = String(i + 1).padStart(2, "0");
-      var active = (selMonth === mm);
-      var btn = document.createElement("button");
-      btn.textContent = name;
-      btn.style.cssText =
-        "padding:9px 0;border-radius:8px;cursor:pointer;font-size:13px;" +
-        "border:1px solid " + (active ? "var(--accent)" : "var(--border)") + ";" +
-        "background:"       + (active ? "var(--accent)" : "var(--bg)")     + ";" +
-        "color:"            + (active ? "#fff"           : "var(--text)")  + ";" +
-        "font-weight:"      + (active ? "700"            : "400")          + ";";
-      btn.addEventListener("click", function() {
-        selMonth = mm;
-        close();
-        document.getElementById("month-text").textContent =
-          selYear + "-" + mm;
-        updateUrl();
-      });
-      grid.appendChild(btn);
-    });
+function onTimeChange(val) {
+  var customDiv = document.getElementById('custom-time-div');
+  if (val === 'custom') {
+    customDiv.style.display = 'flex';
+  } else {
+    customDiv.style.display = 'none';
+    updateUrl();
   }
+}
 
-  window.shiftYear = function(delta) {
-    var next = selYear + delta;
-    if (next < yearMin || next > yearMax) return;
-    selYear = next;
-    render();
-  };
-
-  window.toggleMonthPicker = function(e) {
-    e.stopPropagation();
-    var pop = document.getElementById("month-picker-popup");
-    if (pop.style.display === "none") {
-      render();
-      var btn  = document.getElementById("month-picker-btn");
-      var rect = btn.getBoundingClientRect();
-      pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
-      var POP_W = 260;
-      pop.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - POP_W)) + "px";
-      pop.style.display = "block";
-    } else {
-      close();
-    }
-  };
-
-  function close() {
-    document.getElementById("month-picker-popup").style.display = "none";
-  }
-  window._closeMonthPicker = close;
-
-  document.addEventListener("click", function(e) {
-    var pop = document.getElementById("month-picker-popup");
-    if (!pop || pop.style.display === "none") return;
-    if (!pop.contains(e.target) && e.target.id !== "month-picker-btn")
-      close();
-  });
-
-  window.onTimeChange = function(val) {
-    var div = document.getElementById("custom-time-div");
-    if (val === "custom") {
-      div.style.display = "block";
-    } else {
-      div.style.display = "none";
-      close();
-      updateUrl();
-    }
-  };
-
-  window.updateUrl = function() {
-    var db   = document.getElementById("db-select").value;
-    var time = document.getElementById("time-select").value;
-    var p    = new URLSearchParams();
-    p.set("dashboard", db);
-    if (time === "custom") {
-      if (!selMonth) return;
-      p.set("time", "custom");
-      p.set("custom_time", selYear + "-" + selMonth);
-    } else {
-      p.set("time", time);
-    }
-    window.location = "/?" + p.toString();
-  };
-
-  // restore on page load
-  (function() {
-    var urlParams = new URLSearchParams(window.location.search);
-    var time = urlParams.get("time");
-    if (time === "custom") {
-      document.getElementById("custom-time-div").style.display = "block";
-      var ct = urlParams.get("custom_time");
-      if (ct && ct.length >= 7) {
-        selYear = parseInt(ct.substring(0, 4));
-        selMonth = ct.substring(5, 7);
-        document.getElementById("month-text").textContent = ct.substring(0, 7);
-      }
-    }
-  })();
+function updateUrl() {
+  var db = document.getElementById('db-select').value;
+  var time = document.getElementById('time-select').value;
   
-})();
+  var params = new URLSearchParams();
+  params.set('dashboard', db);
+  
+  if (time === 'custom') {
+    var year = document.getElementById('custom-year').value;
+    var month = document.getElementById('custom-month').value;
+    params.set('time', 'custom');
+    params.set('custom_time', year + '-' + month);
+  } else {
+    params.set('time', time);
+  }
+  
+  window.location = '/?' + params.toString();
+}
+
+// Show custom input if custom time was selected
+if (document.getElementById('time-select').value === 'custom') {
+  document.getElementById('custom-time-div').style.display = 'flex';
+}
 </script>
 {% endif %}
 
@@ -179,11 +86,26 @@
   </div>
   {% else %}
   {% for s in stats %}
+  {% if s.query_url %}
+  <a href="{{ s.query_url }}" style="text-decoration:none;">
+    <div class="stat-card" style="cursor:pointer;transition:box-shadow .15s;"
+         onmouseover="this.style.boxShadow='0 4px 16px rgba(79,107,237,.18)'"
+         onmouseout="this.style.boxShadow=''">
+      <div class="stat-label" style="display:flex;align-items:center;justify-content:space-between;">
+        <span>{{ s.label }}</span>
+        <span style="font-size:11px;color:var(--accent);font-weight:700;opacity:.7;">→</span>
+      </div>
+      <div class="stat-value">{{ s.value }}</div>
+      <div class="stat-sub">{{ s.sub }}</div>
+    </div>
+  </a>
+  {% else %}
   <div class="stat-card">
     <div class="stat-label">{{ s.label }}</div>
     <div class="stat-value">{{ s.value }}</div>
     <div class="stat-sub">{{ s.sub }}</div>
   </div>
+  {% endif %}
   {% endfor %}
   {% endif %}
 </div>

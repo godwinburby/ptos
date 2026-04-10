@@ -196,8 +196,26 @@ def home():
             db = svc.get_dashboard(db_name, time_code)
             # Show all dashboard items in home (no limit, template handles display)
             for item in db["items"]:
-                stats.append({"label": item["name"].replace("_"," "),
-                               "value": item["value"], "sub": "this month"})
+                _raw_t  = request.args.get("time", "tm")
+                _cust_t = request.args.get("custom_time", "")
+                if _raw_t == "custom" and _cust_t:
+                    time_label = _cust_t[:7]
+                else:
+                    time_label = dict(TIME_OPTIONS).get(_raw_t, _raw_t)
+                kind = item.get("kind", "metric")
+                # build a query page URL for base-query items
+                if kind == "query":
+                    query_url = f"/queries?run={item['name']}&time={time_code}"
+                else:
+                    query_url = ""
+                stats.append({
+                    "label":     item["name"].replace("_"," "),
+                    "value":     item["value"],
+                    "sub":       time_label.lower(),
+                    "kind":      kind,
+                    "query_url": query_url,
+                    "name":      item["name"],
+                })
     except Exception:
         pass
     except Exception:
@@ -409,26 +427,6 @@ def journal_save():
     ptos._backup_file(path)
     with open(path,"w",encoding="utf-8") as f: f.write(content)
     return jsonify(ok=True)
-
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Lint
-# ══════════════════════════════════════════════════════════════════════════════
-
-@app.route("/lint")
-def lint_page():
-    return render_template("lint.html",
-        tab="lint", title="Lint", now=_now_str())
-
-@app.route("/lint/run", methods=["POST"])
-def lint_run():
-    try:
-        result = svc.run_lint()
-        return jsonify(ok=True, data=result)
-    except PTOSError as e:
-        return jsonify(ok=False, error=str(e))
-    except Exception as e:
-        return jsonify(ok=False, error=str(e))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
