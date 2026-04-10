@@ -30,23 +30,83 @@
       <span style="font-size:10px;color:var(--sub);">▼</span>
     </button>
   </div>
+
+  <!-- ── Chip filter builder ── -->
+  <div id="chip-builder" style="display:none;">
+
+    <!-- active filter chips -->
+    <div id="active-chips" style="display:none;margin-bottom:10px;">
+      <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">ACTIVE FILTERS</div>
+      <div id="active-chip-list" class="chip-group"></div>
+    </div>
+
+    <!-- field selector -->
+    <div style="margin-bottom:8px;">
+      <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">FILTER BY</div>
+      <div id="field-chips" class="chip-group"></div>
+    </div>
+
+    <!-- value selector — appears after tapping a field chip -->
+    <div id="value-chip-row" style="display:none;margin-bottom:4px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div style="font-size:11px;color:var(--sub);font-weight:600;">
+          <span id="value-chip-label"></span>
+        </div>
+        <button onclick="closeValueRow()"
+                style="background:none;border:none;font-size:16px;color:var(--sub);
+                       cursor:pointer;padding:0 4px;line-height:1;">✕</button>
+      </div>
+      <div id="value-chips" class="chip-group"></div>
+      <div id="value-text-row" style="display:none;margin-top:8px;flex;gap:8px;">
+        <input type="text" id="value-text-input" placeholder="type a value…"
+               style="flex:1;padding:8px 12px;border-radius:8px;
+                      border:1px solid var(--border);background:var(--bg);
+                      color:var(--text);font-size:14px;"
+               onkeydown="if(event.key==='Enter') addTextFilter()">
+        <button onclick="addTextFilter()"
+                style="padding:8px 16px;border-radius:8px;border:none;
+                       background:var(--accent);color:#fff;font-size:14px;
+                       font-weight:600;cursor:pointer;margin-top:6px;">Add</button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Group and sort -->
   <div class="field-group">
     <label>Group by</label>
     <select id="b-group"><option value="">(none)</option></select>
   </div>
   <div class="field-group">
+    <label>Sort by</label>
+    <select id="b-sort" onchange="runBrowse()">
+      <option value="">(default)</option>
+    </select>
+  </div>
+
+  <!-- Search -->
+  <div class="field-group">
     <label>Search</label>
     <input type="text" id="b-search" placeholder="full-text search…"
            oninput="debouncedBrowse()">
   </div>
+
+  <!-- Expression filter — collapsed by default for cleaner mobile view -->
   <div class="field-group">
-    <label>Expression filter</label>
-    <input type="text" id="b-expr"
-           placeholder='e.g. type=expense AND (domain=self OR domain=home)'
-           oninput="debouncedBrowse()" style="font-family:monospace;font-size:13px;">
-    <div class="hint">Operators: = != &gt; &lt; &gt;= &lt;= ~(contains) !~(not contains) · AND OR NOT ( )</div>
+    <label style="display:flex;align-items:center;justify-content:space-between;">
+      <span>Expression filter</span>
+      <button onclick="toggleExprMode()" id="expr-toggle-btn"
+              style="background:none;border:none;font-size:11px;color:var(--accent);
+                     cursor:pointer;font-weight:600;padding:0;">show</button>
+    </label>
+    <div id="expr-row" style="display:none;">
+      <input type="text" id="b-expr"
+             placeholder='e.g. type=expense AND (domain=self OR domain=home)'
+             oninput="debouncedBrowse()" style="font-family:monospace;font-size:13px;">
+      <div class="hint">= != &gt; &lt; &gt;= &lt;= ~(contains) !~(not contains) · AND OR NOT ( )</div>
+    </div>
   </div>
-  <div id="field-filters" style="display:none;"></div>
+
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <button class="btn btn-success btn-sm" onclick="exportCSV()">↓ CSV</button>
     <button class="btn btn-primary btn-sm" onclick="showSaveQuery()">💾 Save as Query</button>
@@ -117,38 +177,191 @@
 </div>
 
 <script>
-function onTypeChange() {
-  const type = document.getElementById("b-type").value;
-  const ff   = document.getElementById("field-filters");
-  const grp  = document.getElementById("b-group");
-  grp.innerHTML = '<option value="">(none)</option>';
-  ff.innerHTML  = ""; ff.style.display = "none";
-  if (!type) { runBrowse(); return; }
-  fetch("/api/type_fields/" + encodeURIComponent(type))
-  .then(r => r.json())
-  .then(data => {
-    (data.dimensions||[]).forEach(f => {
-      const o = document.createElement("option");
-      o.value = f; o.textContent = f; grp.appendChild(o);
-    });
-    (data.fields||[]).forEach(f => {
-      if (!f.options||!f.options.length) return;
-      const wrap = document.createElement("div");
-      wrap.className = "field-group";
-      wrap.innerHTML = `<label>${f.name}</label>
-        <select id="ff-${f.name}" onchange="runBrowse()">
-          <option value="">(any)</option>
-          ${f.options.map(o=>`<option value="${o}">${o}</option>`).join("")}
-        </select>`;
-      ff.appendChild(wrap);
-    });
-    ff.style.display = ff.children.length ? "block" : "none";
-    runBrowse();
-  });
-}
+// ── Chip filter builder ──────────────────────────────────────────────────────
+(function() {
+  var _activeFilters = [];
+  var _fieldDefs     = [];
+  var _activeField   = null;
+  var _exprVisible   = false;
 
-// wire time and group selects
-document.getElementById("b-group").addEventListener("change", runBrowse);
+  window._chipFiltersWhere = function() {
+    return _activeFilters.map(function(f) { return f.field + f.op + f.value; });
+  };
+
+  window.closeValueRow = function() {
+    _activeField = null;
+    document.getElementById("value-chip-row").style.display = "none";
+    renderFieldChips();
+  };
+
+  window.toggleExprMode = function() {
+    _exprVisible = !_exprVisible;
+    document.getElementById("expr-row").style.display = _exprVisible ? "block" : "none";
+    document.getElementById("expr-toggle-btn").textContent = _exprVisible ? "hide" : "show";
+    if (!_exprVisible) {
+      var el = document.getElementById("b-expr");
+      if (el) { el.value = ""; runBrowse(); }
+    }
+  };
+
+  window.addTextFilter = function() {
+    if (!_activeField) return;
+    var val = document.getElementById("value-text-input").value.trim();
+    if (!val) return;
+    pushFilter(_activeField, "=", val);
+    document.getElementById("value-text-input").value = "";
+    closeValueRow();
+  };
+
+  function renderActive() {
+    var wrap = document.getElementById("active-chips");
+    var list = document.getElementById("active-chip-list");
+    if (!_activeFilters.length) { wrap.style.display = "none"; return; }
+    wrap.style.display = "block";
+    list.innerHTML = "";
+    _activeFilters.forEach(function(f, i) {
+      var chip = document.createElement("span");
+      chip.style.cssText =
+        "display:inline-flex;align-items:center;gap:6px;padding:6px 10px;" +
+        "border-radius:20px;font-size:13px;font-weight:600;" +
+        "background:var(--accent-lt);border:1.5px solid var(--accent);color:var(--accent);";
+      var label = document.createElement("span");
+      label.textContent = f.field + f.op + f.value;
+      var rm = document.createElement("button");
+      rm.textContent = "×";
+      rm.style.cssText =
+        "background:none;border:none;color:var(--accent);cursor:pointer;" +
+        "font-size:14px;padding:0;line-height:1;font-weight:700;";
+      rm.addEventListener("click", function() { removeFilter(i); });
+      chip.appendChild(label); chip.appendChild(rm);
+      list.appendChild(chip);
+    });
+  }
+
+  window.removeFilter = function(idx) {
+    _activeFilters.splice(idx, 1);
+    renderActive(); runBrowse();
+  };
+
+  function renderFieldChips() {
+    var row = document.getElementById("field-chips");
+    row.innerHTML = "";
+    _fieldDefs.forEach(function(f) {
+      var isActive   = (_activeField === f.name);
+      var hasFilter  = _activeFilters.some(function(af) { return af.field === f.name; });
+      var chip = document.createElement("button");
+      chip.textContent = f.name;
+      chip.style.cssText =
+        "padding:7px 13px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;" +
+        (isActive
+          ? "background:var(--accent);border:1.5px solid var(--accent);color:#fff;"
+          : hasFilter
+            ? "background:var(--accent-lt);border:1.5px solid var(--accent);color:var(--accent);"
+            : "background:var(--bg);border:1.5px solid var(--border);color:var(--text);");
+      chip.addEventListener("click", function() { selectField(f.name); });
+      row.appendChild(chip);
+    });
+  }
+
+  function selectField(fname) {
+    if (_activeField === fname) { closeValueRow(); return; }
+    _activeField = fname;
+    renderFieldChips();
+    var fdef = _fieldDefs.find(function(f) { return f.name === fname; });
+    if (!fdef) return;
+    document.getElementById("value-chip-label").textContent = fname;
+    var vrow   = document.getElementById("value-chip-row");
+    var vchips = document.getElementById("value-chips");
+    var vtextR = document.getElementById("value-text-row");
+    vchips.innerHTML = "";
+    vrow.style.display = "block";
+    if (fdef.options && fdef.options.length) {
+      vtextR.style.display = "none";
+      fdef.options.forEach(function(opt) {
+        var already = _activeFilters.some(function(af) {
+          return af.field === fname && af.value === opt;
+        });
+        var chip = document.createElement("button");
+        chip.textContent = opt;
+        chip.style.cssText =
+          "padding:7px 13px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;" +
+          (already
+            ? "background:var(--accent);border:1.5px solid var(--accent);color:#fff;"
+            : "background:var(--bg);border:1.5px solid var(--border);color:var(--text);");
+        chip.addEventListener("click", function() {
+          if (already) {
+            _activeFilters = _activeFilters.filter(function(af) {
+              return !(af.field === fname && af.value === opt);
+            });
+            renderActive(); runBrowse(); selectField(fname);
+          } else {
+            pushFilter(fname, "=", opt); closeValueRow();
+          }
+        });
+        vchips.appendChild(chip);
+      });
+    } else {
+      vtextR.style.display = "flex";
+      setTimeout(function() {
+        document.getElementById("value-text-input").focus();
+      }, 50);
+    }
+  }
+
+  function pushFilter(field, op, value) {
+    _activeFilters = _activeFilters.filter(function(f) { return f.field !== field; });
+    _activeFilters.push({field: field, op: op, value: value});
+    renderActive(); runBrowse();
+  }
+
+  window._resetChipBuilder = function() {
+    _activeFilters = []; _activeField = null; _fieldDefs = [];
+    var el;
+    el = document.getElementById("chip-builder");    if (el) el.style.display = "none";
+    el = document.getElementById("active-chips");    if (el) el.style.display = "none";
+    el = document.getElementById("active-chip-list");if (el) el.innerHTML = "";
+    el = document.getElementById("field-chips");     if (el) el.innerHTML = "";
+    el = document.getElementById("value-chip-row");  if (el) el.style.display = "none";
+    el = document.getElementById("b-group");         if (el) el.innerHTML = '<option value="">(none)</option>';
+    el = document.getElementById("b-sort");          if (el) el.innerHTML = '<option value="">(default)</option>';
+  };
+
+  window.onTypeChange = function() {
+    var type = document.getElementById("b-type").value;
+    _resetChipBuilder();
+    document.getElementById("chip-builder").style.display = type ? "block" : "none";
+    if (!type) { runBrowse(); return; }
+    fetch("/api/type_fields/" + encodeURIComponent(type))
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      _fieldDefs = (data.fields || []).filter(function(f) {
+        // include option fields and free-text fields; exclude int/derived
+        return !f.is_int;
+      });
+      var grp     = document.getElementById("b-group");
+      var sortSel = document.getElementById("b-sort");
+      (data.dimensions||[]).forEach(function(f) {
+        var o = document.createElement("option");
+        o.value = f; o.textContent = f; grp.appendChild(o);
+        var o2 = document.createElement("option");
+        o2.value = f; o2.textContent = f;
+        if (sortSel) sortSel.appendChild(o2);
+      });
+      renderFieldChips();
+      runBrowse();
+    });
+  };
+})();
+
+function onTypeChange() { window.onTypeChange(); }
+
+// group and sort fire runBrowse on change
+document.addEventListener("DOMContentLoaded", function() {
+  ["b-group","b-sort"].forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("change", runBrowse);
+  });
+});
 
 // debounce for search input — wait 500ms after user stops typing
 let _searchTimer = null;
@@ -252,18 +465,18 @@ function _params() {
   let time = document.getElementById("b-time").value;
   if (time === "custom") {
     const ct = window._bGetCustomTime();
-    time = ct || "tm";   // fallback to this-month if no month picked yet
+    time = ct || "tm";
   }
   const type   = document.getElementById("b-type").value;
-  const search = document.getElementById("b-search").value.trim();
-  const group  = document.getElementById("b-group").value;
-  const expr   = document.getElementById("b-expr").value.trim();
+  const search = document.getElementById("b-search") ? document.getElementById("b-search").value.trim() : "";
+  const group  = document.getElementById("b-group")  ? document.getElementById("b-group").value  : "";
+  const sort   = document.getElementById("b-sort")   ? document.getElementById("b-sort").value   : "";
+  const exprEl = document.getElementById("b-expr");
+  const expr   = exprEl ? exprEl.value.trim() : "";
   const where  = [];
   if (type) where.push("type=" + type);
-  document.querySelectorAll("[id^='ff-']").forEach(sel => {
-    if (sel.value) where.push(sel.id.replace("ff-","") + "=" + sel.value);
-  });
-  return {where, expr, time, search, group};
+  (window._chipFiltersWhere ? window._chipFiltersWhere() : []).forEach(f => where.push(f));
+  return {where, expr, time, search, group, sort};
 }
 
 function runBrowse() {
@@ -294,16 +507,17 @@ function exportCSV() {
 }
 
 function clearBrowse() {
-  ["b-type","b-search","b-group","b-expr"].forEach(id => {
+  ["b-type","b-search"].forEach(id => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
+  const exprEl = document.getElementById("b-expr");
+  if (exprEl) exprEl.value = "";
   document.getElementById("b-time").value = "tm";
   document.getElementById("b-custom-time").style.display = "none";
   window._bCloseMonthPicker();
   document.getElementById("b-month-text").textContent = "Pick a month";
-  document.getElementById("field-filters").innerHTML = "";
-  document.getElementById("field-filters").style.display = "none";
+  if (window._resetChipBuilder) window._resetChipBuilder();
   document.getElementById("result-area").innerHTML = "";
 }
 

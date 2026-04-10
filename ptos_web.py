@@ -17,15 +17,34 @@ from flask import (Flask, render_template, request, redirect,
 app = Flask(__name__, template_folder="web_templates")
 app.secret_key = "ptos-local-only"
 
-TIME_OPTIONS = [
+_TIME_OPTIONS_BASE = [
     ("Today","td"),("Yesterday","yd"),("This week","tw"),("Last week","lw"),
     ("This month","tm"),("Last month","lm"),("This quarter","tq"),
     ("Last quarter","lq"),("This year","ty"),("Last year","ly"),("All time","all"),
     ("Custom","custom"),
 ]
-_TIME_DICT = dict(TIME_OPTIONS)
-_VALID_TIME = {code for _, code in TIME_OPTIONS}
 _YEAR_RANGE = list(range(dt.date.today().year - 10, dt.date.today().year + 1))
+
+def _build_time_options():
+    """Merge standard time options with custom cycles from config.toml."""
+    opts = list(_TIME_OPTIONS_BASE)
+    try:
+        cycles = ptos.get_config().get("cycles", {})
+        for name in cycles:
+            label = name.replace("_", " ").title()
+            opts.insert(-1, (label, name))          # insert before Custom
+            opts.insert(-1, (f"{label} -1", f"{name}-1"))
+    except Exception:
+        pass
+    return opts
+
+def _get_time_options():
+    return _build_time_options()
+
+# module-level for templates that need it at import time
+TIME_OPTIONS = _build_time_options()
+_TIME_DICT   = dict(TIME_OPTIONS)
+_VALID_TIME  = {code for _, code in TIME_OPTIONS}
 
 def _now_str():
     return dt.datetime.now().strftime("%a %d %b")
@@ -194,17 +213,15 @@ def home():
         cycles = cfg.get("cycles", {})
         if db_name and db_name in dashboards:
             db = svc.get_dashboard(db_name, time_code)
-            raw_time_arg = request.args.get("time", "tm")
-            custom_time_arg = request.args.get("custom_time", "")
-            if raw_time_arg == "custom" and custom_time_arg:
-                time_label = custom_time_arg[:7]
+            _raw_t  = request.args.get("time", "tm")
+            _cust_t = request.args.get("custom_time", "")
+            if _raw_t == "custom" and _cust_t:
+                time_label = _cust_t[:7]
             else:
-                time_label = dict(TIME_OPTIONS).get(raw_time_arg, raw_time_arg)
+                time_label = dict(TIME_OPTIONS).get(_raw_t, _raw_t)
             for item in db["items"]:
                 stats.append({"label": item["name"].replace("_"," "),
                                "value": item["value"], "sub": time_label.lower()})
-    except Exception:
-        pass
     except Exception:
         pass
     recent_rows = []
@@ -222,7 +239,7 @@ def home():
         stats=stats,
         dashboards=list(dashboards.keys()),
         current_db=db_name if 'db_name' in locals() else None,
-        time_options=TIME_OPTIONS,
+        time_options=_get_time_options(),
         year_range=_YEAR_RANGE,
         current_time=request.args.get("time", "tm"),
         custom_time=request.args.get("custom_time", ""),
@@ -413,6 +430,10 @@ def journal_save():
     path = os.path.join(year_dir, f"{date}.md")
     ptos._backup_file(path)
     with open(path,"w",encoding="utf-8") as f: f.write(content)
+    # invalidate caches for any config file that may have been edited
+    for key in ("schema", "config", "queries", "presets",
+                "derived_fields", "numeric_fields"):
+        ptos._CACHE.pop(key, None)
     return jsonify(ok=True)
 
 
@@ -432,7 +453,7 @@ def queries_get():
         queries=named,
         metrics=list(all_q.get("metrics",{}).keys()),
         dashboards=list(all_q.get("dashboards",{}).keys()),
-        time_options=TIME_OPTIONS, year_range=_YEAR_RANGE,
+        time_options=_get_time_options(), year_range=_YEAR_RANGE,
         current_time=request.args.get("time", ""),
         custom_time=request.args.get("custom_time", ""))
 
@@ -443,7 +464,8 @@ def queries_run():
     name = data.get("name","")
     raw_time = data.get("time","") or None
     # reject any value that is not a known alias and not a valid YYYY-MM
-    if raw_time and raw_time not in _VALID_TIME and \
+    _valid = {code for _, code in _get_time_options()}
+    if raw_time and raw_time not in _valid and \
        not re.fullmatch(r"\d{4}-\d{2}", raw_time):
         return jsonify(ok=False, error=f"Invalid time window: {raw_time}")
     time = raw_time
@@ -478,7 +500,7 @@ def browse_get():
                        if f.endswith(".log")) if os.path.exists(ptos.RECORDS_DIR) else []
     return render_template("browse.html",
         tab="browse", title="Browse", now=_now_str(),
-        types=types, log_files=log_files, time_options=TIME_OPTIONS, year_range=_YEAR_RANGE,
+        types=types, log_files=log_files, time_options=_get_time_options(), year_range=_YEAR_RANGE,
         current_time=request.args.get("time", "tm"),
         custom_time=request.args.get("custom_time", ""))
 
@@ -486,7 +508,8 @@ def browse_get():
 def browse_run():
     data   = request.get_json(silent=True) or {}
     raw_time = data.get("time","tm")
-    if raw_time and raw_time not in _VALID_TIME and \
+    _valid = {code for _, code in _get_time_options()}
+    if raw_time and raw_time not in _valid and \
        not re.fullmatch(r"\d{4}-\d{2}", raw_time):
         raw_time = "tm"
     time = raw_time
