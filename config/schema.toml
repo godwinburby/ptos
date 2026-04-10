@@ -144,7 +144,8 @@ options = [
   "nexia_4_ric",
   "nexia_power_bte",
   "resound_key_188",
-  "resound_one_ric"
+  "resound_one_ric",
+  "resound_key_298_sp_bte"
 ]
 
 # ==================================================

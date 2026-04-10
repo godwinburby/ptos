@@ -205,3 +205,7 @@ time  = "this-month"
 [investments]
 where = "type=investment"
 time  = "tm"
+
+[assessment_cso]
+where = "(type=assessment) AND (booked_by=cso)"
+time  = "lm"
