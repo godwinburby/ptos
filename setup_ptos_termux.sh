@@ -66,6 +66,13 @@ echo "🚀 Initializing PTOS..."
 python ptos.py --init
 
 echo ""
+echo "📥 Downloading start and update scripts..."
+curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/start_ptos_termux.sh -o start_ptos_termux.sh
+curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/update_ptos_termux.sh -o update_ptos_termux.sh
+chmod +x start_ptos_termux.sh update_ptos_termux.sh
+echo "Scripts downloaded and made executable."
+
+echo ""
 echo "=========================================="
 echo "  ✅ Setup Complete!"
 echo "=========================================="
