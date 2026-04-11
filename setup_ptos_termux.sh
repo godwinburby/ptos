@@ -56,10 +56,10 @@ else
 fi
 
 echo ""
-echo "📥 Downloading start and update scripts..."
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/start_ptos_termux.sh -o start_ptos_termux.sh
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/update_ptos_termux.sh -o update_ptos_termux.sh
-chmod +x start_ptos_termux.sh update_ptos_termux.sh
+echo "📥 Downloading start and update scripts to home folder..."
+curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/start_ptos_termux.sh -o "$HOME/start_ptos_termux.sh"
+curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/update_ptos_termux.sh -o "$HOME/update_ptos_termux.sh"
+chmod +x "$HOME/start_ptos_termux.sh" "$HOME/update_ptos_termux.sh"
 echo "Scripts downloaded and made executable."
 
 echo ""
