@@ -1,49 +1,56 @@
 @echo off
 :: PTOS Start Script for Windows
-:: Run from inside the ptos folder
+:: Run from inside the ptos folder.
 
 echo ==========================================
 echo   PTOS Web Server
 echo ==========================================
 echo.
 
-:: Check if ptos_web.py exists
 if not exist "ptos_web.py" (
     echo ERROR: ptos_web.py not found.
-    echo Make sure you are running this from the PTOS folder.
+    echo Run this script from the ptos folder, or run setup_ptos_windows.bat first.
     pause
     exit /b 1
 )
 
-:: Find Python
+:: ── Find Python 3.11+ ─────────────────────────────────────────────────────────
+set "PYTHON="
 py --version >nul 2>&1
-if errorlevel 1 (
+if not errorlevel 1 (
+    py -c "import sys; sys.exit(0 if sys.version_info>=(3,11) else 1)" >nul 2>&1
+    if not errorlevel 1 set "PYTHON=py"
+)
+if "%PYTHON%"=="" (
     python --version >nul 2>&1
-    if errorlevel 1 (
-        echo ERROR: Python is not installed.
-        pause
-        exit /b 1
+    if not errorlevel 1 (
+        python -c "import sys; sys.exit(0 if sys.version_info>=(3,11) else 1)" >nul 2>&1
+        if not errorlevel 1 set "PYTHON=python"
     )
-    set "PYTHON=python"
-) else (
-    set "PYTHON=py"
+)
+if "%PYTHON%"=="" (
+    echo ERROR: Python 3.11+ not found. Run setup_ptos_windows.bat first.
+    pause
+    exit /b 1
 )
 
-:: Kill any process on port 5000
-echo Checking for existing server on port 5000...
-for /f "tokens=5" %%a in ('netstat -ano ^| findstr :5000 ^| findstr LISTENING') do (
-    echo Killing process %%a on port 5000...
+:: ── Kill any process on port 5000 ────────────────────────────────────────────
+echo Checking port 5000...
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5000 " ^| findstr "LISTENING"') do (
+    echo Stopping process %%a on port 5000...
     taskkill /F /PID %%a >nul 2>&1
 )
 
+:: ── Start Flask, then open browser ───────────────────────────────────────────
 echo.
-echo Starting PTOS Web Server...
+echo Starting PTOS...
 echo Open in browser: http://localhost:5000
 echo Press Ctrl+C to stop.
 echo.
 
-:: Open browser
+start "" /B %PYTHON% ptos_web.py
+timeout /t 2 /nobreak >nul
 start http://localhost:5000
 
-:: Start Flask server
+:: Keep window open
 %PYTHON% ptos_web.py

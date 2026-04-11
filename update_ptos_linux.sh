@@ -1,52 +1,47 @@
 #!/bin/bash
 # PTOS Update Script for Linux
-# Git pull to update PTOS
-
-set -e
+# Pulls latest code via git. Run from the PTOS folder.
 
 echo "=========================================="
 echo "  PTOS Update"
 echo "=========================================="
 echo ""
 
-# Get directory where script is located
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Check for ptos_web.py
 if [ ! -f "$SCRIPT_DIR/ptos_web.py" ]; then
-    echo "Error: ptos_web.py not found in $SCRIPT_DIR"
-    echo "Make sure you're running this script from the PTOS directory."
+    echo "ERROR: ptos_web.py not found in $SCRIPT_DIR"
+    echo "Run setup_ptos_linux.sh first."
     exit 1
 fi
 
 cd "$SCRIPT_DIR"
 
-# Check if it's a git repo
 if [ ! -d ".git" ]; then
-    echo "Error: Not a git repository."
+    echo "ERROR: Not a git repository. Cannot update."
     echo "PTOS was not installed via git clone."
     exit 1
 fi
 
-# Check if Flask is running
+# ── Stop Flask if running ─────────────────────────────────────────────────────
 RUNNING=false
 if pgrep -f "python.*ptos_web.py" > /dev/null 2>&1; then
     RUNNING=true
-    echo "Flask server is running. Stopping it first..."
+    echo "Stopping running server..."
     pkill -f "python.*ptos_web.py" 2>/dev/null || true
     sleep 1
 fi
 
-echo "Pulling latest changes..."
+# ── Pull latest ───────────────────────────────────────────────────────────────
+echo "Pulling latest changes from GitHub..."
 git pull
 
 echo ""
 echo "=========================================="
-echo "  ✅ PTOS Updated!"
+echo "  PTOS Updated!"
 echo "=========================================="
 echo ""
 
 if [ "$RUNNING" = true ]; then
-    echo "You can restart with:"
-    echo "  ./start_ptos_linux.sh"
+    echo "Restart the server with:  ./start_ptos_linux.sh"
 fi

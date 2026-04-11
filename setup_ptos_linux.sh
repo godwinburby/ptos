@@ -1,148 +1,114 @@
 #!/bin/bash
 # PTOS Setup Script for Linux
 # Run it anywhere: ./setup_ptos_linux.sh
-# It will clone the repo if not found, or use existing one.
-
-set -e
+# Clones the repo if not found, installs deps, and starts the web server.
 
 echo "=========================================="
 echo "  PTOS Setup for Linux"
 echo "=========================================="
 echo ""
 
-# Get the directory where this script is located
+# ── Locate PTOS directory ─────────────────────────────────────────────────────
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Check if already in a PTOS repository
 if [ ! -f "$SCRIPT_DIR/ptos.py" ]; then
-    echo "PTOS not found."
-    # Clone into ptos subfolder
+    echo "ptos.py not found here — cloning from GitHub..."
     git clone https://github.com/godwinburby/ptos.git "$SCRIPT_DIR/ptos"
     cd "$SCRIPT_DIR/ptos"
-    echo "Clone complete!"
 else
     cd "$SCRIPT_DIR"
 fi
-SCRIPT_DIR="$(pwd)"
+PTOS_DIR="$(pwd)"
 
-# Check if already initialized
-if [ -d "config" ]; then
-    echo "PTOS is already initialized (config/ folder exists)."
-    echo "Skipping initialization..."
+# ── Find Python 3.11+ ─────────────────────────────────────────────────────────
+PYTHON=""
+for cmd in python3.13 python3.12 python3.11 python3 python; do
+    if command -v "$cmd" &>/dev/null; then
+        if "$cmd" -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+            PYTHON="$cmd"
+            break
+        fi
+    fi
+done
+
+if [ -z "$PYTHON" ]; then
+    echo ""
+    echo "ERROR: Python 3.11 or higher is required but not found."
+    echo "Install it, e.g.:  sudo apt install python3.11"
+    exit 1
+fi
+echo "Using $PYTHON ($($PYTHON --version))"
+
+# ── Check if already initialised ─────────────────────────────────────────────
+if [ -d "$PTOS_DIR/config" ]; then
+    echo "Already initialised (config/ exists). Skipping first-time setup."
     INIT_NEEDED=false
 else
     INIT_NEEDED=true
 fi
 
-# Find Python
-PYTHON=""
-if command -v python3 &>/dev/null; then
-    PYTHON="python3"
-elif command -v python &>/dev/null; then
-    PYTHON="python"
-else
-    echo "Error: Python not found. Please install python3."
-    exit 1
-fi
-echo "Using Python: $PYTHON"
-
-# Install dependencies if init is needed
+# ── Install Flask ─────────────────────────────────────────────────────────────
 if [ "$INIT_NEEDED" = true ]; then
     echo ""
-    echo "=========================================="
-    echo "  Installing Dependencies"
-    echo "=========================================="
-    echo ""
-
-    # Detect package manager
-    PKG_MGR=""
-    PKG_CMD=""
+    echo "--- Installing Flask ---"
+    # Ensure pip is available for the chosen Python
     if command -v apt &>/dev/null; then
-        PKG_MGR="apt"
-        PKG_CMD="sudo apt update && sudo apt install -y python3 python3-pip"
+        sudo apt update -qq && sudo apt install -y python3-pip 2>/dev/null || true
     elif command -v dnf &>/dev/null; then
-        PKG_MGR="dnf"
-        PKG_CMD="sudo dnf install -y python3 python3-pip"
+        sudo dnf install -y python3-pip 2>/dev/null || true
     elif command -v pacman &>/dev/null; then
-        PKG_MGR="pacman"
-        PKG_CMD="sudo pacman -Sy --noconfirm python python-pip"
+        sudo pacman -Sy --noconfirm python-pip 2>/dev/null || true
     elif command -v zypper &>/dev/null; then
-        PKG_MGR="zypper"
-        PKG_CMD="sudo zypper install -y python3 python3-pip"
-    elif command -v apk &>/dev/null; then
-        PKG_MGR="apk"
-        PKG_CMD="apk add python3 py3-pip"
+        sudo zypper install -y python3-pip 2>/dev/null || true
     fi
 
-    if [ -n "$PKG_MGR" ]; then
-        echo "Detected package manager: $PKG_MGR"
-        echo "Installing system packages..."
-        eval "$PKG_CMD"
-    else
-        echo "Package manager not detected."
-        echo "Assuming Python and pip are already installed..."
-    fi
+    $PYTHON -m pip install flask --break-system-packages --quiet
+    echo "Flask installed."
 
-    # Install Flask via pip
     echo ""
-    echo "Installing Flask..."
-    pip install flask --break-system-packages
-
-    # Initialize PTOS
-    echo ""
-    echo "Initializing PTOS..."
+    echo "--- Initialising PTOS ---"
     $PYTHON ptos.py --init
 
     echo ""
-    echo "=========================================="
-    echo "  PTOS Initialized!"
-    echo "=========================================="
+    echo "PTOS initialised."
 fi
 
-# Always make scripts executable
-echo ""
-echo "Making scripts executable..."
-if [ -f "start_ptos_linux.sh" ]; then
-    chmod +x start_ptos_linux.sh
-    echo "  - start_ptos_linux.sh is now executable"
-else
-    echo "  - start_ptos_linux.sh not found"
-fi
-if [ -f "update_ptos_linux.sh" ]; then
-    chmod +x update_ptos_linux.sh
-    echo "  - update_ptos_linux.sh is now executable"
-else
-    echo "  - update_ptos_linux.sh not found"
-fi
+# ── Make companion scripts executable ────────────────────────────────────────
+for script in start_ptos_linux.sh update_ptos_linux.sh; do
+    [ -f "$PTOS_DIR/$script" ] && chmod +x "$PTOS_DIR/$script" && echo "Marked executable: $script"
+done
 
-# Clean up port 5000
+# ── Kill anything on port 5000 ────────────────────────────────────────────────
 echo ""
-echo "Checking for processes on port 5000..."
-# Try lsof first
+echo "Checking port 5000..."
 if command -v lsof &>/dev/null; then
-    PID=$(lsof -ti:5000 2>/dev/null) || true
+    PID=$(lsof -ti:5000 2>/dev/null || true)
     if [ -n "$PID" ]; then
-        echo "Killing process $PID on port 5000..."
-        kill -9 $PID 2>/dev/null || sudo kill -9 $PID 2>/dev/null || true
+        echo "Stopping existing process on port 5000 (PID $PID)..."
+        kill "$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
+        sleep 1
     fi
-# Fallback to fuser
 elif command -v fuser &>/dev/null; then
     fuser -k 5000/tcp 2>/dev/null || true
+    sleep 1
 fi
-echo "Port 5000 is ready."
+echo "Port 5000 ready."
 
-# Start Flask server
+# ── Start Flask, then open browser ───────────────────────────────────────────
 echo ""
 echo "=========================================="
 echo "  Starting PTOS Web Server"
 echo "=========================================="
 echo ""
-echo "Open your browser and go to: http://localhost:5000"
-echo "Press Ctrl+C to stop the server."
+echo "Open in browser: http://localhost:5000"
+echo "Press Ctrl+C to stop."
 echo ""
 
-# Open browser first
-xdg-open http://localhost:5000 2>/dev/null
+# Start Flask in background, wait for it to be ready, then open browser
+$PYTHON ptos_web.py &
+FLASK_PID=$!
+sleep 2
+xdg-open http://localhost:5000 2>/dev/null || true
 
-# Start Flask server in foreground (Ctrl+C to stop)
-$PYTHON ptos_web.py
+# Bring Flask back to foreground so Ctrl+C works naturally
+wait $FLASK_PID
