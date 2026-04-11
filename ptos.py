@@ -1190,6 +1190,60 @@ def lint_records(records, schema):
     print()
     return error_files
 
+def lint_all_records():
+    """Lint all records and return structured data for web UI.
+    Returns dict with: clean, checked, error_count, warning_count, type_counts, errors, warnings
+    """
+    schema = get_schema()
+    results, _ = scan_records(dt.date.min, dt.date.max, [], None)
+    
+    total_errors   = 0
+    total_warnings = 0
+    total_checked  = 0
+    type_counts    = {}
+    errors_list    = []
+    warnings_list  = []
+    
+    for line in results:
+        if not line.strip():
+            continue
+        total_checked += 1
+        d, kv, note = parse_line(line)
+        rtype = kv.get("type", "unknown")
+        type_counts[rtype] = type_counts.get(rtype, 0) + 1
+        line_errors   = []
+        line_warnings = []
+        
+        if d == dt.date.min:
+            line_errors.append("missing or malformed date")
+        if "type" not in kv:
+            line_errors.append("missing type field")
+        if "tag" not in kv:
+            line_warnings.append("no tag")
+        if not note or not note.strip():
+            line_warnings.append("no note")
+        
+        schema_problems = validate_record(schema, kv)
+        line_errors.extend(schema_problems)
+        
+        if line_errors:
+            total_errors += len(line_errors)
+            errors_list.append({"line": line, "problems": line_errors})
+        
+        if line_warnings:
+            total_warnings += len(line_warnings)
+            warnings_list.append({"line": line, "problems": line_warnings})
+    
+    return {
+        "clean": total_errors == 0 and total_warnings == 0,
+        "checked": total_checked,
+        "error_count": total_errors,
+        "warning_count": total_warnings,
+        "type_counts": type_counts,
+        "errors": errors_list,
+        "warnings": warnings_list,
+    }
+
 # --------------------------------------------------
 # Analysis  —  group + pivot return data, render separately
 # --------------------------------------------------

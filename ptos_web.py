@@ -910,6 +910,24 @@ def editor_save():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Lint
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/lint")
+def lint_page():
+    return render_template("lint.html",
+        tab="lint", title="Lint", now=_now_str())
+
+@app.route("/lint/run", methods=["POST"])
+def lint_run():
+    try:
+        result = ptos.lint_all_records()
+        return jsonify(ok=True, data=result)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Edit Record (full form)
 # ══════════════════════════════════════════════════════════════════════════════
 
