@@ -1,0 +1,531 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-title">Schema Builder</div>
+
+<div style="display:flex;gap:10px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">
+  <button onclick="saveSchema()" class="btn btn-success btn-sm" id="save-btn">
+    💾 Save Schema
+  </button>
+  <button onclick="addType()" class="btn btn-primary btn-sm">+ Add Type</button>
+  <div id="save-msg" style="font-size:13px;display:none;"></div>
+</div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+
+  <!-- ── Type list (left panel) ── -->
+  <div id="type-list"
+       style="width:160px;flex-shrink:0;background:var(--card);
+              border:1px solid var(--border);border-radius:12px;padding:10px;">
+    <div style="font-size:11px;font-weight:700;color:var(--sub);
+                letter-spacing:.5px;margin-bottom:8px;">TYPES</div>
+    <div id="type-tabs"></div>
+  </div>
+
+  <!-- ── Type editor (right panel) ── -->
+  <div id="type-editor" style="flex:1;min-width:280px;display:none;">
+
+    <!-- type name row -->
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+        <div style="flex:1;">
+          <label>Type name</label>
+          <input type="text" id="ed-type-name" placeholder="e.g. lead"
+                 oninput="onTypeNameChange()"
+                 style="font-size:16px;font-weight:700;">
+        </div>
+        <button onclick="deleteCurrentType()"
+                class="btn btn-ghost btn-sm"
+                style="color:var(--error);border-color:var(--error);margin-top:18px;">
+          Delete type
+        </button>
+      </div>
+    </div>
+
+    <!-- required fields -->
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title">Required fields</div>
+      <div class="hint" style="margin-bottom:10px;">
+        These fields must be present on every record of this type.
+      </div>
+      <div id="required-chips" class="chip-group" style="margin-bottom:10px;"></div>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="req-input" placeholder="field name"
+               style="flex:1;font-size:14px;"
+               onkeydown="if(event.key==='Enter') addRequired()">
+        <button onclick="addRequired()" class="btn btn-ghost btn-sm">Add</button>
+      </div>
+    </div>
+
+    <!-- fields editor -->
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title">Fields</div>
+      <div class="hint" style="margin-bottom:10px;">
+        Define what each field accepts. Leave options empty for free-text fields.
+      </div>
+      <div id="fields-list"></div>
+      <button onclick="addField()" class="btn btn-ghost btn-sm" style="margin-top:8px;">
+        + Add field
+      </button>
+    </div>
+
+    <!-- tags editor -->
+    <div class="card" style="margin-bottom:12px;">
+      <div class="card-title">Tag options</div>
+      <div class="hint" style="margin-bottom:10px;">
+        Tags that appear based on a field value. Pick a field, then define
+        which tags show for each value of that field.
+      </div>
+      <div id="tags-list"></div>
+      <button onclick="addTagRule()" class="btn btn-ghost btn-sm" style="margin-top:8px;">
+        + Add tag rule
+      </button>
+    </div>
+
+  </div>
+
+  <div id="type-empty"
+       style="flex:1;padding:40px;text-align:center;color:var(--sub);font-size:14px;">
+    Select a type on the left, or add a new one.
+  </div>
+
+</div>
+
+<style>
+  .type-tab {
+    display:block;width:100%;text-align:left;padding:8px 10px;border-radius:8px;
+    border:none;background:none;font-size:14px;font-weight:600;color:var(--sub);
+    cursor:pointer;margin-bottom:2px;transition:all .15s;
+  }
+  .type-tab:hover   { background:var(--bg); color:var(--text); }
+  .type-tab.active  { background:var(--accent-lt); color:var(--accent); }
+
+  .field-row {
+    border:1px solid var(--border);border-radius:10px;
+    padding:12px;margin-bottom:10px;background:var(--bg);
+  }
+  .field-row-head {
+    display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap;
+  }
+  .opts-area { margin-top:8px; }
+  .opt-chip {
+    display:inline-flex;align-items:center;gap:4px;
+    padding:4px 10px;border-radius:16px;font-size:13px;font-weight:600;
+    background:var(--card);border:1.5px solid var(--border);color:var(--text);
+    margin:3px;cursor:default;
+  }
+  .opt-chip button {
+    background:none;border:none;color:var(--sub);cursor:pointer;
+    font-size:13px;padding:0;line-height:1;font-weight:700;
+  }
+  .tag-rule-row {
+    border:1px solid var(--border);border-radius:10px;
+    padding:12px;margin-bottom:10px;background:var(--bg);
+  }
+</style>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+// _state.types: ["expense","income",...]
+// _state.type_schemas: { expense: { required:[...], fields:{...}, tags:{...} } }
+// _currentType: string | null
+
+var _state = {
+  types: [],
+  type_schemas: {}
+};
+var _currentType = null;
+
+// ── Boot: load from server schema ────────────────────────────────────────────
+(function() {
+  var schema = {{ schema | tojson }};
+  _state.types = schema.types ? (schema.types.allowed || []) : [];
+
+  var old_types = schema.type || {};
+  _state.types.forEach(function(tname) {
+    var ts = old_types[tname] || {};
+    // only bring in flat-option fields (not use=shared, not parent-dependent, not derived)
+    var fields = {};
+    Object.entries(ts.fields || {}).forEach(function(entry) {
+      var fname = entry[0], fdef = entry[1];
+      if (!fdef || typeof fdef !== "object") return;
+      if ("derived" in fdef) return;   // skip derived
+      if ("use" in fdef) return;       // skip shared refs — builder doesn't manage these
+      if ("parent" in fdef) return;    // skip parent-dependent
+      var opts = Array.isArray(fdef.options) ? fdef.options : [];
+      fields[fname] = {
+        is_int:  fdef.type === "int",
+        options: opts,
+      };
+    });
+
+    // tags: only bring in flat tags (options.key = [...])
+    var tags = {};
+    Object.entries(ts.tags || {}).forEach(function(entry) {
+      var tfield = entry[0], tdef = entry[1];
+      if (!tdef || typeof tdef !== "object") return;
+      var rule = {};
+      Object.entries(tdef).forEach(function(e2) {
+        // e2 = ["options", {...}] or the options dict directly
+        var k2 = e2[0], v2 = e2[1];
+        if (k2 === "options" && typeof v2 === "object") {
+          Object.entries(v2).forEach(function(e3) {
+            rule[e3[0]] = Array.isArray(e3[1]) ? e3[1] : [];
+          });
+        } else if (Array.isArray(v2)) {
+          rule[k2] = v2;
+        }
+      });
+      tags[tfield] = rule;
+    });
+
+    _state.type_schemas[tname] = {
+      required: Array.isArray(ts.required) ? ts.required : [],
+      fields:   fields,
+      tags:     tags,
+    };
+  });
+
+  renderTypeList();
+  if (_state.types.length) selectType(_state.types[0]);
+})();
+
+// ── Type list ─────────────────────────────────────────────────────────────────
+function renderTypeList() {
+  var el = document.getElementById("type-tabs");
+  el.innerHTML = "";
+  _state.types.forEach(function(t) {
+    var btn = document.createElement("button");
+    btn.className = "type-tab" + (t === _currentType ? " active" : "");
+    btn.textContent = t;
+    btn.addEventListener("click", function() { selectType(t); });
+    el.appendChild(btn);
+  });
+}
+
+function selectType(tname) {
+  _currentType = tname;
+  renderTypeList();
+  document.getElementById("type-editor").style.display = "block";
+  document.getElementById("type-empty").style.display  = "none";
+  renderEditor();
+}
+
+function addType() {
+  var name = prompt("New type name (lowercase, underscores):");
+  if (!name) return;
+  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
+  if (!name) return;
+  if (_state.types.includes(name)) { alert("Type already exists"); return; }
+  _state.types.push(name);
+  _state.type_schemas[name] = { required:[], fields:{}, tags:{} };
+  selectType(name);
+}
+
+function deleteCurrentType() {
+  if (!_currentType) return;
+  if (!confirm("Delete type '" + _currentType + "'? This only changes the schema, not existing records.")) return;
+  _state.types = _state.types.filter(function(t){ return t !== _currentType; });
+  delete _state.type_schemas[_currentType];
+  _currentType = null;
+  document.getElementById("type-editor").style.display = "none";
+  document.getElementById("type-empty").style.display  = "block";
+  renderTypeList();
+}
+
+function onTypeNameChange() {
+  // rename in place
+  var newName = document.getElementById("ed-type-name").value.trim()
+                       .toLowerCase().replace(/[^a-z0-9_]/g,"_");
+  if (!newName || newName === _currentType) return;
+  if (_state.types.includes(newName)) return;
+  var idx = _state.types.indexOf(_currentType);
+  if (idx === -1) return;
+  _state.types[idx] = newName;
+  _state.type_schemas[newName] = _state.type_schemas[_currentType];
+  delete _state.type_schemas[_currentType];
+  _currentType = newName;
+  renderTypeList();
+}
+
+// ── Editor ────────────────────────────────────────────────────────────────────
+function renderEditor() {
+  if (!_currentType) return;
+  var ts = _state.type_schemas[_currentType];
+  document.getElementById("ed-type-name").value = _currentType;
+  renderRequired(ts);
+  renderFields(ts);
+  renderTags(ts);
+}
+
+function ts() { return _state.type_schemas[_currentType]; }
+
+// ── Required ──────────────────────────────────────────────────────────────────
+function renderRequired(ts) {
+  var el = document.getElementById("required-chips");
+  el.innerHTML = "";
+  (ts.required || []).forEach(function(r, i) {
+    var chip = document.createElement("span");
+    chip.className = "opt-chip";
+    chip.innerHTML = r + ' <button onclick="removeRequired(' + i + ')">×</button>';
+    el.appendChild(chip);
+  });
+}
+
+function addRequired() {
+  var inp = document.getElementById("req-input");
+  var val = inp.value.trim().toLowerCase().replace(/\s+/g,"_");
+  if (!val) return;
+  var t = ts();
+  if (!t.required.includes(val)) { t.required.push(val); renderRequired(t); }
+  inp.value = "";
+}
+
+function removeRequired(idx) {
+  ts().required.splice(idx, 1);
+  renderRequired(ts());
+}
+
+// ── Fields ────────────────────────────────────────────────────────────────────
+function renderFields(ts) {
+  var el = document.getElementById("fields-list");
+  el.innerHTML = "";
+  Object.entries(ts.fields).forEach(function(entry) {
+    el.appendChild(makeFieldRow(entry[0], entry[1]));
+  });
+}
+
+function addField() {
+  var name = prompt("Field name (lowercase):");
+  if (!name) return;
+  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
+  if (!name) return;
+  if (ts().fields[name]) { alert("Field already exists"); return; }
+  ts().fields[name] = { is_int: false, options: [] };
+  renderFields(ts());
+}
+
+function makeFieldRow(fname, fdef) {
+  var div = document.createElement("div");
+  div.className = "field-row";
+  div.id = "field-row-" + fname;
+
+  // header: name + type toggle + delete
+  var head = document.createElement("div");
+  head.className = "field-row-head";
+  head.innerHTML =
+    '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
+      '<input type="checkbox" ' + (fdef.is_int ? "checked" : "") +
+      ' onchange="toggleInt(\'' + fname + '\',this.checked)"> Number field' +
+    '</label>' +
+    '<button onclick="deleteField(\'' + fname + '\')" ' +
+    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;' +
+    'line-height:1;padding:0;">×</button>';
+  div.appendChild(head);
+
+  if (!fdef.is_int) {
+    // options area
+    var opts = document.createElement("div");
+    opts.className = "opts-area";
+
+    var chipsDiv = document.createElement("div");
+    chipsDiv.style.marginBottom = "8px";
+    (fdef.options || []).forEach(function(opt, i) {
+      var chip = document.createElement("span");
+      chip.className = "opt-chip";
+      chip.innerHTML = opt + ' <button onclick="removeOption(\'' +
+        fname + '\',' + i + ')">×</button>';
+      chipsDiv.appendChild(chip);
+    });
+    opts.appendChild(chipsDiv);
+
+    var addRow = document.createElement("div");
+    addRow.style.cssText = "display:flex;gap:8px;";
+    addRow.innerHTML =
+      '<input type="text" id="opt-inp-' + fname + '" placeholder="add option…" ' +
+      'style="flex:1;font-size:13px;" ' +
+      'onkeydown="if(event.key===\'Enter\') addOption(\'' + fname + '\')">' +
+      '<button onclick="addOption(\'' + fname + '\')" ' +
+      'class="btn btn-ghost btn-sm">Add</button>';
+    opts.appendChild(addRow);
+    div.appendChild(opts);
+  } else {
+    var note = document.createElement("div");
+    note.style.cssText = "font-size:12px;color:var(--sub);margin-top:4px;";
+    note.textContent = "Numeric — no options needed";
+    div.appendChild(note);
+  }
+
+  return div;
+}
+
+function toggleInt(fname, val) {
+  ts().fields[fname].is_int = val;
+  if (val) ts().fields[fname].options = [];
+  renderFields(ts());
+}
+
+function deleteField(fname) {
+  if (!confirm("Remove field '" + fname + "' from this type?")) return;
+  delete ts().fields[fname];
+  // also remove any tag rules for this field
+  delete ts().tags[fname];
+  renderFields(ts()); renderTags(ts());
+}
+
+function addOption(fname) {
+  var inp = document.getElementById("opt-inp-" + fname);
+  var val = inp.value.trim().toLowerCase().replace(/\s+/g,"_");
+  if (!val) return;
+  var opts = ts().fields[fname].options;
+  if (!opts.includes(val)) { opts.push(val); renderFields(ts()); }
+  else inp.value = "";
+}
+
+function removeOption(fname, idx) {
+  ts().fields[fname].options.splice(idx, 1);
+  renderFields(ts());
+}
+
+// ── Tags ──────────────────────────────────────────────────────────────────────
+function renderTags(ts) {
+  var el = document.getElementById("tags-list");
+  el.innerHTML = "";
+  Object.entries(ts.tags).forEach(function(entry) {
+    el.appendChild(makeTagRule(entry[0], entry[1]));
+  });
+}
+
+function addTagRule() {
+  // pick a field that has options
+  var fieldNames = Object.keys(ts().fields).filter(function(f) {
+    return !ts().fields[f].is_int && ts().fields[f].options.length > 0;
+  });
+  if (!fieldNames.length) {
+    alert("Add a field with options first — tags are based on field values.");
+    return;
+  }
+  var field = prompt("Which field triggers these tags?\n" + fieldNames.join(", "));
+  if (!field || !ts().fields[field]) { alert("Unknown field"); return; }
+  if (ts().tags[field]) { alert("Tag rule for '" + field + "' already exists"); return; }
+  ts().tags[field] = {};
+  renderTags(ts());
+}
+
+function makeTagRule(tfield, rule) {
+  var fdef    = ts().fields[tfield];
+  var fieldOpts = fdef ? fdef.options : [];
+
+  var div = document.createElement("div");
+  div.className = "tag-rule-row";
+
+  var head = document.createElement("div");
+  head.style.cssText = "display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;";
+  head.innerHTML =
+    '<div style="font-size:13px;font-weight:700;">Tags when <span style="color:var(--accent);">' +
+    tfield + '</span> = …</div>' +
+    '<button onclick="deleteTagRule(\'' + tfield + '\')" ' +
+    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:16px;line-height:1;padding:0;">×</button>';
+  div.appendChild(head);
+
+  // one row per field value
+  fieldOpts.forEach(function(fval) {
+    var tags = rule[fval] || [];
+    var row  = document.createElement("div");
+    row.style.marginBottom = "10px";
+
+    var valLabel = document.createElement("div");
+    valLabel.style.cssText = "font-size:12px;color:var(--sub);font-weight:600;margin-bottom:5px;";
+    valLabel.textContent = fval;
+    row.appendChild(valLabel);
+
+    var chipDiv = document.createElement("div");
+    chipDiv.className = "chip-group";
+    chipDiv.style.marginBottom = "5px";
+    tags.forEach(function(tag, ti) {
+      var chip = document.createElement("span");
+      chip.className = "opt-chip";
+      chip.innerHTML = tag + ' <button onclick="removeTag(\'' +
+        tfield + '\',\'' + fval + '\',' + ti + ')">×</button>';
+      chipDiv.appendChild(chip);
+    });
+    row.appendChild(chipDiv);
+
+    var addRow = document.createElement("div");
+    addRow.style.cssText = "display:flex;gap:6px;";
+    addRow.innerHTML =
+      '<input type="text" id="tag-inp-' + tfield + '-' + fval + '" ' +
+      'placeholder="tag name…" style="flex:1;font-size:13px;" ' +
+      'onkeydown="if(event.key===\'Enter\') addTag(\'' + tfield + '\',\'' + fval + '\')">' +
+      '<button onclick="addTag(\'' + tfield + '\',\'' + fval + '\')" ' +
+      'class="btn btn-ghost btn-sm">Add</button>';
+    row.appendChild(addRow);
+    div.appendChild(row);
+  });
+
+  if (!fieldOpts.length) {
+    var note = document.createElement("div");
+    note.style.cssText = "font-size:12px;color:var(--sub);";
+    note.textContent = "Field '" + tfield + "' has no options defined yet.";
+    div.appendChild(note);
+  }
+
+  return div;
+}
+
+function deleteTagRule(tfield) {
+  delete ts().tags[tfield];
+  renderTags(ts());
+}
+
+function addTag(tfield, fval) {
+  var inp = document.getElementById("tag-inp-" + tfield + "-" + fval);
+  var val = inp.value.trim().toLowerCase().replace(/\s+/g,"_");
+  if (!val) return;
+  if (!ts().tags[tfield][fval]) ts().tags[tfield][fval] = [];
+  if (!ts().tags[tfield][fval].includes(val)) {
+    ts().tags[tfield][fval].push(val);
+    renderTags(ts());
+  } else inp.value = "";
+}
+
+function removeTag(tfield, fval, idx) {
+  ts().tags[tfield][fval].splice(idx, 1);
+  renderTags(ts());
+}
+
+// ── Save ─────────────────────────────────────────────────────────────────────
+function saveSchema() {
+  var btn = document.getElementById("save-btn");
+  var msg = document.getElementById("save-msg");
+  btn.disabled = true; btn.textContent = "Saving…";
+  msg.style.display = "none";
+
+  fetch("/schema-builder/save", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(_state)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    btn.disabled = false; btn.textContent = "💾 Save Schema";
+    msg.style.display = "inline";
+    if (d.ok) {
+      msg.style.color = "var(--success)";
+      msg.textContent = "✔ Saved — restart Flask to reload schema in all sessions";
+    } else {
+      msg.style.color = "var(--error)";
+      msg.textContent = "✖ " + d.error;
+    }
+  })
+  .catch(function(e) {
+    btn.disabled = false; btn.textContent = "💾 Save Schema";
+    msg.style.display = "inline";
+    msg.style.color = "var(--error)";
+    msg.textContent = "✖ " + e;
+  });
+}
+</script>
+
+{% endblock %}
