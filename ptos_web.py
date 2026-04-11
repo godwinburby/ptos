@@ -34,6 +34,62 @@ def _greeting():
     h = dt.datetime.now().hour
     return "morning" if h < 12 else "afternoon" if h < 17 else "evening"
 
+def _build_period_label(time_code, custom_time, cycles):
+    """Build a human-readable label from time code.
+    
+    Examples:
+      "tm"     → "This month"
+      "tw"     → "This week"  
+      "tq"     → "This quarter"
+      "all"    → "All time"
+      "2026-04"→ "Apr 2026"
+      "clinic" → "Clinic"
+      "custom" → "Custom"
+    """
+    # Standard time options labels
+    labels = {
+        "td": "Today", "yd": "Yesterday",
+        "tw": "This week", "lw": "Last week",
+        "tm": "This month", "lm": "Last month",
+        "tq": "This quarter", "lq": "Last quarter",
+        "ty": "This year", "ly": "Last year",
+        "all": "All time",
+    }
+    
+    # Check standard codes first
+    if time_code in labels:
+        return labels[time_code]
+    
+    # Handle YYYY-MM format (custom month)
+    if re.fullmatch(r"\d{4}-\d{2}", time_code):
+        year, month = int(time_code[:4]), int(time_code[5:7])
+        dt_obj = dt.datetime(year, month, 1)
+        return dt_obj.strftime("%b %Y")
+    
+    # Check for custom cycles (e.g., "clinic", "school")
+    for cycle_name in cycles.keys():
+        if time_code == cycle_name:
+            return cycle_name.capitalize()
+        # Check for offset variants like "clinic-1"
+        if time_code.startswith(cycle_name + "-"):
+            return cycle_name.capitalize()
+    
+    # Handle "custom" without a specific time
+    if time_code == "custom" and custom_time:
+        if re.fullmatch(r"\d{4}-\d{2}", custom_time):
+            year, month = int(custom_time[:4]), int(custom_time[5:7])
+            dt_obj = dt.datetime(year, month, 1)
+            return dt_obj.strftime("%b %Y")
+        return "Custom"
+    
+    # Fallback - try to use custom_time if provided
+    if custom_time and re.fullmatch(r"\d{4}-\d{2}", custom_time):
+        year, month = int(custom_time[:4]), int(custom_time[5:7])
+        dt_obj = dt.datetime(year, month, 1)
+        return dt_obj.strftime("%b %Y")
+    
+    return "Custom"
+
 def _build_field_defs(schema, rtype, current_record=None):
     if not rtype: return []
     type_schema  = schema.get("type", {}).get(rtype, {})
@@ -186,24 +242,16 @@ def home():
         
         # Get time window from query param, default to this month
         time_code = request.args.get("time", "tm")
+        custom_time = request.args.get("custom_time", "")
         if time_code == "custom":
-            custom_time = request.args.get("custom_time", "")
             if custom_time and re.match(r"\d{4}-\d{2}", custom_time):
                 time_code = custom_time
         
         cycles = cfg.get("cycles", {})
         if db_name and db_name in dashboards:
             db = svc.get_dashboard(db_name, time_code)
-            # Build nice period string from db["period"] (e.g., "Apr 2026")
-            period_str = ""
-            if db.get("period"):
-                try:
-                    parts = db["period"].split(" to ")
-                    if len(parts) == 2:
-                        start_date = dt.datetime.strptime(parts[0].strip(), "%Y-%m-%d")
-                        period_str = start_date.strftime("%b %Y")
-                except:
-                    period_str = ""
+            # Build nice period label (e.g., "This week", "Apr 2026", "Clinic")
+            period_str = _build_period_label(time_code, custom_time, cycles)
             # Show all dashboard items in home (no limit, template handles display)
             for item in db["items"]:
                 kind = item.get("kind", "unknown")
@@ -633,6 +681,12 @@ def queries_run():
         if kind == "d":
             result = svc.get_dashboard(name, time or "tm")
             result["kind"] = "dashboard"
+            # Add human-readable time label
+            cfg = ptos.get_config()
+            cycles = cfg.get("cycles", {})
+            custom_time = ""
+            time_for_label = time or "tm"
+            result["time_label"] = _build_period_label(time_for_label, custom_time, cycles)
         elif kind == "m":
             result = svc.get_metric(name, time or "tm")
             result["kind"] = "metric"
