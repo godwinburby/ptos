@@ -1,9 +1,13 @@
 #!/bin/bash
 # PTOS Setup Script for Termux
-# Run ONCE to install PTOS, or anytime to update
+# Run ONCE to install PTOS (first-time only)
 #
-# First run:  Full setup (clone, install dependencies, init)
-# Update run:  Quick git pull (data never touched)
+# This script:
+# - Clones PTOS to ~/storage/shared/ptos
+# - Installs Python and Flask
+# - Initializes PTOS
+#
+# For updates, just run start_ptos.sh (it handles updates automatically)
 
 set -e
 
@@ -14,51 +18,46 @@ echo "  PTOS Setup for Termux"
 echo "=========================================="
 echo ""
 
-# Determine if first run or update
-if [ ! -d "$PTOS_DIR" ]; then
-    # FIRST RUN
-    echo "📥 Cloning PTOS repository..."
-    mkdir -p "$HOME/storage/shared"
-    git clone https://github.com/godwinburby/ptos.git "$PTOS_DIR"
-    echo "✅ Cloned PTOS to $PTOS_DIR"
-    IS_FIRST_RUN=true
-else
-    # UPDATE
-    echo "✅ PTOS directory found at $PTOS_DIR"
-    cd "$PTOS_DIR"
-    echo "📥 Pulling latest changes..."
-    git pull
-    IS_FIRST_RUN=false
+# Check if already installed
+if [ -d "$PTOS_DIR" ]; then
+    echo "❌ PTOS is already installed at $PTOS_DIR"
+    echo ""
+    echo "To update PTOS, just run:"
+    echo "  ./start_ptos.sh"
+    echo ""
+    echo "This will automatically pull latest changes."
+    exit 1
 fi
+
+echo "📥 Cloning PTOS repository..."
+mkdir -p "$HOME/storage/shared"
+git clone https://github.com/godwinburby/ptos.git "$PTOS_DIR"
 
 cd "$PTOS_DIR"
 
-if [ "$IS_FIRST_RUN" = true ]; then
-    echo ""
-    echo "📦 Updating Termux packages..."
-    pkg update && pkg upgrade -y
+echo ""
+echo "📦 Updating Termux packages..."
+pkg update && pkg upgrade -y
 
-    echo ""
-    echo "🐍 Installing Python..."
-    pkg install python -y
+echo ""
+echo "🐍 Installing Python..."
+pkg install python -y
 
-    echo ""
-    echo "📥 Installing Flask..."
-    pip install flask
+echo ""
+echo "📥 Installing Flask..."
+pip install flask
 
-    echo ""
-    echo "🚀 Initializing PTOS..."
-    python ptos.py --init
-fi
+echo ""
+echo "🚀 Initializing PTOS..."
+python ptos.py --init
 
 echo ""
 echo "=========================================="
-echo "  ✅ PTOS is ready!"
+echo "  ✅ Setup Complete!"
 echo "=========================================="
 echo ""
 echo "To start PTOS Web:"
 echo "  cd $PTOS_DIR"
 echo "  ./start_ptos.sh"
 echo ""
-echo "To update PTOS anytime:"
-echo "  ./setup_ptos.sh"
+echo "The start script will auto-update PTOS each time you run it."
