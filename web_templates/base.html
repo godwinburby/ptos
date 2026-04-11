@@ -161,10 +161,23 @@
       }
       .sidebar-footer a { color: var(--accent); text-decoration: none; }
       .main { padding: 28px 32px; max-width: 860px; }
+      .floating-stop { bottom: 20px; right: 20px; }
     }
 
     /* ── Shared components ── */
     .page-title { font-size: 20px; font-weight: 800; margin-bottom: 18px; }
+
+    .floating-stop {
+      position: fixed; bottom: 76px; right: 16px;
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--error); color: #fff; border: none;
+      font-size: 18px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 150; transition: transform .15s, box-shadow .15s;
+    }
+    .floating-stop:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
+    .floating-stop:active { transform: scale(.95); }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
     .card-title { font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
 
@@ -319,6 +332,10 @@
   </nav>
   <div class="sidebar-footer">
     <a href="https://github.com/godwinburby/ptos" target="_blank">⭐ github.com/godwinburby/ptos</a>
+    <br><br>
+    <button onclick="stopServer()" style="width:100%;padding:8px 14px;border-radius:8px;border:none;background:var(--error);color:#fff;font-size:13px;font-weight:600;cursor:pointer;opacity:.85;">
+      Stop Server
+    </button>
   </div>
 </aside>
 
@@ -351,6 +368,11 @@
   </a>
 </nav>
 
+<!-- Floating Stop button -->
+<button class="floating-stop" onclick="stopServer()" title="Stop Server">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+</button>
+
 <!-- More menu dropdown -->
 <div id="more-menu" class="more-menu" style="display:none;">
   <div class="more-menu-overlay" onclick="toggleMoreMenu(event)"></div>
@@ -380,6 +402,11 @@
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
       Lint
     </a>
+    <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
+    <a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      Stop Server
+    </a>
   </div>
 </div>
 
@@ -388,6 +415,17 @@ function toggleMoreMenu(e) {
   if (e) e.preventDefault();
   var menu = document.getElementById("more-menu");
   menu.style.display = menu.style.display === "none" ? "flex" : "none";
+}
+function stopServer() {
+  if (!confirm("Stop PTOS server?")) return;
+  fetch("/shutdown")
+    .then(function() {
+      window.close();
+      document.body.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:var(--sub);'>Server stopped. Close this tab.</div>";
+    })
+    .catch(function() {
+      document.body.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:var(--sub);'>Server stopped. Close this tab.</div>";
+    });
 }
 </script>
 

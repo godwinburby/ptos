@@ -1256,6 +1256,17 @@ def api_save_preset():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/shutdown", methods=["GET", "POST"])
+def shutdown_server():
+    def _exit():
+        import time
+        time.sleep(0.3)
+        os._exit(0)
+    import threading
+    threading.Thread(target=_exit, daemon=True).start()
+    return "Server stopped"
+
+
 @app.route("/api/save_query", methods=["POST"])
 def api_save_query():
     data    = request.get_json(silent=True) or {}
