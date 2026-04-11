@@ -129,9 +129,8 @@ echo "Open your browser and go to: http://localhost:5000"
 echo "Press Ctrl+C to stop the server."
 echo ""
 
-# Open browser in background
-xdg-open http://localhost:5000 2>/dev/null &
-BROWSER_PID=$!
+# Open browser first
+xdg-open http://localhost:5000 2>/dev/null
 
-# Start Flask server
+# Start Flask server in foreground (Ctrl+C to stop)
 $PYTHON ptos_web.py
