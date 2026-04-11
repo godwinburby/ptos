@@ -106,12 +106,14 @@ fi
 # Clean up port 5000
 echo ""
 echo "Checking for processes on port 5000..."
+# Try lsof first
 if command -v lsof &>/dev/null; then
-    PID=$(lsof -ti:5000 2>/dev/null)
+    PID=$(lsof -ti:5000 2>/dev/null) || true
     if [ -n "$PID" ]; then
         echo "Killing process $PID on port 5000..."
         kill -9 $PID 2>/dev/null || sudo kill -9 $PID 2>/dev/null || true
     fi
+# Fallback to fuser
 elif command -v fuser &>/dev/null; then
     fuser -k 5000/tcp 2>/dev/null || true
 fi
