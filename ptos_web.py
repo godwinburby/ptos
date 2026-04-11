@@ -194,10 +194,29 @@ def home():
         cycles = cfg.get("cycles", {})
         if db_name and db_name in dashboards:
             db = svc.get_dashboard(db_name, time_code)
+            # Build nice period string from db["period"] (e.g., "Apr 2026")
+            period_str = ""
+            if db.get("period"):
+                try:
+                    parts = db["period"].split(" to ")
+                    if len(parts) == 2:
+                        start_date = dt.datetime.strptime(parts[0].strip(), "%Y-%m-%d")
+                        period_str = start_date.strftime("%b %Y")
+                except:
+                    period_str = ""
             # Show all dashboard items in home (no limit, template handles display)
             for item in db["items"]:
-                stats.append({"label": item["name"].replace("_"," "),
-                               "value": item["value"], "sub": "this month"})
+                kind = item.get("kind", "unknown")
+                stat = {
+                    "label": item["name"].replace("_"," "),
+                    "value": item["value"],
+                    "sub": period_str,
+                    "kind": kind,
+                }
+                # Only queries get a clickable link
+                if kind == "query":
+                    stat["query_url"] = f"/queries?run={item['name']}&time={time_code}"
+                stats.append(stat)
     except Exception:
         pass
     except Exception:
