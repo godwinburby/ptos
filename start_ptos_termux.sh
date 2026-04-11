@@ -1,6 +1,5 @@
 #!/bin/bash
-# PTOS Web Server Start Script
-# Starts the web server - no download/update
+# PTOS Start Script for Termux
 
 PTOS_DIR="$HOME/storage/shared/ptos"
 
@@ -10,27 +9,29 @@ echo "=========================================="
 echo ""
 
 if [ ! -d "$PTOS_DIR" ]; then
-    echo "=========================================="
-    echo "  PTOS is not installed!"
-    echo "=========================================="
-    echo ""
-    echo "Run setup_ptos_termux.sh first to install PTOS."
+    echo "ERROR: PTOS not installed."
+    echo "Run setup_ptos_termux.sh first."
     exit 1
 fi
 
 cd "$PTOS_DIR"
 
-echo "🚀 Starting PTOS Web Server..."
-echo ""
-echo "Open in browser: http://localhost:5000"
-echo ""
+# Verify Python 3.11+
+if ! python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+    echo "ERROR: Python 3.11+ required. Run:  pkg install python"
+    exit 1
+fi
 
-# Kill any existing server
+# Stop any existing server
 pkill -f "python.*ptos_web.py" 2>/dev/null || true
 sleep 1
 
-# Open browser (non-blocking)
-am start -a android.intent.action.VIEW -d http://localhost:5000 > /dev/null 2>&1 &
+echo "Starting PTOS Web Server..."
+echo "Open in browser: http://localhost:5000"
+echo ""
 
-# Start server (terminal stays visible)
+# Open browser (non-blocking, ignore failure)
+am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 &
+
+# Start server in foreground
 python ptos_web.py
