@@ -23,6 +23,7 @@ TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
 BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
 BACKUP_FOLDERS = ["records", "config", "templates"]
+MAX_BACKUPS = 10  # Keep last 10 backups
 
 def _backup_file(path):
     """Copy path to path.bak before any write operation.
@@ -39,6 +40,7 @@ def _backup_file(path):
 def backup_data():
     """Create a timestamped backup ZIP of records/, config/, templates/.
     Returns the path to the created backup file.
+    Automatically removes oldest backups if MAX_BACKUPS limit is exceeded.
     """
     import zipfile
     os.makedirs(BACKUP_DIR, exist_ok=True)
@@ -55,6 +57,9 @@ def backup_data():
                         file_path = os.path.join(root, file)
                         arcname = os.path.relpath(file_path, BASE_DIR)
                         zf.write(file_path, arcname)
+    
+    # Clean up old backups if limit exceeded
+    _cleanup_old_backups()
     
     return backup_path
 
@@ -94,6 +99,17 @@ def delete_backup(filename):
         raise ValueError("Invalid backup filename")
     os.remove(backup_path)
     return True
+
+def _cleanup_old_backups():
+    """Remove oldest backups if MAX_BACKUPS limit is exceeded."""
+    backups = list_backups()
+    if len(backups) > MAX_BACKUPS:
+        # Get list of filenames to delete (oldest, beyond the limit)
+        to_delete = backups[MAX_BACKUPS:]
+        for name, _ in to_delete:
+            backup_path = os.path.join(BACKUP_DIR, name)
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
 
 def check_backup_folders():
     """Check if all required backup folders exist.
