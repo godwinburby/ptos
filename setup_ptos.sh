@@ -1,16 +1,8 @@
 #!/bin/bash
 # PTOS Setup Script for Termux
 # Run ONCE to install PTOS (first-time only)
-#
-# This script:
-# - Clones PTOS to ~/storage/shared/ptos
-# - Installs Python and Flask
-# - Initializes PTOS
-#
-# For updates, just run start_ptos.sh (it handles updates automatically)
 
-set -e
-
+TMP_DIR="$HOME/.ptos-temp"
 PTOS_DIR="$HOME/storage/shared/ptos"
 
 echo "=========================================="
@@ -18,20 +10,42 @@ echo "  PTOS Setup for Termux"
 echo "=========================================="
 echo ""
 
-# Check if already installed
 if [ -d "$PTOS_DIR" ]; then
-    echo "❌ PTOS is already installed at $PTOS_DIR"
+    echo "=========================================="
+    echo "  PTOS is already installed!"
+    echo "=========================================="
     echo ""
-    echo "To update PTOS, just run:"
+    echo "PTOS is at: $PTOS_DIR"
+    echo ""
+    echo "To start PTOS Web:"
     echo "  ./start_ptos.sh"
     echo ""
-    echo "This will automatically pull latest changes."
+    echo "To update PTOS:"
+    echo "  ./update_ptos.sh"
     exit 1
 fi
 
-echo "📥 Cloning PTOS repository..."
+echo "=========================================="
+echo "  Downloading and Installing PTOS"
+echo "=========================================="
+echo ""
+
+echo "📥 Downloading PTOS..."
 mkdir -p "$HOME/storage/shared"
-git clone https://github.com/godwinburby/ptos.git "$PTOS_DIR"
+cd "$HOME/storage/shared"
+
+rm -rf "$TMP_DIR" 2>/dev/null
+mkdir -p "$TMP_DIR"
+
+curl -L --progress-bar -o "$TMP_DIR/ptos.zip" \
+    https://github.com/godwinburby/ptos/archive/refs/heads/main.zip
+
+echo ""
+echo "📦 Extracting files..."
+mkdir -p "$TMP_DIR/new"
+unzip -o "$TMP_DIR/ptos.zip" -d "$TMP_DIR/new" > /dev/null 2>&1
+mv "$TMP_DIR/new/ptos-main" ptos
+rm -rf "$TMP_DIR"
 
 cd "$PTOS_DIR"
 
@@ -56,8 +70,24 @@ echo "=========================================="
 echo "  ✅ Setup Complete!"
 echo "=========================================="
 echo ""
+
+
+echo "📱 Creating Termux Widget shortcuts..."
+mkdir -p "$HOME/.shortcuts"
+
+rm -f "$HOME/.shortcuts/setup_ptos.sh" 2>/dev/null
+rm -f "$HOME/.shortcuts/start_ptos.sh" 2>/dev/null
+rm -f "$HOME/.shortcuts/update_ptos.sh" 2>/dev/null
+
+ln -s "$HOME/setup_ptos.sh" "$HOME/.shortcuts/setup_ptos.sh"
+ln -s "$HOME/start_ptos.sh" "$HOME/.shortcuts/start_ptos.sh"
+ln -s "$HOME/update_ptos.sh" "$HOME/.shortcuts/update_ptos.sh"
+
+echo ""
+echo "✅ All done! Widget shortcuts ready."
+echo ""
 echo "To start PTOS Web:"
-echo "  cd $PTOS_DIR"
 echo "  ./start_ptos.sh"
 echo ""
-echo "The start script will auto-update PTOS each time you run it."
+echo "To update PTOS (when new version available):"
+echo "  ./update_ptos.sh"
