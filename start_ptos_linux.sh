@@ -35,7 +35,7 @@ fi
 # Kill any existing process on port 5000
 echo "Checking for existing server..."
 if command -v lsof &>/dev/null; then
-    PID=$(lsof -ti:5000 2>/dev/null)
+    PID=$(lsof -ti:5000 2>/dev/null) || true
     if [ -n "$PID" ]; then
         echo "Killing existing process $PID on port 5000..."
         kill -9 $PID 2>/dev/null || sudo kill -9 $PID 2>/dev/null || true
@@ -54,8 +54,8 @@ echo "Open in browser: http://localhost:5000"
 echo "Press Ctrl+C to stop."
 echo ""
 
-# Open browser (non-blocking)
-xdg-open http://localhost:5000 2>/dev/null &
+# Open browser first
+xdg-open http://localhost:5000 2>/dev/null
 
-# Start Flask server
+# Start Flask server in foreground (Ctrl+C to stop)
 $PYTHON ptos_web.py
