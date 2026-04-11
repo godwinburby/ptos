@@ -547,6 +547,26 @@ def backup_download(name):
     return send_file(backup_path, as_attachment=True, download_name=name)
 
 
+@app.route("/backup/delete", methods=["POST"])
+def backup_delete():
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "")
+    if not name:
+        return jsonify(ok=False, error="No backup name provided")
+    try:
+        ptos.delete_backup(name)
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/backup/check", methods=["GET"])
+def backup_check():
+    """Check if all required backup folders exist."""
+    all_exist, missing = ptos.check_backup_folders()
+    return jsonify(ok=all_exist, missing=missing)
+
+
 @app.route("/backup/restore", methods=["POST"])
 def backup_restore():
     if "file" in request.files:

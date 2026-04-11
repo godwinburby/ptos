@@ -83,6 +83,29 @@ def list_backups():
     backups.sort(key=lambda x: x[1], reverse=True)
     return backups
 
+def delete_backup(filename):
+    """Delete a specific backup file.
+    Returns True on success, raises error on failure.
+    """
+    backup_path = os.path.join(BACKUP_DIR, filename)
+    if not os.path.exists(backup_path):
+        raise FileNotFoundError(f"Backup not found: {filename}")
+    if not filename.startswith("backup_") or not filename.endswith(".zip"):
+        raise ValueError("Invalid backup filename")
+    os.remove(backup_path)
+    return True
+
+def check_backup_folders():
+    """Check if all required backup folders exist.
+    Returns tuple: (all_exist: bool, missing_folders: list)
+    """
+    missing = []
+    for folder in BACKUP_FOLDERS:
+        folder_path = os.path.join(BASE_DIR, folder)
+        if not os.path.exists(folder_path):
+            missing.append(folder)
+    return len(missing) == 0, missing
+
 SCHEMA_PATH  = os.path.join(CONFIG_DIR, "schema.toml")
 QUERIES_PATH = os.path.join(CONFIG_DIR, "queries.toml")
 CONFIG_PATH  = os.path.join(CONFIG_DIR, "config.toml")
