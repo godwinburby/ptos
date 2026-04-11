@@ -2,8 +2,10 @@
 # PTOS Web Server Start Script
 # Works with Termux Widget - one-tap start
 #
-# If server already running: opens browser
-# If not running: starts server + opens browser
+# This script:
+# - Checks for updates (git pull) on every run
+# - Kills any existing server on port 5000
+# - Starts fresh server + opens browser
 
 set -e
 
@@ -15,21 +17,35 @@ echo "  PTOS Web"
 echo "=========================================="
 echo ""
 
-# Check if server is already running on port 5000
-if curl -s --connect-timeout 2 http://localhost:5000 > /dev/null 2>&1; then
-    echo "🌐 PTOS Web is already running!"
+# Check if PTOS is installed
+if [ ! -d "$PTOS_DIR" ]; then
+    echo "❌ PTOS is not installed."
     echo ""
-    echo "Opening browser..."
-    am start -a android.intent.action.VIEW -d http://localhost:5000
-else
-    echo "🚀 Starting PTOS Web Server..."
-    echo ""
-    echo "Open in browser: http://localhost:5000"
-    echo ""
-    
-    # Open browser (non-blocking)
-    am start -a android.intent.action.VIEW -d http://localhost:5000 &
-    
-    # Start server (terminal stays visible)
-    python ptos_web.py
+    echo "Run setup_ptos.sh first to install PTOS."
+    exit 1
 fi
+
+# Always check for updates
+echo "📥 Checking for updates..."
+cd "$PTOS_DIR"
+git pull
+
+echo ""
+echo "✅ PTOS is up to date!"
+echo ""
+
+# Kill any existing server on port 5000
+echo "🔄 Stopping any existing server..."
+pkill -f "python.*ptos_web.py" 2>/dev/null || true
+sleep 1
+
+echo "🚀 Starting PTOS Web Server..."
+echo ""
+echo "Open in browser: http://localhost:5000"
+echo ""
+
+# Open browser (non-blocking)
+am start -a android.intent.action.VIEW -d http://localhost:5000 &
+
+# Start server (terminal stays visible)
+python ptos_web.py
