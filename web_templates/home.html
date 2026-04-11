@@ -19,60 +19,141 @@
   </select>
   
   <div id="custom-time-div" style="display:none;gap:8px;align-items:center;">
-    <select id="custom-year" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;min-width:80px;">
-      {% for y in year_range|reverse %}<option value="{{ y }}" {% if custom_time and custom_time[:4] == y|string %}selected{% endif %}>{{ y }}</option>{% endfor %}
-    </select>
-    <select id="custom-month" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;min-width:80px;">
-      <option value="01" {% if custom_time and custom_time[5:7] == '01' %}selected{% endif %}>Jan</option>
-      <option value="02" {% if custom_time and custom_time[5:7] == '02' %}selected{% endif %}>Feb</option>
-      <option value="03" {% if custom_time and custom_time[5:7] == '03' %}selected{% endif %}>Mar</option>
-      <option value="04" {% if custom_time and custom_time[5:7] == '04' %}selected{% endif %}>Apr</option>
-      <option value="05" {% if custom_time and custom_time[5:7] == '05' %}selected{% endif %}>May</option>
-      <option value="06" {% if custom_time and custom_time[5:7] == '06' %}selected{% endif %}>Jun</option>
-      <option value="07" {% if custom_time and custom_time[5:7] == '07' %}selected{% endif %}>Jul</option>
-      <option value="08" {% if custom_time and custom_time[5:7] == '08' %}selected{% endif %}>Aug</option>
-      <option value="09" {% if custom_time and custom_time[5:7] == '09' %}selected{% endif %}>Sep</option>
-      <option value="10" {% if custom_time and custom_time[5:7] == '10' %}selected{% endif %}>Oct</option>
-      <option value="11" {% if custom_time and custom_time[5:7] == '11' %}selected{% endif %}>Nov</option>
-      <option value="12" {% if custom_time and custom_time[5:7] == '12' %}selected{% endif %}>Dec</option>
-    </select>
+    <button id="month-picker-btn"
+            style="display:flex;align-items:center;justify-content:space-between;
+                   padding:6px 12px;border-radius:6px;border:1px solid var(--border);
+                   background:var(--bg);color:var(--text);font-size:14px;font-weight:500;
+                   cursor:pointer;min-width:120px;">
+      <span id="month-text">Pick a month</span>
+      <span style="font-size:10px;color:var(--sub);">▼</span>
+    </button>
   </div>
 </div>
 
+<!-- month picker popup -->
+<div id="month-picker-popup"
+     style="display:none;position:fixed;z-index:600;
+            background:var(--card);border:1px solid var(--border);
+            border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);
+            padding:16px;width:252px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <button onclick="shiftYear(-1)"
+            style="background:none;border:none;font-size:20px;color:var(--text);
+                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&lt;</button>
+    <span id="picker-year" style="font-weight:700;font-size:15px;color:var(--text);"></span>
+    <button onclick="shiftYear(1)"
+            style="background:none;border:none;font-size:20px;color:var(--text);
+                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&gt;</button>
+  </div>
+  <div id="picker-grid"
+       style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
+</div>
+
 <script>
-function onTimeChange(val) {
-  var customDiv = document.getElementById('custom-time-div');
-  if (val === 'custom') {
-    customDiv.style.display = 'flex';
-  } else {
-    customDiv.style.display = 'none';
-    updateUrl();
-  }
-}
+(function() {
+  var MONTHS  = ["Jan","Feb","Mar","Apr","May","Jun",
+                 "Jul","Aug","Sep","Oct","Nov","Dec"];
+  var yearMin = {{ year_range[0] }};
+  var yearMax = {{ year_range[-1] }};
+  var selYear = new Date().getFullYear();
+  var selMonth = null;
 
-function updateUrl() {
-  var db = document.getElementById('db-select').value;
-  var time = document.getElementById('time-select').value;
-  
-  var params = new URLSearchParams();
-  params.set('dashboard', db);
-  
-  if (time === 'custom') {
-    var year = document.getElementById('custom-year').value;
-    var month = document.getElementById('custom-month').value;
-    params.set('time', 'custom');
-    params.set('custom_time', year + '-' + month);
-  } else {
-    params.set('time', time);
+  function render() {
+    document.getElementById("picker-year").textContent = selYear;
+    var grid = document.getElementById("picker-grid");
+    grid.innerHTML = "";
+    MONTHS.forEach(function(name, i) {
+      var mm = String(i + 1).padStart(2, "0");
+      var active = (selMonth === mm);
+      var btn = document.createElement("button");
+      btn.textContent = name;
+      btn.style.cssText =
+        "padding:9px 0;border-radius:8px;cursor:pointer;font-size:13px;" +
+        "border:1px solid " + (active ? "var(--accent)" : "var(--border)") + ";" +
+        "background:"       + (active ? "var(--accent)" : "var(--bg)")     + ";" +
+        "color:"           + (active ? "#fff"           : "var(--text)")  + ";" +
+        "font-weight:"     + (active ? "700"            : "400")          + ";";
+      btn.addEventListener("click", function() {
+        selMonth = mm;
+        closePopup();
+        document.getElementById("month-text").textContent = selYear + "-" + mm;
+        updateUrl();
+      });
+      grid.appendChild(btn);
+    });
   }
-  
-  window.location = '/?' + params.toString();
-}
 
-// Show custom input if custom time was selected
-if (document.getElementById('time-select').value === 'custom') {
-  document.getElementById('custom-time-div').style.display = 'flex';
-}
+  window.shiftYear = function(d) {
+    var n = selYear + d;
+    if (n < yearMin || n > yearMax) return;
+    selYear = n; render();
+  };
+
+  document.getElementById("month-picker-btn").addEventListener("click", function(e) {
+    e.stopPropagation();
+    var pop = document.getElementById("month-picker-popup");
+    if (pop.style.display === "none") {
+      render();
+      var btn  = document.getElementById("month-picker-btn");
+      var rect = btn.getBoundingClientRect();
+      pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
+      var POP_W = 260;
+      pop.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - POP_W)) + "px";
+      pop.style.display = "block";
+    } else { closePopup(); }
+  });
+
+  function closePopup() {
+    document.getElementById("month-picker-popup").style.display = "none";
+  }
+
+  document.addEventListener("click", function(e) {
+    var pop = document.getElementById("month-picker-popup");
+    if (!pop || pop.style.display === "none") return;
+    if (!pop.contains(e.target) && e.target.id !== "month-picker-btn") closePopup();
+  });
+
+  function updateUrl() {
+    var db = document.getElementById('db-select').value;
+    var time = document.getElementById('time-select').value;
+    var params = new URLSearchParams();
+    params.set('dashboard', db);
+    if (time === 'custom' && selMonth) {
+      params.set('time', 'custom');
+      params.set('custom_time', selYear + '-' + selMonth);
+    } else {
+      params.set('time', time);
+    }
+    window.location = '/?' + params.toString();
+  }
+  window.updateUrl = updateUrl;
+
+  function onTimeChange(val) {
+    var customDiv = document.getElementById('custom-time-div');
+    if (val === 'custom') {
+      customDiv.style.display = 'flex';
+    } else {
+      customDiv.style.display = 'none';
+      updateUrl();
+    }
+  }
+  window.onTimeChange = onTimeChange;
+
+  // Restore state from URL params
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    var time = params.get("time");
+    if (time === "custom") {
+      document.getElementById("custom-time-div").style.display = "flex";
+      var ct = params.get("custom_time");
+      if (ct && ct.length >= 7) {
+        selYear = parseInt(ct.substring(0, 4));
+        selMonth = ct.substring(5, 7);
+        document.getElementById("month-text").textContent = ct.substring(0, 7);
+      }
+    }
+  })();
+})();
 </script>
 {% endif %}
 
