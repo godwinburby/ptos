@@ -3,6 +3,10 @@
 
 <div class="page-title">Backup & Restore</div>
 
+<div id="folder-warning" class="msg msg-error" style="display:none;margin-bottom:14px;">
+  ⚠️ Missing folders: <span id="missing-folders"></span>
+</div>
+
 <div class="card" style="margin-bottom:14px;">
   <div class="card-title">Create Backup</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
@@ -44,12 +48,13 @@
       </thead>
       <tbody>
         {% for name, created in backups %}
-        <tr>
+        <tr id="row-{{ loop.index }}">
           <td>{{ created.strftime("%Y-%m-%d %H:%M") }}</td>
           <td><code>{{ name }}</code></td>
           <td style="text-align:right;">
             <a href="/backup/download/{{ name }}" class="btn btn-ghost btn-sm" style="margin-right:6px;">Download</a>
-            <button onclick="restoreBackup('{{ name }}')" class="btn btn-ghost btn-sm" style="color:var(--warn);">Restore</button>
+            <button onclick="restoreBackup('{{ name }}')" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--warn);">Restore</button>
+            <button onclick="deleteBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="color:var(--error);">Delete</button>
           </td>
         </tr>
         {% endfor %}
@@ -60,6 +65,20 @@
 </div>
 
 <script>
+// Check folder status on load
+(function() {
+  fetch("/backup/check")
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.ok && d.missing && d.missing.length > 0) {
+        var warning = document.getElementById("folder-warning");
+        var missing = document.getElementById("missing-folders");
+        missing.textContent = d.missing.join(", ");
+        warning.style.display = "block";
+      }
+    });
+})();
+
 function createBackup() {
   var btn = document.getElementById("create-btn");
   var msg = document.getElementById("create-msg");
@@ -108,6 +127,35 @@ function restoreBackup(name) {
         location.reload();
       } else {
         alert("✖ Restore failed: " + d.error);
+      }
+    })
+    .catch(function(e) {
+      alert("✖ Error: " + e);
+    });
+}
+
+function deleteBackup(name, rowNum) {
+  if (!confirm("Are you sure you want to delete '" + name + "'?\n\nThis cannot be undone.")) {
+    return;
+  }
+  
+  fetch("/backup/delete", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name: name})
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        var row = document.getElementById("row-" + rowNum);
+        if (row) row.remove();
+        // Check if table is now empty
+        var tbody = document.querySelector("tbody");
+        if (tbody && tbody.children.length === 0) {
+          location.reload();
+        }
+      } else {
+        alert("✖ Delete failed: " + d.error);
       }
     })
     .catch(function(e) {
