@@ -1,0 +1,167 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-title">Backup & Restore</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Create Backup</div>
+  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Creates a backup of <code>records/</code>, <code>config/</code>, and <code>templates/</code> folders.
+  </p>
+  <button onclick="createBackup()" class="btn btn-primary" id="create-btn">
+    💾 Create Backup Now
+  </button>
+  <span id="create-msg" style="margin-left:12px;font-size:13px;display:none;"></span>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Restore from Upload</div>
+  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Upload a backup ZIP file to restore. This will overwrite existing data.
+  </p>
+  <form onsubmit="return restoreUpload(event)">
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+      <input type="file" id="restore-file" accept=".zip" style="flex:1;">
+      <button type="submit" class="btn btn-warn" id="restore-btn">Restore Backup</button>
+    </div>
+  </form>
+  <div id="restore-msg" style="margin-top:10px;font-size:13px;display:none;"></div>
+</div>
+
+<div class="card">
+  <div class="card-title">Backup History</div>
+  {% if not backups %}
+  <p style="font-size:13px;color:var(--sub);">No backups yet. Create your first backup above.</p>
+  {% else %}
+  <div style="overflow-x:auto;">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>File</th>
+          <th style="text-align:right;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for name, created in backups %}
+        <tr>
+          <td>{{ created.strftime("%Y-%m-%d %H:%M") }}</td>
+          <td><code>{{ name }}</code></td>
+          <td style="text-align:right;">
+            <a href="/backup/download/{{ name }}" class="btn btn-ghost btn-sm" style="margin-right:6px;">Download</a>
+            <button onclick="restoreBackup('{{ name }}')" class="btn btn-ghost btn-sm" style="color:var(--warn);">Restore</button>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
+
+<script>
+function createBackup() {
+  var btn = document.getElementById("create-btn");
+  var msg = document.getElementById("create-msg");
+  btn.disabled = true;
+  btn.textContent = "Creating...";
+  msg.style.display = "none";
+  
+  fetch("/backup/create", {method: "POST"})
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.disabled = false;
+      btn.textContent = "💾 Create Backup Now";
+      msg.style.display = "inline";
+      if (d.ok) {
+        msg.style.color = "var(--success)";
+        msg.textContent = "✔ Backup created! Refreshing...";
+        setTimeout(function() { location.reload(); }, 1000);
+      } else {
+        msg.style.color = "var(--error)";
+        msg.textContent = "✖ " + d.error;
+      }
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      btn.textContent = "💾 Create Backup Now";
+      msg.style.display = "inline";
+      msg.style.color = "var(--error)";
+      msg.textContent = "✖ " + e;
+    });
+}
+
+function restoreBackup(name) {
+  if (!confirm("This will overwrite your current data with the backup.\n\nAre you sure you want to restore '" + name + "'?")) {
+    return;
+  }
+  
+  fetch("/backup/restore", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name: name})
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        alert("✔ Restore complete! Page will reload.");
+        location.reload();
+      } else {
+        alert("✖ Restore failed: " + d.error);
+      }
+    })
+    .catch(function(e) {
+      alert("✖ Error: " + e);
+    });
+}
+
+function restoreUpload(e) {
+  e.preventDefault();
+  var fileInput = document.getElementById("restore-file");
+  var file = fileInput.files[0];
+  if (!file) {
+    alert("Please select a backup file first.");
+    return false;
+  }
+  
+  if (!confirm("This will overwrite your current data with the uploaded backup.\n\nAre you sure?")) {
+    return false;
+  }
+  
+  var btn = document.getElementById("restore-btn");
+  var msg = document.getElementById("restore-msg");
+  btn.disabled = true;
+  msg.style.display = "none";
+  
+  var formData = new FormData();
+  formData.append("file", file);
+  
+  fetch("/backup/restore", {
+    method: "POST",
+    body: formData
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.disabled = false;
+      msg.style.display = "block";
+      if (d.ok) {
+        msg.style.color = "var(--success)";
+        msg.textContent = "✔ Restore complete! Page will reload.";
+        setTimeout(function() { location.reload(); }, 1000);
+      } else {
+        msg.style.color = "var(--error)";
+        msg.textContent = "✖ " + d.error;
+      }
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      msg.style.display = "block";
+      msg.style.color = "var(--error)";
+      msg.textContent = "✖ " + e;
+    });
+  
+  return false;
+}
+</script>
+
+{% endblock %}

@@ -7,6 +7,7 @@ __pycache__/
 records/
 journal/
 tasks/
+backups/
 
 # PTOS runtime
 ptos_error.log
