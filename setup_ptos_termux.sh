@@ -18,10 +18,10 @@ if [ -d "$PTOS_DIR" ]; then
     echo "PTOS is at: $PTOS_DIR"
     echo ""
     echo "To start PTOS Web:"
-    echo "  ./start_ptos.sh"
+    echo "  ./start_ptos_termux.sh"
     echo ""
     echo "To update PTOS:"
-    echo "  ./update_ptos.sh"
+    echo "  ./update_ptos_termux.sh"
     exit 1
 fi
 
@@ -75,19 +75,19 @@ echo ""
 echo "📱 Creating Termux Widget shortcuts..."
 mkdir -p "$HOME/.shortcuts"
 
-rm -f "$HOME/.shortcuts/setup_ptos.sh" 2>/dev/null
-rm -f "$HOME/.shortcuts/start_ptos.sh" 2>/dev/null
-rm -f "$HOME/.shortcuts/update_ptos.sh" 2>/dev/null
+rm -f "$HOME/.shortcuts/setup_ptos_termux.sh" 2>/dev/null
+rm -f "$HOME/.shortcuts/start_ptos_termux.sh" 2>/dev/null
+rm -f "$HOME/.shortcuts/update_ptos_termux.sh" 2>/dev/null
 
-ln -s "$HOME/setup_ptos.sh" "$HOME/.shortcuts/setup_ptos.sh"
-ln -s "$HOME/start_ptos.sh" "$HOME/.shortcuts/start_ptos.sh"
-ln -s "$HOME/update_ptos.sh" "$HOME/.shortcuts/update_ptos.sh"
+ln -s "$HOME/setup_ptos_termux.sh" "$HOME/.shortcuts/setup_ptos_termux.sh"
+ln -s "$HOME/start_ptos_termux.sh" "$HOME/.shortcuts/start_ptos_termux.sh"
+ln -s "$HOME/update_ptos_termux.sh" "$HOME/.shortcuts/update_ptos_termux.sh"
 
 echo ""
 echo "✅ All done! Widget shortcuts ready."
 echo ""
 echo "To start PTOS Web:"
-echo "  ./start_ptos.sh"
+echo "  ./start_ptos_termux.sh"
 echo ""
 echo "To update PTOS (when new version available):"
-echo "  ./update_ptos.sh"
+echo "  ./update_ptos_termux.sh"
