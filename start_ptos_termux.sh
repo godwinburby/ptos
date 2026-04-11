@@ -14,7 +14,7 @@ if [ ! -d "$PTOS_DIR" ]; then
     echo "  PTOS is not installed!"
     echo "=========================================="
     echo ""
-    echo "Run setup_ptos.sh first to install PTOS."
+    echo "Run setup_ptos_termux.sh first to install PTOS."
     exit 1
 fi
 

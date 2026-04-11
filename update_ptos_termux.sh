@@ -16,7 +16,7 @@ if [ ! -d "$PTOS_DIR" ]; then
     echo "  PTOS is not installed!"
     echo "=========================================="
     echo ""
-    echo "Run setup_ptos.sh first to install PTOS."
+    echo "Run setup_ptos_termux.sh first to install PTOS."
     exit 1
 fi
 
@@ -72,7 +72,7 @@ fi
 if [ "$FILES_CHANGED" -eq 1 ]; then
     echo "📦 Updating PTOS code..."
     cp "$TMP_DIR/new/ptos-main"/*.py "$PTOS_DIR/" 2>/dev/null || true
-    cp "$TMP_DIR/new/ptos-main"/*.sh "$HOME/" 2>/dev/null || true
+    cp "$TMP_DIR/new/ptos-main"/*_termux.sh "$PTOS_DIR/" 2>/dev/null || true
     rm -rf "$PTOS_DIR/web_templates" 2>/dev/null || true
     cp -r "$TMP_DIR/new/ptos-main/web_templates" "$PTOS_DIR/" 2>/dev/null || true
     echo ""
@@ -89,16 +89,16 @@ echo ""
 echo "📱 Creating/Updating Termux Widget shortcuts..."
 mkdir -p "$HOME/.shortcuts"
 
-rm -f "$HOME/.shortcuts/setup_ptos.sh" 2>/dev/null
-rm -f "$HOME/.shortcuts/start_ptos.sh" 2>/dev/null
-rm -f "$HOME/.shortcuts/update_ptos.sh" 2>/dev/null
+rm -f "$HOME/.shortcuts/setup_ptos_termux.sh" 2>/dev/null
+rm -f "$HOME/.shortcuts/start_ptos_termux.sh" 2>/dev/null
+rm -f "$HOME/.shortcuts/update_ptos_termux.sh" 2>/dev/null
 
-ln -s "$HOME/setup_ptos.sh" "$HOME/.shortcuts/setup_ptos.sh"
-ln -s "$HOME/start_ptos.sh" "$HOME/.shortcuts/start_ptos.sh"
-ln -s "$HOME/update_ptos.sh" "$HOME/.shortcuts/update_ptos.sh"
+ln -s "$HOME/setup_ptos_termux.sh" "$HOME/.shortcuts/setup_ptos_termux.sh"
+ln -s "$HOME/start_ptos_termux.sh" "$HOME/.shortcuts/start_ptos_termux.sh"
+ln -s "$HOME/update_ptos_termux.sh" "$HOME/.shortcuts/update_ptos_termux.sh"
 
 echo ""
 echo "✅ Widget shortcuts ready!"
 echo ""
 echo "To start PTOS Web:"
-echo "  ./start_ptos.sh"
+echo "  ./start_ptos_termux.sh"
