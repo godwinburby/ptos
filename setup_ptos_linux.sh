@@ -16,12 +16,20 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # Check if already in a PTOS repository
 if [ ! -f "$SCRIPT_DIR/ptos.py" ]; then
     echo "PTOS not found. Cloning repository..."
-    git clone https://github.com/godwinburby/ptos.git "$SCRIPT_DIR"
+    if [ "$(ls -A "$SCRIPT_DIR" 2>/dev/null)" ]; then
+        # Directory not empty, clone into ptos subfolder
+        git clone https://github.com/godwinburby/ptos.git "$SCRIPT_DIR/ptos"
+        cd "$SCRIPT_DIR/ptos"
+    else
+        # Empty directory, clone directly
+        git clone https://github.com/godwinburby/ptos.git "$SCRIPT_DIR"
+        cd "$SCRIPT_DIR"
+    fi
     echo "Clone complete!"
+else
+    # Already has ptos.py, cd into it
+    cd "$SCRIPT_DIR"
 fi
-
-# Change to PTOS directory
-cd "$SCRIPT_DIR"
 SCRIPT_DIR="$(pwd)"
 
 # Check if already initialized
