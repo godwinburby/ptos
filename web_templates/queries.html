@@ -252,7 +252,7 @@ function renderDashboard(d) {
     `<div class="stat-card">
       <div class="stat-label">${i.name.replace(/_/g," ")}</div>
       <div class="stat-value" style="font-size:20px;">${i.value}</div>
-      <div class="stat-sub">${d.period||""}</div>
+      <div class="stat-sub">${d.time_label||""}</div>
     </div>`).join("");
   return `<div class="card"><div class="card-title">Dashboard · ${d.name}</div>
     <div class="stat-grid">${items}</div></div>`;
