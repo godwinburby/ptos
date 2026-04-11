@@ -57,10 +57,11 @@ fi
 
 echo ""
 echo "📥 Downloading start and update scripts to home folder..."
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/start_ptos_termux.sh -o "$HOME/start_ptos_termux.sh"
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/update_ptos_termux.sh -o "$HOME/update_ptos_termux.sh"
-chmod +x "$HOME/start_ptos_termux.sh" "$HOME/update_ptos_termux.sh"
-echo "Scripts downloaded and made executable."
+echo "HOME is: $HOME"
+curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/start_ptos_termux.sh -o "$HOME/start_ptos_termux.sh" && echo "Downloaded start_ptos_termux.sh"
+curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/update_ptos_termux.sh -o "$HOME/update_ptos_termux.sh" && echo "Downloaded update_ptos_termux.sh"
+chmod +x "$HOME/start_ptos_termux.sh" "$HOME/update_ptos_termux.sh" && echo "Made scripts executable"
+ls -la "$HOME/"*.sh 2>/dev/null || echo "No .sh files found in HOME"
 
 echo ""
 echo "📱 Creating Termux Widget shortcuts..."
