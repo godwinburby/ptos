@@ -102,7 +102,18 @@ fi
 # Always make scripts executable
 echo ""
 echo "Making scripts executable..."
-chmod +x start_ptos_linux.sh update_ptos_linux.sh 2>/dev/null || true
+if [ -f "start_ptos_linux.sh" ]; then
+    chmod +x start_ptos_linux.sh
+    echo "  - start_ptos_linux.sh is now executable"
+else
+    echo "  - start_ptos_linux.sh not found"
+fi
+if [ -f "update_ptos_linux.sh" ]; then
+    chmod +x update_ptos_linux.sh
+    echo "  - update_ptos_linux.sh is now executable"
+else
+    echo "  - update_ptos_linux.sh not found"
+fi
 
 # Clean up port 5000
 echo ""
