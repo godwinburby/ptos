@@ -94,6 +94,10 @@ if [ "$INIT_NEEDED" = true ]; then
     $PYTHON ptos.py --init
 
     echo ""
+    echo "Making scripts executable..."
+    chmod +x start_ptos_linux.sh update_ptos_linux.sh 2>/dev/null || true
+
+    echo ""
     echo "=========================================="
     echo "  PTOS Initialized!"
     echo "=========================================="
