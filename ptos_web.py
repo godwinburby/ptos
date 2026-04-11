@@ -518,6 +518,66 @@ def schema_builder_save():
         return jsonify(ok=False, error=str(e))
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Backup
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/backup")
+def backup_page():
+    backups = ptos.list_backups()
+    return render_template("backup.html",
+        tab="backup", title="Backup & Restore", now=_now_str(),
+        backups=backups)
+
+
+@app.route("/backup/create", methods=["POST"])
+def backup_create():
+    try:
+        backup_path = ptos.backup_data()
+        return jsonify(ok=True, path=backup_path)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/backup/download/<name>")
+def backup_download(name):
+    backup_path = os.path.join(ptos.BACKUP_DIR, name)
+    if not os.path.exists(backup_path):
+        return "Backup not found", 404
+    return send_file(backup_path, as_attachment=True, download_name=name)
+
+
+@app.route("/backup/restore", methods=["POST"])
+def backup_restore():
+    if "file" in request.files:
+        f = request.files["file"]
+        if f.filename == "":
+            return jsonify(ok=False, error="No file selected")
+        # Save uploaded file to temp, then restore
+        import tempfile
+        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+            f.save(tmp.name)
+            tmp_path = tmp.name
+        try:
+            ptos.restore_data(tmp_path)
+            os.unlink(tmp_path)
+            return jsonify(ok=True)
+        except Exception as e:
+            os.unlink(tmp_path)
+            return jsonify(ok=False, error=str(e))
+    else:
+        data = request.get_json(silent=True) or {}
+        name = data.get("name", "")
+        backup_path = os.path.join(ptos.BACKUP_DIR, name)
+        if not os.path.exists(backup_path):
+            return jsonify(ok=False, error="Backup not found")
+        try:
+            ptos.restore_data(backup_path)
+            return jsonify(ok=True)
+        except Exception as e:
+            return jsonify(ok=False, error=str(e))
+
+
 def _toml_val(v):
     if isinstance(v, bool):   return "true" if v else "false"
     if isinstance(v, int):    return str(v)
@@ -1169,6 +1229,13 @@ def api_save_query():
 # ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
+    # Auto-backup on startup
+    try:
+        backup_path = ptos.backup_data()
+        print(f"Auto-backup created: {os.path.basename(backup_path)}")
+    except Exception as e:
+        print(f"Auto-backup skipped: {e}")
+    
     print("\nPTOS Web UI")
     print("Open: http://localhost:5000\n")
     app.run(debug=False, host="127.0.0.1", port=5000)

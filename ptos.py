@@ -21,6 +21,8 @@ RECORDS_DIR  = os.path.join(BASE_DIR, "records")
 JOURNAL_DIR  = os.path.join(BASE_DIR, "journal")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
+BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
+BACKUP_FOLDERS = ["records", "config", "templates"]
 
 def _backup_file(path):
     """Copy path to path.bak before any write operation.
@@ -29,6 +31,57 @@ def _backup_file(path):
     import shutil
     if os.path.exists(path):
         shutil.copy2(path, path + ".bak")
+
+# --------------------------------------------------
+# Backup functions
+# --------------------------------------------------
+
+def backup_data():
+    """Create a timestamped backup ZIP of records/, config/, templates/.
+    Returns the path to the created backup file.
+    """
+    import zipfile
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"backup_{timestamp}.zip"
+    backup_path = os.path.join(BACKUP_DIR, backup_name)
+    
+    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        for folder in BACKUP_FOLDERS:
+            folder_path = os.path.join(BASE_DIR, folder)
+            if os.path.exists(folder_path):
+                for root, dirs, files in os.walk(folder_path):
+                    for file in files:
+                        file_path = os.path.join(root, file)
+                        arcname = os.path.relpath(file_path, BASE_DIR)
+                        zf.write(file_path, arcname)
+    
+    return backup_path
+
+def restore_data(zip_path):
+    """Restore data from a backup ZIP file.
+    Overwrites existing files with the contents of the backup.
+    """
+    import zipfile
+    if not os.path.exists(zip_path):
+        raise FileNotFoundError(f"Backup file not found: {zip_path}")
+    
+    with zipfile.ZipFile(zip_path, "r") as zf:
+        zf.extractall(BASE_DIR)
+
+def list_backups():
+    """Return list of backup files with creation dates, sorted newest first.
+    Returns list of tuples: (filename, created_datetime)
+    """
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    backups = []
+    for f in os.listdir(BACKUP_DIR):
+        if f.startswith("backup_") and f.endswith(".zip"):
+            path = os.path.join(BACKUP_DIR, f)
+            mtime = dt.datetime.fromtimestamp(os.path.getmtime(path))
+            backups.append((f, mtime))
+    backups.sort(key=lambda x: x[1], reverse=True)
+    return backups
 
 SCHEMA_PATH  = os.path.join(CONFIG_DIR, "schema.toml")
 QUERIES_PATH = os.path.join(CONFIG_DIR, "queries.toml")
@@ -2433,6 +2486,7 @@ def build_parser(cycles):
             "  ptos --time 2026-03\n"
             "  ptos --from 2026-01-01 --to 2026-03-31\n"
             "  ptos --lint\n"
+            "  ptos --backup\n"
             "\n"
             "Time windows (full form / short):\n"
             "  today              td\n"
@@ -2505,6 +2559,7 @@ def build_parser(cycles):
                      help="Apply --set/--delete to all matched records without interactive pick")
     utl.add_argument("--fields", action="store_true", help="Show field discovery report")
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
+    utl.add_argument("--backup", action="store_true", help="Create a backup of records/, config/, and templates/")
 
     return p
 
@@ -3030,6 +3085,11 @@ def main():
 
     if args.journal:
         edit_target("daily")
+        return
+
+    if args.backup:
+        backup_path = backup_data()
+        print(f"Backup created: {backup_path}")
         return
 
     # ---- add mode ----
