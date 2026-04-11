@@ -196,26 +196,8 @@ def home():
             db = svc.get_dashboard(db_name, time_code)
             # Show all dashboard items in home (no limit, template handles display)
             for item in db["items"]:
-                _raw_t  = request.args.get("time", "tm")
-                _cust_t = request.args.get("custom_time", "")
-                if _raw_t == "custom" and _cust_t:
-                    time_label = _cust_t[:7]
-                else:
-                    time_label = dict(TIME_OPTIONS).get(_raw_t, _raw_t)
-                kind = item.get("kind", "metric")
-                # build a query page URL for base-query items
-                if kind == "query":
-                    query_url = f"/queries?run={item['name']}&time={time_code}"
-                else:
-                    query_url = ""
-                stats.append({
-                    "label":     item["name"].replace("_"," "),
-                    "value":     item["value"],
-                    "sub":       time_label.lower(),
-                    "kind":      kind,
-                    "query_url": query_url,
-                    "name":      item["name"],
-                })
+                stats.append({"label": item["name"].replace("_"," "),
+                               "value": item["value"], "sub": "this month"})
     except Exception:
         pass
     except Exception:
@@ -427,6 +409,174 @@ def journal_save():
     ptos._backup_file(path)
     with open(path,"w",encoding="utf-8") as f: f.write(content)
     return jsonify(ok=True)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Schema builder
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/schema-builder")
+def schema_builder():
+    try:
+        schema = ptos.get_schema()
+    except Exception:
+        schema = {}
+    return render_template("schema_builder.html",
+        tab="schema_builder", title="Schema Builder",
+        now=_now_str(), schema=schema)
+
+
+@app.route("/schema-builder/save", methods=["POST"])
+def schema_builder_save():
+    data = request.get_json(silent=True) or {}
+    new_types    = data.get("types", [])
+    type_schemas = data.get("type_schemas", {})
+    if not new_types:
+        return jsonify(ok=False, error="At least one record type is required")
+    import re as _re
+    for t in new_types:
+        if not _re.match(r"^[a-z][a-z0-9_]*$", t):
+            return jsonify(ok=False,
+                error=f"Type '{t}' must be lowercase letters, numbers, underscores")
+    try:
+        schema = ptos.get_schema()
+        lines  = _build_schema_toml(schema, new_types, type_schemas)
+        ptos._backup_file(ptos.SCHEMA_PATH)
+        with open(ptos.SCHEMA_PATH, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+        for key in ("schema", "derived_fields", "numeric_fields"):
+            ptos._CACHE.pop(key, None)
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+def _toml_val(v):
+    if isinstance(v, bool):   return "true" if v else "false"
+    if isinstance(v, int):    return str(v)
+    if isinstance(v, float):  return str(v)
+    if isinstance(v, list):
+        items = ", ".join(f'"{x}"' if isinstance(x, str) else str(x) for x in v)
+        return f"[{items}]"
+    if isinstance(v, dict):
+        pairs = ", ".join(
+            (f'{dk} = "{dv}"' if isinstance(dv, str) else f"{dk} = {dv}")
+            for dk, dv in v.items()
+        )
+        return "{" + pairs + "}"
+    return '"'  + str(v).replace("\\", "\\\\").replace('"'  , '\\"') + '"'
+
+
+def _toml_kv(k, v):
+    return f"{k} = {_toml_val(v)}"
+
+
+def _build_schema_toml(old_schema, new_types, type_schemas):
+    lines = [
+        "# ==================================================",
+        "# PTOS SCHEMA  (managed by Schema Builder)",
+        "# ==================================================",
+        "",
+        "[types]",
+        "allowed = [",
+    ]
+    for t in new_types:
+        lines.append(f'  "{t}",')
+    lines.append("]")
+    lines.append("")
+
+    # ── global [fields.*] preserved verbatim ─────────────────────────────────
+    lines += ["# Global field metadata", ""]
+    for fname, fmeta in old_schema.get("fields", {}).items():
+        if not isinstance(fmeta, dict):
+            continue
+        lines.append(f"[fields.{fname}]")
+        for k, v in fmeta.items():
+            lines.append(_toml_kv(k, v))
+        lines.append("")
+
+    # ── [shared.*] preserved verbatim ────────────────────────────────────────
+    if old_schema.get("shared"):
+        lines += ["# Shared field definitions", ""]
+        for sname, smeta in old_schema["shared"].items():
+            lines.append(f"[shared.{sname}]")
+            if isinstance(smeta, dict):
+                for k, v in smeta.items():
+                    lines.append(_toml_kv(k, v))
+            lines.append("")
+
+    # ── types ────────────────────────────────────────────────────────────────
+    lines += ["# ==================================================",
+              "# TYPES", "# ==================================================", ""]
+    old_types = old_schema.get("type", {})
+
+    for tname in new_types:
+        ts_new = type_schemas.get(tname, {})
+        ts_old = old_types.get(tname, {})
+
+        lines += [f"# {tname.upper()}", ""]
+        lines.append(f"[type.{tname}]")
+        required = ts_new.get("required", ts_old.get("required", []))
+        if required:
+            req_str = ", ".join(f'"{r}"' for r in required)
+            lines.append(f"required = [{req_str}]")
+        lines.append("")
+
+        # fields: merge builder fields with preserved old fields
+        fields_new  = ts_new.get("fields", {})
+        fields_old  = ts_old.get("fields", {})
+        seen_fields = list(fields_new.keys())
+        for fn in fields_old:
+            if fn not in seen_fields:
+                seen_fields.append(fn)
+
+        for fname in seen_fields:
+            fdef_new = fields_new.get(fname)
+            fdef_old = fields_old.get(fname, {})
+            lines.append(f"[type.{tname}.fields.{fname}]")
+            if fdef_new is not None:
+                if fdef_new.get("is_int"):
+                    lines.append('type = "int"')
+                opts = fdef_new.get("options", [])
+                if opts:
+                    lines.append(_toml_kv("options", opts))
+            else:
+                if isinstance(fdef_old, dict):
+                    for k, v in fdef_old.items():
+                        lines.append(_toml_kv(k, v))
+            lines.append("")
+
+        # tags: merge builder tags with preserved old tags
+        tags_new   = ts_new.get("tags", {})
+        tags_old   = ts_old.get("tags", {})
+        seen_tags  = list(tags_new.keys())
+        for tf in tags_old:
+            if tf not in seen_tags:
+                seen_tags.append(tf)
+
+        for tfield in seen_tags:
+            tdef_new = tags_new.get(tfield)
+            tdef_old = tags_old.get(tfield, {})
+            lines.append(f"[type.{tname}.tags.{tfield}]")
+            if tdef_new is not None:
+                for fval, tags in tdef_new.items():
+                    if tags:
+                        lines.append(_toml_kv(f"options.{fval}", tags))
+            else:
+                if isinstance(tdef_old, dict):
+                    for k, v in tdef_old.items():
+                        lines.append(_toml_kv(k, v))
+            lines.append("")
+
+        # conditions: always preserved verbatim
+        for cname, cdef in ts_old.get("conditions", {}).items():
+            lines.append(f"[type.{tname}.conditions.{cname}]")
+            if isinstance(cdef, dict):
+                for k, v in cdef.items():
+                    lines.append(_toml_kv(k, v))
+            lines.append("")
+
+    return lines
 
 
 # ══════════════════════════════════════════════════════════════════════════════
