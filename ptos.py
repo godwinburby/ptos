@@ -351,8 +351,8 @@ def backup_data():
     """
     os.makedirs(BACKUP_DIR, exist_ok=True)
     timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    temp_path = os.path.join(BACKUP_DIR, f".backup_{timestamp}.tmp")
-    final_path = os.path.join(BACKUP_DIR, f"backup_{timestamp}.zip")
+    temp_path = os.path.join(BACKUP_DIR, f".ptos-backup-full-{timestamp}.tmp")
+    final_path = os.path.join(BACKUP_DIR, f"ptos-backup-full-{timestamp}.zip")
     
     try:
         # Write to .tmp file (skip .bak files)
@@ -396,8 +396,8 @@ def backup_config():
     """
     os.makedirs(BACKUP_DIR, exist_ok=True)
     timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    temp_path = os.path.join(BACKUP_DIR, f".ptos-config_{timestamp}.tmp")
-    final_path = os.path.join(BACKUP_DIR, f"ptos-config_{timestamp}.zip")
+    temp_path = os.path.join(BACKUP_DIR, f".ptos-backup-config-{timestamp}.tmp")
+    final_path = os.path.join(BACKUP_DIR, f"ptos-backup-config-{timestamp}.zip")
     
     config_path = os.path.join(BASE_DIR, "config")
     
@@ -513,16 +513,19 @@ def restore_data(zip_path):
 def list_backups():
     """Return list of backup files with creation dates, sorted newest first.
     Returns list of tuples: (filename, created_datetime, type)
-    type is 'full' for backup_*.zip or 'config' for ptos-config_*.zip
+    type is 'full' for ptos-backup-full-*.zip or 'config' for ptos-backup-config-*.zip
     """
     os.makedirs(BACKUP_DIR, exist_ok=True)
     backups = []
     for f in os.listdir(BACKUP_DIR):
-        if (f.startswith("backup_") or f.startswith("ptos-config_")) and f.endswith(".zip"):
+        if f.startswith("ptos-backup-full-") and f.endswith(".zip"):
             path = os.path.join(BACKUP_DIR, f)
             mtime = dt.datetime.fromtimestamp(os.path.getmtime(path))
-            btype = "config" if f.startswith("ptos-config_") else "full"
-            backups.append((f, mtime, btype))
+            backups.append((f, mtime, "full"))
+        elif f.startswith("ptos-backup-config-") and f.endswith(".zip"):
+            path = os.path.join(BACKUP_DIR, f)
+            mtime = dt.datetime.fromtimestamp(os.path.getmtime(path))
+            backups.append((f, mtime, "config"))
     backups.sort(key=lambda x: x[1], reverse=True)
     return backups
 
@@ -533,7 +536,7 @@ def delete_backup(filename):
     backup_path = os.path.join(BACKUP_DIR, filename)
     if not os.path.exists(backup_path):
         raise FileNotFoundError(f"Backup not found: {filename}")
-    if not ((filename.startswith("backup_") or filename.startswith("ptos-config_")) and filename.endswith(".zip")):
+    if not ((filename.startswith("ptos-backup-full-") or filename.startswith("ptos-backup-config-")) and filename.endswith(".zip")):
         raise ValueError("Invalid backup filename")
     os.remove(backup_path)
     return True
