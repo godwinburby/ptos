@@ -17,6 +17,7 @@ ptos_error.log
 *.tmp
 *.bak
 *.log
+.version
 
 # Syncthing
 .stfolder/

@@ -69,10 +69,6 @@ if errorlevel 1 (
 )
 echo Update downloaded.
 
-:: ── Update .version file ──────────────────────────────────────────────────────
-for /f %%i in ('git rev-parse HEAD') do echo %%i > .version
-echo Updated version file.
-
 :: ── Install Any New Dependencies ─────────────────────────────────────────────
 echo.
 echo Checking dependencies...
