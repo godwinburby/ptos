@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, datetime as dt, json, csv, tempfile
+import sys, os, re, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
@@ -659,6 +659,163 @@ def backup_config_restore():
     except Exception as e:
         os.unlink(tmp_path)
         return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Update check and apply
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/check-update", methods=["GET"])
+def check_update():
+    """Check if a new version is available on GitHub."""
+    try:
+        # Initialize version on first check
+        ptos.init_version()
+        
+        current_sha = ptos.get_current_version() or "unknown"
+        
+        # Fetch latest from GitHub API
+        req = urllib.request.Request(
+            ptos.GITHUB_API_URL,
+            headers={"User-Agent": "PTOS/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            data = json.loads(response.read().decode())
+            latest_sha = data.get("sha", "")[:8]
+            latest_message = data.get("commit", {}).get("message", "").split("\n")[0]
+            latest_date = data.get("commit", {}).get("author", {}).get("date", "")
+        
+        update_available = current_sha != latest_sha and current_sha != "unknown"
+        
+        return jsonify({
+            "ok": True,
+            "update_available": update_available,
+            "current_sha": current_sha[:8] if current_sha else None,
+            "latest_sha": latest_sha,
+            "latest_message": latest_message,
+            "latest_date": latest_date,
+        })
+    except Exception as e:
+        return jsonify({
+            "ok": False,
+            "update_available": False,
+            "error": str(e)
+        })
+
+
+@app.route("/api/update", methods=["POST"])
+def apply_update():
+    """Run platform-specific update script."""
+    try:
+        # Kill existing server first
+        _stop_server()
+        
+        # Detect platform and run appropriate update
+        system = platform.system()
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        if system == "Windows":
+            script = os.path.join(script_dir, "update_ptos_windows.bat")
+            result = subprocess.run(
+                [script],
+                cwd=script_dir,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+        else:
+            # Linux/Termux
+            if system == "Linux" or "android" in platform.platform().lower():
+                script = os.path.join(script_dir, "update_ptos_linux.sh")
+            else:
+                script = os.path.join(script_dir, "update_ptos_linux.sh")
+            
+            result = subprocess.run(
+                ["bash", script],
+                cwd=script_dir,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
+        
+        # Update stored version
+        ptos.init_version()
+        
+        return jsonify({
+            "ok": True,
+            "message": "Update downloaded. Restarting server...",
+            "output": result.stdout[-500:] if result.stdout else ""  # Last 500 chars
+        })
+    except subprocess.TimeoutExpired:
+        return jsonify({"ok": False, "error": "Update timed out"})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+def _stop_server():
+    """Stop the Flask server by killing the process on port 5000."""
+    system = platform.system()
+    try:
+        if system == "Windows":
+            # Windows: use netstat + taskkill
+            result = subprocess.run(
+                ["netstat", "-ano"],
+                capture_output=True,
+                text=True
+            )
+            for line in result.stdout.split("\n"):
+                if ":5000" in line and "LISTENING" in line:
+                    parts = line.split()
+                    if parts:
+                        pid = parts[-1]
+                        subprocess.run(["taskkill", "/F", "/PID", pid], 
+                                     capture_output=True)
+        else:
+            # Linux/Termux: use lsof or fuser
+            try:
+                result = subprocess.run(
+                    ["lsof", "-ti:5000"],
+                    capture_output=True,
+                    text=True
+                )
+                if result.stdout.strip():
+                    pids = result.stdout.strip().split("\n")
+                    for pid in pids:
+                        subprocess.run(["kill", "-9", pid], capture_output=True)
+            except FileNotFoundError:
+                # Try fuser as fallback
+                subprocess.run(["fuser", "-k", "5000/tcp"], capture_output=True)
+    except Exception:
+        pass  # Best effort
+
+
+@app.route("/api/restart-server", methods=["POST"])
+def restart_server():
+    """Restart the server after an update."""
+    try:
+        _stop_server()
+        
+        # Start new server in background
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        system = platform.system()
+        
+        if system == "Windows":
+            subprocess.Popen(
+                ["cmd", "/c", "start", "ptos_web.bat"],
+                cwd=script_dir,
+                creationflags=subprocess.CREATE_NEW_CONSOLE
+            )
+        else:
+            subprocess.Popen(
+                ["python3", "ptos_web.py"],
+                cwd=script_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        
+        return jsonify({"ok": True, "message": "Server restarting..."})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
 
 
 def _toml_val(v):

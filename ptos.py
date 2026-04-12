@@ -24,6 +24,44 @@ EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
 BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
 BACKUP_FOLDERS = ["records", "config", "templates"]
 MAX_BACKUPS = 10  # Keep last 10 backups
+VERSION_FILE = os.path.join(BASE_DIR, ".version")
+GITHUB_REPO = "godwinburby/ptos"
+GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
+
+def get_current_version():
+    """Get the stored current version SHA from .version file."""
+    if os.path.exists(VERSION_FILE):
+        with open(VERSION_FILE, "r") as f:
+            return f.read().strip()
+    return None
+
+def save_current_version(sha):
+    """Save the current version SHA to .version file."""
+    with open(VERSION_FILE, "w") as f:
+        f.write(sha)
+
+def init_version():
+    """Initialize version file with current git SHA or 'unknown'."""
+    if os.path.exists(VERSION_FILE):
+        return  # Already initialized
+    
+    # Try to get git SHA
+    sha = "unknown"
+    if os.path.exists(os.path.join(BASE_DIR, ".git")):
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=BASE_DIR,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0:
+                sha = result.stdout.strip()
+        except Exception:
+            pass
+    
+    save_current_version(sha)
 
 def _backup_file(path):
     """Copy path to path.bak before any write operation.

@@ -43,5 +43,8 @@ echo "=========================================="
 echo ""
 
 if [ "$RUNNING" = true ]; then
-    echo "Restart the server with:  ./start_ptos_linux.sh"
+    echo "Restarting server..."
+    # Open browser and start server
+    xdg-open http://localhost:5000 2>/dev/null &
+    python3 ptos_web.py
 fi
