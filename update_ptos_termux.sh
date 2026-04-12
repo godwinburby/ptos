@@ -17,15 +17,6 @@ fi
 
 cd "$PTOS_DIR"
 
-# ── Stop Flask if running ─────────────────────────────────────────────────────
-RUNNING=false
-if pgrep -f "python.*ptos_web.py" > /dev/null 2>&1; then
-    RUNNING=true
-    echo "Stopping running server..."
-    pkill -f "python.*ptos_web.py" 2>/dev/null || true
-    sleep 1
-fi
-
 # ── Download latest zip ───────────────────────────────────────────────────────
 echo "Downloading latest PTOS..."
 rm -rf "$TMP_DIR" 2>/dev/null
@@ -116,9 +107,16 @@ echo "  PTOS Updated!"
 echo "=========================================="
 echo ""
 
-# Restart server if it was running
-if [ "$RUNNING" = true ]; then
-    echo "Restarting server..."
+# ── Restart server (background this process first) ────────────────────────────
+# Use double-fork: background a subshell that kills port 5000 and restarts
+# This allows the main script to exit cleanly so Flask can return a response
+(
+    sleep 2
+    echo "Stopping server..."
+    pkill -f "python.*ptos_web.py" 2>/dev/null || true
+    sleep 1
+    echo "Starting server..."
     am start -a android.intent.action.VIEW -d http://localhost:5000 > /dev/null 2>&1 &
-    python "$PTOS_DIR/ptos_web.py"
-fi
+    nohup python "$PTOS_DIR/ptos_web.py" > /dev/null 2>&1 &
+) &
+disown

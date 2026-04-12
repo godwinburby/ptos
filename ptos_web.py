@@ -669,10 +669,31 @@ def backup_config_restore():
 def check_update():
     """Check if a new version is available on GitHub."""
     try:
-        # Initialize version on first check
-        ptos.init_version()
+        script_dir = os.path.dirname(os.path.abspath(__file__))
         
-        current_sha = ptos.get_current_version() or "unknown"
+        # Check if it's a git repository
+        is_git = os.path.exists(os.path.join(script_dir, ".git"))
+        
+        if not is_git:
+            return jsonify({
+                "ok": True,
+                "update_available": False,
+                "reason": "not_git",
+                "message": "Not a git installation"
+            })
+        
+        # Initialize version
+        ptos.init_version()
+        current_sha = ptos.get_current_version()
+        
+        if not current_sha or current_sha == "unknown":
+            return jsonify({
+                "ok": True,
+                "update_available": False,
+                "reason": "no_version",
+                "current_sha": current_sha,
+                "message": "Version not tracked"
+            })
         
         # Fetch latest from GitHub API
         req = urllib.request.Request(
@@ -685,11 +706,12 @@ def check_update():
             latest_message = data.get("commit", {}).get("message", "").split("\n")[0]
             latest_date = data.get("commit", {}).get("author", {}).get("date", "")
         
-        update_available = current_sha != latest_sha and current_sha != "unknown"
+        update_available = current_sha[:8] != latest_sha
         
         return jsonify({
             "ok": True,
             "update_available": update_available,
+            "is_git": is_git,
             "current_sha": current_sha[:8] if current_sha else None,
             "latest_sha": latest_sha,
             "latest_message": latest_message,
