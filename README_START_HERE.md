@@ -194,11 +194,13 @@ your data is safe.
 
 | Problem | What to try |
 |---------|-------------|
-| App won't open | Make sure Python 3 is installed. Run `python3 ptos_web.py` directly to see error messages. |
+| App won't open | Run `ptos --doctor` to check for issues, or run `python3 ptos_web.py` directly to see error messages. |
 | "schema.toml not found" | Run the setup script for your platform first. |
-| A field or dropdown option is missing | Open `schema.toml` — find the relevant type and add the option following the pattern already there. |
-| Record saved with wrong values | Open the Log Editor tab, find the line, edit it, save. |
-| A query is missing or producing unexpected results | Open `queries.toml` — the comments at the top explain the format. |
+| A field or dropdown option is missing | Go to **Schema Builder** tab — add or edit the field there. |
+| Record saved with wrong values | Go to **Browse** tab — find the record in the list, click the **Edit** button next to it. |
+| A query is missing or producing unexpected results | Go to **Browse**, set your filters, then click **Save as Query** to save. |
+| Want to check for data errors | Go to **Lint** tab and run a check. |
+| Need to restore a previous backup | Go to **Backup** tab — find your backup and click Restore. |
 | Something looks broken and you can't figure it out | Don't change anything — reach out for help and describe what you saw. |
 
 ---
