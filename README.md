@@ -11,12 +11,15 @@ One Python file. No database. No dependencies beyond the standard library.
 
 ## Table of Contents
 
+### Getting Started
 - [What it is](#what-it-is)
 - [Anatomy of a record](#anatomy-of-a-record)
 - [Requirements](#requirements)
 - [Installation](#installation)
 - [Folder structure after init](#folder-structure-after-init)
 - [Quick start](#quick-start)
+
+### CLI Reference
 - [CLI reference](#cli-reference)
 - [Time windows](#time-windows)
 - [Filter expressions](#filter-expressions)
@@ -33,15 +36,23 @@ One Python file. No database. No dependencies beyond the standard library.
 - [Analysis examples](#analysis-examples)
 - [Validation](#validation)
 - [Journal](#journal)
+
+### Configuration & Data Safety
 - [Configuration](#configuration)
 - [Backup & Restore](#backup--restore)
 - [Atomic Operations](#atomic-operations)
 - [Doctor Command](#doctor-command)
-- [Sharing and sync](#sharing-and-sync)
+
+### Schema & Customization
 - [Adding a new record type](#adding-a-new-record-type)
 - [Unit labels in schema](#unit-labels-in-schema)
+
+### Web Interface
 - [Web Interface](#web-interface)
 - [Setup Scripts](#setup-scripts)
+
+### Sharing & Sync
+- [Sharing and sync](#sharing-and-sync)
 - [Ignore patterns](#ignore-patterns)
 
 ---
