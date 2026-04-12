@@ -29,7 +29,7 @@ def _build_time_options():
     """Standard time options merged with custom cycles from config.toml."""
     opts = list(_TIME_OPTIONS_BASE)
     try:
-        cycles = ptos.get_config().get("cycles", {})
+        cycles = svc.get_config().get("cycles", {})
         for name in cycles:
             label = name.replace("_", " ").title()
             # insert before Custom (last entry)
@@ -192,14 +192,14 @@ def _build_field_defs(schema, rtype, current_record=None):
 
 
 def _resolve_multi_preset(name):
-    presets = ptos.get_presets()
+    presets = svc.get_presets()
     pd = presets.get(name, {})
     if isinstance(pd, dict) and "alias" in pd:
         pd = presets.get(pd["alias"], {})
     if not isinstance(pd, dict) or "records" not in pd:
         return None, f"'{name}' is not a multi-record preset"
     try:
-        schema = ptos.get_schema()
+        schema = svc.get_schema()
     except Exception as e:
         return None, str(e)
     resolved = []
@@ -223,7 +223,7 @@ def _resolve_multi_preset(name):
 
 def _multi_presets():
     result = {}
-    for name, p in ptos.get_presets().items():
+    for name, p in svc.get_presets().items():
         if not isinstance(p, dict) or "records" not in p:
             continue
         records, err = _resolve_multi_preset(name)
@@ -239,9 +239,9 @@ def _multi_presets():
 
 @app.route("/")
 def home():
-    try: schema = ptos.get_schema()
+    try: schema = svc.get_schema()
     except: schema = {}
-    presets = {k: v for k, v in ptos.get_presets().items()
+    presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
     multi_presets = _multi_presets()
     try:
@@ -252,9 +252,9 @@ def home():
         due_rows = []; due_count = 0
     stats = []
     try:
-        queries    = ptos.get_queries()
+        queries    = svc.get_queries()
         dashboards = queries.get("dashboards", {})
-        cfg        = ptos.get_config()
+        cfg        = svc.get_config()
         default_db = cfg.get("dashboard", {}).get("default")
         # Use query param if provided, otherwise use config default, fallback to first
         db_name = request.args.get("dashboard", default_db or next(iter(dashboards), None))
@@ -334,11 +334,11 @@ def due_page():
 @app.route("/add", methods=["GET"])
 def add_get():
     try:
-        schema = ptos.get_schema()
+        schema = svc.get_schema()
     except PTOSError:
         schema = {"types": {"allowed": []}}
     types   = schema.get("types", {}).get("allowed", [])
-    presets = {k: v for k, v in ptos.get_presets().items()
+    presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
     multi_presets = _multi_presets()
     selected_type = request.args.get("type", "")
@@ -348,9 +348,9 @@ def add_get():
     if "tag" in request.args:
         field_values["tag"] = request.args.getlist("tag")
     if preset_name and not selected_type:
-        pd = ptos.get_presets().get(preset_name, {})
+        pd = svc.get_presets().get(preset_name, {})
         if isinstance(pd, dict) and "alias" in pd:
-            pd = ptos.get_presets().get(pd["alias"], {})
+            pd = svc.get_presets().get(pd["alias"], {})
         if pd:
             selected_type = pd.get("type", "")
             for k, v in pd.items():
@@ -397,11 +397,11 @@ def add_get():
 @app.route("/add", methods=["POST"])
 def add_post():
     try:
-        schema = ptos.get_schema()
+        schema = svc.get_schema()
     except PTOSError:
         schema = {"types": {"allowed": []}}
     types  = schema.get("types", {}).get("allowed", [])
-    presets = {k: v for k, v in ptos.get_presets().items()
+    presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
     rtype     = request.form.get("type","").strip()
     date_str  = request.form.get("date", dt.date.today().isoformat()).strip()
@@ -435,7 +435,7 @@ def add_post():
             msg=" | ".join(problems), msg_type="error", last_line=None)
     try:
         line = ptos.build_record_line(date_str, record, note)
-        ptos.append_record(line)
+        svc.append_record(line)
     except PTOSError as e:
         fd = _build_field_defs(schema, rtype, record)
         return render_template("add.html",
@@ -490,7 +490,7 @@ def journal_save():
     year_dir = os.path.join(ptos.JOURNAL_DIR, date[:4])
     os.makedirs(year_dir, exist_ok=True)
     path = os.path.join(year_dir, f"{date}.md")
-    ptos.atomic_write(path, content)
+    svc.write_file(path, content)
     return jsonify(ok=True)
 
 
@@ -501,7 +501,7 @@ def journal_save():
 @app.route("/schema-builder")
 def schema_builder():
     try:
-        schema = ptos.get_schema()
+        schema = svc.get_schema()
     except Exception:
         schema = {}
     return render_template("schema_builder.html",
@@ -522,9 +522,9 @@ def schema_builder_save():
             return jsonify(ok=False,
                 error=f"Type '{t}' must be lowercase letters, numbers, underscores")
     try:
-        schema = ptos.get_schema()
+        schema = svc.get_schema()
         lines  = _build_schema_toml(schema, new_types, type_schemas)
-        ptos.atomic_write(ptos.SCHEMA_PATH, "\n".join(lines) + "\n")
+        svc.write_file(ptos.SCHEMA_PATH, "\n".join(lines) + "\n")
         for key in ("schema", "derived_fields", "numeric_fields"):
             ptos._CACHE.pop(key, None)
         return jsonify(ok=True)
@@ -538,7 +538,7 @@ def schema_builder_save():
 
 @app.route("/backup")
 def backup_page():
-    backups = ptos.list_backups()
+    backups = svc.list_backups()
     return render_template("backup.html",
         tab="backup", title="Backup & Restore", now=_now_str(),
         backups=backups)
@@ -547,8 +547,8 @@ def backup_page():
 @app.route("/backup/create", methods=["POST"])
 def backup_create():
     try:
-        backup_path = ptos.backup_data()
-        return jsonify(ok=True, path=backup_path)
+        result = svc.backup_full()
+        return jsonify(ok=True, path=result["path"])
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
@@ -579,7 +579,7 @@ def backup_delete():
     if not name:
         return jsonify(ok=False, error="No backup name provided")
     try:
-        ptos.delete_backup(name)
+        svc.delete_backup(name)
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -596,8 +596,8 @@ def backup_check():
 def backup_restore():
     # Create backup first before restoring
     try:
-        backup_path = ptos.backup_data()
-        print(f"Backup created before restore: {os.path.basename(backup_path)}")
+        result = svc.backup_full()
+        print(f"Backup created before restore: {os.path.basename(result['path'])}")
     except Exception as e:
         return jsonify(ok=False, error=f"Failed to create backup before restore: {e}")
     
@@ -611,7 +611,7 @@ def backup_restore():
             f.save(tmp.name)
             tmp_path = tmp.name
         try:
-            ptos.restore_data(tmp_path)
+            svc.restore_full(tmp_path)
             os.unlink(tmp_path)
             return jsonify(ok=True)
         except Exception as e:
@@ -624,7 +624,7 @@ def backup_restore():
         if not os.path.exists(backup_path):
             return jsonify(ok=False, error="Backup not found")
         try:
-            ptos.restore_data(backup_path)
+            svc.restore_full(backup_path)
             return jsonify(ok=True)
         except Exception as e:
             return jsonify(ok=False, error=str(e))
@@ -634,7 +634,7 @@ def backup_restore():
 def backup_config_download():
     """Download config backup as a zip file."""
     try:
-        result = svc.get_config_backup()
+        result = svc.backup_config_only()
         if result.get("ok"):
             path = result["path"]
             filename = os.path.basename(path)
@@ -1026,7 +1026,7 @@ def _build_schema_toml(old_schema, new_types, type_schemas):
 
 @app.route("/queries")
 def queries_get():
-    try:    all_q = ptos.get_queries()
+    try:    all_q = svc.get_queries()
     except: all_q = {}
     named = [k for k in all_q
              if k not in ("metrics","dashboards","due")
@@ -1057,7 +1057,7 @@ def queries_run():
             result = svc.get_dashboard(name, time or "tm")
             result["kind"] = "dashboard"
             # Add human-readable time label
-            cfg = ptos.get_config()
+            cfg = svc.get_config()
             cycles = cfg.get("cycles", {})
             custom_time = ""
             time_for_label = time or "tm"
@@ -1081,7 +1081,7 @@ def queries_run():
 @app.route("/browse")
 def browse_get():
     try:
-        schema = ptos.get_schema()
+        schema = svc.get_schema()
         types  = schema.get("types",{}).get("allowed",[])
     except PTOSError:
         types = []
@@ -1200,7 +1200,7 @@ def editor_save():
     path = os.path.join(ptos.RECORDS_DIR, file)
     if not os.path.exists(path):
         return jsonify(ok=False, error=f"File not found: {file}")
-    ptos.atomic_write(path, content)
+    svc.write_file(path, content)
     # invalidate caches — editor can modify any config file
     for key in ("schema", "config", "queries", "presets",
                 "derived_fields", "numeric_fields"):
@@ -1247,7 +1247,7 @@ def edit_get():
     d, kv, note = parsed
     rtype = kv.get("type", "")
     try:
-        schema = ptos.get_schema()
+        schema = svc.get_schema()
     except PTOSError:
         schema = {}
     field_values = {"type": rtype}
@@ -1305,7 +1305,7 @@ def edit_post():
     except ValueError:
         lineno_int = None
     try:
-        schema = ptos.get_schema()
+        schema = svc.get_schema()
     except PTOSError:
         schema = {}
     ts    = schema.get("type", {}).get(rtype, {})
@@ -1360,7 +1360,7 @@ def edit_post():
         return redirect(return_to)
     except PTOSError as e:
         try:
-            schema = ptos.get_schema()
+            schema = svc.get_schema()
         except Exception:
             schema = {}
         field_values = dict(new_record)
@@ -1502,7 +1502,7 @@ def api_preset_add():
     try:
         for record in records:
             line = ptos.build_record_line(date_str, record, note)
-            ptos.append_record(line)
+            svc.append_record(line)
             added.append(line)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -1579,12 +1579,12 @@ def api_save_query():
 if __name__ == "__main__":
     # Auto-backup on startup (only if no backup exists from today)
     try:
-        backups = ptos.list_backups()
+        backups = svc.list_backups()
         today = dt.date.today().isoformat()
         has_today = any(mtime.date().isoformat() == today for _, mtime, _ in backups)
         if not has_today:
-            backup_path = ptos.backup_data()
-            print(f"Auto-backup created: {os.path.basename(backup_path)}")
+            result = svc.backup_full()
+            print(f"Auto-backup created: {os.path.basename(result['path'])}")
         else:
             print("Auto-backup skipped: backup from today already exists")
     except Exception as e:

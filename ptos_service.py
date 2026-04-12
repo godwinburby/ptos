@@ -58,6 +58,146 @@ def _parse_record(line):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Configuration (service layer wrappers)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_config():
+    """Get PTOS configuration.
+    
+    Returns:
+        dict: Configuration as dict loaded from config.toml.
+    """
+    return ptos.get_config()
+
+
+def get_schema():
+    """Get record schema definition.
+    
+    Returns:
+        dict: Schema loaded from schema.toml with types, fields, and options.
+    """
+    return ptos.get_schema()
+
+
+def get_presets():
+    """Get saved presets.
+    
+    Returns:
+        dict: Presets loaded from presets.toml.
+    """
+    return ptos.get_presets()
+
+
+def get_queries():
+    """Get saved queries.
+    
+    Returns:
+        dict: Queries loaded from queries.toml.
+    """
+    return ptos.get_queries()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Write operations (atomic)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def append_record(line):
+    """Append a record line to the appropriate year log file.
+    
+    Args:
+        line: Record line string to append.
+    
+    Returns:
+        None
+    """
+    ptos.append_record(line)
+
+
+def write_file(filepath, content):
+    """Write content to a file atomically.
+    
+    Args:
+        filepath: Path to file to write.
+        content: String content to write.
+    
+    Returns:
+        None
+    """
+    ptos.atomic_write(filepath, content)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Backup operations
+# ══════════════════════════════════════════════════════════════════════════════
+
+def backup_full():
+    """Create a full backup of records/, config/, and templates/ folders.
+    
+    Returns:
+        str: Path to the created backup ZIP file.
+    """
+    try:
+        backup_path = ptos.backup_data()
+        return {"ok": True, "path": backup_path}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def backup_config_only():
+    """Create a config-only backup ZIP.
+    
+    Returns:
+        str: Path to the created backup ZIP file.
+    """
+    try:
+        backup_path = ptos.backup_config()
+        return {"ok": True, "path": backup_path}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def list_backups():
+    """List all backup files.
+    
+    Returns:
+        list: List of tuples (filename, created_datetime, type).
+              type is 'full' or 'config'.
+    """
+    return ptos.list_backups()
+
+
+def delete_backup(filename):
+    """Delete a backup file.
+    
+    Args:
+        filename: Name of backup file to delete.
+    
+    Returns:
+        bool: True on success.
+    """
+    try:
+        return ptos.delete_backup(filename)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def restore_full(zip_path):
+    """Restore data from a full backup ZIP.
+    
+    Args:
+        zip_path: Path to backup ZIP file.
+    
+    Returns:
+        None
+    """
+    try:
+        ptos.restore_data(zip_path)
+        return {"ok": True}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Records
 # ══════════════════════════════════════════════════════════════════════════════
 # History suggestions
@@ -1067,9 +1207,13 @@ def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
             new_year = changed_date[:4]
             ptos.rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
             new_path = _os.path.join(ptos.RECORDS_DIR, f"{new_year}.log")
-            ptos._backup_file(new_path)
-            with open(new_path, "a", encoding="utf-8") as f:
-                f.write(new_line + "\n")
+            # Read existing and append atomically
+            existing = ""
+            if _os.path.exists(new_path):
+                with open(new_path, "r", encoding="utf-8") as f:
+                    existing = f.read()
+            content = existing.rstrip() + "\n" + new_line + "\n"
+            write_file(new_path, content)
         else:
             ptos.rewrite_line_in_file(filepath, old_line, new_line, lineno=lineno)
     except ValueError as e:
@@ -1093,17 +1237,6 @@ def delete_record(filepath, old_line, lineno=None):
     except Exception as e:
         raise PTOSError(str(e))
     return {"deleted_line": old_line}
-
-
-def get_config_backup():
-    """Create a config backup zip file.
-    Returns the path to the created backup file.
-    """
-    try:
-        backup_path = ptos.backup_config()
-        return {"ok": True, "path": backup_path}
-    except Exception as e:
-        raise PTOSError(str(e))
 
 
 def restore_config(zip_path):
