@@ -330,7 +330,16 @@ function checkForUpdates() {
   fetch("/api/check-update")
     .then(function(r) { return r.json(); })
     .then(function(d) {
-      if (d.ok && d.update_available) {
+      // Debug output
+      console.log("Update check:", d);
+      
+      // Skip if not git or no update available
+      if (!d.ok || d.reason === "not_git" || d.reason === "no_version") {
+        console.log("Update check skipped:", d.reason || "No update available");
+        return;
+      }
+      
+      if (d.update_available) {
         var banner = document.getElementById("update-banner");
         var msg = document.getElementById("update-message");
         if (banner && msg) {
@@ -339,7 +348,9 @@ function checkForUpdates() {
         }
       }
     })
-    .catch(function() {});
+    .catch(function(e) { 
+      console.log("Update check failed:", e); 
+    });
 }
 
 function applyUpdate() {

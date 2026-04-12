@@ -27,13 +27,6 @@ if "%PYTHON%"=="" (
     exit /b 1
 )
 
-:: ── Stop Flask if running ─────────────────────────────────────────────────────
-echo Checking for running server...
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5000 " ^| findstr "LISTENING"') do (
-    echo Stopping server (PID %%a)...
-    taskkill /F /PID %%a >nul 2>&1
-)
-
 :: ── Download latest zip ───────────────────────────────────────────────────────
 echo.
 echo Downloading latest PTOS...
@@ -76,9 +69,13 @@ echo   PTOS Updated!
 echo ==========================================
 echo.
 
-:: ── Restart server if it was running ─────────────────────────────────────
-echo Restarting server...
-start http://localhost:5000
-python ptos_web.py
+:: ── Restart server ─────────────────────────────────────────────────────────────
+:: Background the restart so script exits quickly for Flask
+echo Stopping any running server on port 5000...
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5000 " ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
+)
 
-pause
+:: Start server in background, script will exit
+start http://localhost:5000
+start /B cmd /c "timeout /t 2 /nobreak >nul && python ptos_web.py"

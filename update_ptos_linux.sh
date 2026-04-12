@@ -23,18 +23,16 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
-# ── Stop Flask if running ─────────────────────────────────────────────────────
-RUNNING=false
-if pgrep -f "python.*ptos_web.py" > /dev/null 2>&1; then
-    RUNNING=true
-    echo "Stopping running server..."
-    pkill -f "python.*ptos_web.py" 2>/dev/null || true
-    sleep 1
-fi
-
-# ── Pull latest ───────────────────────────────────────────────────────────────
+# ── Pull latest first ────────────────────────────────────────────────────────
 echo "Pulling latest changes from GitHub..."
 git pull
+
+# ── Update .version file with new SHA ────────────────────────────────────────
+NEW_SHA=$(git rev-parse HEAD 2>/dev/null)
+if [ -n "$NEW_SHA" ]; then
+    echo "$NEW_SHA" > .version
+    echo "Updated version to: ${NEW_SHA:0:8}"
+fi
 
 echo ""
 echo "=========================================="
@@ -42,9 +40,24 @@ echo "  PTOS Updated!"
 echo "=========================================="
 echo ""
 
-if [ "$RUNNING" = true ]; then
-    echo "Restarting server..."
-    # Open browser and start server
+# ── Restart server (background this process first) ───────────────────────────
+# Use double-fork: background a subshell that kills port 5000 and restarts
+# This allows the main script to exit cleanly so Flask can return a response
+(
+    sleep 1
+    echo "Stopping server on port 5000..."
+    if command -v lsof &>/dev/null; then
+        PIDS=$(lsof -ti:5000 2>/dev/null)
+        if [ -n "$PIDS" ]; then
+            echo "$PIDS" | xargs kill -9 2>/dev/null || true
+        fi
+    elif command -v fuser &>/dev/null; then
+        fuser -k 5000/tcp 2>/dev/null || true
+    fi
+    sleep 1
+    echo "Starting server..."
+    cd "$SCRIPT_DIR"
     xdg-open http://localhost:5000 2>/dev/null &
-    python3 ptos_web.py
-fi
+    nohup python3 ptos_web.py > /dev/null 2>&1 &
+) &
+disown
