@@ -238,6 +238,10 @@ ptos -y test -t td --delete --all
 | `--journal` | `-j` | Open today's journal (creates from template if new) |
 | `--edit [TARGET]` | `-e` | Edit a workspace file — `r s q c p d/j x` |
 | `--init` | | Initialise workspace (safe to re-run — will not overwrite existing files) |
+| `--backup-full` | | Create full backup (records/, config/, templates/, backups/) |
+| `--backup-config` | | Create config-only backup (schema, queries, presets, config) |
+| `--doctor` | | Check PTOS installation health |
+| `--doctor --fix` | | Auto-fix issues found by --doctor |
 
 ---
 
@@ -776,11 +780,105 @@ Useful when the script is on `PATH` but data lives in a synced folder.
 
 ---
 
-## Automatic backups
+## Backup & Restore
 
-Every write operation — `--add`, `--preset`, `--set`, `--delete`, log editor saves from the web UI, and journal saves — creates a `.bak` file alongside the original before writing. For example, before modifying `records/2026.log`, PTOS writes `records/2026.log.bak`.
+PTOS provides both CLI commands and web UI for backup management.
 
-Add `*.bak` to your `.gitignore` and Syncthing ignore patterns.
+### CLI Commands
+
+```bash
+ptos --backup-full    # Full backup: records/, templates/, config/, backups/
+ptos --backup-config  # Config-only backup: schema, queries, presets, config
+```
+
+### Web UI
+
+Access at `/backup` in the web UI:
+- Create full or config-only backups
+- Download any backup
+- Restore from a local backup or uploaded ZIP file
+- Delete old backups
+
+### Backup Retention Policy
+
+- **Full backups:** Automatically keeps the last **10 backups**. Older backups beyond this limit are deleted after each new backup.
+- **Config backups:** Never automatically deleted — kept indefinitely for manual management.
+
+### Backup Files
+
+Backups are stored in `backups/` folder with timestamped names:
+- Full: `ptos-backup-full-YYYYMMDD_HHMMSS.zip`
+- Config: `ptos-backup-config-YYYYMMDD_HHMMSS.zip`
+
+---
+
+## Atomic Operations
+
+PTOS ensures data safety through atomic write operations at every level.
+
+### File Writes (`.bak` + `.tmp` pattern)
+
+Every write operation follows this sequence:
+1. Copy current file to `*.bak`
+2. Write new content to `*.tmp`
+3. Atomic rename `.tmp` → final file
+4. On success: delete `.bak`
+5. On failure: restore from `.bak`, delete `.bak`
+
+This applies to:
+- Adding records (`--add`)
+- Editing records (`--set`)
+- Saving presets
+- Saving journal entries
+- Log editor saves (web UI)
+
+### Backup Creation (`.tmp` + verify pattern)
+
+1. Write backup to `*.tmp` file
+2. Verify ZIP integrity with `testzip()`
+3. Atomic rename `.tmp` → final `.zip`
+4. Clean up old backups if limit exceeded
+
+### Restore Operations (pre-restore backup + `.bak` pattern)
+
+1. Create a full backup before restore (safety net)
+2. Extract new files to temp directory
+3. Copy existing folders to `*.bak`
+4. Copy new files from temp to destination
+5. On success: delete all `*.bak` backups
+6. On failure: restore from `*.bak` backups
+
+### Crash Safety
+
+If PTOS crashes mid-write:
+- Original file is preserved (still in `.bak`)
+- Incomplete `.tmp` is cleaned up
+- On next run, PTOS restores from `.bak`
+
+Add `*.bak` and `*.tmp` to your `.gitignore` and Syncthing ignore patterns.
+
+---
+
+## Doctor Command
+
+`--doctor` checks your PTOS installation for common issues:
+
+```bash
+ptos --doctor           # Check for issues
+ptos --doctor --fix     # Auto-fix issues where possible
+```
+
+### Checks Performed
+
+- Python version (3.11+ required)
+- Flask installed (for web UI)
+- Required folders exist (records/, config/, journal/, etc.)
+- Config files are valid TOML
+- Schema is valid and has at least one record type
+- Templates folder and files exist
+- Backups folder is writable
+
+Use `--doctor --fix` to automatically create missing files and folders.
 
 ---
 
@@ -797,6 +895,20 @@ Multiple devices can safely append to the same log file as long as writes don't 
 ---
 
 ## Adding a new record type
+
+You can add record types via:
+- **Web UI:** Use the Schema Builder at `/schema-builder` (visual editor)
+- **Direct edit:** Modify `schema.toml` directly
+
+### Using Schema Builder
+
+Navigate to `/schema-builder` in the web UI:
+- Add, edit, and delete record types
+- Define required and optional fields per type
+- Set field types (text, int, options)
+- Configure conditional fields and tags
+
+### Manual editing
 
 1. Add the type name to `[types] allowed` in `schema.toml`
 2. Define `required`, `fields`, and optionally `tags` and `conditions`
@@ -913,6 +1025,12 @@ Then open `http://localhost:5000` in your browser (or your device's IP on the lo
 **Journal** — Daily markdown journal editor. Opens today's journal. Navigate to previous or future dates; forward navigation is blocked past today. Creates a new entry from template for dates with no file. Saves with a `.bak` backup automatically.
 
 **Log Editor** — View and edit any `.log` file in `records/` directly in the browser. File selector dropdown at the top. Saves with a `.bak` backup before every write.
+
+**Schema Builder** — Visual editor for `schema.toml`. Add, edit, and delete record types; define fields, types, and conditions. See [Adding a new record type](#adding-a-new-record-type) for documentation.
+
+**Backup** — Create full or config-only backups, download existing backups, restore from a backup (local file or upload), and delete old backups. See [Backup & Restore](#backup--restore) for retention policy details.
+
+**Lint** — Run validation on all records. See [Doctor Command](#doctor-command) for related health checks.
 
 ---
 
