@@ -355,13 +355,16 @@ def backup_data():
     final_path = os.path.join(BACKUP_DIR, f"backup_{timestamp}.zip")
     
     try:
-        # Write to .tmp file
+        # Write to .tmp file (skip .bak files)
         with zipfile.ZipFile(temp_path, "w", zipfile.ZIP_DEFLATED) as zf:
             for folder in BACKUP_FOLDERS:
                 folder_path = os.path.join(BASE_DIR, folder)
                 if os.path.exists(folder_path):
                     for root, dirs, files in os.walk(folder_path):
                         for file in files:
+                            # Skip .bak and .tmp files
+                            if file.endswith(".bak") or file.endswith(".tmp"):
+                                continue
                             file_path = os.path.join(root, file)
                             arcname = os.path.relpath(file_path, BASE_DIR)
                             zf.write(file_path, arcname)
@@ -427,7 +430,7 @@ def backup_config():
 def restore_data(zip_path):
     """Restore data from a backup ZIP file.
     Overwrites existing files with the contents of the backup.
-    Uses atomic operation with temp directory for crash safety.
+    Uses fully atomic operation: temp extract -> backup old -> copy new -> cleanup.
     """
     if not os.path.exists(zip_path):
         raise FileNotFoundError(f"Backup file not found: {zip_path}")
@@ -450,19 +453,53 @@ def restore_data(zip_path):
         if not has_content:
             raise Exception("Invalid backup: expected folders not found")
         
-        # Copy files to BASE_DIR
+        # Fully atomic restore: backup -> copy new -> delete old backup
+        # Step 1: Create .bak backups of existing folders
+        bak_dirs = []
         for item in os.listdir(temp_dir):
             src = os.path.join(temp_dir, item)
             dst = os.path.join(BASE_DIR, item)
             
-            if os.path.isdir(src):
+            if os.path.exists(dst):
+                bak_path = dst + ".bak"
+                if os.path.isdir(dst):
+                    shutil.copytree(dst, bak_path)
+                else:
+                    shutil.copy2(dst, bak_path)
+                bak_dirs.append((dst, bak_path))
+        
+        # Step 2: Copy new files from temp to destination
+        try:
+            for item in os.listdir(temp_dir):
+                src = os.path.join(temp_dir, item)
+                dst = os.path.join(BASE_DIR, item)
+                
+                if os.path.isdir(src):
+                    if os.path.exists(dst):
+                        shutil.rmtree(dst)
+                    shutil.copytree(src, dst)
+                else:
+                    if os.path.exists(dst):
+                        os.remove(dst)
+                    shutil.copy2(src, dst)
+        except Exception:
+            # Step 2 failed - restore from .bak backups
+            for dst, bak_path in bak_dirs:
                 if os.path.exists(dst):
-                    shutil.rmtree(dst)
-                shutil.copytree(src, dst)
-            else:
-                if os.path.exists(dst):
-                    os.remove(dst)
-                shutil.copy2(src, dst)
+                    if os.path.isdir(dst):
+                        shutil.rmtree(dst)
+                    else:
+                        os.remove(dst)
+                shutil.move(bak_path, dst)
+            raise
+        
+        # Step 3: Success - delete .bak backups
+        for dst, bak_path in bak_dirs:
+            if os.path.exists(bak_path):
+                if os.path.isdir(bak_path):
+                    shutil.rmtree(bak_path)
+                else:
+                    os.remove(bak_path)
         
         # Cleanup temp directory
         shutil.rmtree(temp_dir)
@@ -475,15 +512,17 @@ def restore_data(zip_path):
 
 def list_backups():
     """Return list of backup files with creation dates, sorted newest first.
-    Returns list of tuples: (filename, created_datetime)
+    Returns list of tuples: (filename, created_datetime, type)
+    type is 'full' for backup_*.zip or 'config' for ptos-config_*.zip
     """
     os.makedirs(BACKUP_DIR, exist_ok=True)
     backups = []
     for f in os.listdir(BACKUP_DIR):
-        if f.startswith("backup_") and f.endswith(".zip"):
+        if (f.startswith("backup_") or f.startswith("ptos-config_")) and f.endswith(".zip"):
             path = os.path.join(BACKUP_DIR, f)
             mtime = dt.datetime.fromtimestamp(os.path.getmtime(path))
-            backups.append((f, mtime))
+            btype = "config" if f.startswith("ptos-config_") else "full"
+            backups.append((f, mtime, btype))
     backups.sort(key=lambda x: x[1], reverse=True)
     return backups
 
@@ -494,7 +533,7 @@ def delete_backup(filename):
     backup_path = os.path.join(BACKUP_DIR, filename)
     if not os.path.exists(backup_path):
         raise FileNotFoundError(f"Backup not found: {filename}")
-    if not filename.startswith("backup_") or not filename.endswith(".zip"):
+    if not ((filename.startswith("backup_") or filename.startswith("ptos-config_")) and filename.endswith(".zip")):
         raise ValueError("Invalid backup filename")
     os.remove(backup_path)
     return True
@@ -505,7 +544,7 @@ def _cleanup_old_backups():
     if len(backups) > MAX_BACKUPS:
         # Get list of filenames to delete (oldest, beyond the limit)
         to_delete = backups[MAX_BACKUPS:]
-        for name, _ in to_delete:
+        for name, _, _ in to_delete:
             backup_path = os.path.join(BACKUP_DIR, name)
             if os.path.exists(backup_path):
                 os.remove(backup_path)

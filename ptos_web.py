@@ -1553,10 +1553,16 @@ def api_save_query():
 # ══════════════════════════════════════════════════════════════════════════════
 
 if __name__ == "__main__":
-    # Auto-backup on startup
+    # Auto-backup on startup (only if no backup exists from today)
     try:
-        backup_path = ptos.backup_data()
-        print(f"Auto-backup created: {os.path.basename(backup_path)}")
+        backups = ptos.list_backups()
+        today = dt.date.today().isoformat()
+        has_today = any(mtime.date().isoformat() == today for _, mtime, _ in backups)
+        if not has_today:
+            backup_path = ptos.backup_data()
+            print(f"Auto-backup created: {os.path.basename(backup_path)}")
+        else:
+            print("Auto-backup skipped: backup from today already exists")
     except Exception as e:
         print(f"Auto-backup skipped: {e}")
     
