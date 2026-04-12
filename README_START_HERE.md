@@ -49,8 +49,9 @@ For each type, the schema defines which fields are required, what values each fi
 accepts, and which tags appear as checkboxes in the form. The app's forms are built
 entirely from this file.
 
-To add a new record type or a new dropdown option, open `schema.toml` and follow
-the pattern already there — every type is documented with comments above it.
+To add a new record type or a new dropdown option, use the **Schema Builder** tab in the app
+instead of editing files directly. If you prefer to edit the file manually, open `schema.toml`
+and follow the pattern already there — every type is documented with comments above it.
 The full reference is in `README.md` under the Schema section.
 
 ### `queries.toml` — your saved reports
@@ -74,11 +75,13 @@ Queries section.
 Presets are shortcuts for records you add frequently. A preset pre-fills the form
 fields so you just confirm and save — no re-entering the same values every time.
 
-The file starts with a commented-out example to show you the format. You can also
-create presets directly from the app without editing this file at all: fill in the
+You can create presets directly from the app without editing any files: fill in the
 Add Record form, click **Save as Preset** at the bottom, give it a name, and it is
 saved immediately. Next time, pick it from the **Load preset** dropdown at the top
 of the form.
+
+Presets can also trigger multiple records at once — for example, a "morning routine"
+preset that logs your exercise, water intake, and meditation in one click.
 
 ### `config.toml` — basic settings
 
@@ -100,15 +103,20 @@ the 1st of the month.
 Run `start_ptos_linux.sh` (or the equivalent for your platform) to launch the web interface.
 Open the URL shown (usually `http://localhost:5000`) in your browser.
 
-The app has five tabs:
+The app has ten tabs:
 
-- **+ Add Record** — fill in a form and save a record. This is where you spend most of your time.
+- **Home** — dashboard with your key numbers at a glance. Shows your saved metrics and any overdue items that need attention.
+- **+ Add Record** — fill in a form and save a record. This is where you spend most of your time. Pick a preset to speed things up.
 - **Queries** — run saved reports. Pick a query from the list, choose a time window, results appear instantly.
 - **Browse** — filter and search records. When you pick a type, field filter dropdowns appear automatically. You can also group results by a field, export to CSV, or click **Save as Query** to save the current filters as a named report for the Queries tab.
+- **Due** — see clients or items that need attention (records past their follow-up date). Sorted by priority.
 - **Journal** — your daily journal. One file per day. Navigate with Prev / Next or the date picker. Past dates with no entry show a Create Entry button.
+- **Schema Builder** — visual editor for record types. No need to edit files directly.
+- **Backup** — create backups, download them, or restore from a previous backup.
+- **Lint** — check your records for errors.
 - **Log Editor** — view and edit the raw log file directly. Use this only to correct a record.
 
-For day-to-day use, you only need **Add Record** and **Journal**.
+For day-to-day use, you only need **Home**, **Add Record**, and **Journal**.
 
 ---
 
@@ -164,9 +172,21 @@ Do not rename or move them — the app finds them by name and location.
 **The Note field is free text.** Use it for context the structured fields can't capture.
 It goes after the `|` in the log line.
 
-**The journal backs itself up.** Every time you save, a `.bak` file is written automatically.
+**Automatic safety copies.** Every time you save a record or journal, PTOS creates a backup first. If you need to undo a mistake, the backup is there.
 
 **Nothing leaves this computer.** All data stays local.
+
+---
+
+## Your data is safe
+
+**Automatic backups.** PTOS keeps the last 10 backups automatically. Go to the **Backup** tab to
+create a manual backup, download one, or restore from a previous version.
+
+**Crash protection.** Every time you save, PTOS makes a backup copy first. If something goes wrong,
+your data is safe.
+
+**Plain text.** Your records are just text files — no special software needed to read them.
 
 ---
 
