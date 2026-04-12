@@ -6,6 +6,8 @@ import tomllib
 import re
 import shutil
 import subprocess
+import uuid
+import zipfile
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -83,6 +85,92 @@ def init_version():
     if sha:
         save_current_version(sha)
 
+# --------------------------------------------------
+# Atomic write operations
+# --------------------------------------------------
+
+def atomic_write(filepath, content):
+    """Write file atomically with .bak backup for rollback on failure."""
+    backup_path = filepath + ".bak"
+    temp_path = filepath + ".tmp"
+    
+    # Create .bak backup
+    if os.path.exists(filepath):
+        shutil.copy2(filepath, backup_path)
+    
+    try:
+        # Write to .tmp
+        with open(temp_path, "w", encoding="utf-8") as f:
+            f.write(content)
+        
+        # Atomic rename
+        os.replace(temp_path, filepath)
+        
+        # Success - remove .bak
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+            
+    except Exception as e:
+        # Failure - cleanup temp, restore .bak
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, filepath)
+            os.remove(backup_path)
+        _log_error(f"Atomic write failed for {filepath}: {e}")
+        raise
+
+def atomic_append(filepath, content):
+    """Append to file atomically with .bak backup for rollback on failure."""
+    backup_path = filepath + ".bak"
+    temp_path = filepath + ".tmp"
+    
+    # Create .bak backup
+    if os.path.exists(filepath):
+        shutil.copy2(filepath, backup_path)
+    
+    try:
+        # Read existing content
+        existing = ""
+        if os.path.exists(filepath):
+            with open(filepath, "r", encoding="utf-8") as f:
+                existing = f.read()
+        
+        # Write to .tmp with appended content
+        with open(temp_path, "w", encoding="utf-8") as f:
+            if existing and not existing.endswith("\n"):
+                f.write(existing + "\n")
+            elif existing:
+                f.write(existing)
+            f.write(content + "\n")
+        
+        # Atomic rename
+        os.replace(temp_path, filepath)
+        
+        # Success - remove .bak
+        if os.path.exists(backup_path):
+            os.remove(backup_path)
+            
+    except Exception as e:
+        # Failure - restore .bak
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        if os.path.exists(backup_path):
+            shutil.copy2(backup_path, filepath)
+            os.remove(backup_path)
+        _log_error(f"Atomic append failed for {filepath}: {e}")
+        raise
+
+def _log_error(message):
+    """Log error to ptos_error.log."""
+    try:
+        log_path = os.path.join(BASE_DIR, "ptos_error.log")
+        timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(log_path, "a", encoding="utf-8") as f:
+            f.write(f"[{timestamp}] {message}\n")
+    except Exception:
+        pass
+
 def _backup_file(path):
     """Copy path to path.bak before any write operation.
     Silent no-op if file does not exist yet.
@@ -92,6 +180,166 @@ def _backup_file(path):
         shutil.copy2(path, path + ".bak")
 
 # --------------------------------------------------
+# Doctor — check PTOS health
+# --------------------------------------------------
+
+def doctor_check(verbose=False, fix=False, json_output=False):
+    """Run health checks on PTOS installation.
+    Returns (errors, warnings, messages).
+    """
+    errors = []
+    warnings = []
+    messages = []
+    fixes_applied = []
+    
+    # Python version check
+    py_version = f"{sys.version_info.major}.{sys.version_info.minor}.{sys.version_info.micro}"
+    if sys.version_info < (3, 11):
+        errors.append(f"Python 3.11+ required, found {py_version}")
+    else:
+        messages.append(("Python", f"Python {py_version}"))
+    
+    # Flask check
+    try:
+        import flask
+        messages.append(("Flask", f"Flask installed"))
+    except ImportError:
+        errors.append("Flask not installed. Run: pip install flask")
+    
+    # Config folder check
+    if not os.path.isdir(CONFIG_DIR):
+        errors.append(f"Config folder missing at {CONFIG_DIR}")
+        if fix:
+            os.makedirs(CONFIG_DIR, exist_ok=True)
+            fixes_applied.append(f"Created config/ folder")
+    else:
+        messages.append(("config/", "Folder exists"))
+    
+    # Config files check
+    config_file = os.path.join(CONFIG_DIR, "config.toml")
+    if not os.path.exists(config_file):
+        errors.append("config/config.toml missing")
+        if fix:
+            _write_if_missing(CONFIG_PATH, _STARTER_CONFIG, "config/config.toml")
+            fixes_applied.append("Created config/config.toml")
+    else:
+        messages.append(("config/config.toml", "Exists"))
+    
+    schema_file = os.path.join(CONFIG_DIR, "schema.toml")
+    if not os.path.exists(schema_file):
+        errors.append("config/schema.toml missing")
+        if fix:
+            _write_if_missing(SCHEMA_PATH, _STARTER_SCHEMA, "config/schema.toml")
+            fixes_applied.append("Created config/schema.toml")
+    else:
+        messages.append(("config/schema.toml", "Exists"))
+    
+    queries_file = os.path.join(CONFIG_DIR, "queries.toml")
+    if not os.path.exists(queries_file):
+        warnings.append("config/queries.toml missing (optional)")
+        if fix:
+            _write_if_missing(QUERIES_PATH, _STARTER_QUERIES, "config/queries.toml")
+            fixes_applied.append("Created config/queries.toml")
+    else:
+        messages.append(("config/queries.toml", "Exists"))
+    
+    presets_file = os.path.join(CONFIG_DIR, "presets.toml")
+    if not os.path.exists(presets_file):
+        warnings.append("config/presets.toml missing (optional)")
+        if fix:
+            _write_if_missing(PRESETS_PATH, _STARTER_PRESETS, "config/presets.toml")
+            fixes_applied.append("Created config/presets.toml")
+    else:
+        messages.append(("config/presets.toml", "Exists"))
+    
+    # Records folder check
+    if not os.path.isdir(RECORDS_DIR):
+        errors.append(f"Records folder missing at {RECORDS_DIR}")
+        if fix:
+            os.makedirs(RECORDS_DIR, exist_ok=True)
+            fixes_applied.append(f"Created records/ folder")
+    else:
+        messages.append(("records/", "Folder exists"))
+        
+        # Check for year log files
+        log_files = [f for f in os.listdir(RECORDS_DIR) if f.endswith(".log")]
+        if not log_files:
+            errors.append("No records found (create at least one .log file)")
+            if fix:
+                year_log = os.path.join(RECORDS_DIR, f"{dt.date.today().year}.log")
+                open(year_log, "a", encoding="utf-8").close()
+                fixes_applied.append(f"Created records/{dt.date.today().year}.log")
+        else:
+            messages.append(("records/*.log", f"{len(log_files)} file(s)"))
+    
+    # Templates folder check
+    if not os.path.isdir(TEMPLATE_DIR):
+        warnings.append("templates/ folder missing (optional)")
+        if fix:
+            os.makedirs(TEMPLATE_DIR, exist_ok=True)
+            fixes_applied.append("Created templates/ folder")
+    else:
+        messages.append(("templates/", "Folder exists"))
+    
+    template_file = os.path.join(TEMPLATE_DIR, "daily.md")
+    if not os.path.exists(template_file):
+        warnings.append("templates/daily.md missing (optional)")
+        if fix:
+            _write_if_missing(template_file, _STARTER_JOURNAL, "templates/daily.md")
+            fixes_applied.append("Created templates/daily.md")
+    else:
+        messages.append(("templates/daily.md", "Exists"))
+    
+    # Output results
+    if json_output:
+        return {
+            "status": "errors" if errors else "warnings" if warnings else "ok",
+            "errors": len(errors),
+            "warnings": len(warnings),
+            "checks": [
+                {"name": name, "status": "pass" if name in [m[0] for m in messages] else "fail", "message": msg}
+                for name, msg in messages
+            ]
+        }
+    
+    return errors, warnings, messages, fixes_applied
+
+def print_doctor_results(errors, warnings, messages, fixes_applied, verbose=False, fix=False):
+    """Print doctor check results in human-readable format."""
+    print("\nPTOS Doctor")
+    print("=" * 40)
+    print()
+    
+    if verbose:
+        print("Checks:")
+        for name, msg in messages:
+            print(f"  [OK]   {name}: {msg}")
+    
+    if warnings and (verbose or not fix):
+        print()
+        for w in warnings:
+            print(f"  [WARN] {w}")
+    
+    if errors:
+        print()
+        for e in errors:
+            print(f"  [FAIL] {e}")
+    
+    if fix and fixes_applied:
+        print()
+        print("Fixes applied:")
+        for f in fixes_applied:
+            print(f"  - {f}")
+    
+    print()
+    if errors:
+        print(f"Summary: {len(errors)} error(s), {len(warnings)} warning(s)")
+    elif warnings:
+        print(f"Summary: {len(warnings)} warning(s)")
+    else:
+        print("All checks passed!")
+
+# --------------------------------------------------
 # Backup functions
 # --------------------------------------------------
 
@@ -99,59 +347,131 @@ def backup_data():
     """Create a timestamped backup ZIP of records/, config/, templates/.
     Returns the path to the created backup file.
     Automatically removes oldest backups if MAX_BACKUPS limit is exceeded.
+    Uses atomic write with .tmp file for crash safety.
     """
-    import zipfile
     os.makedirs(BACKUP_DIR, exist_ok=True)
     timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"backup_{timestamp}.zip"
-    backup_path = os.path.join(BACKUP_DIR, backup_name)
+    temp_path = os.path.join(BACKUP_DIR, f".backup_{timestamp}.tmp")
+    final_path = os.path.join(BACKUP_DIR, f"backup_{timestamp}.zip")
     
-    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        for folder in BACKUP_FOLDERS:
-            folder_path = os.path.join(BASE_DIR, folder)
-            if os.path.exists(folder_path):
-                for root, dirs, files in os.walk(folder_path):
-                    for file in files:
-                        file_path = os.path.join(root, file)
-                        arcname = os.path.relpath(file_path, BASE_DIR)
-                        zf.write(file_path, arcname)
-    
-    # Clean up old backups if limit exceeded
-    _cleanup_old_backups()
-    
-    return backup_path
+    try:
+        # Write to .tmp file
+        with zipfile.ZipFile(temp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for folder in BACKUP_FOLDERS:
+                folder_path = os.path.join(BASE_DIR, folder)
+                if os.path.exists(folder_path):
+                    for root, dirs, files in os.walk(folder_path):
+                        for file in files:
+                            file_path = os.path.join(root, file)
+                            arcname = os.path.relpath(file_path, BASE_DIR)
+                            zf.write(file_path, arcname)
+        
+        # Verify ZIP integrity
+        with zipfile.ZipFile(temp_path, "r") as zf:
+            bad_file = zf.testzip()
+            if bad_file:
+                raise Exception(f"ZIP verification failed: {bad_file}")
+        
+        # Atomic rename to final location
+        os.replace(temp_path, final_path)
+        
+        # Clean up old backups if limit exceeded
+        _cleanup_old_backups()
+        
+        return final_path
+        
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        _log_error(f"Backup failed: {e}")
+        raise
 
 def backup_config():
     """Create a timestamped backup ZIP of config/ folder only.
     Returns the path to the created backup file.
+    Uses atomic write with .tmp file for crash safety.
     """
-    import zipfile
     os.makedirs(BACKUP_DIR, exist_ok=True)
     timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-    backup_name = f"ptos-config_{timestamp}.zip"
-    backup_path = os.path.join(BACKUP_DIR, backup_name)
+    temp_path = os.path.join(BACKUP_DIR, f".ptos-config_{timestamp}.tmp")
+    final_path = os.path.join(BACKUP_DIR, f"ptos-config_{timestamp}.zip")
     
     config_path = os.path.join(BASE_DIR, "config")
     
-    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
-        if os.path.exists(config_path):
-            for file in os.listdir(config_path):
-                if file.endswith(".toml"):
-                    file_path = os.path.join(config_path, file)
-                    zf.write(file_path, os.path.join("config", file))
-    
-    return backup_path
+    try:
+        # Write to .tmp file
+        with zipfile.ZipFile(temp_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            if os.path.exists(config_path):
+                for file in os.listdir(config_path):
+                    if file.endswith(".toml"):
+                        file_path = os.path.join(config_path, file)
+                        zf.write(file_path, os.path.join("config", file))
+        
+        # Verify ZIP integrity
+        with zipfile.ZipFile(temp_path, "r") as zf:
+            bad_file = zf.testzip()
+            if bad_file:
+                raise Exception(f"ZIP verification failed: {bad_file}")
+        
+        # Atomic rename to final location
+        os.replace(temp_path, final_path)
+        
+        return final_path
+        
+    except Exception as e:
+        if os.path.exists(temp_path):
+            os.remove(temp_path)
+        _log_error(f"Config backup failed: {e}")
+        raise
 
 def restore_data(zip_path):
     """Restore data from a backup ZIP file.
     Overwrites existing files with the contents of the backup.
+    Uses atomic operation with temp directory for crash safety.
     """
-    import zipfile
     if not os.path.exists(zip_path):
         raise FileNotFoundError(f"Backup file not found: {zip_path}")
     
-    with zipfile.ZipFile(zip_path, "r") as zf:
-        zf.extractall(BASE_DIR)
+    temp_dir = os.path.join(BACKUP_DIR, f".restore-{uuid.uuid4().hex[:8]}")
+    
+    try:
+        # Extract to temp directory
+        os.makedirs(temp_dir)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(temp_dir)
+        
+        # Verify extraction (check for expected folders)
+        has_content = False
+        for item in os.listdir(temp_dir):
+            if item in BACKUP_FOLDERS or item == "config":
+                has_content = True
+                break
+        
+        if not has_content:
+            raise Exception("Invalid backup: expected folders not found")
+        
+        # Copy files to BASE_DIR
+        for item in os.listdir(temp_dir):
+            src = os.path.join(temp_dir, item)
+            dst = os.path.join(BASE_DIR, item)
+            
+            if os.path.isdir(src):
+                if os.path.exists(dst):
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
+            else:
+                if os.path.exists(dst):
+                    os.remove(dst)
+                shutil.copy2(src, dst)
+        
+        # Cleanup temp directory
+        shutil.rmtree(temp_dir)
+        
+    except Exception as e:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        _log_error(f"Restore failed: {e}")
+        raise
 
 def list_backups():
     """Return list of backup files with creation dates, sorted newest first.
@@ -889,8 +1209,7 @@ def rewrite_line_in_file(filepath, old_line, new_line, lineno=None):
     else:
         lines[idx] = new_line + "\n"
 
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.writelines(lines)
+    atomic_write(filepath, "".join(lines))
 
 
 def apply_set(old_line, set_args, new_note):
@@ -1046,9 +1365,7 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
             new_year = changed_date[:4]
             rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
             new_path = os.path.join(RECORDS_DIR, f"{new_year}.log")
-            _backup_file(new_path)
-            with open(new_path, "a", encoding="utf-8") as f:
-                f.write(new_line + "\n")
+            atomic_append(new_path, new_line)
             moved = f" (moved {old_year}.log → {new_year}.log)" if old_year != new_year else ""
             print(f"  Updated{moved}: {new_line}")
         else:
@@ -1114,17 +1431,21 @@ def append_record(line):
     os.makedirs(RECORDS_DIR, exist_ok=True)
     year = line[:4]
     path = os.path.join(RECORDS_DIR, f"{year}.log")
-    _backup_file(path)
-    # strip trailing blank lines left by manual editing before appending
+    
+    # Read existing content and prepare new content
+    existing = ""
     if os.path.exists(path):
         with open(path, "r", encoding="utf-8") as f:
             existing = f.read()
-        stripped = existing.rstrip("\n\r ")
-        if stripped != existing.rstrip():
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(stripped + "\n")
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(line + "\n")
+    
+    # Strip trailing blank lines
+    stripped = existing.rstrip("\n\r ")
+    if stripped != existing.rstrip():
+        new_content = stripped + "\n" + line + "\n"
+    else:
+        new_content = existing + line + "\n"
+    
+    atomic_write(path, new_content)
 
 # --------------------------------------------------
 # Validation
@@ -1966,8 +2287,7 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
             schema_text = (schema_text.rstrip() +
                            f"\n\n{section_key}\n{option_key} = [\"" + tag + "\"]\n")
 
-        _backup_file(schema_path)
-        open(schema_path, "w", encoding="utf-8").write(schema_text)
+        atomic_write(schema_path, schema_text)
         print(f"  ✔ Added '{tag}' to schema.")
 
 
@@ -2097,9 +2417,16 @@ def save_query(name, args, extra_filters):
         lines.append("sum   = true")
 
     block = "\n".join(lines)
-    _backup_file(QUERIES_PATH)
-    with open(QUERIES_PATH, "a", encoding="utf-8") as f:
-        f.write(block + "\n")
+    
+    # Read existing content and append
+    existing = ""
+    if os.path.exists(QUERIES_PATH):
+        with open(QUERIES_PATH, "r", encoding="utf-8") as f:
+            existing = f.read()
+    
+    new_content = existing.rstrip() + "\n" + block + "\n" if existing else block + "\n"
+    atomic_write(QUERIES_PATH, new_content)
+    
     print(f"\nQuery '{name}' saved to queries.toml")
     print(f"Run with: ptos -q {name}")
 
@@ -2130,13 +2457,15 @@ def save_as_preset(name, record, note=None):
         block_lines.append("# amount omitted — will be prompted each time")
     new_block = "\n".join(block_lines) + "\n"
 
-    _backup_file(presets_path)
-
-    # replace existing block if name already exists — line-by-line safe replacement
+    # Read existing content
+    existing = ""
     if os.path.exists(presets_path):
         with open(presets_path, "r", encoding="utf-8") as f:
-            lines = f.readlines()
+            existing = f.read()
+            lines = existing.splitlines(keepends=True)
 
+    # replace existing block if name already exists
+    if existing:
         header = f"[presets.{name}]"
         start_idx = None
         for i, line in enumerate(lines):
@@ -2153,21 +2482,20 @@ def save_as_preset(name, record, note=None):
                     end_idx = i
                     break
 
-            # rebuild file: everything before + new block + blank line + everything after
+            # rebuild file: everything before + new block + everything after
             before = lines[:start_idx]
-            after  = lines[end_idx:]
+            after = lines[end_idx:]
             # strip trailing blank lines from before
             while before and before[-1].strip() == "":
                 before.pop()
-            result = before + ["\n", new_block + "\n"] + after
-            with open(presets_path, "w", encoding="utf-8") as f:
-                f.writelines(result)
+            result = before + ["\n", new_block] + after
+            atomic_write(presets_path, "".join(result))
             print(f"Preset '{name}' updated in presets.toml")
             return
 
     # no existing block — append
-    with open(presets_path, "a", encoding="utf-8") as f:
-        f.write("\n" + new_block)
+    new_content = existing.rstrip() + "\n" + new_block if existing else new_block
+    atomic_write(presets_path, new_content)
     print(f"Preset '{name}' saved to presets.toml")
 
 def interactive_add(schema, date=None, save_preset_name=None):
@@ -2738,6 +3066,8 @@ def build_parser(cycles):
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
     utl.add_argument("--backup-full", action="store_true", help="Full backup: records/, templates/, config/, and backups/ folder")
     utl.add_argument("--backup-config", action="store_true", help="Config backup: only schema, queries, presets, and config toml files")
+    utl.add_argument("--doctor", action="store_true", help="Check PTOS installation health")
+    utl.add_argument("--doctor-fix", dest="doctor_fix", action="store_true", help="With --doctor: fix any issues found")
 
     return p
 
@@ -3263,6 +3593,14 @@ def main():
 
     if args.journal:
         edit_target("daily")
+        return
+
+    if args.doctor:
+        errors, warnings, messages, fixes = doctor_check(
+            verbose=True,
+            fix=args.doctor_fix
+        )
+        print_doctor_results(errors, warnings, messages, fixes, verbose=True, fix=args.doctor_fix)
         return
 
     if args.backup_full:

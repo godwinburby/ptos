@@ -1,9 +1,16 @@
 #!/bin/bash
 # PTOS Update Script for Termux
 # Downloads latest code files. Preserves config/, records/, journal/, templates/.
+# Uses robust error handling with atomic operations.
 
 TMP_DIR="$HOME/.ptos-temp"
 PTOS_DIR="$HOME/storage/shared/ptos"
+
+# Cleanup on exit
+cleanup() {
+    rm -rf "$TMP_DIR" 2>/dev/null
+}
+trap cleanup EXIT
 
 echo "=========================================="
 echo "  PTOS Update"
@@ -22,22 +29,29 @@ echo "Downloading latest PTOS..."
 rm -rf "$TMP_DIR" 2>/dev/null
 mkdir -p "$TMP_DIR"
 
-curl -L --progress-bar -o "$TMP_DIR/ptos.zip" \
+curl -f -L -o "$TMP_DIR/ptos.zip" \
     https://github.com/godwinburby/ptos/archive/refs/heads/main.zip
 
-if [ ! -f "$TMP_DIR/ptos.zip" ]; then
+if [ $? -ne 0 ] || [ ! -f "$TMP_DIR/ptos.zip" ]; then
     echo "ERROR: Download failed. Check your internet connection."
+    exit 1
+fi
+
+# ── Verify zip integrity ─────────────────────────────────────────────────────
+echo "Verifying download..."
+unzip -t "$TMP_DIR/ptos.zip" > /dev/null 2>&1
+if [ $? -ne 0 ]; then
+    echo "ERROR: Downloaded file is corrupted."
     exit 1
 fi
 
 echo ""
 echo "Extracting..."
 mkdir -p "$TMP_DIR/new"
-unzip -o "$TMP_DIR/ptos.zip" -d "$TMP_DIR/new" > /dev/null 2>&1
+unzip -q "$TMP_DIR/ptos.zip" -d "$TMP_DIR/new"
 
 if [ ! -d "$TMP_DIR/new/ptos-main" ]; then
     echo "ERROR: Extraction failed."
-    rm -rf "$TMP_DIR"
     exit 1
 fi
 
@@ -56,7 +70,7 @@ done
 if [ -d "$TMP_DIR/new/ptos-main/web_templates" ] && [ "$FILES_CHANGED" -eq 0 ]; then
     if [ ! -d "$PTOS_DIR/web_templates" ] || \
        ! cmp -s "$TMP_DIR/new/ptos-main/web_templates/base.html" \
-                "$PTOS_DIR/web_templates/base.html" 2>/dev/null; then
+              "$PTOS_DIR/web_templates/base.html" 2>/dev/null; then
         FILES_CHANGED=1
     fi
 fi
@@ -64,46 +78,59 @@ fi
 # ── Apply update ──────────────────────────────────────────────────────────────
 if [ "$FILES_CHANGED" -eq 1 ]; then
     echo "Updating PTOS code files..."
+    
+    # Backup old Python files to .bak
+    for f in "$PTOS_DIR"/*.py; do
+        [ -f "$f" ] && cp "$f" "$f.bak" 2>/dev/null || true
+    done
+    
     # Python files
     cp "$TMP_DIR/new/ptos-main"/*.py "$PTOS_DIR/" 2>/dev/null || true
+    
     # Web templates
     rm -rf "$PTOS_DIR/web_templates" 2>/dev/null || true
     cp -r "$TMP_DIR/new/ptos-main/web_templates" "$PTOS_DIR/" 2>/dev/null || true
+    
     # Shell scripts inside ptos dir
     cp "$TMP_DIR/new/ptos-main"/*_termux.sh "$PTOS_DIR/" 2>/dev/null || true
     chmod +x "$PTOS_DIR"/*_termux.sh 2>/dev/null || true
+    
+    # Remove .bak files on success
+    for f in "$PTOS_DIR"/*.bak; do
+        [ -f "$f" ] && rm "$f" 2>/dev/null || true
+    done
+    
     echo "Code updated."
-
+    
     # ── Save latest SHA to .version file ───────────────────────────────────────
     echo "Saving version..."
     curl -s "https://api.github.com/repos/godwinburby/ptos/commits/main" \
         | grep '"sha"' | head -1 | cut -d'"' -f4 > "$PTOS_DIR/.version"
+    
+    # Verify .version was written
+    if [ ! -s "$PTOS_DIR/.version" ]; then
+        echo "WARNING: Failed to save version. Will try on next update."
+        rm -f "$PTOS_DIR/.version"
+    fi
 else
     echo "Already up to date."
 fi
 
-rm -rf "$TMP_DIR"
-
 # ── Refresh companion scripts in $HOME ────────────────────────────────────────
-# Always re-download so $HOME scripts stay current even if code didn't change
 echo ""
-echo "Refreshing companion scripts..."
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/start_ptos_termux.sh \
-     -o "$HOME/start_ptos_termux.sh"
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/update_ptos_termux.sh \
-     -o "$HOME/update_ptos_termux.sh"
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_termux.sh \
-     -o "$HOME/setup_ptos_termux.sh"
-chmod +x "$HOME/start_ptos_termux.sh" \
-         "$HOME/update_ptos_termux.sh" \
-         "$HOME/setup_ptos_termux.sh"
+echo "Refreshing scripts..."
+for script in start_ptos_termux.sh update_ptos_termux.sh setup_ptos_termux.sh; do
+    curl -fsSL "https://raw.githubusercontent.com/godwinburby/ptos/main/$script" \
+         -o "$HOME/$script" 2>/dev/null || true
+    chmod +x "$HOME/$script" 2>/dev/null || true
+done
 
 # ── Refresh widget shortcuts ──────────────────────────────────────────────────
-echo "Refreshing widget shortcuts..."
+echo "Refreshing shortcuts..."
 mkdir -p "$HOME/.shortcuts"
 for script in setup_ptos_termux.sh start_ptos_termux.sh update_ptos_termux.sh; do
     rm -f "$HOME/.shortcuts/$script"
-    ln -s "$HOME/$script" "$HOME/.shortcuts/$script"
+    ln -s "$HOME/$script" "$HOME/.shortcuts/$script" 2>/dev/null || true
 done
 
 echo ""
@@ -113,15 +140,13 @@ echo "=========================================="
 echo ""
 
 # ── Restart server (background this process first) ────────────────────────────
-# Use double-fork: background a subshell that kills port 5000 and restarts
-# This allows the main script to exit cleanly so Flask can return a response
+echo "Restarting server..."
 (
     sleep 2
-    echo "Stopping server..."
     pkill -f "python.*ptos_web.py" 2>/dev/null || true
     sleep 1
-    echo "Starting server..."
-    am start -a android.intent.action.VIEW -d http://localhost:5000 > /dev/null 2>&1 &
     nohup python "$PTOS_DIR/ptos_web.py" > /dev/null 2>&1 &
 ) &
 disown
+
+echo "Done. Reload PTOS in browser to see changes."
