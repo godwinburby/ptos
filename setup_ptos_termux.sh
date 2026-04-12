@@ -84,6 +84,11 @@ else
     echo ""
     echo "--- Initialising PTOS ---"
     python ptos.py --init
+
+    # ── Save initial version ───────────────────────────────────────────────────
+    echo "Saving version..."
+    curl -s "https://api.github.com/repos/godwinburby/ptos/commits/main" \
+        | grep '"sha"' | head -1 | cut -d'"' -f4 > "$PTOS_DIR/.version"
 fi
 
 # ── Download start/update scripts to $HOME ───────────────────────────────────

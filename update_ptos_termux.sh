@@ -73,6 +73,11 @@ if [ "$FILES_CHANGED" -eq 1 ]; then
     cp "$TMP_DIR/new/ptos-main"/*_termux.sh "$PTOS_DIR/" 2>/dev/null || true
     chmod +x "$PTOS_DIR"/*_termux.sh 2>/dev/null || true
     echo "Code updated."
+
+    # ── Save latest SHA to .version file ───────────────────────────────────────
+    echo "Saving version..."
+    curl -s "https://api.github.com/repos/godwinburby/ptos/commits/main" \
+        | grep '"sha"' | head -1 | cut -d'"' -f4 > "$PTOS_DIR/.version"
 else
     echo "Already up to date."
 fi
