@@ -746,6 +746,9 @@ def apply_update():
         # Run update script FIRST (while server is still running)
         system = platform.system()
         
+        # Detect Android by absence of .git folder (zip-based install)
+        is_git = os.path.exists(os.path.join(script_dir, ".git"))
+        
         if system == "Windows":
             script = os.path.join(script_dir, "update_ptos_windows.bat")
             result = subprocess.run(
@@ -755,8 +758,18 @@ def apply_update():
                 text=True,
                 timeout=120
             )
+        elif system == "Linux" and not is_git:
+            # Non-git = Android (zip-based install)
+            script = os.path.join(script_dir, "update_ptos_android.sh")
+            result = subprocess.run(
+                ["bash", script],
+                cwd=script_dir,
+                capture_output=True,
+                text=True,
+                timeout=120
+            )
         else:
-            # Linux/Termux
+            # Linux with git clone
             script = os.path.join(script_dir, "update_ptos_linux.sh")
             result = subprocess.run(
                 ["bash", script],

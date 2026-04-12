@@ -1,12 +1,12 @@
 #!/bin/bash
-# PTOS Setup Script for Termux
+# PTOS Setup Script for Android (Termux)
 # Downloads and installs PTOS, or refreshes scripts if already installed.
 
 TMP_DIR="$HOME/.ptos-temp"
 PTOS_DIR="$HOME/storage/shared/ptos"
 
 echo "=========================================="
-echo "  PTOS Setup for Termux"
+echo "  PTOS Setup for Android"
 echo "=========================================="
 echo ""
 
@@ -96,27 +96,25 @@ else
     fi
 fi
 
-# ── Download start/update scripts to $HOME ───────────────────────────────────
+# ── Download Android scripts to $HOME ────────────────────────────────────────
 echo ""
-echo "Downloading companion scripts..."
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/start_ptos_termux.sh \
-     -o "$HOME/start_ptos_termux.sh"
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/update_ptos_termux.sh \
-     -o "$HOME/update_ptos_termux.sh"
-curl -fsSL https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_termux.sh \
-     -o "$HOME/setup_ptos_termux.sh"
-chmod +x "$HOME/start_ptos_termux.sh" \
-         "$HOME/update_ptos_termux.sh" \
-         "$HOME/setup_ptos_termux.sh"
-echo "Scripts ready."
+echo "Downloading scripts..."
+for script in start_ptos_android.sh update_ptos_android.sh setup_ptos_android.sh; do
+    curl -fsSL "https://raw.githubusercontent.com/godwinburby/ptos/main/$script" \
+         -o "$HOME/$script" 2>/dev/null || true
+    chmod +x "$HOME/$script" 2>/dev/null || true
+done
+chmod +x "$HOME/start_ptos_android.sh" \
+         "$HOME/update_ptos_android.sh" \
+         "$HOME/setup_ptos_android.sh" 2>/dev/null || true
 
-# ── Termux Widget shortcuts ───────────────────────────────────────────────────
+# ── Refresh widget shortcuts ────────────────────────────────────────────────────
 echo ""
 echo "Creating widget shortcuts..."
 mkdir -p "$HOME/.shortcuts"
-for script in setup_ptos_termux.sh start_ptos_termux.sh update_ptos_termux.sh; do
+for script in setup_ptos_android.sh start_ptos_android.sh update_ptos_android.sh; do
     rm -f "$HOME/.shortcuts/$script"
-    ln -s "$HOME/$script" "$HOME/.shortcuts/$script"
+    ln -s "$HOME/$script" "$HOME/.shortcuts/$script" 2>/dev/null || true
 done
 echo "Shortcuts created."
 
@@ -125,5 +123,5 @@ echo "=========================================="
 echo "  Setup Complete!"
 echo "=========================================="
 echo ""
-echo "Start PTOS:   ./start_ptos_termux.sh"
-echo "Update PTOS:  ./update_ptos_termux.sh"
+echo "Start PTOS:   ./start_ptos_android.sh"
+echo "Update PTOS:  ./update_ptos_android.sh"

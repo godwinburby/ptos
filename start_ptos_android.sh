@@ -1,5 +1,5 @@
 #!/bin/bash
-# PTOS Start Script for Termux
+# PTOS Start Script for Android (Termux)
 
 PTOS_DIR="$HOME/storage/shared/ptos"
 
@@ -10,7 +10,7 @@ echo ""
 
 if [ ! -d "$PTOS_DIR" ]; then
     echo "ERROR: PTOS not installed."
-    echo "Run setup_ptos_termux.sh first."
+    echo "Run setup_ptos_android.sh first."
     exit 1
 fi
 

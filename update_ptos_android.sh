@@ -1,5 +1,5 @@
 #!/bin/bash
-# PTOS Update Script for Termux
+# PTOS Update Script for Android (Termux)
 # Downloads latest code files. Preserves config/, records/, journal/, templates/.
 # Uses robust error handling with atomic operations.
 
@@ -18,14 +18,14 @@ echo "=========================================="
 echo ""
 
 if [ ! -d "$PTOS_DIR" ]; then
-    echo "ERROR: PTOS not installed. Run setup_ptos_termux.sh first."
+    echo "ERROR: PTOS not installed. Run setup_ptos_android.sh first."
     exit 1
 fi
 
 cd "$PTOS_DIR"
 
 # ── Download latest zip ───────────────────────────────────────────────────────
-echo "Downloading latest PTOS..."
+echo "Downloading PTOS..."
 rm -rf "$TMP_DIR" 2>/dev/null
 mkdir -p "$TMP_DIR"
 
@@ -92,8 +92,8 @@ if [ "$FILES_CHANGED" -eq 1 ]; then
     cp -r "$TMP_DIR/new/ptos-main/web_templates" "$PTOS_DIR/" 2>/dev/null || true
     
     # Shell scripts inside ptos dir
-    cp "$TMP_DIR/new/ptos-main"/*_termux.sh "$PTOS_DIR/" 2>/dev/null || true
-    chmod +x "$PTOS_DIR"/*_termux.sh 2>/dev/null || true
+    cp "$TMP_DIR/new/ptos-main"/*_android.sh "$PTOS_DIR/" 2>/dev/null || true
+    chmod +x "$PTOS_DIR"/*_android.sh 2>/dev/null || true
     
     # Remove .bak files on success
     for f in "$PTOS_DIR"/*.bak; do
@@ -112,20 +112,14 @@ if [ "$FILES_CHANGED" -eq 1 ]; then
         echo "WARNING: Failed to fetch version. Will retry on next update."
         rm -f "$PTOS_DIR/.version"
     fi
-    
-    # Verify .version was written
-    if [ ! -s "$PTOS_DIR/.version" ]; then
-        echo "WARNING: Failed to save version. Will try on next update."
-        rm -f "$PTOS_DIR/.version"
-    fi
 else
     echo "Already up to date."
 fi
 
-# ── Refresh companion scripts in $HOME ────────────────────────────────────────
+# ── Refresh scripts in $HOME ─────────────────────────────────────────────────
 echo ""
 echo "Refreshing scripts..."
-for script in start_ptos_termux.sh update_ptos_termux.sh setup_ptos_termux.sh; do
+for script in start_ptos_android.sh update_ptos_android.sh setup_ptos_android.sh; do
     curl -fsSL "https://raw.githubusercontent.com/godwinburby/ptos/main/$script" \
          -o "$HOME/$script" 2>/dev/null || true
     chmod +x "$HOME/$script" 2>/dev/null || true
@@ -134,7 +128,7 @@ done
 # ── Refresh widget shortcuts ──────────────────────────────────────────────────
 echo "Refreshing shortcuts..."
 mkdir -p "$HOME/.shortcuts"
-for script in setup_ptos_termux.sh start_ptos_termux.sh update_ptos_termux.sh; do
+for script in setup_ptos_android.sh start_ptos_android.sh update_ptos_android.sh; do
     rm -f "$HOME/.shortcuts/$script"
     ln -s "$HOME/$script" "$HOME/.shortcuts/$script" 2>/dev/null || true
 done
@@ -145,14 +139,17 @@ echo "  PTOS Updated!"
 echo "=========================================="
 echo ""
 
-# ── Restart server (background this process first) ────────────────────────────
+# ── Restart server ────────────────────────────────────────────────────────────
 echo "Restarting server..."
 (
     sleep 2
     pkill -f "python.*ptos_web.py" 2>/dev/null || true
     sleep 1
+    # Open browser
+    am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 &
+    # Start server
     nohup python "$PTOS_DIR/ptos_web.py" > /dev/null 2>&1 &
 ) &
 disown
 
-echo "Done. Reload PTOS in browser to see changes."
+echo "Done. PTOS will open in browser."
