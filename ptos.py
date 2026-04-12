@@ -41,12 +41,15 @@ def save_current_version(sha):
         f.write(sha)
 
 def init_version():
-    """Initialize version file with current git SHA or 'unknown'."""
+    """Initialize version file with current SHA.
+    For git: use HEAD. For non-git (Termux): fetch from GitHub API.
+    """
     if os.path.exists(VERSION_FILE):
         return  # Already initialized
     
-    # Try to get git SHA
-    sha = "unknown"
+    sha = None
+    
+    # Try git first
     if os.path.exists(os.path.join(BASE_DIR, ".git")):
         try:
             result = subprocess.run(
@@ -61,7 +64,24 @@ def init_version():
         except Exception:
             pass
     
-    save_current_version(sha)
+    # For non-git (Termux), fetch from GitHub API
+    if not sha:
+        try:
+            import urllib.request
+            req = urllib.request.Request(
+                GITHUB_API_URL,
+                headers={"User-Agent": "PTOS/1.0"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as response:
+                import json
+                data = json.loads(response.read().decode())
+                sha = data.get("sha", "")
+        except Exception:
+            pass
+    
+    # Save if we got something
+    if sha:
+        save_current_version(sha)
 
 def _backup_file(path):
     """Copy path to path.bak before any write operation.
@@ -2604,6 +2624,10 @@ def init_ptos():
         print(f"  exists   records/{today().year}.log")
 
     print("\nDone. Edit config/schema.toml to define your record types.\n")
+    
+    # Initialize version tracking
+    init_version()
+    print("Version tracked.")
 
 # --------------------------------------------------
 # CLI  — argument parsing only, no logic
