@@ -78,10 +78,18 @@ alias ptos="python ~/ptos/ptos.py"
 
 ```
 ptos/
-├── ptos.py              # Core CLI engine
-├── ptos_service.py      # Data layer (used by web UI and GUI)
-├── ptos_web.py          # Web UI (optional)
-├── ptos_gui.pyw         # Desktop GUI (optional, Windows)
+├── ptos.py                 # Core CLI engine
+├── ptos_service.py         # Service layer (web UI)
+├── ptos_web.py             # Web UI (Flask)
+├── setup_ptos_linux.sh    # Linux setup script
+├── setup_ptos_windows.bat  # Windows setup script
+├── setup_ptos_android.sh   # Android/Termux setup script
+├── start_ptos_linux.sh     # Linux start script
+├── start_ptos_windows.bat  # Windows start script
+├── start_ptos_android.sh   # Android/Termux start script
+├── update_ptos_linux.sh    # Linux update script
+├── update_ptos_windows.bat # Windows update script
+├── update_ptos_android.sh   # Android/Termux update script
 ├── config/
 │   ├── config.toml      # Editor, currency, cycles, dashboard
 │   ├── schema.toml      # Record types, fields, validation
@@ -770,7 +778,7 @@ Useful when the script is on `PATH` but data lives in a synced folder.
 
 ## Automatic backups
 
-Every write operation — `--add`, `--preset`, `--set`, `--delete`, log editor saves from both the web UI and the GUI, and journal saves — creates a `.bak` file alongside the original before writing. For example, before modifying `records/2026.log`, PTOS writes `records/2026.log.bak`.
+Every write operation — `--add`, `--preset`, `--set`, `--delete`, log editor saves from the web UI, and journal saves — creates a `.bak` file alongside the original before writing. For example, before modifying `records/2026.log`, PTOS writes `records/2026.log.bak`.
 
 Add `*.bak` to your `.gitignore` and Syncthing ignore patterns.
 
@@ -828,7 +836,7 @@ ptos --type mood --time this-week --group context
 
 ## Unit labels in schema
 
-To show a unit hint next to a numeric field in the web UI and GUI add forms:
+To show a unit hint next to a numeric field in the web UI add forms:
 
 ```toml
 [fields.amount]
@@ -844,7 +852,7 @@ aggregatable = true
 unit         = "min"
 ```
 
-The `unit` key is read by the web UI and GUI only — `ptos.py` ignores it.
+The `unit` key is read by the web UI only — `ptos.py` ignores it.
 
 ---
 
@@ -871,7 +879,7 @@ Then open `http://localhost:5000` in your browser (or your device's IP on the lo
 | File | Purpose |
 |------|---------|
 | `ptos_web.py` | Flask application |
-| `ptos_service.py` | Data layer — shared with GUI |
+| `ptos_service.py` | Service layer — web UI interface |
 | `web_templates/` | HTML templates |
 
 ### Pages
@@ -908,37 +916,35 @@ Then open `http://localhost:5000` in your browser (or your device's IP on the lo
 
 ---
 
-## GUI (Desktop fallback)
+## Setup Scripts
 
-`ptos_gui.pyw` is a Tkinter desktop GUI for Windows. It is the fallback interface — use the CLI or web UI first; the GUI covers the same ground for users who prefer a native window.
+Use the platform-specific setup script to get started quickly.
 
-### Requirements
+### Quick Setup
 
-Same as `ptos.py` — Python 3.11+, standard library only. No extra packages. Tkinter is included with most Python distributions on Windows.
+| Platform | Command |
+|----------|---------|
+| Linux | `bash setup_ptos_linux.sh` |
+| Windows | Run `setup_ptos_windows.bat` |
+| Android/Termux | `bash setup_ptos_android.sh` |
 
-### Launching
+### Start PTOS
 
-```cmd
-python ptos_gui.pyw
-```
+| Platform | Command |
+|----------|---------|
+| Linux | `bash start_ptos_linux.sh` |
+| Windows | Run `start_ptos_windows.bat` |
+| Android/Termux | `bash start_ptos_android.sh` |
 
-Or double-click `ptg.bat` (Windows launcher, no console window).
+### Update PTOS
 
-### Tabs
+| Platform | Command |
+|----------|---------|
+| Linux | `bash update_ptos_linux.sh` |
+| Windows | Run `update_ptos_windows.bat` |
+| Android/Termux | `bash update_ptos_android.sh` |
 
-**+ Add Record** — Same schema-driven form as the web UI. Dropdowns, conditional fields, numeric units, tag checkboxes, preset loading and saving. History-based autocomplete on free-text fields.
-
-**Journal** — Daily journal editor. Navigate with ◀ Prev / Next ▶ or click the date to jump. Ctrl+S saves; Ctrl+Enter toggles checkboxes. Markdown syntax highlighting. Creates entry from template for new dates.
-
-**Queries** — Run named queries, metrics, and dashboards. Selecting a query or changing the time window runs it immediately.
-
-**Browse** — Filter records by type, time, and field values. Group by dropdown. Due List button. Export CSV. Inline edit and delete with a full form.
-
-**Log Editor** — Edit any `.log` file with full undo. Saves with `.bak` backup.
-
-### Error log
-
-Crashes and callback errors are written to `ptos_error.log` and shown in a popup with a Copy to Clipboard button. The app continues running after dismissal.
+Or update directly from the web UI by clicking the Update button in the banner.
 
 ---
 
