@@ -8,6 +8,19 @@ no account. You own the data completely.
 
 ---
 
+## Table of Contents
+
+- [How it works — the big picture](#how-it-works--the-big-picture)
+- [The four config files](#the-four-config-files)
+- [How to use the app](#how-to-use-the-app)
+- [First time setup](#first-time-setup)
+- [Where your data lives](#where-your-data-lives)
+- [Things to know](#things-to-know)
+- [Your data is safe](#your-data-is-safe)
+- [Troubleshooting](#troubleshooting)
+
+---
+
 ## How it works — the big picture
 
 Think of PTOS as a logbook with rules.
