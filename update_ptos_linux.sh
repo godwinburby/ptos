@@ -27,13 +27,6 @@ fi
 echo "Pulling latest changes from GitHub..."
 git pull
 
-# ── Update .version file with new SHA ────────────────────────────────────────
-NEW_SHA=$(git rev-parse HEAD 2>/dev/null)
-if [ -n "$NEW_SHA" ]; then
-    echo "$NEW_SHA" > .version
-    echo "Updated version to: ${NEW_SHA:0:8}"
-fi
-
 echo ""
 echo "=========================================="
 echo "  PTOS Updated!"

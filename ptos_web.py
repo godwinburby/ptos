@@ -682,17 +682,25 @@ def check_update():
                 "message": "Not a git installation"
             })
         
-        # Initialize version
-        ptos.init_version()
-        current_sha = ptos.get_current_version()
+        # Get current version from git HEAD
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=script_dir,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            current_sha = result.stdout.strip() if result.returncode == 0 else None
+        except Exception:
+            current_sha = None
         
-        if not current_sha or current_sha == "unknown":
+        if not current_sha:
             return jsonify({
                 "ok": True,
                 "update_available": False,
                 "reason": "no_version",
-                "current_sha": current_sha,
-                "message": "Version not tracked"
+                "message": "Cannot read git HEAD"
             })
         
         # Fetch latest from GitHub API
@@ -712,7 +720,7 @@ def check_update():
             "ok": True,
             "update_available": update_available,
             "is_git": is_git,
-            "current_sha": current_sha[:8] if current_sha else None,
+            "current_sha": current_sha[:8],
             "latest_sha": latest_sha,
             "latest_message": latest_message,
             "latest_date": latest_date,
@@ -760,21 +768,6 @@ def apply_update():
                 "ok": False,
                 "error": "Update failed: " + (result.stderr or "Unknown error")
             })
-        
-        # Update .version file with new git SHA
-        try:
-            sha_result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=script_dir,
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if sha_result.returncode == 0:
-                new_sha = sha_result.stdout.strip()
-                ptos.save_current_version(new_sha)
-        except Exception:
-            pass  # Non-fatal if version update fails
         
         return jsonify({
             "ok": True,
