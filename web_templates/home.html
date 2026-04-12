@@ -364,14 +364,17 @@ function applyUpdate() {
   if (btn) btn.disabled = true;
   if (btn) btn.textContent = "Updating...";
   if (banner) banner.style.display = "none";
-  if (progress) progress.style.display = "block";
-  if (progress) progress.textContent = "Downloading update...";
+  if (progress) {
+    progress.style.display = "block";
+    progress.style.color = "var(--accent)";
+    progress.textContent = "Preparing update...";
+  }
   
   fetch("/api/update", {method: "POST"})
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (d.ok) {
-        if (progress) progress.textContent = "Update downloaded! Server is restarting...";
+        if (progress) progress.textContent = "Downloading update...";
         // Clear dismissed state for next update
         sessionStorage.removeItem("ptos-update-dismissed");
         // Wait for server to restart, then reload page
@@ -387,8 +390,10 @@ function applyUpdate() {
             fetch("/api/check-update", {method: "GET"})
               .then(function() {
                 clearInterval(reloadInterval);
-                // Use location.replace for softer reload (avoids Firefox GPU crash)
-                window.location.replace("/");
+                showToast("Update successful!");
+                setTimeout(function() {
+                  window.location.replace("/");
+                }, 1500);
               })
               .catch(function() {});
           }
@@ -416,6 +421,21 @@ function dismissUpdate() {
   var banner = document.getElementById("update-banner");
   if (banner) banner.style.display = "none";
   sessionStorage.setItem("ptos-update-dismissed", "1");
+}
+
+function showToast(msg) {
+  var toast = document.getElementById("update-toast");
+  if (!toast) {
+    toast = document.createElement("div");
+    toast.id = "update-toast";
+    toast.style.cssText = "position:fixed;top:60px;right:20px;background:var(--success);color:white;padding:12px 20px;border-radius:8px;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,.2);font-size:14px;";
+    document.body.appendChild(toast);
+  }
+  toast.textContent = msg;
+  toast.style.display = "block";
+  setTimeout(function() { 
+    toast.style.display = "none"; 
+  }, 3000);
 }
 </script>
 {% endif %}
