@@ -75,6 +75,10 @@ echo ==========================================
 echo   PTOS Updated!
 echo ==========================================
 echo.
-echo Restart the server with:  start_ptos_windows.bat
-echo.
+
+:: ── Restart server if it was running ─────────────────────────────────────
+echo Restarting server...
+start http://localhost:5000
+python ptos_web.py
+
 pause

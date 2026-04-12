@@ -3,6 +3,22 @@
 
 <div class="page-title">Good {{ greeting }}, Godwin</div>
 
+<!-- Update notification banner -->
+<div id="update-banner" style="display:none;background:var(--accent-lt);border:1px solid var(--accent);
+     border-radius:10px;padding:14px 16px;margin-bottom:16px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;">
+    <div>
+      <div style="font-weight:700;color:var(--accent);margin-bottom:4px;">New Update Available!</div>
+      <div id="update-message" style="font-size:13px;color:var(--text);"></div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button onclick="applyUpdate()" id="update-btn" class="btn btn-primary btn-sm">Update</button>
+      <button onclick="dismissUpdate()" class="btn btn-ghost btn-sm">Dismiss</button>
+    </div>
+  </div>
+</div>
+<div id="update-progress" style="display:none;" class="msg msg-success">Updating...</div>
+
 <!-- dashboard + time selector -->
 {% if dashboards %}
 <div style="margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
@@ -295,6 +311,86 @@ function addMultiPreset(name, btn) {
     msg.style.color = "var(--error)";
     msg.style.display = "block";
   });
+}
+
+// ── Update notification ──────────────────────────────────────────────────────────
+(function() {
+  // Check for updates on page load
+  checkForUpdates();
+  
+  // Check if dismissed recently
+  var dismissed = sessionStorage.getItem("ptos-update-dismissed");
+  if (dismissed) {
+    var banner = document.getElementById("update-banner");
+    if (banner) banner.style.display = "none";
+  }
+})();
+
+function checkForUpdates() {
+  fetch("/api/check-update")
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok && d.update_available) {
+        var banner = document.getElementById("update-banner");
+        var msg = document.getElementById("update-message");
+        if (banner && msg) {
+          msg.textContent = d.latest_message || ("New version: " + d.latest_sha);
+          banner.style.display = "block";
+        }
+      }
+    })
+    .catch(function() {});
+}
+
+function applyUpdate() {
+  var btn = document.getElementById("update-btn");
+  var progress = document.getElementById("update-progress");
+  var banner = document.getElementById("update-banner");
+  
+  if (btn) btn.disabled = true;
+  if (btn) btn.textContent = "Updating...";
+  if (banner) banner.style.display = "none";
+  if (progress) progress.style.display = "block";
+  if (progress) progress.textContent = "Downloading update...";
+  
+  fetch("/api/update", {method: "POST"})
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        if (progress) progress.textContent = "Update downloaded! Restarting server...";
+        // Restart the server
+        setTimeout(function() {
+          fetch("/api/restart-server", {method: "POST"})
+            .then(function() {
+              // Redirect to home after a moment
+              setTimeout(function() {
+                window.location = "/";
+              }, 2000);
+            });
+        }, 1000);
+      } else {
+        if (progress) {
+          progress.style.color = "var(--error)";
+          progress.textContent = "Update failed: " + (d.error || "Unknown error");
+        }
+        if (btn) btn.disabled = false;
+        if (btn) btn.textContent = "Update";
+      }
+    })
+    .catch(function(e) {
+      if (progress) {
+        progress.style.color = "var(--error)";
+        progress.textContent = "Update failed: " + e;
+      }
+      if (btn) btn.disabled = false;
+      if (btn) btn.textContent = "Update";
+    });
+}
+
+function dismissUpdate() {
+  var banner = document.getElementById("update-banner");
+  if (banner) banner.style.display = "none";
+  sessionStorage.setItem("ptos-update-dismissed", "1");
 }
 </script>
 {% endif %}

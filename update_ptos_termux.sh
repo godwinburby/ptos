@@ -17,6 +17,15 @@ fi
 
 cd "$PTOS_DIR"
 
+# ── Stop Flask if running ─────────────────────────────────────────────────────
+RUNNING=false
+if pgrep -f "python.*ptos_web.py" > /dev/null 2>&1; then
+    RUNNING=true
+    echo "Stopping running server..."
+    pkill -f "python.*ptos_web.py" 2>/dev/null || true
+    sleep 1
+fi
+
 # ── Download latest zip ───────────────────────────────────────────────────────
 echo "Downloading latest PTOS..."
 rm -rf "$TMP_DIR" 2>/dev/null
@@ -106,4 +115,10 @@ echo "=========================================="
 echo "  PTOS Updated!"
 echo "=========================================="
 echo ""
-echo "Start PTOS:  ./start_ptos_termux.sh"
+
+# Restart server if it was running
+if [ "$RUNNING" = true ]; then
+    echo "Restarting server..."
+    am start -a android.intent.action.VIEW -d http://localhost:5000 > /dev/null 2>&1 &
+    python "$PTOS_DIR/ptos_web.py"
+fi
