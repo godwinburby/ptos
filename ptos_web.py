@@ -586,6 +586,13 @@ def backup_check():
 
 @app.route("/backup/restore", methods=["POST"])
 def backup_restore():
+    # Create backup first before restoring
+    try:
+        backup_path = ptos.backup_data()
+        print(f"Backup created before restore: {os.path.basename(backup_path)}")
+    except Exception as e:
+        return jsonify(ok=False, error=f"Failed to create backup before restore: {e}")
+    
     if "file" in request.files:
         f = request.files["file"]
         if f.filename == "":
