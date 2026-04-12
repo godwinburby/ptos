@@ -9,6 +9,43 @@ One Python file. No database. No dependencies beyond the standard library.
 
 ---
 
+## Table of Contents
+
+- [What it is](#what-it-is)
+- [Anatomy of a record](#anatomy-of-a-record)
+- [Requirements](#requirements)
+- [Installation](#installation)
+- [Folder structure after init](#folder-structure-after-init)
+- [Quick start](#quick-start)
+- [CLI reference](#cli-reference)
+- [Time windows](#time-windows)
+- [Filter expressions](#filter-expressions)
+- [Table view](#table-view)
+- [Derived fields](#derived-fields)
+- [Queries](#queries)
+- [Trend analysis](#trend-analysis)
+- [Due list](#due-list)
+- [Presets](#presets)
+- [Exporting to CSV](#exporting-to-csv)
+- [Summing a specific field](#summing-a-specific-field)
+- [Reading from a specific file](#reading-from-a-specific-file)
+- [Selecting output fields](#selecting-output-fields)
+- [Analysis examples](#analysis-examples)
+- [Validation](#validation)
+- [Journal](#journal)
+- [Configuration](#configuration)
+- [Backup & Restore](#backup--restore)
+- [Atomic Operations](#atomic-operations)
+- [Doctor Command](#doctor-command)
+- [Sharing and sync](#sharing-and-sync)
+- [Adding a new record type](#adding-a-new-record-type)
+- [Unit labels in schema](#unit-labels-in-schema)
+- [Web Interface](#web-interface)
+- [Setup Scripts](#setup-scripts)
+- [Ignore patterns](#ignore-patterns)
+
+---
+
 ## What it is
 
 Every event you record becomes one line in a plain-text `.log` file:
