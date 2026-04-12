@@ -1154,12 +1154,29 @@ def restore_config(zip_path):
         if not os.path.isdir(temp_config):
             raise PTOSError("Invalid backup: config folder not found after extraction")
         
-        # Atomic swap: backup current, copy new
+        # Atomic swap with rollback: backup to config.bak, copy new, cleanup on success
+        config_bak = config_path + ".bak"
+        
+        # Backup existing config to config.bak
         if os.path.exists(config_path):
-            # Remove old config
-            shutil.rmtree(config_path)
+            if os.path.exists(config_bak):
+                shutil.rmtree(config_bak)
+            os.rename(config_path, config_bak)
+        
         # Copy new config
-        shutil.copytree(temp_config, config_path)
+        try:
+            shutil.copytree(temp_config, config_path)
+        except Exception:
+            # Rollback: restore config.bak
+            if os.path.exists(config_bak):
+                if os.path.exists(config_path):
+                    shutil.rmtree(config_path)
+                os.rename(config_bak, config_path)
+            raise
+        
+        # Success: delete config.bak
+        if os.path.exists(config_bak):
+            shutil.rmtree(config_bak)
         
         # Cleanup temp
         shutil.rmtree(temp_dir)

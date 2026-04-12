@@ -542,11 +542,17 @@ def delete_backup(filename):
     return True
 
 def _cleanup_old_backups():
-    """Remove oldest backups if MAX_BACKUPS limit is exceeded."""
+    """Remove oldest full backups if MAX_BACKUPS limit is exceeded.
+    Config backups are excluded from automatic cleanup.
+    """
     backups = list_backups()
-    if len(backups) > MAX_BACKUPS:
+    
+    # Only cleanup full backups, keep all config backups
+    full_backups = [(n, m, t) for n, m, t in backups if t == "full"]
+    
+    if len(full_backups) > MAX_BACKUPS:
         # Get list of filenames to delete (oldest, beyond the limit)
-        to_delete = backups[MAX_BACKUPS:]
+        to_delete = full_backups[MAX_BACKUPS:]
         for name, _, _ in to_delete:
             backup_path = os.path.join(BACKUP_DIR, name)
             if os.path.exists(backup_path):
