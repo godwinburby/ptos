@@ -144,7 +144,7 @@ function createBackup() {
 }
 
 function restoreBackup(name) {
-  if (!confirm("This will overwrite your current data with the backup.\n\nAre you sure you want to restore '" + name + "'?")) {
+  if (!confirm("A backup of your current data will be created first.\n\nThis will then overwrite your data with the backup.\n\nAre you sure you want to restore '" + name + "'?")) {
     return;
   }
   
@@ -205,7 +205,7 @@ function restoreUpload(e) {
     return false;
   }
   
-  if (!confirm("This will overwrite your current data with the uploaded backup.\n\nAre you sure?")) {
+  if (!confirm("A backup of your current data will be created first.\n\nThis will then overwrite your data with the uploaded backup.\n\nAre you sure?")) {
     return false;
   }
   
