@@ -490,8 +490,7 @@ def journal_save():
     year_dir = os.path.join(ptos.JOURNAL_DIR, date[:4])
     os.makedirs(year_dir, exist_ok=True)
     path = os.path.join(year_dir, f"{date}.md")
-    ptos._backup_file(path)
-    with open(path,"w",encoding="utf-8") as f: f.write(content)
+    ptos.atomic_write(path, content)
     return jsonify(ok=True)
 
 
@@ -525,9 +524,7 @@ def schema_builder_save():
     try:
         schema = ptos.get_schema()
         lines  = _build_schema_toml(schema, new_types, type_schemas)
-        ptos._backup_file(ptos.SCHEMA_PATH)
-        with open(ptos.SCHEMA_PATH, "w", encoding="utf-8") as f:
-            f.write("\n".join(lines) + "\n")
+        ptos.atomic_write(ptos.SCHEMA_PATH, "\n".join(lines) + "\n")
         for key in ("schema", "derived_fields", "numeric_fields"):
             ptos._CACHE.pop(key, None)
         return jsonify(ok=True)
@@ -1179,8 +1176,7 @@ def editor_save():
     path = os.path.join(ptos.RECORDS_DIR, file)
     if not os.path.exists(path):
         return jsonify(ok=False, error=f"File not found: {file}")
-    ptos._backup_file(path)
-    with open(path,"w",encoding="utf-8") as f: f.write(content)
+    ptos.atomic_write(path, content)
     # invalidate caches — editor can modify any config file
     for key in ("schema", "config", "queries", "presets",
                 "derived_fields", "numeric_fields"):
