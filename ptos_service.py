@@ -1,7 +1,7 @@
 """
-ptos_service.py  —  Structured data layer for PTOS
+ptos_service.py  —  Service layer for PTOS
 Returns dicts/lists instead of printing.  Zero UI knowledge.
-Used by ptos_web.py (Flask) and ptos_gui.pyw (Tkinter).
+Used by ptos_web.py (Flask).
 ptos.py CLI is unchanged and does not use this file.
 """
 
