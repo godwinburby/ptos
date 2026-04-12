@@ -84,7 +84,7 @@ of the form.
 
 Three settings:
 
-- **editor** — which text editor opens when editing files from the terminal (not relevant for GUI users)
+- **editor** — which text editor opens when editing files from the terminal
 - **currency** — the symbol shown next to all money values (default: `₹`)
 - **cycles** — custom billing or reporting periods defined by a start day of month
   (e.g. `clinic = 26` means a cycle running 26th to 25th next month)
@@ -97,7 +97,8 @@ the 1st of the month.
 
 ## How to use the app
 
-Double-click `ptg.bat` to open the app. You do not need the terminal.
+Run `start_ptos_linux.sh` (or the equivalent for your platform) to launch the web interface.
+Open the URL shown (usually `http://localhost:5000`) in your browser.
 
 The app has five tabs:
 
@@ -113,14 +114,21 @@ For day-to-day use, you only need **Add Record** and **Journal**.
 
 ## First time setup
 
-The app needs two Python files in the same folder: `ptos.py` (the engine) and `ptos_gui.pyw` (the GUI). Both must be downloaded. `ptos.py` can also be used on its own from the terminal without the GUI.
+Download all the files from the repository and run the setup script for your platform:
 
-1. Make sure both `ptos.py` and `ptos_gui.pyw` are in the same folder.
-2. Double-click `ptos_init.bat` — creates all folders and config files.
-3. Double-click `ptg.bat` — opens the app.
-4. Start adding records.
+| Platform | Run this |
+|----------|----------|
+| Linux / macOS | `./setup_ptos_linux.sh` |
+| Windows | `setup_ptos_windows.bat` |
+| Android (Termux) | `./setup_ptos_android.sh` |
 
-Run `ptos_init.bat` only once.
+The setup script creates all folders and config files. After setup, use the start script to launch:
+
+| Platform | Run this |
+|----------|----------|
+| Linux / macOS | `./start_ptos_linux.sh` |
+| Windows | `start_ptos_windows.bat` |
+| Android (Termux) | `./start_ptos_android.sh` |
 
 ---
 
@@ -166,8 +174,8 @@ It goes after the `|` in the log line.
 
 | Problem | What to try |
 |---------|-------------|
-| App won't open | Make sure Python is installed. Try right-clicking `ptg.bat` → Run as administrator. |
-| "schema.toml not found" | Run `ptos_init.bat` first. |
+| App won't open | Make sure Python 3 is installed. Run `python3 ptos_web.py` directly to see error messages. |
+| "schema.toml not found" | Run the setup script for your platform first. |
 | A field or dropdown option is missing | Open `schema.toml` — find the relevant type and add the option following the pattern already there. |
 | Record saved with wrong values | Open the Log Editor tab, find the line, edit it, save. |
 | A query is missing or producing unexpected results | Open `queries.toml` — the comments at the top explain the format. |
