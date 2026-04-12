@@ -63,6 +63,27 @@ def backup_data():
     
     return backup_path
 
+def backup_config():
+    """Create a timestamped backup ZIP of config/ folder only.
+    Returns the path to the created backup file.
+    """
+    import zipfile
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
+    backup_name = f"ptos-config_{timestamp}.zip"
+    backup_path = os.path.join(BACKUP_DIR, backup_name)
+    
+    config_path = os.path.join(BASE_DIR, "config")
+    
+    with zipfile.ZipFile(backup_path, "w", zipfile.ZIP_DEFLATED) as zf:
+        if os.path.exists(config_path):
+            for file in os.listdir(config_path):
+                if file.endswith(".toml"):
+                    file_path = os.path.join(config_path, file)
+                    zf.write(file_path, os.path.join("config", file))
+    
+    return backup_path
+
 def restore_data(zip_path):
     """Restore data from a backup ZIP file.
     Overwrites existing files with the contents of the backup.
@@ -2579,7 +2600,8 @@ def build_parser(cycles):
             "  ptos --time 2026-03\n"
             "  ptos --from 2026-01-01 --to 2026-03-31\n"
             "  ptos --lint\n"
-            "  ptos --backup\n"
+            "  ptos --backup-full\n"
+            "  ptos --backup-config\n"
             "\n"
             "Time windows (full form / short):\n"
             "  today              td\n"
@@ -2652,7 +2674,8 @@ def build_parser(cycles):
                      help="Apply --set/--delete to all matched records without interactive pick")
     utl.add_argument("--fields", action="store_true", help="Show field discovery report")
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
-    utl.add_argument("--backup", action="store_true", help="Create a backup of records/, config/, and templates/")
+    utl.add_argument("--backup-full", action="store_true", help="Full backup: records/, templates/, config/, and backups/ folder")
+    utl.add_argument("--backup-config", action="store_true", help="Config backup: only schema, queries, presets, and config toml files")
 
     return p
 
@@ -3180,9 +3203,14 @@ def main():
         edit_target("daily")
         return
 
-    if args.backup:
+    if args.backup_full:
         backup_path = backup_data()
-        print(f"Backup created: {backup_path}")
+        print(f"Full backup created: {backup_path}")
+        return
+
+    if args.backup_config:
+        backup_path = backup_config()
+        print(f"Config backup created: {backup_path}")
         return
 
     # ---- add mode ----

@@ -1094,3 +1094,63 @@ def delete_record(filepath, old_line, lineno=None):
         raise PTOSError(str(e))
     return {"deleted_line": old_line}
 
+
+def get_config_backup():
+    """Create a config backup zip file.
+    Returns the path to the created backup file.
+    """
+    try:
+        backup_path = ptos.backup_config()
+        return {"ok": True, "path": backup_path}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def restore_config(zip_path):
+    """Restore config from a backup zip file.
+    Validates contents, backs up current config first, then restores.
+    """
+    import zipfile
+    import tempfile
+    import shutil
+    
+    if not os.path.exists(zip_path):
+        raise PTOSError(f"Backup file not found: {zip_path}")
+    
+    # Validate zip contents
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            names = zf.namelist()
+            # Check that only config folder files are present
+            for name in names:
+                if not name.startswith("config/") or not name.endswith(".toml"):
+                    raise PTOSError(f"Invalid config backup: '{name}' is not a valid config file")
+    except zipfile.BadZipFile:
+        raise PTOSError("Invalid zip file")
+    
+    # Backup current config first
+    try:
+        current_backup = ptos.backup_config()
+    except Exception:
+        pass  # If backup fails, continue anyway
+    
+    # Restore config
+    config_path = os.path.join(ptos.BASE_DIR, "config")
+    try:
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            # Clear existing config files
+            if os.path.exists(config_path):
+                for f in os.listdir(config_path):
+                    if f.endswith(".toml"):
+                        os.remove(os.path.join(config_path, f))
+            # Extract new config
+            zf.extractall(ptos.BASE_DIR)
+    except Exception as e:
+        raise PTOSError(f"Failed to restore config: {e}")
+    
+    # Invalidate caches
+    for key in ("schema", "config", "queries", "presets", "derived_fields", "numeric_fields"):
+        ptos._CACHE.pop(key, None)
+    
+    return {"ok": True, "message": "Config restored successfully"}
+
