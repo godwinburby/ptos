@@ -555,7 +555,18 @@ def backup_create():
 
 @app.route("/backup/download/<name>")
 def backup_download(name):
+    # Prevent path traversal attacks
+    if ".." in name or "/" in name or "\\" in name:
+        return "Invalid backup name", 400
+    
     backup_path = os.path.join(ptos.BACKUP_DIR, name)
+    
+    # Verify path is within BACKUP_DIR
+    real_path = os.path.realpath(backup_path)
+    real_backup_dir = os.path.realpath(ptos.BACKUP_DIR)
+    if not real_path.startswith(real_backup_dir + os.sep):
+        return "Invalid backup name", 400
+    
     if not os.path.exists(backup_path):
         return "Backup not found", 404
     return send_file(backup_path, as_attachment=True, download_name=name)
