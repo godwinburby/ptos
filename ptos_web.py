@@ -615,6 +615,45 @@ def backup_restore():
             return jsonify(ok=False, error=str(e))
 
 
+@app.route("/backup/config", methods=["GET"])
+def backup_config_download():
+    """Download config backup as a zip file."""
+    try:
+        result = svc.get_config_backup()
+        if result.get("ok"):
+            path = result["path"]
+            filename = os.path.basename(path)
+            return send_file(path, as_attachment=True, download_name=filename)
+        return jsonify(ok=False, error="Failed to create config backup")
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/backup/config/restore", methods=["POST"])
+def backup_config_restore():
+    """Restore config from uploaded zip file."""
+    if "file" not in request.files:
+        return jsonify(ok=False, error="No file uploaded")
+    
+    f = request.files["file"]
+    if f.filename == "":
+        return jsonify(ok=False, error="No file selected")
+    
+    # Save to temp file
+    import tempfile
+    with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
+        f.save(tmp.name)
+        tmp_path = tmp.name
+    
+    try:
+        result = svc.restore_config(tmp_path)
+        os.unlink(tmp_path)
+        return jsonify(ok=True, message=result.get("message", "Config restored"))
+    except Exception as e:
+        os.unlink(tmp_path)
+        return jsonify(ok=False, error=str(e))
+
+
 def _toml_val(v):
     if isinstance(v, bool):   return "true" if v else "false"
     if isinstance(v, int):    return str(v)

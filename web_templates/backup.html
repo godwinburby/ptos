@@ -8,28 +8,61 @@
 </div>
 
 <div class="card" style="margin-bottom:14px;">
-  <div class="card-title">Create Backup</div>
+  <div class="card-title">Full Backup</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    Creates a backup of <code>records/</code>, <code>config/</code>, and <code>templates/</code> folders.
+    Creates a full backup of <code>records/</code>, <code>config/</code>, and <code>templates/</code> folders.
   </p>
   <button onclick="createBackup()" class="btn btn-primary" id="create-btn">
-    💾 Create Backup Now
+    💾 Create Full Backup
   </button>
   <span id="create-msg" style="margin-left:12px;font-size:13px;display:none;"></span>
 </div>
 
 <div class="card" style="margin-bottom:14px;">
-  <div class="card-title">Restore from Upload</div>
+  <div class="card-title">Restore Full Backup</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    Upload a backup ZIP file to restore. This will overwrite existing data.
+    Upload a full backup ZIP file to restore. This will overwrite existing data.
   </p>
   <form onsubmit="return restoreUpload(event)">
     <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
       <input type="file" id="restore-file" accept=".zip" style="flex:1;">
-      <button type="submit" class="btn btn-warn" id="restore-btn">Restore Backup</button>
+      <button type="submit" class="btn btn-warn" id="restore-btn">Restore Full Backup</button>
     </div>
   </form>
   <div id="restore-msg" style="margin-top:10px;font-size:13px;display:none;"></div>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Config Backup</div>
+  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Export or import only your config files (schema, queries, presets, config toml). Useful for sharing settings without your records.
+  </p>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+    <button onclick="exportConfig()" class="btn btn-ghost">
+      📤 Export Config
+    </button>
+    <label class="btn btn-ghost" style="cursor:pointer;">
+      📥 Import Config
+      <input type="file" id="config-import-input" accept=".zip" onchange="handleConfigImport(this)" style="display:none;">
+    </label>
+  </div>
+</div>
+
+<!-- Config Import Confirmation Modal -->
+<div id="import-config-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,.2);">
+    <div style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--warn);">
+      ⚠️ Warning: Import Config
+    </div>
+    <div style="font-size:14px;color:var(--sub);margin-bottom:16px;">
+      This will replace your current config files with the imported ones.<br><br>
+      Your existing config will be backed up first.
+    </div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="confirmConfigImport()" class="btn btn-primary">Import</button>
+      <button onclick="closeConfigModal()" class="btn btn-ghost">Cancel</button>
+    </div>
+  </div>
 </div>
 
 <div class="card">
@@ -90,7 +123,7 @@ function createBackup() {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       btn.disabled = false;
-      btn.textContent = "💾 Create Backup Now";
+      btn.textContent = "💾 Create Full Backup";
       msg.style.display = "inline";
       if (d.ok) {
         msg.style.color = "var(--success)";
@@ -103,7 +136,7 @@ function createBackup() {
     })
     .catch(function(e) {
       btn.disabled = false;
-      btn.textContent = "💾 Create Backup Now";
+      btn.textContent = "💾 Create Full Backup";
       msg.style.display = "inline";
       msg.style.color = "var(--error)";
       msg.textContent = "✖ " + e;
@@ -209,6 +242,50 @@ function restoreUpload(e) {
     });
   
   return false;
+}
+
+function exportConfig() {
+  window.location = "/backup/config";
+}
+
+var _pendingConfigFile = null;
+
+function handleConfigImport(input) {
+  if (input.files && input.files[0]) {
+    _pendingConfigFile = input.files[0];
+    document.getElementById("import-config-modal").style.display = "flex";
+  }
+}
+
+function confirmConfigImport() {
+  if (!_pendingConfigFile) return;
+  
+  var formData = new FormData();
+  formData.append("file", _pendingConfigFile);
+  
+  fetch("/backup/config/restore", {
+    method: "POST",
+    body: formData
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    closeConfigModal();
+    if (d.ok) {
+      alert("Config imported successfully!");
+      location.reload();
+    } else {
+      alert("Error: " + d.error);
+    }
+  })
+  .catch(function(e) {
+    closeConfigModal();
+    alert("Error: " + e);
+  });
+}
+
+function closeConfigModal() {
+  document.getElementById("import-config-modal").style.display = "none";
+  _pendingConfigFile = null;
 }
 </script>
 
