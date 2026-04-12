@@ -707,12 +707,10 @@ def check_update():
 def apply_update():
     """Run platform-specific update script."""
     try:
-        # Kill existing server first
-        _stop_server()
-        
-        # Detect platform and run appropriate update
-        system = platform.system()
         script_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Run update script FIRST (while server is still running)
+        system = platform.system()
         
         if system == "Windows":
             script = os.path.join(script_dir, "update_ptos_windows.bat")
@@ -725,11 +723,7 @@ def apply_update():
             )
         else:
             # Linux/Termux
-            if system == "Linux" or "android" in platform.platform().lower():
-                script = os.path.join(script_dir, "update_ptos_linux.sh")
-            else:
-                script = os.path.join(script_dir, "update_ptos_linux.sh")
-            
+            script = os.path.join(script_dir, "update_ptos_linux.sh")
             result = subprocess.run(
                 ["bash", script],
                 cwd=script_dir,
@@ -738,18 +732,64 @@ def apply_update():
                 timeout=120
             )
         
-        # Update stored version
-        ptos.init_version()
+        # Check if update succeeded
+        if result.returncode != 0:
+            return jsonify({
+                "ok": False,
+                "error": "Update failed: " + (result.stderr or "Unknown error")
+            })
+        
+        # Update .version file with new git SHA
+        try:
+            sha_result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=script_dir,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if sha_result.returncode == 0:
+                new_sha = sha_result.stdout.strip()
+                ptos.save_current_version(new_sha)
+        except Exception:
+            pass  # Non-fatal if version update fails
         
         return jsonify({
             "ok": True,
             "message": "Update downloaded. Restarting server...",
-            "output": result.stdout[-500:] if result.stdout else ""  # Last 500 chars
+            "output": result.stdout[-500:] if result.stdout else ""
         })
     except subprocess.TimeoutExpired:
         return jsonify({"ok": False, "error": "Update timed out"})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
+
+
+def _restart_background():
+    """Restart the server in background. Called after update to restart the server."""
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    system = platform.system()
+    
+    try:
+        if system == "Windows":
+            # Windows: use start to launch in new window
+            subprocess.Popen(
+                ["cmd", "/c", "start", "cmd", "/c", "cd", script_dir, "&&", "python", "ptos_web.py"],
+                cwd=script_dir,
+                creationflags=subprocess.CREATE_NEW_CONSOLE,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+        else:
+            # Linux/Termux: use nohup to detach
+            subprocess.Popen(
+                ["nohup", "bash", "-c", f"cd '{script_dir}' && python3 ptos_web.py > /dev/null 2>&1 &"],
+                cwd=script_dir,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL
+            )
+    except Exception:
+        pass
 
 
 def _stop_server():
@@ -793,27 +833,18 @@ def _stop_server():
 def restart_server():
     """Restart the server after an update."""
     try:
-        _stop_server()
-        
-        # Start new server in background
-        script_dir = os.path.dirname(os.path.abspath(__file__))
-        system = platform.system()
-        
-        if system == "Windows":
-            subprocess.Popen(
-                ["cmd", "/c", "start", "ptos_web.bat"],
-                cwd=script_dir,
-                creationflags=subprocess.CREATE_NEW_CONSOLE
-            )
-        else:
-            subprocess.Popen(
-                ["python3", "ptos_web.py"],
-                cwd=script_dir,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL
-            )
-        
+        _restart_background()
         return jsonify({"ok": True, "message": "Server restarting..."})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
+
+@app.route("/api/stop-server", methods=["POST"])
+def stop_server():
+    """Stop the server."""
+    try:
+        _stop_server()
+        return jsonify({"ok": True})
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)})
 
