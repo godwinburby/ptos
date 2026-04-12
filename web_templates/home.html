@@ -357,16 +357,25 @@ function applyUpdate() {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (d.ok) {
-        if (progress) progress.textContent = "Update downloaded! Restarting server...";
-        // Restart the server
-        setTimeout(function() {
-          fetch("/api/restart-server", {method: "POST"})
-            .then(function() {
-              // Redirect to home after a moment
-              setTimeout(function() {
+        if (progress) progress.textContent = "Update downloaded! Server is restarting...";
+        // Server will restart itself via update script
+        // Wait for server to restart, then reload page
+        var reloadAttempts = 0;
+        var reloadInterval = setInterval(function() {
+          reloadAttempts++;
+          if (reloadAttempts > 30) {  // Max 30 seconds
+            clearInterval(reloadInterval);
+            if (progress) progress.textContent = "Server restart timed out. Please refresh manually.";
+            if (btn) btn.disabled = false;
+          } else {
+            // Try to reload - will fail until server is back up
+            fetch("/api/check-update", {method: "GET"})
+              .then(function() {
+                clearInterval(reloadInterval);
                 window.location = "/";
-              }, 2000);
-            });
+              })
+              .catch(function() {});
+          }
         }, 1000);
       } else {
         if (progress) {
