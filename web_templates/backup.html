@@ -80,13 +80,20 @@
         </tr>
       </thead>
       <tbody>
-        {% for name, created in backups %}
+        {% for name, created, btype in backups %}
         <tr id="row-{{ loop.index }}">
           <td>{{ created.strftime("%Y-%m-%d %H:%M") }}</td>
-          <td><code>{{ name }}</code></td>
+          <td>
+            <code>{{ name }}</code>
+            {% if btype == 'config' %}
+            <span style="font-size:11px;color:var(--sub);margin-left:6px;">(config only)</span>
+            {% endif %}
+          </td>
           <td style="text-align:right;">
             <a href="/backup/download/{{ name }}" class="btn btn-ghost btn-sm" style="margin-right:6px;">Download</a>
-            <button onclick="restoreBackup('{{ name }}')" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--warn);">Restore</button>
+            {% if btype != 'config' %}
+            <button onclick="restoreBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--warn);">Restore</button>
+            {% endif %}
             <button onclick="deleteBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="color:var(--error);">Delete</button>
           </td>
         </tr>

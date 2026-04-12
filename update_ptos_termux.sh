@@ -104,8 +104,14 @@ if [ "$FILES_CHANGED" -eq 1 ]; then
     
     # ── Save latest SHA to .version file ───────────────────────────────────────
     echo "Saving version..."
-    curl -s "https://api.github.com/repos/godwinburby/ptos/commits/main" \
-        | grep '"sha"' | head -1 | cut -d'"' -f4 > "$PTOS_DIR/.version"
+    SHA=$(curl -sf "https://api.github.com/repos/godwinburby/ptos/commits/main" \
+        | grep '"sha"' | head -1 | cut -d'"' -f4)
+    if [ -n "$SHA" ]; then
+        echo "$SHA" > "$PTOS_DIR/.version"
+    else
+        echo "WARNING: Failed to fetch version. Will retry on next update."
+        rm -f "$PTOS_DIR/.version"
+    fi
     
     # Verify .version was written
     if [ ! -s "$PTOS_DIR/.version" ]; then

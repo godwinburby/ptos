@@ -1108,44 +1108,65 @@ def get_config_backup():
 
 def restore_config(zip_path):
     """Restore config from a backup zip file.
-    Validates contents, backs up current config first, then restores.
+    Validates contents, backs up current config first, then restores atomically.
     """
     import zipfile
-    import tempfile
+    import uuid
     import shutil
     
     if not os.path.exists(zip_path):
         raise PTOSError(f"Backup file not found: {zip_path}")
     
-    # Validate zip contents
+    # Validate zip contents and check for path traversal
     try:
+        base_dir = os.path.abspath(ptos.BASE_DIR)
         with zipfile.ZipFile(zip_path, "r") as zf:
             names = zf.namelist()
-            # Check that only config folder files are present
             for name in names:
+                # Check that only config folder files are present
                 if not name.startswith("config/") or not name.endswith(".toml"):
                     raise PTOSError(f"Invalid config backup: '{name}' is not a valid config file")
+                # Prevent zip slip (path traversal)
+                resolved_path = os.path.abspath(os.path.join(base_dir, name))
+                if not resolved_path.startswith(base_dir + os.sep):
+                    raise PTOSError(f"Invalid path in backup: {name}")
     except zipfile.BadZipFile:
         raise PTOSError("Invalid zip file")
     
-    # Backup current config first
+    # Backup current config first - abort if this fails
     try:
         current_backup = ptos.backup_config()
-    except Exception:
-        pass  # If backup fails, continue anyway
-    
-    # Restore config
-    config_path = os.path.join(ptos.BASE_DIR, "config")
-    try:
-        with zipfile.ZipFile(zip_path, "r") as zf:
-            # Clear existing config files
-            if os.path.exists(config_path):
-                for f in os.listdir(config_path):
-                    if f.endswith(".toml"):
-                        os.remove(os.path.join(config_path, f))
-            # Extract new config
-            zf.extractall(ptos.BASE_DIR)
     except Exception as e:
+        raise PTOSError(f"Failed to create backup before restore: {e}")
+    
+    # Restore config atomically using temp directory
+    temp_dir = os.path.join(ptos.BACKUP_DIR, f".config-restore-{uuid.uuid4().hex[:8]}")
+    config_path = os.path.join(ptos.BASE_DIR, "config")
+    
+    try:
+        # Extract to temp directory
+        os.makedirs(temp_dir)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(temp_dir)
+        
+        # Verify extraction
+        temp_config = os.path.join(temp_dir, "config")
+        if not os.path.isdir(temp_config):
+            raise PTOSError("Invalid backup: config folder not found after extraction")
+        
+        # Atomic swap: backup current, copy new
+        if os.path.exists(config_path):
+            # Remove old config
+            shutil.rmtree(config_path)
+        # Copy new config
+        shutil.copytree(temp_config, config_path)
+        
+        # Cleanup temp
+        shutil.rmtree(temp_dir)
+        
+    except Exception as e:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
         raise PTOSError(f"Failed to restore config: {e}")
     
     # Invalidate caches

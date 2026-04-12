@@ -87,8 +87,13 @@ else
 
     # ── Save initial version ───────────────────────────────────────────────────
     echo "Saving version..."
-    curl -s "https://api.github.com/repos/godwinburby/ptos/commits/main" \
-        | grep '"sha"' | head -1 | cut -d'"' -f4 > "$PTOS_DIR/.version"
+    SHA=$(curl -sf "https://api.github.com/repos/godwinburby/ptos/commits/main" \
+        | grep '"sha"' | head -1 | cut -d'"' -f4)
+    if [ -n "$SHA" ]; then
+        echo "$SHA" > "$PTOS_DIR/.version"
+    else
+        echo "WARNING: Failed to fetch version. Run update to track version."
+    fi
 fi
 
 # ── Download start/update scripts to $HOME ───────────────────────────────────
