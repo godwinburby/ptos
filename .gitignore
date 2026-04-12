@@ -4,10 +4,13 @@ __pycache__/
 *.pyo
 
 # PTOS private data
+config/
 records/
 journal/
+exports/
 tasks/
 backups/
+templates/
 
 # PTOS runtime
 ptos_error.log
