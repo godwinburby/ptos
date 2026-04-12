@@ -1,15 +1,46 @@
 @echo off
 :: PTOS Update Script for Windows
-:: Run from inside the ptos folder.
+:: Run from the ptos folder, or from the parent folder (will cd into ptos).
 
 echo ==========================================
 echo   PTOS Update
 echo ==========================================
 echo.
 
-if not exist "ptos_web.py" (
+:: ── Locate PTOS directory ─────────────────────────────────────────────────────
+set "SCRIPT_DIR=%~dp0"
+if exist "%SCRIPT_DIR%ptos_web.py" (
+    set "PTOS_DIR=%SCRIPT_DIR%"
+) else if exist "%SCRIPT_DIR%ptos\ptos_web.py" (
+    set "PTOS_DIR=%SCRIPT_DIR%ptos"
+) else (
     echo ERROR: ptos_web.py not found.
-    echo Run this script from the ptos folder.
+    echo Run this script from the ptos folder, or from the folder containing ptos.
+    pause
+    exit /b 1
+)
+
+cd /d "%PTOS_DIR%"
+
+:: ── Check Git ─────────────────────────────────────────────────────────────────
+git --version >nul 2>&1
+if errorlevel 1 (
+    :: Refresh PATH for Git
+    set "PATH=%PATH%;C:\Program Files\Git\cmd;C:\Program Files\Git\bin"
+)
+git --version >nul 2>&1
+if errorlevel 1 (
+    echo ERROR: Git not found. Please install Git.
+    echo Run setup_ptos_windows.bat to reinstall with Git.
+    pause
+    exit /b 1
+)
+
+:: ── Check if Git Repo ─────────────────────────────────────────────────────────
+if not exist ".git" (
+    echo ERROR: Not a git repository.
+    echo PTOS was not installed via git clone. Cannot update.
+    echo Run setup_ptos_windows.bat to reinstall with git.
     pause
     exit /b 1
 )
@@ -22,60 +53,46 @@ if not errorlevel 1 ( set "PYTHON=py" ) else (
     if not errorlevel 1 ( set "PYTHON=python" )
 )
 if "%PYTHON%"=="" (
-    echo ERROR: Python not found.
+    echo ERROR: Python not found. Run setup_ptos_windows.bat first.
     pause
     exit /b 1
 )
 
-:: ── Download latest zip ───────────────────────────────────────────────────────
+:: ── Git Pull ─────────────────────────────────────────────────────────────────
 echo.
-echo Downloading latest PTOS...
-curl -L -o ptos_update.zip https://github.com/godwinburby/ptos/archive/refs/heads/main.zip
+echo Pulling latest changes from GitHub...
+git pull
 if errorlevel 1 (
-    echo ERROR: Download failed. Check your internet connection.
+    echo ERROR: Git pull failed. You may have uncommitted changes.
     pause
     exit /b 1
 )
+echo Update downloaded.
 
-echo Extracting...
-tar -xf ptos_update.zip
-if errorlevel 1 (
-    echo ERROR: Extraction failed.
-    del ptos_update.zip 2>nul
-    pause
-    exit /b 1
+:: ── Update .version file ──────────────────────────────────────────────────────
+for /f %%i in ('git rev-parse HEAD') do echo %%i > .version
+echo Updated version file.
+
+:: ── Install Any New Dependencies ─────────────────────────────────────────────
+echo.
+echo Checking dependencies...
+%PYTHON% -m pip install flask --quiet --break-system-packages 2>nul
+
+:: ── Background Restart (allows Flask to return response) ─────────────────────
+echo.
+echo Stopping server on port 5000...
+for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5000 " ^| findstr "LISTENING"') do (
+    taskkill /F /PID %%a >nul 2>&1
 )
 
-:: ── Copy updated files (preserve config/, records/, journal/) ────────────────
-echo Updating Python files...
-xcopy /Y ptos-main\*.py . >nul 2>&1
-
-echo Updating web templates...
-if exist "ptos-main\web_templates" (
-    if not exist "web_templates" mkdir web_templates
-    xcopy /E /Y ptos-main\web_templates\* web_templates\ >nul 2>&1
-)
-
-echo Updating scripts...
-xcopy /Y ptos-main\*_windows.bat . >nul 2>&1
-
-:: ── Cleanup ───────────────────────────────────────────────────────────────────
-rmdir /S /Q ptos-main 2>nul
-del ptos_update.zip 2>nul
+:: Background restart - script exits quickly so Flask can respond
+echo Starting server...
+start http://localhost:5000
+start /B cmd /c "timeout /t 2 /nobreak >nul && %PYTHON% ptos_web.py"
 
 echo.
 echo ==========================================
 echo   PTOS Updated!
 echo ==========================================
 echo.
-
-:: ── Restart server ─────────────────────────────────────────────────────────────
-:: Background the restart so script exits quickly for Flask
-echo Stopping any running server on port 5000...
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5000 " ^| findstr "LISTENING"') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
-
-:: Start server in background, script will exit
-start http://localhost:5000
-start /B cmd /c "timeout /t 2 /nobreak >nul && python ptos_web.py"
+echo Restart your browser to see changes.
