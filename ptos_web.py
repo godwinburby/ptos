@@ -665,6 +665,31 @@ def backup_config_restore():
 # Update check and apply
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _get_current_sha(script_dir, is_git):
+    """Get current version SHA. For git: use HEAD. For non-git: read .version file."""
+    if is_git:
+        try:
+            result = subprocess.run(
+                ["git", "rev-parse", "HEAD"],
+                cwd=script_dir,
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            return result.stdout.strip() if result.returncode == 0 else None
+        except Exception:
+            return None
+    else:
+        # Non-git (Termux): read from .version file
+        version_file = os.path.join(script_dir, ".version")
+        if os.path.exists(version_file):
+            try:
+                with open(version_file, "r") as f:
+                    return f.read().strip()
+            except Exception:
+                return None
+        return None
+
 @app.route("/api/check-update", methods=["GET"])
 def check_update():
     """Check if a new version is available on GitHub."""
@@ -674,33 +699,15 @@ def check_update():
         # Check if it's a git repository
         is_git = os.path.exists(os.path.join(script_dir, ".git"))
         
-        if not is_git:
-            return jsonify({
-                "ok": True,
-                "update_available": False,
-                "reason": "not_git",
-                "message": "Not a git installation"
-            })
-        
-        # Get current version from git HEAD
-        try:
-            result = subprocess.run(
-                ["git", "rev-parse", "HEAD"],
-                cwd=script_dir,
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            current_sha = result.stdout.strip() if result.returncode == 0 else None
-        except Exception:
-            current_sha = None
+        # Get current version SHA
+        current_sha = _get_current_sha(script_dir, is_git)
         
         if not current_sha:
             return jsonify({
                 "ok": True,
                 "update_available": False,
                 "reason": "no_version",
-                "message": "Cannot read git HEAD"
+                "message": "No version tracked" if is_git else "Run update once to track version"
             })
         
         # Fetch latest from GitHub API
