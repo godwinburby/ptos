@@ -3040,6 +3040,9 @@ def build_parser(cycles):
             "  ptos --lint\n"
             "  ptos --backup-full\n"
             "  ptos --backup-config\n"
+            "  ptos --restore-full\n"
+            "  ptos --restore-config\n"
+            "  ptos --list-backups\n"
             "\n"
             "Time windows (full form / short):\n"
             "  today              td\n"
@@ -3114,6 +3117,9 @@ def build_parser(cycles):
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
     utl.add_argument("--backup-full", action="store_true", help="Full backup: records/, templates/, config/, and backups/ folder")
     utl.add_argument("--backup-config", action="store_true", help="Config backup: only schema, queries, presets, and config toml files")
+    utl.add_argument("--restore-full", nargs="?", const="", metavar="PATH", help="Restore from full backup (shows list if no path given)")
+    utl.add_argument("--restore-config", nargs="?", const="", metavar="PATH", help="Restore from config backup (shows list if no path given)")
+    utl.add_argument("--list-backups", action="store_true", help="List available backups in backups/ folder")
     utl.add_argument("--doctor", action="store_true", help="Check PTOS installation health")
     utl.add_argument("--doctor-fix", dest="doctor_fix", action="store_true", help="With --doctor: fix any issues found")
 
@@ -3661,6 +3667,34 @@ def main():
         print(f"Config backup created: {backup_path}")
         return
 
+    if args.list_backups:
+        backups = list_backups()
+        if not backups:
+            print("No backups found.")
+            return
+        print("\nAvailable backups:")
+        for name, date, btype in backups:
+            print(f"  {name}  ({btype}, {date.strftime('%Y-%m-%d %H:%M')})")
+        return
+
+    if args.restore_full is not None:
+        zip_path = args.restore_full
+        if not zip_path:
+            zip_path = _interactive_restore("full")
+        print(f"Restoring full backup from: {zip_path}")
+        restore_data(zip_path)
+        print("Restore complete.")
+        sys.exit(0)
+
+    if args.restore_config is not None:
+        zip_path = args.restore_config
+        if not zip_path:
+            zip_path = _interactive_restore("config")
+        print(f"Restoring config backup from: {zip_path}")
+        restore_data(zip_path)
+        print("Restore complete.")
+        sys.exit(0)
+
     # ---- add mode ----
     schema = get_schema()
 
@@ -3926,6 +3960,30 @@ def main():
         for line in results:
             print(line)
     render_summary(results, start, end, time_label, final_filters, total, sum_field=sum_field)
+
+
+def _interactive_restore(backup_type):
+    """Interactive restore - show list and let user choose."""
+    backups = list_backups()
+    filtered = [b for b in backups if b[2] == backup_type]
+    if not filtered:
+        sys.exit(f"No {backup_type} backups found.")
+    
+    print(f"\nAvailable {backup_type} backups:")
+    for i, (name, date, _) in enumerate(filtered, 1):
+        print(f"  {i}. {name} ({date.strftime('%Y-%m-%d %H:%M')})")
+    
+    while True:
+        choice = input("\nEnter number to restore (or 'q' to quit): ").strip()
+        if choice.lower() == 'q':
+            sys.exit("Restore cancelled.")
+        try:
+            idx = int(choice) - 1
+            if 0 <= idx < len(filtered):
+                return os.path.join(BACKUP_DIR, filtered[idx][0])
+            print("Invalid number. Try again.")
+        except ValueError:
+            print("Invalid input. Enter a number or 'q'.")
 
 
 if __name__ == "__main__":
