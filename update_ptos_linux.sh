@@ -1,6 +1,9 @@
 #!/bin/bash
 # PTOS Update Script for Linux
 # Pulls latest code via git. Run from the PTOS folder.
+#
+# After running this script, restart the server:
+#   python3 ptos_web.py
 
 echo "=========================================="
 echo "  PTOS Update"
@@ -23,7 +26,6 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
-# ── Pull latest first ────────────────────────────────────────────────────────
 echo "Pulling latest changes from GitHub..."
 git pull
 
@@ -32,25 +34,4 @@ echo "=========================================="
 echo "  PTOS Updated!"
 echo "=========================================="
 echo ""
-
-# ── Restart server (background this process first) ───────────────────────────
-# Use double-fork: background a subshell that kills port 5000 and restarts
-# This allows the main script to exit cleanly so Flask can return a response
-(
-    sleep 1
-    echo "Stopping server on port 5000..."
-    if command -v lsof &>/dev/null; then
-        PIDS=$(lsof -ti:5000 2>/dev/null)
-        if [ -n "$PIDS" ]; then
-            echo "$PIDS" | xargs kill -9 2>/dev/null || true
-        fi
-    elif command -v fuser &>/dev/null; then
-        fuser -k 5000/tcp 2>/dev/null || true
-    fi
-    sleep 1
-    echo "Starting server..."
-    cd "$SCRIPT_DIR"
-    xdg-open http://localhost:5000 2>/dev/null &
-    nohup python3 ptos_web.py > /dev/null 2>&1 &
-) &
-disown
+echo "Restart the server: python3 ptos_web.py"
