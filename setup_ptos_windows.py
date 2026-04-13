@@ -11,12 +11,8 @@ import subprocess
 import time
 import webbrowser
 import shutil
-import urllib.request
-import zipfile
-import tempfile
 
 REPO_URL   = "https://github.com/godwinburby/ptos.git"
-ZIP_URL    = "https://github.com/godwinburby/ptos/archive/refs/heads/main.zip"
 MIN_PYTHON = (3, 11)
 
 
@@ -66,46 +62,23 @@ else:
 if ptos_dir is None:
     ptos_dir = os.path.join(script_dir, "ptos")
 
-    # Try git clone first
-    git_ok = shutil.which("git") is not None
-    if git_ok:
-        step("Cloning PTOS from GitHub")
-        rc, out, err = run(["git", "clone", REPO_URL, ptos_dir])
-        if rc != 0:
-            print(f"Git clone failed: {err}")
-            git_ok = False
+    # Git is required for Windows (needed for updates)
+    if shutil.which("git") is None:
+        print("ERROR: Git is required for Windows setup.")
+        print("       PTOS uses git to check for updates.")
+        print("       Install Git from: https://git-scm.com/download/win")
+        print("       Or use 'winget install Git.Git' if you have Windows Package Manager")
+        input("\nPress Enter to exit.")
+        sys.exit(1)
 
-    if not git_ok:
-        # Fallback: download ZIP
-        step("Downloading PTOS ZIP from GitHub")
-        tmp_zip = os.path.join(tempfile.gettempdir(), "ptos_setup.zip")
-        try:
-            print(f"Downloading {ZIP_URL} ...")
-            urllib.request.urlretrieve(ZIP_URL, tmp_zip)
-        except Exception as e:
-            print(f"ERROR: Download failed: {e}")
-            print("Check your internet connection and try again.")
-            input("\nPress Enter to exit.")
-            sys.exit(1)
+    step("Cloning PTOS from GitHub")
+    rc, out, err = run(["git", "clone", REPO_URL, ptos_dir])
+    if rc != 0:
+        print(f"Git clone failed: {err}")
+        input("\nPress Enter to exit.")
+        sys.exit(1)
 
-        print("Extracting...")
-        tmp_dir = os.path.join(tempfile.gettempdir(), "ptos_setup_extract")
-        if os.path.exists(tmp_dir):
-            shutil.rmtree(tmp_dir)
-        with zipfile.ZipFile(tmp_zip, "r") as zf:
-            zf.extractall(tmp_dir)
-        os.remove(tmp_zip)
-
-        # GitHub ZIP extracts to ptos-main/
-        extracted = os.path.join(tmp_dir, "ptos-main")
-        if not os.path.isdir(extracted):
-            print("ERROR: Unexpected ZIP structure.")
-            input("\nPress Enter to exit.")
-            sys.exit(1)
-
-        shutil.copytree(extracted, ptos_dir)
-        shutil.rmtree(tmp_dir)
-        print(f"PTOS installed to: {ptos_dir}")
+    print(f"PTOS cloned to: {ptos_dir}")
 
 os.chdir(ptos_dir)
 

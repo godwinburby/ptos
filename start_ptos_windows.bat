@@ -43,9 +43,6 @@ echo Open in browser: http://localhost:5000
 echo Press Ctrl+C to stop.
 echo.
 
-start /B %PYTHON% ptos_web.py
-timeout /t 2 /nobreak >nul
+:: Start Flask in foreground - shows output, Ctrl+C to stop
 start http://localhost:5000
-
-:: Keep window alive so user sees Flask output
 %PYTHON% ptos_web.py

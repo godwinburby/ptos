@@ -1,7 +1,7 @@
 @echo off
 :: PTOS Update Script for Windows
 :: Run from inside the ptos folder.
-:: Uses git pull if installed via git, otherwise falls back to Python updater.
+:: Requires git (installed via setup_ptos_windows.bat)
 
 echo ==========================================
 echo   PTOS Update
@@ -30,13 +30,7 @@ if "%PYTHON%"=="" (
     exit /b 1
 )
 
-:: Stop server if running
-echo Stopping server if running...
-for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5000 " ^| findstr LISTENING') do (
-    taskkill /F /PID %%a >nul 2>&1
-)
-
-:: Git pull if this is a git repo
+:: Git pull
 if exist ".git" (
     echo Pulling latest from GitHub...
     git pull
@@ -47,15 +41,10 @@ if exist ".git" (
         exit /b 1
     )
 ) else (
-    :: No git -- hand off to Python updater
-    echo No git repository found. Running Python updater...
-    %PYTHON% update_ptos_windows.py
-    if errorlevel 1 (
-        echo ERROR: Update failed.
-        pause
-        exit /b 1
-    )
-    goto :done
+    echo ERROR: Not a git repository.
+    echo Run setup_ptos_windows.bat to reinstall with git.
+    pause
+    exit /b 1
 )
 
 :: Refresh Flask
@@ -63,13 +52,14 @@ echo.
 echo Refreshing dependencies...
 %PYTHON% -m pip install flask --quiet 2>nul
 
+:: Restart server in background (so script returns quickly for HTTP response)
+echo.
+echo Restarting server...
+start /B cmd /C "timeout /t 2 /nobreak >nul && taskkill /F /IM python.exe >nul 2>&1 && start /B %PYTHON% ptos_web.py && start http://localhost:5000"
+
 echo.
 echo ==========================================
 echo   PTOS Updated!
 echo ==========================================
+echo Server is restarting in background...
 echo.
-echo Run start_ptos_windows.bat to restart.
-echo.
-
-:done
-pause
