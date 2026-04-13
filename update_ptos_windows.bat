@@ -55,7 +55,13 @@ echo Refreshing dependencies...
 :: Restart server in background (so script returns quickly for HTTP response)
 echo.
 echo Restarting server...
-start /B cmd /C "timeout /t 2 /nobreak >nul && taskkill /F /IM python.exe >nul 2>&1 && start /B %PYTHON% ptos_web.py && start http://localhost:5000"
+(
+    timeout /t 2 /nobreak >nul
+    taskkill /F /IM python.exe >nul 2>&1
+    timeout /t 1 /nobreak >nul
+    start /B %PYTHON% ptos_web.py
+    start http://localhost:5000
+) &
 
 echo.
 echo ==========================================
