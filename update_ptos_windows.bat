@@ -16,6 +16,20 @@ if not exist "ptos_web.py" (
     exit /b 1
 )
 
+:: Find Python
+set PYTHON=
+py --version >nul 2>&1
+if not errorlevel 1 set PYTHON=py
+if "%PYTHON%"=="" (
+    python --version >nul 2>&1
+    if not errorlevel 1 set PYTHON=python
+)
+if "%PYTHON%"=="" (
+    echo ERROR: Python not found. Run setup_ptos_windows.bat first.
+    pause
+    exit /b 1
+)
+
 :: Git pull
 if exist ".git" (
     echo Pulling latest from GitHub...
@@ -33,11 +47,19 @@ if exist ".git" (
     exit /b 1
 )
 
+:: Restart server in background (so script returns quickly)
+echo.
+echo Restarting server...
+(
+    timeout /t 2 /nobreak >nul
+    taskkill /F /IM python.exe >nul 2>&1
+    timeout /t 1 /nobreak >nul
+    start /B %PYTHON% ptos_web.py
+    start http://localhost:5000
+) &
+
 echo.
 echo ==========================================
 echo   PTOS Updated!
 echo ==========================================
-echo.
-echo Restart the server: python ptos_web.py
-echo.
-pause
+echo Server is restarting in background...

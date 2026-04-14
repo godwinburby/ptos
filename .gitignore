@@ -22,6 +22,7 @@ ptos_error.log
 # Syncthing
 .stfolder/
 .stversions/
+.stignore
 
 # Misc
 test.txt

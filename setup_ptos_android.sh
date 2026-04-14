@@ -123,5 +123,13 @@ echo "=========================================="
 echo "  Setup Complete!"
 echo "=========================================="
 echo ""
-echo "Start PTOS:   ./start_ptos_android.sh"
-echo "Update PTOS:  ./update_ptos_android.sh"
+echo "Starting PTOS..."
+echo "Open in browser: http://localhost:5000"
+echo ""
+
+# Open browser (non-blocking)
+am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 &
+
+# Start server in foreground
+cd "$PTOS_DIR"
+python ptos_web.py
