@@ -285,6 +285,8 @@ function _buildQueryEditor(container, name) {
         'cursor:pointer;font-size:16px;line-height:1;">✕</button>'+
       '</div>'+
       '<div id="qb-value-chips" class="chip-group" style="margin-bottom:6px;"></div>'+
+      '<div id="qb-history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">Recent:</div>'+
+      '<div id="qb-history-chips" class="chip-group" style="opacity:0.65;margin-bottom:4px;"></div>'+
       '<div id="qb-val-text" style="display:none;gap:8px;margin-top:6px;">'+
         '<input type="text" id="qb-val-input" placeholder="type a value…" style="flex:1;font-size:14px;"'+
         ' onkeydown="if(event.key===\'Enter\') addTextChip()">'+
@@ -362,7 +364,7 @@ function _buildQueryEditor(container, name) {
   _renderTypeChips(q);
   var sel = _typeFromChips(q);
   if (sel) {
-    _fetchFields(sel, function() {
+    _fetchFields(sel, q, function() {
       _renderFieldChips(q);
       _renderActiveChips(q);
       _updatePreview(q);
@@ -436,7 +438,7 @@ function _onTypeClick(type, q) {
   var fc = document.getElementById("qb-field-card");
   if (type) {
     fc.style.display = "block";
-    _fetchFields(type, function() {
+    _fetchFields(type, q, function() {
       _renderFieldChips(q);
       _renderActiveChips(q);
       _updatePreview(q);
@@ -450,17 +452,42 @@ function _onTypeClick(type, q) {
   }
 }
 
-function _fetchFields(type, cb) {
-  if (_fieldCache[type]) { cb(); return; }
-  fetch("/api/type_fields/"+encodeURIComponent(type))
+// Build context object from chips (e.g., {domain: "self", category: "transport"})
+function _getContext(q) {
+  var ctx = {};
+  (q._chips||[]).forEach(function(c) {
+    if (c.field !== "type") ctx[c.field] = c.value;
+  });
+  return ctx;
+}
+
+// Build context string for API (e.g., "domain:self,category:transport")
+function _getContextStr(q) {
+  var ctx = _getContext(q);
+  return Object.keys(ctx).map(function(k){ return k+":"+ctx[k]; }).join(",");
+}
+
+function _fetchFields(type, q, cb) {
+  var ctxStr = _getContextStr(q);
+  var cacheKey = type + "?" + ctxStr;
+  
+  if (_fieldCache[cacheKey] && _fieldCache[cacheKey].fields) { cb(); return; }
+  
+  var url = "/api/type_fields/"+encodeURIComponent(type);
+  if (ctxStr) url += "?context="+encodeURIComponent(ctxStr);
+  
+  fetch(url)
   .then(function(r){ return r.json(); })
   .then(function(data) {
-    _fieldCache[type] = (data.fields||[]).filter(function(f){
-      return !f.is_int && f.name!=="type";
-    });
+    _fieldCache[cacheKey] = {
+      fields: (data.fields||[]).filter(function(f){
+        return !f.is_int && f.name!=="type";
+      }),
+      history: data.history_fields || {}
+    };
     cb();
   })
-  .catch(function(){ _fieldCache[type]=[]; cb(); });
+  .catch(function(){ _fieldCache[cacheKey]={fields:[],history:{}}; cb(); });
 }
 
 function _renderFieldChips(q) {
@@ -468,12 +495,26 @@ function _renderFieldChips(q) {
   if (!el) return;
   el.innerHTML = "";
   var type = _typeFromChips(q);
-  (_fieldCache[type]||[]).forEach(function(f) {
+  var ctxStr = _getContextStr(q);
+  var cacheKey = type + "?" + ctxStr;
+  var fields = (_fieldCache[cacheKey]||{}).fields || [];
+  
+  // Filter out fields whose parent is not in context
+  var ctx = _getContext(q);
+  fields = fields.filter(function(f) {
+    if (!f.has_parent) return true;
+    return ctx[f.parent];
+  });
+  
+  fields.forEach(function(f) {
     var active  = q._activeField===f.name;
     var hasChip = (q._chips||[]).some(function(c){ return c.field===f.name; });
     var chip = document.createElement("button");
     chip.className = "qb-chip"+(active?" active":hasChip?" selected":"");
-    chip.textContent = f.name;
+    var label = f.name;
+    if (f.has_parent && !ctx[f.parent]) label += "*";
+    chip.textContent = label;
+    chip.title = f.has_parent && !ctx[f.parent] ? "Select "+f.parent+" first" : f.name;
     chip.addEventListener("click", function(){ _onFieldClick(f, q); });
     el.appendChild(chip);
   });
@@ -486,10 +527,20 @@ function _onFieldClick(fdef, q) {
   var va = document.getElementById("qb-value-area");
   var vl = document.getElementById("qb-val-label");
   var vc = document.getElementById("qb-value-chips");
+  var vh = document.getElementById("qb-history-chips");
+  var vhl = document.getElementById("qb-history-label");
   var vt = document.getElementById("qb-val-text");
   va.style.display = "block";
   vl.textContent = fdef.name;
   vc.innerHTML = "";
+  vh.innerHTML = "";
+  
+  var type = _typeFromChips(q);
+  var cache = _fieldCache[type] || {};
+  var hist = cache.history || {};
+  var recent = (hist[fdef.name]||[]).slice(0, 8);
+  
+  // Schema options (if field has predefined options)
   if (fdef.options && fdef.options.length) {
     vt.style.display = "none";
     fdef.options.forEach(function(opt) {
@@ -507,12 +558,58 @@ function _onFieldClick(fdef, q) {
       });
       vc.appendChild(chip);
     });
+    // Show history values below schema options (if any not in schema)
+    if (recent.length) {
+      vhl.style.display = "block";
+      recent.forEach(function(val) {
+        var already = (q._chips||[]).some(function(c){
+          return c.field===fdef.name && c.value===val;
+        });
+        // Skip if already shown in schema options
+        if (already || fdef.options.indexOf(val)!==-1) return;
+        var chip = document.createElement("button");
+        chip.className = "qb-chip";
+        chip.style.fontSize = "12px";
+        chip.style.padding = "4px 9px";
+        chip.style.opacity = "0.7";
+        chip.textContent = val;
+        chip.addEventListener("click", function() {
+          _toggleValueChip(fdef.name, val, q);
+          closeValueArea();
+        });
+        vh.appendChild(chip);
+      });
+      // Hide "Recent:" label if no chips added
+      if (!vh.children.length) vhl.style.display = "none";
+    } else {
+      vhl.style.display = "none";
+    }
   } else {
-    vt.style.display = "flex";
-    setTimeout(function(){
-      var inp = document.getElementById("qb-val-input");
-      if (inp) inp.focus();
-    },50);
+    // No schema options - show history as chips, or text input
+    if (recent.length) {
+      vt.style.display = "none";
+      recent.forEach(function(val) {
+        var already = (q._chips||[]).some(function(c){
+          return c.field===fdef.name && c.value===val;
+        });
+        var chip = document.createElement("button");
+        chip.className = "qb-chip"+(already?" active":"");
+        chip.textContent = val;
+        chip.addEventListener("click", function() {
+          _toggleValueChip(fdef.name, val, q);
+          closeValueArea();
+        });
+        vc.appendChild(chip);
+      });
+      vhl.style.display = "none";
+    } else {
+      vt.style.display = "flex";
+      setTimeout(function(){
+        var inp = document.getElementById("qb-val-input");
+        if (inp) inp.focus();
+      },50);
+      vhl.style.display = "none";
+    }
   }
 }
 
@@ -522,8 +619,18 @@ function _toggleValueChip(field, value, q) {
   });
   if (idx!==-1) q._chips.splice(idx,1);
   else q._chips.push({field,op:"=",value});
+  
   _renderActiveChips(q);
   _updatePreview(q);
+  
+  // Re-fetch fields when parent chips change (to update child field options)
+  var type = _typeFromChips(q);
+  if (type && field !== "type") {
+    _fetchFields(type, q, function() {
+      _renderFieldChips(q);
+      closeValueArea();
+    });
+  }
 }
 
 function addTextChip() {

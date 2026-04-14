@@ -1388,7 +1388,41 @@ def api_type_fields(rtype):
     try:
         schema     = ptos.get_schema()
         bad        = ptos.non_dimension_fields()
-        defs       = _build_field_defs(schema, rtype)
+        
+        # Parse context from query param (e.g., ?context=domain:self,category:transport)
+        context = {}
+        ctx_str = request.args.get("context", "")
+        if ctx_str:
+            for pair in ctx_str.split(","):
+                if ":" in pair:
+                    k, v = pair.split(":", 1)
+                    context[k.strip()] = v.strip()
+        
+        defs       = _build_field_defs(schema, rtype, context if context else None)
+        
+        # Add tag field with cascade options if type has tag triggers
+        type_schema = schema.get("type", {}).get(rtype, {})
+        tag_triggers = type_schema.get("tags", {})
+        if tag_triggers:
+            # Find the first/primary tag trigger (usually 'category')
+            tag_parent = list(tag_triggers.keys())[0] if tag_triggers else None
+            tag_options = []
+            if tag_parent and tag_parent in context:
+                tag_options = tag_triggers.get(tag_parent, {}).get("options", {}).get(context[tag_parent], [])
+            defs.append({
+                "name": "tag",
+                "required": False,
+                "options": tag_options,
+                "is_int": False,
+                "unit": "",
+                "parent": tag_parent or "",
+                "has_parent": bool(tag_parent),
+                "is_parent": False,
+                "is_tag_trigger": False,
+                "is_condition_trigger": False,
+                "show_when": {},
+            })
+        
         dimensions = [f["name"] for f in defs if f["name"] not in bad and f["options"]]
         history    = svc.get_history_suggestions(rtype)
         return jsonify(fields=defs, dimensions=dimensions,
