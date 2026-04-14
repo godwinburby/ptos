@@ -1009,8 +1009,7 @@ def browse_get():
         types  = schema.get("types",{}).get("allowed",[])
     except PTOSError:
         types = []
-    log_files = sorted(f for f in os.listdir(ptos.RECORDS_DIR)
-                       if f.endswith(".log")) if os.path.exists(ptos.RECORDS_DIR) else []
+    log_files = ptos.get_log_files()
     return render_template("browse.html",
         tab="browse", title="Browse", now=_now_str(),
         types=types, log_files=log_files, time_options=_get_time_options(), year_range=_YEAR_RANGE,
@@ -1102,8 +1101,7 @@ def browse_export():
 
 @app.route("/editor")
 def editor_get():
-    log_files = sorted(f for f in os.listdir(ptos.RECORDS_DIR)
-                       if f.endswith(".log")) if os.path.exists(ptos.RECORDS_DIR) else []
+    log_files = ptos.get_log_files()
     current = request.args.get("file","")
     if not current and log_files: current = log_files[-1]
     content = ""
@@ -1460,11 +1458,31 @@ def api_save_preset():
 def shutdown_server():
     def _exit():
         import time
-        time.sleep(0.3)
+        time.sleep(1)
         os._exit(0)
     import threading
     threading.Thread(target=_exit, daemon=True).start()
-    return "Server stopped"
+    response = """
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <title>PTOS Stopped</title>
+        <style>
+            body { font-family: system-ui, sans-serif; display: flex; align-items: center; justify-content: center; height: 100vh; margin: 0; background: #1a1a1a; color: #888; }
+            h1 { color: #4a4a4a; margin-bottom: 10px; }
+        </style>
+    </head>
+    <body>
+        <div style="text-align:center">
+            <h1>Server stopped</h1>
+            <p>You can close this tab.</p>
+        </div>
+    </body>
+    </html>
+    """
+    from flask import make_response
+    r = make_response(response)
+    return r
 
 
 @app.route("/api/save_query", methods=["POST"])
