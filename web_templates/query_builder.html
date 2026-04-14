@@ -1,0 +1,520 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-title">Query Builder</div>
+
+<!-- top bar -->
+<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">
+  <button onclick="addEntry()" class="btn btn-primary btn-sm">+ New</button>
+  <button onclick="saveAll()"  class="btn btn-success btn-sm" id="save-btn">💾 Save All</button>
+  <div id="save-msg" style="font-size:13px;display:none;"></div>
+</div>
+
+<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+
+  <!-- ── Left panel: list of all entries ── -->
+  <div id="entry-list"
+       style="width:170px;flex-shrink:0;background:var(--card);
+              border:1px solid var(--border);border-radius:12px;padding:10px;">
+
+    <div style="font-size:11px;font-weight:700;color:var(--sub);
+                letter-spacing:.5px;margin-bottom:6px;">QUERIES</div>
+    <div id="tabs-queries"></div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--sub);
+                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">METRICS</div>
+    <div id="tabs-metrics"></div>
+
+    <div style="font-size:11px;font-weight:700;color:var(--sub);
+                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">DASHBOARDS</div>
+    <div id="tabs-dashboards"></div>
+  </div>
+
+  <!-- ── Right panel: editor ── -->
+  <div id="entry-editor" style="flex:1;min-width:280px;display:none;"></div>
+
+  <div id="entry-empty"
+       style="flex:1;padding:40px;text-align:center;color:var(--sub);font-size:14px;">
+    Select an entry on the left, or click <strong>+ New</strong>.
+  </div>
+
+</div>
+
+<!-- delete confirm modal -->
+<div id="del-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
+     z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:300px;
+              box-shadow:0 8px 32px rgba(0,0,0,.2);">
+    <div style="font-size:16px;font-weight:700;color:var(--error);margin-bottom:10px;">Delete?</div>
+    <div id="del-msg-text" style="font-size:14px;color:var(--sub);margin-bottom:16px;"></div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="confirmDelete()" class="btn btn-sm"
+              style="flex:1;background:var(--error);color:#fff;border:none;">Delete</button>
+      <button onclick="closeDeleteModal()" class="btn btn-ghost btn-sm" style="flex:1;">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<style>
+  .q-tab {
+    display:block;width:100%;text-align:left;padding:7px 10px;border-radius:8px;
+    border:none;background:none;font-size:13px;font-weight:600;color:var(--sub);
+    cursor:pointer;margin-bottom:2px;transition:all .15s;white-space:nowrap;
+    overflow:hidden;text-overflow:ellipsis;
+  }
+  .q-tab:hover  { background:var(--bg); color:var(--text); }
+  .q-tab.active { background:var(--accent-lt); color:var(--accent); }
+  .q-tab.metric-tab    { }
+  .q-tab.dashboard-tab { }
+
+  .section-card { background:var(--bg);border:1px solid var(--border);
+                  border-radius:10px;padding:12px;margin-bottom:10px; }
+  .dash-chip {
+    display:inline-flex;align-items:center;gap:4px;padding:4px 10px;
+    border-radius:16px;font-size:13px;font-weight:600;
+    background:var(--card);border:1.5px solid var(--border);color:var(--text);margin:3px;
+  }
+  .dash-chip button { background:none;border:none;color:var(--sub);
+                      cursor:pointer;font-size:13px;padding:0;line-height:1;font-weight:700; }
+</style>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+// _st.queries:    { name: {where, time, sum, group, search} }
+// _st.metrics:    { name: {kind, base, base2} }
+// _st.dashboards: { name: {metrics: [...]} }
+var _st = { queries: {}, metrics: {}, dashboards: {} };
+var _cur = null;   // {section, name}
+var _delPending = null;
+
+var _types      = {{ types | tojson }};
+var _timeOpts   = {{ time_options | tojson }};
+var _allBaseNames = function() {
+  return Object.keys(_st.queries).concat(Object.keys(_st.metrics));
+};
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+(function() {
+  var q = {{ queries | tojson }};
+  var reserved = ["metrics", "dashboards", "due"];
+
+  // base queries
+  Object.entries(q).forEach(function(e) {
+    var k = e[0], v = e[1];
+    if (reserved.indexOf(k) !== -1) return;
+    if (typeof v !== "object") return;
+    _st.queries[k] = {
+      where:  v.where  || "",
+      time:   v.time   || "tm",
+      sum:    !!v.sum,
+      group:  Array.isArray(v.group) ? v.group[0] : (v.group || ""),
+      search: v.search || "",
+    };
+  });
+
+  // metrics
+  Object.entries(q.metrics || {}).forEach(function(e) {
+    var k = e[0], m = e[1];
+    var kind = "avg";
+    var base = "", base2 = "";
+    if ("ratio" in m && Array.isArray(m.ratio)) {
+      kind = "ratio"; base = m.ratio[0] || ""; base2 = m.ratio[1] || "";
+    } else if ("avg"  in m) { kind = "avg";  base = m.avg;  }
+    else if ("sum"  in m) { kind = "sum";  base = m.sum;  }
+    else if ("max"  in m) { kind = "max";  base = m.max;  }
+    else if ("min"  in m) { kind = "min";  base = m.min;  }
+    _st.metrics[k] = { kind: kind, base: base, base2: base2 };
+  });
+
+  // dashboards
+  Object.entries(q.dashboards || {}).forEach(function(e) {
+    _st.dashboards[e[0]] = { metrics: e[1].metrics || [] };
+  });
+
+  renderTabs();
+  // auto-select first query
+  var first = Object.keys(_st.queries)[0];
+  if (first) select("queries", first);
+})();
+
+// ── Tab rendering ─────────────────────────────────────────────────────────────
+function renderTabs() {
+  renderSection("tabs-queries",    _st.queries,    "queries");
+  renderSection("tabs-metrics",    _st.metrics,    "metrics");
+  renderSection("tabs-dashboards", _st.dashboards, "dashboards");
+}
+
+function renderSection(elId, data, section) {
+  var el = document.getElementById(elId);
+  el.innerHTML = "";
+  if (!Object.keys(data).length) {
+    var e = document.createElement("div");
+    e.style.cssText = "font-size:12px;color:var(--border);padding:4px 8px;";
+    e.textContent = "none";
+    el.appendChild(e);
+    return;
+  }
+  Object.keys(data).forEach(function(name) {
+    var btn = document.createElement("button");
+    btn.className = "q-tab" + (_cur && _cur.section===section && _cur.name===name ? " active" : "");
+    btn.textContent = name;
+    btn.title = name;
+    btn.addEventListener("click", function() { select(section, name); });
+    el.appendChild(btn);
+  });
+}
+
+// ── Select entry ──────────────────────────────────────────────────────────────
+function select(section, name) {
+  _cur = { section: section, name: name };
+  renderTabs();
+  document.getElementById("entry-editor").style.display = "block";
+  document.getElementById("entry-empty").style.display  = "none";
+  renderEditor();
+}
+
+// ── Add new entry ─────────────────────────────────────────────────────────────
+function addEntry() {
+  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard", "q");
+  if (!kind) return;
+  kind = kind.trim().toLowerCase();
+  var section = kind === "m" ? "metrics" : kind === "d" ? "dashboards" : "queries";
+  var name = prompt("Name (lowercase, underscores):");
+  if (!name) return;
+  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name) return;
+  if (_st[section][name]) { alert("'" + name + "' already exists."); return; }
+
+  if (section === "queries") {
+    _st.queries[name] = { where: "", time: "tm", sum: false, group: "", search: "" };
+  } else if (section === "metrics") {
+    _st.metrics[name] = { kind: "avg", base: "", base2: "" };
+  } else {
+    _st.dashboards[name] = { metrics: [] };
+  }
+  renderTabs();
+  select(section, name);
+}
+
+// ── Editor ────────────────────────────────────────────────────────────────────
+function renderEditor() {
+  var ed = document.getElementById("entry-editor");
+  ed.innerHTML = "";
+  if (!_cur) return;
+  var s = _cur.section, n = _cur.name;
+
+  // header card
+  var header = document.createElement("div");
+  header.className = "card";
+  header.style.marginBottom = "12px";
+  header.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+      '<div style="flex:1;">' +
+        '<label>Name</label>' +
+        '<input type="text" id="ed-name" value="' + n + '"' +
+        ' style="font-size:16px;font-weight:700;"' +
+        ' oninput="onNameChange()">' +
+      '</div>' +
+      '<div style="display:flex;gap:8px;margin-top:18px;">' +
+        '<a href="/queries" class="btn btn-ghost btn-sm" title="Go to Queries">▶ Run</a>' +
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm"' +
+        ' style="color:var(--error);border-color:var(--error);">Delete</button>' +
+      '</div>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--sub);margin-top:6px;">' +
+      (s === "queries" ? "Base query — filter + time window" :
+       s === "metrics" ? "Metric — computed value over a base query" :
+       "Dashboard — group of metrics shown on Home") +
+    '</div>';
+  ed.appendChild(header);
+
+  if (s === "queries")    ed.appendChild(makeQueryEditor(n));
+  else if (s === "metrics")    ed.appendChild(makeMetricEditor(n));
+  else                         ed.appendChild(makeDashboardEditor(n));
+}
+
+function onNameChange() {
+  var newName = document.getElementById("ed-name").value.trim()
+                       .toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  var s = _cur.section, old = _cur.name;
+  if (!newName || newName === old) return;
+  if (_st[s][newName]) return;  // already exists
+  _st[s][newName] = _st[s][old];
+  delete _st[s][old];
+  _cur.name = newName;
+  renderTabs();
+}
+
+// ── Query editor ──────────────────────────────────────────────────────────────
+function makeQueryEditor(name) {
+  var q   = _st.queries[name];
+  var div = document.createElement("div");
+
+  // where
+  div.appendChild(makeField("Where expression",
+    '<input type="text" id="q-where" value="' + escAttr(q.where) + '"' +
+    ' placeholder="type=expense AND domain=self" style="font-family:monospace;font-size:13px;"' +
+    ' oninput="_st.queries[_cur.name].where=this.value">',
+    "Filter expression — e.g. <code>type=expense</code> or <code>type=expense AND domain=self</code>. Leave blank for all records."));
+
+  // time
+  div.appendChild(makeField("Time window",
+    '<select id="q-time" onchange="_st.queries[_cur.name].time=this.value">' +
+    _timeOpts.map(function(o) {
+      return '<option value="' + o[1] + '"' + (o[1]===q.time?' selected':'') +
+             '>' + o[0] + '</option>';
+    }).join("") + '</select>', ""));
+
+  // group
+  div.appendChild(makeField("Group by",
+    '<input type="text" id="q-group" value="' + escAttr(q.group) + '"' +
+    ' placeholder="domain or category…"' +
+    ' oninput="_st.queries[_cur.name].group=this.value">',
+    "Optional. Group results by this field."));
+
+  // search
+  div.appendChild(makeField("Full-text search",
+    '<input type="text" id="q-search" value="' + escAttr(q.search) + '"' +
+    ' placeholder="keyword…"' +
+    ' oninput="_st.queries[_cur.name].search=this.value">',
+    "Optional. Text search across the whole record line."));
+
+  // sum toggle
+  var sumCard = document.createElement("div");
+  sumCard.className = "card";
+  sumCard.style.marginBottom = "10px";
+  sumCard.innerHTML =
+    '<label style="display:flex;align-items:center;gap:10px;cursor:pointer;">' +
+      '<input type="checkbox" id="q-sum"' + (q.sum ? " checked" : "") +
+      ' onchange="_st.queries[_cur.name].sum=this.checked"' +
+      ' style="width:18px;height:18px;accent-color:var(--accent);">' +
+      '<span><strong>Sum amount</strong> — show total of the amount field across records</span>' +
+    '</label>';
+  div.appendChild(sumCard);
+  return div;
+}
+
+// ── Metric editor ─────────────────────────────────────────────────────────────
+function makeMetricEditor(name) {
+  var m   = _st.metrics[name];
+  var div = document.createElement("div");
+  var qNames = Object.keys(_st.queries);
+
+  var kindOpts = ["avg","sum","max","min","ratio"].map(function(k) {
+    return '<option value="' + k + '"' + (k===m.kind?' selected':'') + '>' +
+           { avg:"Average (avg)", sum:"Total (sum)", max:"Maximum (max)",
+             min:"Minimum (min)", ratio:"Ratio (ratio)" }[k] + '</option>';
+  }).join("");
+
+  div.appendChild(makeField("Metric type",
+    '<select id="m-kind" onchange="onMetricKindChange(this.value)">' + kindOpts + '</select>',
+    "avg = mean amount · sum = total · max/min = extremes · ratio = count A ÷ count B"));
+
+  var baseOpts = qNames.map(function(n) {
+    return '<option value="' + n + '"' + (n===m.base?' selected':'') + '>' + n + '</option>';
+  }).join("");
+
+  div.appendChild(makeField("Base query",
+    '<select id="m-base" onchange="_st.metrics[_cur.name].base=this.value">' +
+    '<option value="">— pick a query —</option>' + baseOpts + '</select>',
+    "Which base query to compute this metric on."));
+
+  // second base for ratio
+  var base2Opts = qNames.map(function(n) {
+    return '<option value="' + n + '"' + (n===m.base2?' selected':'') + '>' + n + '</option>';
+  }).join("");
+  var ratio2 = makeField("Second query (ratio denominator)",
+    '<select id="m-base2" onchange="_st.metrics[_cur.name].base2=this.value">' +
+    '<option value="">— pick a query —</option>' + base2Opts + '</select>',
+    "ratio = count(base query) ÷ count(second query) × 100%");
+  ratio2.id = "ratio2-row";
+  ratio2.style.display = m.kind === "ratio" ? "block" : "none";
+  div.appendChild(ratio2);
+
+  return div;
+}
+
+function onMetricKindChange(kind) {
+  _st.metrics[_cur.name].kind = kind;
+  document.getElementById("ratio2-row").style.display =
+    kind === "ratio" ? "block" : "none";
+}
+
+// ── Dashboard editor ──────────────────────────────────────────────────────────
+function makeDashboardEditor(name) {
+  var db  = _st.dashboards[name];
+  var div = document.createElement("div");
+
+  var card = document.createElement("div");
+  card.className = "card";
+  card.style.marginBottom = "10px";
+
+  var label = document.createElement("div");
+  label.className = "card-title";
+  label.textContent = "Items";
+  card.appendChild(label);
+
+  var hint = document.createElement("div");
+  hint.className = "hint";
+  hint.style.marginBottom = "10px";
+  hint.textContent = "Choose metrics and base queries to show on the Home dashboard. Order matters — first item is shown first.";
+  card.appendChild(hint);
+
+  var chipsDiv = document.createElement("div");
+  chipsDiv.id = "db-chips";
+  chipsDiv.className = "chip-group";
+  chipsDiv.style.marginBottom = "10px";
+  renderDashChips(db, chipsDiv);
+  card.appendChild(chipsDiv);
+
+  // add from all base names
+  var allNames = Object.keys(_st.queries).concat(Object.keys(_st.metrics));
+  var opts = allNames
+    .filter(function(n) { return db.metrics.indexOf(n) === -1; })
+    .map(function(n) {
+      var tag = _st.metrics[n] ? "metric" : "query";
+      return '<option value="' + n + '">' + n + ' (' + tag + ')</option>';
+    }).join("");
+
+  var addRow = document.createElement("div");
+  addRow.style.cssText = "display:flex;gap:8px;";
+  addRow.innerHTML =
+    '<select id="db-add-sel" style="flex:1;">' +
+    '<option value="">— add item —</option>' + opts + '</select>' +
+    '<button onclick="addDashItem()" class="btn btn-ghost btn-sm">Add</button>';
+  card.appendChild(addRow);
+  div.appendChild(card);
+  return div;
+}
+
+function renderDashChips(db, container) {
+  container.innerHTML = "";
+  (db.metrics || []).forEach(function(item, i) {
+    var chip = document.createElement("span");
+    chip.className = "dash-chip";
+    var tag = _st.metrics[item] ? "metric" : "query";
+    chip.innerHTML =
+      '<span style="color:var(--sub);font-size:11px;margin-right:3px;">' + tag + '</span>' +
+      item +
+      ' <button onclick="removeDashItem(' + i + ')">×</button>';
+    container.appendChild(chip);
+  });
+}
+
+function addDashItem() {
+  var sel  = document.getElementById("db-add-sel");
+  var item = sel.value;
+  if (!item) return;
+  var db = _st.dashboards[_cur.name];
+  if (db.metrics.indexOf(item) === -1) db.metrics.push(item);
+  // re-render
+  var chipsDiv = document.getElementById("db-chips");
+  renderDashChips(db, chipsDiv);
+  // remove from dropdown
+  var opt = sel.querySelector('option[value="' + item + '"]');
+  if (opt) opt.remove();
+  sel.value = "";
+}
+
+function removeDashItem(idx) {
+  var db = _st.dashboards[_cur.name];
+  var removed = db.metrics.splice(idx, 1)[0];
+  var chipsDiv = document.getElementById("db-chips");
+  renderDashChips(db, chipsDiv);
+  // add back to dropdown
+  var sel = document.getElementById("db-add-sel");
+  var opt = document.createElement("option");
+  opt.value = removed; opt.textContent = removed;
+  sel.appendChild(opt);
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function makeField(labelText, inputHTML, hint) {
+  var wrap = document.createElement("div");
+  wrap.className = "card";
+  wrap.style.marginBottom = "10px";
+  wrap.innerHTML =
+    '<label>' + labelText + '</label>' +
+    inputHTML +
+    (hint ? '<div class="hint" style="margin-top:4px;">' + hint + '</div>' : '');
+  return wrap;
+}
+
+function escAttr(s) {
+  return String(s || "").replace(/&/g,"&amp;").replace(/"/g,"&quot;")
+                        .replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+function askDelete() {
+  if (!_cur) return;
+  _delPending = { section: _cur.section, name: _cur.name };
+  document.getElementById("del-msg-text").textContent =
+    "Delete " + _cur.section.replace("s","") + " '" + _cur.name + "'? This cannot be undone.";
+  document.getElementById("del-modal").style.display = "flex";
+}
+
+function closeDeleteModal() {
+  _delPending = null;
+  document.getElementById("del-modal").style.display = "none";
+}
+
+function confirmDelete() {
+  if (!_delPending) return;
+  var s = _delPending.section, n = _delPending.name;
+  closeDeleteModal();
+  fetch("/query-builder/delete", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({ name: n, kind: s === "queries" ? "query" :
+                                         s === "metrics"  ? "metric" : "dashboard" })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      delete _st[s][n];
+      _cur = null;
+      renderTabs();
+      document.getElementById("entry-editor").style.display = "none";
+      document.getElementById("entry-empty").style.display  = "block";
+      showMsg("✔ Deleted", true);
+    } else {
+      showMsg("✖ " + d.error, false);
+    }
+  })
+  .catch(function(e) { showMsg("✖ " + e, false); });
+}
+
+// ── Save all ──────────────────────────────────────────────────────────────────
+function saveAll() {
+  var btn = document.getElementById("save-btn");
+  btn.disabled = true; btn.textContent = "Saving…";
+  fetch("/query-builder/save", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(_st)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    btn.disabled = false; btn.textContent = "💾 Save All";
+    if (d.ok) showMsg("✔ Saved to queries.toml", true);
+    else      showMsg("✖ " + d.error, false);
+  })
+  .catch(function(e) {
+    btn.disabled = false; btn.textContent = "💾 Save All";
+    showMsg("✖ " + e, false);
+  });
+}
+
+function showMsg(text, ok) {
+  var el = document.getElementById("save-msg");
+  el.textContent = text;
+  el.style.color = ok ? "var(--success)" : "var(--error)";
+  el.style.display = "inline";
+  if (ok) setTimeout(function() { el.style.display = "none"; }, 3000);
+}
+
+document.getElementById("del-modal").addEventListener("click", function(e) {
+  if (e.target === this) closeDeleteModal();
+});
+</script>
+
+{% endblock %}
