@@ -358,6 +358,12 @@ def backup_data():
     Automatically removes oldest backups if MAX_BACKUPS limit is exceeded.
     Uses atomic write with .tmp file for crash safety.
     """
+    # Validate mandatory folders exist
+    if not os.path.isdir(CONFIG_DIR):
+        raise Exception("Cannot create full backup: config/ folder missing")
+    if not os.path.isdir(RECORDS_DIR):
+        raise Exception("Cannot create full backup: records/ folder missing")
+    
     os.makedirs(BACKUP_DIR, exist_ok=True)
     timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     temp_path = os.path.join(BACKUP_DIR, f".ptos-backup-full-{timestamp}.tmp")
@@ -452,15 +458,13 @@ def restore_data(zip_path):
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(temp_dir)
         
-        # Verify extraction (check for expected folders)
-        has_content = False
-        for item in os.listdir(temp_dir):
-            if item in BACKUP_FOLDERS or item == "config":
-                has_content = True
-                break
+        # Verify extraction contains mandatory folders (config and records)
+        folders_in_zip = {item for item in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, item))}
         
-        if not has_content:
-            raise Exception("Invalid backup: expected folders not found")
+        if "config" not in folders_in_zip:
+            raise Exception("Invalid backup: config/ folder not found in archive")
+        if "records" not in folders_in_zip:
+            raise Exception("Invalid backup: records/ folder not found in archive")
         
         # Fully atomic restore: backup -> copy new -> delete old backup
         # Step 1: Create .bak backups of existing folders
