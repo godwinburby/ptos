@@ -40,8 +40,12 @@
       <span style="font-size:10px;color:var(--sub);">▼</span>
     </button>
   </div>
-  <div style="display:flex;gap:8px;">
+  <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
     <button class="btn btn-ghost btn-sm" onclick="clearOut()">✕ Clear</button>
+    <span id="edit-link-wrap" style="display:none;">
+      <a id="edit-link" href="/query-builder" class="btn btn-ghost btn-sm">✎ Edit</a>
+    </span>
+    <a href="/query-builder" class="btn btn-ghost btn-sm" style="margin-left:auto;">Query Builder →</a>
   </div>
 </div>
 
@@ -195,6 +199,21 @@ function runQuery() {
   if (!raw) return;
   const [kind, ...rest] = raw.split(":");
   const name = rest.join(":");
+  // update edit link
+  const editWrap = document.getElementById("edit-link-wrap");
+  const editLink = document.getElementById("edit-link");
+  if (kind === "q" && editWrap && editLink) {
+    editLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=queries";
+    editWrap.style.display = "inline";
+  } else if (kind === "m" && editWrap && editLink) {
+    editLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=metrics";
+    editWrap.style.display = "inline";
+  } else if (kind === "d" && editWrap && editLink) {
+    editLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=dashboards";
+    editWrap.style.display = "inline";
+  } else if (editWrap) {
+    editWrap.style.display = "none";
+  }
   area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
   fetch("/queries/run", {
     method:"POST", headers:{"Content-Type":"application/json"},
