@@ -798,6 +798,153 @@ def _build_schema_toml(old_schema, new_types, type_schemas):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Query Builder
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards):
+    """Build and atomically write queries.toml from dicts.
+    raw_queries:    {name: {where, time, sum, group, search}}
+    raw_metrics:    {name: {kind, base, base2}}
+    raw_dashboards: {name: {metrics: [...]}}
+    Preserves [due] section from existing file.
+    Raises ValueError on invalid names, Exception on write failure.
+    """
+    import re as _re
+    for n in list(raw_queries) + list(raw_metrics) + list(raw_dashboards):
+        if not _re.match(r'^[a-z][a-z0-9_]*$', n):
+            raise ValueError(
+                f"Invalid name '{n}' — use lowercase letters, numbers, underscores")
+
+    try:
+        old_queries = ptos.get_queries()
+    except Exception:
+        old_queries = {}
+
+    lines = [
+        "# --------------------------------------------------",
+        "# PTOS QUERIES  (managed by Query Builder)",
+        "# --------------------------------------------------",
+        "",
+    ]
+
+    # ── Base queries ──────────────────────────────────────────────────────────
+    for name, q in raw_queries.items():
+        lines.append(f"[{name}]")
+        if q.get("where", "").strip():
+            val = q["where"].strip().replace('"', '\\"')
+            lines.append(f'where = "{val}"')
+        lines.append(f'time  = "{q.get("time", "tm")}"')
+        if q.get("group", "").strip():
+            lines.append(f'group = ["{q["group"].strip()}"]')
+        if q.get("search", "").strip():
+            lines.append(f'search = "{q["search"].strip()}"')
+        if q.get("sum"):
+            lines.append("sum   = true")
+        lines.append("")
+
+    # ── Metrics ───────────────────────────────────────────────────────────────
+    for name, m in raw_metrics.items():
+        lines.append(f"[metrics.{name}]")
+        kind  = m.get("kind", "avg")
+        base  = m.get("base",  "").strip()
+        base2 = m.get("base2", "").strip()
+        if kind == "ratio" and base and base2:
+            lines.append(f'ratio = ["{base}", "{base2}"]')
+        elif kind in ("avg", "sum", "max", "min") and base:
+            lines.append(f'{kind} = "{base}"')
+        lines.append("")
+
+    # ── Dashboards ────────────────────────────────────────────────────────────
+    for name, db in raw_dashboards.items():
+        lines.append(f"[dashboards.{name}]")
+        items = db.get("metrics", [])
+        if items:
+            items_str = ", ".join(f'"{i}"' for i in items)
+            lines.append(f"metrics = [{items_str}]")
+        lines.append("")
+
+    # ── Preserve [due] verbatim ───────────────────────────────────────────────
+    if "due" in old_queries and isinstance(old_queries["due"], dict):
+        lines.append("[due]")
+        for k, v in old_queries["due"].items():
+            if isinstance(v, str):    lines.append(f'{k} = "{v}"')
+            elif isinstance(v, bool): lines.append(f'{k} = {"true" if v else "false"}')
+            elif isinstance(v, int):  lines.append(f'{k} = {v}')
+            elif isinstance(v, list):
+                s = ", ".join(f'"{x}"' if isinstance(x, str) else str(x) for x in v)
+                lines.append(f"{k} = [{s}]")
+        lines.append("")
+
+    ptos._backup_file(ptos.QUERIES_PATH)
+    ptos.atomic_write(ptos.QUERIES_PATH, "\n".join(lines))
+    ptos._CACHE.pop("queries", None)
+
+@app.route("/query-builder")
+def query_builder():
+    try:
+        queries = ptos.get_queries()
+        schema  = ptos.get_schema()
+        types   = schema.get("types", {}).get("allowed", [])
+    except Exception:
+        queries = {}
+        types   = []
+    return render_template("query_builder.html",
+        tab="query_builder", title="Query Builder",
+        now=_now_str(), queries=queries, types=types,
+        time_options=_get_time_options())
+
+
+@app.route("/query-builder/save", methods=["POST"])
+def query_builder_save():
+    """Receive full queries state from builder and rewrite queries.toml."""
+    data = request.get_json(silent=True) or {}
+    try:
+        _write_queries_toml(
+            data.get("queries", {}),
+            data.get("metrics", {}),
+            data.get("dashboards", {}),
+        )
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/query-builder/delete", methods=["POST"])
+def query_builder_delete():
+    """Delete a single named query, metric, or dashboard and rewrite the file."""
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    kind = data.get("kind", "query")   # "query" | "metric" | "dashboard"
+    if not name:
+        return jsonify(ok=False, error="No name provided")
+    try:
+        queries = ptos.get_queries()
+        reserved = ("metrics", "dashboards", "due")
+        if kind == "metric":
+            if name not in queries.get("metrics", {}):
+                return jsonify(ok=False, error=f"Metric '{name}' not found")
+            del queries["metrics"][name]
+        elif kind == "dashboard":
+            if name not in queries.get("dashboards", {}):
+                return jsonify(ok=False, error=f"Dashboard '{name}' not found")
+            del queries["dashboards"][name]
+        else:
+            if name not in queries or name in reserved:
+                return jsonify(ok=False, error=f"Query '{name}' not found")
+            del queries[name]
+
+        _write_queries_toml(
+            {k: v for k, v in queries.items()
+             if k not in reserved and isinstance(v, dict)},
+            queries.get("metrics", {}),
+            queries.get("dashboards", {}),
+        )
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Queries
 # ══════════════════════════════════════════════════════════════════════════════
 
