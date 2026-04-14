@@ -60,12 +60,12 @@
   .q-tab:hover  { background:var(--bg);color:var(--text); }
   .q-tab.active { background:var(--accent-lt);color:var(--accent); }
   .dash-chip {
-    display:inline-flex;align-items:center;gap:4px;padding:4px 10px;
-    border-radius:16px;font-size:13px;font-weight:600;
-    background:var(--card);border:1.5px solid var(--border);color:var(--text);margin:3px;
+    display:inline-flex;align-items:center;gap:5px;padding:5px 11px;
+    border-radius:20px;font-size:13px;font-weight:600;
+    background:var(--accent-lt);border:1.5px solid var(--accent);color:var(--accent);margin:3px;
   }
-  .dash-chip button { background:none;border:none;color:var(--sub);
-    cursor:pointer;font-size:13px;padding:0;line-height:1;font-weight:700; }
+  .dash-chip button { background:none;border:none;color:var(--accent);
+    cursor:pointer;font-size:14px;padding:0;line-height:1;font-weight:700; }
   .qb-chip {
     display:inline-flex;align-items:center;gap:4px;padding:6px 12px;
     border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;
@@ -686,7 +686,8 @@ function _buildDashEditor(name) {
       '<button onclick="addDashItem()" class="btn btn-ghost btn-sm">Add</button>'+
     '</div>';
   div.appendChild(card);
-  _renderDashChips(db);
+  // Defer renderChips until after div is in DOM
+  setTimeout(function() { _renderDashChips(db); }, 0);
   return div;
 }
 function _renderDashChips(db) {
@@ -699,9 +700,10 @@ function _renderDashChips(db) {
     var m = _st.metrics[item];
     var tag = m ? (m.derived ? "derived" : "metric") : "query";
     chip.innerHTML =
-      '<span style="color:var(--sub);font-size:11px;margin-right:3px;">'+
+      '<span style="color:var(--accent);opacity:.7;font-size:11px;margin-right:4px;">'+
       tag+'</span>'+
-      item+' <button onclick="removeDashItem('+i+')">×</button>';
+      item+
+      ' <button onclick="removeDashItem('+i+')">×</button>';
     el.appendChild(chip);
   });
 }
