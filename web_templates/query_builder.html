@@ -6,6 +6,7 @@
 <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">
   <button onclick="addEntry()" class="btn btn-primary btn-sm">+ New</button>
   <button onclick="saveAll()"  class="btn btn-success btn-sm" id="save-btn">💾 Save All</button>
+  <button onclick="resetQuery()" class="btn btn-ghost btn-sm" id="reset-btn">Clear</button>
   <div id="save-msg" style="font-size:13px;display:none;"></div>
 </div>
 
@@ -104,6 +105,7 @@ var _delPending = null;
 var _types    = {{ types | tojson }};
 var _timeOpts = {{ time_options | tojson }};
 var _fieldCache = {};   // {type: [{name, options, is_int}]}
+var _liveTimer = null;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function() {
@@ -190,6 +192,21 @@ function select(section, name) {
   document.getElementById("entry-editor").style.display = "block";
   document.getElementById("entry-empty").style.display  = "none";
   renderEditor();
+}
+
+// ── Reset current query ───────────────────────────────────────────────────────
+function resetQuery() {
+  if (!_cur || _cur.section !== "queries") return;
+  var q = _st.queries[_cur.name];
+  q._chips = [];
+  q._activeField = null;
+  q._exprManual = "";
+  q.search = "";
+  q.group = "";
+  q.sum = false;
+  _fieldCache = {};
+  renderEditor();
+  triggerLivePreview();
 }
 
 // ── Add new ───────────────────────────────────────────────────────────────────
@@ -360,6 +377,10 @@ function _buildQueryEditor(container, name) {
     '<div id="qb-preview" class="qb-preview"></div>';
   container.appendChild(c7);
 
+  // 8. Live Records Preview
+  container.appendChild(_mkCard("Live records",
+    '<div id="qb-live-area" style="font-size:13px;color:var(--sub);">Updates automatically as you change filters.</div>'));
+
   // ── now render chips ──────────────────────────────────────────────────────
   _renderTypeChips(q);
   var sel = _typeFromChips(q);
@@ -368,9 +389,11 @@ function _buildQueryEditor(container, name) {
       _renderFieldChips(q);
       _renderActiveChips(q);
       _updatePreview(q);
+      triggerLivePreview();
     });
   } else {
     _updatePreview(q);
+    triggerLivePreview();
   }
 }
 
@@ -391,12 +414,14 @@ function _updateQ(field, val) {
   if (!_cur||_cur.section!=="queries") return;
   _st.queries[_cur.name][field] = val;
   _updatePreview(_st.queries[_cur.name]);
+  triggerLivePreview();
 }
 
 function _onExprInput(val) {
   if (!_cur) return;
   _st.queries[_cur.name]._exprManual = val;
   _updatePreview(_st.queries[_cur.name]);
+  triggerLivePreview();
 }
 
 function toggleExpr(btn) {
@@ -442,6 +467,7 @@ function _onTypeClick(type, q) {
       _renderFieldChips(q);
       _renderActiveChips(q);
       _updatePreview(q);
+      triggerLivePreview();
     });
   } else {
     fc.style.display = "none";
@@ -449,6 +475,7 @@ function _onTypeClick(type, q) {
     q._chips = [];
     _renderActiveChips(q);
     _updatePreview(q);
+    triggerLivePreview();
   }
 }
 
@@ -536,7 +563,9 @@ function _onFieldClick(fdef, q) {
   vh.innerHTML = "";
   
   var type = _typeFromChips(q);
-  var cache = _fieldCache[type] || {};
+  var ctxStr = _getContextStr(q);
+  var cacheKey = type + "?" + ctxStr;
+  var cache = _fieldCache[cacheKey] || {};
   var hist = cache.history || {};
   var recent = (hist[fdef.name]||[]).slice(0, 8);
   
@@ -622,6 +651,7 @@ function _toggleValueChip(field, value, q) {
   
   _renderActiveChips(q);
   _updatePreview(q);
+  triggerLivePreview();
   
   // Re-fetch fields when parent chips change (to update child field options)
   var type = _typeFromChips(q);
@@ -646,6 +676,7 @@ function addTextChip() {
   _renderFieldChips(q);
   _renderActiveChips(q);
   _updatePreview(q);
+  triggerLivePreview();
 }
 
 function closeValueArea() {
@@ -682,6 +713,7 @@ window._removeActiveChip = function(visualIdx) {
   _renderFieldChips(q);
   _renderActiveChips(q);
   _updatePreview(q);
+  triggerLivePreview();
 };
 
 function _updatePreview(q) {
@@ -919,6 +951,46 @@ function showMsg(text, ok) {
 document.getElementById("del-modal").addEventListener("click", function(e) {
   if (e.target===this) closeDeleteModal();
 });
+
+// ── Live Records Preview ────────────────────────────────────────────────────────
+function triggerLivePreview() {
+  if (!_cur || _cur.section !== "queries") return;
+  clearTimeout(_liveTimer);
+  _liveTimer = setTimeout(() => {
+    var area = document.getElementById("qb-live-area");
+    if (!area) return;
+    var q = _st.queries[_cur.name];
+    area.innerHTML = '<div style="color:var(--sub);padding:16px;">Loading…</div>';
+    fetch("/browse/run", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({where: [_buildWhereExpr(q)], expr: "", time: q.time || "tm"})
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) { area.innerHTML = '<div style="color:var(--error);padding:16px;">'+_esc(d.error)+'</div>'; return; }
+      var recs = d.data;
+      if (recs.kind === "group") {
+        area.innerHTML = '<div style="font-size:13px;margin-bottom:8px;">' + (recs.grand_count || 0) + ' records</div>' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr><th>Group</th><th>Count</th>' +
+          (recs.has_amount ? '<th>Total</th>' : '') + '</tr></thead><tbody>' +
+          (recs.rows || []).map(r => '<tr><td>'+_esc(r.key)+'</td><td>'+r.count+'</td>' + (recs.has_amount ? '<td>'+(r.total_fmt||'')+'</td>' : '') + '</tr>').join('') +
+          '</tbody></table>';
+      } else if (recs.records && recs.records.length) {
+        var cols = recs.columns || [];
+        area.innerHTML = '<div style="font-size:13px;margin-bottom:8px;">' + recs.records.length + ' records</div>' +
+          '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">' +
+          '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
+          cols.map(c => '<th style="padding:8px 10px;text-align:left;">'+_esc(c)+'</th>').join('') +
+          '</tr></thead><tbody>' +
+          recs.records.slice(0, 20).map(r => '<tr>' + cols.map(c => '<td style="padding:6px 10px;border-bottom:1px solid var(--border);">'+_esc(r[c]||'')+'</td>').join('') + '</tr>').join('') +
+          '</tbody></table></div>';
+      } else {
+        area.innerHTML = '<div style="color:var(--sub);padding:16px;">No records found.</div>';
+      }
+    })
+    .catch(e => { area.innerHTML = '<div style="color:var(--error);padding:16px;">'+_esc(String(e))+'</div>'; });
+  }, 400);
+}
 </script>
 
 {% endblock %}
