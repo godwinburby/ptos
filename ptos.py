@@ -30,6 +30,15 @@ VERSION_FILE = os.path.join(BASE_DIR, ".version")
 GITHUB_REPO = "godwinburby/ptos"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
 
+
+def get_log_files():
+    """Get list of log files from records/, excluding sync conflicts."""
+    if not os.path.isdir(RECORDS_DIR):
+        return []
+    return sorted(f for f in os.listdir(RECORDS_DIR)
+                  if f.endswith(".log") and "sync-conflict" not in f.lower())
+
+
 def get_current_version():
     """Get the stored current version SHA from .version file."""
     if os.path.exists(VERSION_FILE):
@@ -262,7 +271,7 @@ def doctor_check(verbose=False, fix=False, json_output=False):
         messages.append(("records/", "Folder exists"))
         
         # Check for year log files
-        log_files = [f for f in os.listdir(RECORDS_DIR) if f.endswith(".log")]
+        log_files = get_log_files()
         if not log_files:
             errors.append("No records found (create at least one .log file)")
             if fix:
@@ -1189,7 +1198,7 @@ def find_records_with_location(filters, search=None, start=None, end=None):
     if end   is None: end   = dt.date.max
     matches = []
     os.makedirs(RECORDS_DIR, exist_ok=True)
-    fnames = sorted(f for f in os.listdir(RECORDS_DIR) if f.endswith(".log"))
+    fnames = get_log_files()
     for fname in fnames:
         if fname[:4].isdigit():
             year = int(fname[:4])
@@ -1443,7 +1452,7 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
         if not os.path.exists(os.path.join(RECORDS_DIR, from_file)):
             sys.exit(f"--file: '{from_file}' not found in records/ folder")
     else:
-        fnames = sorted(f for f in os.listdir(RECORDS_DIR) if f.endswith(".log"))
+        fnames = get_log_files()
     for fname in fnames:
         # skip files whose year cannot overlap the query window
         if fname[:4].isdigit() and start is not None and end is not None:

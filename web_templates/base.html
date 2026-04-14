@@ -424,14 +424,8 @@ function toggleMoreMenu(e) {
 }
 function stopServer() {
   if (!confirm("Stop PTOS server?")) return;
-  fetch("/shutdown")
-    .then(function() {
-      window.close();
-      document.body.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:var(--sub);'>Server stopped. Close this tab.</div>";
-    })
-    .catch(function() {
-      document.body.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:var(--sub);'>Server stopped. Close this tab.</div>";
-    });
+  document.body.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#4a4a4a;background:#1a1a1a;'><div><h1>Server stopped</h1><p>You can close this tab.</p></div></div>";
+  fetch("/shutdown");
 }
 </script>
 
