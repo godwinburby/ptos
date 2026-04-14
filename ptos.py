@@ -1860,8 +1860,6 @@ def _run_base_query(name, queries, start, end, cycles):
     if not isinstance(where, str):
         sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
     filters = [where] if where.strip() else []
-    if "time" in q:
-        start, end = resolve_time(q["time"], cycles)
     results, total = scan_records(start, end, filters, None)
     return len(results), total
 
@@ -1871,8 +1869,6 @@ def _run_base_query_lines(name, queries, start, end, cycles):
     if not isinstance(where, str):
         sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
     filters = [where] if where.strip() else []
-    if "time" in q:
-        start, end = resolve_time(q["time"], cycles)
     return scan_records(start, end, filters, None)
 
 def run_metric(name, queries, start, end, cycles):
