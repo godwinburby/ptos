@@ -1,9 +1,6 @@
 #!/bin/bash
 # PTOS Update Script for Linux
 # Pulls latest code via git. Run from the PTOS folder.
-#
-# After running this script, restart the server:
-#   python3 ptos_web.py
 
 echo "=========================================="
 echo "  PTOS Update"
@@ -34,4 +31,15 @@ echo "=========================================="
 echo "  PTOS Updated!"
 echo "=========================================="
 echo ""
-echo "Restart the server: python3 ptos_web.py"
+
+# Restart server in background
+(
+    sleep 2
+    pkill -f "python.*ptos_web.py" 2>/dev/null || true
+    sleep 1
+    xdg-open http://localhost:5000 2>/dev/null &
+    nohup python3 ptos_web.py > /dev/null 2>&1 &
+) &
+disown
+
+echo "Done. PTOS will restart in browser."
