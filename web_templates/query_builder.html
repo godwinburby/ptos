@@ -139,16 +139,26 @@ var _liveTimer = null;
   // metrics — include all (derived metrics have .derived expression)
   Object.entries(q.metrics||{}).forEach(function(e) {
     var k = e[0], m = e[1];
-    var kind="avg",base="",base2="",derived=null;
+    var kind="avg",base="",base2="",derived="",unit_field="",unit_weights={};
     if ("derived" in m) {
       derived = m.derived;
     } else if ("ratio" in m && Array.isArray(m.ratio)) {
       kind="ratio"; base=m.ratio[0]||""; base2=m.ratio[1]||"";
-    } else if ("avg" in m) { kind="avg"; base=m.avg; }
-    else if ("sum" in m) { kind="sum"; base=m.sum; }
+    } else if ("avg" in m) {
+      kind="avg"; base=m.avg;
+      unit_field = m.unit_field || "";
+      unit_weights = m.unit_weights || {};
+    } else if ("sum" in m) { kind="sum"; base=m.sum; }
     else if ("max" in m) { kind="max"; base=m.max; }
     else if ("min" in m) { kind="min"; base=m.min; }
-    _st.metrics[k] = { kind, base, base2, derived };
+    // Preserve any extra raw fields
+    var raw = {};
+    Object.keys(m).forEach(function(f) {
+      if (["avg","sum","max","min","ratio","derived","unit_field","unit_weights"].indexOf(f)===-1) {
+        raw[f] = m[f];
+      }
+    });
+    _st.metrics[k] = { kind, base, base2, derived, unit_field, unit_weights, _raw: raw };
   });
   Object.entries(q.dashboards||{}).forEach(function(e) {
     _st.dashboards[e[0]] = { metrics: e[1].metrics||[] };
@@ -842,9 +852,10 @@ function _updatePreview(q) {
 function _buildMetricEditor(name) {
   var m = _st.metrics[name];
   var div = document.createElement("div");
+  var qNames = Object.keys(_st.queries);
 
   // ── Derived metric: editable expression with reference inserter ───────────
-  if (m.derived !== undefined) {
+  if (m.derived) {
     var refs = Object.keys(_st.queries).map(function(n){
       return '<option value="'+n+'">query: '+n+'</option>';
     }).join("") +
@@ -868,7 +879,6 @@ function _buildMetricEditor(name) {
   }
 
   // ── Regular metric: show editor ───────────────────────────────────────────
-  var qNames = Object.keys(_st.queries);
   var kindMap = {
     avg:"Average — mean amount across records",
     sum:"Total — sum of amount field",
@@ -881,13 +891,19 @@ function _buildMetricEditor(name) {
   }).join("");
   div.appendChild(_mkCard("Metric type",
     '<select id="m-kind" onchange="onMetricKindChange(this.value)">'+kindOpts+'</select>'));
+
+  // Base query dropdown (used by sum, avg, min, max)
   var baseOpts = qNames.map(function(n){
     return '<option value="'+n+'"'+(n===m.base?" selected":"")+'>'+n+'</option>';
   }).join("");
-  div.appendChild(_mkCard("Base query",
+  var baseRow = _mkCard("Base query",
     '<select id="m-base" onchange="_st.metrics[_cur.name].base=this.value">'+
     '<option value="">— pick a query —</option>'+baseOpts+'</select>',
-    "Which base query to compute this metric on."));
+    "Which base query to compute this metric on.");
+  baseRow.id = "base-row";
+  div.appendChild(baseRow);
+
+  // Ratio: second query (denominator)
   var base2Opts = qNames.map(function(n){
     return '<option value="'+n+'"'+(n===m.base2?" selected":"")+'>'+n+'</option>';
   }).join("");
@@ -898,12 +914,60 @@ function _buildMetricEditor(name) {
   r2.id = "ratio2-row";
   r2.style.display = m.kind==="ratio"?"block":"none";
   div.appendChild(r2);
+
+  // Avg: unit_field and unit_weights
+  var avgOpts = _mkCard("Unit field (optional)",
+    '<input type="text" id="m-unit-field" value="'+_esc(m.unit_field||'')+'"'+
+    ' placeholder="e.g. fit"'+
+    ' oninput="_st.metrics[_cur.name].unit_field=this.value">',
+    "Field to group by for weighted average.");
+  avgOpts.id = "unit-field-row";
+  avgOpts.style.display = m.kind==="avg"?"block":"none";
+  div.appendChild(avgOpts);
+
+  var weightsRow = document.createElement("div");
+  weightsRow.className = "card"; weightsRow.style.marginBottom = "10px";
+  weightsRow.id = "unit-weights-row";
+  weightsRow.style.display = m.kind==="avg"?"block":"none";
+  weightsRow.innerHTML =
+    '<label>Unit weights (JSON)</label>'+
+    '<textarea id="m-unit-weights" rows="4" placeholder="{ \&quot;monaural\&quot;: 1, \&quot;binaural\&quot;: 2 }"'+
+    ' style="width:100%;font-family:monospace;font-size:13px;padding:8px;border-radius:8px;resize:vertical;"'+
+    ' oninput="onUnitWeightsChange(this.value)">'+JSON.stringify(m.unit_weights||{},null,2)+'</textarea>'+
+    '<div class="hint">Key-value pairs for weighted avg. Keys must match unit_field values.</div>';
+  div.appendChild(weightsRow);
+
+  // Raw extra config
+  var rawKeys = Object.keys(m._raw || {});
+  if (rawKeys.length > 0) {
+    div.appendChild(_mkCard("Advanced / Raw config",
+      '<textarea id="m-raw" rows="3" style="width:100%;font-family:monospace;font-size:12px;padding:8px;"'+
+      ' oninput="onMetricRawChange(this.value)">'+JSON.stringify(m._raw||{},null,2)+'</textarea>',
+      "Extra fields not handled by UI. Edit as JSON."));
+  }
+
   return div;
 }
 function onMetricKindChange(kind) {
   _st.metrics[_cur.name].kind = kind;
   var r = document.getElementById("ratio2-row");
   if (r) r.style.display = kind==="ratio"?"block":"none";
+  var u = document.getElementById("unit-field-row");
+  if (u) u.style.display = kind==="avg"?"block":"none";
+  var w = document.getElementById("unit-weights-row");
+  if (w) w.style.display = kind==="avg"?"block":"none";
+}
+function onUnitWeightsChange(val) {
+  if (!_cur || _cur.section !== "metrics") return;
+  try {
+    _st.metrics[_cur.name].unit_weights = JSON.parse(val || "{}");
+  } catch(e) {}
+}
+function onMetricRawChange(val) {
+  if (!_cur || _cur.section !== "metrics") return;
+  try {
+    _st.metrics[_cur.name]._raw = JSON.parse(val || "{}");
+  } catch(e) {}
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
