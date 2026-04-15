@@ -70,6 +70,14 @@ if [ "$INIT_NEEDED" = true ]; then
     $PYTHON ptos.py --init
 
     echo ""
+    echo "--- Your Name ---"
+    echo "Enter your name (leave blank for 'User'):"
+    read -r USER_NAME
+    if [ -n "$USER_NAME" ]; then
+        $PYTHON ptos.py --set-name "$USER_NAME"
+    fi
+
+    echo ""
     echo "PTOS initialised."
 fi
 

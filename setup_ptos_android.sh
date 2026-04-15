@@ -81,6 +81,15 @@ else
     echo "--- Initialising PTOS ---"
     python ptos.py --init
 
+    # ── Set user name ─────────────────────────────────────────────────────────
+    echo ""
+    echo "--- Your Name ---"
+    echo "Enter your name (leave blank for 'User'):"
+    read -r USER_NAME
+    if [ -n "$USER_NAME" ]; then
+        python ptos.py --set-name "$USER_NAME"
+    fi
+
     # ── Save initial version ───────────────────────────────────────────────────
     echo "Saving version..."
     SHA=$(curl -sf "https://api.github.com/repos/godwinburby/ptos/commits/main" \
