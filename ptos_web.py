@@ -251,6 +251,7 @@ def home():
     except Exception:
         due_rows = []; due_count = 0
     stats = []
+    dashboards = {}
     try:
         queries    = svc.get_queries()
         dashboards = queries.get("dashboards", {})
@@ -869,10 +870,8 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
         if kind == "avg" and unit_field:
             lines.append(f'unit_field   = "{unit_field}"')
         if kind == "avg" and unit_weights:
-            uw_lines = [f'  {k} = {v}' for k, v in unit_weights.items()]
-            lines.append('unit_weights = {')
-            lines.extend(uw_lines)
-            lines.append('}')
+            uw_parts = [f'{k} = {v}' for k, v in unit_weights.items()]
+            lines.append(f'unit_weights = {{ {", ".join(uw_parts)} }}')
         
         # Any extra raw fields
         for k, v in raw.items():

@@ -161,7 +161,7 @@
         font-size: 11px; color: var(--sub);
       }
       .sidebar-footer a { color: var(--accent); text-decoration: none; }
-      .main { padding: 28px 32px; max-width: 860px; }
+      .main { padding: 28px 32px; }
       .floating-stop { bottom: 20px; right: 20px; }
     }
 
@@ -426,7 +426,8 @@ function toggleMoreMenu(e) {
 }
 function stopServer() {
   if (!confirm("Stop PTOS server?")) return;
-  document.body.innerHTML = "<div style='display:flex;align-items:center;justify-content:center;height:100vh;font-size:18px;color:#4a4a4a;background:#1a1a1a;'><div><h1>Server stopped</h1><p>You can close this tab.</p></div></div>";
+  document.body.style.cssText = "display:block;margin:0;padding:0;";
+  document.body.innerHTML = "<div style='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;'><h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p></div>";
   fetch("/shutdown");
 }
 </script>
