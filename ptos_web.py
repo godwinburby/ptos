@@ -854,12 +854,40 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
         base  = m.get("base",  "").strip()
         base2 = m.get("base2", "").strip()
         derived = m.get("derived", "").strip()
+        unit_field = m.get("unit_field", "").strip()
+        unit_weights = m.get("unit_weights") or {}
+        raw = m.get("_raw") or {}
+        
         if derived:
             lines.append(f'derived = "{derived}"')
         elif kind == "ratio" and base and base2:
             lines.append(f'ratio = ["{base}", "{base2}"]')
         elif kind in ("avg", "sum", "max", "min") and base:
             lines.append(f'{kind} = "{base}"')
+        
+        # Unit field and weights for avg
+        if kind == "avg" and unit_field:
+            lines.append(f'unit_field   = "{unit_field}"')
+        if kind == "avg" and unit_weights:
+            uw_lines = [f'  {k} = {v}' for k, v in unit_weights.items()]
+            lines.append('unit_weights = {')
+            lines.extend(uw_lines)
+            lines.append('}')
+        
+        # Any extra raw fields
+        for k, v in raw.items():
+            if isinstance(v, str):
+                lines.append(f'{k} = "{v}"')
+            elif isinstance(v, bool):
+                lines.append(f'{k} = {"true" if v else "false"}')
+            elif isinstance(v, int):
+                lines.append(f'{k} = {v}')
+            elif isinstance(v, list):
+                s = ", ".join(f'"{x}"' if isinstance(x, str) else str(x) for x in v)
+                lines.append(f"{k} = [{s}]")
+            elif isinstance(v, dict):
+                lines.append(f'{k} = {json.dumps(v)}')
+        
         lines.append("")
 
     # ── Alias queries ─────────────────────────────────────────────────────────
