@@ -300,14 +300,14 @@ function renderMetric(d) {
 function renderGroup(d) {
   const hasTot = d.has_amount;
   const heads  = hasTot
-    ? `<th>Group</th><th style="text-align:right">Count</th><th style="text-align:right">Total</th>`
-    : `<th>Group</th><th style="text-align:right">Count</th>`;
+    ? `<th>Group</th><th class="numeric">Count</th><th class="numeric">Total</th>`
+    : `<th>Group</th><th class="numeric">Count</th>`;
   const rows = (d.rows||[]).map(r => hasTot
-    ? `<tr><td>${r.key}</td><td style="text-align:right">${r.count}</td><td style="text-align:right">${r.total_fmt}</td></tr>`
-    : `<tr><td>${r.key}</td><td style="text-align:right">${r.count}</td></tr>`).join("");
+    ? `<tr><td>${r.key}</td><td class="numeric">${r.count}</td><td class="numeric">${r.total_fmt}</td></tr>`
+    : `<tr><td>${r.key}</td><td class="numeric">${r.count}</td></tr>`).join("");
   const foot = hasTot
-    ? `<tr style="font-weight:700;border-top:2px solid var(--border)"><td>Total</td><td style="text-align:right">${d.grand_count}</td><td style="text-align:right">${d.grand_total_fmt}</td></tr>`
-    : `<tr style="font-weight:700;border-top:2px solid var(--border)"><td>Total</td><td style="text-align:right">${d.grand_count}</td></tr>`;
+    ? `<tr class="total-row"><td>Total</td><td class="numeric">${d.grand_count}</td><td class="numeric">${d.grand_total_fmt}</td></tr>`
+    : `<tr class="total-row"><td>Total</td><td class="numeric">${d.grand_count}</td></tr>`;
   return `<div class="card">
     <div class="card-title">Grouped by ${(d.fields||[]).join(", ")} · ${d.time_label}</div>
     ${exprBadge(d)}
@@ -318,13 +318,13 @@ function renderGroup(d) {
 
 function renderPivot(d) {
   const cols  = d.cols || [];
-  const heads = `<th>${d.row_field}</th>${cols.map(c=>`<th style="text-align:right">${c}</th>`).join("")}<th style="text-align:right">Total</th>`;
+  const heads = `<th>${d.row_field}</th>${cols.map(c=>`<th class="numeric">${c}</th>`).join("")}<th class="numeric">Total</th>`;
   const rows  = (d.rows||[]).map(r => {
-    const cells = cols.map(c=>`<td style="text-align:right">${r[c]||0}</td>`).join("");
-    return `<tr><td>${r.label}</td>${cells}<td style="text-align:right;font-weight:700">${r.total}</td></tr>`;
+    const cells = cols.map(c=>`<td class="numeric">${r[c]||0}</td>`).join("");
+    return `<tr><td>${r.label}</td>${cells}<td class="numeric" style="font-weight:700">${r.total}</td></tr>`;
   }).join("");
-  const totCells = cols.map(c=>`<td style="text-align:right;font-weight:700">${(d.col_totals||{})[c]||0}</td>`).join("");
-  const foot = `<tr style="font-weight:700;border-top:2px solid var(--border)"><td>Total</td>${totCells}<td style="text-align:right">${d.grand}</td></tr>`;
+  const totCells = cols.map(c=>`<td class="numeric" style="font-weight:700">${(d.col_totals||{})[c]||0}</td>`).join("");
+  const foot = `<tr class="total-row"><td>Total</td>${totCells}<td class="numeric">${d.grand}</td></tr>`;
   return `<div class="card">
     <div class="card-title">Pivot · ${d.row_field} × ${d.col_field} · ${d.time_label}</div>
     ${exprBadge(d)}
@@ -335,11 +335,11 @@ function renderPivot(d) {
 function renderTrend(d) {
   const has  = d.has_amount;
   const head = has
-    ? `<th>Period</th><th style="text-align:right">Count</th><th style="text-align:right">Total</th><th style="text-align:right">Avg</th>`
-    : `<th>Period</th><th style="text-align:right">Count</th>`;
+    ? `<th>Period</th><th class="numeric">Count</th><th class="numeric">Total</th><th class="numeric">Avg</th>`
+    : `<th>Period</th><th class="numeric">Count</th>`;
   const rows = (d.periods||[]).map(p => has
-    ? `<tr><td>${p.label}</td><td style="text-align:right">${p.count}</td><td style="text-align:right">${p.total_fmt}</td><td style="text-align:right">${p.avg_fmt}</td></tr>`
-    : `<tr><td>${p.label}</td><td style="text-align:right">${p.count}</td></tr>`).join("");
+    ? `<tr><td>${p.label}</td><td class="numeric">${p.count}</td><td class="numeric">${p.total_fmt}</td><td class="numeric">${p.avg_fmt}</td></tr>`
+    : `<tr><td>${p.label}</td><td class="numeric">${p.count}</td></tr>`).join("");
   return `<div class="card">
     <div class="card-title">Trend · ${d.filter_str}</div>
     ${exprBadge(d)}
