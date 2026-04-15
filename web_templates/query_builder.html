@@ -25,6 +25,9 @@
     <div style="font-size:11px;font-weight:700;color:var(--sub);
                 letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">DASHBOARDS</div>
     <div id="tabs-dashboards"></div>
+    <div style="font-size:11px;font-weight:700;color:var(--sub);
+                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">ALIAS QUERIES</div>
+    <div id="tabs-aliases"></div>
   </div>
 
   <!-- ── Right panel ── -->
@@ -60,6 +63,8 @@
   }
   .q-tab:hover  { background:var(--bg);color:var(--text); }
   .q-tab.active { background:var(--accent-lt);color:var(--accent); }
+  .q-tab-derived { opacity:0.7;font-style:italic; }
+  .q-tab-alias { opacity:0.6; }
   .dash-chip {
     display:inline-flex;align-items:center;gap:5px;padding:5px 11px;
     border-radius:20px;font-size:13px;font-weight:600;
@@ -99,7 +104,7 @@
 </style>
 
 <script>
-var _st = { queries:{}, metrics:{}, dashboards:{} };
+var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{} };
 var _cur = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
@@ -114,6 +119,10 @@ var _liveTimer = null;
   Object.entries(q).forEach(function(e) {
     var k = e[0], v = e[1];
     if (reserved.indexOf(k)!==-1 || typeof v!=="object") return;
+    if (v.alias) {
+      _st.aliases[k] = { alias: v.alias };
+      return;
+    }
     var parsed = _parseWhere(v.where||"");
     _st.queries[k] = {
       where:        v.where||"",
@@ -168,6 +177,7 @@ function renderTabs() {
   _renderSection("tabs-queries",    _st.queries,    "queries");
   _renderSection("tabs-metrics",    _st.metrics,    "metrics");
   _renderSection("tabs-dashboards", _st.dashboards, "dashboards");
+  _renderSection("tabs-aliases",    _st.aliases,    "aliases");
 }
 function _renderSection(elId, data, section) {
   var el = document.getElementById(elId);
@@ -179,9 +189,18 @@ function _renderSection(elId, data, section) {
   }
   keys.forEach(function(name) {
     var btn = document.createElement("button");
-    btn.className = "q-tab" +
+    var extraClass = "";
+    var badge = "";
+    if (section==="metrics" && data[name].derived) {
+      extraClass = " q-tab-derived";
+      badge = ' <span style="font-size:10px;background:var(--sub);color:var(--card);padding:1px 5px;border-radius:4px;">fx</span>';
+    } else if (section==="aliases") {
+      extraClass = " q-tab-alias";
+    }
+    btn.className = "q-tab" + extraClass +
       (_cur&&_cur.section===section&&_cur.name===name?" active":"");
-    btn.textContent = name; btn.title = name;
+    btn.innerHTML = name + badge;
+    btn.title = section==="aliases" ? "→ " + data[name].alias : name;
     btn.addEventListener("click", function(){ select(section, name); });
     el.appendChild(btn);
   });
@@ -237,6 +256,10 @@ function renderEditor() {
   ed.innerHTML = "";
   if (!_cur) return;
   var s=_cur.section, n=_cur.name;
+  if (s==="aliases") {
+    _buildAliasEditor(ed, n);
+    return;
+  }
   // header
   var hdr = document.createElement("div");
   hdr.className = "card"; hdr.style.marginBottom = "12px";
@@ -403,6 +426,42 @@ function _buildQueryEditor(container, name) {
     _updatePreview(q);
     triggerLivePreview();
   }
+}
+
+// ── Alias Editor (read-only) ───────────────────────────────────────────────────
+function _buildAliasEditor(container, name) {
+  var a = _st.aliases[name];
+  var qNames = Object.keys(_st.queries);
+  var opts = qNames.map(function(n){
+    return '<option value="'+n+'"'+(n===a.alias?" selected":"")+'>'+n+'</option>';
+  }).join("");
+  var card = document.createElement("div");
+  card.className = "card";
+  card.innerHTML =
+    '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;">'+
+      '<span style="font-size:28px;color:var(--accent);">↳</span>'+
+      '<div style="flex:1;">'+
+        '<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">Alias — shortcut name for another query</div>'+
+        '<select id="alias-target" onchange="onAliasChange(this.value)" style="width:100%;font-size:14px;padding:8px;border-radius:8px;">'+
+          '<option value="">— select a query —</option>'+opts+'</select>'+
+      '</div>'+
+    '</div>';
+  container.appendChild(card);
+}
+
+function onAliasChange(val) {
+  if (!_cur || _cur.section !== "aliases") return;
+  _st.aliases[_cur.name].alias = val;
+}
+
+function insertDerivedRef(ref) {
+  if (!_cur || _cur.section !== "metrics" || !ref) return;
+  var input = document.getElementById("m-derived");
+  if (!input) return;
+  var current = input.value.trim();
+  var insert = current ? " " + ref + " " : ref + " ";
+  input.value = current ? current + insert : ref + " ";
+  _st.metrics[_cur.name].derived = input.value;
 }
 
 // ── helpers scoped to query editor ───────────────────────────────────────────
@@ -784,15 +843,27 @@ function _buildMetricEditor(name) {
   var m = _st.metrics[name];
   var div = document.createElement("div");
 
-  // ── Derived metric: show read-only expression ──────────────────────────────
-  if (m.derived) {
+  // ── Derived metric: editable expression with reference inserter ───────────
+  if (m.derived !== undefined) {
+    var refs = Object.keys(_st.queries).map(function(n){
+      return '<option value="'+n+'">query: '+n+'</option>';
+    }).join("") +
+    Object.keys(_st.metrics).filter(function(n){ return n!==name && !_st.metrics[n].derived; })
+      .map(function(n){
+      return '<option value="'+n+'">metric: '+n+'</option>';
+    }).join("");
     div.appendChild(_mkCard("Metric type",
       '<input type="text" value="Derived" readonly'+
       ' style="background:var(--accent-lt);color:var(--accent);font-weight:700;border-color:var(--accent);">'));
     div.appendChild(_mkCard("Expression",
-      '<input type="text" value="'+_esc(m.derived)+'" readonly'+
-      ' style="font-family:monospace;background:var(--bg);">',
-      "Calculated from other metrics. Non-editable."));
+      '<input type="text" id="m-derived" value="'+_esc(m.derived)+'"'+
+      ' placeholder="e.g. income - expense"'+
+      ' style="font-family:monospace;" oninput="_st.metrics[_cur.name].derived=this.value">',
+      "Math expression using other metrics. Type or use the inserter below."));
+    div.appendChild(_mkCard("Insert reference",
+      '<select id="m-ref" onchange="insertDerivedRef(this.value); this.value=\'\';">'+
+        '<option value="">— pick a query or metric —</option>'+refs+'</select>',
+      "Select to insert with spaces for operators."));
     return div;
   }
 
@@ -952,7 +1023,7 @@ function saveAll() {
   Object.keys(_st.queries).forEach(function(n) {
     _st.queries[n].where = _buildWhereExpr(_st.queries[n]);
   });
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{} };
+  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
     payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
