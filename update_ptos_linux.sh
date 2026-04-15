@@ -23,6 +23,22 @@ if [ ! -d ".git" ]; then
     exit 1
 fi
 
+# ── Find Python 3.11+ ─────────────────────────────────────────────────────────
+PYTHON=""
+for cmd in python3.13 python3.12 python3.11 python3 python; do
+    if command -v "$cmd" &>/dev/null; then
+        if "$cmd" -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+            PYTHON="$cmd"
+            break
+        fi
+    fi
+done
+
+if [ -z "$PYTHON" ]; then
+    echo "ERROR: Python 3.11+ not found. Run setup_ptos_linux.sh first."
+    exit 1
+fi
+
 echo "Pulling latest changes from GitHub..."
 git pull
 
@@ -38,7 +54,7 @@ echo ""
     pkill -f "python.*ptos_web.py" 2>/dev/null || true
     sleep 1
     xdg-open http://localhost:5000 2>/dev/null &
-    nohup python3 ptos_web.py > /dev/null 2>&1 &
+    nohup "$PYTHON" ptos_web.py > /dev/null 2>&1 &
 ) &
 disown
 

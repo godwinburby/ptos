@@ -24,6 +24,10 @@ fi
 
 cd "$PTOS_DIR"
 
+# ── Update Termux packages ────────────────────────────────────────────────────
+echo "Updating Termux packages..."
+pkg update -y && pkg upgrade -y
+
 # ── Download latest zip ───────────────────────────────────────────────────────
 echo "Downloading PTOS..."
 rm -rf "$TMP_DIR" 2>/dev/null
@@ -59,20 +63,36 @@ fi
 echo "Checking for changes..."
 FILES_CHANGED=0
 
-for f in "$TMP_DIR/new/ptos-main"/*.py; do
-    fname="$(basename "$f")"
-    if [ ! -f "$PTOS_DIR/$fname" ] || ! cmp -s "$f" "$PTOS_DIR/$fname"; then
-        FILES_CHANGED=1
-        break
-    fi
-done
+# Check Python files (including new ones)
+NEW_PY_COUNT=$(cd "$TMP_DIR/new/ptos-main" && ls -1 *.py 2>/dev/null | wc -l)
+if [ "$NEW_PY_COUNT" -gt 0 ]; then
+    for f in "$TMP_DIR/new/ptos-main"/*.py; do
+        fname="$(basename "$f")"
+        if [ ! -f "$PTOS_DIR/$fname" ] || ! cmp -s "$f" "$PTOS_DIR/$fname"; then
+            FILES_CHANGED=1
+            break
+        fi
+    done
+fi
 
-if [ -d "$TMP_DIR/new/ptos-main/web_templates" ] && [ "$FILES_CHANGED" -eq 0 ]; then
+# Check web_templates
+if [ "$FILES_CHANGED" -eq 0 ] && [ -d "$TMP_DIR/new/ptos-main/web_templates" ]; then
     if [ ! -d "$PTOS_DIR/web_templates" ] || \
        ! cmp -s "$TMP_DIR/new/ptos-main/web_templates/base.html" \
               "$PTOS_DIR/web_templates/base.html" 2>/dev/null; then
         FILES_CHANGED=1
     fi
+fi
+
+# Check for new shell scripts
+if [ "$FILES_CHANGED" -eq 0 ]; then
+    for f in "$TMP_DIR/new/ptos-main"/*_android.sh; do
+        fname="$(basename "$f")"
+        if [ ! -f "$PTOS_DIR/$fname" ] || ! cmp -s "$f" "$PTOS_DIR/$fname"; then
+            FILES_CHANGED=1
+            break
+        fi
+    done
 fi
 
 # ── Apply update ──────────────────────────────────────────────────────────────
