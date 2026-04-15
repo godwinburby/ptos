@@ -551,19 +551,15 @@ def schema_builder_preview_lint():
         new_schema_toml = "\n".join(lines)
         new_schema = tomllib.loads(new_schema_toml)
         
-        old_schema_raw = ptos._CACHE.get("schema", {})
+        content_parts = []
+        for fname in ptos.get_log_files():
+            fpath = os.path.join(ptos.RECORDS_DIR, fname)
+            if os.path.exists(fpath):
+                with open(fpath, encoding="utf-8") as f:
+                    content_parts.append(f.read())
+        content = "\n".join(content_parts)
         
-        ptos._CACHE["schema"] = new_schema
-        ptos._CACHE.pop("derived_fields", None)
-        ptos._CACHE.pop("numeric_fields", None)
-        
-        try:
-            result = ptos.lint_all_records()
-        finally:
-            ptos._CACHE["schema"] = old_schema_raw
-            ptos._CACHE.pop("derived_fields", None)
-            ptos._CACHE.pop("numeric_fields", None)
-        
+        result = svc.lint_content_with_schema(content, schema_override=new_schema)
         return jsonify(ok=True, data=result)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -1304,7 +1300,7 @@ def lint_page():
 @app.route("/lint/run", methods=["POST"])
 def lint_run():
     try:
-        result = ptos.lint_all_records()
+        result = svc.lint_all()
         return jsonify(ok=True, data=result)
     except Exception as e:
         return jsonify(ok=False, error=str(e))

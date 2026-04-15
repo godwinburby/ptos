@@ -1343,3 +1343,131 @@ def restore_config(zip_path):
     
     return {"ok": True, "message": "Config restored successfully"}
 
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Lint (service layer wrappers)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def lint_all():
+    """Lint all records and return structured data.
+    
+    Returns:
+        dict: Lint results including errors, warnings, quality warnings, and counts.
+    """
+    return ptos.lint_all_records()
+
+
+def validate_content(content):
+    """Validate raw log file content.
+    
+    Args:
+        content: String content of a log file.
+    
+    Returns:
+        dict: Validation results with errors list.
+    """
+    errors = []
+    for lineno, raw_line in enumerate(content.split("\n"), 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            d, kv, note = ptos.parse_line(line)
+        except Exception:
+            errors.append({
+                "line": line,
+                "problems": ["cannot parse line"],
+                "lineno": lineno
+            })
+            continue
+        
+        line_errors = []
+        if d == dt.date.min:
+            line_errors.append("missing or malformed date")
+        if "type" not in kv:
+            line_errors.append("missing type field")
+        
+        schema = ptos.get_schema()
+        schema_problems = ptos.validate_record(schema, kv)
+        line_errors.extend(schema_problems)
+        
+        if line_errors:
+            errors.append({
+                "line": line,
+                "problems": line_errors,
+                "lineno": lineno
+            })
+    
+    return {
+        "valid": len(errors) == 0,
+        "error_count": len(errors),
+        "errors": errors
+    }
+
+
+def lint_content_with_schema(content, schema_override=None):
+    """Lint content against a specific schema (for schema builder preview).
+    
+    Args:
+        content: String content to lint.
+        schema_override: Optional schema dict to use instead of current schema.
+    
+    Returns:
+        dict: Lint results with errors and quality warnings.
+    """
+    schema = schema_override if schema_override is not None else ptos.get_schema()
+    errors = []
+    warnings = []
+    quality_warnings = []
+    
+    for lineno, raw_line in enumerate(content.split("\n"), 1):
+        line = raw_line.strip()
+        if not line or line.startswith("#"):
+            continue
+        try:
+            d, kv, note = ptos.parse_line(line)
+        except Exception:
+            errors.append({
+                "line": line,
+                "problems": ["cannot parse line"],
+                "lineno": lineno
+            })
+            continue
+        
+        line_errors = []
+        line_quality = []
+        
+        if d == dt.date.min:
+            line_errors.append("missing or malformed date")
+        if "type" not in kv:
+            line_errors.append("missing type field")
+        if "tag" not in kv:
+            line_quality.append("no tag")
+        if not note or not note.strip():
+            line_quality.append("no note")
+        
+        schema_problems = ptos.validate_record(schema, kv)
+        line_errors.extend(schema_problems)
+        
+        if line_errors:
+            errors.append({
+                "line": line,
+                "problems": line_errors,
+                "lineno": lineno
+            })
+        
+        if line_quality:
+            quality_warnings.append({
+                "line": line,
+                "problems": line_quality,
+                "lineno": lineno
+            })
+    
+    return {
+        "clean": len(errors) == 0 and len(quality_warnings) == 0,
+        "error_count": len(errors),
+        "quality_warning_count": len(quality_warnings),
+        "errors": errors,
+        "quality_warnings": quality_warnings,
+    }
+

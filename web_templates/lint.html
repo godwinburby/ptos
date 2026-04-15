@@ -42,12 +42,15 @@ function runLint() {
 
 function renderLint(d) {
   // ── summary bar ──────────────────────────────────────────────────────────
-  const statusColor  = d.clean ? "var(--success)" : d.error_count ? "var(--error)" : "var(--warn)";
+  const hasQuality = d.quality_warning_count > 0;
+  const statusColor  = d.clean ? "var(--success)" : d.error_count ? "var(--error)" : hasQuality ? "var(--info)" : "var(--warn)";
   const statusText   = d.clean
     ? "✔ All clean"
     : d.error_count
       ? `✖ ${d.error_count} error${d.error_count>1?"s":""}${d.warning_count ? ", " + d.warning_count + " warning" + (d.warning_count>1?"s":"") : ""}`
-      : `⚠ ${d.warning_count} warning${d.warning_count>1?"s":""}`;
+      : hasQuality
+        ? `ℹ ${d.quality_warning_count} quality note${d.quality_warning_count>1?"s":""}`
+        : `⚠ ${d.warning_count} warning${d.warning_count>1?"s":""}`;
 
   // type counts table
   const typeRows = Object.entries(d.type_counts||{})
@@ -99,14 +102,21 @@ function renderLint(d) {
   // ── warnings ──────────────────────────────────────────────────────────────
   if (d.warnings && d.warnings.length) {
     // collapsed by default — can be large
-    const rows = d.warnings.map(w => `
-      <div style="padding:8px 0;border-bottom:1px solid var(--border);">
-        <div style="font-family:monospace;font-size:12px;color:var(--sub);
-                    word-break:break-all;margin-bottom:4px;">${escHtml(w.line)}</div>
-        ${w.problems.map(p =>
-          `<div style="font-size:13px;color:var(--warn);font-weight:600;">⚠ ${escHtml(p)}</div>`
-        ).join("")}
-      </div>`).join("");
+    const rows = d.warnings.map(w => {
+      const gotoUrl = '/editor?file='+encodeURIComponent(w.filepath||'')+'&goto='+w.lineno;
+      return `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-size:11px;color:var(--sub);">${escHtml(w.filepath||'')} line ${w.lineno}</div>
+          <div style="font-family:monospace;font-size:12px;color:var(--sub);
+                      word-break:break-all;margin-bottom:4px;">${escHtml(w.line)}</div>
+          ${w.problems.map(p =>
+            `<div style="font-size:13px;color:var(--warn);font-weight:600;">⚠ ${escHtml(p)}</div>`
+          ).join("")}
+        </div>
+        <a href="${gotoUrl}" target="_blank" class="btn btn-sm" style="margin-left:8px;flex-shrink:0;" title="Open in Log Editor">↗</a>
+      </div>`;
+    }).join("");
     html += `
     <div class="card" style="border-color:var(--warn);">
       <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"
@@ -119,6 +129,40 @@ function renderLint(d) {
         </div>
         <span class="warn-toggle"
               style="font-size:12px;color:var(--warn);font-weight:600;">show</span>
+      </div>
+      <div style="display:none;">${rows}</div>
+    </div>`;
+  }
+
+  // ── quality notes (collapsed, non-blocking) ─────────────────────────────
+  if (d.quality_warnings && d.quality_warnings.length) {
+    const rows = d.quality_warnings.map(w => {
+      const gotoUrl = '/editor?file='+encodeURIComponent(w.filepath||'')+'&goto='+w.lineno;
+      return `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-size:11px;color:var(--sub);">${escHtml(w.filepath||'')} line ${w.lineno}</div>
+          <div style="font-family:monospace;font-size:12px;color:var(--sub);
+                      word-break:break-all;margin-bottom:4px;">${escHtml(w.line)}</div>
+          ${w.problems.map(p =>
+            `<div style="font-size:13px;color:var(--info);font-weight:600;">ℹ ${escHtml(p)}</div>`
+          ).join("")}
+        </div>
+        <a href="${gotoUrl}" target="_blank" class="btn btn-sm" style="margin-left:8px;flex-shrink:0;" title="Open in Log Editor">↗</a>
+      </div>`;
+    }).join("");
+    html += `
+    <div class="card" style="border-color:var(--info);">
+      <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;"
+           onclick="this.nextElementSibling.style.display=
+                    this.nextElementSibling.style.display==='none'?'block':'none';
+                    this.querySelector('.qual-toggle').textContent=
+                    this.nextElementSibling.style.display==='none'?'show':'hide';">
+        <div class="card-title" style="color:var(--info);margin:0;">
+          Quality Notes (${d.quality_warnings.length})
+        </div>
+        <span class="qual-toggle"
+              style="font-size:12px;color:var(--info);font-weight:600;">show</span>
       </div>
       <div style="display:none;">${rows}</div>
     </div>`;
