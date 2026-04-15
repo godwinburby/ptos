@@ -110,6 +110,7 @@ var _delPending = null;
 var _types    = {{ types | tojson }};
 var _timeOpts = {{ time_options | tojson }};
 var _fieldCache = {};   // {type: [{name, options, is_int}]}
+var _cacheSet  = [];    // maintain insertion order for eviction
 var _liveTimer = null;
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
@@ -234,26 +235,30 @@ function resetQuery() {
   q.search = "";
   q.group = "";
   q.sum = false;
+  q.time = "tm";
   _fieldCache = {};
+  _cacheSet = [];
   renderEditor();
   triggerLivePreview();
 }
 
 // ── Add new ───────────────────────────────────────────────────────────────────
 function addEntry() {
-  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard","q");
+  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias","q");
   if (!kind) return;
   kind = kind.trim().toLowerCase();
-  var section = kind==="m"?"metrics":kind==="d"?"dashboards":"queries";
+  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":"queries";
   var name = prompt("Name (lowercase, underscores):");
   if (!name) return;
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
   if (!name) return;
-  if (_st[section][name]) { alert("'"+name+"' already exists."); return; }
+  if (_st[section] && _st[section][name]) { alert("'"+name+"' already exists."); return; }
   if (section==="queries")
     _st.queries[name]    = {where:"",time:"tm",sum:false,group:"",search:"",_chips:[],_exprManual:"",_activeField:null};
   else if (section==="metrics")
     _st.metrics[name]    = {kind:"avg",base:"",base2:""};
+  else if (section==="aliases")
+    _st.aliases[name]    = {alias:""};
   else
     _st.dashboards[name] = {metrics:[]};
   renderTabs();
@@ -487,6 +492,10 @@ function _buildWhereExpr(q) {
   return parts.join(" AND ");
 }
 
+function _buildChipFilters(q) {
+  return (q._chips||[]).map(function(c){ return c.field+c.op+c.value; });
+}
+
 function _updateQ(field, val) {
   if (!_cur||_cur.section!=="queries") return;
   _st.queries[_cur.name][field] = val;
@@ -578,6 +587,12 @@ function _fetchFields(type, q, cb) {
   
   if (_fieldCache[cacheKey] && _fieldCache[cacheKey].fields) { cb(); return; }
   
+  // Evict oldest if over limit
+  if (_cacheSet.length >= 20) {
+    var oldKey = _cacheSet.shift();
+    delete _fieldCache[oldKey];
+  }
+  
   var url = "/api/type_fields/"+encodeURIComponent(type);
   if (ctxStr) url += "?context="+encodeURIComponent(ctxStr);
   
@@ -591,6 +606,7 @@ function _fetchFields(type, q, cb) {
       history: data.history_fields || {},
       dimensions: data.dimensions || []
     };
+    _cacheSet.push(cacheKey);
     cb();
   })
   .catch(function(){ _fieldCache[cacheKey]={fields:[],history:{},dimensions:[]}; cb(); });
@@ -1067,7 +1083,7 @@ function confirmDelete() {
   closeDeleteModal();
   fetch("/query-builder/delete", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name:n, kind:s==="queries"?"query":s==="metrics"?"metric":"dashboard"})
+    body:JSON.stringify({name:n, kind:s==="queries"?"query":s==="metrics"?"metric":s==="aliases"?"alias":"dashboard"})
   })
   .then(function(r){ return r.json(); })
   .then(function(d) {
@@ -1136,7 +1152,7 @@ function triggerLivePreview() {
     area.innerHTML = '<div style="color:var(--sub);padding:16px;">Loading…</div>';
     fetch("/browse/run", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({where: [_buildWhereExpr(q)], expr: "", time: q.time || "tm", group: group, sort: sort})
+      body: JSON.stringify({where: _buildChipFilters(q), expr: q._exprManual || "", time: q.time || "tm", group: group, sort: sort})
     })
     .then(r => r.json())
     .then(d => {
