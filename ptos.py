@@ -1730,12 +1730,14 @@ def lint_all_records():
     """
     schema = get_schema()
     
-    total_errors   = 0
-    total_warnings = 0
+    total_errors        = 0
+    total_warnings      = 0
+    total_quality_issues = 0
     total_checked  = 0
     type_counts    = {}
     errors_list    = []
     warnings_list  = []
+    quality_list   = []
     
     for fname in get_log_files():
         path = os.path.join(RECORDS_DIR, fname)
@@ -1760,17 +1762,18 @@ def lint_all_records():
                 
                 rtype = kv.get("type", "unknown")
                 type_counts[rtype] = type_counts.get(rtype, 0) + 1
-                line_errors   = []
-                line_warnings = []
+                line_errors    = []
+                line_warnings  = []
+                line_quality   = []
                 
                 if d == dt.date.min:
                     line_errors.append("missing or malformed date")
                 if "type" not in kv:
                     line_errors.append("missing type field")
                 if "tag" not in kv:
-                    line_warnings.append("no tag")
+                    line_quality.append("no tag")
                 if not note or not note.strip():
-                    line_warnings.append("no note")
+                    line_quality.append("no note")
                 
                 schema_problems = validate_record(schema, kv)
                 line_errors.extend(schema_problems)
@@ -1792,15 +1795,26 @@ def lint_all_records():
                         "filepath": fname,
                         "lineno": lineno
                     })
+                
+                if line_quality:
+                    total_quality_issues += len(line_quality)
+                    quality_list.append({
+                        "line": line,
+                        "problems": line_quality,
+                        "filepath": fname,
+                        "lineno": lineno
+                    })
     
     return {
         "clean": total_errors == 0 and total_warnings == 0,
         "checked": total_checked,
         "error_count": total_errors,
         "warning_count": total_warnings,
+        "quality_warning_count": total_quality_issues,
         "type_counts": type_counts,
         "errors": errors_list,
         "warnings": warnings_list,
+        "quality_warnings": quality_list,
     }
 
 # --------------------------------------------------
