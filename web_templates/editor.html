@@ -64,13 +64,14 @@
   <div id="editor-wrapper" style="display:flex;min-height:70vh;">
     <!-- line numbers -->
     <div id="line-numbers"
-         style="width:45px;min-width:45px;padding:14px 8px;
+         style="width:45px;min-width:45px;min-height:70vh;padding:14px 8px;
                 background:#151A26;color:#546E7A;
                 font-family:'Consolas','Courier New',monospace;
                 font-size:14px;line-height:1.7;
                 text-align:right;user-select:none;
                 border-right:1px solid #2A3040;
-                overflow:hidden;flex-shrink:0;"></div>
+                overflow-y:hidden;flex-shrink:0;
+                box-sizing:border-box;"></div>
     
     <!-- raw textarea (edit mode) -->
     <textarea id="log-editor"
@@ -190,14 +191,21 @@ function updateLineNumbers() {
   var lines = (editor.value.match(/\n/g) || []).length + 1;
   var html = "";
   for (var i = 1; i <= lines; i++) {
-    html += i + "\n";
+    html += i + "<br>";
   }
-  lns.textContent = html;
+  lns.innerHTML = html;
 }
 
 function syncLineNumberScroll() {
   var editor = document.getElementById("log-editor");
   var lns = document.getElementById("line-numbers");
+  lns.scrollTop = editor.scrollTop;
+}
+
+function syncLineNumberScroll() {
+  var editor = document.getElementById("log-editor");
+  var lns = document.getElementById("line-numbers");
+  syncLineNumbersHeight();
   lns.scrollTop = editor.scrollTop;
 }
 
@@ -218,7 +226,10 @@ document.addEventListener("DOMContentLoaded", function() {
     }, 100);
   }
   
-  setTimeout(updateLineNumbers, 50);
+  setTimeout(function() {
+    updateLineNumbers();
+    syncLineNumberScroll();
+  }, 50);
 });
 
 // ── Go to line ────────────────────────────────────────────────────────────────
