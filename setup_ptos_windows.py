@@ -108,6 +108,15 @@ if not os.path.isdir(config_dir):
         input("\nPress Enter to exit.")
         sys.exit(1)
     print("PTOS initialised.")
+    
+    step("Your Name")
+    user_name = input("Enter your name (leave blank for 'User'): ").strip()
+    if user_name:
+        rc, out, err = run([sys.executable, "ptos.py", "--set-name", user_name])
+        if rc == 0:
+            print(f"Name set to: {user_name}")
+        else:
+            print(f"Warning: Could not set name: {err}")
 else:
     print("PTOS already initialised (config/ exists).")
 

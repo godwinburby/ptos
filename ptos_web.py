@@ -294,8 +294,13 @@ def home():
         recent_cols = data["columns"]
     except Exception:
         recent_cols = []
+    
+    cfg = svc.get_config()
+    username = cfg.get("user", {}).get("name", "User")
+    
     return render_template("home.html",
         tab="home", title="Home", now=_now_str(), greeting=_greeting(),
+        username=username,
         presets=sorted(presets.keys())[:8],
         multi_presets=multi_presets,
         due_count=due_count, due_rows=due_rows[:5],

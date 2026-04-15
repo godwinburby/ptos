@@ -2853,7 +2853,10 @@ def edit_target(target):
 # Starter file content  (written by --init, no external templates needed)
 # --------------------------------------------------
 
-_STARTER_CONFIG = """[editor]
+_STARTER_CONFIG = """[user]
+name = "User"
+
+[editor]
 command = "nvim"
 
 [display]
@@ -3126,6 +3129,74 @@ def init_ptos():
     init_version()
     print("Version tracked.")
 
+
+def set_user_name(name):
+    """Set the user name in config.toml."""
+    if not name or not name.strip():
+        sys.exit("Error: Name cannot be empty.")
+    
+    name = name.strip()
+    
+    if not os.path.exists(CONFIG_PATH):
+        sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
+    
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            content = f.read()
+    except Exception as e:
+        sys.exit(f"Error reading config: {e}")
+    
+    lines = content.split("\n")
+    new_lines = []
+    user_section_found = False
+    name_updated = False
+    
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        
+        if stripped == "[user]":
+            user_section_found = True
+            new_lines.append(line)
+            continue
+        
+        if user_section_found and stripped.startswith("name"):
+            new_lines.append(f'name = "{name}"')
+            name_updated = True
+            user_section_found = False
+            continue
+        
+        if user_section_found and stripped.startswith("["):
+            new_lines.append(f'name = "{name}"')
+            new_lines.append("")
+            user_section_found = False
+            new_lines.append(line)
+            continue
+        
+        if user_section_found and i == len(lines) - 1:
+            new_lines.append(f'name = "{name}"')
+            name_updated = True
+            continue
+        
+        new_lines.append(line)
+    
+    if not name_updated:
+        if "[user]" in content:
+            new_lines.append(f'name = "{name}"')
+        else:
+            new_lines.append("")
+            new_lines.append("[user]")
+            new_lines.append(f'name = "{name}"')
+    
+    try:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            f.write("\n".join(new_lines))
+        print(f"User name set to: {name}")
+        
+        for key in ("config",):
+            _CACHE.pop(key, None)
+    except Exception as e:
+        sys.exit(f"Error writing config: {e}")
+
 # --------------------------------------------------
 # CLI  — argument parsing only, no logic
 # --------------------------------------------------
@@ -3236,6 +3307,8 @@ def build_parser(cycles):
                      help="Apply --set/--delete to all matched records without interactive pick")
     utl.add_argument("--fields", action="store_true", help="Show field discovery report")
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
+    utl.add_argument("--set-name", dest="set_name", metavar="NAME",
+                     help="Set user name in config")
     utl.add_argument("--backup-full", action="store_true", help="Full backup: records/, templates/, config/, and backups/ folder")
     utl.add_argument("--backup-config", action="store_true", help="Config backup: only schema, queries, presets, and config toml files")
     utl.add_argument("--restore-full", nargs="?", const="", metavar="PATH", help="Restore from full backup (shows list if no path given)")
@@ -3756,6 +3829,10 @@ def main():
     # ---- early exits (no data needed) ----
     if args.init:
         init_ptos()
+        return
+
+    if args.set_name:
+        set_user_name(args.set_name)
         return
 
     if args.edit:
