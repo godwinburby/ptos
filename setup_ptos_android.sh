@@ -21,20 +21,25 @@ if [ ! -d "$HOME/storage/shared" ]; then
     exit 0
 fi
 
-# ── Check Python version ──────────────────────────────────────────────────────
-check_python() {
-    if command -v python &>/dev/null; then
-        if python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
-            return 0
-        fi
-    fi
-    return 1
-}
+cd "$HOME/storage/shared"
 
-# ── Install or use existing ───────────────────────────────────────────────────
+# ── Check Python version ──────────────────────────────────────────────────────
+if ! python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+    echo "ERROR: Python 3.11+ required. Run:  pkg install python"
+    exit 1
+fi
+
+# ── Check Flask installed ─────────────────────────────────────────────────────
+if ! python -c "import flask" 2>/dev/null; then
+    echo "Installing Flask..."
+    python -m pip install flask --quiet
+fi
+
+# ── Install or use existing ────────────────────────────────────────────────────
 if [ -d "$PTOS_DIR" ]; then
     echo "PTOS already installed at: $PTOS_DIR"
-    cd "$PTOS_DIR"
+    echo "Updating Termux packages..."
+    pkg update -y && pkg upgrade -y
 else
     echo "--- Downloading PTOS ---"
     mkdir -p "$HOME/storage/shared"
@@ -67,15 +72,6 @@ else
     echo ""
     echo "--- Installing Python ---"
     pkg install python -y
-
-    # Verify Python version
-    if ! check_python; then
-        echo ""
-        echo "ERROR: Installed Python is older than 3.11."
-        echo "Try:  pkg install python"
-        echo "Then re-run this script."
-        exit 1
-    fi
 
     echo ""
     echo "--- Installing Flask ---"

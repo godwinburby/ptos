@@ -28,6 +28,18 @@ cd "$PTOS_DIR"
 echo "Updating Termux packages..."
 pkg update -y && pkg upgrade -y
 
+# ── Verify Python 3.11+ ──────────────────────────────────────────────────────
+if ! python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+    echo "ERROR: Python 3.11+ required. Run:  pkg install python"
+    exit 1
+fi
+
+# ── Verify Flask installed ─────────────────────────────────────────────────────
+if ! python -c "import flask" 2>/dev/null; then
+    echo "Installing Flask..."
+    python -m pip install flask --quiet
+fi
+
 # ── Download latest zip ───────────────────────────────────────────────────────
 echo "Downloading PTOS..."
 rm -rf "$TMP_DIR" 2>/dev/null
