@@ -108,7 +108,7 @@ chmod +x "$HOME/start_ptos_android.sh" \
 echo ""
 echo "Creating widget shortcuts..."
 mkdir -p "$HOME/.shortcuts"
-for script in setup_ptos_android.sh start_ptos_android.sh update_ptos_android.sh; do
+for script in start_ptos_android.sh update_ptos_android.sh; do
     rm -f "$HOME/.shortcuts/$script"
     ln -s "$HOME/$script" "$HOME/.shortcuts/$script" 2>/dev/null || true
 done
