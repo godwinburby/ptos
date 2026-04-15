@@ -203,6 +203,21 @@ function syncLineNumberScroll() {
 
 // Init line numbers on load
 document.addEventListener("DOMContentLoaded", function() {
+  // Parse URL params for goto line
+  const params = new URLSearchParams(window.location.search);
+  const gotoLine = params.get('goto');
+  const gotoFile = params.get('file');
+  
+  if (gotoFile) {
+    var sel = document.getElementById("file-select");
+    if (sel) sel.value = gotoFile;
+    loadFileWithGoto(gotoLine);
+  } else if (gotoLine) {
+    setTimeout(function() {
+      goToLineNum(parseInt(gotoLine, 10));
+    }, 100);
+  }
+  
   setTimeout(updateLineNumbers, 50);
 });
 
@@ -263,6 +278,20 @@ function loadFile() {
   }
   var file = document.getElementById("file-select").value;
   window.location = "/editor?file=" + encodeURIComponent(file);
+}
+
+function loadFileWithGoto(gotoLine) {
+  var file = document.getElementById("file-select").value;
+  fetch("/editor/content?file=" + encodeURIComponent(file))
+  .then(function(r) { return r.text(); })
+  .then(function(content) {
+    document.getElementById("log-editor").value = content;
+    _dirty = false;
+    updateLineNumbers();
+    if (gotoLine) {
+      goToLineNum(parseInt(gotoLine, 10));
+    }
+  });
 }
 
 // ── Saving ────────────────────────────────────────────────────────────────────

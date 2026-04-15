@@ -72,14 +72,21 @@ function renderLint(d) {
 
   // ── errors ────────────────────────────────────────────────────────────────
   if (d.errors && d.errors.length) {
-    const rows = d.errors.map(e => `
-      <div style="padding:10px 0;border-bottom:1px solid var(--border);">
-        <div style="font-family:monospace;font-size:12px;color:var(--sub);
-                    word-break:break-all;margin-bottom:4px;">${escHtml(e.line)}</div>
-        ${e.problems.map(p =>
-          `<div style="font-size:13px;color:var(--error);font-weight:600;">✖ ${escHtml(p)}</div>`
-        ).join("")}
-      </div>`).join("");
+    const rows = d.errors.map(e => {
+      const gotoUrl = '/editor?file='+encodeURIComponent(e.filepath||'')+'&goto='+e.lineno;
+      return `
+      <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
+        <div style="flex:1;">
+          <div style="font-size:11px;color:var(--sub);">${escHtml(e.filepath||'')} line ${e.lineno}</div>
+          <div style="font-family:monospace;font-size:12px;color:var(--sub);
+                      word-break:break-all;margin-bottom:4px;">${escHtml(e.line)}</div>
+          ${e.problems.map(p =>
+            `<div style="font-size:13px;color:var(--error);font-weight:600;">✖ ${escHtml(p)}</div>`
+          ).join("")}
+        </div>
+        <a href="${gotoUrl}" target="_blank" class="btn btn-sm" style="margin-left:8px;flex-shrink:0;" title="Open in Log Editor">↗</a>
+      </div>`;
+    }).join("");
     html += `
     <div class="card" style="border-color:var(--error);">
       <div class="card-title" style="color:var(--error);">

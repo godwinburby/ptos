@@ -1219,6 +1219,18 @@ def editor_get():
         tab="editor", title="Log Editor", now=_now_str(),
         log_files=log_files, current_file=current, content=content, msg=None)
 
+@app.route("/editor/content")
+def editor_content():
+    """Return file content for AJAX loading (used for goto line feature)."""
+    file = request.args.get("file", "")
+    if not file or "/" in file or "\\" in file or " " in file:
+        return "Invalid filename", 400
+    path = os.path.join(ptos.RECORDS_DIR, file)
+    if not os.path.exists(path):
+        return "File not found", 404
+    with open(path, encoding="utf-8") as f:
+        return f.read(), 200, {"Content-Type": "text/plain"}
+
 @app.route("/editor/save", methods=["POST"])
 def editor_save():
     data = request.get_json(silent=True) or {}
