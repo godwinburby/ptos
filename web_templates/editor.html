@@ -3,6 +3,28 @@
 
 <div class="page-title">Log Editor</div>
 
+<div style="background:#FEE2E2;border:2px solid #DC2626;color:#991B1B;padding:14px 18px;border-radius:10px;margin-bottom:14px;font-size:14px;font-weight:600;">
+  ⚠️ WARNING: Wrong edits can break PTOS! Each record must follow the correct syntax below.
+</div>
+
+<div id="syntax-guide" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;">
+  <div style="font-weight:700;margin-bottom:10px;">Record Syntax:</div>
+  <code style="display:block;background:var(--bg);padding:10px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:monospace;">
+    DATE type=VALUE FIELD=VALUE... tag=VALUE | NOTE
+  </code>
+  <div style="font-size:13px;color:var(--sub);">
+    <div style="margin-bottom:6px;"><strong>DATE</strong> — YYYY-MM-DD format (required)</div>
+    <div style="margin-bottom:6px;"><strong>type=VALUE</strong> — must match a schema type (required)</div>
+    <div style="margin-bottom:6px;"><strong>FIELD=VALUE</strong> — key-value pairs defined by schema (optional)</div>
+    <div style="margin-bottom:6px;"><strong>tag=VALUE</strong> — freeform labels for categorization (optional but recommended)</div>
+    <div><strong>| NOTE</strong> — human context after pipe (optional but recommended)</div>
+  </div>
+  <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;">
+    <strong>Example:</strong>
+    <code style="display:block;background:var(--bg);padding:8px;border-radius:6px;margin-top:6px;font-family:monospace;">2026-04-15 type=expense amount=50 category=transport tag=restaurant | lunch with team</code>
+  </div>
+</div>
+
 <div class="card" style="margin-bottom:14px;">
   <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
     <select id="file-select" onchange="loadFile()"

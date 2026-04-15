@@ -534,6 +534,41 @@ def schema_builder_save():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/schema-builder/preview-lint", methods=["POST"])
+def schema_builder_preview_lint():
+    """Preview lint results against unsaved schema changes."""
+    import tomllib
+    data = request.get_json(silent=True) or {}
+    new_types    = data.get("types", [])
+    type_schemas = data.get("type_schemas", {})
+    
+    if not new_types:
+        return jsonify(ok=False, error="No types provided")
+    
+    try:
+        old_schema = svc.get_schema()
+        lines = _build_schema_toml(old_schema, new_types, type_schemas)
+        new_schema_toml = "\n".join(lines)
+        new_schema = tomllib.loads(new_schema_toml)
+        
+        old_schema_raw = ptos._CACHE.get("schema", {})
+        
+        ptos._CACHE["schema"] = new_schema
+        ptos._CACHE.pop("derived_fields", None)
+        ptos._CACHE.pop("numeric_fields", None)
+        
+        try:
+            result = ptos.lint_all_records()
+        finally:
+            ptos._CACHE["schema"] = old_schema_raw
+            ptos._CACHE.pop("derived_fields", None)
+            ptos._CACHE.pop("numeric_fields", None)
+        
+        return jsonify(ok=True, data=result)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Backup
 # ══════════════════════════════════════════════════════════════════════════════

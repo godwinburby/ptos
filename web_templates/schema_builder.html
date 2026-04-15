@@ -3,8 +3,15 @@
 
 <div class="page-title">Schema Builder</div>
 
+<div style="background:var(--warn);color:#fff;padding:12px 16px;border-radius:10px;margin-bottom:14px;font-size:14px;font-weight:600;">
+  ⚠️ Schema changes affect all existing records. Wrong changes can break PTOS. Use "Preview Lint" before saving.
+</div>
+
 <div style="display:flex;gap:10px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">
-  <button onclick="saveSchema()" class="btn btn-success btn-sm" id="save-btn">
+  <button onclick="previewLint()" class="btn btn-warn btn-sm" id="lint-btn">
+    🔍 Preview Lint
+  </button>
+  <button onclick="confirmSave()" class="btn btn-success btn-sm" id="save-btn">
     💾 Save Schema
   </button>
   <button onclick="addType()" class="btn btn-primary btn-sm">+ Add Type</button>
@@ -526,6 +533,124 @@ function saveSchema() {
     msg.textContent = "✖ " + e;
   });
 }
+
+// ── Preview Lint ───────────────────────────────────────────────────────────────
+function previewLint() {
+  var btn = document.getElementById("lint-btn");
+  btn.disabled = true; btn.textContent = "Running lint…";
+  
+  fetch("/schema-builder/preview-lint", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(_state)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    btn.disabled = false; btn.textContent = "🔍 Preview Lint";
+    showLintModal(d);
+  })
+  .catch(function(e) {
+    btn.disabled = false; btn.textContent = "🔍 Preview Lint";
+    showLintModal({ ok: false, error: e.toString() });
+  });
+}
+
+function showLintModal(d) {
+  var modal = document.getElementById("lint-modal");
+  var content = document.getElementById("lint-modal-content");
+  
+  if (!d.ok) {
+    content.innerHTML = '<div style="color:var(--error);padding:20px;">Error: '+escHtml(d.error||"Unknown error")+'</div>';
+    modal.style.display = "flex";
+    return;
+  }
+  
+  var data = d.data || {};
+  var errors = data.errors || [];
+  var warnings = data.warnings || [];
+  var checked = data.checked || 0;
+  
+  var html = '<div style="padding:20px;">';
+  html += '<h3 style="margin:0 0 16px;">Lint Results</h3>';
+  
+  if (data.clean) {
+    html += '<div style="color:var(--success);padding:16px;background:var(--success-lt);border-radius:8px;">';
+    html += '✓ All '+checked+' records pass validation</div>';
+  } else {
+    html += '<div style="margin-bottom:16px;font-size:13px;color:var(--sub);">';
+    html += '<strong>'+data.error_count+'</strong> errors, <strong>'+data.warning_count+'</strong> warnings ';
+    html += 'out of <strong>'+checked+'</strong> records</div>';
+  }
+  
+  if (errors.length > 0) {
+    html += '<div style="background:var(--error-lt);border-radius:8px;margin-bottom:12px;max-height:200px;overflow-y:auto;">';
+    html += '<div style="padding:8px 12px;font-weight:700;color:var(--error);border-bottom:1px solid var(--border);">Errors</div>';
+    errors.forEach(function(e) {
+      html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;">';
+      html += '<span style="color:var(--sub);word-break:break-all;max-width:400px;">'+escHtml(e.line.substring(0,60))+'...</span>';
+      html += '<br><span style="color:var(--error);">'+escHtml((e.problems||[]).join("; "))+'</span></div>';
+    });
+    html += '</div>';
+  }
+  
+  if (warnings.length > 0) {
+    html += '<div style="background:#FFF8E1;border-radius:8px;margin-bottom:12px;max-height:150px;overflow-y:auto;">';
+    html += '<div style="padding:8px 12px;font-weight:700;color:var(--warn);border-bottom:1px solid var(--border);">Warnings</div>';
+    warnings.forEach(function(w) {
+      html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;">';
+      html += '<span style="color:var(--sub);word-break:break-all;max-width:400px;">'+escHtml(w.line.substring(0,60))+'...</span>';
+      html += '<br><span style="color:var(--warn);">'+escHtml((w.problems||[]).join("; "))+'</span></div>';
+    });
+    html += '</div>';
+  }
+  
+  html += '<div style="margin-top:16px;"><button onclick="closeLintModal()" class="btn btn-primary">Close</button></div>';
+  html += '</div>';
+  
+  content.innerHTML = html;
+  modal.style.display = "flex";
+}
+
+function closeLintModal() {
+  document.getElementById("lint-modal").style.display = "none";
+}
+
+// ── Save with confirmation ─────────────────────────────────────────────────────
+function confirmSave() {
+  var modal = document.getElementById("save-modal");
+  document.getElementById("save-modal-content").innerHTML = 
+    '<div style="padding:20px;">'+
+    '<h3 style="margin:0 0 12px;">Save Schema Changes?</h3>'+
+    '<p style="color:var(--sub);margin-bottom:16px;">This will update schema.toml and may affect how existing records are validated.</p>'+
+    '<div style="display:flex;gap:10px;">'+
+    '<button onclick="closeSaveModal()" class="btn btn-ghost">Cancel</button>'+
+    '<button onclick="doSaveSchema()" class="btn btn-success">Save Anyway</button>'+
+    '</div></div>';
+  modal.style.display = "flex";
+}
+
+function closeSaveModal() {
+  document.getElementById("save-modal").style.display = "none";
+}
+
+function doSaveSchema() {
+  closeSaveModal();
+  saveSchema();
+}
+
+function escHtml(s) {
+  return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
 </script>
+
+<!-- Lint Modal -->
+<div id="lint-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;">
+  <div id="lint-modal-content" style="background:var(--card);border-radius:12px;max-width:500px;width:90%;max-height:80vh;overflow:hidden;"></div>
+</div>
+
+<!-- Save Confirmation Modal -->
+<div id="save-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;">
+  <div id="save-modal-content" style="background:var(--card);border-radius:12px;max-width:400px;width:90%;"></div>
+</div>
 
 {% endblock %}
