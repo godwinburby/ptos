@@ -1162,23 +1162,23 @@ function triggerLivePreview() {
         area.innerHTML = '<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;font-size:13px;">' +
           '<span>' + (recs.grand_count || 0) + ' records</span>' +
           summaryBar(recs) +
-          '</div>' +
-          '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr><th>Group</th><th>Count</th>' +
-          (recs.has_amount ? '<th style="text-align:right">Total</th>' : '') + '</tr></thead><tbody>' +
-          (recs.rows || []).map(r => '<tr><td>'+_esc(r.key)+'</td><td>'+r.count+'</td>' + (recs.has_amount ? '<td style="text-align:right">'+(r.total_fmt||'')+'</td>' : '') + '</tr>').join('') +
-          '</tbody></table>';
+'</div>' +
+           '<table class="data-table"><thead><tr><th>Group</th><th>Count</th>' +
+           (recs.has_amount ? '<th style="text-align:right">Total</th>' : '') + '</tr></thead><tbody>' +
+           (recs.rows || []).map(r => '<tr><td>'+_esc(r.key)+'</td><td>'+r.count+'</td>' + (recs.has_amount ? '<td style="text-align:right">'+(r.total_fmt||'')+'</td>' : '') + '</tr>').join('') +
+           '</tbody></table>';
       } else if (recs.records && recs.records.length) {
         var cols = recs.columns || [];
         area.innerHTML = '<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;font-size:13px;">' +
           '<span>' + recs.records.length + ' records</span>' +
           summaryBar(recs) +
-          '</div>' +
-          '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">' +
-          '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
-          cols.map(c => '<th style="padding:8px 10px;text-align:left;">'+_esc(c)+'</th>').join('') +
-          '</tr></thead><tbody>' +
-          recs.records.slice(0, 20).map(r => '<tr>' + cols.map(c => '<td style="padding:6px 10px;border-bottom:1px solid var(--border);">'+_esc(r[c]||'')+'</td>').join('') + '</tr>').join('') +
-          '</tbody></table></div>';
+           '</div>' +
+           '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">' +
+           '<table class="data-table"><thead><tr>' +
+           cols.map(c => '<th>'+_esc(c)+'</th>').join('') +
+           '</tr></thead><tbody>' +
+           recs.records.slice(0, 20).map(r => '<tr>' + cols.map(c => '<td>'+_esc(r[c]||'')+'</td>').join('') + '</tr>').join('') +
+           '</tbody></table></div>';
       } else {
         area.innerHTML = '<div style="color:var(--sub);padding:16px;">No records found.</div>';
       }

@@ -576,7 +576,10 @@ def schema_builder_preview_lint():
 
 @app.route("/backup")
 def backup_page():
-    backups = svc.list_backups()
+    backups_raw = svc.list_backups()
+    # Format dates before passing to template
+    backups = [(name, svc.fmt_datetime(created), btype) 
+               for name, created, btype in backups_raw]
     return render_template("backup.html",
         tab="backup", title="Backup & Restore", now=_now_str(),
         backups=backups)

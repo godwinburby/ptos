@@ -36,7 +36,7 @@ def _resolve_time(code):
         raise PTOSError(f"Invalid time '{code}': {e}")
 
 
-def _parse_record(line):
+def _parse_record(line, format_date=True):
     """Parse a raw log line into a flat dict suitable for UI rendering.
     Derived fields from schema are computed and added as virtual columns.
     """
@@ -44,7 +44,7 @@ def _parse_record(line):
     if not parsed:
         return None
     d, kv, note = parsed
-    row = {"date": str(d)}
+    row = {"date": fmt_date(d) if format_date else str(d)}
     for k, v in kv.items():
         row[k] = ", ".join(v) if isinstance(v, list) else str(v)
     # append derived fields — pass record date for date arithmetic
@@ -1342,6 +1342,96 @@ def restore_config(zip_path):
         ptos._CACHE.pop(key, None)
     
     return {"ok": True, "message": "Config restored successfully"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Display helpers
+# ══════════════════════════════════════════════════════════════════════════════
+
+def fmt_date(date_obj):
+    """Format date object according to configured format.
+    
+    Supports presets: indian (dd/mm/yyyy), us (mm/dd/yyyy), 
+    eu (dd.mm.yyyy), readable (15 Apr 2026), iso (yyyy-mm-dd),
+    or custom strftime pattern.
+    """
+    import datetime as dt
+    cfg = get_config()
+    fmt = cfg.get("display", {}).get("date_format", "indian")
+    
+    if fmt == "indian":
+        return date_obj.strftime("%d/%m/%Y")
+    elif fmt == "us":
+        return date_obj.strftime("%m/%d/%Y")
+    elif fmt == "eu":
+        return date_obj.strftime("%d.%m.%Y")
+    elif fmt == "readable":
+        return date_obj.strftime("%d %b %Y")
+    elif fmt == "iso":
+        if isinstance(date_obj, dt.date):
+            return date_obj.isoformat()
+        else:
+            return date_obj.strftime("%Y-%m-%d")
+    else:
+        # Custom strftime format
+        try:
+            return date_obj.strftime(fmt)
+        except (ValueError, AttributeError):
+            # Fallback to ISO format on error
+            if isinstance(date_obj, dt.date):
+                return date_obj.isoformat()
+            else:
+                return date_obj.strftime("%Y-%m-%d")
+
+
+def fmt_datetime(dt_obj):
+    """Format datetime object: date part uses configured format, time stays HH:MM."""
+    return f"{fmt_date(dt_obj)} {dt_obj.strftime('%H:%M')}"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Display helpers
+# ══════════════════════════════════════════════════════════════════════════════
+
+def fmt_date(date_obj):
+    """Format date object according to configured format.
+    
+    Supports presets: indian (dd/mm/yyyy), us (mm/dd/yyyy), 
+    eu (dd.mm.yyyy), readable (15 Apr 2026), iso (yyyy-mm-dd),
+    or custom strftime pattern.
+    """
+    import datetime as dt
+    cfg = get_config()
+    fmt = cfg.get("display", {}).get("date_format", "indian")
+    
+    if fmt == "indian":
+        return date_obj.strftime("%d/%m/%Y")
+    elif fmt == "us":
+        return date_obj.strftime("%m/%d/%Y")
+    elif fmt == "eu":
+        return date_obj.strftime("%d.%m.%Y")
+    elif fmt == "readable":
+        return date_obj.strftime("%d %b %Y")
+    elif fmt == "iso":
+        if isinstance(date_obj, dt.date):
+            return date_obj.isoformat()
+        else:
+            return date_obj.strftime("%Y-%m-%d")
+    else:
+        # Custom strftime format
+        try:
+            return date_obj.strftime(fmt)
+        except (ValueError, AttributeError):
+            # Fallback to ISO format on error
+            if isinstance(date_obj, dt.date):
+                return date_obj.isoformat()
+            else:
+                return date_obj.strftime("%Y-%m-%d")
+
+
+def fmt_datetime(dt_obj):
+    """Format datetime object: date part uses configured format, time stays HH:MM."""
+    return f"{fmt_date(dt_obj)} {dt_obj.strftime('%H:%M')}"
 
 
 # ══════════════════════════════════════════════════════════════════════════════

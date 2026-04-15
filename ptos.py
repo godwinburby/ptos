@@ -721,6 +721,51 @@ def fmt_avg(n):
         return c + _indian_commas(round(n))
     return f"{c}{n:.0f}"
 
+
+def date_format():
+    """Get configured date format for display."""
+    return get_config().get("display", {}).get("date_format", "indian")
+
+
+def fmt_date(date_obj):
+    """Format date object according to configured format.
+    
+    Supports presets: indian (dd/mm/yyyy), us (mm/dd/yyyy), 
+    eu (dd.mm.yyyy), readable (15 Apr 2026), iso (yyyy-mm-dd),
+    or custom strftime pattern.
+    """
+    import datetime as dt
+    fmt = date_format()
+    
+    if fmt == "indian":
+        return date_obj.strftime("%d/%m/%Y")
+    elif fmt == "us":
+        return date_obj.strftime("%m/%d/%Y")
+    elif fmt == "eu":
+        return date_obj.strftime("%d.%m.%Y")
+    elif fmt == "readable":
+        return date_obj.strftime("%d %b %Y")
+    elif fmt == "iso":
+        if isinstance(date_obj, dt.date):
+            return date_obj.isoformat()
+        else:
+            return date_obj.strftime("%Y-%m-%d")
+    else:
+        # Custom strftime format
+        try:
+            return date_obj.strftime(fmt)
+        except (ValueError, AttributeError):
+            # Fallback to ISO format on error
+            if isinstance(date_obj, dt.date):
+                return date_obj.isoformat()
+            else:
+                return date_obj.strftime("%Y-%m-%d")
+
+
+def fmt_datetime(dt_obj):
+    """Format datetime object: date part uses configured format, time stays HH:MM."""
+    return f"{fmt_date(dt_obj)} {dt_obj.strftime('%H:%M')}"
+
 # --------------------------------------------------
 # Schema helpers
 # --------------------------------------------------
@@ -2861,6 +2906,7 @@ command = "nvim"
 
 [display]
 currency = "₹"
+date_format = "indian"
 
 [cycles]
 # Define billing/reporting cycles as day-of-month they start
@@ -3197,6 +3243,134 @@ def set_user_name(name):
     except Exception as e:
         sys.exit(f"Error writing config: {e}")
 
+
+def validate_date_format(fmt):
+    """Validate date format string.
+    
+    Returns True for presets or valid strftime patterns.
+    Raises ValueError for invalid formats.
+    """
+    import datetime as dt
+    presets = ["indian", "us", "eu", "readable", "iso"]
+    
+    if fmt in presets:
+        return True
+    
+    # Check if it looks like a strftime pattern (contains %)
+    if '%' not in fmt:
+        raise ValueError(f"Invalid date format '{fmt}': not a preset and contains no strftime directives. "
+                         f"Use: indian, us, eu, readable, iso, or a valid strftime pattern starting with %.")
+    
+    # Basic validation: check for % at end or invalid patterns
+    if fmt.endswith('%'):
+        raise ValueError(f"Invalid date format '{fmt}': cannot end with %")
+    
+    # Test if it's a valid strftime pattern
+    try:
+        test_date = dt.datetime(2026, 4, 15, 10, 30)
+        result = test_date.strftime(fmt)
+        # If result contains a standalone % (not %% escaped), it's likely invalid
+        import re
+        if re.search(r'(?<!%)%(?!%)', result):
+            raise ValueError(f"Invalid date format '{fmt}': contains unprocessed directives")
+        return True
+    except (ValueError, AttributeError) as e:
+        raise ValueError(f"Invalid date format '{fmt}': {e}. "
+                         f"Use: indian, us, eu, readable, iso, or a valid strftime pattern.")
+
+
+def set_date_format(fmt):
+    """Set the date format in config.toml."""
+    if fmt is None or not isinstance(fmt, str):
+        sys.exit("Error: Date format must be a string.")
+    
+    fmt = fmt.strip()
+    if not fmt:
+        sys.exit("Error: Date format cannot be empty.")
+    
+    # Validate format
+    try:
+        validate_date_format(fmt)
+    except ValueError as e:
+        sys.exit(str(e))
+    
+    if not os.path.exists(CONFIG_PATH):
+        sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
+    
+    try:
+        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
+            lines = f.readlines()
+    except Exception as e:
+        sys.exit(f"Error reading config: {e}")
+    
+    new_lines = []
+    in_display_section = False
+    date_format_updated = False
+    
+    for line in lines:
+        stripped = line.strip()
+        
+        # Track if we're in the [display] section
+        if stripped == "[display]":
+            in_display_section = True
+            new_lines.append(line)
+            continue
+        
+        # If we're in display section and find date_format, replace it
+        if in_display_section and stripped.startswith("date_format"):
+            new_lines.append(f'date_format = "{fmt}"\n')
+            date_format_updated = True
+            continue
+        
+        # If we encounter a new section header while in display section
+        if in_display_section and stripped.startswith("[") and stripped != "[display]":
+            # Add missing date_format before leaving display section
+            if not date_format_updated:
+                new_lines.append(f'date_format = "{fmt}"\n')
+                date_format_updated = True
+            in_display_section = False
+            new_lines.append(line)
+            continue
+        
+        # Skip original date_format lines we're replacing
+        if stripped.startswith("date_format"):
+            continue
+        
+        new_lines.append(line)
+    
+    # If we're still in display section at EOF, add date_format
+    if in_display_section and not date_format_updated:
+        new_lines.append(f'date_format = "{fmt}"\n')
+        date_format_updated = True
+    
+    # If no display section found at all, create it
+    if not date_format_updated:
+        # Find where to insert [display] section - after [editor] if it exists
+        insert_index = 0
+        for i, line in enumerate(new_lines):
+            if line.strip() == "[editor]":
+                insert_index = i + 1
+                while insert_index < len(new_lines) and new_lines[insert_index].strip():
+                    insert_index += 1
+                break
+        
+        # Insert blank line and display section
+        if insert_index < len(new_lines):
+            new_lines.insert(insert_index, f'[display]\ncurrency = "₹"\ndate_format = "{fmt}"\n')
+        else:
+            new_lines.append(f'\n[display]\ncurrency = "₹"\ndate_format = "{fmt}"\n')
+        date_format_updated = True
+    
+    try:
+        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
+            f.writelines(new_lines)
+        print(f"Date format set to: {fmt}")
+        
+        for key in ("config",):
+            _CACHE.pop(key, None)
+    except Exception as e:
+        sys.exit(f"Error writing config: {e}")
+
 # --------------------------------------------------
 # CLI  — argument parsing only, no logic
 # --------------------------------------------------
@@ -3309,6 +3483,8 @@ def build_parser(cycles):
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
     utl.add_argument("--set-name", dest="set_name", metavar="NAME",
                      help="Set user name in config")
+    utl.add_argument("--set-date-format", dest="set_date_format", metavar="FORMAT",
+                     help="Set date display format: indian, us, eu, readable, iso, or custom strftime")
     utl.add_argument("--backup-full", action="store_true", help="Full backup: records/, templates/, config/, and backups/ folder")
     utl.add_argument("--backup-config", action="store_true", help="Config backup: only schema, queries, presets, and config toml files")
     utl.add_argument("--restore-full", nargs="?", const="", metavar="PATH", help="Restore from full backup (shows list if no path given)")
@@ -3835,6 +4011,10 @@ def main():
         set_user_name(args.set_name)
         return
 
+    if args.set_date_format:
+        set_date_format(args.set_date_format)
+        return
+
     if args.edit:
         edit_target(args.edit)
         return
@@ -3872,7 +4052,7 @@ def main():
             return
         print("\nAvailable backups:")
         for name, date, btype in backups:
-            print(f"  {name}  ({btype}, {date.strftime('%Y-%m-%d %H:%M')})")
+            print(f"  {name}  ({btype}, {fmt_datetime(date)})")
         return
 
     if args.restore_full is not None:
@@ -4169,7 +4349,7 @@ def _interactive_restore(backup_type):
     
     print(f"\nAvailable {backup_type} backups:")
     for i, (name, date, _) in enumerate(filtered, 1):
-        print(f"  {i}. {name} ({date.strftime('%Y-%m-%d %H:%M')})")
+        print(f"  {i}. {name} ({fmt_datetime(date)})")
     
     while True:
         choice = input("\nEnter number to restore (or 'q' to quit): ").strip()

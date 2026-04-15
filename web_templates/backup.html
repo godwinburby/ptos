@@ -82,7 +82,7 @@
       <tbody>
         {% for name, created, btype in backups %}
         <tr id="row-{{ loop.index }}">
-          <td>{{ created.strftime("%Y-%m-%d %H:%M") }}</td>
+           <td>{{ created }}</td>
           <td>
             <code>{{ name }}</code>
             {% if btype == 'config' %}
