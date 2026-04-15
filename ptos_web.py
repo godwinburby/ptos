@@ -801,16 +801,19 @@ def _build_schema_toml(old_schema, new_types, type_schemas):
 # Query Builder
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards):
+def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None):
     """Build and atomically write queries.toml from dicts.
     raw_queries:    {name: {where, time, sum, group, search}}
-    raw_metrics:    {name: {kind, base, base2}}
+    raw_metrics:    {name: {kind, base, base2, derived}}
     raw_dashboards: {name: {metrics: [...]}}
+    raw_aliases:    {name: {alias: target}}   (optional)
     Preserves [due] section from existing file.
     Raises ValueError on invalid names, Exception on write failure.
     """
     import re as _re
-    for n in list(raw_queries) + list(raw_metrics) + list(raw_dashboards):
+    if raw_aliases is None:
+        raw_aliases = {}
+    for n in list(raw_queries) + list(raw_metrics) + list(raw_dashboards) + list(raw_aliases):
         if not _re.match(r'^[a-z][a-z0-9_]*$', n):
             raise ValueError(
                 f"Invalid name '{n}' — use lowercase letters, numbers, underscores")
@@ -850,11 +853,22 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards):
         kind  = m.get("kind", "avg")
         base  = m.get("base",  "").strip()
         base2 = m.get("base2", "").strip()
-        if kind == "ratio" and base and base2:
+        derived = m.get("derived", "").strip()
+        if derived:
+            lines.append(f'derived = "{derived}"')
+        elif kind == "ratio" and base and base2:
             lines.append(f'ratio = ["{base}", "{base2}"]')
         elif kind in ("avg", "sum", "max", "min") and base:
             lines.append(f'{kind} = "{base}"')
         lines.append("")
+
+    # ── Alias queries ─────────────────────────────────────────────────────────
+    for name, a in (raw_aliases or {}).items():
+        alias = a.get("alias", "").strip()
+        if alias:
+            lines.append(f"[{name}]")
+            lines.append(f'alias = "{alias}"')
+            lines.append("")
 
     # ── Dashboards ────────────────────────────────────────────────────────────
     for name, db in raw_dashboards.items():
@@ -905,6 +919,7 @@ def query_builder_save():
             data.get("queries", {}),
             data.get("metrics", {}),
             data.get("dashboards", {}),
+            data.get("aliases", {}),
         )
         return jsonify(ok=True)
     except Exception as e:
@@ -913,10 +928,10 @@ def query_builder_save():
 
 @app.route("/query-builder/delete", methods=["POST"])
 def query_builder_delete():
-    """Delete a single named query, metric, or dashboard and rewrite the file."""
+    """Delete a single named query, metric, dashboard, or alias and rewrite the file."""
     data = request.get_json(silent=True) or {}
     name = data.get("name", "").strip()
-    kind = data.get("kind", "query")   # "query" | "metric" | "dashboard"
+    kind = data.get("kind", "query")   # "query" | "metric" | "dashboard" | "alias"
     if not name:
         return jsonify(ok=False, error="No name provided")
     try:
@@ -926,21 +941,47 @@ def query_builder_delete():
             if name not in queries.get("metrics", {}):
                 return jsonify(ok=False, error=f"Metric '{name}' not found")
             del queries["metrics"][name]
+            _write_queries_toml(
+                {k: v for k, v in queries.items()
+                 if k not in reserved and isinstance(v, dict) and "alias" not in v},
+                queries.get("metrics", {}),
+                queries.get("dashboards", {}),
+                {k: v for k, v in queries.items()
+                 if k not in reserved and isinstance(v, dict) and "alias" in v},
+            )
         elif kind == "dashboard":
             if name not in queries.get("dashboards", {}):
                 return jsonify(ok=False, error=f"Dashboard '{name}' not found")
             del queries["dashboards"][name]
+            _write_queries_toml(
+                {k: v for k, v in queries.items()
+                 if k not in reserved and isinstance(v, dict) and "alias" not in v},
+                queries.get("metrics", {}),
+                queries.get("dashboards", {}),
+                {k: v for k, v in queries.items()
+                 if k not in reserved and isinstance(v, dict) and "alias" in v},
+            )
+        elif kind == "alias":
+            _write_queries_toml(
+                {k: v for k, v in queries.items()
+                 if k not in reserved and isinstance(v, dict) and "alias" not in v},
+                queries.get("metrics", {}),
+                queries.get("dashboards", {}),
+                {k: v for k, v in queries.items()
+                 if k not in reserved and isinstance(v, dict) and "alias" in v and k != name},
+            )
         else:
             if name not in queries or name in reserved:
                 return jsonify(ok=False, error=f"Query '{name}' not found")
             del queries[name]
-
-        _write_queries_toml(
-            {k: v for k, v in queries.items()
-             if k not in reserved and isinstance(v, dict)},
-            queries.get("metrics", {}),
-            queries.get("dashboards", {}),
-        )
+            _write_queries_toml(
+                {k: v for k, v in queries.items()
+                 if k not in reserved and isinstance(v, dict) and "alias" not in v},
+                queries.get("metrics", {}),
+                queries.get("dashboards", {}),
+                {k: v for k, v in queries.items()
+                 if k not in reserved and isinstance(v, dict) and "alias" in v},
+            )
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))

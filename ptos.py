@@ -523,6 +523,78 @@ def restore_data(zip_path):
         _log_error(f"Restore failed: {e}")
         raise
 
+def restore_config(zip_path):
+    """Restore config from a backup ZIP file (config/ folder only).
+    Overwrites existing config files with the contents of the backup.
+    Uses atomic operation: backup old -> copy new -> cleanup.
+    """
+    if not os.path.exists(zip_path):
+        raise FileNotFoundError(f"Backup file not found: {zip_path}")
+    
+    temp_dir = os.path.join(BACKUP_DIR, f".restore-config-{uuid.uuid4().hex[:8]}")
+    
+    try:
+        # Extract to temp directory
+        os.makedirs(temp_dir)
+        with zipfile.ZipFile(zip_path, "r") as zf:
+            zf.extractall(temp_dir)
+        
+        # Verify extraction contains config folder
+        config_temp = os.path.join(temp_dir, "config")
+        if not os.path.isdir(config_temp):
+            raise Exception("Invalid backup: config/ folder not found in archive")
+        
+        # Backup existing config
+        config_dst = os.path.join(BASE_DIR, "config")
+        config_bak = config_dst + ".bak"
+        if os.path.exists(config_dst):
+            if os.path.isdir(config_dst):
+                if os.path.exists(config_bak):
+                    shutil.rmtree(config_bak)
+                shutil.copytree(config_dst, config_bak)
+            else:
+                shutil.copy2(config_dst, config_bak)
+        
+        # Copy new config files
+        try:
+            for item in os.listdir(config_temp):
+                src = os.path.join(config_temp, item)
+                dst = os.path.join(config_dst, item)
+                if os.path.exists(dst):
+                    if os.path.isdir(dst):
+                        shutil.rmtree(dst)
+                    else:
+                        os.remove(dst)
+                if os.path.isdir(src):
+                    shutil.copytree(src, dst)
+                else:
+                    shutil.copy2(src, dst)
+        except Exception:
+            # Restore from backup
+            if os.path.exists(config_dst):
+                if os.path.isdir(config_dst):
+                    shutil.rmtree(config_dst)
+                else:
+                    os.remove(config_dst)
+            if os.path.exists(config_bak):
+                shutil.move(config_bak, config_dst)
+            raise
+        
+        # Success - delete backup
+        if os.path.exists(config_bak):
+            if os.path.isdir(config_bak):
+                shutil.rmtree(config_bak)
+            else:
+                os.remove(config_bak)
+        
+        shutil.rmtree(temp_dir)
+        
+    except Exception as e:
+        if os.path.exists(temp_dir):
+            shutil.rmtree(temp_dir)
+        _log_error(f"Config restore failed: {e}")
+        raise
+
 def list_backups():
     """Return list of backup files with creation dates, sorted newest first.
     Returns list of tuples: (filename, created_datetime, type)
@@ -3700,7 +3772,7 @@ def main():
         if not zip_path:
             zip_path = _interactive_restore("config")
         print(f"Restoring config backup from: {zip_path}")
-        restore_data(zip_path)
+        restore_config(zip_path)
         print("Restore complete.")
         sys.exit(0)
 
