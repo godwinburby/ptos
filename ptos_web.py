@@ -1236,6 +1236,50 @@ def editor_save():
     return jsonify(ok=True)
 
 
+@app.route("/editor/validate", methods=["POST"])
+def editor_validate():
+    """Quick validation of raw log content using PTOS parser."""
+    data = request.get_json(silent=True) or {}
+    content = data.get("content", "")
+    
+    errors = []
+    
+    for i, line in enumerate(content.split("\n"), 1):
+        line = line.strip()
+        if not line:
+            continue
+        
+        # Use PTOS parser
+        result = ptos.safe_parse_line(line)
+        if result is None:
+            errors.append({"line": i, "problems": ["Cannot parse line - check format"]})
+            continue
+        
+        date, kv, note = result
+        problems = []
+        
+        # Check if date parsed successfully (dt.date.min means invalid)
+        if date.year == 1:
+            problems.append("Invalid date (expected YYYY-MM-DD)")
+        
+        # Check for type field
+        if "type" not in kv:
+            problems.append("Missing type field (use type=)")
+        
+        # Check for any tokens that weren't parsed (text without =)
+        main_part, _, _ = line.partition("|")
+        parts = main_part.strip().split()
+        if len(parts) > 1:
+            unparsed = [p for p in parts[1:] if "=" not in p]
+            if unparsed:
+                problems.append(f"Invalid text: '{' '.join(unparsed)}' - must be key=value format")
+        
+        if problems:
+            errors.append({"line": i, "problems": problems})
+    
+    return jsonify(ok=True, errors=errors, warnings=[])
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Lint
 # ══════════════════════════════════════════════════════════════════════════════

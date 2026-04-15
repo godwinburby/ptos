@@ -7,7 +7,9 @@
   ⚠️ WARNING: Wrong edits can break PTOS! Each record must follow the correct syntax below.
 </div>
 
-<div id="syntax-guide" style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;">
+<button onclick="toggleSyntaxGuide()" id="syntax-toggle" class="btn btn-ghost btn-sm" style="margin-bottom:14px;">▶ Show syntax</button>
+
+<div id="syntax-guide" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;">
   <div style="font-weight:700;margin-bottom:10px;">Record Syntax:</div>
   <code style="display:block;background:var(--bg);padding:10px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:monospace;">
     DATE type=VALUE FIELD=VALUE... tag=VALUE | NOTE
@@ -35,7 +37,14 @@
       <option value="{{ f }}" {% if f == current_file %}selected{% endif %}>{{ f }}</option>
       {% endfor %}
     </select>
-    <button onclick="saveFile()" id="save-btn"
+    <input type="number" id="goto-line" placeholder="Line #" min="1"
+           style="width:70px;padding:8px;border-radius:8px;border:1px solid var(--border);
+                  background:var(--bg);color:var(--text);font-size:14px;"
+           onkeydown="if(event.key==='Enter')goToLine()">
+    <button onclick="goToLine()" class="btn btn-ghost btn-sm" title="Go to line">⬇ Go</button>
+    <button onclick="runFullLint()" id="lint-btn"
+            class="btn btn-warn btn-sm" title="Full schema validation">🔍 Validate Full</button>
+    <button onclick="saveFileWithValidation()" id="save-btn"
             class="btn btn-success btn-sm">Save</button>
     <button onclick="toggleHighlight()" id="hl-btn"
             class="btn btn-ghost btn-sm" title="Toggle colour coding">🎨</button>
@@ -51,21 +60,35 @@
 <!-- editor / highlighted view toggle -->
 <div id="editor-card" class="card" style="padding:0;overflow:hidden;">
 
-  <!-- raw textarea (edit mode) -->
-  <textarea id="log-editor"
-            style="width:100%;min-height:70vh;padding:14px 16px;
-                   font-family:'Consolas','Courier New',monospace;
-                   font-size:14px;line-height:1.7;
-                   background:#1E2130;color:#D4D8E8;
-                   border:none;border-radius:10px;
-                   resize:vertical;outline:none;
-                   display:block;"
-            spellcheck="false"
-            oninput="_dirty=true">{{ content }}</textarea>
+  <!-- editor with line numbers -->
+  <div id="editor-wrapper" style="display:flex;min-height:70vh;">
+    <!-- line numbers -->
+    <div id="line-numbers"
+         style="width:45px;min-width:45px;padding:14px 8px;
+                background:#151A26;color:#546E7A;
+                font-family:'Consolas','Courier New',monospace;
+                font-size:14px;line-height:1.7;
+                text-align:right;user-select:none;
+                border-right:1px solid #2A3040;
+                overflow:hidden;flex-shrink:0;"></div>
+    
+    <!-- raw textarea (edit mode) -->
+    <textarea id="log-editor"
+              style="flex:1;width:100%;min-height:70vh;padding:14px 16px;
+                     font-family:'Consolas','Courier New',monospace;
+                     font-size:14px;line-height:1.7;
+                     background:#1E2130;color:#D4D8E8;
+                     border:none;border-radius:0;
+                     resize:vertical;outline:none;
+                     box-sizing:border-box;"
+              spellcheck="false"
+              oninput="_dirty=true;updateLineNumbers();"
+              onscroll="syncLineNumberScroll()">{{ content }}</textarea>
+  </div>
 
   <!-- highlighted overlay (view mode) — hidden by default -->
   <pre id="log-highlight"
-       style="display:none;width:100%;min-height:70vh;padding:14px 16px;
+       style="display:none;min-height:70vh;padding:14px 16px;
               font-family:'Consolas','Courier New',monospace;
               font-size:14px;line-height:1.7;
               background:#1E2130;color:#D4D8E8;
@@ -160,6 +183,50 @@ function escHtml(s) {
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
+// ── Line numbers ──────────────────────────────────────────────────────────────
+function updateLineNumbers() {
+  var editor = document.getElementById("log-editor");
+  var lns = document.getElementById("line-numbers");
+  var lines = (editor.value.match(/\n/g) || []).length + 1;
+  var html = "";
+  for (var i = 1; i <= lines; i++) {
+    html += i + "\n";
+  }
+  lns.textContent = html;
+}
+
+function syncLineNumberScroll() {
+  var editor = document.getElementById("log-editor");
+  var lns = document.getElementById("line-numbers");
+  lns.scrollTop = editor.scrollTop;
+}
+
+// Init line numbers on load
+document.addEventListener("DOMContentLoaded", function() {
+  setTimeout(updateLineNumbers, 50);
+});
+
+// ── Go to line ────────────────────────────────────────────────────────────────
+function goToLine() {
+  var input = document.getElementById("goto-line");
+  var editor = document.getElementById("log-editor");
+  var lineNum = parseInt(input.value, 10);
+  if (!lineNum || lineNum < 1) return;
+  
+  var lines = editor.value.split("\n");
+  var totalLines = lines.length;
+  if (lineNum > totalLines) lineNum = totalLines;
+  
+  var pos = 0;
+  for (var i = 0; i < lineNum - 1; i++) {
+    pos += lines[i].length + 1;
+  }
+  
+  editor.setSelectionRange(pos, pos + (lines[lineNum - 1] || "").length);
+  editor.focus();
+  editor.scrollTop = editor.scrollHeight * (lineNum - 1) / totalLines;
+}
+
 // ── Mode switching ────────────────────────────────────────────────────────────
 function toggleHighlight() {
   _hlMode ? setEditMode() : setHighlightMode();
@@ -169,8 +236,9 @@ function setHighlightMode() {
   _hlMode = true;
   var editor = document.getElementById("log-editor");
   var hl     = document.getElementById("log-highlight");
+  var wrapper = document.getElementById("editor-wrapper");
   hl.innerHTML   = highlightLog(editor.value);
-  editor.style.display = "none";
+  wrapper.style.display = "none";
   hl.style.display     = "block";
   document.getElementById("hl-btn").style.background = "var(--accent-lt)";
   document.getElementById("hl-btn").style.borderColor = "var(--accent)";
@@ -178,11 +246,12 @@ function setHighlightMode() {
 
 function setEditMode() {
   _hlMode = false;
-  document.getElementById("log-editor").style.display   = "block";
+  document.getElementById("editor-wrapper").style.display = "flex";
   document.getElementById("log-highlight").style.display = "none";
   document.getElementById("hl-btn").style.background  = "";
   document.getElementById("hl-btn").style.borderColor = "";
   document.getElementById("log-editor").focus();
+  updateLineNumbers();
 }
 
 // ── File loading ──────────────────────────────────────────────────────────────
@@ -233,11 +302,207 @@ function saveFile() {
 
 // Ctrl+S
 document.addEventListener("keydown", function(e) {
-  if ((e.ctrlKey||e.metaKey) && e.key==="s") { e.preventDefault(); saveFile(); }
+  if ((e.ctrlKey||e.metaKey) && e.key==="s") { e.preventDefault(); saveFileWithValidation(); }
 });
 
 window.addEventListener("beforeunload", function(e) {
   if (_dirty) { e.preventDefault(); e.returnValue=""; }
 });
+
+// ── Validation ────────────────────────────────────────────────────────────────
+function runFullLint() {
+  var btn = document.getElementById("lint-btn");
+  btn.disabled = true; btn.textContent = "Validating...";
+  
+  fetch("/lint/run", { method: "POST" })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    btn.disabled = false; btn.textContent = "🔍 Validate Full";
+    showValidationModal(d, "Full Schema Validation");
+  })
+  .catch(function(e) {
+    btn.disabled = false; btn.textContent = "🔍 Validate Full";
+    showValidationModal({ ok: false, error: e.toString() }, "Full Schema Validation");
+  });
+}
+
+function quickValidate() {
+  return new Promise(function(resolve) {
+    var content = document.getElementById("log-editor").value;
+    fetch("/editor/validate", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ content: content })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) { resolve(d); })
+    .catch(function(e) { resolve({ ok: false, errors: [], warnings: [] }); });
+  });
+}
+
+function saveFileWithValidation() {
+  var btn = document.getElementById("save-btn");
+  btn.disabled = true; btn.textContent = "Checking...";
+  
+  quickValidate().then(function(d) {
+    btn.disabled = false; btn.textContent = "Save";
+    
+    var errors = d.errors || [];
+    if (errors.length > 0) {
+      showValidationBlockedModal(errors);
+      return;
+    }
+    
+    saveFile();
+  });
+}
+
+function showValidationModal(d, title) {
+  var modal = document.getElementById("validate-modal");
+  var content = document.getElementById("validate-modal-content");
+  
+  var html = '<div style="padding:20px;">';
+  html += '<h3 style="margin:0 0 16px;">' + escHtml(title) + '</h3>';
+  
+  if (!d.ok) {
+    html += '<div style="color:var(--error);padding:12px;background:var(--error-lt);border-radius:8px;">Error: ' + escHtml(d.error || "Unknown error") + '</div>';
+  } else {
+    var data = d.data || {};
+    var errors = data.errors || [];
+    var warnings = data.warnings || [];
+    var checked = data.checked || 0;
+    
+    if (data.clean) {
+      html += '<div style="color:var(--success);padding:16px;background:var(--success-lt);border-radius:8px;">✓ All ' + checked + ' records pass validation</div>';
+    } else {
+      html += '<div style="margin-bottom:16px;font-size:13px;color:var(--sub);">';
+      html += '<strong>' + data.error_count + '</strong> errors, <strong>' + data.warning_count + '</strong> warnings out of <strong>' + checked + '</strong> records</div>';
+    }
+    
+    if (errors.length > 0) {
+      html += '<div style="background:var(--error-lt);border-radius:8px;margin-bottom:12px;max-height:200px;overflow-y:auto;">';
+      html += '<div style="padding:8px 12px;font-weight:700;color:var(--error);border-bottom:1px solid var(--border);">Errors</div>';
+      errors.slice(0, 20).forEach(function(e) {
+        html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family:monospace;word-break:break-all;">';
+        html += escHtml((e.line || "").substring(0, 80)) + '</div>';
+        html += '<div style="padding:4px 12px 8px;font-size:11px;color:var(--error);">' + escHtml((e.problems || []).join("; ")) + '</div>';
+      });
+      if (errors.length > 20) {
+        html += '<div style="padding:8px 12px;font-size:12px;color:var(--sub);">... and ' + (errors.length - 20) + ' more</div>';
+      }
+      html += '</div>';
+    }
+    
+    if (warnings.length > 0) {
+      html += '<div style="background:#FFF8E1;border-radius:8px;margin-bottom:12px;max-height:150px;overflow-y:auto;">';
+      html += '<div style="padding:8px 12px;font-weight:700;color:var(--warn);border-bottom:1px solid var(--border);">Warnings</div>';
+      warnings.slice(0, 10).forEach(function(w) {
+        html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family:monospace;word-break:break-all;">';
+        html += escHtml((w.line || "").substring(0, 80)) + '</div>';
+        html += '<div style="padding:4px 12px 8px;font-size:11px;color:var(--warn);">' + escHtml((w.problems || []).join("; ")) + '</div>';
+      });
+      html += '</div>';
+    }
+  }
+  
+  html += '<div style="margin-top:16px;"><button onclick="closeValidateModal()" class="btn btn-primary">Close</button></div>';
+  html += '</div>';
+  
+  content.innerHTML = html;
+  modal.style.display = "flex";
+}
+
+function showSaveWarningModal(d) {
+  var modal = document.getElementById("validate-modal");
+  var content = document.getElementById("validate-modal-content");
+  
+  // Handle both quick validation (direct) and full lint (wrapped in data)
+  var errors = d.errors || (d.data && d.data.errors) || [];
+  var warnings = d.warnings || (d.data && d.data.warnings) || [];
+  
+  var html = '<div style="padding:20px;">';
+  html += '<h3 style="margin:0 0 12px;color:var(--warn);">⚠️ Validation Issues Found</h3>';
+  html += '<p style="color:var(--sub);margin-bottom:16px;">Found ' + errors.length + ' errors and ' + warnings.length + ' warnings. Save anyway?</p>';
+  
+  if (errors.length > 0 || warnings.length > 0) {
+    html += '<div style="max-height:200px;overflow-y:auto;font-size:12px;color:var(--sub);">';
+    errors.slice(0, 10).forEach(function(e) {
+      html += '<div style="padding:4px 0;">Line ' + e.line + ': ' + escHtml((e.problems || []).join("; ")) + '</div>';
+    });
+    warnings.slice(0, 10).forEach(function(w) {
+      html += '<div style="padding:4px 0;">Line ' + w.line + ': ' + escHtml((w.problems || []).join("; ")) + '</div>';
+    });
+    html += '</div>';
+  }
+  
+  html += '<div style="margin-top:16px;display:flex;gap:10px;">';
+  html += '<button onclick="closeValidateModal()" class="btn btn-ghost">Cancel</button>';
+  html += '<button onclick="closeValidateModal();saveFile();" class="btn btn-success">Save Anyway</button>';
+  html += '</div></div>';
+  
+  content.innerHTML = html;
+  modal.style.display = "flex";
+}
+
+function closeValidateModal() {
+  document.getElementById("validate-modal").style.display = "none";
+}
+
+function showValidationBlockedModal(errors) {
+  var modal = document.getElementById("validate-modal");
+  var content = document.getElementById("validate-modal-content");
+  
+  var html = '<div style="padding:20px;">';
+  html += '<h3 style="margin:0 0 12px;color:var(--error);">✖ Cannot Save - Validation Errors</h3>';
+  html += '<p style="color:var(--sub);margin-bottom:16px;">Fix these errors before saving:</p>';
+  
+  html += '<div style="max-height:250px;overflow-y:auto;font-size:12px;background:var(--error-lt);border-radius:8px;padding:12px;margin-bottom:16px;">';
+  errors.slice(0, 20).forEach(function(e) {
+    html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">';
+    html += '<div>';
+    html += '<span style="color:var(--error);font-weight:700;">Line ' + e.line + '</span>';
+    (e.problems || []).forEach(function(p) {
+      html += '<div style="color:var(--error);margin-left:12px;">' + escHtml(p) + '</div>';
+    });
+    html += '</div>';
+    html += '<button onclick="closeValidateModal();goToLineNum(' + e.line + ')" class="btn btn-ghost btn-sm" style="margin-left:8px;">⬇ Go</button>';
+    html += '</div>';
+  });
+  html += '</div>';
+  
+  html += '<button onclick="closeValidateModal()" class="btn btn-primary" style="width:100%;">Close</button>';
+  html += '</div>';
+  
+  content.innerHTML = html;
+  modal.style.display = "flex";
+}
+
+function goToLineNum(num) {
+  var input = document.getElementById("goto-line");
+  input.value = num;
+  goToLine();
+}
+
+function toggleSyntaxGuide() {
+  var guide = document.getElementById("syntax-guide");
+  var btn = document.getElementById("syntax-toggle");
+  if (guide.style.display === "none") {
+    guide.style.display = "block";
+    btn.textContent = "▼ Hide syntax";
+  } else {
+    guide.style.display = "none";
+    btn.textContent = "▶ Show syntax";
+  }
+}
+
+function escHtml(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 </script>
+
+<!-- Validation Modal -->
+<div id="validate-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;">
+  <div id="validate-modal-content" style="background:var(--card);border-radius:12px;max-width:500px;width:90%;max-height:80vh;overflow:auto;"></div>
+</div>
+
 {% endblock %}
