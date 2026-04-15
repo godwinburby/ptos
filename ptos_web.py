@@ -525,6 +525,7 @@ def schema_builder_save():
     try:
         schema = svc.get_schema()
         lines  = _build_schema_toml(schema, new_types, type_schemas)
+        ptos._backup_file(ptos.SCHEMA_PATH)
         svc.write_file(ptos.SCHEMA_PATH, "\n".join(lines) + "\n")
         for key in ("schema", "derived_fields", "numeric_fields"):
             ptos._CACHE.pop(key, None)
