@@ -260,9 +260,21 @@ function exprBadge(d) {
     ? `<code style="font-size:11px;background:var(--bg);padding:2px 8px;
          border-radius:4px;color:var(--sub);word-break:break-all;">${d.where_expr}</code>`
     : "";
-  return `<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-               font-size:13px;color:var(--sub);margin-bottom:10px;">
-    ${name}${expr}
+
+  // Build extras
+  const parts = [];
+  if (d.query_group) parts.push(`<span style="color:var(--accent);">⬇ ${Array.isArray(d.query_group) ? d.query_group.join(", ") : d.query_group}</span>`);
+  if (d.query_sort) parts.push(`<span style="color:var(--warn);">⬆ ${d.query_sort}</span>`);
+  if (d.query_sum) parts.push(`<span>∑</span>`);
+  if (d.query_search) parts.push(`<span>🔍 "${d.query_search}"</span>`);
+  if (d.query_pivot) parts.push(`<span>⊞</span>`);
+  if (d.query_trend) parts.push(`<span>↗ ${d.query_trend}</span>`);
+
+  return `<div style="font-size:13px;color:var(--sub);margin-bottom:10px;">
+    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+      ${name}${expr}
+    </div>
+    ${parts.length ? `<div style="margin-top:6px;font-size:12px;display:flex;gap:10px;flex-wrap:wrap;">${parts.join("")}</div>` : ""}
   </div>`;
 }
 
