@@ -1726,9 +1726,9 @@ def lint_records(records, schema):
 def lint_all_records():
     """Lint all records and return structured data for web UI.
     Returns dict with: clean, checked, error_count, warning_count, type_counts, errors, warnings
+    Each error/warning includes filepath and lineno for linking to editor.
     """
     schema = get_schema()
-    results, _ = scan_records(dt.date.min, dt.date.max, [], None)
     
     total_errors   = 0
     total_warnings = 0
@@ -1737,35 +1737,61 @@ def lint_all_records():
     errors_list    = []
     warnings_list  = []
     
-    for line in results:
-        if not line.strip():
+    for fname in get_log_files():
+        path = os.path.join(RECORDS_DIR, fname)
+        if not os.path.exists(path):
             continue
-        total_checked += 1
-        d, kv, note = parse_line(line)
-        rtype = kv.get("type", "unknown")
-        type_counts[rtype] = type_counts.get(rtype, 0) + 1
-        line_errors   = []
-        line_warnings = []
-        
-        if d == dt.date.min:
-            line_errors.append("missing or malformed date")
-        if "type" not in kv:
-            line_errors.append("missing type field")
-        if "tag" not in kv:
-            line_warnings.append("no tag")
-        if not note or not note.strip():
-            line_warnings.append("no note")
-        
-        schema_problems = validate_record(schema, kv)
-        line_errors.extend(schema_problems)
-        
-        if line_errors:
-            total_errors += len(line_errors)
-            errors_list.append({"line": line, "problems": line_errors})
-        
-        if line_warnings:
-            total_warnings += len(line_warnings)
-            warnings_list.append({"line": line, "problems": line_warnings})
+        with open(path, encoding="utf-8") as f:
+            for lineno, raw_line in enumerate(f, 1):
+                line = raw_line.strip()
+                if not line or line.startswith("#"):
+                    continue
+                total_checked += 1
+                try:
+                    d, kv, note = parse_line(line)
+                except Exception:
+                    errors_list.append({
+                        "line": line,
+                        "problems": ["cannot parse line"],
+                        "filepath": fname,
+                        "lineno": lineno
+                    })
+                    continue
+                
+                rtype = kv.get("type", "unknown")
+                type_counts[rtype] = type_counts.get(rtype, 0) + 1
+                line_errors   = []
+                line_warnings = []
+                
+                if d == dt.date.min:
+                    line_errors.append("missing or malformed date")
+                if "type" not in kv:
+                    line_errors.append("missing type field")
+                if "tag" not in kv:
+                    line_warnings.append("no tag")
+                if not note or not note.strip():
+                    line_warnings.append("no note")
+                
+                schema_problems = validate_record(schema, kv)
+                line_errors.extend(schema_problems)
+                
+                if line_errors:
+                    total_errors += len(line_errors)
+                    errors_list.append({
+                        "line": line,
+                        "problems": line_errors,
+                        "filepath": fname,
+                        "lineno": lineno
+                    })
+                
+                if line_warnings:
+                    total_warnings += len(line_warnings)
+                    warnings_list.append({
+                        "line": line,
+                        "problems": line_warnings,
+                        "filepath": fname,
+                        "lineno": lineno
+                    })
     
     return {
         "clean": total_errors == 0 and total_warnings == 0,
