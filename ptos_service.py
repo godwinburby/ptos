@@ -1066,6 +1066,11 @@ def run_query(name, time=None):
         result["kind"]       = "group"
         result["query_name"] = name
         result["where_expr"] = where_expr
+        result["query_time"] = q.get("time", "tm")
+        result["query_group"] = q.get("group")
+        result["query_sort"] = q.get("sort")
+        result["query_sum"] = q.get("sum")
+        result["query_search"] = q.get("search")
         return result
 
     if "pivot" in q and len(q["pivot"]) >= 2:
@@ -1076,6 +1081,11 @@ def run_query(name, time=None):
         result["kind"]       = "pivot"
         result["query_name"] = name
         result["where_expr"] = where_expr
+        result["query_time"] = q.get("time", "tm")
+        result["query_pivot"] = q.get("pivot")
+        result["query_sort"] = q.get("sort")
+        result["query_sum"] = q.get("sum")
+        result["query_search"] = q.get("search")
         return result
 
     if "trend" in q:
@@ -1083,12 +1093,19 @@ def run_query(name, time=None):
         result["kind"]       = "trend"
         result["query_name"] = name
         result["where_expr"] = where_expr
+        result["query_time"] = q.get("time", "tm")
+        result["query_trend"] = q.get("trend")
+        result["query_sum"] = q.get("sum")
         return result
 
     result = get_records(filters, effective_time, search=effective_search)
     result["kind"]       = "records"
     result["query_name"] = name
     result["where_expr"] = where_expr
+    result["query_time"] = q.get("time", "tm")
+    result["query_sort"] = q.get("sort")
+    result["query_sum"] = q.get("sum")
+    result["query_search"] = q.get("search")
     return result
 
 

@@ -1008,14 +1008,20 @@ function triggerLivePreview() {
       if (!d.ok) { area.innerHTML = '<div style="color:var(--error);padding:16px;">'+_esc(d.error)+'</div>'; return; }
       var recs = d.data;
       if (recs.kind === "group") {
-        area.innerHTML = '<div style="font-size:13px;margin-bottom:8px;">' + (recs.grand_count || 0) + ' records</div>' +
+        area.innerHTML = '<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;font-size:13px;">' +
+          '<span>' + (recs.grand_count || 0) + ' records</span>' +
+          summaryBar(recs) +
+          '</div>' +
           '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr><th>Group</th><th>Count</th>' +
-          (recs.has_amount ? '<th>Total</th>' : '') + '</tr></thead><tbody>' +
-          (recs.rows || []).map(r => '<tr><td>'+_esc(r.key)+'</td><td>'+r.count+'</td>' + (recs.has_amount ? '<td>'+(r.total_fmt||'')+'</td>' : '') + '</tr>').join('') +
+          (recs.has_amount ? '<th style="text-align:right">Total</th>' : '') + '</tr></thead><tbody>' +
+          (recs.rows || []).map(r => '<tr><td>'+_esc(r.key)+'</td><td>'+r.count+'</td>' + (recs.has_amount ? '<td style="text-align:right">'+(r.total_fmt||'')+'</td>' : '') + '</tr>').join('') +
           '</tbody></table>';
       } else if (recs.records && recs.records.length) {
         var cols = recs.columns || [];
-        area.innerHTML = '<div style="font-size:13px;margin-bottom:8px;">' + recs.records.length + ' records</div>' +
+        area.innerHTML = '<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;font-size:13px;">' +
+          '<span>' + recs.records.length + ' records</span>' +
+          summaryBar(recs) +
+          '</div>' +
           '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">' +
           '<table style="width:100%;border-collapse:collapse;font-size:12px;"><thead><tr>' +
           cols.map(c => '<th style="padding:8px 10px;text-align:left;">'+_esc(c)+'</th>').join('') +
@@ -1028,6 +1034,14 @@ function triggerLivePreview() {
     })
     .catch(e => { area.innerHTML = '<div style="color:var(--error);padding:16px;">'+_esc(String(e))+'</div>'; });
   }, 400);
+}
+
+function summaryBar(d) {
+  var parts = [];
+  if (d.total_fmt) parts.push('<span>Total: <strong>'+d.total_fmt+'</strong></span>');
+  if (d.avg_fmt)   parts.push('<span>Avg: <strong>'+d.avg_fmt+'</strong></span>');
+  if (d.time_label) parts.push('<span style="color:var(--sub);">'+d.time_label+'</span>');
+  return parts.length ? '<div style="display:flex;gap:12px;">' + parts.join('') + '</div>' : '';
 }
 </script>
 
