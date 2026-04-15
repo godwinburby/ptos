@@ -121,6 +121,7 @@ var _liveTimer = null;
       sum:          !!v.sum,
       group:        Array.isArray(v.group)?v.group[0]:(v.group||""),
       search:       v.search||"",
+      sort:         v.sort||"",
       _chips:       parsed.chips,
       _exprManual:  parsed.manual,
       _activeField: null,
@@ -357,9 +358,15 @@ function _buildQueryEditor(container, name) {
         '<span>Sum amount</span></label>'+
       '<div style="display:flex;align-items:center;gap:8px;">'+
         '<label style="font-weight:600;white-space:nowrap;">Group by</label>'+
-        '<input type="text" id="qb-group" value="'+_esc(q.group)+'"'+
-        ' placeholder="field…" style="width:120px;"'+
-        ' oninput="_updateQ(\'group\',this.value)">'+
+        '<select id="qb-group" onchange="_updateQ(\'group\',this.value)" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">'+
+          '<option value="">— select —</option>'+
+        '</select>'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<label style="font-weight:600;white-space:nowrap;">Sort by</label>'+
+        '<select id="qb-sort" onchange="_updateQ(\'sort\',this.value)" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">'+
+          '<option value="">— select —</option>'+
+        '</select>'+
       '</div>'+
     '</div>';
   container.appendChild(c6);
@@ -388,6 +395,7 @@ function _buildQueryEditor(container, name) {
     _fetchFields(sel, q, function() {
       _renderFieldChips(q);
       _renderActiveChips(q);
+      _updateGroupSortDropdowns(q);
       _updatePreview(q);
       triggerLivePreview();
     });
@@ -466,6 +474,7 @@ function _onTypeClick(type, q) {
     _fetchFields(type, q, function() {
       _renderFieldChips(q);
       _renderActiveChips(q);
+      _updateGroupSortDropdowns(q);
       _updatePreview(q);
       triggerLivePreview();
     });
@@ -510,11 +519,33 @@ function _fetchFields(type, q, cb) {
       fields: (data.fields||[]).filter(function(f){
         return !f.is_int && f.name!=="type";
       }),
-      history: data.history_fields || {}
+      history: data.history_fields || {},
+      dimensions: data.dimensions || []
     };
     cb();
   })
-  .catch(function(){ _fieldCache[cacheKey]={fields:[],history:{}}; cb(); });
+  .catch(function(){ _fieldCache[cacheKey]={fields:[],history:{},dimensions:[]}; cb(); });
+}
+
+function _updateGroupSortDropdowns(q) {
+  var grp = document.getElementById("qb-group");
+  var sort = document.getElementById("qb-sort");
+  if (!grp || !sort) return;
+  
+  var type = _typeFromChips(q);
+  var ctxStr = _getContextStr(q);
+  var cacheKey = type + "?" + ctxStr;
+  var dims = (_fieldCache[cacheKey] || {}).dimensions || [];
+  
+  grp.innerHTML = '<option value="">— select —</option>';
+  sort.innerHTML = '<option value="">— select —</option>';
+  dims.forEach(function(d) {
+    grp.innerHTML += '<option value="'+d+'">'+d+'</option>';
+    sort.innerHTML += '<option value="'+d+'">'+d+'</option>';
+  });
+  
+  if (q.group && grp.querySelector('option[value="'+q.group+'"]')) grp.value = q.group;
+  if (q.sort && sort.querySelector('option[value="'+q.sort+'"]')) sort.value = q.sort;
 }
 
 function _renderFieldChips(q) {
@@ -658,6 +689,7 @@ function _toggleValueChip(field, value, q) {
   if (type && field !== "type") {
     _fetchFields(type, q, function() {
       _renderFieldChips(q);
+      _updateGroupSortDropdowns(q);
       closeValueArea();
     });
   }
@@ -734,6 +766,8 @@ function _updatePreview(q) {
              '<span class="p-dim">  ← '+_esc(timeLabel)+'</span>');
   if (q.group)
     lines.push('group = <span class="p-opt">["'+_esc(q.group)+'"]</span>');
+  if (q.sort)
+    lines.push('sort  = <span class="p-opt">"'+_esc(q.sort)+'"</span>');
   if (q.search)
     lines.push('search = <span class="p-opt">"'+_esc(q.search)+'"</span>');
   if (q.sum)
@@ -921,7 +955,7 @@ function saveAll() {
   var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{} };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
-    payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search};
+    payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
   });
   var btn = document.getElementById("save-btn");
   btn.disabled=true; btn.textContent="Saving…";
@@ -960,10 +994,14 @@ function triggerLivePreview() {
     var area = document.getElementById("qb-live-area");
     if (!area) return;
     var q = _st.queries[_cur.name];
+    var grpEl = document.getElementById("qb-group");
+    var sortEl = document.getElementById("qb-sort");
+    var group = grpEl ? grpEl.value : "";
+    var sort = sortEl ? sortEl.value : "";
     area.innerHTML = '<div style="color:var(--sub);padding:16px;">Loading…</div>';
     fetch("/browse/run", {
       method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({where: [_buildWhereExpr(q)], expr: "", time: q.time || "tm"})
+      body: JSON.stringify({where: [_buildWhereExpr(q)], expr: "", time: q.time || "tm", group: group, sort: sort})
     })
     .then(r => r.json())
     .then(d => {
