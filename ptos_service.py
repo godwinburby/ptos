@@ -1135,6 +1135,9 @@ def save_query(name, where_expr, time="tm", group=None, search=None,
         items = ", ".join(f'"{g}"' for g in (group if isinstance(group, list) else [group]))
         lines.append(f"group = [{items}]")
 
+    if sort:
+        lines.append(f'sort = "{sort}"')
+
     if search:
         lines.append(f'search = "{search}"')
 
@@ -1143,8 +1146,6 @@ def save_query(name, where_expr, time="tm", group=None, search=None,
         lines.append(f"pivot = [{items}]")
         if count:
             lines.append("count = true")
-        if sort:
-            lines.append(f'sort  = "{sort}"')
 
     if trend is not None:
         lines.append(f"trend = {trend}")

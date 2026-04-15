@@ -836,6 +836,8 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards):
         lines.append(f'time  = "{q.get("time", "tm")}"')
         if q.get("group", "").strip():
             lines.append(f'group = ["{q["group"].strip()}"]')
+        if q.get("sort", "").strip():
+            lines.append(f'sort = "{q["sort"].strip()}"')
         if q.get("search", "").strip():
             lines.append(f'search = "{q["search"].strip()}"')
         if q.get("sum"):
@@ -1423,7 +1425,7 @@ def api_type_fields(rtype):
                 "show_when": {},
             })
         
-        dimensions = [f["name"] for f in defs if f["name"] not in bad and f["options"]]
+        dimensions = [f["name"] for f in defs if f["name"] not in bad and not f.get("is_int")]
         history    = svc.get_history_suggestions(rtype)
         return jsonify(fields=defs, dimensions=dimensions,
                        history_tags=history["tags"],
@@ -1527,6 +1529,7 @@ def api_save_query():
     where   = data.get("where", [])
     time    = data.get("time", "tm")
     group   = data.get("group", "") or None
+    sort    = data.get("sort", "") or None
     search  = data.get("search", "") or None
     if isinstance(where, str):
         where = [where] if where.strip() else []
@@ -1540,7 +1543,7 @@ def api_save_query():
     else:
         where_expr = ""
     try:
-        result = svc.save_query(name, where_expr, time=time, group=group, search=search)
+        result = svc.save_query(name, where_expr, time=time, group=group, search=search, sort=sort)
         return jsonify(ok=True, name=result["name"])
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))

@@ -100,12 +100,12 @@
     </div>
     <div class="field-group" style="flex:1;min-width:140px;">
       <label>Group by</label>
-      <select id="b-group" onchange="runBrowse()"><option value="">(none)</option></select>
+      <select id="b-group" onchange="runBrowse()"><option value="">— select —</option></select>
     </div>
     <div class="field-group" style="flex:1;min-width:140px;">
       <label>Sort by</label>
       <select id="b-sort" onchange="runBrowse()">
-        <option value="">(default)</option>
+        <option value="">— select —</option>
       </select>
     </div>
   </div>
@@ -293,6 +293,10 @@ function fetchFields() {
     // Update group/sort dropdowns
     var grp = document.getElementById("b-group");
     var sortSel = document.getElementById("b-sort");
+    var savedGroup = grp && grp.value && grp.value !== "" ? grp.value : "";
+    var savedSort = sortSel && sortSel.value && sortSel.value !== "" ? sortSel.value : "";
+    grp.innerHTML = '<option value="">— select —</option>';
+    if (sortSel) sortSel.innerHTML = '<option value="">— select —</option>';
     (data.dimensions||[]).forEach(function(f) {
       var o = document.createElement("option");
       o.value = f; o.textContent = f; grp.appendChild(o);
@@ -300,6 +304,9 @@ function fetchFields() {
       o2.value = f; o2.textContent = f;
       if (sortSel) sortSel.appendChild(o2);
     });
+    // Restore selected values if still valid
+    if (savedGroup && grp.querySelector('option[value="'+savedGroup+'"]')) grp.value = savedGroup;
+    if (savedSort && sortSel && sortSel.querySelector('option[value="'+savedSort+'"]')) sortSel.value = savedSort;
     
     renderFieldChips();
     updateWherePreview();
@@ -870,6 +877,7 @@ function showSaveQuery() {
   if (exprPreview) previewLines.push(`where = "${exprPreview}"`);
   previewLines.push(`time  = "${p.time}"`);
   if (p.group)  previewLines.push(`group = ["${p.group}"]`);
+  if (p.sort)  previewLines.push(`sort = "${p.sort}"`);
   if (p.search) previewLines.push(`search = "${p.search}"`);
   document.getElementById("query-preview").textContent = previewLines.join("\n");
 
@@ -890,7 +898,7 @@ function doSaveQuery() {
   fetch("/api/save_query", {
     method:"POST", headers:{"Content-Type":"application/json"},
     body: JSON.stringify({name, where: p.where, expr: p.expr, time: p.time,
-                          group: p.group, search: p.search})
+                          group: p.group, search: p.search, sort: p.sort})
   })
   .then(r => r.json())
   .then(d => {
