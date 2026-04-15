@@ -71,81 +71,49 @@ if [ ! -d "$TMP_DIR/new/ptos-main" ]; then
     exit 1
 fi
 
-# ── Check what changed ────────────────────────────────────────────────────────
-echo "Checking for changes..."
-FILES_CHANGED=0
-
-# Check Python files (including new ones)
-NEW_PY_COUNT=$(cd "$TMP_DIR/new/ptos-main" && ls -1 *.py 2>/dev/null | wc -l)
-if [ "$NEW_PY_COUNT" -gt 0 ]; then
-    for f in "$TMP_DIR/new/ptos-main"/*.py; do
-        fname="$(basename "$f")"
-        if [ ! -f "$PTOS_DIR/$fname" ] || ! cmp -s "$f" "$PTOS_DIR/$fname"; then
-            FILES_CHANGED=1
-            break
-        fi
-    done
-fi
-
-# Check web_templates
-if [ "$FILES_CHANGED" -eq 0 ] && [ -d "$TMP_DIR/new/ptos-main/web_templates" ]; then
-    if [ ! -d "$PTOS_DIR/web_templates" ] || \
-       ! cmp -s "$TMP_DIR/new/ptos-main/web_templates/base.html" \
-              "$PTOS_DIR/web_templates/base.html" 2>/dev/null; then
-        FILES_CHANGED=1
-    fi
-fi
-
-# Check for new shell scripts
-if [ "$FILES_CHANGED" -eq 0 ]; then
-    for f in "$TMP_DIR/new/ptos-main"/*_android.sh; do
-        fname="$(basename "$f")"
-        if [ ! -f "$PTOS_DIR/$fname" ] || ! cmp -s "$f" "$PTOS_DIR/$fname"; then
-            FILES_CHANGED=1
-            break
-        fi
-    done
-fi
-
 # ── Apply update ──────────────────────────────────────────────────────────────
-if [ "$FILES_CHANGED" -eq 1 ]; then
-    echo "Updating PTOS code files..."
-    
-    # Backup old Python files to .bak
-    for f in "$PTOS_DIR"/*.py; do
-        [ -f "$f" ] && cp "$f" "$f.bak" 2>/dev/null || true
+echo "Updating PTOS code files..."
+
+# Preserved directories and files (user data that must not be overwritten)
+PRESERVED="config records journal notes tasks scripts backups exports .version __pycache__ .git"
+
+# Copy all files except preserved ones
+for item in "$TMP_DIR/new/ptos-main"/* "$TMP_DIR/new/ptos-main"/.[!.]*; do
+    [ -e "$item" ] || continue
+    basename=$(basename "$item")
+    skip=0
+    for p in $PRESERVED; do
+        if [ "$basename" = "$p" ]; then
+            skip=1
+            break
+        fi
     done
-    
-    # Python files
-    cp "$TMP_DIR/new/ptos-main"/*.py "$PTOS_DIR/" 2>/dev/null || true
-    
-    # Web templates
-    rm -rf "$PTOS_DIR/web_templates" 2>/dev/null || true
-    cp -r "$TMP_DIR/new/ptos-main/web_templates" "$PTOS_DIR/" 2>/dev/null || true
-    
-    # Shell scripts inside ptos dir
-    cp "$TMP_DIR/new/ptos-main"/*_android.sh "$PTOS_DIR/" 2>/dev/null || true
-    chmod +x "$PTOS_DIR"/*_android.sh 2>/dev/null || true
-    
-    # Remove .bak files on success
-    for f in "$PTOS_DIR"/*.bak; do
-        [ -f "$f" ] && rm "$f" 2>/dev/null || true
-    done
-    
-    echo "Code updated."
-    
-    # ── Save latest SHA to .version file ───────────────────────────────────────
-    echo "Saving version..."
-    SHA=$(curl -sf "https://api.github.com/repos/godwinburby/ptos/commits/main" \
-        | grep '"sha"' | head -1 | cut -d'"' -f4)
-    if [ -n "$SHA" ]; then
-        echo "$SHA" > "$PTOS_DIR/.version"
-    else
-        echo "WARNING: Failed to fetch version. Will retry on next update."
-        rm -f "$PTOS_DIR/.version"
+    if [ $skip -eq 0 ]; then
+        if [ -d "$item" ]; then
+            rm -rf "$PTOS_DIR/$basename" 2>/dev/null || true
+            cp -r "$item" "$PTOS_DIR/" 2>/dev/null || true
+        else
+            cp "$item" "$PTOS_DIR/" 2>/dev/null || true
+        fi
     fi
+done
+
+# Ensure shell scripts are executable
+for f in "$PTOS_DIR"/*.sh; do
+    [ -f "$f" ] && chmod +x "$f" 2>/dev/null || true
+done
+
+echo "Code updated."
+
+# ── Save latest SHA to .version file ───────────────────────────────────────
+echo "Saving version..."
+SHA=$(curl -sf "https://api.github.com/repos/godwinburby/ptos/commits/main" \
+    | grep '"sha"' | head -1 | cut -d'"' -f4)
+if [ -n "$SHA" ]; then
+    echo "$SHA" > "$PTOS_DIR/.version"
 else
-    echo "Already up to date."
+    echo "WARNING: Failed to fetch version. Will retry on next update."
+    rm -f "$PTOS_DIR/.version"
 fi
 
 # ── Refresh scripts in $HOME ─────────────────────────────────────────────────
