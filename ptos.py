@@ -2929,19 +2929,33 @@ _STARTER_QUERIES = """# --------------------------------------------------
 #   ptos -q                     list all queries
 # --------------------------------------------------
 
-# Example base query
-[all_expenses]
+[expenses_this_month]
 where = "type=expense"
 time  = "this-month"
 sum   = true
 
-# Example metric
-[metrics.avg_expense]
-avg = "all_expenses"
+[expenses_last_month]
+where = "type=expense"
+time  = "last-month"
+sum   = true
 
-# Example dashboard
-[dashboards.home]
-metrics = ["all_expenses", "avg_expense"]
+[expenses_by_category]
+where = "type=expense"
+time  = "this-month"
+group = "category"
+
+[monthly_trend]
+where = "type=expense"
+time  = "this-month"
+
+[income_this_month]
+where = "type=income"
+time  = "this-month"
+sum   = true
+
+[balance]
+where = "type=expense or type=income"
+time  = "this-month"
 """
 
 _STARTER_PRESETS = """# --------------------------------------------------
@@ -2953,12 +2967,25 @@ _STARTER_PRESETS = """# --------------------------------------------------
 #         ptos -p <name> -d yesterday
 # --------------------------------------------------
 
-# [presets.commute]
-# type     = "expense"
-# domain   = "self"
-# category = "transport"
-# amount   = 90
-# tag      = ["auto"]
+[presets.supplies]
+type     = "expense"
+domain   = "work"
+category = "supplies"
+
+[presets.travel]
+type     = "expense"
+domain   = "work"
+category = "travel"
+
+[presets.meals]
+type     = "expense"
+domain   = "work"
+category = "meals"
+
+[presets.utilities]
+type     = "expense"
+domain   = "work"
+category = "utilities"
 """
 
 _STARTER_SCHEMA = """# --------------------------------------------------
@@ -3089,53 +3116,20 @@ options = ["self", "work"]
 
 _STARTER_JOURNAL = """# {{date}}
 
-## ARRIVE
-Reality:  (what is actually on your plate today)
-Body:  (how does your body feel)
-Mood:  (what emotion are you carrying)
-Word:  (bible verse or quote that anchors you)
-Intention:  (one thing that would make today a win)
-Prayer:  (talk to God before the day begins)
+## Today
+Top 3:
+- [ ] 
+- [ ] 
+- [ ] 
 
----
+## End of Day
+Wins:
 
-## ENGAGE
+Drifted:
 
-### Top 3  (what must get done today)
-- [ ]  (most important)
-- [ ]
-- [ ]
+Grateful for:
 
-### Home / Personal  (don't let clinic crowd this out)
-- [ ]  (family, project, or self)
-
-### One person to love well  (intentional not incidental)
--  (name and how you will show up for them)
-
-### Habits
-- [ ] Prayer
-- [ ] Move
-- [ ] Connect
-- [ ] Learn
-
-### Drift Checks  (pause and assess — are you on track)
-11:  2:  5:
-
----
-
-## RELEASE  (end of day — be honest)
-
-### Wins  (what actually got done, big or small)
-
-
-### Drifted  (where did you lose focus or fall short)
-
-
-### Gratitude  (one thing you are thankful for today)
-
-
-### Tomorrow  (one thing you want to carry forward)
-
+Tomorrow:
 """
 
 def _write_if_missing(path, content, label):
