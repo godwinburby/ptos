@@ -43,8 +43,9 @@ behind it.
 Below the numbers, **Quick Add** presets let you log a frequent entry (auto ride,
 bakery run, petrol) in a single tap — no form to fill.
 
-![PTOS Home screen showing dashboard metrics and Quick Add presets](images/ptos_home.png)
-
+<p align="center">
+  <img src="images/ptos_home.png" width="300" alt="PTOS Home screen showing dashboard metrics and Quick Add presets"/>
+</p>
 ---
 
 ### Add a record in seconds
@@ -53,14 +54,18 @@ Tap the **+** button at the bottom. If you want to use a preset or pick a record
 type first, the Add screen shows your presets front and centre — one tap and the
 form opens pre-filled.
 
-![Add Record screen showing preset chips and record type selection](images/ptos_presets.png)
+<p align="center">
+  <img src="images/ptos_presets.png" width="300" alt="Add Record screen showing preset chips and record type selection"/>
+</p>
 
 Once you've picked a type, the form shows exactly the fields you need — nothing
 more. Dropdowns are pre-loaded with your valid options. Tags appear as chips so
 you can select them without typing. The form even suggests your most-used values
 from history.
 
-![Add Record form for an expense with domain, category, amount, and tag chips](images/ptos_add_record.png)
+<p align="center">
+  <img src="images/ptos_add_record.png" width="300" alt="Add Record form for an expense with domain, category, amount, and tag chips"/>
+</p>
 
 ---
 
@@ -70,7 +75,9 @@ The **Queries** tab runs your saved reports. Type a query name, hit run, and the
 results appear — record count, total, average, and a full table. No typing filters
 every time.
 
-![Queries screen showing an expense query result with totals and a record table](images/ptos_queries.png)
+<p align="center">
+  <img src="images/ptos_queries.png" width="300" alt="Queries screen showing an expense query result with totals and a record table"/>
+</p>
 
 ---
 
@@ -80,7 +87,9 @@ The **Browse** tab lets you slice your data any way you want. Tap a type chip to
 filter by type. Active filters appear as removable chips so you can see exactly
 what's applied. A live preview shows the query that will run before you execute it.
 
-![Browse screen with type chips, active filter chips, and a query preview](images/ptos_browse.png)
+<p align="center">
+  <img src="images/ptos_browse.png" width="300" alt="Browse screen with type chips, active filter chips, and a query preview"/>
+</p>
 
 ---
 
@@ -90,7 +99,9 @@ Tap **More** at the bottom right to reach Journal, Due List, Schema Builder,
 Backup, Log Editor, and Lint — all the tools you need without cluttering the
 main navigation.
 
-![More menu showing Journal, Due List, Schema Builder, Backup, Log Editor, Lint](images/ptos_more_menu.png)
+<p align="center">
+  <img src="images/ptos_more_menu.png" width="300" alt="More menu showing Journal, Due List, Schema Builder, Backup, Log Editor, Lint"/>
+</p>
 
 ---
 
