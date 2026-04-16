@@ -37,11 +37,6 @@
       <option value="{{ f }}" {% if f == current_file %}selected{% endif %}>{{ f }}</option>
       {% endfor %}
     </select>
-    <input type="number" id="goto-line" placeholder="Line #" min="1"
-           style="width:70px;padding:8px;border-radius:8px;border:1px solid var(--border);
-                  background:var(--bg);color:var(--text);font-size:14px;"
-           onkeydown="if(event.key==='Enter')goToLine()">
-    <button onclick="goToLine()" class="btn btn-ghost btn-sm" title="Go to line">⬇ Go</button>
     <button onclick="runFullLint()" id="lint-btn"
             class="btn btn-warn btn-sm" title="Full schema validation">🔍 Validate Full</button>
     <button onclick="saveFileWithValidation()" id="save-btn"
@@ -60,32 +55,17 @@
 <!-- editor / highlighted view toggle -->
 <div id="editor-card" class="card" style="padding:0;overflow:hidden;">
 
-  <!-- editor with line numbers -->
-  <div id="editor-wrapper" style="display:flex;min-height:70vh;">
-    <!-- line numbers -->
-    <div id="line-numbers"
-         style="width:45px;min-width:45px;min-height:70vh;padding:14px 8px;
-                background:#151A26;color:#546E7A;
-                font-family:'Consolas','Courier New',monospace;
-                font-size:14px;line-height:1.7;
-                text-align:right;user-select:none;
-                border-right:1px solid #2A3040;
-                overflow-y:hidden;flex-shrink:0;
-                box-sizing:border-box;"></div>
-    
-    <!-- raw textarea (edit mode) -->
-    <textarea id="log-editor"
-              style="flex:1;width:100%;min-height:70vh;padding:14px 16px;
-                     font-family:'Consolas','Courier New',monospace;
-                     font-size:14px;line-height:1.7;
-                     background:#1E2130;color:#D4D8E8;
-                     border:none;border-radius:0;
-                     resize:vertical;outline:none;
-                     box-sizing:border-box;"
-              spellcheck="false"
-              oninput="_dirty=true;updateLineNumbers();"
-              onscroll="syncLineNumberScroll()">{{ content }}</textarea>
-  </div>
+  <!-- raw textarea (edit mode) -->
+  <textarea id="log-editor"
+            style="width:100%;min-height:70vh;padding:14px 16px;
+                   font-family:'Consolas','Courier New',monospace;
+                   font-size:14px;line-height:1.7;
+                   background:#1E2130;color:#D4D8E8;
+                   border:none;border-radius:0;
+                   resize:vertical;outline:none;
+                   box-sizing:border-box;"
+            spellcheck="false"
+            oninput="_dirty=true;">{{ content }}</textarea>
 
   <!-- highlighted overlay (view mode) — hidden by default -->
   <pre id="log-highlight"
@@ -184,75 +164,7 @@ function escHtml(s) {
     .replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
-// ── Line numbers ──────────────────────────────────────────────────────────────
-function updateLineNumbers() {
-  var editor = document.getElementById("log-editor");
-  var lns = document.getElementById("line-numbers");
-  var lines = (editor.value.match(/\n/g) || []).length + 1;
-  var html = "";
-  for (var i = 1; i <= lines; i++) {
-    html += i + "<br>";
-  }
-  lns.innerHTML = html;
-}
-
-function syncLineNumberScroll() {
-  var editor = document.getElementById("log-editor");
-  var lns = document.getElementById("line-numbers");
-  lns.scrollTop = editor.scrollTop;
-}
-
-function syncLineNumberScroll() {
-  var editor = document.getElementById("log-editor");
-  var lns = document.getElementById("line-numbers");
-  syncLineNumbersHeight();
-  lns.scrollTop = editor.scrollTop;
-}
-
-// Init line numbers on load
-document.addEventListener("DOMContentLoaded", function() {
-  // Parse URL params for goto line
-  const params = new URLSearchParams(window.location.search);
-  const gotoLine = params.get('goto');
-  const gotoFile = params.get('file');
-  
-  if (gotoFile) {
-    var sel = document.getElementById("file-select");
-    if (sel) sel.value = gotoFile;
-    loadFileWithGoto(gotoLine);
-  } else if (gotoLine) {
-    setTimeout(function() {
-      goToLineNum(parseInt(gotoLine, 10));
-    }, 100);
-  }
-  
-  setTimeout(function() {
-    updateLineNumbers();
-    syncLineNumberScroll();
-  }, 50);
-});
-
 // ── Go to line ────────────────────────────────────────────────────────────────
-function goToLine() {
-  var input = document.getElementById("goto-line");
-  var editor = document.getElementById("log-editor");
-  var lineNum = parseInt(input.value, 10);
-  if (!lineNum || lineNum < 1) return;
-  
-  var lines = editor.value.split("\n");
-  var totalLines = lines.length;
-  if (lineNum > totalLines) lineNum = totalLines;
-  
-  var pos = 0;
-  for (var i = 0; i < lineNum - 1; i++) {
-    pos += lines[i].length + 1;
-  }
-  
-  editor.setSelectionRange(pos, pos + (lines[lineNum - 1] || "").length);
-  editor.focus();
-  editor.scrollTop = editor.scrollHeight * (lineNum - 1) / totalLines;
-}
-
 // ── Mode switching ────────────────────────────────────────────────────────────
 function toggleHighlight() {
   _hlMode ? setEditMode() : setHighlightMode();
@@ -298,10 +210,6 @@ function loadFileWithGoto(gotoLine) {
   .then(function(content) {
     document.getElementById("log-editor").value = content;
     _dirty = false;
-    updateLineNumbers();
-    if (gotoLine) {
-      goToLineNum(parseInt(gotoLine, 10));
-    }
   });
 }
 
@@ -348,6 +256,22 @@ document.addEventListener("keydown", function(e) {
 window.addEventListener("beforeunload", function(e) {
   if (_dirty) { e.preventDefault(); e.returnValue=""; }
 });
+
+// Check URL params for goto line on page load
+(function() {
+  var params = new URLSearchParams(window.location.search);
+  var gotoLine = params.get('goto');
+  var gotoFile = params.get('file');
+  if (gotoFile) {
+    var sel = document.getElementById("file-select");
+    if (sel) sel.value = gotoFile;
+  }
+  if (gotoLine) {
+    setTimeout(function() {
+      goToLineNum(parseInt(gotoLine, 10));
+    }, 100);
+  }
+})();
 
 // ── Validation ────────────────────────────────────────────────────────────────
 function runFullLint() {
@@ -423,9 +347,13 @@ function showValidationModal(d, title) {
       html += '<div style="background:var(--error-lt);border-radius:8px;margin-bottom:12px;max-height:200px;overflow-y:auto;">';
       html += '<div style="padding:8px 12px;font-weight:700;color:var(--error);border-bottom:1px solid var(--border);">Errors</div>';
       errors.slice(0, 20).forEach(function(e) {
-        html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family:monospace;word-break:break-all;">';
-        html += escHtml((e.line || "").substring(0, 80)) + '</div>';
-        html += '<div style="padding:4px 12px 8px;font-size:11px;color:var(--error);">' + escHtml((e.problems || []).join("; ")) + '</div>';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family:monospace;word-break:break-all;">';
+        html += '<div style="flex:1;overflow:hidden;">';
+        html += '<span style="color:var(--error);font-weight:700;">Line ' + e.lineno + '</span>';
+        html += '<div style="color:var(--error);margin-left:12px;">' + escHtml((e.problems || []).join("; ")) + '</div>';
+        html += '</div>';
+        html += '<button onclick="goToLineNum(' + e.lineno + ')" class="btn btn-ghost btn-sm" style="margin-left:8px;flex-shrink:0;">⬇ Go</button>';
+        html += '</div>';
       });
       if (errors.length > 20) {
         html += '<div style="padding:8px 12px;font-size:12px;color:var(--sub);">... and ' + (errors.length - 20) + ' more</div>';
@@ -437,9 +365,13 @@ function showValidationModal(d, title) {
       html += '<div style="background:#FFF8E1;border-radius:8px;margin-bottom:12px;max-height:150px;overflow-y:auto;">';
       html += '<div style="padding:8px 12px;font-weight:700;color:var(--warn);border-bottom:1px solid var(--border);">Warnings</div>';
       warnings.slice(0, 10).forEach(function(w) {
-        html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family:monospace;word-break:break-all;">';
-        html += escHtml((w.line || "").substring(0, 80)) + '</div>';
-        html += '<div style="padding:4px 12px 8px;font-size:11px;color:var(--warn);">' + escHtml((w.problems || []).join("; ")) + '</div>';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family:monospace;word-break:break-all;">';
+        html += '<div style="flex:1;overflow:hidden;">';
+        html += '<span style="color:var(--warn);font-weight:700;">Line ' + w.lineno + '</span>';
+        html += '<div style="color:var(--warn);margin-left:12px;">' + escHtml((w.problems || []).join("; ")) + '</div>';
+        html += '</div>';
+        html += '<button onclick="goToLineNum(' + w.lineno + ')" class="btn btn-ghost btn-sm" style="margin-left:8px;flex-shrink:0;">⬇ Go</button>';
+        html += '</div>';
       });
       html += '</div>';
     }
@@ -500,12 +432,12 @@ function showValidationBlockedModal(errors) {
   errors.slice(0, 20).forEach(function(e) {
     html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);">';
     html += '<div>';
-    html += '<span style="color:var(--error);font-weight:700;">Line ' + e.line + '</span>';
+    html += '<span style="color:var(--error);font-weight:700;">Line ' + e.lineno + '</span>';
     (e.problems || []).forEach(function(p) {
       html += '<div style="color:var(--error);margin-left:12px;">' + escHtml(p) + '</div>';
     });
     html += '</div>';
-    html += '<button onclick="closeValidateModal();goToLineNum(' + e.line + ')" class="btn btn-ghost btn-sm" style="margin-left:8px;">⬇ Go</button>';
+    html += '<button onclick="goToLineNum(' + e.lineno + ')" class="btn btn-ghost btn-sm" style="margin-left:8px;">⬇ Go</button>';
     html += '</div>';
   });
   html += '</div>';
@@ -518,9 +450,33 @@ function showValidationBlockedModal(errors) {
 }
 
 function goToLineNum(num) {
-  var input = document.getElementById("goto-line");
-  input.value = num;
-  goToLine();
+  var editor = document.getElementById("log-editor");
+  if (!num || num < 1) return;
+  
+  var lines = editor.value.split("\n");
+  var totalLines = lines.length;
+  if (num > totalLines) num = totalLines;
+  
+  var pos = 0;
+  for (var i = 0; i < num - 1; i++) {
+    pos += lines[i].length + 1;
+  }
+  
+  // Set selection to highlight the line
+  editor.setSelectionRange(pos, pos + (lines[num - 1] || "").length);
+  editor.focus();
+  editor.scrollTop = editor.scrollHeight * (num - 1) / totalLines;
+  
+  // Brief visual flash to show the line
+  var oldBg = editor.style.backgroundColor;
+  editor.style.backgroundColor = "#3a4a6b";
+  setTimeout(function() {
+    editor.style.backgroundColor = oldBg;
+  }, 500);
+  
+  // Close modal
+  var modal = document.getElementById("validate-modal");
+  if (modal) modal.style.display = "none";
 }
 
 function toggleSyntaxGuide() {

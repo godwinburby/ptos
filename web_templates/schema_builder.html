@@ -587,13 +587,13 @@ function showLintModal(d) {
     html += '<div style="padding:8px 12px;font-weight:700;color:var(--error);border-bottom:1px solid var(--border);">Errors</div>';
     errors.forEach(function(e) {
       html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;display:flex;justify-content:space-between;align-items:flex-start;">';
-      html += '<div>';
+      html += '<div style="flex:1;">';
       html += '<div style="color:var(--sub);font-size:11px;">'+escHtml(e.filepath||'')+' line '+e.lineno+'</div>';
-      html += '<div style="word-break:break-all;max-width:350px;">'+escHtml((e.line||'').substring(0,60))+'...</div>';
+      html += '<div style="word-break:break-all;">'+escHtml((e.line||'').substring(0,80))+'</div>';
       html += '<div style="color:var(--error);">'+escHtml((e.problems||[]).join("; "))+'</div>';
       html += '</div>';
       var gotoUrl = '/editor?file='+encodeURIComponent(e.filepath||'')+'&goto='+e.lineno;
-      html += '<a href="'+gotoUrl+'" target="_blank" class="btn btn-sm" style="margin-left:8px;flex-shrink:0;" title="Open in Log Editor">↗</a>';
+      html += '<button onclick="window.location.href=\''+gotoUrl+'\'" class="btn btn-ghost btn-sm" style="margin-left:8px;flex-shrink:0;" title="Go to line in Log Editor">⬇ Go</button>';
       html += '</div>';
     });
     html += '</div>';
@@ -603,9 +603,15 @@ function showLintModal(d) {
     html += '<div style="background:#FFF8E1;border-radius:8px;margin-bottom:12px;max-height:150px;overflow-y:auto;">';
     html += '<div style="padding:8px 12px;font-weight:700;color:var(--warn);border-bottom:1px solid var(--border);">Warnings</div>';
     warnings.forEach(function(w) {
-      html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;">';
-      html += '<span style="color:var(--sub);word-break:break-all;max-width:400px;">'+escHtml(w.line.substring(0,60))+'...</span>';
-      html += '<br><span style="color:var(--warn);">'+escHtml((w.problems||[]).join("; "))+'</span></div>';
+      html += '<div style="padding:8px 12px;border-bottom:1px solid var(--border);font-size:13px;display:flex;justify-content:space-between;align-items:flex-start;">';
+      html += '<div style="flex:1;">';
+      html += '<div style="color:var(--sub);font-size:11px;">'+escHtml(w.filepath||'')+' line '+w.lineno+'</div>';
+      html += '<div style="word-break:break-all;">'+escHtml((w.line||'').substring(0,80))+'</div>';
+      html += '<div style="color:var(--warn);">'+escHtml((w.problems||[]).join("; "))+'</div>';
+      html += '</div>';
+      var gotoUrl = '/editor?file='+encodeURIComponent(w.filepath||'')+'&goto='+w.lineno;
+      html += '<button onclick="window.location.href=\''+gotoUrl+'\'" class="btn btn-ghost btn-sm" style="margin-left:8px;flex-shrink:0;" title="Go to line in Log Editor">⬇ Go</button>';
+      html += '</div>';
     });
     html += '</div>';
   }
