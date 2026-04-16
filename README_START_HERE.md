@@ -7,10 +7,14 @@ whenever you need to.
 Everything is stored as plain text files on your computer. No database, no internet,
 no account. You own the data completely.
 
+> **Works on your phone.** PTOS runs as a web app in your mobile browser — no app
+> store, no install. Just open a URL and it's there.
+
 ---
 
 ## Table of Contents
 
+- [See it in action](#see-it-in-action)
 - [The web app — your main interface](#the-web-app--your-main-interface)
 - [How it works — the big picture](#how-it-works--the-big-picture)
 - [The four config files](#the-four-config-files)
@@ -20,6 +24,73 @@ no account. You own the data completely.
 - [Your data is safe](#your-data-is-safe)
 - [The CLI — for advanced users](#the-cli--for-advanced-users)
 - [Troubleshooting](#troubleshooting)
+
+---
+
+## See it in action
+
+These are real screenshots from a phone. This is what you open in your browser
+every day.
+
+---
+
+### Your dashboard — everything at a glance
+
+Open PTOS and your numbers are right there. This month's income, expenses,
+investments, and balance — all in one view. Tap any card to drill into the records
+behind it.
+
+Below the numbers, **Quick Add** presets let you log a frequent entry (auto ride,
+bakery run, petrol) in a single tap — no form to fill.
+
+![PTOS Home screen showing dashboard metrics and Quick Add presets](images/ptos_home.png)
+
+---
+
+### Add a record in seconds
+
+Tap the **+** button at the bottom. If you want to use a preset or pick a record
+type first, the Add screen shows your presets front and centre — one tap and the
+form opens pre-filled.
+
+![Add Record screen showing preset chips and record type selection](images/ptos_presets.png)
+
+Once you've picked a type, the form shows exactly the fields you need — nothing
+more. Dropdowns are pre-loaded with your valid options. Tags appear as chips so
+you can select them without typing. The form even suggests your most-used values
+from history.
+
+![Add Record form for an expense with domain, category, amount, and tag chips](images/ptos_add_record.png)
+
+---
+
+### Run a saved report in one click
+
+The **Queries** tab runs your saved reports. Type a query name, hit run, and the
+results appear — record count, total, average, and a full table. No typing filters
+every time.
+
+![Queries screen showing an expense query result with totals and a record table](images/ptos_queries.png)
+
+---
+
+### Filter and explore your records
+
+The **Browse** tab lets you slice your data any way you want. Tap a type chip to
+filter by type. Active filters appear as removable chips so you can see exactly
+what's applied. A live preview shows the query that will run before you execute it.
+
+![Browse screen with type chips, active filter chips, and a query preview](images/ptos_browse.png)
+
+---
+
+### Everything else is one tap away
+
+Tap **More** at the bottom right to reach Journal, Due List, Schema Builder,
+Backup, Log Editor, and Lint — all the tools you need without cluttering the
+main navigation.
+
+![More menu showing Journal, Due List, Schema Builder, Backup, Log Editor, Lint](images/ptos_more_menu.png)
 
 ---
 
@@ -124,10 +195,10 @@ fields so you just confirm and save — no re-entering the same values every tim
 
 Create presets directly from the Add Record form: fill in the fields, click
 **Save as Preset** at the bottom, give it a name. Next time, pick it from the
-**Load preset** dropdown at the top of the form.
+preset list at the top of the Add screen.
 
-Presets can also trigger multiple records at once — for example, a "morning routine"
-preset that logs exercise, water intake, and medication in one tap.
+Presets can also trigger multiple records at once — for example, a "commute" preset
+that logs your auto and bus fare in one tap.
 
 ### `config.toml` — basic settings
 
