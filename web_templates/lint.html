@@ -87,7 +87,7 @@ function renderLint(d) {
             `<div style="font-size:13px;color:var(--error);font-weight:600;">✖ ${escHtml(p)}</div>`
           ).join("")}
         </div>
-        <a href="${gotoUrl}" target="_blank" class="btn btn-sm" style="margin-left:8px;flex-shrink:0;" title="Open in Log Editor">↗</a>
+        <button onclick="window.location.href='${gotoUrl}'" class="btn btn-ghost btn-sm" style="margin-left:8px;flex-shrink:0;" title="Go to line in Log Editor">⬇ Go</button>
       </div>`;
     }).join("");
     html += `
@@ -114,7 +114,7 @@ function renderLint(d) {
             `<div style="font-size:13px;color:var(--warn);font-weight:600;">⚠ ${escHtml(p)}</div>`
           ).join("")}
         </div>
-        <a href="${gotoUrl}" target="_blank" class="btn btn-sm" style="margin-left:8px;flex-shrink:0;" title="Open in Log Editor">↗</a>
+        <button onclick="window.location.href='${gotoUrl}'" class="btn btn-ghost btn-sm" style="margin-left:8px;flex-shrink:0;" title="Go to line in Log Editor">⬇ Go</button>
       </div>`;
     }).join("");
     html += `
