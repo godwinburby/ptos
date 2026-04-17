@@ -7,9 +7,6 @@ whenever you need to.
 Everything is stored as plain text files on your computer. No database, no internet,
 no account. You own the data completely.
 
-> **Works on your phone.** PTOS runs as a web app in your mobile browser — no app
-> store, no install. Just open a URL and it's there.
-
 ---
 
 ## Table of Contents
@@ -29,58 +26,22 @@ no account. You own the data completely.
 
 ## See it in action
 
-<<<<<<< HEAD
-These are real screenshots from a phone. This is what you open in your browser
-every day.
-=======
 Real screenshots from a phone — this is what you open in your browser every day.
->>>>>>> e33934f (docs: add screenshots to README.md pages reference section)
 
 ---
 
 ### Your dashboard — everything at a glance
 
-<<<<<<< HEAD
-Open PTOS and your numbers are right there. This month's income, expenses,
-investments, and balance — all in one view. Tap any card to drill into the records
-behind it.
-
-Below the numbers, **Quick Add** presets let you log a frequent entry (auto ride,
-bakery run, petrol) in a single tap — no form to fill.
-
-<p align="center">
-  <img src="images/ptos_home.png" width="300" alt="PTOS Home screen showing dashboard metrics and Quick Add presets"/>
-</p>
-=======
 Open PTOS and your numbers are right there. Income, expenses, investments, and balance
 for the month — all in one view. Tap any card to drill into the records behind it.
 Below the numbers, **Quick Add** presets let you log a frequent entry in a single tap.
 
 <img src="images/ptos_home.png" width="260" alt="PTOS Home dashboard with metrics and Quick Add presets">
 
->>>>>>> e33934f (docs: add screenshots to README.md pages reference section)
 ---
 
 ### Add a record in seconds
 
-<<<<<<< HEAD
-Tap the **+** button at the bottom. If you want to use a preset or pick a record
-type first, the Add screen shows your presets front and centre — one tap and the
-form opens pre-filled.
-
-<p align="center">
-  <img src="images/ptos_presets.png" width="300" alt="Add Record screen showing preset chips and record type selection"/>
-</p>
-
-Once you've picked a type, the form shows exactly the fields you need — nothing
-more. Dropdowns are pre-loaded with your valid options. Tags appear as chips so
-you can select them without typing. The form even suggests your most-used values
-from history.
-
-<p align="center">
-  <img src="images/ptos_add_record.png" width="300" alt="Add Record form for an expense with domain, category, amount, and tag chips"/>
-</p>
-=======
 Tap **+** at the bottom. The Add screen shows all your presets and record types
 up front — one tap and the form opens pre-filled. No hunting through menus.
 
@@ -91,64 +52,34 @@ pre-loaded with valid options. Tags appear as chips — tap to select, no typing
 The form even suggests your most-used values from history.
 
 <img src="images/ptos_add_record.png" width="260" alt="Add Record form showing domain, category, amount fields and tag chips">
->>>>>>> e33934f (docs: add screenshots to README.md pages reference section)
 
 ---
 
 ### Run a saved report in one click
 
-<<<<<<< HEAD
-The **Queries** tab runs your saved reports. Type a query name, hit run, and the
-results appear — record count, total, average, and a full table. No typing filters
-every time.
-
-<p align="center">
-  <img src="images/ptos_queries.png" width="300" alt="Queries screen showing an expense query result with totals and a record table"/>
-</p>
-=======
 The **Queries** tab runs your saved reports. Pick a query, and results appear
 instantly — record count, total, average, and a full table. No typing filters every time.
 
 <img src="images/ptos_queries.png" width="260" alt="Queries screen showing expense query results with totals and record table">
->>>>>>> e33934f (docs: add screenshots to README.md pages reference section)
 
 ---
 
 ### Filter and explore your records
 
-<<<<<<< HEAD
-The **Browse** tab lets you slice your data any way you want. Tap a type chip to
-filter by type. Active filters appear as removable chips so you can see exactly
-what's applied. A live preview shows the query that will run before you execute it.
-
-<p align="center">
-  <img src="images/ptos_browse.png" width="300" alt="Browse screen with type chips, active filter chips, and a query preview"/>
-</p>
-=======
 **Browse** lets you slice your data any way you want. Tap a type chip to filter.
 Active filters show as removable chips. A live preview shows exactly what query will
 run before you execute it.
 
 <img src="images/ptos_browse.png" width="260" alt="Browse screen with type chips, active filter chips, and query preview">
->>>>>>> e33934f (docs: add screenshots to README.md pages reference section)
 
 ---
 
 ### Everything else is one tap away
 
 Tap **More** at the bottom right to reach Journal, Due List, Schema Builder,
-<<<<<<< HEAD
-Backup, Log Editor, and Lint — all the tools you need without cluttering the
-main navigation.
-
-<p align="center">
-  <img src="images/ptos_more_menu.png" width="300" alt="More menu showing Journal, Due List, Schema Builder, Backup, Log Editor, Lint"/>
-</p>
-=======
 Backup, Log Editor, and Lint — without cluttering the main navigation.
 
 <img src="images/ptos_more_menu.png" width="260" alt="More menu showing Journal, Due List, Schema Builder, Backup, Log Editor, Lint">
->>>>>>> e33934f (docs: add screenshots to README.md pages reference section)
 
 ---
 
@@ -253,10 +184,10 @@ fields so you just confirm and save — no re-entering the same values every tim
 
 Create presets directly from the Add Record form: fill in the fields, click
 **Save as Preset** at the bottom, give it a name. Next time, pick it from the
-preset list at the top of the Add screen.
+**Load preset** dropdown at the top of the form.
 
-Presets can also trigger multiple records at once — for example, a "commute" preset
-that logs your auto and bus fare in one tap.
+Presets can also trigger multiple records at once — for example, a "morning routine"
+preset that logs exercise, water intake, and medication in one tap.
 
 ### `config.toml` — basic settings
 
