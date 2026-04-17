@@ -196,6 +196,8 @@ summary (up to 5 rows), quick-add preset buttons, and today's records. A dropdow
 lets you switch between dashboards. The default dashboard is set in `config.toml`
 under `[dashboard] default`.
 
+<img src="images/ptos_home.png" width="260" alt="PTOS Home dashboard with metrics, Quick Add presets, and multi-presets">
+
 ### + Add Record
 
 Schema-driven add form. Select a record type and all required and optional fields
@@ -212,6 +214,8 @@ appear automatically. Features:
 - Cascade suggestions — picking a field value (e.g. `source=mgm`) suggests the
   most common co-occurring values for related fields
 
+<img src="images/ptos_presets.png" width="260" alt="Add Record screen showing preset chips and record type tiles"> <img src="images/ptos_add_record.png" width="260" alt="Add Record form with domain, category, amount fields and tag chips">
+
 ### Browse
 
 Filter, search, and group records. Features:
@@ -226,11 +230,15 @@ Filter, search, and group records. Features:
 - Export current results to CSV
 - Save current filter as a named query (Save as Query button)
 
+<img src="images/ptos_browse.png" width="260" alt="Browse screen with type chips, active filter chips, and query preview">
+
 ### Queries
 
 Run any named query, metric, or dashboard from `queries.toml`. Choose a query from
 the list, optionally override the time window, and run. Results render inline:
 records as a table, groups as a summary, metrics as a value, dashboards as a card grid.
+
+<img src="images/ptos_queries.png" width="260" alt="Queries screen showing expense query results with totals and record table">
 
 ### Due
 
