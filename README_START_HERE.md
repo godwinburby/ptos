@@ -1,7 +1,7 @@
 # Welcome to PTOS
 
-PTOS is a personal record-keeping system. Log anything that matters — clinic activity,
-expenses, follow-ups, exercise, journal entries — and search, filter, and report on it
+PTOS is a personal record-keeping system. Log anything that matters — expenses,
+income, exercise, or anything else you want to track — and search, filter, and report on it
 whenever you need to.
 
 Everything is stored as plain text files on your computer. No database, no internet,
@@ -195,8 +195,7 @@ Three settings:
 
 - **editor** — which text editor opens when editing files from the terminal
 - **currency** — the symbol shown next to all money values (default: `₹`)
-- **cycles** — custom billing or reporting periods defined by a start day of month
-  (e.g. `clinic = 26` means a cycle running 26th to 25th next month)
+- **cycles** — custom billing or reporting periods, e.g. `billing_cycle = 26`
 
 ---
 

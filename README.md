@@ -357,10 +357,10 @@ command = "nvim"        # falls back to $EDITOR, then notepad/nvim by OS
 currency = "₹"          # prefix shown on all numeric output
 
 [cycles]
-clinic = 26             # billing cycle starting on the 26th
+billing_cycle = 26      # billing cycle starting on the 26th
 
 [dashboard]
-default = "clinic"      # default dashboard shown on web UI home page
+default = "monthly"     # default dashboard shown on web UI home page
 ```
 
 ### PTOS_HOME environment variable
@@ -465,23 +465,20 @@ min = "expenses"                 # lowest single record
 `avg` also supports weighted averaging — useful when records represent different unit counts:
 
 ```toml
-[metrics.asp]
-avg          = "prescriptions"
-unit_field   = "fit"
-unit_weights = { monaural = 1, binaural = 2 }
+[metrics.avg_expense]
+avg          = "expenses_this_month"
+unit_field   = "category"
+unit_weights = { food = 1, transport = 2 }
 ```
 
 ### Derived metrics — arithmetic over other metrics and base queries
 
 ```toml
 [metrics.balance]
-derived = "income - expense - investment"
-
-[metrics.net_clinic]
-derived = "total_revenue - expense_work"
+derived = "income_this_month - expenses_this_month"
 
 [metrics.savings_rate]
-derived = "balance / income * 100"
+derived = "balance / income_this_month * 100"
 ```
 
 Tokens in the expression can be other metrics or base queries directly. Base queries
@@ -491,8 +488,8 @@ applies when it has one defined.
 ### Dashboards — named collections of metrics and queries
 
 ```toml
-[dashboards.clinic]
-metrics = ["assessments", "prescriptions", "total_revenue", "asp", "prescription_ratio"]
+[dashboards.monthly]
+metrics = ["expenses_this_month", "income_this_month", "balance", "savings_rate"]
 ```
 
 ### Saved queries — any combination of filters, time, and analysis
@@ -503,15 +500,15 @@ where = "type=expense"
 time  = "this-month"
 sum   = true
 
-[expense_funnel]
-where = "type=lead"
-time  = "this-quarter"
-pivot = ["source", "outcome"]
-count = true
+[income_by_source]
+where = "type=income"
+time  = "this-month"
+group = "source"
 
 [exp_cat]
-where = "type=expense domain!=work"
+where = "type=expense"
 time  = "this-month"
+group = "category"
 group = ["category"]
 
 [sales_trend]
@@ -759,8 +756,8 @@ ptos -y expense -t td --set category=food
 # Add a tag to a specific record
 ptos -w "type=expense domain=self" -t td --set tag+=urgent
 
-# Remove a tag
-ptos -w type=followup --set tag-=pending
+# Add a tag to all expenses
+ptos -y expense -t tm --set tag+=tracked
 
 # Change the date of a record (moves to correct year file if needed)
 ptos -w "type=expense amount=120" --set date=2026-03-15
@@ -804,7 +801,7 @@ ptos -y test -t td --delete --all
 | `last-year` | Previous year |
 | `YYYY-MM` | Specific month, e.g. `2026-03` |
 | `all` | No date filter |
-| Custom cycles | Defined in `config.toml` — e.g. `clinic`, `clinic-1` |
+| Custom cycles | Defined in `config.toml` — e.g. `billing_cycle`, `billing_cycle-1` |
 
 Short aliases:
 
@@ -822,12 +819,12 @@ Short aliases:
 | `ly` | `last-year` |
 
 Custom cycles let you define a billing or reporting period that starts on a fixed day
-of the month rather than the 1st. `clinic-1` means one cycle back, `clinic-2` two
+of the month rather than the 1st. `billing_cycle-1` means one cycle back, `billing_cycle-2` two
 cycles back, and so on.
 
 ```toml
 [cycles]
-clinic = 26    # billing cycle starting on the 26th of each month
+billing_cycle = 26    # billing cycle starting on the 26th of each month
 ```
 
 ---
@@ -851,8 +848,8 @@ ptos --where "type=sale product~comfort"         # field contains (case-insensit
 
 ```bash
 ptos --where domain=self|home                    # self OR home
-ptos --where type=assessment|prescription        # two types
-ptos --where outcome!=deferred|not_interested    # exclude both
+ptos --where type=expense|income              # two types
+ptos --where category!=entertainment          # exclude one
 ```
 
 **Boolean expressions** — full `AND`, `OR`, `NOT`, and parentheses:
@@ -874,9 +871,9 @@ where = "type=expense AND (domain=self OR domain=home)"
 **Derived fields in filters** — virtual fields computed per record are fully filterable:
 
 ```bash
-ptos -y followup --where is_overdue=true         # all overdue followups
-ptos -y followup --where "is_overdue=true AND intent=trial"
-ptos -y expense --where "days_since>30"          # global derived field
+ptos -t last-month                         # filter by time
+ptos --where "category=food"            # simple filter
+ptos --where "amount>1000"           # numeric filter
 ```
 
 ---
@@ -922,13 +919,9 @@ type    = "int"
 **Type-scoped derived fields** — apply only to a specific type:
 
 ```toml
-[type.followup.fields.is_overdue]
+[type.expense.fields.days_since]
 derived = "(today - date) > 30"
 type    = "bool"
-
-[type.prescription.fields.balance]
-derived = "amount - advance"
-type    = "int"
 ```
 
 Expressions support: `today`, `date`, `today - date` (returns days as int), and any
@@ -980,34 +973,26 @@ most urgent.
 ```toml
 # default — used by: ptos --due
 [due]
-type            = "followup"
-key             = "client"
-sort_by         = "intent"
+type            = "expense"
+key             = "category"
+sort_by         = "amount"
 days            = 7
-exclude_results = ["fix_appointment", "deceased", "not_relevant"]
-
-# named — used by: ptos --due outreach
-[due.outreach]
-type    = "outreach"
-key     = "place"
-days    = 14
+exclude_results = ["personal", "other"]
 ```
 
-The `sort_by` field's options in `schema.toml` define priority order:
-
+The `sort_by` field's options in `schema.toml` define priority order.
 ```toml
-[type.followup.fields.intent]
-options = ["trial", "decision", "assessment", "mgm"]
+[type.expense.fields.category]
+options = ["food", "transport", "entertainment", "personal", "other"]
 #           ↑ most urgent                   ↑ least urgent
 ```
 
 ### Usage
 
 ```bash
-ptos --due                  # default [due] config, default days
-ptos --due 3                # override threshold to 3 days
-ptos --due 0                # show everyone (morning review)
-ptos --due outreach         # use [due.outreach] named config
+ptos --due                  # default [due] config
+ptos --due 7                # show items due within 7 days
+ptos --due 0                # show all items (no filter)
 ```
 
 ---
@@ -1056,9 +1041,9 @@ Full filename including extension is required. No spaces. The file must exist in
 ## Selecting output fields
 
 ```bash
-ptos -y followup -t tm --select name intent result
-ptos -y followup -t tm --select name intent result --table
-ptos -y followup -t tm --select name intent --sort intent
+ptos -y expense -t tm --select category amount domain
+ptos -y expense -t tm --select category amount domain --table
+ptos -y expense -t tm --select category amount --sort amount
 ```
 
 Date and type are always included. Add `note` to `--select` to include notes.
