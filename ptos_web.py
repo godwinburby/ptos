@@ -267,9 +267,12 @@ def home():
             if custom_time and re.match(r"\d{4}-\d{2}", custom_time):
                 time_code = custom_time
         
+        # Use dashboard time only when explicitly changed (not default "tm")
+        use_dashboard_time = request.args.get("override_time") == "1"
+        
         cycles = cfg.get("cycles", {})
         if db_name and db_name in dashboards:
-            db = svc.get_dashboard(db_name, time_code)
+            db = svc.get_dashboard(db_name, time_code, use_dashboard_time)
             # Build nice period label (e.g., "This week", "Apr 2026", "Clinic")
             period_str = _build_period_label(time_code, custom_time, cycles)
             # Show all dashboard items in home (no limit, template handles display)
@@ -278,12 +281,12 @@ def home():
                 stat = {
                     "label": item["name"].replace("_"," "),
                     "value": item["value"],
-                    "sub": period_str,
+                    "sub": item.get("sub", period_str),  # Use item's own period if available
                     "kind": kind,
                 }
                 # Only queries get a clickable link
                 if kind == "query":
-                    stat["query_url"] = f"/queries?run={item['name']}&time={time_code}"
+                    stat["query_url"] = f"/queries?run={item['name']}"
                 stats.append(stat)
     except Exception:
         pass
@@ -1088,7 +1091,7 @@ def queries_run():
     time = raw_time
     try:
         if kind == "d":
-            result = svc.get_dashboard(name, time or "tm")
+            result = svc.get_dashboard(name, time or "tm", use_dashboard_time=True)
             result["kind"] = "dashboard"
             # Add human-readable time label
             cfg = svc.get_config()

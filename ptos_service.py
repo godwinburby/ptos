@@ -869,17 +869,19 @@ def get_metric(name, time="tm"):
 # Dashboard
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_dashboard(name, time="tm"):
+def get_dashboard(name, time="tm", use_dashboard_time=False):
     """
     Returns:
       { name: str,
         period: str,
         items: [{name, value, raw}] }
+    
+    use_dashboard_time: if False (default), each metric/query uses its own time.
+                      if True, all use the dashboard's time.
     """
     try:
         queries    = ptos.get_queries()
         cycles     = _cycles()
-        start, end = _resolve_time(time)
         dashboards = queries.get("dashboards", {})
     except PTOSError:
         raise
@@ -889,16 +891,34 @@ def get_dashboard(name, time="tm"):
     if name not in dashboards:
         raise PTOSError(f"Dashboard '{name}' not found")
 
+    # Pre-resolve dashboard time for override case
+    if use_dashboard_time:
+        db_start, db_end = _resolve_time(time)
+    
     items = []
     for item_name in dashboards[name].get("metrics", []):
         metrics = queries.get("metrics", {})
+        queries_dict = queries.get("queries", queries)
+        
+        # Determine which time to use for this item
+        if use_dashboard_time:
+            # Override: use dashboard's time for all
+            item_time = time
+        else:
+            # Use each item's own time from queries.toml, fallback to dashboard's time
+            q = queries_dict.get(item_name, {})
+            item_time = q.get("time", time)
+        
+        # Get start/end for this item
+        item_start, item_end = _resolve_time(item_time)
+        
         if item_name in metrics:
-            item = get_metric(item_name, time)
+            item = get_metric(item_name, item_time)
             item["kind"] = "metric"
             items.append(item)
-        elif item_name in queries:
+        elif item_name in queries_dict:
             try:
-                cnt, total = ptos._run_base_query(item_name, queries, start, end, cycles)
+                cnt, total = ptos._run_base_query(item_name, queries, item_start, item_end, cycles)
                 value = str(cnt)
                 if total > 0:
                     value += f"  ({ptos.fmt(total)})"
@@ -911,9 +931,12 @@ def get_dashboard(name, time="tm"):
             items.append({"name": item_name, "value": "not found", "raw": None,
                            "kind": "unknown"})
 
+    # Build period string based on dashboard's time
+    period_start, period_end = _resolve_time(time) if use_dashboard_time else _resolve_time(item_time)
+    
     return {
         "name":   name,
-        "period": f"{start} to {end}",
+        "period": f"{period_start} to {period_end}",
         "items":  items,
     }
 
