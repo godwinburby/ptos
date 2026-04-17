@@ -3067,14 +3067,14 @@ options = ["self", "home", "work"]
 
 [type.expense.fields.category]
 parent       = "domain"
-options.self = ["food", "transport", "health", "education", "personal"]
-options.home = ["grocery", "utilities", "rent", "household"]
-options.work = ["admin", "supplies", "travel", "meals"]
+options.self = ["food", "transport", "entertainment", "personal", "medical", "other"]
+options.home = ["grocery", "utilities", "rent", "household", "maintenance", "other"]
+options.work = ["supplies", "travel", "meals", "equipment", "services", "other"]
 
 [type.expense.tags.category]
-options.food      = ["snacks", "coffee", "restaurant"]
-options.transport = ["auto", "bus", "taxi", "petrol"]
-options.grocery   = ["vegetables", "milk", "fruits"]
+options.food      = ["snacks", "coffee", "restaurant", "delivery"]
+options.transport = ["auto", "bus", "metro", "taxi", "fuel"]
+options.grocery   = ["vegetables", "milk", "groceries", "essentials"]
 
 # ----------------------
 # INCOME
@@ -3084,7 +3084,7 @@ options.grocery   = ["vegetables", "milk", "fruits"]
 required = ["source", "amount"]
 
 [type.income.fields.source]
-options = ["salary", "freelance", "gift", "refund", "other"]
+options = ["salary", "freelance", "gift", "refund", "sales", "other"]
 
 # ----------------------
 # EXERCISE
@@ -3094,11 +3094,12 @@ options = ["salary", "freelance", "gift", "refund", "other"]
 required = ["activity", "duration"]
 
 [type.exercise.fields.activity]
-options = ["walk", "run", "cycle", "strength", "yoga", "stretch"]
+options = ["walk", "run", "cycle", "strength", "yoga", "stretch", "sport", "other"]
 
 [type.exercise.tags.activity]
 options.walk = ["morning", "evening"]
 options.run  = ["morning", "evening"]
+options.yoga = ["morning", "evening"]
 
 # ----------------------
 # LEARNING
@@ -3108,10 +3109,10 @@ options.run  = ["morning", "evening"]
 required = ["topic", "source", "domain"]
 
 [type.learning.fields.source]
-options = ["youtube", "podcast", "book", "article", "course", "audio_book"]
+options = ["book", "course", "video", "podcast", "article", "other"]
 
 [type.learning.fields.domain]
-options = ["self", "work"]
+options = ["self", "work", "other"]
 """
 
 _STARTER_JOURNAL = """# {{date}}
