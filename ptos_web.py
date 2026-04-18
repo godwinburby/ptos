@@ -886,14 +886,28 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
                 if ftype:
                     lines.append(_toml_kv("type", ftype))
             elif fdef_new is not None:
-                # from builder regular fields state
-                if fdef_new.get("is_int"):
+                if fdef_new.get("use"):
+                    # shared reference
+                    lines.append(_toml_kv("use", fdef_new["use"]))
+                elif fdef_new.get("parent"):
+                    # parent-dependent field
+                    lines.append(_toml_kv("parent", fdef_new["parent"]))
+                    by_parent = fdef_new.get("options_by_parent", {})
+                    if by_parent:
+                        # write as inline dict: options = {self = [...], home = [...]}
+                        pairs = ", ".join(
+                            f"{pval} = {_toml_val(popts)}"
+                            for pval, popts in by_parent.items()
+                        )
+                        lines.append(f"options = {{{pairs}}}")
+                elif fdef_new.get("is_int"):
                     lines.append('type = "int"')
-                opts = fdef_new.get("options", [])
-                if opts:
-                    lines.append(_toml_kv("options", opts))
+                else:
+                    opts = fdef_new.get("options", [])
+                    if opts:
+                        lines.append(_toml_kv("options", opts))
             else:
-                # preserved verbatim: parent-dep, use=shared, old derived, etc.
+                # preserved verbatim: old derived, conditions, etc.
                 if isinstance(fdef_old, dict):
                     for k, v in fdef_old.items():
                         lines.append(_toml_kv(k, v))
@@ -912,21 +926,13 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
             tdef_old = tags_old.get(tfield, {})
             lines.append(f"[type.{tname}.tags.{tfield}]")
             if tdef_new is not None:
-                # builder state: { fval: [tags, ...], ... }
-                for fval, ftags in tdef_new.items():
-                    if ftags:
-                        lines.append(_toml_kv(f"options.{fval}", ftags))
+                for fval, tags in tdef_new.items():
+                    if tags:
+                        lines.append(_toml_kv(f"options.{fval}", tags))
             else:
-                # preserve from old schema — always expand to dotted keys
-                # to avoid inline-dict vs dotted-key TOML conflict on re-save
                 if isinstance(tdef_old, dict):
                     for k, v in tdef_old.items():
-                        if k == "options" and isinstance(v, dict):
-                            # expand inline dict to dotted keys
-                            for fval, ftags in v.items():
-                                lines.append(_toml_kv(f"options.{fval}", ftags))
-                        else:
-                            lines.append(_toml_kv(k, v))
+                        lines.append(_toml_kv(k, v))
             lines.append("")
 
         # ── conditions: always preserved verbatim ────────────────────────
