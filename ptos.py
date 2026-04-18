@@ -682,6 +682,13 @@ def get_schema():
         sys.exit("schema.toml not found. Run: ptos --init")
     return _load("schema", SCHEMA_PATH)
 
+def get_global_fields(schema=None):
+    """Return ordered dict of {name: field_def} from [global_fields] in schema.
+    These are optional fields that appear on every record type."""
+    if schema is None:
+        schema = get_schema()
+    return schema.get("global_fields", {})
+
 def get_queries():
     if not os.path.exists(QUERIES_PATH):
         sys.exit("queries.toml not found. Run: ptos --init")
@@ -1657,6 +1664,11 @@ def _get_field_options(schema, type_schema, field, record):
             return opts.get(parent_val, [])
         return None
 
+    # global_fields fallback — field not in type schema, check [global_fields]
+    gf = schema.get("global_fields", {}).get(field, {})
+    if isinstance(gf, dict) and "options" in gf:
+        return gf["options"]
+
     return None
 
 def validate_record(schema, record):
@@ -1689,6 +1701,7 @@ def validate_record(schema, record):
     allowed_fields.update(type_schema.get("required", []))
     allowed_fields.update(type_schema.get("fields", {}).keys())
     allowed_fields.update(type_schema.get("conditions", {}).keys())
+    allowed_fields.update(schema.get("global_fields", {}).keys())
     for f in record:
         if f not in allowed_fields:
             problems.append(f"Unknown field '{f}'")
@@ -2238,6 +2251,21 @@ def choose_from_list(prompt, options):
         if choice.isdigit() and 1 <= int(choice) <= len(options):
             return options[int(choice) - 1]
 
+def choose_from_list_optional(prompt, options):
+    """Like choose_from_list but Enter with no input skips (returns empty string)."""
+    print(f"\n{prompt} (Enter to skip):")
+    for i, opt in enumerate(options, 1):
+        print(f"  {i}) {opt}")
+    while True:
+        raw = input("> ").strip()
+        if not raw:
+            return ""
+        if raw.isdigit() and 1 <= int(raw) <= len(options):
+            return options[int(raw) - 1]
+        if raw in options:
+            return raw
+        print(f"  Enter a number 1–{len(options)} or press Enter to skip.")
+
 def input_text(prompt):
     while True:
         val = input(f"\n{prompt}: ").strip()
@@ -2545,6 +2573,22 @@ def complete_record(schema, record):
         pass  # record["tag"] already set from preset
 
     note = input("\nAdd note (optional): ").strip()
+
+    # global optional fields — prompt once after note, all skippable
+    gfields = get_global_fields(schema)
+    if gfields:
+        print("\nAdditional info (all optional — press Enter to skip each):")
+        for fname, fdef in gfields.items():
+            if fname in record:
+                continue  # already set by preset or inline arg
+            opts = fdef.get("options", []) if isinstance(fdef, dict) else []
+            if opts:
+                val = choose_from_list_optional(f"  {fname}", opts)
+            else:
+                val = input(f"  {fname}: ").strip()
+            if val:
+                record[fname] = val.replace(" ", "_")
+
     return record, note
 
 
@@ -3050,6 +3094,26 @@ multi     = true
 # --------------------------------------------------
 
 # (add shared fields here and reference with  use = "shared.fieldname")
+
+# ==================================================
+# GLOBAL OPTIONAL FIELDS
+# ==================================================
+# These fields appear on EVERY record type — always optional.
+# Uncomment and customise to enable them.
+# They show in a collapsible "Additional info" panel in the web UI
+# and are prompted after the note in the CLI.
+#
+# [global_fields.person]
+# type    = "string"
+# options = ["alice", "bob"]    # omit for free-text
+#
+# [global_fields.context]
+# type    = "string"
+# options = ["home", "work", "travel"]
+#
+# [global_fields.project]
+# type    = "string"
+# # no options = free-text entry
 
 # ==================================================
 # TYPES  —  add your own below using the pattern above

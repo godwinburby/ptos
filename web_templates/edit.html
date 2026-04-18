@@ -101,6 +101,55 @@
              style="margin-top:{% if tag_options %}10px{% else %}4px{% endif %};">
     </div>
 
+    <!-- global optional fields -->
+    {% if global_field_defs %}
+    <div class="divider"></div>
+    {% set filled = global_field_defs | selectattr('value') | list %}
+    <div onclick="toggleExtra()"
+         style="display:flex;align-items:center;justify-content:space-between;
+                padding:10px 0;cursor:pointer;user-select:none;">
+      <span style="font-size:13px;font-weight:600;color:var(--sub);">
+        Additional info
+        {% if filled %}
+        <span style="color:var(--accent);margin-left:6px;">· {{ filled|length }} filled</span>
+        {% endif %}
+      </span>
+      <span id="extra-arrow" style="font-size:11px;color:var(--sub);">
+        {% if filled %}▲{% else %}▼{% endif %}
+      </span>
+    </div>
+    <div id="extra-fields" style="display:{% if filled %}block{% else %}none{% endif %};">
+      {% for f in global_field_defs %}
+      <div class="field-group" style="margin-bottom:10px;">
+        <label>{{ f.name }}
+          <span style="color:var(--sub);font-weight:400;font-size:11px;"> optional</span>
+        </label>
+        {% if f.options %}
+        <select name="{{ f.name }}">
+          <option value="">— none —</option>
+          {% for opt in f.options %}
+          <option value="{{ opt }}" {% if f.value == opt %}selected{% endif %}>{{ opt }}</option>
+          {% endfor %}
+        </select>
+        {% else %}
+        <input type="text" name="{{ f.name }}"
+               value="{{ f.value }}"
+               placeholder="{{ f.name }}">
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    <script>
+    function toggleExtra() {
+      var el  = document.getElementById("extra-fields");
+      var arr = document.getElementById("extra-arrow");
+      var open = el.style.display !== "none";
+      el.style.display = open ? "none" : "block";
+      arr.textContent  = open ? "▼" : "▲";
+    }
+    </script>
+    {% endif %}
+
     <!-- note -->
     <div class="divider"></div>
     <div class="field-group">

@@ -98,6 +98,19 @@
 
 </div>
 
+<!-- Global Fields editor — full width below type editor -->
+<div class="card" style="margin-top:18px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+    <div class="card-title" style="margin:0;">Global Optional Fields</div>
+    <button onclick="addGlobalField()" class="btn btn-ghost btn-sm">+ Add field</button>
+  </div>
+  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    These fields appear on <strong>every</strong> record type in a collapsible
+    "Additional info" panel. Always optional. Leave options empty for free-text.
+  </p>
+  <div id="global-fields-list"></div>
+</div>
+
 <style>
   .type-tab {
     display:block;width:100%;text-align:left;padding:8px 10px;border-radius:8px;
@@ -139,7 +152,8 @@
 
 var _state = {
   types: [],
-  type_schemas: {}
+  type_schemas: {},
+  global_fields: {}   // { fname: { is_int: bool, options: [] } }
 };
 var _currentType = null;
 
@@ -147,6 +161,16 @@ var _currentType = null;
 (function() {
   var schema = {{ schema | tojson }};
   _state.types = schema.types ? (schema.types.allowed || []) : [];
+
+  // load global_fields
+  Object.entries(schema.global_fields || {}).forEach(function(entry) {
+    var fname = entry[0], fdef = entry[1];
+    if (!fdef || typeof fdef !== "object") return;
+    _state.global_fields[fname] = {
+      is_int:  fdef.type === "int",
+      options: Array.isArray(fdef.options) ? fdef.options : [],
+    };
+  });
 
   var old_types = schema.type || {};
   _state.types.forEach(function(tname) {
@@ -195,6 +219,7 @@ var _currentType = null;
 
   renderTypeList();
   if (_state.types.length) selectType(_state.types[0]);
+  renderGlobalFields();
 })();
 
 // ── Type list ─────────────────────────────────────────────────────────────────
@@ -500,6 +525,109 @@ function addTag(tfield, fval) {
 function removeTag(tfield, fval, idx) {
   ts().tags[tfield][fval].splice(idx, 1);
   renderTags(ts());
+}
+
+// ── Global Fields ─────────────────────────────────────────────────────────────
+function renderGlobalFields() {
+  var el = document.getElementById("global-fields-list");
+  if (!el) return;
+  el.innerHTML = "";
+  Object.entries(_state.global_fields).forEach(function(entry) {
+    el.appendChild(makeGlobalFieldRow(entry[0], entry[1]));
+  });
+}
+
+function addGlobalField() {
+  var name = prompt("Global field name (lowercase):");
+  if (!name) return;
+  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name) return;
+  if (_state.global_fields[name]) { alert("Field already exists"); return; }
+  _state.global_fields[name] = { is_int: false, options: [] };
+  renderGlobalFields();
+}
+
+function makeGlobalFieldRow(fname, fdef) {
+  var div = document.createElement("div");
+  div.className = "field-row";
+  div.id = "gf-row-" + fname;
+
+  var head = document.createElement("div");
+  head.className = "field-row-head";
+  head.innerHTML =
+    '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
+      '<input type="checkbox" ' + (fdef.is_int ? "checked" : "") +
+      ' onchange="toggleGlobalInt(\'' + fname + '\',this.checked)"> Number field' +
+    '</label>' +
+    '<button onclick="deleteGlobalField(\'' + fname + '\')" ' +
+    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;' +
+    'line-height:1;padding:0;">×</button>';
+  div.appendChild(head);
+
+  if (!fdef.is_int) {
+    var opts = document.createElement("div");
+    opts.className = "opts-area";
+
+    var chipsDiv = document.createElement("div");
+    chipsDiv.style.marginBottom = "8px";
+    (fdef.options || []).forEach(function(opt, i) {
+      var chip = document.createElement("span");
+      chip.className = "opt-chip";
+      chip.innerHTML = opt + ' <button onclick="removeGlobalOption(\'' +
+        fname + '\',' + i + ')">×</button>';
+      chipsDiv.appendChild(chip);
+    });
+
+    var hint = document.createElement("div");
+    hint.style.cssText = "font-size:11px;color:var(--sub);margin-bottom:6px;";
+    hint.textContent = fdef.options.length ? "" : "No options = free-text entry";
+    chipsDiv.appendChild(hint);
+    opts.appendChild(chipsDiv);
+
+    var addRow = document.createElement("div");
+    addRow.style.cssText = "display:flex;gap:8px;";
+    addRow.innerHTML =
+      '<input type="text" id="gf-inp-' + fname + '" placeholder="add option…" ' +
+      'style="flex:1;font-size:13px;" ' +
+      'onkeydown="if(event.key===\'Enter\') addGlobalOption(\'' + fname + '\')">' +
+      '<button onclick="addGlobalOption(\'' + fname + '\')" ' +
+      'class="btn btn-ghost btn-sm">Add</button>';
+    opts.appendChild(addRow);
+    div.appendChild(opts);
+  } else {
+    var note = document.createElement("div");
+    note.style.cssText = "font-size:12px;color:var(--sub);margin-top:4px;";
+    note.textContent = "Numeric — no options needed";
+    div.appendChild(note);
+  }
+  return div;
+}
+
+function toggleGlobalInt(fname, val) {
+  _state.global_fields[fname].is_int = val;
+  if (val) _state.global_fields[fname].options = [];
+  renderGlobalFields();
+}
+
+function deleteGlobalField(fname) {
+  if (!confirm("Remove global field '" + fname + "'?\nExisting records that used it won't be changed.")) return;
+  delete _state.global_fields[fname];
+  renderGlobalFields();
+}
+
+function addGlobalOption(fname) {
+  var inp = document.getElementById("gf-inp-" + fname);
+  var val = inp.value.trim().toLowerCase().replace(/\s+/g, "_");
+  if (!val) return;
+  var opts = _state.global_fields[fname].options;
+  if (!opts.includes(val)) { opts.push(val); renderGlobalFields(); }
+  else inp.value = "";
+}
+
+function removeGlobalOption(fname, idx) {
+  _state.global_fields[fname].options.splice(idx, 1);
+  renderGlobalFields();
 }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
