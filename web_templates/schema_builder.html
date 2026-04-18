@@ -274,10 +274,20 @@ var _currentType = null;
       var fname = entry[0], fdef = entry[1];
       if (!fdef || typeof fdef !== "object") return;
       if ("derived" in fdef) return;   // skip derived — handled separately
-      if ("parent" in fdef) return;    // skip parent-dependent — read-only
       if ("use" in fdef) {
-        // shared ref — load with use property so builder can show and edit it
         fields[fname] = { is_int: false, options: [], use: fdef.use };
+        return;
+      }
+      if ("parent" in fdef) {
+        // parent-dependent field — options is a dict keyed by parent value
+        var rawOpts = fdef.options;
+        var byParent = {};
+        if (rawOpts && typeof rawOpts === "object" && !Array.isArray(rawOpts)) {
+          Object.entries(rawOpts).forEach(function(e) {
+            byParent[e[0]] = Array.isArray(e[1]) ? e[1] : [];
+          });
+        }
+        fields[fname] = { is_int: false, parent: fdef.parent, options_by_parent: byParent };
         return;
       }
       var opts = Array.isArray(fdef.options) ? fdef.options : [];
@@ -445,15 +455,23 @@ function addField() {
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
   if (!name) return;
   if (ts().fields[name]) { alert("Field already exists"); return; }
-  var sharedKeys = Object.keys(_state.shared_defs);
-  if (sharedKeys.length) {
+
+  // check for parent candidates: flat-option fields in this type
+  var parentCandidates = Object.entries(ts().fields)
+    .filter(function(e) { return !e[1].is_int && !e[1].parent && !e[1].use && Array.isArray(e[1].options) && e[1].options.length > 0; })
+    .map(function(e) { return e[0]; });
+
+  if (parentCandidates.length) {
     var pick = prompt(
-      "Assign to a shared definition? Enter one of:\n" +
-      sharedKeys.join(", ") +
+      "Make this field depend on a parent field?\nEnter one of: " + parentCandidates.join(", ") +
       "\n\n(Leave blank for standalone)"
     );
-    if (pick && _state.shared_defs[pick.trim()]) {
-      ts().fields[name] = { is_int: false, options: [], use: "shared." + pick.trim() };
+    if (pick && ts().fields[pick.trim()]) {
+      var parentName = pick.trim();
+      var parentOpts = ts().fields[parentName].options;
+      var byParent = {};
+      parentOpts.forEach(function(pval) { byParent[pval] = []; });
+      ts().fields[name] = { is_int: false, parent: parentName, options_by_parent: byParent };
       renderFields(ts());
       return;
     }
@@ -467,56 +485,72 @@ function makeFieldRow(fname, fdef) {
   div.className = "field-row";
   div.id = "field-row-" + fname;
 
-  // ── shared ref field ─────────────────────────────────────────────────────
-  if (fdef.use) {
+  // ── parent-dependent field ────────────────────────────────────────────────
+  if (fdef.parent) {
     var head = document.createElement("div");
     head.className = "field-row-head";
     head.innerHTML =
       '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
+      '<span style="font-size:11px;color:var(--accent);background:var(--accent-lt);' +
+        'padding:2px 8px;border-radius:10px;margin-right:6px;">depends on ' + fdef.parent + '</span>' +
       '<button onclick="deleteField(\'' + fname + '\')" ' +
       'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>';
     div.appendChild(head);
 
-    var body = document.createElement("div");
-    body.style.cssText = "display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap;";
+    // one sub-section per parent value
+    var byParent = fdef.options_by_parent || {};
+    Object.entries(byParent).forEach(function(entry) {
+      var pval = entry[0], childOpts = entry[1];
 
-    // shared selector — populated from _state.shared_defs
-    var sharedKeys = Object.keys(_state.shared_defs);
-    var selHtml =
-      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;">' +
-      'Uses shared:&nbsp;<select onchange="setFieldUse(\'' + fname + '\',this.value)" ' +
-      'style="font-size:12px;padding:3px 6px;">';
-    sharedKeys.forEach(function(k) {
-      var full = "shared." + k;
-      selHtml += '<option value="' + full + '"' + (fdef.use === full ? " selected" : "") + '>' + k + '</option>';
+      var section = document.createElement("div");
+      section.style.cssText = "margin-top:10px;border-left:3px solid var(--border);padding-left:12px;";
+
+      var pLabel = document.createElement("div");
+      pLabel.style.cssText = "font-size:11px;font-weight:700;color:var(--sub);letter-spacing:.4px;margin-bottom:6px;";
+      pLabel.textContent = fdef.parent.toUpperCase() + " = " + pval;
+      section.appendChild(pLabel);
+
+      // chips
+      var chipsDiv = document.createElement("div");
+      chipsDiv.style.marginBottom = "6px";
+      childOpts.forEach(function(opt, i) {
+        var chip = document.createElement("span");
+        chip.className = "opt-chip";
+        chip.innerHTML = opt + ' <button onclick="removeParentOpt(\'' +
+          fname + '\',\'' + pval + '\',' + i + ')">×</button>';
+        chipsDiv.appendChild(chip);
+      });
+      section.appendChild(chipsDiv);
+
+      // add input
+      var addRow = document.createElement("div");
+      addRow.style.cssText = "display:flex;gap:8px;";
+      var inpId = "pdep-inp-" + fname + "-" + pval;
+      addRow.innerHTML =
+        '<input type="text" id="' + inpId + '" placeholder="add option for ' + pval + '…" ' +
+        'style="flex:1;font-size:12px;" ' +
+        'onkeydown="if(event.key===\'Enter\') addParentOpt(\'' + fname + '\',\'' + pval + '\')">' +
+        '<button onclick="addParentOpt(\'' + fname + '\',\'' + pval + '\')" ' +
+        'class="btn btn-ghost btn-sm" style="font-size:11px;">Add</button>';
+      section.appendChild(addRow);
+      div.appendChild(section);
     });
-    if (!sharedKeys.length) {
-      selHtml += '<option value="">— no shared defs yet —</option>';
-    }
-    selHtml += '</select></label>';
 
-    // convert to standalone button
-    selHtml +=
-      '<button onclick="convertToStandalone(\'' + fname + '\')" ' +
-      'class="btn btn-ghost btn-sm" style="font-size:11px;" ' +
-      'title="Stop using shared, give this field its own options list">Convert to standalone</button>';
+    // add new parent-value bucket
+    var addPVal = document.createElement("div");
+    addPVal.style.cssText = "margin-top:10px;display:flex;gap:8px;align-items:center;";
+    addPVal.innerHTML =
+      '<input type="text" id="pdep-pval-' + fname + '" ' +
+      'placeholder="add new ' + fdef.parent + ' value…" style="flex:1;font-size:12px;" ' +
+      'onkeydown="if(event.key===\'Enter\') addParentValue(\'' + fname + '\')">' +
+      '<button onclick="addParentValue(\'' + fname + '\')" ' +
+      'class="btn btn-ghost btn-sm" style="font-size:11px;">+ Parent value</button>';
+    div.appendChild(addPVal);
 
-    body.innerHTML = selHtml;
-    div.appendChild(body);
-
-    // preview the options from the referenced shared def
-    var refKey = fdef.use.replace("shared.", "");
-    var refOpts = (_state.shared_defs[refKey] || {}).options || [];
-    if (refOpts.length) {
-      var preview = document.createElement("div");
-      preview.style.cssText = "margin-top:6px;font-size:11px;color:var(--sub);";
-      preview.textContent = "Options: " + refOpts.join(", ");
-      div.appendChild(preview);
-    }
     return div;
   }
 
-  // ── regular field ─────────────────────────────────────────────────────────
+  // ── regular field (flat options) ──────────────────────────────────────────
   var head2 = document.createElement("div");
   head2.className = "field-row-head";
   head2.innerHTML =
@@ -533,45 +567,25 @@ function makeFieldRow(fname, fdef) {
   if (!fdef.is_int) {
     var opts = document.createElement("div");
     opts.className = "opts-area";
-    var chipsDiv = document.createElement("div");
-    chipsDiv.style.marginBottom = "8px";
+    var chipsDiv2 = document.createElement("div");
+    chipsDiv2.style.marginBottom = "8px";
     (fdef.options || []).forEach(function(opt, i) {
       var chip = document.createElement("span");
       chip.className = "opt-chip";
       chip.innerHTML = opt + ' <button onclick="removeOption(\'' +
         fname + '\',' + i + ')">×</button>';
-      chipsDiv.appendChild(chip);
+      chipsDiv2.appendChild(chip);
     });
-    opts.appendChild(chipsDiv);
-    var addRow = document.createElement("div");
-    addRow.style.cssText = "display:flex;gap:8px;";
-    addRow.innerHTML =
+    opts.appendChild(chipsDiv2);
+    var addRow2 = document.createElement("div");
+    addRow2.style.cssText = "display:flex;gap:8px;";
+    addRow2.innerHTML =
       '<input type="text" id="opt-inp-' + fname + '" placeholder="add option…" ' +
       'style="flex:1;font-size:13px;" ' +
       'onkeydown="if(event.key===\'Enter\') addOption(\'' + fname + '\')">' +
       '<button onclick="addOption(\'' + fname + '\')" ' +
       'class="btn btn-ghost btn-sm">Add</button>';
-    opts.appendChild(addRow);
-
-    // assign to shared button — only if shared defs exist
-    if (Object.keys(_state.shared_defs).length) {
-      var assignRow = document.createElement("div");
-      assignRow.style.cssText = "margin-top:8px;display:flex;align-items:center;gap:6px;";
-      var sharedKeys2 = Object.keys(_state.shared_defs);
-      var assignHtml =
-        '<label style="font-size:11px;color:var(--sub);">Assign to shared:&nbsp;</label>' +
-        '<select id="assign-sel-' + fname + '" style="font-size:12px;padding:2px 4px;">' +
-        '<option value="">— pick —</option>';
-      sharedKeys2.forEach(function(k) {
-        assignHtml += '<option value="shared.' + k + '">' + k + '</option>';
-      });
-      assignHtml += '</select>' +
-        '<button onclick="assignToShared(\'' + fname + '\')" ' +
-        'class="btn btn-ghost btn-sm" style="font-size:11px;">Use</button>';
-      assignRow.innerHTML = assignHtml;
-      opts.appendChild(assignRow);
-    }
-
+    opts.appendChild(addRow2);
     div.appendChild(opts);
   } else {
     var note = document.createElement("div");
@@ -591,30 +605,9 @@ function toggleInt(fname, val) {
 function deleteField(fname) {
   if (!confirm("Remove field '" + fname + "' from this type?")) return;
   delete ts().fields[fname];
+  // also remove any tag rules for this field
   delete ts().tags[fname];
   renderFields(ts()); renderTags(ts());
-}
-
-function setFieldUse(fname, val) {
-  // change which shared def this field references
-  ts().fields[fname].use = val;
-  renderFields(ts());
-}
-
-function convertToStandalone(fname) {
-  // copy options from the shared def, then remove the use reference
-  var fdef = ts().fields[fname];
-  var refKey = (fdef.use || "").replace("shared.", "");
-  var refOpts = (_state.shared_defs[refKey] || {}).options || [];
-  ts().fields[fname] = { is_int: false, options: refOpts.slice() };
-  renderFields(ts());
-}
-
-function assignToShared(fname) {
-  var sel = document.getElementById("assign-sel-" + fname);
-  if (!sel || !sel.value) return;
-  ts().fields[fname] = { is_int: false, options: [], use: sel.value };
-  renderFields(ts());
 }
 
 function addOption(fname) {
@@ -629,6 +622,38 @@ function addOption(fname) {
 function removeOption(fname, idx) {
   ts().fields[fname].options.splice(idx, 1);
   renderFields(ts());
+}
+
+// ── Parent-dependent field helpers ────────────────────────────────────────────
+function addParentOpt(fname, pval) {
+  var inpId = "pdep-inp-" + fname + "-" + pval;
+  var inp = document.getElementById(inpId);
+  if (!inp) return;
+  var val = inp.value.trim().toLowerCase().replace(/\s+/g, "_");
+  if (!val) return;
+  var byParent = ts().fields[fname].options_by_parent;
+  if (!byParent[pval]) byParent[pval] = [];
+  if (!byParent[pval].includes(val)) {
+    byParent[pval].push(val);
+    renderFields(ts());
+  } else inp.value = "";
+}
+
+function removeParentOpt(fname, pval, idx) {
+  ts().fields[fname].options_by_parent[pval].splice(idx, 1);
+  renderFields(ts());
+}
+
+function addParentValue(fname) {
+  var inp = document.getElementById("pdep-pval-" + fname);
+  if (!inp) return;
+  var val = inp.value.trim().toLowerCase().replace(/\s+/g, "_");
+  if (!val) return;
+  var byParent = ts().fields[fname].options_by_parent;
+  if (!byParent[val]) {
+    byParent[val] = [];
+    renderFields(ts());
+  } else inp.value = "";
 }
 
 // ── Tags ──────────────────────────────────────────────────────────────────────
