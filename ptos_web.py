@@ -191,6 +191,23 @@ def _build_field_defs(schema, rtype, current_record=None):
     return defs
 
 
+def _build_global_field_defs(schema, current_record=None):
+    """Build field def dicts for [global_fields] — rendered in collapsible panel."""
+    record = current_record or {}
+    defs = []
+    for fname, fdef in schema.get("global_fields", {}).items():
+        if not isinstance(fdef, dict):
+            continue
+        defs.append({
+            "name":    fname,
+            "options": fdef.get("options", []),
+            "is_int":  fdef.get("type") == "int",
+            "unit":    fdef.get("unit", ""),
+            "value":   record.get(fname, ""),
+        })
+    return defs
+
+
 def _resolve_multi_preset(name):
     presets = svc.get_presets()
     pd = presets.get(name, {})
@@ -389,6 +406,7 @@ def add_get():
             pass
     
     field_defs  = _build_field_defs(schema, selected_type, initial_context)
+    global_field_defs = _build_global_field_defs(schema, field_values)
     tag_options = []
     if selected_type:
         ts = schema.get("type", {}).get(selected_type, {})
@@ -398,6 +416,7 @@ def add_get():
         types=types, presets=sorted(presets.keys()),
         multi_presets=multi_presets,
         selected_type=selected_type, field_defs=field_defs,
+        global_field_defs=global_field_defs,
         tag_options=tag_options, history_tags=history_filtered_tags,
         field_values=field_values,
         today=dt.date.today().isoformat(),
@@ -428,6 +447,10 @@ def add_post():
         if fname == "tag": continue
         val = request.form.get(fname,"").strip()
         if val: record[fname] = val.replace(" ","_")
+    # collect global optional fields from form
+    for fname in ptos.get_global_fields(schema):
+        val = request.form.get(fname, "").strip()
+        if val: record[fname] = val.replace(" ", "_")
     tags = request.form.getlist("tag") + custom_tags
     if tags: record["tag"] = tags
     try:   problems = ptos.validate_record(schema, record)
@@ -439,6 +462,7 @@ def add_post():
             types=types, presets=sorted(presets.keys()),
             multi_presets=_multi_presets(),
             selected_type=rtype, field_defs=fd,
+            global_field_defs=_build_global_field_defs(schema, record),
             tag_options=ptos.resolve_tags(schema, ts, record),
             field_values=record, today=dt.date.today().isoformat(),
             msg=" | ".join(problems), msg_type="error", last_line=None)
@@ -452,6 +476,7 @@ def add_post():
             types=types, presets=sorted(presets.keys()),
             multi_presets=_multi_presets(),
             selected_type=rtype, field_defs=fd,
+            global_field_defs=_build_global_field_defs(schema, record),
             tag_options=ptos.resolve_tags(schema, ts, record),
             field_values=record, today=dt.date.today().isoformat(),
             msg=str(e), msg_type="error", last_line=None)
@@ -460,6 +485,7 @@ def add_post():
         types=types, presets=sorted(presets.keys()),
         multi_presets=_multi_presets(),
         selected_type="", field_defs=[], tag_options=[],
+        global_field_defs=[],
         field_values={}, today=dt.date.today().isoformat(),
         msg=None, msg_type=None, last_line=line)
 
@@ -521,8 +547,9 @@ def schema_builder():
 @app.route("/schema-builder/save", methods=["POST"])
 def schema_builder_save():
     data = request.get_json(silent=True) or {}
-    new_types    = data.get("types", [])
-    type_schemas = data.get("type_schemas", {})
+    new_types     = data.get("types", [])
+    type_schemas  = data.get("type_schemas", {})
+    global_fields = data.get("global_fields", {})
     if not new_types:
         return jsonify(ok=False, error="At least one record type is required")
     import re as _re
@@ -532,7 +559,8 @@ def schema_builder_save():
                 error=f"Type '{t}' must be lowercase letters, numbers, underscores")
     try:
         schema = svc.get_schema()
-        lines  = _build_schema_toml(schema, new_types, type_schemas)
+        lines  = _build_schema_toml(schema, new_types, type_schemas,
+                                    new_global_fields=global_fields)
         ptos._backup_file(ptos.SCHEMA_PATH)
         svc.write_file(ptos.SCHEMA_PATH, "\n".join(lines) + "\n")
         for key in ("schema", "derived_fields", "numeric_fields"):
@@ -547,18 +575,20 @@ def schema_builder_preview_lint():
     """Preview lint results against unsaved schema changes."""
     import tomllib
     data = request.get_json(silent=True) or {}
-    new_types    = data.get("types", [])
-    type_schemas = data.get("type_schemas", {})
-    
+    new_types     = data.get("types", [])
+    type_schemas  = data.get("type_schemas", {})
+    global_fields = data.get("global_fields", {})
+
     if not new_types:
         return jsonify(ok=False, error="No types provided")
-    
+
     try:
         old_schema = svc.get_schema()
-        lines = _build_schema_toml(old_schema, new_types, type_schemas)
+        lines = _build_schema_toml(old_schema, new_types, type_schemas,
+                                   new_global_fields=global_fields)
         new_schema_toml = "\n".join(lines)
         new_schema = tomllib.loads(new_schema_toml)
-        
+
         content_parts = []
         for fname in ptos.get_log_files():
             fpath = os.path.join(ptos.RECORDS_DIR, fname)
@@ -566,7 +596,7 @@ def schema_builder_preview_lint():
                 with open(fpath, encoding="utf-8") as f:
                     content_parts.append(f.read())
         content = "\n".join(content_parts)
-        
+
         result = svc.lint_content_with_schema(content, schema_override=new_schema)
         return jsonify(ok=True, data=result)
     except Exception as e:
@@ -733,7 +763,7 @@ def _toml_kv(k, v):
     return f"{k} = {_toml_val(v)}"
 
 
-def _build_schema_toml(old_schema, new_types, type_schemas):
+def _build_schema_toml(old_schema, new_types, type_schemas, new_global_fields=None):
     lines = [
         "# ==================================================",
         "# PTOS SCHEMA  (managed by Schema Builder)",
@@ -765,6 +795,28 @@ def _build_schema_toml(old_schema, new_types, type_schemas):
             if isinstance(smeta, dict):
                 for k, v in smeta.items():
                     lines.append(_toml_kv(k, v))
+            lines.append("")
+
+    # ── [global_fields.*] — written from builder state ────────────────────────
+    # new_global_fields: { fname: { is_int: bool, options: [...] } }
+    # falls back to old_schema["global_fields"] if builder sent nothing
+    gf_source = new_global_fields if new_global_fields is not None \
+                else old_schema.get("global_fields", {})
+    if gf_source:
+        lines += ["# ==================================================",
+                  "# GLOBAL OPTIONAL FIELDS",
+                  "# ==================================================", ""]
+        for fname, fdef in gf_source.items():
+            if not isinstance(fdef, dict):
+                continue
+            lines.append(f"[global_fields.{fname}]")
+            if fdef.get("is_int"):
+                lines.append('type = "int"')
+            else:
+                lines.append('type = "string"')
+            opts = fdef.get("options", [])
+            if opts:
+                lines.append(_toml_kv("options", opts))
             lines.append("")
 
     # ── types ────────────────────────────────────────────────────────────────
@@ -1375,6 +1427,7 @@ def edit_get():
         filepath=filepath, lineno=lineno_int, old_line=line,
         return_to=return_to,
         rtype=rtype, field_defs=field_defs,
+        global_field_defs=_build_global_field_defs(schema, field_values),
         tag_options=tag_options, history_tags=history_filtered_tags,
         field_values=field_values,
         today=dt.date.today().isoformat(),
@@ -1408,6 +1461,10 @@ def edit_post():
     new_record = {"type": rtype}
     for fname in all_f:
         if fname == "tag": continue
+        val = request.form.get(fname, "").strip()
+        if val: new_record[fname] = val.replace(" ", "_")
+    # collect global optional fields from form
+    for fname in ptos.get_global_fields(schema):
         val = request.form.get(fname, "").strip()
         if val: new_record[fname] = val.replace(" ", "_")
     tags = request.form.getlist("tag") + custom_tags
@@ -1465,6 +1522,7 @@ def edit_post():
             filepath=filepath, lineno=lineno_int, old_line=old_line,
             return_to=return_to,
             rtype=rtype, field_defs=field_defs,
+            global_field_defs=_build_global_field_defs(schema, field_values),
             tag_options=tag_options, field_values=field_values,
             today=dt.date.today().isoformat(),
             msg=str(e), msg_type="error")
@@ -1593,6 +1651,27 @@ def api_type_fields(rtype):
             })
         
         dimensions = [f["name"] for f in defs if f["name"] not in bad and not f.get("is_int")]
+
+        # append global_fields so Browse chips and Query Builder can filter on them
+        for fname, fdef in schema.get("global_fields", {}).items():
+            if not isinstance(fdef, dict):
+                continue
+            defs.append({
+                "name":                 fname,
+                "required":             False,
+                "options":              fdef.get("options", []),
+                "is_int":               fdef.get("type") == "int",
+                "unit":                 fdef.get("unit", ""),
+                "parent":               "",
+                "has_parent":           False,
+                "is_parent":            False,
+                "is_tag_trigger":       False,
+                "is_condition_trigger": False,
+                "show_when":            {},
+            })
+            if fname not in bad and fdef.get("type") != "int":
+                dimensions.append(fname)
+
         history    = svc.get_history_suggestions(rtype)
         return jsonify(fields=defs, dimensions=dimensions,
                        history_tags=history["tags"],
