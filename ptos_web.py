@@ -550,6 +550,8 @@ def schema_builder_save():
     new_types     = data.get("types", [])
     type_schemas  = data.get("type_schemas", {})
     global_fields = data.get("global_fields", {})
+    shared_defs   = data.get("shared_defs", {})
+    field_meta    = data.get("field_meta", {})
     if not new_types:
         return jsonify(ok=False, error="At least one record type is required")
     import re as _re
@@ -560,7 +562,9 @@ def schema_builder_save():
     try:
         schema = svc.get_schema()
         lines  = _build_schema_toml(schema, new_types, type_schemas,
-                                    new_global_fields=global_fields)
+                                    new_global_fields=global_fields,
+                                    new_shared_defs=shared_defs,
+                                    new_field_meta=field_meta)
         ptos._backup_file(ptos.SCHEMA_PATH)
         svc.write_file(ptos.SCHEMA_PATH, "\n".join(lines) + "\n")
         for key in ("schema", "derived_fields", "numeric_fields"):
@@ -578,6 +582,8 @@ def schema_builder_preview_lint():
     new_types     = data.get("types", [])
     type_schemas  = data.get("type_schemas", {})
     global_fields = data.get("global_fields", {})
+    shared_defs   = data.get("shared_defs", {})
+    field_meta    = data.get("field_meta", {})
 
     if not new_types:
         return jsonify(ok=False, error="No types provided")
@@ -585,7 +591,9 @@ def schema_builder_preview_lint():
     try:
         old_schema = svc.get_schema()
         lines = _build_schema_toml(old_schema, new_types, type_schemas,
-                                   new_global_fields=global_fields)
+                                   new_global_fields=global_fields,
+                                   new_shared_defs=shared_defs,
+                                   new_field_meta=field_meta)
         new_schema_toml = "\n".join(lines)
         new_schema = tomllib.loads(new_schema_toml)
 
@@ -763,7 +771,10 @@ def _toml_kv(k, v):
     return f"{k} = {_toml_val(v)}"
 
 
-def _build_schema_toml(old_schema, new_types, type_schemas, new_global_fields=None):
+def _build_schema_toml(old_schema, new_types, type_schemas,
+                       new_global_fields=None,
+                       new_shared_defs=None,
+                       new_field_meta=None):
     lines = [
         "# ==================================================",
         "# PTOS SCHEMA  (managed by Schema Builder)",
@@ -777,29 +788,40 @@ def _build_schema_toml(old_schema, new_types, type_schemas, new_global_fields=No
     lines.append("]")
     lines.append("")
 
-    # ── global [fields.*] preserved verbatim ─────────────────────────────────
-    lines += ["# Global field metadata", ""]
-    for fname, fmeta in old_schema.get("fields", {}).items():
-        if not isinstance(fmeta, dict):
-            continue
-        lines.append(f"[fields.{fname}]")
-        for k, v in fmeta.items():
-            lines.append(_toml_kv(k, v))
-        lines.append("")
-
-    # ── [shared.*] preserved verbatim ────────────────────────────────────────
-    if old_schema.get("shared"):
-        lines += ["# Shared field definitions", ""]
-        for sname, smeta in old_schema["shared"].items():
-            lines.append(f"[shared.{sname}]")
-            if isinstance(smeta, dict):
-                for k, v in smeta.items():
-                    lines.append(_toml_kv(k, v))
+    # ── [fields.*] global field metadata ─────────────────────────────────────
+    fm_source = new_field_meta if new_field_meta is not None \
+                else old_schema.get("fields", {})
+    if fm_source:
+        lines += ["# Global field metadata", ""]
+        for fname, fmeta in fm_source.items():
+            if not isinstance(fmeta, dict):
+                continue
+            lines.append(f"[fields.{fname}]")
+            lines.append(_toml_kv("type", fmeta.get("type", "string")))
+            if "aggregatable" in fmeta:
+                lines.append(_toml_kv("aggregatable", fmeta["aggregatable"]))
+            if "dimension" in fmeta:
+                lines.append(_toml_kv("dimension", fmeta["dimension"]))
+            if fmeta.get("unit"):
+                lines.append(_toml_kv("unit", fmeta["unit"]))
             lines.append("")
 
-    # ── [global_fields.*] — written from builder state ────────────────────────
-    # new_global_fields: { fname: { is_int: bool, options: [...] } }
-    # falls back to old_schema["global_fields"] if builder sent nothing
+    # ── [shared.*] shared definitions ────────────────────────────────────────
+    sd_source = new_shared_defs if new_shared_defs is not None \
+                else old_schema.get("shared", {})
+    if sd_source:
+        lines += ["# Shared field definitions", ""]
+        for sname, sdef in sd_source.items():
+            if not isinstance(sdef, dict):
+                continue
+            lines.append(f"[shared.{sname}]")
+            lines.append('type = "int"' if sdef.get("is_int") else 'type = "string"')
+            opts = sdef.get("options", [])
+            if opts:
+                lines.append(_toml_kv("options", opts))
+            lines.append("")
+
+    # ── [global_fields.*] ────────────────────────────────────────────────────
     gf_source = new_global_fields if new_global_fields is not None \
                 else old_schema.get("global_fields", {})
     if gf_source:
@@ -810,10 +832,7 @@ def _build_schema_toml(old_schema, new_types, type_schemas, new_global_fields=No
             if not isinstance(fdef, dict):
                 continue
             lines.append(f"[global_fields.{fname}]")
-            if fdef.get("is_int"):
-                lines.append('type = "int"')
-            else:
-                lines.append('type = "string"')
+            lines.append('type = "int"' if fdef.get("is_int") else 'type = "string"')
             opts = fdef.get("options", [])
             if opts:
                 lines.append(_toml_kv("options", opts))
@@ -836,34 +855,54 @@ def _build_schema_toml(old_schema, new_types, type_schemas, new_global_fields=No
             lines.append(f"required = [{req_str}]")
         lines.append("")
 
-        # fields: merge builder fields with preserved old fields
-        fields_new  = ts_new.get("fields", {})
-        fields_old  = ts_old.get("fields", {})
+        # ── fields: builder fields + derived fields + preserved advanced ──
+        fields_new   = ts_new.get("fields", {})
+        fields_old   = ts_old.get("fields", {})
+        derived_new  = ts_new.get("derived_fields", {})
+
+        # build ordered field name list: builder fields first, then old-only,
+        # then derived (so derived don't collide with regular fields)
         seen_fields = list(fields_new.keys())
         for fn in fields_old:
             if fn not in seen_fields:
                 seen_fields.append(fn)
+        for fn in derived_new:
+            if fn not in seen_fields:
+                seen_fields.append(fn)
 
         for fname in seen_fields:
-            fdef_new = fields_new.get(fname)
-            fdef_old = fields_old.get(fname, {})
+            fdef_new     = fields_new.get(fname)
+            fdef_old     = fields_old.get(fname, {})
+            fdef_derived = derived_new.get(fname)
+
             lines.append(f"[type.{tname}.fields.{fname}]")
-            if fdef_new is not None:
+
+            if fdef_derived is not None:
+                # from builder derived_fields state
+                expr  = fdef_derived.get("expr", "")
+                ftype = fdef_derived.get("type", "")
+                if expr:
+                    lines.append(_toml_kv("derived", expr))
+                if ftype:
+                    lines.append(_toml_kv("type", ftype))
+            elif fdef_new is not None:
+                # from builder regular fields state
                 if fdef_new.get("is_int"):
                     lines.append('type = "int"')
                 opts = fdef_new.get("options", [])
                 if opts:
                     lines.append(_toml_kv("options", opts))
             else:
+                # preserved verbatim: parent-dep, use=shared, old derived, etc.
                 if isinstance(fdef_old, dict):
                     for k, v in fdef_old.items():
                         lines.append(_toml_kv(k, v))
             lines.append("")
 
-        # tags: merge builder tags with preserved old tags
-        tags_new   = ts_new.get("tags", {})
-        tags_old   = ts_old.get("tags", {})
-        seen_tags  = list(tags_new.keys())
+        # ── tags: merge builder tags with preserved old tags ──────────────
+        tags_new  = ts_new.get("tags", {})
+        tags_old  = ts_old.get("tags", {})
+        seen_tags = list(tags_new.keys())
         for tf in tags_old:
             if tf not in seen_tags:
                 seen_tags.append(tf)
@@ -873,16 +912,24 @@ def _build_schema_toml(old_schema, new_types, type_schemas, new_global_fields=No
             tdef_old = tags_old.get(tfield, {})
             lines.append(f"[type.{tname}.tags.{tfield}]")
             if tdef_new is not None:
-                for fval, tags in tdef_new.items():
-                    if tags:
-                        lines.append(_toml_kv(f"options.{fval}", tags))
+                # builder state: { fval: [tags, ...], ... }
+                for fval, ftags in tdef_new.items():
+                    if ftags:
+                        lines.append(_toml_kv(f"options.{fval}", ftags))
             else:
+                # preserve from old schema — always expand to dotted keys
+                # to avoid inline-dict vs dotted-key TOML conflict on re-save
                 if isinstance(tdef_old, dict):
                     for k, v in tdef_old.items():
-                        lines.append(_toml_kv(k, v))
+                        if k == "options" and isinstance(v, dict):
+                            # expand inline dict to dotted keys
+                            for fval, ftags in v.items():
+                                lines.append(_toml_kv(f"options.{fval}", ftags))
+                        else:
+                            lines.append(_toml_kv(k, v))
             lines.append("")
 
-        # conditions: always preserved verbatim
+        # ── conditions: always preserved verbatim ────────────────────────
         for cname, cdef in ts_old.get("conditions", {}).items():
             lines.append(f"[type.{tname}.conditions.{cname}]")
             if isinstance(cdef, dict):

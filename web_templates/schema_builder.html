@@ -89,6 +89,21 @@
       </button>
     </div>
 
+    <!-- derived fields editor -->
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div class="card-title" style="margin:0;">Derived fields</div>
+        <button onclick="addDerivedField()" class="btn btn-ghost btn-sm">+ Add</button>
+      </div>
+      <div class="hint" style="margin-bottom:10px;">
+        Computed from other fields or dates. Available in filters and table output.
+        Example: <code>is_overdue = (today - date) &gt; 30</code>
+      </div>
+      <div id="derived-fields-list"></div>
+    </div>
+
+    </div>
+
   </div>
 
   <div id="type-empty"
@@ -98,17 +113,70 @@
 
 </div>
 
-<!-- Global Fields editor — full width below type editor -->
+<!-- ── Schema-wide settings ── -->
 <div class="card" style="margin-top:18px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-    <div class="card-title" style="margin:0;">Global Optional Fields</div>
-    <button onclick="addGlobalField()" class="btn btn-ghost btn-sm">+ Add field</button>
+  <div style="font-size:15px;font-weight:800;color:var(--text);margin-bottom:4px;">Schema-wide settings</div>
+  <div style="font-size:13px;color:var(--sub);margin-bottom:18px;">
+    These sections apply across all record types and are saved together with the type definitions above.
   </div>
-  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    These fields appear on <strong>every</strong> record type in a collapsible
-    "Additional info" panel. Always optional. Leave options empty for free-text.
-  </p>
-  <div id="global-fields-list"></div>
+
+  <!-- Global Optional Fields -->
+  <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:13px;font-weight:700;">Global Optional Fields</div>
+      <button onclick="addGlobalField()" class="btn btn-ghost btn-sm">+ Add field</button>
+    </div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
+      Appear on <strong>every</strong> record type in a collapsible "Additional info" panel.
+      Always optional. Leave options empty for free-text.
+    </div>
+    <div id="global-fields-list"></div>
+  </div>
+
+  <!-- Shared Definitions -->
+  <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:13px;font-weight:700;">Shared Definitions
+        <span style="font-size:11px;font-weight:400;color:var(--sub);margin-left:6px;">[shared.*]</span>
+      </div>
+      <button onclick="addSharedDef()" class="btn btn-ghost btn-sm">+ Add</button>
+    </div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
+      Reusable option lists. Reference from a type field with <code>use = "shared.name"</code>.
+    </div>
+    <div id="shared-defs-list"></div>
+  </div>
+
+  <!-- Field Metadata -->
+  <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:13px;font-weight:700;">Field Metadata
+        <span style="font-size:11px;font-weight:400;color:var(--sub);margin-left:6px;">[fields.*]</span>
+      </div>
+      <button onclick="addFieldMeta()" class="btn btn-ghost btn-sm">+ Add</button>
+    </div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
+      Type, unit, and aggregation hints for named fields — used by the metrics engine.
+    </div>
+    <div id="field-meta-list"></div>
+  </div>
+
+  <!-- Read-only: conditions / parent-dependent -->
+  <div style="border-top:1px solid var(--border);padding-top:16px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:13px;font-weight:700;">Conditions &amp; Parent-dependent fields
+        <span style="font-size:11px;font-weight:400;color:var(--sub);margin-left:6px;">read-only</span>
+      </div>
+      <button id="ro-show-btn"
+              onclick="renderReadOnly();document.getElementById('readonly-advanced').style.display='block';this.style.display='none';"
+              class="btn btn-ghost btn-sm">Show</button>
+    </div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
+      Managed directly in <code>config/schema.toml</code>. Shown here for reference.
+    </div>
+    <div id="readonly-advanced" style="display:none;"></div>
+  </div>
+
 </div>
 
 <style>
@@ -153,7 +221,10 @@
 var _state = {
   types: [],
   type_schemas: {},
-  global_fields: {}   // { fname: { is_int: bool, options: [] } }
+  global_fields: {},  // { fname: { is_int, options } }
+  shared_defs:   {},  // { name:  { is_int, options } }
+  field_meta:    {}   // { fname: { type, aggregatable, dimension, unit } }
+  // derived_fields live inside type_schemas[tname].derived_fields
 };
 var _currentType = null;
 
@@ -172,6 +243,28 @@ var _currentType = null;
     };
   });
 
+  // load shared_defs
+  Object.entries(schema.shared || {}).forEach(function(entry) {
+    var sname = entry[0], sdef = entry[1];
+    if (!sdef || typeof sdef !== "object") return;
+    _state.shared_defs[sname] = {
+      is_int:  sdef.type === "int",
+      options: Array.isArray(sdef.options) ? sdef.options : [],
+    };
+  });
+
+  // load field_meta
+  Object.entries(schema.fields || {}).forEach(function(entry) {
+    var fname = entry[0], fmeta = entry[1];
+    if (!fmeta || typeof fmeta !== "object") return;
+    _state.field_meta[fname] = {
+      type:         fmeta.type         || "string",
+      aggregatable: fmeta.aggregatable === true,
+      dimension:    fmeta.dimension    !== false,
+      unit:         fmeta.unit         || "",
+    };
+  });
+
   var old_types = schema.type || {};
   _state.types.forEach(function(tname) {
     var ts = old_types[tname] || {};
@@ -180,9 +273,13 @@ var _currentType = null;
     Object.entries(ts.fields || {}).forEach(function(entry) {
       var fname = entry[0], fdef = entry[1];
       if (!fdef || typeof fdef !== "object") return;
-      if ("derived" in fdef) return;   // skip derived
-      if ("use" in fdef) return;       // skip shared refs — builder doesn't manage these
-      if ("parent" in fdef) return;    // skip parent-dependent
+      if ("derived" in fdef) return;   // skip derived — handled separately
+      if ("parent" in fdef) return;    // skip parent-dependent — read-only
+      if ("use" in fdef) {
+        // shared ref — load with use property so builder can show and edit it
+        fields[fname] = { is_int: false, options: [], use: fdef.use };
+        return;
+      }
       var opts = Array.isArray(fdef.options) ? fdef.options : [];
       fields[fname] = {
         is_int:  fdef.type === "int",
@@ -211,15 +308,29 @@ var _currentType = null;
     });
 
     _state.type_schemas[tname] = {
-      required: Array.isArray(ts.required) ? ts.required : [],
-      fields:   fields,
-      tags:     tags,
+      required:       Array.isArray(ts.required) ? ts.required : [],
+      fields:         fields,
+      tags:           tags,
+      derived_fields: {}
     };
+
+    // load derived fields for this type
+    Object.entries(ts.fields || {}).forEach(function(entry) {
+      var fname = entry[0], fdef = entry[1];
+      if (!fdef || typeof fdef !== "object") return;
+      if (!("derived" in fdef)) return;
+      _state.type_schemas[tname].derived_fields[fname] = {
+        expr: fdef.derived || "",
+        type: fdef.type    || "",
+      };
+    });
   });
 
   renderTypeList();
   if (_state.types.length) selectType(_state.types[0]);
   renderGlobalFields();
+  renderSharedDefs();
+  renderFieldMeta();
 })();
 
 // ── Type list ─────────────────────────────────────────────────────────────────
@@ -250,7 +361,7 @@ function addType() {
   if (!name) return;
   if (_state.types.includes(name)) { alert("Type already exists"); return; }
   _state.types.push(name);
-  _state.type_schemas[name] = { required:[], fields:{}, tags:{} };
+  _state.type_schemas[name] = { required:[], fields:{}, tags:{}, derived_fields:{} };
   selectType(name);
 }
 
@@ -288,6 +399,7 @@ function renderEditor() {
   renderRequired(ts);
   renderFields(ts);
   renderTags(ts);
+  renderDerivedFields(ts);
 }
 
 function ts() { return _state.type_schemas[_currentType]; }
@@ -333,6 +445,19 @@ function addField() {
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
   if (!name) return;
   if (ts().fields[name]) { alert("Field already exists"); return; }
+  var sharedKeys = Object.keys(_state.shared_defs);
+  if (sharedKeys.length) {
+    var pick = prompt(
+      "Assign to a shared definition? Enter one of:\n" +
+      sharedKeys.join(", ") +
+      "\n\n(Leave blank for standalone)"
+    );
+    if (pick && _state.shared_defs[pick.trim()]) {
+      ts().fields[name] = { is_int: false, options: [], use: "shared." + pick.trim() };
+      renderFields(ts());
+      return;
+    }
+  }
   ts().fields[name] = { is_int: false, options: [] };
   renderFields(ts());
 }
@@ -342,10 +467,59 @@ function makeFieldRow(fname, fdef) {
   div.className = "field-row";
   div.id = "field-row-" + fname;
 
-  // header: name + type toggle + delete
-  var head = document.createElement("div");
-  head.className = "field-row-head";
-  head.innerHTML =
+  // ── shared ref field ─────────────────────────────────────────────────────
+  if (fdef.use) {
+    var head = document.createElement("div");
+    head.className = "field-row-head";
+    head.innerHTML =
+      '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
+      '<button onclick="deleteField(\'' + fname + '\')" ' +
+      'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>';
+    div.appendChild(head);
+
+    var body = document.createElement("div");
+    body.style.cssText = "display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap;";
+
+    // shared selector — populated from _state.shared_defs
+    var sharedKeys = Object.keys(_state.shared_defs);
+    var selHtml =
+      '<label style="font-size:12px;display:flex;align-items:center;gap:6px;">' +
+      'Uses shared:&nbsp;<select onchange="setFieldUse(\'' + fname + '\',this.value)" ' +
+      'style="font-size:12px;padding:3px 6px;">';
+    sharedKeys.forEach(function(k) {
+      var full = "shared." + k;
+      selHtml += '<option value="' + full + '"' + (fdef.use === full ? " selected" : "") + '>' + k + '</option>';
+    });
+    if (!sharedKeys.length) {
+      selHtml += '<option value="">— no shared defs yet —</option>';
+    }
+    selHtml += '</select></label>';
+
+    // convert to standalone button
+    selHtml +=
+      '<button onclick="convertToStandalone(\'' + fname + '\')" ' +
+      'class="btn btn-ghost btn-sm" style="font-size:11px;" ' +
+      'title="Stop using shared, give this field its own options list">Convert to standalone</button>';
+
+    body.innerHTML = selHtml;
+    div.appendChild(body);
+
+    // preview the options from the referenced shared def
+    var refKey = fdef.use.replace("shared.", "");
+    var refOpts = (_state.shared_defs[refKey] || {}).options || [];
+    if (refOpts.length) {
+      var preview = document.createElement("div");
+      preview.style.cssText = "margin-top:6px;font-size:11px;color:var(--sub);";
+      preview.textContent = "Options: " + refOpts.join(", ");
+      div.appendChild(preview);
+    }
+    return div;
+  }
+
+  // ── regular field ─────────────────────────────────────────────────────────
+  var head2 = document.createElement("div");
+  head2.className = "field-row-head";
+  head2.innerHTML =
     '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
     '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
       '<input type="checkbox" ' + (fdef.is_int ? "checked" : "") +
@@ -354,13 +528,11 @@ function makeFieldRow(fname, fdef) {
     '<button onclick="deleteField(\'' + fname + '\')" ' +
     'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;' +
     'line-height:1;padding:0;">×</button>';
-  div.appendChild(head);
+  div.appendChild(head2);
 
   if (!fdef.is_int) {
-    // options area
     var opts = document.createElement("div");
     opts.className = "opts-area";
-
     var chipsDiv = document.createElement("div");
     chipsDiv.style.marginBottom = "8px";
     (fdef.options || []).forEach(function(opt, i) {
@@ -371,7 +543,6 @@ function makeFieldRow(fname, fdef) {
       chipsDiv.appendChild(chip);
     });
     opts.appendChild(chipsDiv);
-
     var addRow = document.createElement("div");
     addRow.style.cssText = "display:flex;gap:8px;";
     addRow.innerHTML =
@@ -381,6 +552,26 @@ function makeFieldRow(fname, fdef) {
       '<button onclick="addOption(\'' + fname + '\')" ' +
       'class="btn btn-ghost btn-sm">Add</button>';
     opts.appendChild(addRow);
+
+    // assign to shared button — only if shared defs exist
+    if (Object.keys(_state.shared_defs).length) {
+      var assignRow = document.createElement("div");
+      assignRow.style.cssText = "margin-top:8px;display:flex;align-items:center;gap:6px;";
+      var sharedKeys2 = Object.keys(_state.shared_defs);
+      var assignHtml =
+        '<label style="font-size:11px;color:var(--sub);">Assign to shared:&nbsp;</label>' +
+        '<select id="assign-sel-' + fname + '" style="font-size:12px;padding:2px 4px;">' +
+        '<option value="">— pick —</option>';
+      sharedKeys2.forEach(function(k) {
+        assignHtml += '<option value="shared.' + k + '">' + k + '</option>';
+      });
+      assignHtml += '</select>' +
+        '<button onclick="assignToShared(\'' + fname + '\')" ' +
+        'class="btn btn-ghost btn-sm" style="font-size:11px;">Use</button>';
+      assignRow.innerHTML = assignHtml;
+      opts.appendChild(assignRow);
+    }
+
     div.appendChild(opts);
   } else {
     var note = document.createElement("div");
@@ -388,7 +579,6 @@ function makeFieldRow(fname, fdef) {
     note.textContent = "Numeric — no options needed";
     div.appendChild(note);
   }
-
   return div;
 }
 
@@ -401,9 +591,30 @@ function toggleInt(fname, val) {
 function deleteField(fname) {
   if (!confirm("Remove field '" + fname + "' from this type?")) return;
   delete ts().fields[fname];
-  // also remove any tag rules for this field
   delete ts().tags[fname];
   renderFields(ts()); renderTags(ts());
+}
+
+function setFieldUse(fname, val) {
+  // change which shared def this field references
+  ts().fields[fname].use = val;
+  renderFields(ts());
+}
+
+function convertToStandalone(fname) {
+  // copy options from the shared def, then remove the use reference
+  var fdef = ts().fields[fname];
+  var refKey = (fdef.use || "").replace("shared.", "");
+  var refOpts = (_state.shared_defs[refKey] || {}).options || [];
+  ts().fields[fname] = { is_int: false, options: refOpts.slice() };
+  renderFields(ts());
+}
+
+function assignToShared(fname) {
+  var sel = document.getElementById("assign-sel-" + fname);
+  if (!sel || !sel.value) return;
+  ts().fields[fname] = { is_int: false, options: [], use: sel.value };
+  renderFields(ts());
 }
 
 function addOption(fname) {
@@ -628,6 +839,274 @@ function addGlobalOption(fname) {
 function removeGlobalOption(fname, idx) {
   _state.global_fields[fname].options.splice(idx, 1);
   renderGlobalFields();
+}
+
+// ── Derived Fields (per type, editable) ──────────────────────────────────────
+function renderDerivedFields(tschema) {
+  var el = document.getElementById("derived-fields-list");
+  if (!el) return;
+  el.innerHTML = "";
+  Object.entries(tschema.derived_fields || {}).forEach(function(entry) {
+    el.appendChild(makeDerivedRow(entry[0], entry[1]));
+  });
+}
+
+function addDerivedField() {
+  var name = prompt("Derived field name (lowercase):");
+  if (!name) return;
+  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name) return;
+  var t = ts();
+  if (!t.derived_fields) t.derived_fields = {};
+  if (t.derived_fields[name]) { alert("Already exists"); return; }
+  t.derived_fields[name] = { expr: "", type: "" };
+  renderDerivedFields(t);
+}
+
+function makeDerivedRow(fname, ddef) {
+  var div = document.createElement("div");
+  div.className = "field-row";
+
+  var head = document.createElement("div");
+  head.className = "field-row-head";
+  head.innerHTML =
+    '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
+    '<button onclick="deleteDerivedField(\'' + fname + '\')" ' +
+    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>';
+  div.appendChild(head);
+
+  var body = document.createElement("div");
+  body.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;align-items:center;";
+  body.innerHTML =
+    '<div style="display:flex;align-items:center;gap:6px;flex:1;min-width:200px;">' +
+      '<label style="font-size:12px;white-space:nowrap;">Expression:</label>' +
+      '<input type="text" value="' + escHtmlAttr(ddef.expr) + '" ' +
+      'placeholder="e.g. today - date  or  amount - advance  or  (today - date) > 30" ' +
+      'style="flex:1;font-size:12px;" ' +
+      'oninput="setDerivedField(\'' + fname + '\',\'expr\',this.value)">' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:6px;">' +
+      '<label style="font-size:12px;">Returns:</label>' +
+      '<select onchange="setDerivedField(\'' + fname + '\',\'type\',this.value)" style="font-size:12px;padding:3px 6px;">' +
+      '<option value=""'      + (!ddef.type              ? " selected" : "") + '>auto</option>' +
+      '<option value="int"'   + (ddef.type==="int"       ? " selected" : "") + '>int</option>' +
+      '<option value="bool"'  + (ddef.type==="bool"      ? " selected" : "") + '>bool</option>' +
+      '<option value="string"'+ (ddef.type==="string"    ? " selected" : "") + '>string</option>' +
+      '</select>' +
+    '</div>';
+  div.appendChild(body);
+
+  var hint = document.createElement("div");
+  hint.style.cssText = "font-size:11px;color:var(--sub);margin-top:6px;";
+  hint.innerHTML = 'Tokens: <code>today</code>, <code>date</code>, ' +
+    '<code>today - date</code> → days, any numeric field. ' +
+    'Bool: use <code>&gt;</code> <code>&lt;</code> <code>=</code>.';
+  div.appendChild(hint);
+  return div;
+}
+
+function setDerivedField(fname, key, val) {
+  var t = ts();
+  if (!t.derived_fields) t.derived_fields = {};
+  if (!t.derived_fields[fname]) t.derived_fields[fname] = { expr: "", type: "" };
+  t.derived_fields[fname][key] = val;
+}
+function deleteDerivedField(fname) {
+  if (!confirm("Remove derived field '" + fname + "'?")) return;
+  delete ts().derived_fields[fname];
+  renderDerivedFields(ts());
+}
+
+// ── Shared Definitions ────────────────────────────────────────────────────────
+function renderSharedDefs() {
+  var el = document.getElementById("shared-defs-list");
+  if (!el) return;
+  el.innerHTML = "";
+  Object.entries(_state.shared_defs).forEach(function(entry) {
+    el.appendChild(makeSharedRow(entry[0], entry[1]));
+  });
+}
+function addSharedDef() {
+  var name = prompt("Shared definition name (lowercase):");
+  if (!name) return;
+  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name) return;
+  if (_state.shared_defs[name]) { alert("Already exists"); return; }
+  _state.shared_defs[name] = { is_int: false, options: [] };
+  renderSharedDefs();
+}
+function makeSharedRow(sname, sdef) {
+  var div = document.createElement("div");
+  div.className = "field-row";
+  var head = document.createElement("div");
+  head.className = "field-row-head";
+  head.innerHTML =
+    '<span style="font-size:14px;font-weight:700;flex:1;">shared.' + sname + '</span>' +
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
+      '<input type="checkbox" ' + (sdef.is_int ? "checked" : "") +
+      ' onchange="toggleSharedInt(\'' + sname + '\',this.checked)"> Number field</label>' +
+    '<button onclick="deleteSharedDef(\'' + sname + '\')" ' +
+    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>';
+  div.appendChild(head);
+  if (!sdef.is_int) {
+    var opts = document.createElement("div");
+    opts.className = "opts-area";
+    var chipsDiv = document.createElement("div");
+    chipsDiv.style.marginBottom = "8px";
+    (sdef.options || []).forEach(function(opt, i) {
+      var chip = document.createElement("span");
+      chip.className = "opt-chip";
+      chip.innerHTML = opt + ' <button onclick="removeSharedOption(\'' + sname + '\',' + i + ')">×</button>';
+      chipsDiv.appendChild(chip);
+    });
+    var hint2 = document.createElement("div");
+    hint2.style.cssText = "font-size:11px;color:var(--sub);margin-bottom:6px;";
+    hint2.textContent = sdef.options.length ? "" : "No options yet";
+    chipsDiv.appendChild(hint2);
+    opts.appendChild(chipsDiv);
+    var addRow = document.createElement("div");
+    addRow.style.cssText = "display:flex;gap:8px;";
+    addRow.innerHTML =
+      '<input type="text" id="sd-inp-' + sname + '" placeholder="add option…" style="flex:1;font-size:13px;" ' +
+      'onkeydown="if(event.key===\'Enter\') addSharedOption(\'' + sname + '\')">' +
+      '<button onclick="addSharedOption(\'' + sname + '\')" class="btn btn-ghost btn-sm">Add</button>';
+    opts.appendChild(addRow);
+    div.appendChild(opts);
+  } else {
+    var note = document.createElement("div");
+    note.style.cssText = "font-size:12px;color:var(--sub);margin-top:4px;";
+    note.textContent = "Numeric — no options needed";
+    div.appendChild(note);
+  }
+  return div;
+}
+function toggleSharedInt(sname, val) {
+  _state.shared_defs[sname].is_int = val;
+  if (val) _state.shared_defs[sname].options = [];
+  renderSharedDefs();
+}
+function deleteSharedDef(sname) {
+  if (!confirm("Remove shared definition '" + sname + "'?\nType fields using use=\"shared." + sname + "\" will need updating.")) return;
+  delete _state.shared_defs[sname];
+  renderSharedDefs();
+}
+function addSharedOption(sname) {
+  var inp = document.getElementById("sd-inp-" + sname);
+  var val = inp.value.trim().toLowerCase().replace(/\s+/g, "_");
+  if (!val) return;
+  var opts = _state.shared_defs[sname].options;
+  if (!opts.includes(val)) { opts.push(val); renderSharedDefs(); }
+  else inp.value = "";
+}
+function removeSharedOption(sname, idx) {
+  _state.shared_defs[sname].options.splice(idx, 1);
+  renderSharedDefs();
+}
+
+// ── Field Metadata ────────────────────────────────────────────────────────────
+function renderFieldMeta() {
+  var el = document.getElementById("field-meta-list");
+  if (!el) return;
+  el.innerHTML = "";
+  Object.entries(_state.field_meta).forEach(function(entry) {
+    el.appendChild(makeFieldMetaRow(entry[0], entry[1]));
+  });
+}
+function addFieldMeta() {
+  var name = prompt("Field name (e.g. amount, duration):");
+  if (!name) return;
+  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name) return;
+  if (_state.field_meta[name]) { alert("Already exists"); return; }
+  _state.field_meta[name] = { type: "string", aggregatable: false, dimension: true, unit: "" };
+  renderFieldMeta();
+}
+function makeFieldMetaRow(fname, fmeta) {
+  var div = document.createElement("div");
+  div.className = "field-row";
+  var head = document.createElement("div");
+  head.className = "field-row-head";
+  head.innerHTML =
+    '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
+    '<button onclick="deleteFieldMeta(\'' + fname + '\')" ' +
+    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>';
+  div.appendChild(head);
+  var body = document.createElement("div");
+  body.style.cssText = "display:flex;flex-wrap:wrap;gap:14px;margin-top:4px;align-items:center;";
+  body.innerHTML =
+    '<label style="font-size:12px;display:flex;align-items:center;gap:6px;">Type:&nbsp;' +
+      '<select onchange="setFieldMeta(\'' + fname + '\',\'type\',this.value)" style="font-size:12px;padding:3px 6px;">' +
+      '<option value="string"' + (fmeta.type==="string" ? " selected":"") + '>string</option>' +
+      '<option value="int"'    + (fmeta.type==="int"    ? " selected":"") + '>int</option>' +
+      '</select></label>' +
+    '<label style="font-size:12px;display:flex;align-items:center;gap:6px;">Unit:&nbsp;' +
+      '<input type="text" value="' + escHtmlAttr(fmeta.unit) + '" ' +
+      'onchange="setFieldMeta(\'' + fname + '\',\'unit\',this.value)" ' +
+      'style="font-size:12px;width:60px;padding:3px 6px;" placeholder="₹ / min"></label>' +
+    '<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;">' +
+      '<input type="checkbox" ' + (fmeta.aggregatable ? "checked":"") +
+      ' onchange="setFieldMeta(\'' + fname + '\',\'aggregatable\',this.checked)"> Aggregatable</label>' +
+    '<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;">' +
+      '<input type="checkbox" ' + (fmeta.dimension !== false ? "checked":"") +
+      ' onchange="setFieldMeta(\'' + fname + '\',\'dimension\',this.checked)"> Dimension</label>';
+  div.appendChild(body);
+  return div;
+}
+function setFieldMeta(fname, key, val) { _state.field_meta[fname][key] = val; }
+function deleteFieldMeta(fname) {
+  if (!confirm("Remove field metadata for '" + fname + "'?")) return;
+  delete _state.field_meta[fname];
+  renderFieldMeta();
+}
+
+// ── Read-only: conditions / parent-dependent per type ────────────────────────
+function renderReadOnly() {
+  var el = document.getElementById("readonly-advanced");
+  if (!el) return;
+  el.innerHTML = "";
+  var schema = {{ schema | tojson }};
+  var hasAny = false;
+  _state.types.forEach(function(tname) {
+    var tschema = schema.type && schema.type[tname] ? schema.type[tname] : {};
+    var parentDep = [], conditions = [];
+    Object.entries(tschema.fields || {}).forEach(function(e) {
+      var fn = e[0], fd = e[1];
+      if (fd && typeof fd === "object" && "parent" in fd)
+        parentDep.push({ name: fn, parent: fd.parent });
+    });
+    Object.entries(tschema.conditions || {}).forEach(function(e) {
+      conditions.push({ name: e[0], def: e[1] });
+    });
+    if (!parentDep.length && !conditions.length) return;
+    hasAny = true;
+    var section = document.createElement("div");
+    section.style.marginBottom = "16px";
+    var label = document.createElement("div");
+    label.style.cssText = "font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.5px;margin-bottom:8px;";
+    label.textContent = tname.toUpperCase();
+    section.appendChild(label);
+    function makeRORow(lbl, detail) {
+      var row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:baseline;gap:10px;padding:8px 10px;" +
+        "border:1px solid var(--border);border-radius:8px;margin-bottom:6px;" +
+        "background:var(--bg);opacity:0.65;";
+      row.innerHTML =
+        '<span style="font-size:13px;font-weight:700;min-width:110px;color:var(--sub);">' + escHtml(lbl) + '</span>' +
+        '<span style="font-size:12px;font-family:monospace;color:var(--sub);flex:1;word-break:break-all;">' + escHtml(detail) + '</span>' +
+        '<span style="font-size:10px;color:var(--sub);border:1px solid var(--border);border-radius:4px;padding:1px 5px;white-space:nowrap;">read-only</span>';
+      return row;
+    }
+    parentDep.forEach(function(p) { section.appendChild(makeRORow(p.name, "parent = " + p.parent)); });
+    conditions.forEach(function(c) { section.appendChild(makeRORow(c.name, "condition: " + JSON.stringify(c.def))); });
+    el.appendChild(section);
+  });
+  if (!hasAny) {
+    el.innerHTML = '<div style="font-size:13px;color:var(--sub);">No conditions or parent-dependent fields found.</div>';
+  }
+}
+
+function escHtmlAttr(s) {
+  return String(s || "").replace(/&/g, "&amp;").replace(/"/g, "&quot;");
 }
 
 // ── Save ─────────────────────────────────────────────────────────────────────
