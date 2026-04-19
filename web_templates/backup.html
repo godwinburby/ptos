@@ -12,10 +12,15 @@
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
     Creates a full backup of <code>records/</code>, <code>config/</code>, and <code>templates/</code> folders.
   </p>
-  <button onclick="createBackup()" class="btn btn-primary" id="create-btn">
-    💾 Create Full Backup
-  </button>
-  <span id="create-msg" style="margin-left:12px;font-size:13px;display:none;"></span>
+  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <button onclick="createBackup()" class="btn btn-primary" id="create-btn">
+      💾 Create Full Backup
+    </button>
+    <button onclick="showBackupPreview()" class="btn btn-ghost" id="preview-btn">
+      🔍 Preview Backup
+    </button>
+    <span id="create-msg" style="margin-left:12px;font-size:13px;display:none;"></span>
+  </div>
 </div>
 
 <div class="card" style="margin-bottom:14px;">
@@ -65,6 +70,18 @@
   </div>
 </div>
 
+<!-- Backup/Restore Preview Modal -->
+<div id="preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:480px;max-width:90vw;max-height:90vh;box-shadow:0 8px 32px rgba(0,0,0,.2);display:flex;flex-direction:column;">
+    <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--accent);flex-shrink:0;" id="preview-modal-title">
+      Preview
+    </div>
+    <div id="preview-modal-content" style="flex:1;overflow:hidden;">
+      <!-- Content will be loaded dynamically -->
+    </div>
+  </div>
+</div>
+
 <div class="card">
   <div class="card-title">Backup History</div>
   {% if not backups %}
@@ -91,10 +108,11 @@
           </td>
 <td style="text-align:right;">
              <a href="/backup/download/{{ name }}" class="btn btn-ghost btn-sm" style="margin-right:6px;">Download</a>
+             <button onclick="showRestorePreview('{{ name }}')" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--sub);">Preview</button>
              {% if btype == 'config' %}
-             <button onclick="restoreConfigBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--accent);">Restore Config</button>
+             <button onclick="restoreConfigBackup('{{ name }}', true)" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--accent);">Restore Config</button>
              {% else %}
-             <button onclick="restoreBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--warn);">Restore</button>
+             <button onclick="restoreBackup('{{ name }}', true)" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--warn);">Restore</button>
              {% endif %}
              <button onclick="deleteBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="color:var(--error);">Delete</button>
            </td>
@@ -152,7 +170,14 @@ function createBackup() {
     });
 }
 
-function restoreBackup(name) {
+function restoreBackup(name, showPreviewFirst) {
+  if (showPreviewFirst !== false) {
+    // Show preview first
+    showRestorePreview(name);
+    return;
+  }
+  
+  // Direct restore (called from preview modal)
   if (!confirm("A backup of your current data will be created first.\n\nThis will then overwrite your data with the backup.\n\nAre you sure you want to restore '" + name + "'?")) {
     return;
   }
@@ -176,7 +201,14 @@ function restoreBackup(name) {
     });
 }
 
-function restoreConfigBackup(name) {
+function restoreConfigBackup(name, showPreviewFirst) {
+  if (showPreviewFirst !== false) {
+    // Show preview first
+    showRestorePreview(name);
+    return;
+  }
+  
+  // Direct restore (called from preview modal)
   if (!confirm("This will replace your current config files with the backup.\n\nYour existing config will be backed up first.\n\nAre you sure you want to restore config from '" + name + "'?")) {
     return;
   }
@@ -318,6 +350,198 @@ function confirmConfigImport() {
 function closeConfigModal() {
   document.getElementById("import-config-modal").style.display = "none";
   _pendingConfigFile = null;
+}
+
+// Backup Preview Modal
+function showBackupPreview() {
+  var btn = document.getElementById("preview-btn");
+  btn.disabled = true;
+  btn.textContent = "Loading...";
+  
+  fetch("/backup/preview")
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      btn.disabled = false;
+      btn.textContent = "🔍 Preview Backup";
+      
+      if (d.ok) {
+        showPreviewModal(d.preview, "backup");
+      } else {
+        alert("Error loading backup preview: " + d.error);
+      }
+    })
+    .catch(function(e) {
+      btn.disabled = false;
+      btn.textContent = "🔍 Preview Backup";
+      alert("Error: " + e);
+    });
+}
+
+function showRestorePreview(name) {
+  fetch("/backup/restore/preview/" + encodeURIComponent(name))
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        showPreviewModal(d.preview, "restore", name);
+      } else {
+        alert("Error loading restore preview: " + d.error);
+      }
+    })
+    .catch(function(e) {
+      alert("Error: " + e);
+    });
+}
+
+function showPreviewModal(preview, type, backupName) {
+  var modal = document.getElementById("preview-modal");
+  var content = document.getElementById("preview-modal-content");
+  var title = document.getElementById("preview-modal-title");
+  
+  if (type === "backup") {
+    title.textContent = "Backup Preview";
+    content.innerHTML = renderBackupPreview(preview);
+  } else {
+    title.textContent = "Restore Preview: " + (backupName || "");
+    content.innerHTML = renderRestorePreview(preview, backupName);
+  }
+  
+  modal.style.display = "flex";
+}
+
+function renderBackupPreview(preview) {
+  var html = '<div style="max-height:70vh;overflow-y:auto;padding-right:8px;">';
+  
+  // Summary
+  html += '<div style="background:var(--bg);padding:12px;border-radius:8px;margin-bottom:16px;">';
+  html += '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">Summary</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">';
+  html += '<div><span style="color:var(--sub);">Total files:</span> ' + preview.total_files + '</div>';
+  html += '<div><span style="color:var(--sub);">Total size:</span> ' + (preview.total_size_formatted || '0 bytes') + '</div>';
+  html += '</div>';
+  
+  if (preview.last_backup) {
+    html += '<div style="margin-top:8px;font-size:12px;color:var(--accent);">';
+    html += 'Last backup: ' + formatDateTime(preview.last_backup.timestamp) + ' (' + preview.last_backup.file_count + ' files)';
+    html += '</div>';
+  }
+  html += '</div>';
+  
+  // Folders
+  html += '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">Folders to backup</div>';
+  
+  if (preview.folders && preview.folders.length > 0) {
+    for (var i = 0; i < preview.folders.length; i++) {
+      var folder = preview.folders[i];
+      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
+      html += '<div style="font-weight:700;color:var(--text);"><code>' + folder.name + '/</code></div>';
+      html += '<div style="font-size:12px;color:var(--sub);">' + folder.file_count + ' files · ' + (folder.size_formatted || '0 bytes') + '</div>';
+      html += '</div>';
+      
+      if (folder.files && folder.files.length > 0) {
+        html += '<div style="font-size:11px;color:var(--sub);margin-top:6px;">Sample files:</div>';
+        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">';
+        for (var j = 0; j < Math.min(folder.files.length, 8); j++) {
+          var file = folder.files[j];
+          html += '<span style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--text);">' + file.name + '</span>';
+        }
+        if (folder.file_count > 8) {
+          html += '<span style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--sub);">+' + (folder.file_count - 8) + ' more</span>';
+        }
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+  } else {
+    html += '<div style="color:var(--sub);font-size:13px;padding:12px;text-align:center;">No folders to backup</div>';
+  }
+  
+  html += '</div>'; // Close scrollable div
+  
+  // Action buttons
+  html += '<div style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">';
+  html += '<button onclick="closePreviewModal()" class="btn btn-ghost" style="flex:1;">Close</button>';
+  html += '<button onclick="closePreviewModal();createBackup();" class="btn btn-primary" style="flex:1;">Create Backup Now</button>';
+  html += '</div>';
+  
+  return html;
+}
+
+function renderRestorePreview(preview, backupName) {
+  var html = '<div style="max-height:70vh;overflow-y:auto;padding-right:8px;">';
+  
+  // Summary
+  html += '<div style="background:var(--bg);padding:12px;border-radius:8px;margin-bottom:16px;">';
+  html += '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">Backup Details</div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">';
+  html += '<div><span style="color:var(--sub);">Type:</span> ' + (preview.type === 'config' ? 'Config only' : 'Full backup') + '</div>';
+  html += '<div><span style="color:var(--sub);">Total files:</span> ' + preview.total_files + '</div>';
+  html += '<div><span style="color:var(--sub);">Total size:</span> ' + (preview.total_size_formatted || '0 bytes') + '</div>';
+  if (preview.backup_date) {
+    html += '<div><span style="color:var(--sub);">Created:</span> ' + formatDateTime(preview.backup_date) + '</div>';
+  }
+  html += '</div>';
+  html += '</div>';
+  
+  // Folders in backup
+  if (preview.folders_formatted && Object.keys(preview.folders_formatted).length > 0) {
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">Contents</div>';
+    
+    for (var folder in preview.folders_formatted) {
+      var info = preview.folders_formatted[folder];
+      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">';
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
+      html += '<div style="font-weight:700;color:var(--text);"><code>' + folder + '/</code></div>';
+      html += '<div style="font-size:12px;color:var(--sub);">' + info.file_count + ' files · ' + info.size + '</div>';
+      html += '</div>';
+      html += '</div>';
+    }
+  }
+  
+  // File list
+  if (preview.contents && preview.contents.length > 0) {
+    html += '<div style="font-size:14px;font-weight:700;margin-bottom:8px;margin-top:16px;">Files</div>';
+    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;max-height:200px;overflow-y:auto;">';
+    for (var i = 0; i < Math.min(preview.contents.length, 20); i++) {
+      var file = preview.contents[i];
+      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-light);font-size:12px;">';
+      html += '<div style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + file.path + '</div>';
+      html += '<div style="color:var(--sub);white-space:nowrap;margin-left:8px;">' + (file.size_formatted || '0 bytes') + '</div>';
+      html += '</div>';
+    }
+    if (preview.total_files > 20) {
+      html += '<div style="text-align:center;color:var(--sub);font-size:11px;padding:8px;">+' + (preview.total_files - 20) + ' more files</div>';
+    }
+    html += '</div>';
+  }
+  
+  html += '</div>'; // Close scrollable div
+  
+  // Action buttons
+  html += '<div style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">';
+  html += '<button onclick="closePreviewModal()" class="btn btn-ghost" style="flex:1;">Cancel</button>';
+  if (preview.type === 'config') {
+    html += '<button onclick="closePreviewModal();restoreConfigBackup(\'' + (backupName || '') + '\');" class="btn btn-primary" style="flex:1;">Restore Config</button>';
+  } else {
+    html += '<button onclick="closePreviewModal();restoreBackup(\'' + (backupName || '') + '\');" class="btn btn-warn" style="flex:1;">Restore Backup</button>';
+  }
+  html += '</div>';
+  
+  return html;
+}
+
+function formatDateTime(dtStr) {
+  if (!dtStr) return 'Unknown';
+  try {
+    var dt = new Date(dtStr);
+    return dt.toLocaleString();
+  } catch (e) {
+    return dtStr;
+  }
+}
+
+function closePreviewModal() {
+  document.getElementById("preview-modal").style.display = "none";
 }
 </script>
 

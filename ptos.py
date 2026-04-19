@@ -157,6 +157,177 @@ def should_backup():
     return False
 
 
+def get_backup_preview():
+    """Get preview of what will be backed up.
+    Returns dict with folder summary and file details.
+    """
+    backup_folders = get_backup_folders()
+    preview = {
+        "folders": [],
+        "total_files": 0,
+        "total_size": 0,
+        "last_backup": None
+    }
+    
+    # Load last backup info if available
+    last_info = _load_last_backup_info()
+    if last_info:
+        preview["last_backup"] = {
+            "timestamp": last_info.get("timestamp"),
+            "file_count": last_info.get("file_count", 0),
+            "total_size": last_info.get("total_size", 0)
+        }
+    
+    for folder in backup_folders:
+        folder_path = os.path.join(BASE_DIR, folder)
+        if not os.path.exists(folder_path):
+            continue
+            
+        folder_info = {
+            "name": folder,
+            "path": folder_path,
+            "file_count": 0,
+            "size": 0,
+            "files": []
+        }
+        
+        # Count files and size in this folder
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                # Skip .bak and .tmp files (same as backup logic)
+                if file.endswith(".bak") or file.endswith(".tmp"):
+                    continue
+                    
+                file_path = os.path.join(root, file)
+                try:
+                    size = os.path.getsize(file_path)
+                    folder_info["file_count"] += 1
+                    folder_info["size"] += size
+                    preview["total_files"] += 1
+                    preview["total_size"] += size
+                    
+                    # Add file details (limit to first 20 files per folder for performance)
+                    if len(folder_info["files"]) < 20:
+                        folder_info["files"].append({
+                            "name": file,
+                            "path": os.path.relpath(file_path, BASE_DIR),
+                            "size": size,
+                            "modified": os.path.getmtime(file_path)
+                        })
+                except Exception:
+                    continue
+        
+        preview["folders"].append(folder_info)
+    
+    # Format sizes for display
+    preview["total_size_formatted"] = _format_size(preview["total_size"])
+    for folder in preview["folders"]:
+        folder["size_formatted"] = _format_size(folder["size"])
+    
+    return preview
+
+
+def _format_size(bytes_size):
+    """Format bytes to human readable size."""
+    if bytes_size < 1024:
+        return f"{bytes_size} bytes"
+    elif bytes_size < 1024 * 1024:
+        return f"{bytes_size / 1024:.1f} KB"
+    elif bytes_size < 1024 * 1024 * 1024:
+        return f"{bytes_size / (1024 * 1024):.1f} MB"
+    else:
+        return f"{bytes_size / (1024 * 1024 * 1024):.1f} GB"
+
+
+def get_restore_preview(backup_path):
+    """Get preview of what will be restored from a backup file.
+    Returns dict with backup contents summary.
+    """
+    import zipfile
+    import json
+    
+    preview = {
+        "filename": os.path.basename(backup_path),
+        "type": "config" if "config" in os.path.basename(backup_path).lower() else "full",
+        "total_files": 0,
+        "total_size": 0,
+        "folders": {},
+        "contents": [],
+        "backup_date": None
+    }
+    
+    try:
+        if not os.path.exists(backup_path):
+            return {"error": f"Backup file not found: {backup_path}"}
+        
+        # Try to extract backup date from filename
+        import re
+        match = re.search(r"(\d{8}_\d{6})", os.path.basename(backup_path))
+        if match:
+            try:
+                dt_str = match.group(1)
+                dt_obj = dt.datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
+                preview["backup_date"] = dt_obj.isoformat()
+            except:
+                pass
+        
+        # Read backup contents
+        with zipfile.ZipFile(backup_path, 'r') as zipf:
+            # Get all file info
+            for file_info in zipf.infolist():
+                if file_info.filename.endswith('/'):
+                    continue  # Skip directories
+                    
+                preview["total_files"] += 1
+                preview["total_size"] += file_info.file_size
+                
+                # Extract folder structure
+                parts = file_info.filename.split('/')
+                if len(parts) > 1:
+                    folder = parts[0]
+                    if folder not in preview["folders"]:
+                        preview["folders"][folder] = {"file_count": 0, "size": 0}
+                    preview["folders"][folder]["file_count"] += 1
+                    preview["folders"][folder]["size"] += file_info.file_size
+                
+                # Add to contents list (limit to first 30 files)
+                if len(preview["contents"]) < 30:
+                    preview["contents"].append({
+                        "path": file_info.filename,
+                        "size": file_info.file_size,
+                        "compressed_size": file_info.compress_size,
+                        "modified": dt.datetime(*file_info.date_time).isoformat() if file_info.date_time else None
+                    })
+            
+            # Try to read metadata if it exists
+            try:
+                if '.last_backup_info' in zipf.namelist():
+                    with zipf.open('.last_backup_info') as f:
+                        metadata = json.loads(f.read().decode('utf-8'))
+                        preview["metadata"] = metadata
+            except:
+                pass
+        
+        # Format sizes
+        preview["total_size_formatted"] = _format_size(preview["total_size"])
+        preview["folders_formatted"] = {}
+        for folder, info in preview["folders"].items():
+            preview["folders_formatted"][folder] = {
+                "file_count": info["file_count"],
+                "size": _format_size(info["size"])
+            }
+        
+        for item in preview["contents"]:
+            item["size_formatted"] = _format_size(item["size"])
+            if item.get("compressed_size"):
+                item["compressed_size_formatted"] = _format_size(item["compressed_size"])
+        
+    except Exception as e:
+        preview["error"] = str(e)
+    
+    return preview
+
+
 def get_current_version():
     """Get the stored current version SHA from .version file."""
     if os.path.exists(VERSION_FILE):

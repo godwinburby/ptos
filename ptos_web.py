@@ -674,6 +674,26 @@ def backup_check():
     return jsonify(ok=all_exist, missing=missing)
 
 
+@app.route("/backup/preview", methods=["GET"])
+def backup_preview():
+    """Get preview of what will be backed up."""
+    try:
+        result = svc.get_backup_preview()
+        return jsonify(result)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/backup/restore/preview/<name>", methods=["GET"])
+def backup_restore_preview(name):
+    """Get preview of what will be restored from a backup."""
+    try:
+        result = svc.get_restore_preview(name)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
 @app.route("/backup/restore", methods=["POST"])
 def backup_restore():
     # Create backup first before restoring
