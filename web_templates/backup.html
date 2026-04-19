@@ -521,9 +521,9 @@ function renderRestorePreview(preview, backupName) {
   html += '<div style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">';
   html += '<button onclick="closePreviewModal()" class="btn btn-ghost" style="flex:1;">Cancel</button>';
   if (preview.type === 'config') {
-    html += '<button onclick="closePreviewModal();restoreConfigBackup(\'' + (backupName || '') + '\');" class="btn btn-primary" style="flex:1;">Restore Config</button>';
+    html += '<button onclick="restoreFromModal(\'' + escapeSingleQuotes(backupName || '') + '\', \'config\')" class="btn btn-primary" style="flex:1;">Restore Config</button>';
   } else {
-    html += '<button onclick="closePreviewModal();restoreBackup(\'' + (backupName || '') + '\');" class="btn btn-warn" style="flex:1;">Restore Backup</button>';
+    html += '<button onclick="restoreFromModal(\'' + escapeSingleQuotes(backupName || '') + '\', \'full\')" class="btn btn-warn" style="flex:1;">Restore Backup</button>';
   }
   html += '</div>';
   
@@ -542,6 +542,19 @@ function formatDateTime(dtStr) {
 
 function closePreviewModal() {
   document.getElementById("preview-modal").style.display = "none";
+}
+
+function escapeSingleQuotes(str) {
+  return (str || '').replace(/'/g, "\\'");
+}
+
+function restoreFromModal(backupName, type) {
+  closePreviewModal();
+  if (type === 'config') {
+    restoreConfigBackup(backupName, false);
+  } else {
+    restoreBackup(backupName, false);
+  }
 }
 </script>
 
