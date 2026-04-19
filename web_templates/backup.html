@@ -89,13 +89,15 @@
             <span style="font-size:11px;color:var(--sub);margin-left:6px;">(config only)</span>
             {% endif %}
           </td>
-          <td style="text-align:right;">
-            <a href="/backup/download/{{ name }}" class="btn btn-ghost btn-sm" style="margin-right:6px;">Download</a>
-            {% if btype != 'config' %}
-            <button onclick="restoreBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--warn);">Restore</button>
-            {% endif %}
-            <button onclick="deleteBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="color:var(--error);">Delete</button>
-          </td>
+<td style="text-align:right;">
+             <a href="/backup/download/{{ name }}" class="btn btn-ghost btn-sm" style="margin-right:6px;">Download</a>
+             {% if btype == 'config' %}
+             <button onclick="restoreConfigBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--accent);">Restore Config</button>
+             {% else %}
+             <button onclick="restoreBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--warn);">Restore</button>
+             {% endif %}
+             <button onclick="deleteBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="color:var(--error);">Delete</button>
+           </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -167,6 +169,29 @@ function restoreBackup(name) {
         location.reload();
       } else {
         alert("✖ Restore failed: " + d.error);
+      }
+    })
+    .catch(function(e) {
+      alert("✖ Error: " + e);
+    });
+}
+
+function restoreConfigBackup(name) {
+  if (!confirm("This will replace your current config files with the backup.\n\nYour existing config will be backed up first.\n\nAre you sure you want to restore config from '" + name + "'?")) {
+    return;
+  }
+  
+  fetch("/backup/config/restore/" + encodeURIComponent(name), {
+    method: "POST",
+    headers: {"Content-Type": "application/json"}
+  })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) {
+        alert("✔ Config restore complete! Page will reload.");
+        location.reload();
+      } else {
+        alert("✖ Config restore failed: " + d.error);
       }
     })
     .catch(function(e) {

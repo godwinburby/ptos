@@ -26,6 +26,8 @@ EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
 BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
 BACKUP_FOLDERS = ["records", "config", "templates"]
 MAX_BACKUPS = 10  # Keep last 10 backups
+
+LAST_BACKUP_INFO = os.path.join(BACKUP_DIR, ".last_backup_info")
 VERSION_FILE = os.path.join(BASE_DIR, ".version")
 GITHUB_REPO = "godwinburby/ptos"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
@@ -37,6 +39,122 @@ def get_log_files():
         return []
     return sorted(f for f in os.listdir(RECORDS_DIR)
                   if f.endswith(".log") and "sync-conflict" not in f.lower())
+
+
+def get_backup_config():
+    """Load backup configuration from config.toml."""
+    try:
+        with open(CONFIG_PATH, "rb") as f:
+            config = tomllib.load(f)
+        return config.get("backup", {})
+    except Exception:
+        return {}
+
+
+def get_backup_folders():
+    """Get list of folders to backup from config, fallback to default."""
+    config = get_backup_config()
+    folders = config.get("folders", BACKUP_FOLDERS)
+    # Filter to only existing folders
+    return [f for f in folders if os.path.exists(os.path.join(BASE_DIR, f))]
+
+
+def get_backup_max_backups():
+    """Get maximum backups to keep from config."""
+    config = get_backup_config()
+    return config.get("max_backups", MAX_BACKUPS)
+
+
+def _save_last_backup_info():
+    """Save information about the last backup."""
+    try:
+        backup_folders = get_backup_folders()
+        info = {
+            "timestamp": dt.datetime.now().isoformat(),
+            "folders": backup_folders,
+            "file_count": 0,
+            "total_size": 0
+        }
+        
+        # Calculate file count and total size
+        for folder in backup_folders:
+            folder_path = os.path.join(BASE_DIR, folder)
+            if os.path.exists(folder_path):
+                for root, dirs, files in os.walk(folder_path):
+                    info["file_count"] += len(files)
+                    for file in files:
+                        # Skip .bak and .tmp files
+                        if file.endswith(".bak") or file.endswith(".tmp"):
+                            continue
+                        file_path = os.path.join(root, file)
+                        try:
+                            info["total_size"] += os.path.getsize(file_path)
+                        except:
+                            pass
+        
+        import json
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        with open(LAST_BACKUP_INFO, "w", encoding="utf-8") as f:
+            json.dump(info, f)
+    except Exception as e:
+        _log_error(f"Failed to save last backup info: {e}")
+
+
+def _load_last_backup_info():
+    """Load information about the last backup."""
+    try:
+        import json
+        if os.path.exists(LAST_BACKUP_INFO):
+            with open(LAST_BACKUP_INFO, "r", encoding="utf-8") as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return None
+
+
+def should_backup():
+    """Check if backup is needed by comparing with last backup."""
+    last_info = _load_last_backup_info()
+    if not last_info:
+        return True  # No previous backup, need one
+    
+    backup_folders = get_backup_folders()
+    
+    # Check if folders list changed
+    if set(backup_folders) != set(last_info.get("folders", [])):
+        return True
+    
+    # Calculate current file count and total size
+    current_file_count = 0
+    current_total_size = 0
+    
+    for folder in backup_folders:
+        folder_path = os.path.join(BASE_DIR, folder)
+        if os.path.exists(folder_path):
+            for root, dirs, files in os.walk(folder_path):
+                current_file_count += len(files)
+                for file in files:
+                    # Skip .bak and .tmp files
+                    if file.endswith(".bak") or file.endswith(".tmp"):
+                        continue
+                    file_path = os.path.join(root, file)
+                    try:
+                        current_total_size += os.path.getsize(file_path)
+                    except:
+                        pass
+    
+    last_file_count = last_info.get("file_count", 0)
+    last_total_size = last_info.get("total_size", 0)
+    
+    # If file count changed by more than 1 file
+    if abs(current_file_count - last_file_count) > 1:
+        return True
+    
+    # If total size changed by more than 1KB
+    if abs(current_total_size - last_total_size) > 1024:
+        return True
+    
+    return False
 
 
 def get_current_version():
@@ -352,12 +470,17 @@ def print_doctor_results(errors, warnings, messages, fixes_applied, verbose=Fals
 # Backup functions
 # --------------------------------------------------
 
-def backup_data():
-    """Create a timestamped backup ZIP of records/, config/, templates/.
+def backup_data(force=False):
+    """Create a timestamped backup ZIP of configured folders.
     Returns the path to the created backup file.
-    Automatically removes oldest backups if MAX_BACKUPS limit is exceeded.
+    Automatically removes oldest backups if limit is exceeded.
     Uses atomic write with .tmp file for crash safety.
+    
+    Args:
+        force: If True, backup even if no changes detected
     """
+    backup_folders = get_backup_folders()
+    
     # Validate mandatory folders exist
     if not os.path.isdir(CONFIG_DIR):
         raise Exception("Cannot create full backup: config/ folder missing")
@@ -372,7 +495,7 @@ def backup_data():
     try:
         # Write to .tmp file (skip .bak files)
         with zipfile.ZipFile(temp_path, "w", zipfile.ZIP_DEFLATED) as zf:
-            for folder in BACKUP_FOLDERS:
+            for folder in backup_folders:
                 folder_path = os.path.join(BASE_DIR, folder)
                 if os.path.exists(folder_path):
                     for root, dirs, files in os.walk(folder_path):
@@ -393,6 +516,9 @@ def backup_data():
         # Atomic rename to final location
         os.replace(temp_path, final_path)
         
+        # Save info about this backup
+        _save_last_backup_info()
+        
         # Clean up old backups if limit exceeded
         _cleanup_old_backups()
         
@@ -403,6 +529,20 @@ def backup_data():
             os.remove(temp_path)
         _log_error(f"Backup failed: {e}")
         raise
+
+
+def backup_if_needed():
+    """Create backup only if changes detected since last backup.
+    Returns tuple: (backup_created: bool, backup_path: str or None)
+    """
+    try:
+        if should_backup():
+            backup_path = backup_data()
+            return True, backup_path
+        return False, None
+    except Exception as e:
+        _log_error(f"Smart backup failed: {e}")
+        return False, None
 
 def backup_config():
     """Create a timestamped backup ZIP of config/ folder only.
@@ -627,17 +767,18 @@ def delete_backup(filename):
     return True
 
 def _cleanup_old_backups():
-    """Remove oldest full backups if MAX_BACKUPS limit is exceeded.
+    """Remove oldest full backups if max_backups limit is exceeded.
     Config backups are excluded from automatic cleanup.
     """
     backups = list_backups()
     
     # Only cleanup full backups, keep all config backups
     full_backups = [(n, m, t) for n, m, t in backups if t == "full"]
+    max_backups = get_backup_max_backups()
     
-    if len(full_backups) > MAX_BACKUPS:
+    if len(full_backups) > max_backups:
         # Get list of filenames to delete (oldest, beyond the limit)
-        to_delete = full_backups[MAX_BACKUPS:]
+        to_delete = full_backups[max_backups:]
         for name, _, _ in to_delete:
             backup_path = os.path.join(BACKUP_DIR, name)
             if os.path.exists(backup_path):
@@ -647,8 +788,9 @@ def check_backup_folders():
     """Check if all required backup folders exist.
     Returns tuple: (all_exist: bool, missing_folders: list)
     """
+    backup_folders = get_backup_folders()
     missing = []
-    for folder in BACKUP_FOLDERS:
+    for folder in backup_folders:
         folder_path = os.path.join(BASE_DIR, folder)
         if not os.path.exists(folder_path):
             missing.append(folder)
@@ -2957,6 +3099,12 @@ date_format = "indian"
 # Example: clinic = 26  means cycle runs 26th → 25th next month
 # Usage:   ptos -t clinic      (current cycle)
 #          ptos -t clinic-1    (previous cycle)
+
+[backup]
+folders = ["records", "config", "templates", "journal", "tasks", "exports"]
+max_backups = 10
+backup_on_startup = true
+backup_on_exit = true
 """
 
 _STARTER_QUERIES = """# --------------------------------------------------
