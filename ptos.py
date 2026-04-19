@@ -27,7 +27,6 @@ BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
 BACKUP_FOLDERS = ["records", "config", "templates"]
 MAX_BACKUPS = 10  # Keep last 10 backups
 
-LAST_BACKUP_INFO = os.path.join(BACKUP_DIR, ".last_backup_info")
 VERSION_FILE = os.path.join(BASE_DIR, ".version")
 GITHUB_REPO = "godwinburby/ptos"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
@@ -60,99 +59,69 @@ def get_backup_folders():
 
 
 def get_backup_max_backups():
-    """Get maximum backups to keep from config."""
+    """Get maximum full backups to keep from config."""
     config = get_backup_config()
     return config.get("max_backups", MAX_BACKUPS)
 
 
-def _save_last_backup_info():
-    """Save information about the last backup."""
-    try:
-        backup_folders = get_backup_folders()
-        info = {
-            "timestamp": dt.datetime.now().isoformat(),
-            "folders": backup_folders,
-            "file_count": 0,
-            "total_size": 0
-        }
-        
-        # Calculate file count and total size
-        for folder in backup_folders:
-            folder_path = os.path.join(BASE_DIR, folder)
-            if os.path.exists(folder_path):
-                for root, dirs, files in os.walk(folder_path):
-                    info["file_count"] += len(files)
-                    for file in files:
-                        # Skip .bak and .tmp files
-                        if file.endswith(".bak") or file.endswith(".tmp"):
-                            continue
-                        file_path = os.path.join(root, file)
-                        try:
-                            info["total_size"] += os.path.getsize(file_path)
-                        except:
-                            pass
-        
-        import json
-        os.makedirs(BACKUP_DIR, exist_ok=True)
-        with open(LAST_BACKUP_INFO, "w", encoding="utf-8") as f:
-            json.dump(info, f)
-    except Exception as e:
-        _log_error(f"Failed to save last backup info: {e}")
-
-
-def _load_last_backup_info():
-    """Load information about the last backup."""
-    try:
-        import json
-        if os.path.exists(LAST_BACKUP_INFO):
-            with open(LAST_BACKUP_INFO, "r", encoding="utf-8") as f:
-                return json.load(f)
-    except Exception:
-        pass
-    return None
+def get_backup_max_config_backups():
+    """Get maximum config-only backups to keep from config."""
+    config = get_backup_config()
+    return config.get("max_config_backups", 10)
 
 
 def should_backup():
-    """Check if backup is needed by comparing with last backup."""
-    last_info = _load_last_backup_info()
-    if not last_info:
-        return True  # No previous backup, need one
+    """Check if backup is needed by comparing file mod times with last backup.
+    Returns True if backup is needed, False if files unchanged since last backup.
+    """
+    # Check config setting first
+    config = get_backup_config()
+    if not config.get("backup_if_files_changed", True):
+        return True  # Always backup when this setting is false
     
     backup_folders = get_backup_folders()
     
-    # Check if folders list changed
-    if set(backup_folders) != set(last_info.get("folders", [])):
+    # Find most recent full backup
+    last_backup_time = None
+    if os.path.exists(BACKUP_DIR):
+        backup_files = []
+        for f in os.listdir(BACKUP_DIR):
+            if f.startswith("ptos-backup-full-") and f.endswith(".zip"):
+                # Extract timestamp from filename: ptos-backup-full-YYYYMMDD_HHMMSS.zip
+                try:
+                    ts_str = f.replace("ptos-backup-full-", "").replace(".zip", "")
+                    backup_time = dt.datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+                    backup_files.append((backup_time, os.path.join(BACKUP_DIR, f)))
+                except:
+                    continue
+        
+        if backup_files:
+            # Get most recent backup
+            backup_files.sort(key=lambda x: x[0], reverse=True)
+            last_backup_time = backup_files[0][0]
+    
+    # If no previous backup found, need to backup
+    if not last_backup_time:
         return True
     
-    # Calculate current file count and total size
-    current_file_count = 0
-    current_total_size = 0
+    # Check if any file in backup folders has been modified since last backup
+    last_backup_timestamp = last_backup_time.timestamp()
     
     for folder in backup_folders:
         folder_path = os.path.join(BASE_DIR, folder)
         if os.path.exists(folder_path):
             for root, dirs, files in os.walk(folder_path):
-                current_file_count += len(files)
                 for file in files:
                     # Skip .bak and .tmp files
                     if file.endswith(".bak") or file.endswith(".tmp"):
                         continue
                     file_path = os.path.join(root, file)
                     try:
-                        current_total_size += os.path.getsize(file_path)
+                        # Check if file modified after last backup
+                        if os.path.getmtime(file_path) > last_backup_timestamp:
+                            return True
                     except:
-                        pass
-    
-    last_file_count = last_info.get("file_count", 0)
-    last_total_size = last_info.get("total_size", 0)
-    
-    # If file count changed by more than 1 file
-    if abs(current_file_count - last_file_count) > 1:
-        return True
-    
-    # If total size changed by more than 1KB
-    if abs(current_total_size - last_total_size) > 1024:
-        return True
+                        continue
     
     return False
 
@@ -169,14 +138,26 @@ def get_backup_preview():
         "last_backup": None
     }
     
-    # Load last backup info if available
-    last_info = _load_last_backup_info()
-    if last_info:
-        preview["last_backup"] = {
-            "timestamp": last_info.get("timestamp"),
-            "file_count": last_info.get("file_count", 0),
-            "total_size": last_info.get("total_size", 0)
-        }
+    # Find most recent full backup timestamp
+    if os.path.exists(BACKUP_DIR):
+        backup_files = []
+        for f in os.listdir(BACKUP_DIR):
+            if f.startswith("ptos-backup-full-") and f.endswith(".zip"):
+                # Extract timestamp from filename: ptos-backup-full-YYYYMMDD_HHMMSS.zip
+                try:
+                    ts_str = f.replace("ptos-backup-full-", "").replace(".zip", "")
+                    backup_time = dt.datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
+                    backup_files.append((backup_time, f))
+                except:
+                    continue
+        
+        if backup_files:
+            backup_files.sort(key=lambda x: x[0], reverse=True)
+            last_backup_time, last_backup_file = backup_files[0]
+            preview["last_backup"] = {
+                "timestamp": last_backup_time.isoformat(),
+                "filename": last_backup_file
+            }
     
     for folder in backup_folders:
         folder_path = os.path.join(BASE_DIR, folder)
@@ -687,9 +668,6 @@ def backup_data(force=False):
         # Atomic rename to final location
         os.replace(temp_path, final_path)
         
-        # Save info about this backup
-        _save_last_backup_info()
-        
         # Clean up old backups if limit exceeded
         _cleanup_old_backups()
         
@@ -744,6 +722,9 @@ def backup_config():
         
         # Atomic rename to final location
         os.replace(temp_path, final_path)
+        
+        # Clean up old backups if limit exceeded
+        _cleanup_old_backups()
         
         return final_path
         
@@ -939,17 +920,29 @@ def delete_backup(filename):
 
 def _cleanup_old_backups():
     """Remove oldest full backups if max_backups limit is exceeded.
-    Config backups are excluded from automatic cleanup.
+    Also cleans up config backups if max_config_backups limit is exceeded.
     """
     backups = list_backups()
     
-    # Only cleanup full backups, keep all config backups
+    # Clean up full backups
     full_backups = [(n, m, t) for n, m, t in backups if t == "full"]
-    max_backups = get_backup_max_backups()
+    max_full_backups = get_backup_max_backups()
     
-    if len(full_backups) > max_backups:
+    if len(full_backups) > max_full_backups:
         # Get list of filenames to delete (oldest, beyond the limit)
-        to_delete = full_backups[max_backups:]
+        to_delete = full_backups[max_full_backups:]
+        for name, _, _ in to_delete:
+            backup_path = os.path.join(BACKUP_DIR, name)
+            if os.path.exists(backup_path):
+                os.remove(backup_path)
+    
+    # Clean up config backups
+    config_backups = [(n, m, t) for n, m, t in backups if t == "config"]
+    max_config_backups = get_backup_max_config_backups()
+    
+    if len(config_backups) > max_config_backups:
+        # Get list of filenames to delete (oldest, beyond the limit)
+        to_delete = config_backups[max_config_backups:]
         for name, _, _ in to_delete:
             backup_path = os.path.join(BACKUP_DIR, name)
             if os.path.exists(backup_path):
@@ -3275,9 +3268,15 @@ date_format = "indian"
 # Folders to include in full backup
 # Note: Keep in sync with Android update preserved folders in update_ptos_android.sh
 folders = ["records", "config", "templates", "journal", "tasks", "exports", "notes", "scripts"]
-max_backups = 10
-backup_on_startup = true
-backup_on_exit = true
+
+# Auto-backup settings
+auto_backup_on_startup = true
+auto_backup_on_shutdown = true
+backup_if_files_changed = true
+
+# Retention settings
+max_full_backups = 10
+max_config_backups = 10
 """
 
 _STARTER_QUERIES = """# --------------------------------------------------
