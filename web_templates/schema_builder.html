@@ -102,6 +102,19 @@
       <div id="derived-fields-list"></div>
     </div>
 
+    <!-- conditions editor -->
+    <div class="card" style="margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+        <div class="card-title" style="margin:0;">Conditional fields</div>
+        <button onclick="addCondition()" class="btn btn-ghost btn-sm">+ Add</button>
+      </div>
+      <div class="hint" style="margin-bottom:10px;">
+        Make a field required only when another field equals a specific value.
+        Example: <code>fit</code> required when <code>outcome = prescribed</code>
+      </div>
+      <div id="conditions-list"></div>
+    </div>
+
     </div>
 
   </div>
@@ -159,22 +172,6 @@
       Type, unit, and aggregation hints for named fields — used by the metrics engine.
     </div>
     <div id="field-meta-list"></div>
-  </div>
-
-  <!-- Read-only: conditions / parent-dependent -->
-  <div style="border-top:1px solid var(--border);padding-top:16px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div style="font-size:13px;font-weight:700;">Conditions &amp; Parent-dependent fields
-        <span style="font-size:11px;font-weight:400;color:var(--sub);margin-left:6px;">read-only</span>
-      </div>
-      <button id="ro-show-btn"
-              onclick="renderReadOnly();document.getElementById('readonly-advanced').style.display='block';this.style.display='none';"
-              class="btn btn-ghost btn-sm">Show</button>
-    </div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
-      Managed directly in <code>config/schema.toml</code>. Shown here for reference.
-    </div>
-    <div id="readonly-advanced" style="display:none;"></div>
   </div>
 
 </div>
@@ -321,7 +318,8 @@ var _currentType = null;
       required:       Array.isArray(ts.required) ? ts.required : [],
       fields:         fields,
       tags:           tags,
-      derived_fields: {}
+      derived_fields: {},
+      conditions:     {}
     };
 
     // load derived fields for this type
@@ -332,6 +330,21 @@ var _currentType = null;
       _state.type_schemas[tname].derived_fields[fname] = {
         expr: fdef.derived || "",
         type: fdef.type    || "",
+      };
+    });
+
+    // load conditions for this type
+    Object.entries(ts.conditions || {}).forEach(function(entry) {
+      var cfield = entry[0], cdef = entry[1];
+      if (!cdef || typeof cdef !== "object") return;
+      var when = cdef.when || {};
+      var keys = Object.keys(when);
+      if (!keys.length) return;
+      var trigField = keys[0];
+      var trigVal   = String(when[trigField] || "");
+      _state.type_schemas[tname].conditions[cfield] = {
+        trigger_field: trigField,
+        trigger_value: trigVal
       };
     });
   });
@@ -371,7 +384,7 @@ function addType() {
   if (!name) return;
   if (_state.types.includes(name)) { alert("Type already exists"); return; }
   _state.types.push(name);
-  _state.type_schemas[name] = { required:[], fields:{}, tags:{}, derived_fields:{} };
+  _state.type_schemas[name] = { required:[], fields:{}, tags:{}, derived_fields:{}, conditions:{} };
   selectType(name);
 }
 
@@ -410,6 +423,7 @@ function renderEditor() {
   renderFields(ts);
   renderTags(ts);
   renderDerivedFields(ts);
+  renderConditions(ts);
 }
 
 function ts() { return _state.type_schemas[_currentType]; }
@@ -605,9 +619,9 @@ function toggleInt(fname, val) {
 function deleteField(fname) {
   if (!confirm("Remove field '" + fname + "' from this type?")) return;
   delete ts().fields[fname];
-  // also remove any tag rules for this field
   delete ts().tags[fname];
-  renderFields(ts()); renderTags(ts());
+  delete ts().conditions[fname];
+  renderFields(ts()); renderTags(ts()); renderConditions(ts());
 }
 
 function addOption(fname) {
@@ -1084,50 +1098,126 @@ function deleteFieldMeta(fname) {
   renderFieldMeta();
 }
 
-// ── Read-only: conditions / parent-dependent per type ────────────────────────
-function renderReadOnly() {
-  var el = document.getElementById("readonly-advanced");
+// ── Conditions (per type, editable) ──────────────────────────────────────────
+// A condition makes a field required when another field equals a certain value.
+// conditions[fieldname] = { trigger_field: str, trigger_value: str }
+
+function renderConditions(tschema) {
+  var el = document.getElementById("conditions-list");
   if (!el) return;
   el.innerHTML = "";
-  var schema = {{ schema | tojson }};
-  var hasAny = false;
-  _state.types.forEach(function(tname) {
-    var tschema = schema.type && schema.type[tname] ? schema.type[tname] : {};
-    var parentDep = [], conditions = [];
-    Object.entries(tschema.fields || {}).forEach(function(e) {
-      var fn = e[0], fd = e[1];
-      if (fd && typeof fd === "object" && "parent" in fd)
-        parentDep.push({ name: fn, parent: fd.parent });
-    });
-    Object.entries(tschema.conditions || {}).forEach(function(e) {
-      conditions.push({ name: e[0], def: e[1] });
-    });
-    if (!parentDep.length && !conditions.length) return;
-    hasAny = true;
-    var section = document.createElement("div");
-    section.style.marginBottom = "16px";
-    var label = document.createElement("div");
-    label.style.cssText = "font-size:12px;font-weight:700;color:var(--accent);letter-spacing:.5px;margin-bottom:8px;";
-    label.textContent = tname.toUpperCase();
-    section.appendChild(label);
-    function makeRORow(lbl, detail) {
-      var row = document.createElement("div");
-      row.style.cssText = "display:flex;align-items:baseline;gap:10px;padding:8px 10px;" +
-        "border:1px solid var(--border);border-radius:8px;margin-bottom:6px;" +
-        "background:var(--bg);opacity:0.65;";
-      row.innerHTML =
-        '<span style="font-size:13px;font-weight:700;min-width:110px;color:var(--sub);">' + escHtml(lbl) + '</span>' +
-        '<span style="font-size:12px;font-family:monospace;color:var(--sub);flex:1;word-break:break-all;">' + escHtml(detail) + '</span>' +
-        '<span style="font-size:10px;color:var(--sub);border:1px solid var(--border);border-radius:4px;padding:1px 5px;white-space:nowrap;">read-only</span>';
-      return row;
-    }
-    parentDep.forEach(function(p) { section.appendChild(makeRORow(p.name, "parent = " + p.parent)); });
-    conditions.forEach(function(c) { section.appendChild(makeRORow(c.name, "condition: " + JSON.stringify(c.def))); });
-    el.appendChild(section);
-  });
-  if (!hasAny) {
-    el.innerHTML = '<div style="font-size:13px;color:var(--sub);">No conditions or parent-dependent fields found.</div>';
+  if (!Object.keys(tschema.conditions || {}).length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--sub);">No conditions yet.</div>';
+    return;
   }
+  Object.entries(tschema.conditions).forEach(function(entry) {
+    el.appendChild(makeConditionRow(entry[0], entry[1]));
+  });
+}
+
+function addCondition() {
+  var tschema = ts();
+  var allFields = Object.keys(tschema.fields);
+  if (allFields.length < 2) {
+    alert("Need at least 2 fields to define a condition.");
+    return;
+  }
+
+  var cfield = prompt("Which field becomes conditionally required?\n" + allFields.join(", "));
+  if (!cfield) return;
+  cfield = cfield.trim();
+  if (!tschema.fields[cfield]) { alert("Field '" + cfield + "' not in this type."); return; }
+  if (tschema.conditions[cfield]) { alert("Condition for '" + cfield + "' already exists."); return; }
+
+  var triggerCandidates = allFields.filter(function(f) {
+    if (f === cfield) return false;
+    var fd = tschema.fields[f];
+    return fd.use || fd.parent ||
+           (Array.isArray(fd.options) && fd.options.length);
+  });
+  if (!triggerCandidates.length) {
+    alert("No option fields found to act as trigger.");
+    return;
+  }
+
+  var trigField = prompt("Which field triggers it?\n" + triggerCandidates.join(", "));
+  if (!trigField) return;
+  trigField = trigField.trim();
+  if (!tschema.fields[trigField]) { alert("Field '" + trigField + "' not found."); return; }
+
+  var trigFdef  = tschema.fields[trigField];
+  var trigOpts  = [];
+  if (trigFdef.use) {
+    trigOpts = (_state.shared_defs[(trigFdef.use || "").replace("shared.", "")] || {}).options || [];
+  } else if (Array.isArray(trigFdef.options)) {
+    trigOpts = trigFdef.options;
+  }
+
+  var trigVal = trigOpts.length
+    ? prompt("When " + trigField + " = (choose):\n" + trigOpts.join(", "))
+    : prompt("When " + trigField + " = (enter value):");
+  if (!trigVal) return;
+
+  tschema.conditions[cfield] = { trigger_field: trigField, trigger_value: trigVal.trim() };
+  renderConditions(tschema);
+}
+
+function makeConditionRow(cfield, cdef) {
+  var div = document.createElement("div");
+  div.className = "field-row";
+
+  var head = document.createElement("div");
+  head.className = "field-row-head";
+  head.innerHTML =
+    '<span style="font-size:14px;font-weight:700;flex:1;">' + cfield + '</span>' +
+    '<span style="font-size:12px;color:var(--sub);margin-right:8px;">conditionally required</span>' +
+    '<button onclick="deleteCondition(\'' + cfield + '\')" ' +
+    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>';
+  div.appendChild(head);
+
+  var allFields = Object.keys(ts().fields).filter(function(f) { return f !== cfield; });
+
+  var body = document.createElement("div");
+  body.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;margin-top:8px;align-items:center;";
+
+  var trigSelHtml =
+    '<label style="font-size:12px;display:flex;align-items:center;gap:6px;">When:&nbsp;' +
+    '<select id="cond-tfield-' + cfield + '" onchange="updateCondField(\'' + cfield + '\')" style="font-size:12px;padding:3px 6px;">';
+  allFields.forEach(function(f) {
+    trigSelHtml += '<option value="' + f + '"' + (cdef.trigger_field === f ? " selected" : "") + '>' + f + '</option>';
+  });
+  trigSelHtml += '</select></label>';
+
+  var trigValHtml =
+    '<label style="font-size:12px;display:flex;align-items:center;gap:6px;">equals:&nbsp;' +
+    '<input type="text" id="cond-tval-' + cfield + '" value="' + escHtmlAttr(cdef.trigger_value) + '" ' +
+    'oninput="updateCondVal(\'' + cfield + '\')" ' +
+    'style="font-size:12px;width:110px;padding:3px 6px;" placeholder="value"></label>';
+
+  body.innerHTML = trigSelHtml + trigValHtml;
+  div.appendChild(body);
+
+  var hint = document.createElement("div");
+  hint.style.cssText = "font-size:11px;color:var(--sub);margin-top:6px;";
+  hint.textContent = "→ " + cfield + " is required when " +
+    (cdef.trigger_field || "?") + " = " + (cdef.trigger_value || "?");
+  div.appendChild(hint);
+  return div;
+}
+
+function updateCondField(cfield) {
+  var sel = document.getElementById("cond-tfield-" + cfield);
+  if (sel) ts().conditions[cfield].trigger_field = sel.value;
+  renderConditions(ts());
+}
+function updateCondVal(cfield) {
+  var inp = document.getElementById("cond-tval-" + cfield);
+  if (inp) ts().conditions[cfield].trigger_value = inp.value.trim();
+}
+function deleteCondition(cfield) {
+  if (!confirm("Remove condition for '" + cfield + "'?")) return;
+  delete ts().conditions[cfield];
+  renderConditions(ts());
 }
 
 function escHtmlAttr(s) {
