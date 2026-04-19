@@ -223,6 +223,13 @@
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
     <div class="card-title" style="margin:0;">Overdue</div>
+    {% if due_configs|length > 1 %}
+    <select onchange="window.location='/home?due='+this.value" style="font-size:12px;padding:4px;">
+      {% for dc in due_configs %}
+      <option value="{{ dc }}" {% if loop.index0==0 %}selected{% endif %}>{{ dc }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
     <a href="/due" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
   </div>
   {% for row in due_rows %}

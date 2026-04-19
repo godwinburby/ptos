@@ -4,14 +4,23 @@
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
   <div class="page-title" style="margin:0;">Due List</div>
   <div style="display:flex;gap:8px;align-items:center;">
+    {% if due_configs|length > 1 %}
+    <div style="display:flex;gap:4px;align-items:center;margin-right:8px;">
+      {% for dc in due_configs %}
+      <a href="/due?due={{ dc }}" 
+         class="btn btn-sm {% if selected_due==dc %}btn-primary{% else %}btn-ghost{% endif %}"
+         style="padding:6px 10px;">{{ dc }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
     <select id="days-select" onchange="reload()" style="width:auto;padding:8px 12px;font-size:13px;">
       <option value="0"  {% if days==0  %}selected{% endif %}>All</option>
       <option value="1"  {% if days==1  %}selected{% endif %}>1+ days</option>
-      <option value="3"  {% if days==3  %}selected{% endif %}>3+ days</option>
-      <option value="7"  {% if days==7  %}selected{% endif %}>7+ days</option>
+      <option value="3"  {% if days==3  %}selected{% endif %}>7+ days</option>
       <option value="14" {% if days==14 %}selected{% endif %}>14+ days</option>
     </select>
   </div>
+</div>
 </div>
 
 {% if error %}
@@ -45,7 +54,11 @@
 <script>
 function reload() {
   const days = document.getElementById("days-select").value;
-  window.location = "/due?days=" + days;
+  const params = new URLSearchParams(window.location.search);
+  const due = params.get("due");
+  let url = "/due?days=" + days;
+  if (due && due !== "default") url += "&due=" + due;
+  window.location = url;
 }
 </script>
 {% endblock %}
