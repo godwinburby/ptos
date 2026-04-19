@@ -272,25 +272,33 @@ def home():
         if not isinstance(due_section, dict):
             due_section = {}
         
-        # Handle TOML parsing: [due.followup] becomes due.followup nested dict
-        if "followup" in due_section:
-            due_configs["followup"] = due_section["followup"]
-        if "assessment" in due_section:
-            due_configs["assessment"] = due_section["assessment"]
-        if "investment" in due_section:
-            due_configs["investment"] = due_section["investment"]
+        # Root-level keys = default config
+        if due_section.get("type"):
+            due_configs["default"] = {
+                "type": due_section.get("type", "followup"),
+                "key": due_section.get("key", "client"),
+                "sort_by": due_section.get("sort_by", ""),
+                "days": due_section.get("days", 7),
+                "exclude_results": due_section.get("exclude_results", [])
+            }
         
-        # Also check for separate [due.*] sections
+        # Read nested configs from [due] section
+        for name, cfg in due_section.items():
+            if isinstance(cfg, dict) and cfg.get("type"):
+                due_configs[name] = cfg
+        
+        # Also check for separate [due.*] or [due_*] sections (backup)
         for k, v in queries.items():
             if not isinstance(v, dict):
                 continue
-            if k == "due":
-                if "default" not in due_configs:
-                    due_configs["default"] = v
-            elif k.startswith("due."):
-                due_configs[k[4:]] = v
+            if k.startswith("due."):
+                name = k[4:]
+                if name not in due_configs:
+                    due_configs[name] = v
             elif k.startswith("due_"):
-                due_configs[k[4:]] = v
+                name = k[4:]
+                if name not in due_configs:
+                    due_configs[name] = v
     except:
         queries = {}
     
@@ -358,7 +366,7 @@ def home():
         presets=sorted(presets.keys())[:8],
         multi_presets=multi_presets,
         due_count=due_count, due_rows=due_rows[:5],
-        due_configs=list(due_configs.keys()),
+        due_configs=list(due_configs.keys()), selected_due=selected_due or "default",
         stats=stats,
         dashboards=list(dashboards.keys()),
         current_db=db_name if 'db_name' in locals() else None,
@@ -1176,9 +1184,8 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
         for due_name, due_cfg in all_due.items():
             if not due_cfg or not isinstance(due_cfg, dict):
                 continue
-            # Write as [due.default] or [due.followup], etc.
-            section = f"[due.{due_name}]" if due_name != "default" else "[due]"
-            lines.append(section)
+            # Always write as [due.name] format
+            lines.append(f"[due.{due_name}]")
             if due_cfg.get("type"):
                 lines.append(f'type = "{due_cfg["type"]}"')
             if due_cfg.get("key"):
@@ -1206,29 +1213,35 @@ def query_builder():
         queries = {}
         types   = []
     
-    # Collect all due configs (due.* or due_* or nested in [due])
+    # Collect all due configs from nested [due] section or separate [due.*] sections
     all_due_configs = {}
-    
-    # Handle nested TOML format: [due.followup] becomes due.followup nested dict
     due_section = queries.get("due", {})
     if isinstance(due_section, dict):
-        for name in ["default", "followup", "assessment", "investment"]:
-            if name in due_section and isinstance(due_section[name], dict):
-                all_due_configs[name] = due_section[name]
+        # Root-level keys = default config (type, key, sort_by are strings at root)
+        if due_section.get("type"):
+            all_due_configs["default"] = {
+                "type": due_section.get("type", "followup"),
+                "key": due_section.get("key", "client"),
+                "sort_by": due_section.get("sort_by", ""),
+                "days": due_section.get("days", 7),
+                "exclude_results": due_section.get("exclude_results", [])
+            }
+        # Nested configs (followup, assessment, investment are dicts)
+        for name, cfg in due_section.items():
+            if isinstance(cfg, dict) and cfg.get("type"):
+                all_due_configs[name] = cfg
     
-    # Also check for separate [due.*] or [due_*] sections
     for k, v in queries.items():
         if not isinstance(v, dict):
             continue
-        if k == "due":
-            if "default" not in all_due_configs:
-                all_due_configs["default"] = v
-        elif k.startswith("due."):
+        if k.startswith("due."):
             name = k[4:]
-            all_due_configs[name] = v
+            if name not in all_due_configs:
+                all_due_configs[name] = v
         elif k.startswith("due_"):
             name = k[4:]
-            all_due_configs[name] = v
+            if name not in all_due_configs:
+                all_due_configs[name] = v
     
     # Ensure at least default exists
     if not all_due_configs:

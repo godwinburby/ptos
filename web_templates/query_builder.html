@@ -107,13 +107,17 @@
 </style>
 
 <script>
-var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{} };
+var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{} };
 var _cur = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
 var _timeOpts = {{ time_options | tojson }};
-var _dueConfigs = {{ due_config | tojson }};  // {name: config}
-var _currentDue = null;  // Currently selected due config
+
+// Initialize due from backend config
+var _dueFromBackend = {{ due_config | tojson }};
+Object.entries(_dueFromBackend).forEach(function(e) {
+  _st.due[e[0]] = e[1];
+});
 var _fieldCache = {};   // {type: [{name, options, is_int}]}
 var _cacheSet  = [];    // maintain insertion order for eviction
 var _liveTimer = null;
@@ -121,10 +125,11 @@ var _liveTimer = null;
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function() {
   var q = {{ queries | tojson }};
-  var reserved = ["metrics","dashboards"];
+  var reserved = ["metrics","dashboards", "due"];
   Object.entries(q).forEach(function(e) {
     var k = e[0], v = e[1];
     if (reserved.indexOf(k)!==-1 || typeof v!=="object") return;
+    if (k.startsWith("due.")) return;  // Skip due configs - loaded separately
     if (v.alias) {
       _st.aliases[k] = { alias: v.alias };
       return;
@@ -201,25 +206,18 @@ function renderDueTabs() {
   var el = document.getElementById("tabs-due");
   if (!el) return;
   el.innerHTML = "";
-  var names = Object.keys(_dueConfigs);
+  var names = Object.keys(_st.due);
   if (!names.length) {
     el.innerHTML = '<div style="font-size:12px;color:var(--border);padding:4px 8px;">none</div>';
     return;
   }
   names.forEach(function(name) {
     var btn = document.createElement("button");
-    btn.className = "q-tab" + (name === _currentDue ? " active" : "");
+    btn.className = "q-tab" + (name === (_cur && _cur.name) && _cur.section === "due" ? " active" : "");
     btn.textContent = name;
-    btn.addEventListener("click", function() { selectDue(name); });
+    btn.addEventListener("click", function() { select("due", name); });
     el.appendChild(btn);
   });
-}
-
-function selectDue(name) {
-  if (!_dueConfigs[name]) return;
-  _currentDue = name;
-  renderDueTabs();
-  showDueEditor();
 }
 function _renderSection(elId, data, section) {
   var el = document.getElementById(elId);
@@ -275,10 +273,10 @@ function resetQuery() {
 
 // ── Add new ───────────────────────────────────────────────────────────────────
 function addEntry() {
-  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias","q");
+  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias\n  u = due","q");
   if (!kind) return;
   kind = kind.trim().toLowerCase();
-  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":"queries";
+  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":kind==="u"?"due":"queries";
   var name = prompt("Name (lowercase, underscores):");
   if (!name) return;
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
@@ -290,6 +288,8 @@ function addEntry() {
     _st.metrics[name]    = {kind:"avg",base:"",base2:""};
   else if (section==="aliases")
     _st.aliases[name]    = {alias:""};
+  else if (section==="due")
+    _st.due[name]      = {type:"followup",key:"client",sort_by:"",days:7,exclude_results:[]};
   else
     _st.dashboards[name] = {metrics:[]};
   renderTabs();
@@ -304,6 +304,10 @@ function renderEditor() {
   var s=_cur.section, n=_cur.name;
   if (s==="aliases") {
     _buildAliasEditor(ed, n);
+    return;
+  }
+  if (s==="due") {
+    showDueEditor();
     return;
   }
   // header
@@ -1134,7 +1138,7 @@ function saveAll() {
   Object.keys(_st.queries).forEach(function(n) {
     _st.queries[n].where = _buildWhereExpr(_st.queries[n]);
   });
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_dueConfigs };
+  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
     payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
@@ -1232,16 +1236,10 @@ function showDueEditor() {
   ed.style.display = "block";
   empty.style.display = "none";
   
-  // Use first config if none selected
-  if (!_currentDue) {
-    var names = Object.keys(_dueConfigs);
-    _currentDue = names.length ? names[0] : "default";
-  }
-  
-  var cfg = _dueConfigs[_currentDue] || {};
+  var cfg = _st.due[_cur.name] || {};
   var typeName = cfg.type || "followup";
   ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
-    '<div class="card-title">Due: '+_currentDue+'</div>'+
+    '<div class="card-title">Due: '+_cur.name+'</div>'+
     '<div style="font-size:13px;color:var(--sub);margin-bottom:14px;">Configure overdue records.</div>'+
     '<div style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Record Type</div>'+
@@ -1267,13 +1265,10 @@ function showDueEditor() {
         '<button onclick="addDueExclude()" class="btn btn-ghost btn-sm">Add</button>'+
       '</div>'+
     '</div>'+
-    '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
-      '<button onclick="addNewDue()" class="btn btn-ghost btn-sm">+ Add New Due</button>'+
-      '<button onclick="deleteCurrentDue()" class="btn btn-ghost btn-sm" style="color:var(--error);border-color:var(--error);">Delete</button>'+
-    '</div>'+
   '</div>';
   
   renderDueTypeChips(typeName);
+  fetchDueFieldsForType(typeName);
 }
 
 function renderDueTypeChips(selected) {
@@ -1285,7 +1280,7 @@ function renderDueTypeChips(selected) {
     chip.className = "qb-chip" + (t===selected ? " active" : "");
     chip.textContent = t;
     chip.addEventListener("click", function() {
-      var cfg = _dueConfigs[_currentDue];
+      var cfg = _st.due[_cur.name];
       if (cfg) {
         cfg.type = t;
         cfg.key = "";
@@ -1310,7 +1305,7 @@ function fetchDueFieldsForType(typeName) {
   .then(function(r){ return r.json(); })
   .then(function(data) {
     var fields = (data.fields||[]).filter(function(f){ return !f.is_int && f.name!=="type"; });
-    var cfg = _dueConfigs[_currentDue] || {};
+    var cfg = _st.due[_cur.name] || {};
     
     // Render Key chips
     keyEl.innerHTML = "";
@@ -1319,7 +1314,7 @@ function fetchDueFieldsForType(typeName) {
       chip.className = "qb-chip" + (f.name === cfg.key ? " active" : "");
       chip.textContent = f.name;
       chip.addEventListener("click", function() {
-        _dueConfigs[_currentDue].key = f.name;
+        _st.due[_cur.name].key = f.name;
         renderDueKeyChips(fields);
       });
       keyEl.appendChild(chip);
@@ -1332,7 +1327,7 @@ function fetchDueFieldsForType(typeName) {
       chip.className = "qb-chip" + (f.name === cfg.sort_by ? " active" : "");
       chip.textContent = f.name;
       chip.addEventListener("click", function() {
-        _dueConfigs[_currentDue].sort_by = f.name;
+        _st.due[_cur.name].sort_by = f.name;
         renderDueSortChips(fields);
       });
       sortEl.appendChild(chip);
@@ -1350,14 +1345,14 @@ function fetchDueFieldsForType(typeName) {
 function renderDueKeyChips(fields) {
   var el = document.getElementById("due-key-chips");
   if (!el) return;
-  var cfg = _dueConfigs[_currentDue] || {};
+  var cfg = _st.due[_cur.name] || {};
   el.innerHTML = "";
   fields.forEach(function(f) {
     var chip = document.createElement("button");
     chip.className = "qb-chip" + (f.name === cfg.key ? " active" : "");
     chip.textContent = f.name;
     chip.addEventListener("click", function() {
-      _dueConfigs[_currentDue].key = f.name;
+      _st.due[_cur.name].key = f.name;
       renderDueKeyChips(fields);
     });
     el.appendChild(chip);
@@ -1367,14 +1362,14 @@ function renderDueKeyChips(fields) {
 function renderDueSortChips(fields) {
   var el = document.getElementById("due-sort-chips");
   if (!el) return;
-  var cfg = _dueConfigs[_currentDue] || {};
+  var cfg = _st.due[_cur.name] || {};
   el.innerHTML = "";
   fields.forEach(function(f) {
     var chip = document.createElement("button");
     chip.className = "qb-chip" + (f.name === cfg.sort_by ? " active" : "");
     chip.textContent = f.name;
     chip.addEventListener("click", function() {
-      _dueConfigs[_currentDue].sort_by = f.name;
+      _st.due[_cur.name].sort_by = f.name;
       renderDueSortChips(fields);
     });
     el.appendChild(chip);
@@ -1384,19 +1379,19 @@ function renderDueSortChips(fields) {
 function onDueSortChange() {
   var sel = document.getElementById("due-sort");
   if (!sel) return;
-  _dueConfigs[_currentDue].sort_by = sel.value;
+  _st.due[_cur.name].sort_by = sel.value;
 }
 
 function onDueDaysChange() {
   var inp = document.getElementById("due-days");
   if (!inp) return;
-  _dueConfigs[_currentDue].days = parseInt(inp.value) || 7;
+  _st.due[_cur.name].days = parseInt(inp.value) || 7;
 }
 
 function renderDueExcludeChips() {
   var el = document.getElementById("due-exclude-chips");
   if (!el) return;
-  var cfg = _dueConfigs[_currentDue];
+  var cfg = _st.due[_cur.name];
   if (!cfg) return;
   el.innerHTML = "";
   var list = cfg.exclude_results || [];
@@ -1412,7 +1407,7 @@ function addDueExclude() {
   var inp = document.getElementById("due-exclude-input");
   var val = inp.value.trim();
   if (!val) return;
-  var cfg = _dueConfigs[_currentDue];
+  var cfg = _st.due[_cur.name];
   if (!cfg) return;
   if (!cfg.exclude_results) cfg.exclude_results = [];
   if (cfg.exclude_results.indexOf(val)===-1) cfg.exclude_results.push(val);
@@ -1423,7 +1418,7 @@ function addDueExclude() {
 function onDueDaysChange() {
   var inp = document.getElementById("due-days");
   if (!inp) return;
-  var cfg = _dueConfigs[_currentDue];
+  var cfg = _st.due[_cur.name];
   if (cfg) cfg.days = parseInt(inp.value) || 7;
 }
 
@@ -1438,7 +1433,7 @@ function addDueExclude() {
 }
 
 function removeDueExclude(idx) {
-  var cfg = _dueConfigs[_currentDue];
+  var cfg = _st.due[_cur.name];
   if (!cfg || !cfg.exclude_results) return;
   cfg.exclude_results.splice(idx, 1);
   renderDueExcludeChips();
@@ -1448,8 +1443,8 @@ function addNewDue() {
   var name = prompt("New due config name (e.g., followup, assessment, investment):");
   if (!name) return;
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
-  if (!name || _dueConfigs[name]) { alert("Invalid or already exists"); return; }
-  _dueConfigs[name] = {
+  if (!name || _st.due[name]) { alert("Invalid or already exists"); return; }
+  _st.due[name] = {
     type: "followup",
     key: "client",
     sort_by: "intent",
@@ -1460,11 +1455,11 @@ function addNewDue() {
 }
 
 function deleteCurrentDue() {
-  if (!_currentDue || _currentDue === "default") { alert("Cannot delete default"); return; }
-  if (!confirm("Delete due config '"+_currentDue+"'?")) return;
-  delete _dueConfigs[_currentDue];
-  var names = Object.keys(_dueConfigs);
-  _currentDue = names.length ? names[0] : "default";
+  if (!_cur.name || _cur.name === "default") { alert("Cannot delete default"); return; }
+  if (!confirm("Delete due config '"+_cur.name+"'?")) return;
+  delete _st.due[_cur.name];
+  var names = Object.keys(_st.due);
+  _cur.name = names.length ? names[0] : "default";
   renderDueTabs();
   showDueEditor();
 }
