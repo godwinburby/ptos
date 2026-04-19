@@ -680,9 +680,17 @@ function renderTags(ts) {
 }
 
 function addTagRule() {
-  // pick a field that has options
+  // pick a field that has options (regular or parent-dependent)
   var fieldNames = Object.keys(ts().fields).filter(function(f) {
-    return !ts().fields[f].is_int && ts().fields[f].options.length > 0;
+    var fdef = ts().fields[f];
+    if (fdef.is_int) return false;
+    if (fdef.options_by_parent) {
+      // Parent-dependent field: check if any parent has options
+      return Object.values(fdef.options_by_parent || {}).some(function(opts) {
+        return Array.isArray(opts) && opts.length > 0;
+      });
+    }
+    return Array.isArray(fdef.options) && fdef.options.length > 0;
   });
   if (!fieldNames.length) {
     alert("Add a field with options first — tags are based on field values.");
@@ -697,7 +705,23 @@ function addTagRule() {
 
 function makeTagRule(tfield, rule) {
   var fdef    = ts().fields[tfield];
-  var fieldOpts = fdef ? fdef.options : [];
+  var fieldOpts = [];
+  
+  if (fdef) {
+    if (fdef.options_by_parent) {
+      // Parent-dependent field: collect all possible values from options_by_parent
+      Object.values(fdef.options_by_parent || {}).forEach(function(parentOpts) {
+        if (Array.isArray(parentOpts)) {
+          fieldOpts = fieldOpts.concat(parentOpts);
+        }
+      });
+      // Remove duplicates
+      fieldOpts = [...new Set(fieldOpts)];
+    } else if (Array.isArray(fdef.options)) {
+      // Regular field with array options
+      fieldOpts = fdef.options;
+    }
+  }
 
   var div = document.createElement("div");
   div.className = "tag-rule-row";
