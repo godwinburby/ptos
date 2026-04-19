@@ -261,9 +261,43 @@ def home():
     presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
     multi_presets = _multi_presets()
+    
+    # Get selected due config from query param, default to first one
+    selected_due = request.args.get("due", None)
+    due_configs = {}  # {name: config}
+    
     try:
-        due_data  = svc.get_due()
-        due_rows  = due_data["rows"]
+        queries = svc.get_queries()
+        due_section = queries.get("due", {})
+        if not isinstance(due_section, dict):
+            due_section = {}
+        
+        # Handle TOML parsing: [due.followup] becomes due.followup nested dict
+        if "followup" in due_section:
+            due_configs["followup"] = due_section["followup"]
+        if "assessment" in due_section:
+            due_configs["assessment"] = due_section["assessment"]
+        if "investment" in due_section:
+            due_configs["investment"] = due_section["investment"]
+        
+        # Also check for separate [due.*] sections
+        for k, v in queries.items():
+            if not isinstance(v, dict):
+                continue
+            if k == "due":
+                if "default" not in due_configs:
+                    due_configs["default"] = v
+            elif k.startswith("due."):
+                due_configs[k[4:]] = v
+            elif k.startswith("due_"):
+                due_configs[k[4:]] = v
+    except:
+        queries = {}
+    
+    # Get due data for selected config
+    try:
+        due_data = svc.get_due(config_name=selected_due if selected_due and selected_due != "default" else None)
+        due_rows = due_data["rows"]
         due_count = due_data["count"]
     except Exception:
         due_rows = []; due_count = 0
@@ -324,6 +358,7 @@ def home():
         presets=sorted(presets.keys())[:8],
         multi_presets=multi_presets,
         due_count=due_count, due_rows=due_rows[:5],
+        due_configs=list(due_configs.keys()),
         stats=stats,
         dashboards=list(dashboards.keys()),
         current_db=db_name if 'db_name' in locals() else None,
@@ -340,17 +375,42 @@ def home():
 
 @app.route("/due")
 def due_page():
+    due_name = request.args.get("due", None)  # Select which due config
     days = request.args.get("days", None)
     days_int = int(days) if days is not None else None
+    
+    # Get all due configs for the tabs
+    due_configs = {}
     try:
-        data = svc.get_due(days_override=days_int)
+        queries = svc.get_queries()
+        due_section = queries.get("due", {})
+        if isinstance(due_section, dict):
+            for name in ["default", "followup", "assessment", "investment"]:
+                if name in due_section and isinstance(due_section[name], dict):
+                    due_configs[name] = due_section[name]
+        for k, v in queries.items():
+            if not isinstance(v, dict):
+                continue
+            if k == "due":
+                if "default" not in due_configs:
+                    due_configs["default"] = v
+            elif k.startswith("due."):
+                due_configs[k[4:]] = v
+            elif k.startswith("due_"):
+                due_configs[k[4:]] = v
+    except:
+        pass
+    
+    try:
+        data = svc.get_due(config_name=due_name if due_name and due_name != "default" else None, days_override=days_int)
         rows = data["rows"]
         days_used = data["days"]
         error = None
     except PTOSError as e:
         rows = []; days_used = 7; error = str(e)
     return render_template("due.html", tab="due", title="Due List",
-        now=_now_str(), rows=rows, days=days_used, error=error)
+        now=_now_str(), rows=rows, days=days_used, error=error,
+        due_configs=list(due_configs.keys()), selected_due=due_name or "default")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1108,23 +1168,29 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
             items_str = ", ".join(f'"{i}"' for i in items)
             lines.append(f"metrics = [{items_str}]")
         lines.append("")
-
-    # ── Due settings ───────────────────────────────────────────────────────────
-    due_cfg = raw_due if raw_due is not None else old_queries.get("due", {})
-    if due_cfg and isinstance(due_cfg, dict):
-        lines.append("[due]")
-        if due_cfg.get("type"):
-            lines.append(f'type = "{due_cfg["type"]}"')
-        if due_cfg.get("key"):
-            lines.append(f'key = "{due_cfg["key"]}"')
-        if due_cfg.get("sort_by"):
-            lines.append(f'sort_by = "{due_cfg["sort_by"]}"')
-        if due_cfg.get("days"):
-            lines.append(f"days = {due_cfg['days']}")
-        if due_cfg.get("exclude_results") and isinstance(due_cfg["exclude_results"], list):
-            opts = ", ".join(f'"{x}"' for x in due_cfg["exclude_results"])
-            lines.append(f"exclude_results = [{opts}]")
-        lines.append("")
+    
+    # ── Due settings (multiple configs) ─────────────────────────────────────────
+    # raw_due is a dict: {config_name: {type, key, sort_by, days, exclude_results}}
+    all_due = raw_due if raw_due else {}
+    if all_due and isinstance(all_due, dict):
+        for due_name, due_cfg in all_due.items():
+            if not due_cfg or not isinstance(due_cfg, dict):
+                continue
+            # Write as [due.default] or [due.followup], etc.
+            section = f"[due.{due_name}]" if due_name != "default" else "[due]"
+            lines.append(section)
+            if due_cfg.get("type"):
+                lines.append(f'type = "{due_cfg["type"]}"')
+            if due_cfg.get("key"):
+                lines.append(f'key = "{due_cfg["key"]}"')
+            if due_cfg.get("sort_by"):
+                lines.append(f'sort_by = "{due_cfg["sort_by"]}"')
+            if due_cfg.get("days"):
+                lines.append(f"days = {due_cfg['days']}")
+            if due_cfg.get("exclude_results") and isinstance(due_cfg["exclude_results"], list):
+                opts = ", ".join(f'"{x}"' for x in due_cfg["exclude_results"])
+                lines.append(f"exclude_results = [{opts}]")
+            lines.append("")
 
     ptos._backup_file(ptos.QUERIES_PATH)
     ptos.atomic_write(ptos.QUERIES_PATH, "\n".join(lines))
@@ -1139,17 +1205,45 @@ def query_builder():
     except Exception:
         queries = {}
         types   = []
-    due_config = queries.get("due", {
-        "type": "followup",
-        "key": "client",
-        "sort_by": "intent",
-        "days": 7,
-        "exclude_results": ["fix_appointment", "deceased", "not_relevant", "another_provider"]
-    })
+    
+    # Collect all due configs (due.* or due_* or nested in [due])
+    all_due_configs = {}
+    
+    # Handle nested TOML format: [due.followup] becomes due.followup nested dict
+    due_section = queries.get("due", {})
+    if isinstance(due_section, dict):
+        for name in ["default", "followup", "assessment", "investment"]:
+            if name in due_section and isinstance(due_section[name], dict):
+                all_due_configs[name] = due_section[name]
+    
+    # Also check for separate [due.*] or [due_*] sections
+    for k, v in queries.items():
+        if not isinstance(v, dict):
+            continue
+        if k == "due":
+            if "default" not in all_due_configs:
+                all_due_configs["default"] = v
+        elif k.startswith("due."):
+            name = k[4:]
+            all_due_configs[name] = v
+        elif k.startswith("due_"):
+            name = k[4:]
+            all_due_configs[name] = v
+    
+    # Ensure at least default exists
+    if not all_due_configs:
+        all_due_configs = {"default": {
+            "type": "followup",
+            "key": "client",
+            "sort_by": "intent",
+            "days": 7,
+            "exclude_results": ["fix_appointment", "deceased", "not_relevant", "another_provider"]
+        }}
+    
     return render_template("query_builder.html",
         tab="query_builder", title="Query Builder",
         now=_now_str(), queries=queries, types=types,
-        time_options=_get_time_options(), due_config=due_config)
+        time_options=_get_time_options(), due_config=all_due_configs)
 
 
 @app.route("/query-builder/save", methods=["POST"])

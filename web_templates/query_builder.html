@@ -29,8 +29,8 @@
                 letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">ALIAS QUERIES</div>
     <div id="tabs-aliases"></div>
     <div style="font-size:11px;font-weight:700;color:var(--sub);
-                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">DUE SETTINGS</div>
-    <button class="q-tab" id="tab-due" onclick="showDueEditor()">due</button>
+                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">DUE</div>
+    <div id="tabs-due"></div>
   </div>
 
   <!-- ── Right panel ── -->
@@ -112,7 +112,8 @@ var _cur = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
 var _timeOpts = {{ time_options | tojson }};
-var _dueCfg  = {{ due_config | tojson }};
+var _dueConfigs = {{ due_config | tojson }};  // {name: config}
+var _currentDue = null;  // Currently selected due config
 var _fieldCache = {};   // {type: [{name, options, is_int}]}
 var _cacheSet  = [];    // maintain insertion order for eviction
 var _liveTimer = null;
@@ -120,7 +121,7 @@ var _liveTimer = null;
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function() {
   var q = {{ queries | tojson }};
-  var reserved = ["metrics","dashboards","due"];
+  var reserved = ["metrics","dashboards"];
   Object.entries(q).forEach(function(e) {
     var k = e[0], v = e[1];
     if (reserved.indexOf(k)!==-1 || typeof v!=="object") return;
@@ -193,6 +194,32 @@ function renderTabs() {
   _renderSection("tabs-metrics",    _st.metrics,    "metrics");
   _renderSection("tabs-dashboards", _st.dashboards, "dashboards");
   _renderSection("tabs-aliases",    _st.aliases,    "aliases");
+  renderDueTabs();
+}
+
+function renderDueTabs() {
+  var el = document.getElementById("tabs-due");
+  if (!el) return;
+  el.innerHTML = "";
+  var names = Object.keys(_dueConfigs);
+  if (!names.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--border);padding:4px 8px;">none</div>';
+    return;
+  }
+  names.forEach(function(name) {
+    var btn = document.createElement("button");
+    btn.className = "q-tab" + (name === _currentDue ? " active" : "");
+    btn.textContent = name;
+    btn.addEventListener("click", function() { selectDue(name); });
+    el.appendChild(btn);
+  });
+}
+
+function selectDue(name) {
+  if (!_dueConfigs[name]) return;
+  _currentDue = name;
+  renderDueTabs();
+  showDueEditor();
 }
 function _renderSection(elId, data, section) {
   var el = document.getElementById(elId);
@@ -1107,7 +1134,7 @@ function saveAll() {
   Object.keys(_st.queries).forEach(function(n) {
     _st.queries[n].where = _buildWhereExpr(_st.queries[n]);
   });
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_dueCfg };
+  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_dueConfigs };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
     payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
@@ -1204,14 +1231,18 @@ function showDueEditor() {
   var empty = document.getElementById("entry-empty");
   ed.style.display = "block";
   empty.style.display = "none";
-  document.querySelectorAll(".q-tab").forEach(function(b){ b.classList.remove("active"); });
-  var tab = document.getElementById("tab-due");
-  if (tab) tab.classList.add("active");
-  var cfg = _dueCfg || {};
+  
+  // Use first config if none selected
+  if (!_currentDue) {
+    var names = Object.keys(_dueConfigs);
+    _currentDue = names.length ? names[0] : "default";
+  }
+  
+  var cfg = _dueConfigs[_currentDue] || {};
   var typeName = cfg.type || "followup";
   ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
-    '<div class="card-title">Due List Settings</div>'+
-    '<div style="font-size:13px;color:var(--sub);margin-bottom:14px;">Configure overdue followups for any record type.</div>'+
+    '<div class="card-title">Due: '+_currentDue+'</div>'+
+    '<div style="font-size:13px;color:var(--sub);margin-bottom:14px;">Configure overdue records.</div>'+
     '<div style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Record Type</div>'+
       '<div id="due-type-chips" class="chip-group"></div>'+
@@ -1221,14 +1252,12 @@ function showDueEditor() {
       '<select id="due-key" onchange="onDueKeyChange()" style="font-size:14px;padding:6px;width:100%;max-width:300px;">'+
         '<option value="">— select type first —</option>'+
       '</select>'+
-      '<div id="due-key-chips" class="chip-group" style="margin-top:6px;"></div>'+
     '</div>'+
     '<div style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Sort By</div>'+
       '<select id="due-sort" onchange="onDueSortChange()" style="font-size:14px;padding:6px;width:100%;max-width:300px;">'+
-        '<option value="">— select type first —</option>'+
+        '<option value="">— select field —</option>'+
       '</select>'+
-      '<div id="due-sort-chips" class="chip-group" style="margin-top:6px;"></div>'+
     '</div>'+
     '<div style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Days Overdue</div>'+
@@ -1242,12 +1271,13 @@ function showDueEditor() {
         '<button onclick="addDueExclude()" class="btn btn-ghost btn-sm">Add</button>'+
       '</div>'+
     '</div>'+
+    '<div style="margin-top:16px;padding-top:12px;border-top:1px solid var(--border);display:flex;gap:8px;">'+
+      '<button onclick="addNewDue()" class="btn btn-ghost btn-sm">+ Add New Due</button>'+
+      '<button onclick="deleteCurrentDue()" class="btn btn-ghost btn-sm" style="color:var(--error);border-color:var(--error);">Delete</button>'+
+    '</div>'+
   '</div>';
   
-  // Render type chips
   renderDueTypeChips(typeName);
-  
-  // Fetch fields for the selected type and render dropdowns
   fetchDueFieldsForType(typeName);
 }
 
@@ -1313,32 +1343,67 @@ function fetchDueFieldsForType(typeName) {
 function onDueKeyChange() {
   var sel = document.getElementById("due-key");
   if (!sel) return;
-  _dueCfg.key = sel.value;
+  _dueConfigs[_currentDue].key = sel.value;
 }
 
 function onDueSortChange() {
   var sel = document.getElementById("due-sort");
   if (!sel) return;
-  _dueCfg.sort_by = sel.value;
+  _dueConfigs[_currentDue].sort_by = sel.value;
 }
 
 function onDueDaysChange() {
   var inp = document.getElementById("due-days");
   if (!inp) return;
-  _dueCfg.days = parseInt(inp.value) || 7;
+  _dueConfigs[_currentDue].days = parseInt(inp.value) || 7;
 }
 
 function renderDueExcludeChips() {
   var el = document.getElementById("due-exclude-chips");
   if (!el) return;
+  var cfg = _dueConfigs[_currentDue];
+  if (!cfg) return;
   el.innerHTML = "";
-  var list = _dueCfg.exclude_results || [];
+  var list = cfg.exclude_results || [];
   list.forEach(function(item, i) {
     var chip = document.createElement("span");
     chip.className = "qb-active-chip";
     chip.innerHTML = item+' <button onclick="removeDueExclude('+i+')">×</button>';
     el.appendChild(chip);
   });
+}
+
+function addDueExclude() {
+  var inp = document.getElementById("due-exclude-input");
+  var val = inp.value.trim();
+  if (!val) return;
+  var cfg = _dueConfigs[_currentDue];
+  if (!cfg) return;
+  if (!cfg.exclude_results) cfg.exclude_results = [];
+  if (cfg.exclude_results.indexOf(val)===-1) cfg.exclude_results.push(val);
+  inp.value = "";
+  renderDueExcludeChips();
+}
+
+function onDueKeyChange() {
+  var sel = document.getElementById("due-key");
+  if (!sel) return;
+  var cfg = _dueConfigs[_currentDue];
+  if (cfg) cfg.key = sel.value;
+}
+
+function onDueSortChange() {
+  var sel = document.getElementById("due-sort");
+  if (!sel) return;
+  var cfg = _dueConfigs[_currentDue];
+  if (cfg) cfg.sort_by = sel.value;
+}
+
+function onDueDaysChange() {
+  var inp = document.getElementById("due-days");
+  if (!inp) return;
+  var cfg = _dueConfigs[_currentDue];
+  if (cfg) cfg.days = parseInt(inp.value) || 7;
 }
 
 function addDueExclude() {
@@ -1352,10 +1417,41 @@ function addDueExclude() {
 }
 
 function removeDueExclude(idx) {
-  if (!_dueCfg.exclude_results) return;
-  _dueCfg.exclude_results.splice(idx, 1);
+  var cfg = _dueConfigs[_currentDue];
+  if (!cfg || !cfg.exclude_results) return;
+  cfg.exclude_results.splice(idx, 1);
   renderDueExcludeChips();
 }
+
+function addNewDue() {
+  var name = prompt("New due config name (e.g., followup, assessment, investment):");
+  if (!name) return;
+  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name || _dueConfigs[name]) { alert("Invalid or already exists"); return; }
+  _dueConfigs[name] = {
+    type: "followup",
+    key: "client",
+    sort_by: "intent",
+    days: 7,
+    exclude_results: []
+  };
+  selectDue(name);
+}
+
+function deleteCurrentDue() {
+  if (!_currentDue || _currentDue === "default") { alert("Cannot delete default"); return; }
+  if (!confirm("Delete due config '"+_currentDue+"'?")) return;
+  delete _dueConfigs[_currentDue];
+  var names = Object.keys(_dueConfigs);
+  _currentDue = names.length ? names[0] : "default";
+  renderDueTabs();
+  showDueEditor();
+}
+
+// Initialize on boot
+(function() {
+  renderTabs();
+})();
 </script>
 
 {% endblock %}
