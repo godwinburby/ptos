@@ -75,7 +75,8 @@ fi
 echo "Updating PTOS code files..."
 
 # Preserved directories and files (user data that must not be overwritten)
-PRESERVED="config records journal notes tasks scripts backups exports .version __pycache__ .git"
+# Note: Keep in sync with backup folders configuration in config.toml
+PRESERVED="config records journal notes tasks scripts backups exports templates .version __pycache__ .git"
 
 # Copy all files except preserved ones
 for item in "$TMP_DIR/new/ptos-main"/* "$TMP_DIR/new/ptos-main"/.[!.]*; do

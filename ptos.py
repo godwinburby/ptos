@@ -3272,7 +3272,9 @@ date_format = "indian"
 #          ptos -t clinic-1    (previous cycle)
 
 [backup]
-folders = ["records", "config", "templates", "journal", "tasks", "exports"]
+# Folders to include in full backup
+# Note: Keep in sync with Android update preserved folders in update_ptos_android.sh
+folders = ["records", "config", "templates", "journal", "tasks", "exports", "notes", "scripts"]
 max_backups = 10
 backup_on_startup = true
 backup_on_exit = true
