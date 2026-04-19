@@ -28,6 +28,9 @@
     <div style="font-size:11px;font-weight:700;color:var(--sub);
                 letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">ALIAS QUERIES</div>
     <div id="tabs-aliases"></div>
+    <div style="font-size:11px;font-weight:700;color:var(--sub);
+                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">DUE SETTINGS</div>
+    <button class="q-tab" id="tab-due" onclick="showDueEditor()">due</button>
   </div>
 
   <!-- ── Right panel ── -->
@@ -109,6 +112,7 @@ var _cur = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
 var _timeOpts = {{ time_options | tojson }};
+var _dueCfg  = {{ due_config | tojson }};
 var _fieldCache = {};   // {type: [{name, options, is_int}]}
 var _cacheSet  = [];    // maintain insertion order for eviction
 var _liveTimer = null;
@@ -1103,7 +1107,7 @@ function saveAll() {
   Object.keys(_st.queries).forEach(function(n) {
     _st.queries[n].where = _buildWhereExpr(_st.queries[n]);
   });
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases };
+  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_dueCfg };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
     payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
@@ -1193,6 +1197,164 @@ function summaryBar(d) {
   if (d.avg_fmt)   parts.push('<span>Avg: <strong>'+d.avg_fmt+'</strong></span>');
   if (d.time_label) parts.push('<span style="color:var(--sub);">'+d.time_label+'</span>');
   return parts.length ? '<div style="display:flex;gap:12px;">' + parts.join('') + '</div>' : '';
+}
+
+function showDueEditor() {
+  var ed = document.getElementById("entry-editor");
+  var empty = document.getElementById("entry-empty");
+  ed.style.display = "block";
+  empty.style.display = "none";
+  document.querySelectorAll(".q-tab").forEach(function(b){ b.classList.remove("active"); });
+  var tab = document.getElementById("tab-due");
+  if (tab) tab.classList.add("active");
+  var cfg = _dueCfg || {};
+  var typeName = cfg.type || "followup";
+  ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
+    '<div class="card-title">Due List Settings</div>'+
+    '<div style="font-size:13px;color:var(--sub);margin-bottom:14px;">Configure overdue followups for any record type.</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Record Type</div>'+
+      '<div id="due-type-chips" class="chip-group"></div>'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Group By (Key Field)</div>'+
+      '<select id="due-key" onchange="onDueKeyChange()" style="font-size:14px;padding:6px;width:100%;max-width:300px;">'+
+        '<option value="">— select type first —</option>'+
+      '</select>'+
+      '<div id="due-key-chips" class="chip-group" style="margin-top:6px;"></div>'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Sort By</div>'+
+      '<select id="due-sort" onchange="onDueSortChange()" style="font-size:14px;padding:6px;width:100%;max-width:300px;">'+
+        '<option value="">— select type first —</option>'+
+      '</select>'+
+      '<div id="due-sort-chips" class="chip-group" style="margin-top:6px;"></div>'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Days Overdue</div>'+
+      '<input type="number" id="due-days" value="'+(cfg.days||7)+'" onchange="onDueDaysChange()" style="font-size:14px;padding:6px;width:80px;">'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Exclude Results</div>'+
+      '<div id="due-exclude-chips" class="chip-group" style="margin-bottom:6px;"></div>'+
+      '<div style="display:flex;gap:6px;">'+
+        '<input type="text" id="due-exclude-input" placeholder="add value…" style="flex:1;font-size:13px;padding:6px;" onkeydown="if(event.key===\'Enter\') addDueExclude()">'+
+        '<button onclick="addDueExclude()" class="btn btn-ghost btn-sm">Add</button>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+  
+  // Render type chips
+  renderDueTypeChips(typeName);
+  
+  // Fetch fields for the selected type and render dropdowns
+  fetchDueFieldsForType(typeName);
+}
+
+function renderDueTypeChips(selected) {
+  var el = document.getElementById("due-type-chips");
+  if (!el) return;
+  el.innerHTML = "";
+  _types.forEach(function(t) {
+    var chip = document.createElement("button");
+    chip.className = "qb-chip" + (t===selected ? " active" : "");
+    chip.textContent = t;
+    chip.addEventListener("click", function() {
+      _dueCfg.type = t;
+      renderDueTypeChips(t);
+      fetchDueFieldsForType(t);
+    });
+    el.appendChild(chip);
+  });
+}
+
+function fetchDueFieldsForType(typeName) {
+  var keySel = document.getElementById("due-key");
+  var sortSel = document.getElementById("due-sort");
+  if (!keySel || !sortSel) return;
+  
+  keySel.innerHTML = '<option value="">Loading…</option>';
+  sortSel.innerHTML = '<option value="">Loading…</option>';
+  
+  fetch("/api/type_fields/"+encodeURIComponent(typeName))
+  .then(function(r){ return r.json(); })
+  .then(function(data) {
+    var fields = (data.fields||[]).filter(function(f){ return !f.is_int && f.name!=="type"; });
+    
+    // Populate Key dropdown
+    keySel.innerHTML = '<option value="">— select field —</option>';
+    fields.forEach(function(f) {
+      var opt = document.createElement("option");
+      opt.value = f.name;
+      opt.textContent = f.name;
+      keySel.appendChild(opt);
+    });
+    if (_dueCfg.key) keySel.value = _dueCfg.key;
+    
+    // Populate Sort dropdown
+    sortSel.innerHTML = '<option value="">— select field —</option>';
+    fields.forEach(function(f) {
+      var opt = document.createElement("option");
+      opt.value = f.name;
+      opt.textContent = f.name;
+      sortSel.appendChild(opt);
+    });
+    if (_dueCfg.sort_by) sortSel.value = _dueCfg.sort_by;
+    
+    // Render exclude chips
+    renderDueExcludeChips();
+  })
+  .catch(function(){
+    keySel.innerHTML = '<option value="">Error loading</option>';
+    sortSel.innerHTML = '<option value="">Error loading</option>';
+  });
+}
+
+function onDueKeyChange() {
+  var sel = document.getElementById("due-key");
+  if (!sel) return;
+  _dueCfg.key = sel.value;
+}
+
+function onDueSortChange() {
+  var sel = document.getElementById("due-sort");
+  if (!sel) return;
+  _dueCfg.sort_by = sel.value;
+}
+
+function onDueDaysChange() {
+  var inp = document.getElementById("due-days");
+  if (!inp) return;
+  _dueCfg.days = parseInt(inp.value) || 7;
+}
+
+function renderDueExcludeChips() {
+  var el = document.getElementById("due-exclude-chips");
+  if (!el) return;
+  el.innerHTML = "";
+  var list = _dueCfg.exclude_results || [];
+  list.forEach(function(item, i) {
+    var chip = document.createElement("span");
+    chip.className = "qb-active-chip";
+    chip.innerHTML = item+' <button onclick="removeDueExclude('+i+')">×</button>';
+    el.appendChild(chip);
+  });
+}
+
+function addDueExclude() {
+  var inp = document.getElementById("due-exclude-input");
+  var val = inp.value.trim();
+  if (!val) return;
+  if (!_dueCfg.exclude_results) _dueCfg.exclude_results = [];
+  if (_dueCfg.exclude_results.indexOf(val)===-1) _dueCfg.exclude_results.push(val);
+  inp.value = "";
+  renderDueExcludeChips();
+}
+
+function removeDueExclude(idx) {
+  if (!_dueCfg.exclude_results) return;
+  _dueCfg.exclude_results.splice(idx, 1);
+  renderDueExcludeChips();
 }
 </script>
 

@@ -1005,13 +1005,13 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
 # Query Builder
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None):
+def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None):
     """Build and atomically write queries.toml from dicts.
     raw_queries:    {name: {where, time, sum, group, search}}
     raw_metrics:    {name: {kind, base, base2, derived}}
     raw_dashboards: {name: {metrics: [...]}}
     raw_aliases:    {name: {alias: target}}   (optional)
-    Preserves [due] section from existing file.
+    raw_due:       {type, key, sort_by, days, exclude_results} (optional)
     Raises ValueError on invalid names, Exception on write failure.
     """
     import re as _re
@@ -1109,16 +1109,21 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
             lines.append(f"metrics = [{items_str}]")
         lines.append("")
 
-    # ── Preserve [due] verbatim ───────────────────────────────────────────────
-    if "due" in old_queries and isinstance(old_queries["due"], dict):
+    # ── Due settings ───────────────────────────────────────────────────────────
+    due_cfg = raw_due if raw_due is not None else old_queries.get("due", {})
+    if due_cfg and isinstance(due_cfg, dict):
         lines.append("[due]")
-        for k, v in old_queries["due"].items():
-            if isinstance(v, str):    lines.append(f'{k} = "{v}"')
-            elif isinstance(v, bool): lines.append(f'{k} = {"true" if v else "false"}')
-            elif isinstance(v, int):  lines.append(f'{k} = {v}')
-            elif isinstance(v, list):
-                s = ", ".join(f'"{x}"' if isinstance(x, str) else str(x) for x in v)
-                lines.append(f"{k} = [{s}]")
+        if due_cfg.get("type"):
+            lines.append(f'type = "{due_cfg["type"]}"')
+        if due_cfg.get("key"):
+            lines.append(f'key = "{due_cfg["key"]}"')
+        if due_cfg.get("sort_by"):
+            lines.append(f'sort_by = "{due_cfg["sort_by"]}"')
+        if due_cfg.get("days"):
+            lines.append(f"days = {due_cfg['days']}")
+        if due_cfg.get("exclude_results") and isinstance(due_cfg["exclude_results"], list):
+            opts = ", ".join(f'"{x}"' for x in due_cfg["exclude_results"])
+            lines.append(f"exclude_results = [{opts}]")
         lines.append("")
 
     ptos._backup_file(ptos.QUERIES_PATH)
@@ -1134,10 +1139,17 @@ def query_builder():
     except Exception:
         queries = {}
         types   = []
+    due_config = queries.get("due", {
+        "type": "followup",
+        "key": "client",
+        "sort_by": "intent",
+        "days": 7,
+        "exclude_results": ["fix_appointment", "deceased", "not_relevant", "another_provider"]
+    })
     return render_template("query_builder.html",
         tab="query_builder", title="Query Builder",
         now=_now_str(), queries=queries, types=types,
-        time_options=_get_time_options())
+        time_options=_get_time_options(), due_config=due_config)
 
 
 @app.route("/query-builder/save", methods=["POST"])
@@ -1150,6 +1162,7 @@ def query_builder_save():
             data.get("metrics", {}),
             data.get("dashboards", {}),
             data.get("aliases", {}),
+            data.get("due", {}),
         )
         return jsonify(ok=True)
     except Exception as e:
