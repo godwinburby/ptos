@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request
+import sys, os, re, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
@@ -748,6 +748,24 @@ def backup_config_restore():
         return jsonify(ok=True, message=result.get("message", "Config restored"))
     except Exception as e:
         os.unlink(tmp_path)
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/backup/config/restore/<name>", methods=["POST"])
+def backup_config_restore_from_list(name):
+    """Restore config from existing backup file in backup list."""
+    # Validate it's a config backup
+    if not name.startswith("ptos-backup-config-") or not name.endswith(".zip"):
+        return jsonify(ok=False, error="Not a valid config backup file")
+    
+    backup_path = os.path.join(ptos.BACKUP_DIR, name)
+    if not os.path.exists(backup_path):
+        return jsonify(ok=False, error=f"Backup file not found: {name}")
+    
+    try:
+        result = svc.restore_config(backup_path)
+        return jsonify(ok=True, message=result.get("message", "Config restored"))
+    except Exception as e:
         return jsonify(ok=False, error=str(e))
 
 
@@ -1871,19 +1889,35 @@ def api_save_query():
 # Run
 # ══════════════════════════════════════════════════════════════════════════════
 
-if __name__ == "__main__":
-    # Auto-backup on startup (only if no backup exists from today)
+def _exit_backup():
+    """Run backup on exit if configured."""
     try:
-        backups = svc.list_backups()
-        today = dt.date.today().isoformat()
-        has_today = any(mtime.date().isoformat() == today for _, mtime, _ in backups)
-        if not has_today:
-            result = svc.backup_full()
-            print(f"Auto-backup created: {os.path.basename(result['path'])}")
-        else:
-            print("Auto-backup skipped: backup from today already exists")
+        backup_config = ptos.get_backup_config()
+        if backup_config.get("backup_on_exit", True):
+            created, backup_path = ptos.backup_if_needed()
+            if created:
+                print(f"Exit backup created: {os.path.basename(backup_path)}")
+            else:
+                print("Exit backup skipped: no changes detected")
     except Exception as e:
-        print(f"Auto-backup skipped: {e}")
+        print(f"Exit backup failed: {e}")
+
+atexit.register(_exit_backup)
+
+if __name__ == "__main__":
+    # Smart backup on startup if configured
+    try:
+        backup_config = ptos.get_backup_config()
+        if backup_config.get("backup_on_startup", True):
+            created, backup_path = ptos.backup_if_needed()
+            if created:
+                print(f"Startup backup created: {os.path.basename(backup_path)}")
+            else:
+                print("Startup backup skipped: no changes detected")
+        else:
+            print("Startup backup disabled in config")
+    except Exception as e:
+        print(f"Startup backup skipped: {e}")
     
     print("\nPTOS Web UI")
     print("Open: http://localhost:5000\n")
