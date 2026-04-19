@@ -935,16 +935,33 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
                         lines.append(_toml_kv(k, v))
             lines.append("")
 
-        # ── conditions: always preserved verbatim ────────────────────────
-        for cname, cdef in ts_old.get("conditions", {}).items():
+        # ── conditions: written from builder state ───────────────────────
+        # ts_new.conditions: { fieldname: { trigger_field, trigger_value } }
+        conditions_new = ts_new.get("conditions", {})
+        conditions_old = ts_old.get("conditions", {})
+        # merge: builder state takes priority; old conditions not in builder preserved
+        all_cfields = list(conditions_new.keys())
+        for cf in conditions_old:
+            if cf not in all_cfields:
+                all_cfields.append(cf)
+        for cname in all_cfields:
+            cdef_new = conditions_new.get(cname)
+            cdef_old = conditions_old.get(cname, {})
             lines.append(f"[type.{tname}.conditions.{cname}]")
-            if isinstance(cdef, dict):
-                for k, v in cdef.items():
-                    lines.append(_toml_kv(k, v))
+            if cdef_new is not None:
+                # from builder state: { trigger_field, trigger_value }
+                tfield = cdef_new.get("trigger_field", "")
+                tval   = cdef_new.get("trigger_value", "")
+                if tfield and tval:
+                    lines.append(f'when = {{{tfield} = "{tval}"}}')
+            else:
+                # preserved verbatim from old schema
+                if isinstance(cdef_old, dict):
+                    for k, v in cdef_old.items():
+                        lines.append(_toml_kv(k, v))
             lines.append("")
 
     return lines
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Query Builder
