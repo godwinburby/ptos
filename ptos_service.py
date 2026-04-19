@@ -681,13 +681,32 @@ def get_due(config_name=None, days_override=None):
         raise PTOSError(str(e))
 
     # resolve config block
+    # Configs are stored as:
+    # - queries["due"] with root keys = default config (type, key, sort_by, days)
+    # - queries["due"]["followup"] etc = additional configs
+    # - queries["due.followup"] = separate [due.followup] section (backup)
     if config_name and config_name not in ("__DEFAULT__",):
+        due_cfg = None
         named = queries.get("due", {})
-        due_cfg = named.get(config_name) if isinstance(named, dict) else None
+        if isinstance(named, dict):
+            # Check if it's a nested config (e.g., due.followup, due.assessment)
+            if config_name in named and isinstance(named[config_name], dict):
+                due_cfg = named[config_name]
+            # Otherwise check root-level keys
+            elif named.get("type"):
+                due_cfg = named
+        # Check separate [due.config_name] section (backup)
+        if not due_cfg:
+            due_cfg = queries.get(f"due.{config_name}")
         if not due_cfg:
             raise PTOSError(f"Due config '{config_name}' not found in queries.toml")
     else:
-        due_cfg = queries.get("due")
+        # Default - use "default" key from [due] section, or fall back to "followup"
+        due_section = queries.get("due", {})
+        if isinstance(due_section, dict):
+            due_cfg = due_section.get("default") or due_section.get("followup")
+        if not due_cfg:
+            due_cfg = queries.get("due.followup")  # Backup check
         if not due_cfg:
             raise PTOSError("No [due] section in queries.toml")
 

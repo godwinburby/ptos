@@ -219,19 +219,20 @@
 {% endif %}
 
 <!-- due preview -->
-{% if due_rows %}
+{% if due_configs %}
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
     <div class="card-title" style="margin:0;">Overdue</div>
     {% if due_configs|length > 1 %}
-    <select onchange="window.location='/home?due='+this.value" style="font-size:12px;padding:4px;">
+    <select onchange="window.location='/?due='+this.value" style="font-size:12px;padding:4px;">
       {% for dc in due_configs %}
-      <option value="{{ dc }}" {% if loop.index0==0 %}selected{% endif %}>{{ dc }}</option>
+      <option value="{{ dc }}" {% if dc == selected_due %}selected{% endif %}>{{ dc }}</option>
       {% endfor %}
     </select>
     {% endif %}
     <a href="/due" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
   </div>
+  {% if due_rows %}
   {% for row in due_rows %}
   <div class="due-row">
     <div class="due-badge {{ row.heat }}">{{ row.days }}d</div>
@@ -241,6 +242,9 @@
     </div>
   </div>
   {% endfor %}
+  {% else %}
+  <div style="font-size:13px;color:var(--sub);">No overdue records</div>
+  {% endif %}
 </div>
 {% endif %}
 
