@@ -1249,15 +1249,11 @@ function showDueEditor() {
     '</div>'+
     '<div style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Group By (Key Field)</div>'+
-      '<select id="due-key" onchange="onDueKeyChange()" style="font-size:14px;padding:6px;width:100%;max-width:300px;">'+
-        '<option value="">— select type first —</option>'+
-      '</select>'+
+      '<div id="due-key-chips" class="chip-group"></div>'+
     '</div>'+
     '<div style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Sort By</div>'+
-      '<select id="due-sort" onchange="onDueSortChange()" style="font-size:14px;padding:6px;width:100%;max-width:300px;">'+
-        '<option value="">— select field —</option>'+
-      '</select>'+
+      '<div id="due-sort-chips" class="chip-group"></div>'+
     '</div>'+
     '<div style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Days Overdue</div>'+
@@ -1278,7 +1274,6 @@ function showDueEditor() {
   '</div>';
   
   renderDueTypeChips(typeName);
-  fetchDueFieldsForType(typeName);
 }
 
 function renderDueTypeChips(selected) {
@@ -1290,7 +1285,12 @@ function renderDueTypeChips(selected) {
     chip.className = "qb-chip" + (t===selected ? " active" : "");
     chip.textContent = t;
     chip.addEventListener("click", function() {
-      _dueCfg.type = t;
+      var cfg = _dueConfigs[_currentDue];
+      if (cfg) {
+        cfg.type = t;
+        cfg.key = "";
+        cfg.sort_by = "";
+      }
       renderDueTypeChips(t);
       fetchDueFieldsForType(t);
     });
@@ -1299,51 +1299,86 @@ function renderDueTypeChips(selected) {
 }
 
 function fetchDueFieldsForType(typeName) {
-  var keySel = document.getElementById("due-key");
-  var sortSel = document.getElementById("due-sort");
-  if (!keySel || !sortSel) return;
+  var keyEl = document.getElementById("due-key-chips");
+  var sortEl = document.getElementById("due-sort-chips");
+  if (!keyEl || !sortEl) return;
   
-  keySel.innerHTML = '<option value="">Loading…</option>';
-  sortSel.innerHTML = '<option value="">Loading…</option>';
+  keyEl.innerHTML = '<span style="font-size:12px;color:var(--border);">Loading…</span>';
+  sortEl.innerHTML = '<span style="font-size:12px;color:var(--border);">Loading…</span>';
   
   fetch("/api/type_fields/"+encodeURIComponent(typeName))
   .then(function(r){ return r.json(); })
   .then(function(data) {
     var fields = (data.fields||[]).filter(function(f){ return !f.is_int && f.name!=="type"; });
+    var cfg = _dueConfigs[_currentDue] || {};
     
-    // Populate Key dropdown
-    keySel.innerHTML = '<option value="">— select field —</option>';
+    // Render Key chips
+    keyEl.innerHTML = "";
     fields.forEach(function(f) {
-      var opt = document.createElement("option");
-      opt.value = f.name;
-      opt.textContent = f.name;
-      keySel.appendChild(opt);
+      var chip = document.createElement("button");
+      chip.className = "qb-chip" + (f.name === cfg.key ? " active" : "");
+      chip.textContent = f.name;
+      chip.addEventListener("click", function() {
+        _dueConfigs[_currentDue].key = f.name;
+        renderDueKeyChips(fields);
+      });
+      keyEl.appendChild(chip);
     });
-    if (_dueCfg.key) keySel.value = _dueCfg.key;
     
-    // Populate Sort dropdown
-    sortSel.innerHTML = '<option value="">— select field —</option>';
+    // Render Sort chips
+    sortEl.innerHTML = "";
     fields.forEach(function(f) {
-      var opt = document.createElement("option");
-      opt.value = f.name;
-      opt.textContent = f.name;
-      sortSel.appendChild(opt);
+      var chip = document.createElement("button");
+      chip.className = "qb-chip" + (f.name === cfg.sort_by ? " active" : "");
+      chip.textContent = f.name;
+      chip.addEventListener("click", function() {
+        _dueConfigs[_currentDue].sort_by = f.name;
+        renderDueSortChips(fields);
+      });
+      sortEl.appendChild(chip);
     });
-    if (_dueCfg.sort_by) sortSel.value = _dueCfg.sort_by;
     
     // Render exclude chips
     renderDueExcludeChips();
   })
   .catch(function(){
-    keySel.innerHTML = '<option value="">Error loading</option>';
-    sortSel.innerHTML = '<option value="">Error loading</option>';
+    keyEl.innerHTML = '<span style="font-size:12px;color:var(--error);">Error loading</span>';
+    sortEl.innerHTML = '<span style="font-size:12px;color:var(--error);">Error loading</span>';
   });
 }
 
-function onDueKeyChange() {
-  var sel = document.getElementById("due-key");
-  if (!sel) return;
-  _dueConfigs[_currentDue].key = sel.value;
+function renderDueKeyChips(fields) {
+  var el = document.getElementById("due-key-chips");
+  if (!el) return;
+  var cfg = _dueConfigs[_currentDue] || {};
+  el.innerHTML = "";
+  fields.forEach(function(f) {
+    var chip = document.createElement("button");
+    chip.className = "qb-chip" + (f.name === cfg.key ? " active" : "");
+    chip.textContent = f.name;
+    chip.addEventListener("click", function() {
+      _dueConfigs[_currentDue].key = f.name;
+      renderDueKeyChips(fields);
+    });
+    el.appendChild(chip);
+  });
+}
+
+function renderDueSortChips(fields) {
+  var el = document.getElementById("due-sort-chips");
+  if (!el) return;
+  var cfg = _dueConfigs[_currentDue] || {};
+  el.innerHTML = "";
+  fields.forEach(function(f) {
+    var chip = document.createElement("button");
+    chip.className = "qb-chip" + (f.name === cfg.sort_by ? " active" : "");
+    chip.textContent = f.name;
+    chip.addEventListener("click", function() {
+      _dueConfigs[_currentDue].sort_by = f.name;
+      renderDueSortChips(fields);
+    });
+    el.appendChild(chip);
+  });
 }
 
 function onDueSortChange() {
@@ -1383,20 +1418,6 @@ function addDueExclude() {
   if (cfg.exclude_results.indexOf(val)===-1) cfg.exclude_results.push(val);
   inp.value = "";
   renderDueExcludeChips();
-}
-
-function onDueKeyChange() {
-  var sel = document.getElementById("due-key");
-  if (!sel) return;
-  var cfg = _dueConfigs[_currentDue];
-  if (cfg) cfg.key = sel.value;
-}
-
-function onDueSortChange() {
-  var sel = document.getElementById("due-sort");
-  if (!sel) return;
-  var cfg = _dueConfigs[_currentDue];
-  if (cfg) cfg.sort_by = sel.value;
 }
 
 function onDueDaysChange() {
