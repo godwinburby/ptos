@@ -156,6 +156,36 @@ def backup_config_only():
         raise PTOSError(str(e))
 
 
+def get_backup_preview():
+    """Get preview of what will be backed up.
+    
+    Returns:
+        dict: Preview information about backup contents.
+    """
+    try:
+        preview = ptos.get_backup_preview()
+        return {"ok": True, "preview": preview}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def get_restore_preview(filename):
+    """Get preview of what will be restored from a backup file.
+    
+    Args:
+        filename: Name of backup file to preview.
+    
+    Returns:
+        dict: Preview information about backup contents.
+    """
+    try:
+        backup_path = os.path.join(ptos.BACKUP_DIR, filename)
+        preview = ptos.get_restore_preview(backup_path)
+        return {"ok": True, "preview": preview}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
 def list_backups():
     """List all backup files.
     
