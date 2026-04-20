@@ -7,30 +7,22 @@
   ⚠️ Schema changes affect all existing records. Wrong changes can break PTOS. Use "Preview Lint" before saving.
 </div>
 
-<div style="display:flex;gap:10px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">
-  <button onclick="previewLint()" class="btn btn-warn btn-sm" id="lint-btn">
-    🔍 Preview Lint
-  </button>
-  <button onclick="confirmSave()" class="btn btn-success btn-sm" id="save-btn">
-    💾 Save Schema
-  </button>
-  <button onclick="addType()" class="btn btn-primary btn-sm">+ Add Type</button>
-  <div id="save-msg" style="font-size:13px;display:none;"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <button onclick="previewLint()" class="btn btn-warn btn-sm" id="lint-btn">🔍 Preview Lint</button>
+    <button onclick="confirmSave()" class="btn btn-success btn-sm" id="save-btn">💾 Save Schema</button>
+    <button onclick="addType()" class="btn btn-primary btn-sm">+ Add Type</button>
+    <div id="save-msg" style="font-size:13px;display:none;"></div>
+  </div>
 </div>
 
-<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+<!-- ── Type chip bar ── -->
+<div class="sb-type-bar">
+  <div id="type-tabs" class="sb-type-strip"></div>
+</div>
 
-  <!-- ── Type list (left panel) ── -->
-  <div id="type-list"
-       style="width:160px;flex-shrink:0;background:var(--card);
-              border:1px solid var(--border);border-radius:12px;padding:10px;">
-    <div style="font-size:11px;font-weight:700;color:var(--sub);
-                letter-spacing:.5px;margin-bottom:8px;">TYPES</div>
-    <div id="type-tabs"></div>
-  </div>
-
-  <!-- ── Type editor (right panel) ── -->
-  <div id="type-editor" style="flex:1;min-width:280px;display:none;">
+<!-- ── Type editor ── -->
+<div id="type-editor" style="margin-top:14px;display:none;">
 
     <!-- type name row -->
     <div class="card" style="margin-bottom:12px;">
@@ -115,15 +107,11 @@
       <div id="conditions-list"></div>
     </div>
 
-    </div>
+</div>
 
-  </div>
-
-  <div id="type-empty"
-       style="flex:1;padding:40px;text-align:center;color:var(--sub);font-size:14px;">
-    Select a type on the left, or add a new one.
-  </div>
-
+<div id="type-empty"
+     style="margin-top:40px;text-align:center;color:var(--sub);font-size:14px;">
+  Select a type above, or add a new one.
 </div>
 
 <!-- ── Schema-wide settings ── -->
@@ -177,14 +165,24 @@
 </div>
 
 <style>
-  .type-tab {
-    display:block;width:100%;text-align:left;padding:8px 10px;border-radius:8px;
-    border:none;background:none;font-size:14px;font-weight:600;color:var(--sub);
-    cursor:pointer;margin-bottom:2px;transition:all .15s;
+  /* ── Type chip bar ───────────────────────────────────────────────────────── */
+  .sb-type-bar {
+    background:var(--card);border:1px solid var(--border);
+    border-radius:12px;padding:8px 10px;min-height:46px;
   }
-  .type-tab:hover   { background:var(--bg); color:var(--text); }
-  .type-tab.active  { background:var(--accent-lt); color:var(--accent); }
+  .sb-type-strip {
+    display:flex;gap:6px;flex-wrap:wrap;
+  }
+  .type-tab {
+    flex-shrink:0;padding:5px 14px;border-radius:20px;
+    border:1.5px solid var(--border);background:var(--bg);
+    font-size:13px;font-weight:600;color:var(--sub);
+    cursor:pointer;transition:all .15s;white-space:nowrap;
+  }
+  .type-tab:hover  { border-color:var(--accent);color:var(--accent); }
+  .type-tab.active { background:var(--accent-lt);border-color:var(--accent);color:var(--accent); }
 
+  /* ── Field / tag rows ────────────────────────────────────────────────────── */
   .field-row {
     border:1px solid var(--border);border-radius:10px;
     padding:12px;margin-bottom:10px;background:var(--bg);
