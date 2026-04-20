@@ -895,13 +895,17 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
     lines.append("")
 
     # ── [fields.*] global field metadata ─────────────────────────────────────
-    # If new_field_meta is empty or None, use old_schema to preserve field order
-    if new_field_meta and isinstance(new_field_meta, dict):
-        fm_source = dict(new_field_meta)  # Copy to avoid mutation
-    else:
-        fm_source = dict(old_schema.get("fields", {}))  # Preserve order from old schema
-    # Merge derived fields from old schema (e.g. days_since) — builder never sends these
+    # Always use old_schema field order to prevent alphabetical sorting
     old_fields = old_schema.get("fields", {})
+    fm_source = dict(old_fields)  # Start with old schema order
+    
+    # Merge/update specific fields from new_field_meta while preserving old order
+    if new_field_meta and isinstance(new_field_meta, dict):
+        for fname, fmeta in new_field_meta.items():
+            if isinstance(fmeta, dict):
+                fm_source[fname] = fmeta  # Updates existing or adds new
+    
+    # Ensure derived fields from old schema are included (e.g. days_since)
     for fname, fmeta in old_fields.items():
         if isinstance(fmeta, dict) and fmeta.get("derived") and fname not in fm_source:
             fm_source[fname] = fmeta
