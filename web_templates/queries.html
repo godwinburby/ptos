@@ -42,10 +42,7 @@
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
     <button class="btn btn-ghost btn-sm" onclick="clearOut()">✕ Clear</button>
-    <span id="edit-link-wrap" style="display:none;">
-      <a id="edit-link" href="/query-builder" class="btn btn-ghost btn-sm">✎ Edit</a>
-    </span>
-    <a href="/query-builder" class="btn btn-ghost btn-sm" style="margin-left:auto;">Query Builder →</a>
+    <a id="builder-link" href="/query-builder" class="btn btn-ghost btn-sm">Query Builder</a>
   </div>
 </div>
 
@@ -199,20 +196,18 @@ function runQuery() {
   if (!raw) return;
   const [kind, ...rest] = raw.split(":");
   const name = rest.join(":");
-  // update edit link
-  const editWrap = document.getElementById("edit-link-wrap");
-  const editLink = document.getElementById("edit-link");
-  if (kind === "q" && editWrap && editLink) {
-    editLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=queries";
-    editWrap.style.display = "inline";
-  } else if (kind === "m" && editWrap && editLink) {
-    editLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=metrics";
-    editWrap.style.display = "inline";
-  } else if (kind === "d" && editWrap && editLink) {
-    editLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=dashboards";
-    editWrap.style.display = "inline";
-  } else if (editWrap) {
-    editWrap.style.display = "none";
+  // update builder link with selected item
+  const builderLink = document.getElementById("builder-link");
+  if (builderLink) {
+    if (kind === "q") {
+      builderLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=queries";
+    } else if (kind === "m") {
+      builderLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=metrics";
+    } else if (kind === "d") {
+      builderLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=dashboards";
+    } else {
+      builderLink.href = "/query-builder";
+    }
   }
   area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
   fetch("/queries/run", {
