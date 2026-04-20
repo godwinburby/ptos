@@ -9,7 +9,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
 from ptos_service import PTOSError
-import ptos
+# import ptos  # DEPRECATED: use ptos_service instead
 
 from flask import (Flask, render_template, request, redirect,
                    url_for, jsonify, send_file)
@@ -172,9 +172,9 @@ def _build_field_defs(schema, rtype, current_record=None):
 
         if parent:
             parent_val = record.get(parent, "")
-            options    = ptos.resolve_options_for_value(type_schema, fname, parent_val)
+            options    = svc.resolve_options_for_value(type_schema, fname, parent_val)
         else:
-            options = ptos.resolve_options(schema, type_schema, fname) or []
+            options = svc.resolve_options(schema, type_schema, fname) or []
         defs.append({
             "name":           fname,
             "required":       fname in required,
@@ -231,7 +231,7 @@ def _resolve_multi_preset(name):
         if isinstance(ref, dict) and "records" in ref:
             return None, f"nested multi-record presets not supported"
         record = dict(ref)
-        problems = ptos.validate_record(schema, record)
+        problems = svc.validate_record(schema, record)
         if problems:
             return None, f"preset '{item}': {problems[0]}"
         resolved.append(record)
@@ -478,7 +478,7 @@ def add_get():
     tag_options = []
     if selected_type:
         ts = schema.get("type", {}).get(selected_type, {})
-        tag_options = ptos.resolve_tags(schema, ts, initial_context)
+        tag_options = svc.resolve_tags(schema, ts, initial_context)
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, presets=sorted(presets.keys()),
@@ -516,12 +516,12 @@ def add_post():
         val = request.form.get(fname,"").strip()
         if val: record[fname] = val.replace(" ","_")
     # collect global optional fields from form
-    for fname in ptos.get_global_fields(schema):
+    for fname in svc.get_global_fields(schema):
         val = request.form.get(fname, "").strip()
         if val: record[fname] = val.replace(" ", "_")
     tags = request.form.getlist("tag") + custom_tags
     if tags: record["tag"] = tags
-    try:   problems = ptos.validate_record(schema, record)
+    try:   problems = svc.validate_record(schema, record)
     except PTOSError as e: problems = [str(e)]
     if problems:
         fd = _build_field_defs(schema, rtype, record)
@@ -531,11 +531,11 @@ def add_post():
             multi_presets=_multi_presets(),
             selected_type=rtype, field_defs=fd,
             global_field_defs=_build_global_field_defs(schema, record),
-            tag_options=ptos.resolve_tags(schema, ts, record),
+            tag_options=svc.resolve_tags(schema, ts, record),
             field_values=record, today=dt.date.today().isoformat(),
             msg=" | ".join(problems), msg_type="error", last_line=None)
     try:
-        line = ptos.build_record_line(date_str, record, note)
+        line = svc.build_record_line(date_str, record, note)
         svc.append_record(line)
     except PTOSError as e:
         fd = _build_field_defs(schema, rtype, record)
@@ -545,7 +545,7 @@ def add_post():
             multi_presets=_multi_presets(),
             selected_type=rtype, field_defs=fd,
             global_field_defs=_build_global_field_defs(schema, record),
-            tag_options=ptos.resolve_tags(schema, ts, record),
+            tag_options=svc.resolve_tags(schema, ts, record),
             field_values=record, today=dt.date.today().isoformat(),
             msg=str(e), msg_type="error", last_line=None)
     return render_template("add.html",
@@ -571,11 +571,11 @@ def journal_get():
     date_str  = date.isoformat()
     prev_date = (date - dt.timedelta(days=1)).isoformat()
     next_date = (date + dt.timedelta(days=1)).isoformat()
-    year_dir = os.path.join(ptos.JOURNAL_DIR, date_str[:4])
+    year_dir = os.path.join(svc.JOURNAL_DIR, date_str[:4])
     os.makedirs(year_dir, exist_ok=True)
     path = os.path.join(year_dir, f"{date_str}.md")
     if not os.path.exists(path) and date == today_d:
-        path = ptos.get_today_journal()
+        path = svc.get_today_journal()
     content = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
     return render_template("journal.html",
         tab="journal", title="Journal", now=_now_str(),
@@ -590,7 +590,7 @@ def journal_save():
     content = data.get("content","")
     try: dt.date.fromisoformat(date)
     except: return jsonify(ok=False, error="Invalid date")
-    year_dir = os.path.join(ptos.JOURNAL_DIR, date[:4])
+    year_dir = os.path.join(svc.JOURNAL_DIR, date[:4])
     os.makedirs(year_dir, exist_ok=True)
     path = os.path.join(year_dir, f"{date}.md")
     svc.write_file(path, content)
@@ -633,10 +633,10 @@ def schema_builder_save():
                                     new_global_fields=global_fields,
                                     new_shared_defs=shared_defs,
                                     new_field_meta=field_meta)
-        ptos._backup_file(ptos.SCHEMA_PATH)
-        svc.write_file(ptos.SCHEMA_PATH, "\n".join(lines) + "\n")
+        svc._backup_file(svc.SCHEMA_PATH)
+        svc.write_file(svc.SCHEMA_PATH, "\n".join(lines) + "\n")
         for key in ("schema", "derived_fields", "numeric_fields"):
-            ptos._CACHE.pop(key, None)
+            svc.invalidate_cache(key)
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -666,8 +666,8 @@ def schema_builder_preview_lint():
         new_schema = tomllib.loads(new_schema_toml)
 
         content_parts = []
-        for fname in ptos.get_log_files():
-            fpath = os.path.join(ptos.RECORDS_DIR, fname)
+        for fname in svc.get_log_files():
+            fpath = os.path.join(svc.RECORDS_DIR, fname)
             if os.path.exists(fpath):
                 with open(fpath, encoding="utf-8") as f:
                     content_parts.append(f.read())
@@ -709,11 +709,11 @@ def backup_download(name):
     if ".." in name or "/" in name or "\\" in name:
         return "Invalid backup name", 400
     
-    backup_path = os.path.join(ptos.BACKUP_DIR, name)
+    backup_path = os.path.join(svc.BACKUP_DIR, name)
     
     # Verify path is within BACKUP_DIR
     real_path = os.path.realpath(backup_path)
-    real_backup_dir = os.path.realpath(ptos.BACKUP_DIR)
+    real_backup_dir = os.path.realpath(svc.BACKUP_DIR)
     if not real_path.startswith(real_backup_dir + os.sep):
         return "Invalid backup name", 400
     
@@ -738,7 +738,7 @@ def backup_delete():
 @app.route("/backup/check", methods=["GET"])
 def backup_check():
     """Check if all required backup folders exist."""
-    all_exist, missing = ptos.check_backup_folders()
+    all_exist, missing = svc.check_backup_folders()
     return jsonify(ok=all_exist, missing=missing)
 
 
@@ -790,7 +790,7 @@ def backup_restore():
     else:
         data = request.get_json(silent=True) or {}
         name = data.get("name", "")
-        backup_path = os.path.join(ptos.BACKUP_DIR, name)
+        backup_path = os.path.join(svc.BACKUP_DIR, name)
         if not os.path.exists(backup_path):
             return jsonify(ok=False, error="Backup not found")
         try:
@@ -846,7 +846,7 @@ def backup_config_restore_from_list(name):
     if not name.startswith("ptos-backup-config-") or not name.endswith(".zip"):
         return jsonify(ok=False, error="Not a valid config backup file")
     
-    backup_path = os.path.join(ptos.BACKUP_DIR, name)
+    backup_path = os.path.join(svc.BACKUP_DIR, name)
     if not os.path.exists(backup_path):
         return jsonify(ok=False, error=f"Backup file not found: {name}")
     
@@ -1132,7 +1132,7 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
                 f"Invalid name '{n}' — use lowercase letters, numbers, underscores")
 
     try:
-        old_queries = ptos.get_queries()
+        old_queries = svc.get_queries()
     except Exception:
         old_queries = {}
 
@@ -1240,15 +1240,15 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
                 lines.append(f"exclude_results = [{opts}]")
             lines.append("")
 
-    ptos._backup_file(ptos.QUERIES_PATH)
-    ptos.atomic_write(ptos.QUERIES_PATH, "\n".join(lines))
-    ptos._CACHE.pop("queries", None)
+    svc._backup_file(svc.QUERIES_PATH)
+    svc.atomic_write(svc.QUERIES_PATH, "\n".join(lines))
+    svc.invalidate_cache("queries")
 
 @app.route("/query-builder")
 def query_builder():
     try:
-        queries = ptos.get_queries()
-        schema  = ptos.get_schema()
+        queries = svc.get_queries()
+        schema  = svc.get_schema()
         types   = schema.get("types", {}).get("allowed", [])
     except Exception:
         queries = {}
@@ -1326,7 +1326,7 @@ def query_builder_delete():
     if not name:
         return jsonify(ok=False, error="No name provided")
     try:
-        queries = ptos.get_queries()
+        queries = svc.get_queries()
         reserved = ("metrics", "dashboards", "due")
         # helper: normalise raw queries from TOML (list group → string)
         def _raw_q():
@@ -1428,7 +1428,7 @@ def browse_get():
         types  = schema.get("types",{}).get("allowed",[])
     except PTOSError:
         types = []
-    log_files = ptos.get_log_files()
+    log_files = svc.get_log_files()
     return render_template("browse.html",
         tab="browse", title="Browse", now=_now_str(),
         types=types, log_files=log_files, time_options=_get_time_options(), year_range=_YEAR_RANGE,
@@ -1453,7 +1453,7 @@ def browse_run():
     if isinstance(where, str):
         where = [where] if where.strip() else []
     if expr and where:
-        combined = ptos._filters_to_expr(where)
+        combined = svc._filters_to_expr(where)
         filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
     elif expr:
         filters = [expr]
@@ -1486,7 +1486,7 @@ def browse_export():
     if isinstance(where, str):
         where = [where] if where.strip() else []
     if expr and where:
-        combined = ptos._filters_to_expr(where)
+        combined = svc._filters_to_expr(where)
         filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
     elif expr:
         filters = [expr]
@@ -1520,12 +1520,12 @@ def browse_export():
 
 @app.route("/editor")
 def editor_get():
-    log_files = ptos.get_log_files()
+    log_files = svc.get_log_files()
     current = request.args.get("file","")
     if not current and log_files: current = log_files[-1]
     content = ""
     if current:
-        path = os.path.join(ptos.RECORDS_DIR, current)
+        path = os.path.join(svc.RECORDS_DIR, current)
         if os.path.exists(path):
             with open(path,encoding="utf-8") as f: content = f.read()
     return render_template("editor.html",
@@ -1538,7 +1538,7 @@ def editor_content():
     file = request.args.get("file", "")
     if not file or "/" in file or "\\" in file or " " in file:
         return "Invalid filename", 400
-    path = os.path.join(ptos.RECORDS_DIR, file)
+    path = os.path.join(svc.RECORDS_DIR, file)
     if not os.path.exists(path):
         return "File not found", 404
     with open(path, encoding="utf-8") as f:
@@ -1550,14 +1550,14 @@ def editor_save():
     file = data.get("file",""); content = data.get("content","")
     if not file or "/" in file or "\\" in file:
         return jsonify(ok=False, error="Invalid filename")
-    path = os.path.join(ptos.RECORDS_DIR, file)
+    path = os.path.join(svc.RECORDS_DIR, file)
     if not os.path.exists(path):
         return jsonify(ok=False, error=f"File not found: {file}")
     svc.write_file(path, content)
     # invalidate caches — editor can modify any config file
     for key in ("schema", "config", "queries", "presets",
                 "derived_fields", "numeric_fields"):
-        ptos._CACHE.pop(key, None)
+        svc.invalidate_cache(key)
     return jsonify(ok=True)
 
 
@@ -1575,7 +1575,7 @@ def editor_validate():
             continue
         
         # Use PTOS parser
-        result = ptos.safe_parse_line(line)
+        result = svc.safe_parse_line(line)
         if result is None:
             errors.append({"line": i, "problems": ["Cannot parse line - check format"]})
             continue
@@ -1638,7 +1638,7 @@ def edit_get():
         lineno_int = int(lineno) if lineno else None
     except ValueError:
         lineno_int = None
-    parsed = ptos.safe_parse_line(line)
+    parsed = svc.safe_parse_line(line)
     if not parsed:
         return redirect(url_for("browse_get"))
     d, kv, note = parsed
@@ -1673,7 +1673,7 @@ def edit_get():
     schema_tag_options = []
     if rtype:
         ts = schema.get("type", {}).get(rtype, {})
-        schema_tag_options = ptos.resolve_tags(schema, ts, field_values)
+        schema_tag_options = svc.resolve_tags(schema, ts, field_values)
     tag_options = list(current_tags) + [t for t in schema_tag_options if t not in current_tags]
     return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
     return render_template("edit.html",
@@ -1718,12 +1718,12 @@ def edit_post():
         val = request.form.get(fname, "").strip()
         if val: new_record[fname] = val.replace(" ", "_")
     # collect global optional fields from form
-    for fname in ptos.get_global_fields(schema):
+    for fname in svc.get_global_fields(schema):
         val = request.form.get(fname, "").strip()
         if val: new_record[fname] = val.replace(" ", "_")
     tags = request.form.getlist("tag") + custom_tags
     if tags: new_record["tag"] = tags
-    parsed = ptos.safe_parse_line(old_line)
+    parsed = svc.safe_parse_line(old_line)
     if not parsed:
         return redirect(url_for("browse_get"))
     old_d, old_kv, old_note = parsed
@@ -1754,7 +1754,7 @@ def edit_post():
     return_to = request.form.get("return_to", "") or url_for("browse_get")
     if not set_args and new_note is None:
         return redirect(return_to)
-    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+    if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
         return redirect(return_to)
     try:
         svc.edit_record(filepath, old_line,
@@ -1770,7 +1770,7 @@ def edit_post():
         if note: field_values["note"] = note
         field_defs  = _build_field_defs(schema, rtype, field_values)
         ts = schema.get("type", {}).get(rtype, {})
-        tag_options = ptos.resolve_tags(schema, ts, field_values)
+        tag_options = svc.resolve_tags(schema, ts, field_values)
         return render_template("edit.html",
             tab="browse", title="Edit Record", now=_now_str(),
             filepath=filepath, lineno=lineno_int, old_line=old_line,
@@ -1796,7 +1796,7 @@ def api_records_find():
     if isinstance(where, str):
         where = [where] if where.strip() else []
     if expr and where:
-        combined = ptos._filters_to_expr(where)
+        combined = svc._filters_to_expr(where)
         filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
     elif expr:
         filters = [expr]
@@ -1826,7 +1826,7 @@ def api_records_edit():
         except: lineno = None
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
-    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+    if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
         return jsonify(ok=False, error="Invalid filepath")
     try:
         result = svc.edit_record(filepath, old_line,
@@ -1849,7 +1849,7 @@ def api_records_delete():
         except: lineno = None
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
-    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+    if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
         return jsonify(ok=False, error="Invalid filepath")
     try:
         result = svc.delete_record(filepath, old_line, lineno=lineno)
@@ -1867,8 +1867,8 @@ def api_records_delete():
 @app.route("/api/type_fields/<rtype>")
 def api_type_fields(rtype):
     try:
-        schema     = ptos.get_schema()
-        bad        = ptos.non_dimension_fields()
+        schema     = svc.get_schema()
+        bad        = svc.non_dimension_fields()
         
         # Parse context from query param (e.g., ?context=domain:self,category:transport)
         context = {}
@@ -1959,7 +1959,7 @@ def api_preset_add():
     added = []
     try:
         for record in records:
-            line = ptos.build_record_line(date_str, record, note)
+            line = svc.build_record_line(date_str, record, note)
             svc.append_record(line)
             added.append(line)
     except Exception as e:
@@ -1980,9 +1980,9 @@ def api_save_preset():
     if not record.get("type"):
         return jsonify(ok=False, error="No record type in form — fill at least the type field")
     try:
-        ptos._CACHE.pop("presets", None)
-        ptos.save_as_preset(name, record, note=note)
-        ptos._CACHE.pop("presets", None)
+        svc.invalidate_cache("presets")
+        svc.save_as_preset(name, record, note=note)
+        svc.invalidate_cache("presets")
         return jsonify(ok=True, name=name)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -2034,12 +2034,12 @@ def api_save_query():
     if isinstance(where, str):
         where = [where] if where.strip() else []
     if expr and where:
-        combined   = ptos._filters_to_expr(where)
+        combined   = svc._filters_to_expr(where)
         where_expr = f"({combined}) AND ({expr})" if combined else expr
     elif expr:
         where_expr = expr
     elif where:
-        where_expr = ptos._filters_to_expr(where)
+        where_expr = svc._filters_to_expr(where)
     else:
         where_expr = ""
     try:
@@ -2058,9 +2058,9 @@ def api_save_query():
 def _exit_backup():
     """Run backup on exit if configured."""
     try:
-        backup_config = ptos.get_backup_config()
+        backup_config = svc.get_backup_config()
         if backup_config.get("backup_on_exit", True):
-            created, backup_path = ptos.backup_if_needed()
+            created, backup_path = svc.backup_if_needed()
             if created:
                 print(f"Exit backup created: {os.path.basename(backup_path)}")
             else:
@@ -2073,15 +2073,17 @@ atexit.register(_exit_backup)
 if __name__ == "__main__":
     # Smart backup on startup if configured
     try:
-        backup_config = ptos.get_backup_config()
+        backup_config = svc.get_backup_config()
         if backup_config.get("backup_on_startup", True):
-            created, backup_path = ptos.backup_if_needed()
+            created, backup_path = svc.backup_if_needed()
             if created:
                 print(f"Startup backup created: {os.path.basename(backup_path)}")
             else:
                 print("Startup backup skipped: no changes detected")
         else:
             print("Startup backup disabled in config")
+    except PTOSError as e:
+        print(f"Startup backup skipped: {e}")
     except Exception as e:
         print(f"Startup backup skipped: {e}")
     

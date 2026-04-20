@@ -25,6 +25,18 @@ sys.exit = _safe_exit
 import ptos
 
 
+# ══════════════════════════════════════════════════════════════════════
+# Path constants (read-only aliases to engine paths)
+# ══════════════════════════════════════════════════════════════════════
+
+JOURNAL_DIR = ptos.JOURNAL_DIR
+RECORDS_DIR = ptos.RECORDS_DIR
+BACKUP_DIR = ptos.BACKUP_DIR
+BASE_DIR = ptos.BASE_DIR
+SCHEMA_PATH = ptos.SCHEMA_PATH
+QUERIES_PATH = ptos.QUERIES_PATH
+
+
 def _cycles():
     return ptos.get_config().get("cycles", {})
 
@@ -1469,53 +1481,8 @@ def fmt_datetime(dt_obj):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Display helpers
-# ══════════════════════════════════════════════════════════════════════════════
-
-def fmt_date(date_obj):
-    """Format date object according to configured format.
-    
-    Supports presets: indian (dd/mm/yyyy), us (mm/dd/yyyy), 
-    eu (dd.mm.yyyy), readable (15 Apr 2026), iso (yyyy-mm-dd),
-    or custom strftime pattern.
-    """
-    import datetime as dt
-    cfg = get_config()
-    fmt = cfg.get("display", {}).get("date_format", "indian")
-    
-    if fmt == "indian":
-        return date_obj.strftime("%d/%m/%Y")
-    elif fmt == "us":
-        return date_obj.strftime("%m/%d/%Y")
-    elif fmt == "eu":
-        return date_obj.strftime("%d.%m.%Y")
-    elif fmt == "readable":
-        return date_obj.strftime("%d %b %Y")
-    elif fmt == "iso":
-        if isinstance(date_obj, dt.date):
-            return date_obj.isoformat()
-        else:
-            return date_obj.strftime("%Y-%m-%d")
-    else:
-        # Custom strftime format
-        try:
-            return date_obj.strftime(fmt)
-        except (ValueError, AttributeError):
-            # Fallback to ISO format on error
-            if isinstance(date_obj, dt.date):
-                return date_obj.isoformat()
-            else:
-                return date_obj.strftime("%Y-%m-%d")
-
-
-def fmt_datetime(dt_obj):
-    """Format datetime object: date part uses configured format, time stays HH:MM."""
-    return f"{fmt_date(dt_obj)} {dt_obj.strftime('%H:%M')}"
-
-
-# ══════════════════════════════════════════════════════════════════════════════
 # Lint (service layer wrappers)
-# ══════════════════════════════════════════════════════════════════════════════
+# ══════════════════════════════════════════════════════════════════════
 
 def lint_all():
     """Lint all records and return structured data.
@@ -1639,4 +1606,128 @@ def lint_content_with_schema(content, schema_override=None):
         "errors": errors,
         "quality_warnings": quality_warnings,
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Engine wrapper functions (for web layer)
+# ══════════════════════════════════════════════════════════════════════
+
+def resolve_options(schema, type_schema, field):
+    """Get options for a field from schema."""
+    return ptos.resolve_options(schema, type_schema, field)
+
+
+def resolve_options_for_value(type_schema, field, parent_value):
+    """Get options for a field based on parent field value."""
+    return ptos.resolve_options_for_value(type_schema, field, parent_value)
+
+
+def resolve_tags(schema, type_schema, record):
+    """Get available tags for a record based on current field values."""
+    return ptos.resolve_tags(schema, type_schema, record)
+
+
+def validate_record(schema, record):
+    """Validate a record against schema. Returns list of problems."""
+    try:
+        return ptos.validate_record(schema, record)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def build_record_line(date, record, note=None):
+    """Build a record line string from date, record dict, and optional note."""
+    try:
+        return ptos.build_record_line(date, record, note)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def _backup_file(path):
+    """Backup a file before modification."""
+    try:
+        return ptos._backup_file(path)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def get_global_fields(schema):
+    """Get list of global optional field names."""
+    return ptos.get_global_fields(schema)
+
+
+def get_log_files():
+    """Get list of record log files."""
+    return ptos.get_log_files()
+
+
+def safe_parse_line(line):
+    """Safely parse a record line. Returns (date, kv_dict, note) or None."""
+    return ptos.safe_parse_line(line)
+
+
+def _filters_to_expr(filters):
+    """Convert list of where clauses to expression string."""
+    return ptos._filters_to_expr(filters)
+
+
+def non_dimension_fields():
+    """Get list of non-dimension field names."""
+    return ptos.non_dimension_fields()
+
+
+def get_today_journal():
+    """Get path to today's journal template."""
+    return ptos.get_today_journal()
+
+
+def save_as_preset(name, record, note=None):
+    """Save a record as a preset."""
+    try:
+        return ptos.save_as_preset(name, record, note)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def get_backup_config():
+    """Get backup configuration."""
+    return ptos.get_backup_config()
+
+
+def backup_if_needed():
+    """Create backup if there are changes since last backup."""
+    try:
+        return ptos.backup_if_needed()
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def invalidate_cache(keys):
+    """Invalidate internal cache entries.
+    
+    Args:
+        keys: Single key string or list of keys to invalidate.
+    """
+    if isinstance(keys, str):
+        keys = [keys]
+    for key in keys:
+        ptos._CACHE.pop(key, None)
+
+
+def check_backup_folders():
+    """Check if all required backup folders exist. Returns (all_exist, missing_list)."""
+    return ptos.check_backup_folders()
+
+
+def atomic_write(filepath, content):
+    """Write content to file atomically."""
+    try:
+        return ptos.atomic_write(filepath, content)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def get_queries():
+    """Get queries configuration."""
+    return ptos.get_queries()
 
