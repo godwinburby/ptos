@@ -206,9 +206,20 @@ var _liveTimer = null;
     _st.dashboards[e[0]] = { metrics: e[1].metrics||[] };
   });
   renderTabs();
-  switchSection("queries");
-  var first = Object.keys(_st.queries)[0];
-  if (first) select("queries", first);
+  // Check URL params for edit mode
+  var params = new URLSearchParams(window.location.search);
+  var editName = params.get("edit");
+  var editSection = params.get("section");
+  if (editName && editSection && _st[editSection]) {
+    // Load existing item for editing
+    switchSection(editSection);
+    select(editSection, editName);
+  } else {
+    // Default: select first query
+    switchSection("queries");
+    var first = Object.keys(_st.queries)[0];
+    if (first) select("queries", first);
+  }
 })();
 
 // ── Parse simple where expression into chips + manual remainder ───────────────
@@ -521,11 +532,7 @@ function _buildQueryEditor(container, name) {
   var c7 = document.createElement("div");
   c7.className = "card"; c7.style.marginBottom = "10px";
   c7.innerHTML =
-    '<label style="display:flex;align-items:center;justify-content:space-between;">'+
-      '<span>Query preview</span>'+
-      '<a id="qb-run-link" href="/queries" target="_blank"'+
-      ' class="btn btn-ghost btn-sm" style="font-size:12px;">▶ Run in Queries</a>'+
-    '</label>'+
+    '<label>Query preview</label>'+
     '<div class="hint" style="margin-bottom:8px;">Live view of what will be saved. Read-only.</div>'+
     '<div id="qb-preview" class="qb-preview"></div>';
   container.appendChild(c7);
@@ -966,8 +973,6 @@ function _updatePreview(q) {
   if (q.sum)
     lines.push('sum   = <span class="p-opt">true</span>');
   el.innerHTML = lines.join("<br>");
-  var link = document.getElementById("qb-run-link");
-  if (link) link.href = "/queries?run=q:"+encodeURIComponent(name)+"&time="+encodeURIComponent(q.time);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
