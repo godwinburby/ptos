@@ -1,45 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="page-title">Query Builder</div>
-
-<div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap;">
-  <button onclick="addEntry()" class="btn btn-primary btn-sm">+ New</button>
-  <button onclick="saveAll()"  class="btn btn-success btn-sm" id="save-btn">💾 Save All</button>
-  <button onclick="resetQuery()" class="btn btn-ghost btn-sm" id="reset-btn">Clear</button>
-  <div id="save-msg" style="font-size:13px;display:none;"></div>
+<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+  <div class="page-title" style="margin:0;">Query Builder</div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    <button onclick="addEntry()" class="btn btn-primary btn-sm">+ New</button>
+    <button onclick="saveAll()"  class="btn btn-success btn-sm" id="save-btn">💾 Save All</button>
+    <button onclick="resetQuery()" class="btn btn-ghost btn-sm" id="reset-btn">Clear</button>
+    <div id="save-msg" style="font-size:13px;display:none;"></div>
+  </div>
 </div>
 
-<div style="display:flex;gap:14px;align-items:flex-start;flex-wrap:wrap;">
+<!-- ── Section tabs row ── -->
+<div class="qb-section-bar">
+  <button class="qb-sec-tab active" data-sec="queries"    onclick="switchSection('queries')">Queries</button>
+  <button class="qb-sec-tab"        data-sec="metrics"    onclick="switchSection('metrics')">Metrics</button>
+  <button class="qb-sec-tab"        data-sec="dashboards" onclick="switchSection('dashboards')">Dashboards</button>
+  <button class="qb-sec-tab"        data-sec="aliases"    onclick="switchSection('aliases')">Aliases</button>
+  <button class="qb-sec-tab"        data-sec="due"        onclick="switchSection('due')">Due</button>
+</div>
 
-  <!-- ── Left panel ── -->
-  <div id="entry-list"
-       style="width:170px;flex-shrink:0;background:var(--card);
-              border:1px solid var(--border);border-radius:12px;padding:10px;">
-    <div style="font-size:11px;font-weight:700;color:var(--sub);
-                letter-spacing:.5px;margin-bottom:6px;">QUERIES</div>
-    <div id="tabs-queries"></div>
-    <div style="font-size:11px;font-weight:700;color:var(--sub);
-                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">METRICS</div>
-    <div id="tabs-metrics"></div>
-    <div style="font-size:11px;font-weight:700;color:var(--sub);
-                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">DASHBOARDS</div>
-    <div id="tabs-dashboards"></div>
-    <div style="font-size:11px;font-weight:700;color:var(--sub);
-                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">ALIAS QUERIES</div>
-    <div id="tabs-aliases"></div>
-    <div style="font-size:11px;font-weight:700;color:var(--sub);
-                letter-spacing:.5px;margin-top:12px;margin-bottom:6px;">DUE</div>
-    <div id="tabs-due"></div>
-  </div>
+<!-- ── Item chips row ── -->
+<div class="qb-item-bar">
+  <div id="tabs-queries"    class="qb-item-strip"></div>
+  <div id="tabs-metrics"    class="qb-item-strip" style="display:none;"></div>
+  <div id="tabs-dashboards" class="qb-item-strip" style="display:none;"></div>
+  <div id="tabs-aliases"    class="qb-item-strip" style="display:none;"></div>
+  <div id="tabs-due"        class="qb-item-strip" style="display:none;"></div>
+</div>
 
-  <!-- ── Right panel ── -->
-  <div id="entry-editor" style="flex:1;min-width:280px;display:none;"></div>
-  <div id="entry-empty"
-       style="flex:1;padding:40px;text-align:center;color:var(--sub);font-size:14px;">
-    Select an entry on the left, or click <strong>+ New</strong>.
-  </div>
-
+<!-- ── Editor ── -->
+<div id="entry-editor" style="margin-top:14px;display:none;"></div>
+<div id="entry-empty"
+     style="margin-top:40px;text-align:center;color:var(--sub);font-size:14px;">
+  Select an entry above, or click <strong>+ New</strong>.
 </div>
 
 <!-- delete modal -->
@@ -58,16 +52,53 @@
 </div>
 
 <style>
-  .q-tab {
-    display:block;width:100%;text-align:left;padding:7px 10px;border-radius:8px;
-    border:none;background:none;font-size:13px;font-weight:600;color:var(--sub);
-    cursor:pointer;margin-bottom:2px;transition:all .15s;
-    white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  /* ── Section tab bar ─────────────────────────────────────────────────────── */
+  .qb-section-bar {
+    display:flex;gap:4px;padding:4px;
+    background:var(--card);border:1px solid var(--border);
+    border-radius:12px;margin-bottom:0;
+    overflow-x:auto;-webkit-overflow-scrolling:touch;
+    scrollbar-width:none;
   }
-  .q-tab:hover  { background:var(--bg);color:var(--text); }
-  .q-tab.active { background:var(--accent-lt);color:var(--accent); }
-  .q-tab-derived { opacity:0.7;font-style:italic; }
-  .q-tab-alias { opacity:0.6; }
+  .qb-section-bar::-webkit-scrollbar { display:none; }
+  .qb-sec-tab {
+    flex-shrink:0;padding:7px 16px;border-radius:8px;border:none;
+    background:none;font-size:13px;font-weight:700;color:var(--sub);
+    cursor:pointer;transition:all .15s;white-space:nowrap;
+  }
+  .qb-sec-tab:hover  { background:var(--bg);color:var(--text); }
+  .qb-sec-tab.active { background:var(--accent);color:#fff; }
+  .qb-sec-tab .sec-count {
+    display:inline-block;font-size:10px;font-weight:700;
+    background:rgba(255,255,255,.25);color:inherit;
+    padding:1px 5px;border-radius:8px;margin-left:5px;
+  }
+  .qb-sec-tab:not(.active) .sec-count {
+    background:var(--border);color:var(--sub);
+  }
+
+  /* ── Item chip bar ───────────────────────────────────────────────────────── */
+  .qb-item-bar {
+    background:var(--card);border:1px solid var(--border);
+    border-top:none;border-radius:0 0 12px 12px;
+    padding:8px 10px;min-height:46px;
+  }
+  .qb-item-strip {
+    display:flex;gap:6px;flex-wrap:wrap;
+  }
+  .q-tab {
+    flex-shrink:0;padding:5px 12px;border-radius:20px;
+    border:1.5px solid var(--border);background:var(--bg);
+    font-size:13px;font-weight:600;color:var(--sub);
+    cursor:pointer;transition:all .15s;white-space:nowrap;
+  }
+  .q-tab:hover  { border-color:var(--accent);color:var(--accent); }
+  .q-tab.active { background:var(--accent-lt);border-color:var(--accent);color:var(--accent); }
+  .q-tab-derived { font-style:italic;opacity:0.8; }
+  .q-tab-alias   { opacity:0.65; }
+  .qb-item-none  { font-size:12px;color:var(--border);padding:4px 6px;align-self:center; }
+
+  /* ── Editor/empty area ───────────────────────────────────────────────────── */
   .dash-chip {
     display:inline-flex;align-items:center;gap:5px;padding:5px 11px;
     border-radius:20px;font-size:13px;font-weight:600;
@@ -175,6 +206,7 @@ var _liveTimer = null;
     _st.dashboards[e[0]] = { metrics: e[1].metrics||[] };
   });
   renderTabs();
+  switchSection("queries");
   var first = Object.keys(_st.queries)[0];
   if (first) select("queries", first);
 })();
@@ -193,6 +225,22 @@ function _parseWhere(expr) {
   return { chips, manual: manual.join(" AND ") };
 }
 
+// ── Section switching ─────────────────────────────────────────────────────────
+var _curSection = "queries";
+
+function switchSection(sec) {
+  _curSection = sec;
+  // update section tab highlight
+  document.querySelectorAll(".qb-sec-tab").forEach(function(btn) {
+    btn.classList.toggle("active", btn.dataset.sec === sec);
+  });
+  // show only the matching item strip
+  ["queries","metrics","dashboards","aliases","due"].forEach(function(s) {
+    var el = document.getElementById("tabs-"+s);
+    if (el) el.style.display = s === sec ? "flex" : "none";
+  });
+}
+
 // ── Tab rendering ─────────────────────────────────────────────────────────────
 function renderTabs() {
   _renderSection("tabs-queries",    _st.queries,    "queries");
@@ -200,6 +248,28 @@ function renderTabs() {
   _renderSection("tabs-dashboards", _st.dashboards, "dashboards");
   _renderSection("tabs-aliases",    _st.aliases,    "aliases");
   renderDueTabs();
+  _updateSectionCounts();
+}
+
+function _updateSectionCounts() {
+  var counts = {
+    queries:    Object.keys(_st.queries).length,
+    metrics:    Object.keys(_st.metrics).length,
+    dashboards: Object.keys(_st.dashboards).length,
+    aliases:    Object.keys(_st.aliases).length,
+    due:        Object.keys(_st.due).length,
+  };
+  document.querySelectorAll(".qb-sec-tab").forEach(function(btn) {
+    var sec = btn.dataset.sec;
+    var existing = btn.querySelector(".sec-count");
+    if (existing) existing.remove();
+    if (counts[sec] > 0) {
+      var badge = document.createElement("span");
+      badge.className = "sec-count";
+      badge.textContent = counts[sec];
+      btn.appendChild(badge);
+    }
+  });
 }
 
 function renderDueTabs() {
@@ -208,7 +278,7 @@ function renderDueTabs() {
   el.innerHTML = "";
   var names = Object.keys(_st.due);
   if (!names.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--border);padding:4px 8px;">none</div>';
+    el.innerHTML = '<span class="qb-item-none">none</span>';
     return;
   }
   names.forEach(function(name) {
@@ -219,16 +289,17 @@ function renderDueTabs() {
     el.appendChild(btn);
   });
 }
+
 function _renderSection(elId, data, section) {
   var el = document.getElementById(elId);
+  if (!el) return;
   el.innerHTML = "";
   var keys = Object.keys(data);
   if (!keys.length) {
-    el.innerHTML = '<div style="font-size:12px;color:var(--border);padding:4px 8px;">none</div>';
+    el.innerHTML = '<span class="qb-item-none">none</span>';
     return;
   }
   keys.forEach(function(name) {
-    var btn = document.createElement("button");
     var extraClass = "";
     var badge = "";
     if (section==="metrics" && data[name].derived) {
@@ -237,6 +308,7 @@ function _renderSection(elId, data, section) {
     } else if (section==="aliases") {
       extraClass = " q-tab-alias";
     }
+    var btn = document.createElement("button");
     btn.className = "q-tab" + extraClass +
       (_cur&&_cur.section===section&&_cur.name===name?" active":"");
     btn.innerHTML = name + badge;
@@ -248,6 +320,7 @@ function _renderSection(elId, data, section) {
 
 function select(section, name) {
   _cur = {section, name};
+  if (_curSection !== section) switchSection(section);
   renderTabs();
   document.getElementById("entry-editor").style.display = "block";
   document.getElementById("entry-empty").style.display  = "none";
@@ -1464,14 +1537,10 @@ function addNewDue() {
     days: 7,
     exclude_results: []
   };
-  selectDue(name);
+  select("due", name);
 }
 
 
-// Initialize on boot
-(function() {
-  renderTabs();
-})();
 </script>
 
 {% endblock %}
