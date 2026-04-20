@@ -100,15 +100,6 @@ def get_presets():
     return ptos.get_presets()
 
 
-def get_queries():
-    """Get saved queries.
-    
-    Returns:
-        dict: Queries loaded from queries.toml.
-    """
-    return ptos.get_queries()
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # Write operations (atomic)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -120,9 +111,12 @@ def append_record(line):
         line: Record line string to append.
     
     Returns:
-        None
+        dict: Result with ok and message.
     """
-    ptos.append_record(line)
+    try:
+        return ptos.append_record(line)
+    except Exception as e:
+        raise PTOSError(str(e))
 
 
 def write_file(filepath, content):
@@ -135,7 +129,10 @@ def write_file(filepath, content):
     Returns:
         None
     """
-    ptos.atomic_write(filepath, content)
+    try:
+        return ptos.atomic_write(filepath, content)
+    except Exception as e:
+        raise PTOSError(str(e))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
