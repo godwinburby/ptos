@@ -897,7 +897,13 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
     # ── [fields.*] global field metadata ─────────────────────────────────────
     fm_source = new_field_meta if new_field_meta is not None \
                 else old_schema.get("fields", {})
-    if fm_source:
+    # always include derived [fields.*] entries from old schema verbatim
+    # (e.g. days_since) — the builder never sends these back
+    old_field_derived = {
+        fn: fmeta for fn, fmeta in old_schema.get("fields", {}).items()
+        if isinstance(fmeta, dict) and "derived" in fmeta
+    }
+    if fm_source or old_field_derived:
         lines += ["# Global field metadata", ""]
         for fname, fmeta in fm_source.items():
             if not isinstance(fmeta, dict):
@@ -910,6 +916,14 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
                 lines.append(_toml_kv("dimension", fmeta["dimension"]))
             if fmeta.get("unit"):
                 lines.append(_toml_kv("unit", fmeta["unit"]))
+            lines.append("")
+        # append derived [fields.*] entries that builder doesn't manage
+        for fname, fmeta in old_field_derived.items():
+            if fname in fm_source:
+                continue  # already written above
+            lines.append(f"[fields.{fname}]")
+            for k, v in fmeta.items():
+                lines.append(_toml_kv(k, v))
             lines.append("")
 
     # ── [shared.*] shared definitions ────────────────────────────────────────
@@ -1072,6 +1086,23 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
 # ══════════════════════════════════════════════════════════════════════════════
 # Query Builder
 # ══════════════════════════════════════════════════════════════════════════════
+
+def _normalise_query_for_write(v):
+    """Normalise a raw query dict read from TOML for writing back via _write_queries_toml.
+    Handles list→string for group field (TOML stores group = ["category"]).
+    """
+    g = v.get("group", "")
+    if isinstance(g, list):
+        g = g[0] if g else ""
+    return {
+        "where":  v.get("where", ""),
+        "time":   v.get("time", "tm"),
+        "sum":    bool(v.get("sum", False)),
+        "group":  g,
+        "sort":   v.get("sort", ""),
+        "search": v.get("search", ""),
+    }
+
 
 def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None):
     """Build and atomically write queries.toml from dicts.
@@ -1287,51 +1318,36 @@ def query_builder_delete():
     try:
         queries = ptos.get_queries()
         reserved = ("metrics", "dashboards", "due")
+        # helper: normalise raw queries from TOML (list group → string)
+        def _raw_q():
+            return {k: _normalise_query_for_write(v)
+                    for k, v in queries.items()
+                    if k not in reserved and isinstance(v, dict) and "alias" not in v}
+        def _raw_a():
+            return {k: v for k, v in queries.items()
+                    if k not in reserved and isinstance(v, dict) and "alias" in v}
         if kind == "metric":
             if name not in queries.get("metrics", {}):
                 return jsonify(ok=False, error=f"Metric '{name}' not found")
             del queries["metrics"][name]
-            _write_queries_toml(
-                {k: v for k, v in queries.items()
-                 if k not in reserved and isinstance(v, dict) and "alias" not in v},
-                queries.get("metrics", {}),
-                queries.get("dashboards", {}),
-                {k: v for k, v in queries.items()
-                 if k not in reserved and isinstance(v, dict) and "alias" in v},
-            )
+            _write_queries_toml(_raw_q(), queries.get("metrics", {}),
+                                queries.get("dashboards", {}), _raw_a())
         elif kind == "dashboard":
             if name not in queries.get("dashboards", {}):
                 return jsonify(ok=False, error=f"Dashboard '{name}' not found")
             del queries["dashboards"][name]
-            _write_queries_toml(
-                {k: v for k, v in queries.items()
-                 if k not in reserved and isinstance(v, dict) and "alias" not in v},
-                queries.get("metrics", {}),
-                queries.get("dashboards", {}),
-                {k: v for k, v in queries.items()
-                 if k not in reserved and isinstance(v, dict) and "alias" in v},
-            )
+            _write_queries_toml(_raw_q(), queries.get("metrics", {}),
+                                queries.get("dashboards", {}), _raw_a())
         elif kind == "alias":
-            _write_queries_toml(
-                {k: v for k, v in queries.items()
-                 if k not in reserved and isinstance(v, dict) and "alias" not in v},
-                queries.get("metrics", {}),
-                queries.get("dashboards", {}),
-                {k: v for k, v in queries.items()
-                 if k not in reserved and isinstance(v, dict) and "alias" in v and k != name},
-            )
+            _write_queries_toml(_raw_q(), queries.get("metrics", {}),
+                                queries.get("dashboards", {}),
+                                {k: v for k, v in _raw_a().items() if k != name})
         else:
             if name not in queries or name in reserved:
                 return jsonify(ok=False, error=f"Query '{name}' not found")
             del queries[name]
-            _write_queries_toml(
-                {k: v for k, v in queries.items()
-                 if k not in reserved and isinstance(v, dict) and "alias" not in v},
-                queries.get("metrics", {}),
-                queries.get("dashboards", {}),
-                {k: v for k, v in queries.items()
-                 if k not in reserved and isinstance(v, dict) and "alias" in v},
-            )
+            _write_queries_toml(_raw_q(), queries.get("metrics", {}),
+                                queries.get("dashboards", {}), _raw_a())
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
