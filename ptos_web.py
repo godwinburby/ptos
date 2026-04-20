@@ -571,8 +571,8 @@ def journal_get():
     date_str  = date.isoformat()
     prev_date = (date - dt.timedelta(days=1)).isoformat()
     next_date = (date + dt.timedelta(days=1)).isoformat()
+    # Build path without doing os.makedirs in the web layer
     year_dir = os.path.join(svc.JOURNAL_DIR, date_str[:4])
-    os.makedirs(year_dir, exist_ok=True)
     path = os.path.join(year_dir, f"{date_str}.md")
     if not os.path.exists(path) and date == today_d:
         path = svc.get_today_journal()
@@ -587,14 +587,14 @@ def journal_get():
 def journal_save():
     data = request.get_json(silent=True) or {}
     date = data.get("date", dt.date.today().isoformat())
-    content = data.get("content","")
-    try: dt.date.fromisoformat(date)
-    except: return jsonify(ok=False, error="Invalid date")
-    year_dir = os.path.join(svc.JOURNAL_DIR, date[:4])
-    os.makedirs(year_dir, exist_ok=True)
-    path = os.path.join(year_dir, f"{date}.md")
-    svc.write_file(path, content)
-    return jsonify(ok=True)
+    content = data.get("content", "")
+    try:
+        svc.save_journal(date, content)
+        return jsonify(ok=True)
+    except svc.PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1676,6 +1676,9 @@ def edit_get():
         schema_tag_options = svc.resolve_tags(schema, ts, field_values)
     tag_options = list(current_tags) + [t for t in schema_tag_options if t not in current_tags]
     return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
+    # Only allow internal paths — reject anything that could be javascript: or external
+    if not return_to.startswith("/"):
+        return_to = url_for("browse_get")
     return render_template("edit.html",
         tab="browse", title="Edit Record", now=_now_str(),
         filepath=filepath, lineno=lineno_int, old_line=line,
@@ -1752,6 +1755,8 @@ def edit_post():
                 set_args.append(f"{k}={new_v}" if new_v else f"{k}=")
     new_note  = note if note != (old_note or "") else None
     return_to = request.form.get("return_to", "") or url_for("browse_get")
+    if not return_to.startswith("/"):
+        return_to = url_for("browse_get")
     if not set_args and new_note is None:
         return redirect(return_to)
     if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):

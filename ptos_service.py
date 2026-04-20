@@ -720,13 +720,13 @@ def get_due(config_name=None, days_override=None):
             raise PTOSError("No [due] section in queries.toml")
 
     rec_type  = due_cfg.get("type")
-    key_field = due_cfg.get("key")
+    key_field = due_cfg.get("key") or "name"   # fall back to name if key omitted
     sort_field = due_cfg.get("sort_by")
     exclude   = due_cfg.get("exclude_results", [])
     days      = days_override if days_override is not None else int(due_cfg.get("days", 7))
 
-    if not rec_type or not key_field:
-        raise PTOSError("[due] config missing 'type' or 'key'")
+    if not rec_type:
+        raise PTOSError("[due] config missing 'type'")
 
     # priority from schema
     priority = {}
