@@ -1415,23 +1415,6 @@ function addDueExclude() {
   renderDueExcludeChips();
 }
 
-function onDueDaysChange() {
-  var inp = document.getElementById("due-days");
-  if (!inp) return;
-  var cfg = _st.due[_cur.name];
-  if (cfg) cfg.days = parseInt(inp.value) || 7;
-}
-
-function addDueExclude() {
-  var inp = document.getElementById("due-exclude-input");
-  var val = inp.value.trim();
-  if (!val) return;
-  if (!_dueCfg.exclude_results) _dueCfg.exclude_results = [];
-  if (_dueCfg.exclude_results.indexOf(val)===-1) _dueCfg.exclude_results.push(val);
-  inp.value = "";
-  renderDueExcludeChips();
-}
-
 function removeDueExclude(idx) {
   var cfg = _st.due[_cur.name];
   if (!cfg || !cfg.exclude_results) return;
