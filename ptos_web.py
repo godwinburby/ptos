@@ -895,14 +895,16 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
     lines.append("")
 
     # ── [fields.*] global field metadata ─────────────────────────────────────
-    fm_source = new_field_meta if new_field_meta is not None \
-                else old_schema.get("fields", {})
-    # always include derived [fields.*] entries from old schema verbatim
-    # (e.g. days_since) — the builder never sends these back
-    old_field_derived = {
-        fn: fmeta for fn, fmeta in old_schema.get("fields", {}).items()
-        if isinstance(fmeta, dict) and "derived" in fmeta
-    }
+    # If new_field_meta is empty or None, use old_schema to preserve field order
+    if new_field_meta and isinstance(new_field_meta, dict):
+        fm_source = dict(new_field_meta)  # Copy to avoid mutation
+    else:
+        fm_source = dict(old_schema.get("fields", {}))  # Preserve order from old schema
+    # Merge derived fields from old schema (e.g. days_since) — builder never sends these
+    old_fields = old_schema.get("fields", {})
+    for fname, fmeta in old_fields.items():
+        if isinstance(fmeta, dict) and fmeta.get("derived") and fname not in fm_source:
+            fm_source[fname] = fmeta
     if fm_source or old_field_derived:
         lines += ["# Global field metadata", ""]
         for fname, fmeta in fm_source.items():
@@ -917,8 +919,12 @@ def _build_schema_toml(old_schema, new_types, type_schemas,
             if fmeta.get("unit"):
                 lines.append(_toml_kv("unit", fmeta["unit"]))
             lines.append("")
-        # append derived [fields.*] entries that builder doesn't manage
-        for fname, fmeta in old_field_derived.items():
+    # Also append derived fields from old schema not in fm_source
+    old_field_derived = {
+        fn: fmeta for fn, fmeta in old_schema.get("fields", {}).items()
+        if isinstance(fmeta, dict) and fmeta.get("derived")
+    }
+    for fname, fmeta in old_field_derived.items():
             if fname in fm_source:
                 continue  # already written above
             lines.append(f"[fields.{fname}]")
