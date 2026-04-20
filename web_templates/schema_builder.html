@@ -499,6 +499,27 @@ function makeFieldRow(fname, fdef) {
   div.className = "field-row";
   div.id = "field-row-" + fname;
 
+  // ── shared-reference field (use = "shared.x") ─────────────────────────────
+  if (fdef.use) {
+    var head = document.createElement("div");
+    head.className = "field-row-head";
+    var sharedNames = Object.keys(_state.shared_defs);
+    var opts = sharedNames.map(function(s) {
+      return '<option value="shared.'+s+'"'+(fdef.use==="shared."+s?" selected":"")+'>shared.'+s+'</option>';
+    }).join("");
+    head.innerHTML =
+      '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
+      '<select onchange="updateFieldUse(\''+fname+'\',this.value)" style="font-size:12px;padding:3px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--accent);">'+opts+'</select>' +
+      '<button onclick="deleteField(\'' + fname + '\')" ' +
+      'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;margin-left:6px;">×</button>';
+    div.appendChild(head);
+    var note = document.createElement("div");
+    note.style.cssText = "font-size:11px;color:var(--sub);margin-top:4px;";
+    note.textContent = "Options come from shared definition above";
+    div.appendChild(note);
+    return div;
+  }
+
   // ── parent-dependent field ────────────────────────────────────────────────
   if (fdef.parent) {
     var head = document.createElement("div");
@@ -614,6 +635,10 @@ function toggleInt(fname, val) {
   ts().fields[fname].is_int = val;
   if (val) ts().fields[fname].options = [];
   renderFields(ts());
+}
+
+function updateFieldUse(fname, val) {
+  ts().fields[fname].use = val;
 }
 
 function deleteField(fname) {
