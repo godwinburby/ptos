@@ -1929,9 +1929,9 @@ def append_record(line):
         with open(path, "r", encoding="utf-8") as f:
             existing = f.read()
     
-    # Strip trailing blank lines
+    # Strip trailing blank lines and append
     stripped = existing.rstrip("\n\r ")
-    if stripped != existing.rstrip():
+    if stripped != existing:
         new_content = stripped + "\n" + line + "\n"
     else:
         new_content = existing + line + "\n"

@@ -157,6 +157,8 @@ function onEditorInput() {
 function saveJournal(silent) {
   clearTimeout(_saveTimer); _dirty = false;
   var content = document.getElementById("journal-editor").value;
+  // Don't silently overwrite with empty — require explicit save for blank content
+  if (silent && !content.trim()) return;
   var btns = ["save-btn","save-btn-2"].map(function(id){ return document.getElementById(id); });
   if (!silent) btns.forEach(function(b){ if(b){ b.disabled=true; b.textContent="Saving…"; } });
   fetch("/journal/save", {

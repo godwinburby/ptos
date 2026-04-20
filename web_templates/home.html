@@ -128,6 +128,13 @@
   }
   window.updateUrl = updateUrl;
 
+  function changeDue(due) {
+    var params = new URLSearchParams(window.location.search);
+    params.set("due", due);
+    window.location = "/?" + params.toString();
+  }
+  window.changeDue = changeDue;
+
   function onTimeChange(val) {
     var customDiv = document.getElementById('custom-time-div');
     if (val === 'custom') {
@@ -224,7 +231,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
     <div class="card-title" style="margin:0;">Overdue</div>
     {% if due_configs|length > 1 %}
-    <select onchange="window.location='/?due='+this.value" style="font-size:12px;padding:4px;">
+    <select onchange="changeDue(this.value)" style="font-size:12px;padding:4px;">
       {% for dc in due_configs %}
       <option value="{{ dc }}" {% if dc == selected_due %}selected{% endif %}>{{ dc }}</option>
       {% endfor %}
