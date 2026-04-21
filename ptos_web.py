@@ -648,9 +648,6 @@ def api_add_tag():
         return jsonify({"success": False, "error": result.get("error", "Failed")}), 400
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
-        
-    except Exception as e:
-        return jsonify({"success": False, "error": str(e)}), 500
 
 
 @app.route("/journal")

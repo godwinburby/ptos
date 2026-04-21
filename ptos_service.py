@@ -1742,7 +1742,17 @@ def add_tag_option(rtype, tag_field, parent_value, new_tag):
         tag_options[parent_value].append(new_tag)
         tag_options[parent_value] = sorted(tag_options[parent_value])
         
+        # Backup schema before modification
+        ptos._backup_file(ptos.SCHEMA_PATH)
+        
+        # Save schema
         ptos._save_schema(schema)
+        
+        # Invalidate schema cache so new options appear immediately
+        ptos._CACHE.pop("schema", None)
+        ptos._CACHE.pop("derived_fields", None)
+        ptos._CACHE.pop("numeric_fields", None)
+        
         return {"success": True, "message": f"Added '{new_tag}' to {tag_field}.{parent_value}"}
     except Exception as e:
         raise PTOSError(str(e))
