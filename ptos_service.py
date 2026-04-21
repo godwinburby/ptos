@@ -1,6 +1,21 @@
 """
 ptos_service.py  —  Service layer for PTOS
-Returns dicts/lists instead of printing.  Zero UI knowledge.
+==========================================
+This layer orchestrates between web (HTTP) and engine (file I/O).
+Returns dicts/lists instead of printing. Zero UI knowledge.
+
+API CONTRACT:
+-------------
+Public functions should accept/return business objects, not file concepts.
+DO NOT expose in public API: filepath, lineno, raw_line, old_line
+
+Public API:
+- get_schema() → dict
+- get_records(filters, time, search) → List[dict]
+- edit_record(context, changes, note) → result  
+- append_record(record) → result
+- get_dashboard(), get_metric(), get_due() → business objects
+
 Used by ptos_web.py (Flask).
 ptos.py CLI is unchanged and does not use this file.
 """
@@ -35,6 +50,41 @@ BACKUP_DIR = ptos.BACKUP_DIR
 BASE_DIR = ptos.BASE_DIR
 SCHEMA_PATH = ptos.SCHEMA_PATH
 QUERIES_PATH = ptos.QUERIES_PATH
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Internal wrappers for engine file operations
+# Centralizes file I/O for easier future changes
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _backup_file(path):
+    """Backup file before modification - wraps engine function."""
+    ptos.backup_file(path)
+
+
+def _update_record_in_file(filepath, old_line, new_line, lineno):
+    """Update record in file - wraps engine file operations.
+    
+    Args:
+        filepath: Path to the record file
+        old_line: Original record line
+        new_line: New record line (or None to delete)
+        lineno: Line number for precise targeting
+    """
+    ptos.backup_file(filepath)
+    ptos.rewrite_line_in_file(filepath, old_line, new_line, lineno=lineno)
+
+
+def invalidate_cache(keys):
+    """Invalidate internal cache entries.
+    
+    Args:
+        keys: Single key string or list of keys to invalidate.
+    """
+    if isinstance(keys, str):
+        keys = [keys]
+    for key in keys:
+        ptos._CACHE.pop(key, None)
 
 
 def _cycles():
@@ -1255,10 +1305,10 @@ def save_query(name, where_expr, time="tm", group=None, search=None,
     if trend is not None:
         lines.append(f"trend = {trend}")
 
-    ptos._backup_file(ptos.QUERIES_PATH)
+    _backup_file(ptos.QUERIES_PATH)
     with open(ptos.QUERIES_PATH, "a", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
-    ptos._CACHE.pop("queries", None)   # invalidate cache
+    invalidate_cache("queries")
 
     return {"ok": True, "name": name}
 
@@ -1311,7 +1361,7 @@ def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
             import os as _os
             old_year = _os.path.basename(filepath)[:4]
             new_year = changed_date[:4]
-            ptos.rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
+            _update_record_in_file(filepath, old_line, None, lineno=lineno)
             new_path = _os.path.join(ptos.RECORDS_DIR, f"{new_year}.log")
             # Read existing and append atomically
             existing = ""
@@ -1321,7 +1371,7 @@ def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
             content = existing.rstrip() + "\n" + new_line + "\n"
             write_file(new_path, content)
         else:
-            ptos.rewrite_line_in_file(filepath, old_line, new_line, lineno=lineno)
+            _update_record_in_file(filepath, old_line, new_line, lineno=lineno)
     except ValueError as e:
         raise PTOSError(str(e))
     except Exception as e:
@@ -1337,7 +1387,7 @@ def delete_record(filepath, old_line, lineno=None):
     Returns {"deleted_line"} or raises PTOSError.
     """
     try:
-        ptos.rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
+        _update_record_in_file(filepath, old_line, None, lineno=lineno)
     except ValueError as e:
         raise PTOSError(str(e))
     except Exception as e:
@@ -1712,15 +1762,6 @@ def build_record_line(date, record, note=None):
         return ptos.build_record_line(date, record, note)
     except Exception as e:
         raise PTOSError(str(e))
-
-
-def _backup_file(path):
-    """Backup a file before modification."""
-    try:
-        return ptos._backup_file(path)
-    except Exception as e:
-        raise PTOSError(str(e))
-
 
 def get_global_fields(schema):
     """Get list of global optional field names."""
