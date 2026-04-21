@@ -59,7 +59,7 @@ QUERIES_PATH = ptos.QUERIES_PATH
 
 def _backup_file(path):
     """Backup file before modification - wraps engine function."""
-    ptos.backup_file(path)
+    ptos._backup_file(path)
 
 
 def _update_record_in_file(filepath, old_line, new_line, lineno):
@@ -71,7 +71,7 @@ def _update_record_in_file(filepath, old_line, new_line, lineno):
         new_line: New record line (or None to delete)
         lineno: Line number for precise targeting
     """
-    ptos.backup_file(filepath)
+    ptos._backup_file(filepath)
     ptos.rewrite_line_in_file(filepath, old_line, new_line, lineno=lineno)
 
 
