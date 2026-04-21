@@ -29,10 +29,13 @@ if ! python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>
     exit 1
 fi
 
-# ── Check Flask installed ─────────────────────────────────────────────────────
+# ── Check Flask installed (always check) ─────────────────────────────────────
+echo "Checking dependencies..."
 if ! python -c "import flask" 2>/dev/null; then
-    echo "Installing Flask..."
+    echo "Installing Flask and tomli-w..."
     python -m pip install flask tomli-w --quiet
+else
+    echo "Flask already installed."
 fi
 
 # ── Install or use existing ────────────────────────────────────────────────────
@@ -68,14 +71,6 @@ else
     echo ""
     echo "--- Updating Termux packages ---"
     pkg update -y && pkg upgrade -y
-
-    echo ""
-    echo "--- Installing Python ---"
-    pkg install python -y
-
-    echo ""
-    echo "--- Installing Flask ---"
-    python -m pip install flask tomli-w --quiet
 
     echo ""
     echo "--- Initialising PTOS ---"

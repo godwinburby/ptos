@@ -47,24 +47,31 @@ else
     INIT_NEEDED=true
 fi
 
-# ── Install Flask ─────────────────────────────────────────────────────────────
-if [ "$INIT_NEEDED" = true ]; then
-    echo ""
-    echo "--- Installing Flask ---"
-    # Ensure pip is available for the chosen Python
-    if command -v apt &>/dev/null; then
-        sudo apt update -qq && sudo apt install -y python3-pip 2>/dev/null || true
-    elif command -v dnf &>/dev/null; then
-        sudo dnf install -y python3-pip 2>/dev/null || true
-    elif command -v pacman &>/dev/null; then
-        sudo pacman -Sy --noconfirm python-pip 2>/dev/null || true
-    elif command -v zypper &>/dev/null; then
-        sudo zypper install -y python3-pip 2>/dev/null || true
-    fi
+# ── Install/patch pip ─────────────────────────────────────────────────────────
+# Always check for pip - install if needed
+if command -v apt &>/dev/null; then
+    sudo apt update -qq && sudo apt install -y python3-pip 2>/dev/null || true
+elif command -v dnf &>/dev/null; then
+    sudo dnf install -y python3-pip 2>/dev/null || true
+elif command -v pacman &>/dev/null; then
+    sudo pacman -Sy --noconfirm python-pip 2>/dev/null || true
+elif command -v zypper &>/dev/null; then
+    sudo zypper install -y python3-pip 2>/dev/null || true
+fi
 
+# ── Install/verify Flask and tomli-w ────────────────────────────────────────────────
+echo ""
+echo "--- Checking Flask and tomli-w ---"
+if ! $PYTHON -c "import flask" 2>/dev/null; then
+    echo "Installing Flask..."
     $PYTHON -m pip install flask tomli-w --break-system-packages --quiet
     echo "Flask installed."
+else
+    echo "Flask already installed."
+fi
 
+# ── Initialise PTOS (only if first time) ─────────────────────────────────────────
+if [ "$INIT_NEEDED" = true ]; then
     echo ""
     echo "--- Initialising PTOS ---"
     $PYTHON ptos.py --init

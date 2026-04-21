@@ -39,6 +39,13 @@ if [ -z "$PYTHON" ]; then
     exit 1
 fi
 
+# Check and install Flask + tomli-w if needed
+echo "Checking dependencies..."
+if ! $PYTHON -c "import flask" 2>/dev/null; then
+    echo "Installing Flask and tomli-w..."
+    $PYTHON -m pip install flask tomli-w --break-system-packages --quiet
+fi
+
 echo "Pulling latest changes from GitHub..."
 git pull
 
