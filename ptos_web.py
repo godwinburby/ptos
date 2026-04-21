@@ -1878,13 +1878,22 @@ def edit_post():
         field_defs  = _build_field_defs(schema, rtype, field_values)
         ts = schema.get("type", {}).get(rtype, {})
         tag_options = svc.resolve_tags(schema, ts, field_values)
+        history_filtered_tags = []
+        try:
+            history_with_context = svc.get_history_suggestions(rtype, field_values)
+            history_filtered_tags = history_with_context.get("filtered_tags", [])
+        except Exception:
+            pass
+        tag_context = svc.get_tag_context(rtype, field_values) if rtype else []
         return render_template("edit.html",
             tab="browse", title="Edit Record", now=_now_str(),
             filepath=filepath, lineno=lineno_int, old_line=old_line,
             return_to=return_to,
             rtype=rtype, field_defs=field_defs,
             global_field_defs=_build_global_field_defs(schema, field_values),
-            tag_options=tag_options, field_values=field_values,
+            tag_options=tag_options, history_tags=history_filtered_tags,
+            tag_context=tag_context,
+            field_values=field_values,
             today=dt.date.today().isoformat(),
             msg=str(e), msg_type="error")
 
