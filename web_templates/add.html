@@ -155,6 +155,11 @@
           {{ tag }}
         </label>
         {% endfor %}
+        {% if tag_context %}
+        <button type="button" onclick="addSchemaTag('{{ selected_type }}')"
+                style="padding:2px 6px;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;margin-left:4px;"
+                title="Add new tag to schema">+</button>
+        {% endif %}
       </div>
       {% endif %}
       <input type="text" name="custom_tags" placeholder="tags, comma separated"
@@ -250,6 +255,37 @@
 
 <script>
 var field_defs = {{ field_defs | tojson | safe }};
+var tag_context = {{ tag_context | tojson | safe }};
+
+function addSchemaTag(rtype) {
+  if (!tag_context || tag_context.length === 0) {
+    alert("Select a parent field first (e.g., category)");
+    return;
+  }
+  var new_tag = prompt("Enter new tag to add:");
+  if (!new_tag || !new_tag.trim()) return;
+  new_tag = new_tag.trim().replace(/ /g, "_");
+  
+  fetch("/api/schema/add_tag", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      rtype: rtype,
+      tag_field: tag_context[0].tag_field,
+      parent_value: tag_context[0].parent_value,
+      new_tag: new_tag
+    })
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.success) {
+      location.reload();
+    } else {
+      alert(d.error || "Failed to add tag");
+    }
+  })
+  .catch(e => alert("Error: " + e));
+}
 
 // when a parent field changes, reload page preserving all current values
 function onParentChange(fieldName) {

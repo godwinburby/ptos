@@ -499,9 +499,11 @@ def add_get():
     field_defs  = _build_field_defs(schema, selected_type, initial_context)
     global_field_defs = _build_global_field_defs(schema, field_values)
     tag_options = []
+    tag_context = []
     if selected_type:
         ts = schema.get("type", {}).get(selected_type, {})
         tag_options = svc.resolve_tags(schema, ts, initial_context)
+        tag_context = svc.get_tag_context(selected_type, field_values)
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, presets=sorted(presets.keys()),
@@ -509,6 +511,7 @@ def add_get():
         selected_type=selected_type, field_defs=field_defs,
         global_field_defs=global_field_defs,
         tag_options=tag_options, history_tags=history_filtered_tags,
+        tag_context=tag_context,
         field_values=field_values,
         today=dt.date.today().isoformat(),
         msg=None, msg_type=None, last_line=None)
@@ -544,6 +547,7 @@ def add_post():
         if val: record[fname] = val.replace(" ", "_")
     tags = request.form.getlist("tag") + custom_tags
     if tags: record["tag"] = tags
+    
     try:   problems = svc.validate_record(schema, record)
     except PTOSError as e: problems = [str(e)]
     if problems:
@@ -569,13 +573,15 @@ def add_post():
             selected_type=rtype, field_defs=fd,
             global_field_defs=_build_global_field_defs(schema, record),
             tag_options=svc.resolve_tags(schema, ts, record),
+            tag_context=svc.get_tag_context(rtype, record),
             field_values=record, today=dt.date.today().isoformat(),
             msg=str(e), msg_type="error", last_line=None)
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, presets=sorted(presets.keys()),
         multi_presets=_multi_presets(),
-selected_type="", field_defs=[], tag_options=[],
+        selected_type="", field_defs=[], tag_options=[],
+        tag_context=[],
         global_field_defs=[], msg=None, msg_type=None, last_line=None)
 
 
@@ -611,6 +617,37 @@ def add_field_option():
         if result.get("success"):
             return jsonify({"success": True})
         return jsonify({"success": False, "error": result.get("error", "Failed")}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+@app.route("/api/schema/add_tag", methods=["POST"])
+def api_add_tag():
+    """Add a new tag option to schema.toml."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data"}), 400
+        
+        rtype = data.get("rtype", "")
+        tag_field = data.get("tag_field", "")
+        parent_value = data.get("parent_value", "")
+        new_tag = data.get("new_tag", "").strip()
+        
+        if not rtype or not tag_field or not parent_value:
+            return jsonify({"success": False, "error": "Missing required fields"}), 400
+        
+        if not new_tag:
+            return jsonify({"success": False, "error": "Empty tag"}), 400
+        
+        result = svc.add_tag_option(rtype, tag_field, parent_value, new_tag)
+        
+        if result.get("success"):
+            return jsonify({"success": True, "message": result.get("message", "")})
+        return jsonify({"success": False, "error": result.get("error", "Failed")}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
         
     except Exception as e:
         return jsonify({"success": False, "error": str(e)}), 500
@@ -1732,9 +1769,11 @@ def edit_get():
             pass
     
     schema_tag_options = []
+    tag_context = []
     if rtype:
         ts = schema.get("type", {}).get(rtype, {})
         schema_tag_options = svc.resolve_tags(schema, ts, field_values)
+        tag_context = svc.get_tag_context(rtype, field_values)
     tag_options = list(current_tags) + [t for t in schema_tag_options if t not in current_tags]
     return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
     # Only allow internal paths — reject anything that could be javascript: or external
@@ -1747,6 +1786,7 @@ def edit_get():
         rtype=rtype, field_defs=field_defs,
         global_field_defs=_build_global_field_defs(schema, field_values),
         tag_options=tag_options, history_tags=history_filtered_tags,
+        tag_context=tag_context,
         field_values=field_values,
         today=dt.date.today().isoformat(),
         msg=None, msg_type=None)
@@ -1787,6 +1827,7 @@ def edit_post():
         if val: new_record[fname] = val.replace(" ", "_")
     tags = request.form.getlist("tag") + custom_tags
     if tags: new_record["tag"] = tags
+    
     parsed = svc.safe_parse_line(old_line)
     if not parsed:
         return redirect(url_for("browse_get"))

@@ -1624,11 +1624,78 @@ def resolve_tags(schema, type_schema, record):
     return ptos.resolve_tags(schema, type_schema, record)
 
 
+def get_tag_context(rtype, record):
+    """Get tag field names and their parent values for a record type.
+    
+    Returns a list of dicts with tag_field name and current parent_value.
+    """
+    try:
+        schema = ptos.get_schema()
+        type_schema = schema.get("type", {}).get(rtype, {})
+        tag_section = type_schema.get("tags", {})
+        
+        result = []
+        for tag_field, trigger in tag_section.items():
+            parent_value = record.get(tag_field, "")
+            if parent_value:
+                result.append({
+                    "tag_field": tag_field,
+                    "parent_value": parent_value
+                })
+        
+        return result
+    except Exception as e:
+        return []
+
+
 def add_field_option(type_name, field_name, new_option, option_source,
                     parent_field="", parent_value="", shared_key=""):
     """Add a new option to schema.toml."""
     return ptos.add_field_option(type_name, field_name, new_option, option_source,
                                  parent_field, parent_value, shared_key)
+
+
+def add_tag_option(rtype, tag_field, parent_value, new_tag):
+    """Add a new tag option to schema.toml.
+    
+    Args:
+        rtype: Record type (e.g., 'expense', 'income')
+        tag_field: The tag field name (e.g., 'category', 'source')
+        parent_value: The parent value this tag belongs to (e.g., 'food', 'salary')
+        new_tag: The new tag option to add
+    
+    Returns:
+        dict: Result with success boolean and optional error message.
+    """
+    try:
+        schema = ptos.get_schema()
+        type_schema = schema.get("type", {}).get(rtype, {})
+        tag_section = type_schema.get("tags", {})
+        
+        if tag_field not in tag_section:
+            return {"success": False, "error": f"No tags section for {tag_field}"}
+        
+        tag_options = tag_section.get(tag_field, {}).get("options", {})
+        if not isinstance(tag_options, dict):
+            return {"success": False, "error": f"Tags for {tag_field} not parent-dependent"}
+        
+        if parent_value not in tag_options:
+            return {"success": False, "error": f"Parent value '{parent_value}' not found in {tag_field} tags"}
+        
+        new_tag = new_tag.strip().replace(" ", "_")
+        if not new_tag:
+            return {"success": False, "error": "Empty tag"}
+        
+        if new_tag in tag_options.get(parent_value, []):
+            return {"success": True, "message": f"Tag '{new_tag}' already exists"}
+        
+        tag_options[parent_value].append(new_tag)
+        tag_options[parent_value] = sorted(tag_options[parent_value])
+        
+        ptos._save_schema(schema)
+        return {"success": True, "message": f"Added '{new_tag}' to {tag_field}.{parent_value}"}
+    except Exception as e:
+        raise PTOSError(str(e))
 
 
 def validate_record(schema, record):
