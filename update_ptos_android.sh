@@ -34,10 +34,13 @@ if ! python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>
     exit 1
 fi
 
-# ── Verify Flask installed ─────────────────────────────────────────────────────
+# ── Verify Flask and tomli-w installed ─────────────────────────────────────
+echo "Checking dependencies..."
 if ! python -c "import flask" 2>/dev/null; then
-    echo "Installing Flask..."
-    python -m pip install flask --quiet
+    echo "Installing Flask and tomli-w..."
+    python -m pip install flask tomli-w --quiet
+else
+    echo "Dependencies OK."
 fi
 
 # ── Download latest zip ───────────────────────────────────────────────────────

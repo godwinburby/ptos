@@ -30,6 +30,14 @@ if "%PYTHON%"=="" (
     exit /b 1
 )
 
+:: Check dependencies
+echo Checking dependencies...
+%PYTHON% -c "import flask" 2>nul
+if errorlevel 1 (
+    echo Installing Flask and tomli-w...
+    %PYTHON% -m pip install flask tomli-w --quiet
+)
+
 :: Git pull
 if exist ".git" (
     echo Pulling latest from GitHub...
