@@ -453,7 +453,125 @@
   </div>
 </div>
 
+<!-- Add Option Modal -->
+<div id="add-option-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:12px;max-width:400px;width:90%;padding:20px;">
+    <h3 style="margin:0 0 12px;color:var(--text);">Add New Option</h3>
+    <p style="margin:0 0 16px;color:var(--sub);">Add "<span id="add-option-value" style="font-weight:600;color:var(--accent);"></span>" to <span id="add-option-field"></span>?</p>
+    <p id="add-option-parent-msg" style="margin:0 0 16px;color:var(--sub);display:none;">This will be added to <span id="add-option-parent-key"></span> options.</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeAddOptionModal()" style="padding:8px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;">Cancel</button>
+      <button onclick="confirmAddOption()" style="padding:8px 16px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;">Add</button>
+    </div>
+  </div>
+</div>
+
 <script>
+// ── Editable Options ────────────────────────────────────────────────────────────────
+let pendingOption = null;
+
+function getFieldInfo(fieldName) {
+    const allFields = window.field_defs || [];
+    return allFields.find(f => f.name === fieldName) || {};
+}
+
+function addNewOption(fieldName) {
+    const newVal = prompt('Enter new option for ' + fieldName + ':');
+    if (!newVal || !newVal.trim()) return;
+    
+    const val = newVal.trim();
+    const fieldInfo = getFieldInfo(fieldName);
+    const select = document.getElementById('field-' + fieldName);
+    const currentOptions = fieldInfo.options || [];
+    
+    // Check if option already exists
+    if (currentOptions.includes(val)) {
+        alert('Option already exists');
+        return;
+    }
+    
+    // For parent-dependent, need parent value
+    if (fieldInfo.option_source === 'parent_dependent') {
+        const parentField = fieldInfo.parent;
+        const parentSelect = document.querySelector(`[name="${parentField}"]`);
+        const parentVal = parentSelect?.value;
+        if (!parentVal) {
+            alert('Please select ' + parentField + ' first');
+            return;
+        }
+        pendingOption = {
+            select: select,
+            fieldInfo: fieldInfo,
+            value: val,
+            parentValue: parentVal
+        };
+        document.getElementById('add-option-value').textContent = val;
+        document.getElementById('add-option-field').textContent = fieldName;
+        document.getElementById('add-option-parent-msg').style.display = 'block';
+        document.getElementById('add-option-parent-key').textContent = parentField + '=' + parentVal;
+        document.getElementById('add-option-modal').style.display = 'flex';
+        return;
+    }
+    
+    pendingOption = {
+        select: select,
+        fieldInfo: fieldInfo,
+        value: val,
+        parentValue: null
+    };
+    document.getElementById('add-option-value').textContent = val;
+    document.getElementById('add-option-field').textContent = fieldName;
+    document.getElementById('add-option-parent-msg').style.display = 'none';
+    document.getElementById('add-option-modal').style.display = 'flex';
+}
+
+function closeAddOptionModal() {
+    document.getElementById('add-option-modal').style.display = 'none';
+    pendingOption = null;
+}
+
+async function confirmAddOption() {
+    if (!pendingOption) return;
+    
+    const { select, fieldInfo, value, parentValue } = pendingOption;
+    const typeName = fieldInfo.type_name || new URLSearchParams(window.location.search).get('type');
+    
+    const payload = {
+        type_name: typeName,
+        field_name: fieldInfo.name,
+        new_option: value,
+        option_source: fieldInfo.option_source,
+        parent_field: fieldInfo.parent,
+        parent_value: parentValue,
+        shared_key: fieldInfo.shared_key || ''
+    };
+    
+    try {
+        const resp = await fetch('/add-field-option', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const result = await resp.json();
+        if (result.success) {
+            // Add new option to select
+            const opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = value;
+            opt.selected = true;
+            select.appendChild(opt);
+            // Reload to refresh options
+            location.reload();
+        } else {
+            alert('Error: ' + (result.error || 'Failed to add option'));
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+    
+    closeAddOptionModal();
+}
+
 function toggleMoreMenu(e) {
   if (e) e.preventDefault();
   var menu = document.getElementById("more-menu");

@@ -2719,6 +2719,86 @@ def resolve_options_for_value(type_schema, field, parent_value):
         return opts.get(parent_value, [])
     return []
 
+
+def _save_schema(schema):
+    """Save schema to config/schema.toml using tomli-w."""
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+    
+    toml_path = os.path.join(CONFIG_DIR, "schema.toml")
+    with open(toml_path, "wb") as f:
+        tomli_w.dump(schema, f)
+
+
+def add_field_option(type_name, field_name, new_option, option_source,
+                    parent_field="", parent_value="", shared_key=""):
+    """Add a new option to schema.toml and save."""
+    schema = get_schema()
+    new_opt = new_option.strip()
+    if not new_opt:
+        return {"success": False, "error": "Empty option"}
+    
+    if option_source == "shared":
+        if not shared_key:
+            return {"success": False, "error": "No shared_key"}
+        shared_defs = schema.get("shared", {})
+        if shared_key not in shared_defs:
+            return {"success": False, "error": f"Shared field {shared_key} not found"}
+        opts = shared_defs[shared_key].get("options", [])
+        if new_opt in opts:
+            return {"success": True}
+        opts.append(new_opt)
+        shared_defs[shared_key]["options"] = sorted(opts)
+    
+    elif option_source == "parent_dependent":
+        if not type_name:
+            return {"success": False, "error": "No type_name"}
+        type_schema = schema.get("type", {}).get(type_name, {})
+        if not type_schema:
+            return {"success": False, "error": f"Type {type_name} not found"}
+        field_def = type_schema.get("fields", {}).get(field_name, {})
+        if not field_def:
+            return {"success": False, "error": f"Field {field_name} not found"}
+        opts = field_def.get("options", {})
+        if not isinstance(opts, dict):
+            return {"success": False, "error": "Not a parent-dependent field"}
+        if parent_value not in opts:
+            return {"success": False, "error": f"Parent value {parent_value} not found"}
+        if new_opt in opts[parent_value]:
+            return {"success": True}
+        opts[parent_value].append(new_opt)
+        opts[parent_value] = sorted(opts[parent_value])
+    
+    elif option_source == "flat":
+        if not type_name:
+            return {"success": False, "error": "No type_name"}
+        type_schema = schema.get("type", {}).get(type_name, {})
+        if not type_schema:
+            return {"success": False, "error": f"Type {type_name} not found"}
+        field_def = type_schema.get("fields", {}).get(field_name, {})
+        if not field_def:
+            return {"success": False, "error": f"Field {field_name} not found"}
+        opts = field_def.get("options", [])
+        if not isinstance(opts, list):
+            return {"success": False, "error": "Not a flat options field"}
+        if new_opt in opts:
+            return {"success": True}
+        opts.append(new_opt)
+        field_def["options"] = sorted(opts)
+    
+    else:
+        return {"success": False, "error": f"Unknown option_source: {option_source}"}
+    
+    try:
+        _save_schema(schema)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    
+    return {"success": True}
+
+
 def resolve_field(schema, type_schema, field, record):
     """Prompt user for a single field value."""
     # integer field  (from global [fields] metadata)

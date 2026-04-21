@@ -85,7 +85,7 @@ os.chdir(ptos_dir)
 # ── 4. Install Flask ───────────────────────────────────────────────────────────
 step("Installing Flask")
 rc, out, err = run(
-    [sys.executable, "-m", "pip", "install", "flask", "--quiet"],
+    [sys.executable, "-m", "pip", "install", "flask", "tomli-w", "--quiet"],
 )
 if rc != 0:
     # Try without --quiet in case it's a flag issue

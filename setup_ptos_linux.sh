@@ -62,7 +62,7 @@ if [ "$INIT_NEEDED" = true ]; then
         sudo zypper install -y python3-pip 2>/dev/null || true
     fi
 
-    $PYTHON -m pip install flask --break-system-packages --quiet
+    $PYTHON -m pip install flask tomli-w --break-system-packages --quiet
     echo "Flask installed."
 
     echo ""

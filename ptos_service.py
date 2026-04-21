@@ -1624,6 +1624,13 @@ def resolve_tags(schema, type_schema, record):
     return ptos.resolve_tags(schema, type_schema, record)
 
 
+def add_field_option(type_name, field_name, new_option, option_source,
+                    parent_field="", parent_value="", shared_key=""):
+    """Add a new option to schema.toml."""
+    return ptos.add_field_option(type_name, field_name, new_option, option_source,
+                                 parent_field, parent_value, shared_key)
+
+
 def validate_record(schema, record):
     """Validate a record against schema. Returns list of problems."""
     try:
