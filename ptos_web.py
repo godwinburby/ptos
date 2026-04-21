@@ -1710,6 +1710,13 @@ def edit_get():
     if note:
         field_values["note"] = note
     field_values["date"] = str(d)
+    
+    # Override with URL params if present (supports cascade parent field changes)
+    for key in request.args:
+        if key not in ("filepath", "lineno", "line", "return_to"):
+            val = request.args.get(key, "")
+            if val:
+                field_values[key] = val
     field_defs   = _build_field_defs(schema, rtype, field_values)
     current_tags = field_values.get("tag", [])
     if isinstance(current_tags, str):
