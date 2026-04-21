@@ -75,7 +75,7 @@ The web app is the primary interface. The CLI is the engine underneath — avail
 ## Requirements
 
 - Python 3.11+ (uses `tomllib` from the standard library)
-- Flask for the web UI: `pip install flask`
+- Flask and tomli-w for the web UI: `pip install flask tomli-w`
 - Works on Windows, Linux, macOS, Android (Termux)
 
 ---

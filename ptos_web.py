@@ -173,12 +173,35 @@ def _build_field_defs(schema, rtype, current_record=None):
         if parent:
             parent_val = record.get(parent, "")
             options    = svc.resolve_options_for_value(type_schema, fname, parent_val)
+            option_source = "parent_dependent"
+            parent_options = list(field_def.get("options", {}).keys()) if isinstance(field_def.get("options"), dict) else []
+            shared_key = ""
         else:
             options = svc.resolve_options(schema, type_schema, fname) or []
+            if field_def.get("use"):
+                option_source = "shared"
+                shared_key = field_def["use"].split(".", 1)[1]
+                parent_options = []
+            elif isinstance(field_def.get("options"), list):
+                option_source = "flat"
+                shared_key = ""
+                parent_options = []
+            else:
+                option_source = "none"
+                shared_key = ""
+                parent_options = []
+        
+        has_options = bool(options) or option_source in ("parent_dependent", "shared")
+        
         defs.append({
             "name":           fname,
             "required":       fname in required,
             "options":        options,
+            "has_options":    has_options,
+            "option_source":  option_source,
+            "shared_key":      shared_key,
+            "parent_options": parent_options,
+            "type_name":       rtype,
             "is_int":         is_int,
             "unit":           unit,
             "parent":         parent or "",
@@ -552,15 +575,46 @@ def add_post():
         tab="add", title="Add Record", now=_now_str(),
         types=types, presets=sorted(presets.keys()),
         multi_presets=_multi_presets(),
-        selected_type="", field_defs=[], tag_options=[],
-        global_field_defs=[],
-        field_values={}, today=dt.date.today().isoformat(),
-        msg=None, msg_type=None, last_line=line)
+selected_type="", field_defs=[], tag_options=[],
+        global_field_defs=[], msg=None, msg_type=None, last_line=None)
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Journal
-# ══════════════════════════════════════════════════════════════════════════════
+@app.route("/add-field-option", methods=["POST"])
+def add_field_option():
+    """Add a new option to schema.toml and return success/error."""
+    try:
+        data = request.get_json()
+        if not data:
+            return jsonify({"success": False, "error": "No data"}), 400
+        
+        type_name = data.get("type_name")
+        field_name = data.get("field_name")
+        new_option = data.get("new_option", "").strip()
+        option_source = data.get("option_source")
+        parent_field = data.get("parent_field", "")
+        parent_value = data.get("parent_value", "")
+        shared_key = data.get("shared_key", "")
+        
+        if not new_option:
+            return jsonify({"success": False, "error": "Empty option"}), 400
+        
+        result = svc.add_field_option(
+            type_name=type_name,
+            field_name=field_name,
+            new_option=new_option,
+            option_source=option_source,
+            parent_field=parent_field,
+            parent_value=parent_value,
+            shared_key=shared_key
+        )
+        
+        if result.get("success"):
+            return jsonify({"success": True})
+        return jsonify({"success": False, "error": result.get("error", "Failed")}), 400
+        
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
 
 @app.route("/journal")
 def journal_get():

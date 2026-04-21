@@ -105,18 +105,24 @@
         {% if f.required %}<span class="req">*</span>{% endif %}
         {% if f.unit %}<span style="color:var(--sub);font-weight:400;"> · {{ f.unit }}</span>{% endif %}
       </label>
-      {% if f.options %}
-      <select name="{{ f.name }}" id="field-{{ f.name }}"
-              {% if f.is_parent or f.is_tag_trigger or f.is_condition_trigger %}onchange="onParentChange('{{ f.name }}')"{% endif %}
-              {% if f.parent %}data-parent="{{ f.parent }}"{% endif %}>
-        <option value="">— select {{ f.name }} —</option>
-        {% for opt in f.options %}
-        <option value="{{ opt }}"
-          {% if field_values and field_values.get(f.name) == opt %}selected{% endif %}>
-          {{ opt }}
-        </option>
-        {% endfor %}
-      </select>
+      {% if f.has_options %}
+      <div style="display:flex;gap:4px;align-items:center;">
+        <select name="{{ f.name }}" id="field-{{ f.name }}"
+                data-field-info="{{ f | tojson | escape }}"
+                {% if f.is_parent or f.is_tag_trigger or f.is_condition_trigger %}onchange="onParentChange('{{ f.name }}')"{% endif %}
+                {% if f.parent %}data-parent="{{ f.parent }}"{% endif %}>
+          <option value="">— select {{ f.name }} —</option>
+          {% for opt in f.options %}
+          <option value="{{ opt }}"
+            {% if field_values and field_values.get(f.name) == opt %}selected{% endif %}>
+            {{ opt }}
+          </option>
+          {% endfor %}
+        </select>
+        <button type="button" onclick="addNewOption('{{ f.name }}')" 
+                style="padding:4px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;" 
+                title="Add new option">+</button>
+      </div>
       {% elif f.has_parent %}
       {# parent-dependent field whose parent has no value yet — show placeholder dropdown #}
       <select name="{{ f.name }}" id="field-{{ f.name }}"
@@ -243,6 +249,8 @@
 </div>
 
 <script>
+var field_defs = {{ field_defs | tojson | safe }};
+
 // when a parent field changes, reload page preserving all current values
 function onParentChange(fieldName) {
   const form   = document.getElementById("add-form");

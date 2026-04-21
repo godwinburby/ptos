@@ -32,7 +32,7 @@ fi
 # ── Check Flask installed ─────────────────────────────────────────────────────
 if ! python -c "import flask" 2>/dev/null; then
     echo "Installing Flask..."
-    python -m pip install flask --quiet
+    python -m pip install flask tomli-w --quiet
 fi
 
 # ── Install or use existing ────────────────────────────────────────────────────
@@ -75,7 +75,7 @@ else
 
     echo ""
     echo "--- Installing Flask ---"
-    python -m pip install flask --quiet
+    python -m pip install flask tomli-w --quiet
 
     echo ""
     echo "--- Initialising PTOS ---"
