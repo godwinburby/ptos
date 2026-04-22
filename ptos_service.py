@@ -1030,6 +1030,7 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
         if item_name in metrics:
             item = get_metric(item_name, item_time)
             item["kind"] = "metric"
+            item["item_time"] = item_time
             items.append(item)
         elif item_name in queries_dict:
             try:
@@ -1038,13 +1039,13 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
                 if total > 0:
                     value += f"  ({ptos.fmt(total)})"
                 items.append({"name": item_name, "value": value, "raw": cnt,
-                               "kind": "query"})
+                               "kind": "query", "item_time": item_time})
             except Exception as e:
                 items.append({"name": item_name, "value": f"error: {e}", "raw": None,
-                               "kind": "query"})
+                               "kind": "query", "item_time": item_time})
         else:
             items.append({"name": item_name, "value": "not found", "raw": None,
-                           "kind": "unknown"})
+                           "kind": "unknown", "item_time": item_time})
 
     # Build period string based on dashboard's time
     period_start, period_end = _resolve_time(time) if use_dashboard_time else _resolve_time(item_time)

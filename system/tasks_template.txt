@@ -1,0 +1,7 @@
+# Format:
+# (priority) creation-date description key:value key:value +project @context | optional_note
+
+(A) YYYY-MM-DD Task description type:example +project due:YYYY-MM-DD
+
+# Completed format:
+# x completion-date creation-date description key:value +project

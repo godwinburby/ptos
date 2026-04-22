@@ -342,31 +342,30 @@ def home():
         # Use query param if provided, otherwise use config default, fallback to first
         db_name = request.args.get("dashboard", default_db or next(iter(dashboards), None))
         
-        # Get time window from query param, default to this month
-        time_code = request.args.get("time", "tm")
+        # time_param absent = Per query mode: each metric uses its own query time.
+        # time_param present = user explicitly picked a window to override all metrics.
+        time_param  = request.args.get("time", None)
         custom_time = request.args.get("custom_time", "")
-        if time_code == "custom":
-            if custom_time and re.match(r"\d{4}-\d{2}", custom_time):
-                time_code = custom_time
-        
-        # Use dashboard time only when explicitly changed (not default "tm")
-        use_dashboard_time = request.args.get("override_time") == "1"
-        
+        if time_param == "custom" and custom_time and re.match(r"\d{4}-\d{2}", custom_time):
+            time_code = custom_time
+        else:
+            time_code = time_param or "tm"
+        use_dashboard_time = time_param is not None
+
         cycles = cfg.get("cycles", {})
         if db_name and db_name in dashboards:
             db = svc.get_dashboard(db_name, time_code, use_dashboard_time)
-            # Build nice period label (e.g., "This week", "Apr 2026", "Clinic")
-            period_str = _build_period_label(time_code, custom_time, cycles)
-            # Show all dashboard items in home (no limit, template handles display)
             for item in db["items"]:
                 kind = item.get("kind", "unknown")
+                # Each card shows its own query's time window, not a global label
+                item_time = item.get("item_time", time_code)
+                sub = _build_period_label(item_time, custom_time, cycles)
                 stat = {
                     "label": item["name"].replace("_"," "),
                     "value": item["value"],
-                    "sub": item.get("sub", period_str),  # Use item's own period if available
-                    "kind": kind,
+                    "sub":   item.get("sub", sub),
+                    "kind":  kind,
                 }
-                # Only queries get a clickable link
                 if kind == "query":
                     stat["query_url"] = f"/queries?run={item['name']}"
                 stats.append(stat)
@@ -395,7 +394,7 @@ def home():
         current_db=db_name if 'db_name' in locals() else None,
         time_options=_get_time_options(),
         year_range=_YEAR_RANGE,
-        current_time=request.args.get("time", "tm"),
+        current_time=request.args.get("time", ""),   # "" selects Per query option
         custom_time=request.args.get("custom_time", ""),
         recent_rows=recent_rows, recent_cols=recent_cols)
 
