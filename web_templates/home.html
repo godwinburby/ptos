@@ -13,6 +13,7 @@
   </select>
   
   <select id="time-select" onchange="onTimeChange(this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;min-width:120px;">
+    <option value="" {% if current_time == "" %}selected{% endif %}>Per query</option>
     {% for label, code in time_options %}
     <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
@@ -118,7 +119,9 @@
     var time = document.getElementById('time-select').value;
     var params = new URLSearchParams();
     params.set('dashboard', db);
-    if (time === 'custom' && selMonth) {
+    if (time === '') {
+      // Per query — no time param sent; each metric uses its own query time
+    } else if (time === 'custom' && selMonth) {
       params.set('time', 'custom');
       params.set('custom_time', selYear + '-' + selMonth);
     } else {
