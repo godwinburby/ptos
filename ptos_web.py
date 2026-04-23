@@ -774,11 +774,18 @@ def settings_page():
     
     cycles = [{"name": k, "day": v} for k, v in cycles_raw.items()]
     
+    today = dt.date.today()
+    date_examples = {
+        "indian": today.strftime("%d/%m/%Y"),
+        "us": today.strftime("%m/%d/%Y"),
+        "eu": today.strftime("%d/%m/%Y"),
+        "iso": today.strftime("%Y-%m-%d"),
+    }
     date_formats = [
-        ("indian", "Indian", "DD/MM/YYYY"),
-        ("us", "US", "MM/DD/YYYY"),
-        ("eu", "EU", "DD/MM/YYYY"),
-        ("iso", "ISO", "YYYY-MM-DD"),
+        ("indian", "Indian", date_examples["indian"]),
+        ("us", "US", date_examples["us"]),
+        ("eu", "EU", date_examples["eu"]),
+        ("iso", "ISO", date_examples["iso"]),
     ]
     
     dashboards = list(svc.get_dashboard_names()) if hasattr(svc, 'get_dashboard_names') else []
