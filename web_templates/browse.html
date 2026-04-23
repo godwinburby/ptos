@@ -966,7 +966,7 @@ function clearBrowse() {
   
   // Reset UI
   document.getElementById("b-search").value = "";
-  document.getElementById("b-expr").value = "";
+  if (document.getElementById("where-editor")) document.getElementById("where-editor").value = "";
   document.getElementById("b-time").value = "tm";
   document.getElementById("b-custom-time").style.display = "none";
   document.getElementById("b-group").value = "";
