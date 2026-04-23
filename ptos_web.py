@@ -715,15 +715,14 @@ def schema_builder_save():
             return jsonify(ok=False,
                 error=f"Type '{t}' must be lowercase letters, numbers, underscores")
     try:
-        schema = svc.get_schema()
-        lines  = _build_schema_toml(schema, new_types, type_schemas,
-                                    new_global_fields=global_fields,
-                                    new_shared_defs=shared_defs,
-                                    new_field_meta=field_meta)
-        svc._backup_file(svc.SCHEMA_PATH)
-        svc.write_file(svc.SCHEMA_PATH, "\n".join(lines) + "\n")
-        for key in ("schema", "derived_fields", "numeric_fields"):
-            svc.invalidate_cache(key)
+        old_schema  = svc.get_schema()
+        new_schema  = _build_schema_dict(old_schema, new_types, type_schemas,
+                                         new_global_fields=global_fields,
+                                         new_shared_defs=shared_defs,
+                                         new_field_meta=field_meta)
+        # _save_schema handles backup + cache invalidation via tomli_w
+        import ptos as _ptos_engine
+        _ptos_engine._save_schema(new_schema)
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -732,7 +731,6 @@ def schema_builder_save():
 @app.route("/schema-builder/preview-lint", methods=["POST"])
 def schema_builder_preview_lint():
     """Preview lint results against unsaved schema changes."""
-    import tomllib
     data = request.get_json(silent=True) or {}
     new_types     = data.get("types", [])
     type_schemas  = data.get("type_schemas", {})
@@ -745,12 +743,11 @@ def schema_builder_preview_lint():
 
     try:
         old_schema = svc.get_schema()
-        lines = _build_schema_toml(old_schema, new_types, type_schemas,
-                                   new_global_fields=global_fields,
-                                   new_shared_defs=shared_defs,
-                                   new_field_meta=field_meta)
-        new_schema_toml = "\n".join(lines)
-        new_schema = tomllib.loads(new_schema_toml)
+        new_schema = _build_schema_dict(old_schema, new_types, type_schemas,
+                                        new_global_fields=global_fields,
+                                        new_shared_defs=shared_defs,
+                                        new_field_meta=field_meta)
+        # new_schema is already a dict — no TOML round-trip needed for lint preview
 
         content_parts = []
         for fname in svc.get_log_files():
@@ -963,6 +960,175 @@ def _toml_val(v):
 def _toml_kv(k, v):
     return f"{k} = {_toml_val(v)}"
 
+
+def _build_schema_dict(old_schema, new_types, type_schemas,
+                       new_global_fields=None,
+                       new_shared_defs=None,
+                       new_field_meta=None):
+    """
+    Merge Schema Builder state with the existing schema dict.
+    Returns a plain Python dict ready for tomli_w.dump() via ptos._save_schema().
+    Same logic as the old _build_schema_toml but produces a dict instead of strings.
+    """
+    schema = {}
+
+    # ── [types] ──────────────────────────────────────────────────────────────
+    schema["types"] = {"allowed": list(new_types)}
+
+    # ── [fields.*] global field metadata ─────────────────────────────────────
+    old_fields = old_schema.get("fields", {})
+    fm_source  = dict(old_fields)
+    if new_field_meta and isinstance(new_field_meta, dict):
+        for fname, fmeta in new_field_meta.items():
+            if isinstance(fmeta, dict):
+                fm_source[fname] = fmeta
+    fields_out = {}
+    for fname, fmeta in fm_source.items():
+        if not isinstance(fmeta, dict):
+            continue
+        fd = {}
+        fd["type"] = fmeta.get("type", "string")
+        if "aggregatable" in fmeta: fd["aggregatable"] = fmeta["aggregatable"]
+        if "dimension"    in fmeta: fd["dimension"]    = fmeta["dimension"]
+        if fmeta.get("unit"):       fd["unit"]         = fmeta["unit"]
+        if fmeta.get("derived"):    fd["derived"]      = fmeta["derived"]
+        fields_out[fname] = fd
+    schema["fields"] = fields_out
+
+    # ── [shared.*] ───────────────────────────────────────────────────────────
+    sd_source = new_shared_defs if new_shared_defs is not None                 else old_schema.get("shared", {})
+    shared_out = {}
+    for sname, sdef in sd_source.items():
+        if not isinstance(sdef, dict):
+            continue
+        sd = {"type": "int" if sdef.get("is_int") else "string"}
+        opts = sdef.get("options", [])
+        if opts:
+            sd["options"] = opts
+        shared_out[sname] = sd
+    schema["shared"] = shared_out
+
+    # ── [global_fields.*] ────────────────────────────────────────────────────
+    gf_source = new_global_fields if new_global_fields is not None                 else old_schema.get("global_fields", {})
+    gf_out = {}
+    for fname, fdef in gf_source.items():
+        if not isinstance(fdef, dict):
+            continue
+        gfd = {"type": "int" if fdef.get("is_int") else "string"}
+        opts = fdef.get("options", [])
+        if opts:
+            gfd["options"] = opts
+        gf_out[fname] = gfd
+    schema["global_fields"] = gf_out
+
+    # ── [type.*] ─────────────────────────────────────────────────────────────
+    old_types  = old_schema.get("type", {})
+    types_out  = {}
+
+    for tname in new_types:
+        ts_new = type_schemas.get(tname, {})
+        ts_old = old_types.get(tname, {})
+        tdict  = {}
+
+        required = ts_new.get("required", ts_old.get("required", []))
+        if required:
+            tdict["required"] = list(required)
+
+        # ── fields ──
+        fields_new  = ts_new.get("fields", {})
+        fields_old  = ts_old.get("fields", {})
+        derived_new = ts_new.get("derived_fields", {})
+
+        seen = list(fields_new.keys())
+        for fn in fields_old:
+            if fn not in seen: seen.append(fn)
+        for fn in derived_new:
+            if fn not in seen: seen.append(fn)
+
+        fields_dict = {}
+        for fname in seen:
+            fdef_new     = fields_new.get(fname)
+            fdef_old     = fields_old.get(fname, {})
+            fdef_derived = derived_new.get(fname)
+
+            if fdef_derived is not None:
+                fd = {}
+                if fdef_derived.get("expr"):  fd["derived"] = fdef_derived["expr"]
+                if fdef_derived.get("type"):  fd["type"]    = fdef_derived["type"]
+                fields_dict[fname] = fd
+            elif fdef_new is not None:
+                fd = {}
+                if fdef_new.get("use"):
+                    fd["use"] = fdef_new["use"]
+                elif fdef_new.get("parent"):
+                    fd["parent"] = fdef_new["parent"]
+                    by_parent = fdef_new.get("options_by_parent", {})
+                    if by_parent:
+                        fd["options"] = {pv: list(popts)
+                                         for pv, popts in by_parent.items()}
+                elif fdef_new.get("is_int"):
+                    fd["type"] = "int"
+                else:
+                    opts = fdef_new.get("options", [])
+                    if opts:
+                        fd["options"] = list(opts)
+                fields_dict[fname] = fd
+            else:
+                # preserve old field verbatim
+                if isinstance(fdef_old, dict):
+                    fields_dict[fname] = dict(fdef_old)
+
+        if fields_dict:
+            tdict["fields"] = fields_dict
+
+        # ── tags ──
+        tags_new = ts_new.get("tags", {})
+        tags_old = ts_old.get("tags", {})
+        seen_tags = list(tags_new.keys())
+        for tf in tags_old:
+            if tf not in seen_tags: seen_tags.append(tf)
+
+        tags_dict = {}
+        for tfield in seen_tags:
+            tdef_new = tags_new.get(tfield)
+            tdef_old = tags_old.get(tfield, {})
+            if tdef_new is not None:
+                opts_dict = {fval: list(tags)
+                             for fval, tags in tdef_new.items() if tags}
+                if opts_dict:
+                    tags_dict[tfield] = {"options": opts_dict}
+            else:
+                if isinstance(tdef_old, dict):
+                    tags_dict[tfield] = dict(tdef_old)
+        if tags_dict:
+            tdict["tags"] = tags_dict
+
+        # ── conditions ──
+        conditions_new = ts_new.get("conditions", {})
+        conditions_old = ts_old.get("conditions", {})
+        all_cfields = list(conditions_new.keys())
+        for cf in conditions_old:
+            if cf not in all_cfields: all_cfields.append(cf)
+
+        conds_dict = {}
+        for cname in all_cfields:
+            cdef_new = conditions_new.get(cname)
+            cdef_old = conditions_old.get(cname, {})
+            if cdef_new is not None:
+                tfield = cdef_new.get("trigger_field", "")
+                tval   = cdef_new.get("trigger_value", "")
+                if tfield and tval:
+                    conds_dict[cname] = {"when": {tfield: tval}}
+            else:
+                if isinstance(cdef_old, dict):
+                    conds_dict[cname] = dict(cdef_old)
+        if conds_dict:
+            tdict["conditions"] = conds_dict
+
+        types_out[tname] = tdict
+
+    schema["type"] = types_out
+    return schema
 
 def _build_schema_toml(old_schema, new_types, type_schemas,
                        new_global_fields=None,
