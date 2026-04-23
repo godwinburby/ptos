@@ -340,25 +340,11 @@ function select(section, name) {
 
 // ── Reset current query ───────────────────────────────────────────────────────
 function resetQuery() {
-  if (!_cur || _cur.section !== "queries") return;
-  var q = _st.queries[_cur.name];
-  q._chips = [];
-  q._activeField = null;
-  q._exprManual = "";
-  q.search = "";
-  q.group = "";
-  q.sum = false;
-  q.time = "tm";
-  _fieldCache = {};
-  _cacheSet = [];
-  
-  // Exit advanced mode UI
-  document.getElementById("qb-adv-editor").style.display = "none";
-  document.getElementById("qb-adv-preview").style.display = "block";
-  document.getElementById("qb-adv-toggle").textContent = "Edit";
-  
-  renderEditor();
-  triggerLivePreview();
+  // Deselect and go to empty state
+  _cur = null;
+  document.getElementById("entry-editor").style.display = "none";
+  document.getElementById("entry-empty").style.display = "block";
+  renderTabs();
 }
 
 // ── Add new ───────────────────────────────────────────────────────────────────
