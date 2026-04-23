@@ -1550,7 +1550,8 @@ def query_builder():
     return render_template("query_builder.html",
         tab="query_builder", title="Query Builder",
         now=_now_str(), queries=queries, types=types,
-        time_options=_get_time_options(), due_config=all_due_configs)
+        time_options=_get_time_options(), year_range=_YEAR_RANGE,
+        due_config=all_due_configs)
 
 
 @app.route("/query-builder/save", methods=["POST"])
