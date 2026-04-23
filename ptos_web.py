@@ -775,10 +775,10 @@ def settings_page():
     cycles = [{"name": k, "day": v} for k, v in cycles_raw.items()]
     
     date_formats = [
-        ("indian", "Indian", "15 Mar 2025"),
-        ("us", "US", "Mar 15, 2025"),
-        ("eu", "EU", "15 Mar 2025"),
-        ("iso", "ISO", "2025-03-15"),
+        ("indian", "Indian", "DD/MM/YYYY"),
+        ("us", "US", "MM/DD/YYYY"),
+        ("eu", "EU", "DD/MM/YYYY"),
+        ("iso", "ISO", "YYYY-MM-DD"),
     ]
     
     dashboards = list(svc.get_dashboard_names()) if hasattr(svc, 'get_dashboard_names') else []
