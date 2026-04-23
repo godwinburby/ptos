@@ -40,53 +40,74 @@ if ! $PYTHON -c "import flask" 2>/dev/null; then
     $PYTHON -m pip install flask tomli-w --quiet
 fi
 
-# ── Check for updates (if not git repo - Android uses zip download) ─────────
-if [ ! -d ".git" ]; then
-    echo "Checking for updates..."
-    rm -rf "$TMP_DIR" 2>/dev/null
-    mkdir -p "$TMP_DIR"
-    
-    curl -f -L -o "$TMP_DIR/ptos.zip" \
-        https://github.com/godwinburby/ptos/archive/refs/heads/main.zip 2>/dev/null
-    
-    if [ $? -eq 0 ] && [ -f "$TMP_DIR/ptos.zip" ]; then
-        mkdir -p "$TMP_DIR/new"
-        unzip -q "$TMP_DIR/ptos.zip" -d "$TMP_DIR/new" 2>/dev/null
-        
-        if [ -d "$TMP_DIR/new/ptos-main" ]; then
-            echo "Updating PTOS code files..."
-            
-            # Preserved directories and files (user data that must not be overwritten)
-            PRESERVED="config records journal notes tasks scripts backups exports templates .version __pycache__ .git"
-            
-            # Copy all files except preserved ones
-            for item in "$TMP_DIR/new/ptos-main"/* "$TMP_DIR/new/ptos-main"/.[!.]*; do
-                [ -e "$item" ] || continue
-                basename=$(basename "$item")
-                skip=0
-                for p in $PRESERVED; do
-                    if [ "$basename" = "$p" ]; then
-                        skip=1
-                        break
-                    fi
-                done
-                if [ $skip -eq 0 ]; then
-                    if [ -d "$item" ]; then
-                        rm -rf "$PTOS_DIR/$basename" 2>/dev/null || true
-                        cp -r "$item" "$PTOS_DIR/" 2>/dev/null || true
-                    else
-                        cp "$item" "$PTOS_DIR/" 2>/dev/null || true
-                    fi
-                fi
-            done
-            
-            echo "Updated from GitHub."
-        fi
+# ── Check for updates via GitHub API ────────────────────────────────────────
+echo "Checking for updates..."
+
+# Fetch latest SHA from GitHub
+LATEST_SHA=$(curl -sf "https://api.github.com/repos/godwinburby/ptos/commits/main" \
+    | grep '"sha"' | head -1 | cut -d'"' -f4)
+
+if [ -z "$LATEST_SHA" ]; then
+    echo "Warning: Could not fetch latest version from GitHub."
+else
+    # Get current SHA (from .git or .version file)
+    CURRENT_SHA=""
+    if [ -d ".git" ]; then
+        CURRENT_SHA=$(git rev-parse HEAD 2>/dev/null)
+    elif [ -f ".version" ]; then
+        CURRENT_SHA=$(cat .version)
     fi
     
-    rm -rf "$TMP_DIR" 2>/dev/null
-else
-    echo "Git repo detected - skipping update check."
+    if [ "$CURRENT_SHA" = "$LATEST_SHA" ]; then
+        echo "Already on latest version."
+    else
+        echo "Updating to latest version..."
+        rm -rf "$TMP_DIR" 2>/dev/null
+        mkdir -p "$TMP_DIR"
+        
+        curl -f -L -o "$TMP_DIR/ptos.zip" \
+            "https://github.com/godwinburby/ptos/archive/refs/heads/main.zip"
+        
+        if [ -f "$TMP_DIR/ptos.zip" ]; then
+            mkdir -p "$TMP_DIR/new"
+            unzip -q "$TMP_DIR/ptos.zip" -d "$TMP_DIR/new"
+            
+            if [ -d "$TMP_DIR/new/ptos-main" ]; then
+                # Preserved directories and files (user data that must not be overwritten)
+                PRESERVED="config records journal notes tasks scripts backups exports templates .version __pycache__ .git"
+                
+                # Copy all files except preserved ones
+                for item in "$TMP_DIR/new/ptos-main"/* "$TMP_DIR/new/ptos-main"/.[!.]*; do
+                    [ -e "$item" ] || continue
+                    basename=$(basename "$item")
+                    skip=0
+                    for p in $PRESERVED; do
+                        if [ "$basename" = "$p" ]; then
+                            skip=1
+                            break
+                        fi
+                    done
+                    if [ $skip -eq 0 ]; then
+                        if [ -d "$item" ]; then
+                            rm -rf "$PTOS_DIR/$basename" 2>/dev/null || true
+                            cp -r "$item" "$PTOS_DIR/" 2>/dev/null || true
+                        else
+                            cp "$item" "$PTOS_DIR/" 2>/dev/null || true
+                        fi
+                    fi
+                done
+                
+                # Save new version
+                echo "$LATEST_SHA" > "$PTOS_DIR/.version"
+                
+                # Make shell scripts executable
+                for f in "$PTOS_DIR"/*.sh; do [ -f "$f" ] && chmod +x "$f"; done
+                
+                echo "Updated to latest version."
+            fi
+        fi
+        rm -rf "$TMP_DIR"
+    fi
 fi
 
 # Stop any existing server
