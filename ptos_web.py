@@ -2159,19 +2159,23 @@ def api_type_fields(rtype):
         
         defs       = _build_field_defs(schema, rtype, context if context else None)
         
+        # Get history suggestions with context filtering (like add/edit)
+        history    = svc.get_history_suggestions(rtype, context if context else None)
+        
         # Add tag field with cascade options if type has tag triggers
         type_schema = schema.get("type", {}).get(rtype, {})
         tag_triggers = type_schema.get("tags", {})
         if tag_triggers:
             # Find the first/primary tag trigger (usually 'category')
             tag_parent = list(tag_triggers.keys())[0] if tag_triggers else None
-            tag_options = []
+            # Schema-based tag options (context-dependent, only from tag triggers)
+            schema_opts = []
             if tag_parent and tag_parent in context:
-                tag_options = tag_triggers.get(tag_parent, {}).get("options", {}).get(context[tag_parent], [])
+                schema_opts = tag_triggers.get(tag_parent, {}).get("options", {}).get(context[tag_parent], [])
             defs.append({
                 "name": "tag",
                 "required": False,
-                "options": tag_options,
+                "options": schema_opts,
                 "is_int": False,
                 "unit": "",
                 "parent": tag_parent or "",
@@ -2204,9 +2208,8 @@ def api_type_fields(rtype):
             if fname not in bad and fdef.get("type") != "int":
                 dimensions.append(fname)
 
-        history    = svc.get_history_suggestions(rtype)
         return jsonify(fields=defs, dimensions=dimensions,
-                       history_tags=history["tags"],
+                       history_tags=history.get("filtered_tags", history.get("tags", [])),
                        history_fields=history["field_values"],
                        history_defaults=history["field_defaults"])
     except Exception as e:

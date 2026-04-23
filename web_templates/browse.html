@@ -37,6 +37,49 @@
       <div id="active-chip-list" class="chip-group"></div>
     </div>
 
+<!-- field selector -->
+    <div style="margin-bottom:8px;">
+      <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">FIELDS</div>
+      <div id="field-chips" class="chip-group"></div>
+    </div>
+
+    <!-- value selector — appears after tapping a field chip -->
+    <div id="value-chip-row" style="display:none;padding:10px;background:var(--bg);
+         border-radius:8px;border:1px solid var(--border);margin-bottom:10px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:11px;color:var(--sub);font-weight:600;">
+          VALUES FOR <span id="value-chip-label" style="color:var(--accent);"></span>
+        </div>
+        <button onclick="closeValueRow()"
+                style="background:none;border:none;font-size:16px;color:var(--sub);
+                       cursor:pointer;padding:0 4px;line-height:1;">✕</button>
+      </div>
+      <div id="value-chips" class="chip-group" style="margin-bottom:6px;"></div>
+      <div id="history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">from history:</div>
+      <div id="history-chips" class="chip-group" style="opacity:0.65;margin-bottom:4px;"></div>
+      <div id="value-text-row" style="display:none;margin-top:8px;flex;gap:8px;">
+        <input type="text" id="value-text-input" placeholder="type a value…"
+               style="flex:1;padding:8px 12px;border-radius:8px;
+                      border:1px solid var(--border);background:var(--card);
+                      color:var(--text);font-size:14px;"
+               onkeydown="if(event.key==='Enter') addTextFilter()">
+        <button onclick="addTextFilter()"
+                style="padding:8px 16px;border-radius:8px;border:none;
+                       background:var(--accent);color:#fff;font-size:14px;
+                       font-weight:600;cursor:pointer;margin-top:6px;">Add</button>
+      </div>
+    </div>
+
+    <!-- Tags section -->
+    <div id="tags-section" style="display:none;margin-bottom:12px;">
+      <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">TAGS</div>
+      <div id="tag-chips" class="chip-group"></div>
+      <div id="tag-history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">from history:</div>
+      <div id="tag-history-chips" class="chip-group"></div>
+    </div>
+
+  </div>
+
     <!-- field selector -->
     <div style="margin-bottom:8px;">
       <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">FIELDS</div>
@@ -55,7 +98,7 @@
                        cursor:pointer;padding:0 4px;line-height:1;">✕</button>
       </div>
       <div id="value-chips" class="chip-group" style="margin-bottom:6px;"></div>
-      <div id="history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">Recent:</div>
+      <div id="history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">from history:</div>
       <div id="history-chips" class="chip-group" style="opacity:0.65;margin-bottom:4px;"></div>
       <div id="value-text-row" style="display:none;margin-top:8px;flex;gap:8px;">
         <input type="text" id="value-text-input" placeholder="type a value…"
@@ -287,7 +330,8 @@ function fetchFields() {
   .then(function(data) {
     _fieldCache[cacheKey] = {
       fields: (data.fields || []).filter(function(f) { return !f.is_int && f.name !== "type"; }),
-      history: data.history_fields || {}
+      history: data.history_fields || {},
+      historyTags: data.history_tags || []
     };
     
     // Update group/sort dropdowns
@@ -309,13 +353,91 @@ function fetchFields() {
     if (savedSort && sortSel && sortSel.querySelector('option[value="'+savedSort+'"]')) sortSel.value = savedSort;
     
     renderFieldChips();
+    renderTagsSection();
     updateWherePreview();
     runBrowse();
   })
   .catch(function() {
-    _fieldCache[cacheKey] = {fields: [], history: {}};
+    _fieldCache[cacheKey] = {fields: [], history: {}, historyTags: []};
     renderFieldChips();
+    renderTagsSection();
   });
+}
+
+// ── Tags section (auto-shows when type selected) ───────────────────────────
+function renderTagsSection() {
+  var tagsSection = document.getElementById("tags-section");
+  var tagChips = document.getElementById("tag-chips");
+  var tagHistLabel = document.getElementById("tag-history-label");
+  var tagHistChips = document.getElementById("tag-history-chips");
+  
+  if (!_browse.type) {
+    tagsSection.style.display = "none";
+    return;
+  }
+  
+  var ctxStr = _getContextStr();
+  var cacheKey = _browse.type + "?" + ctxStr;
+  var cache = _fieldCache[cacheKey] || {fields: [], history: {}, historyTags: []};
+  
+  // Find tag field definition
+  var tagField = cache.fields.find(function(f) { return f.name === "tag"; });
+  if (!tagField) {
+    tagsSection.style.display = "none";
+    return;
+  }
+  
+  var schemaOpts = tagField.options || [];
+  var historyTags = cache.historyTags || [];
+  var historyOpts = historyTags.filter(function(t) { return schemaOpts.indexOf(t) === -1; });
+  
+  if (!schemaOpts.length && !historyOpts.length) {
+    tagsSection.style.display = "none";
+    return;
+  }
+  
+  tagsSection.style.display = "block";
+  tagChips.innerHTML = "";
+  tagHistChips.innerHTML = "";
+  
+  // Schema options
+  schemaOpts.forEach(function(opt) {
+    var already = _browse.chips.some(function(c) { return c.field === "tag" && c.value === opt; });
+    var chip = document.createElement("button");
+    chip.className = "qb-chip" + (already ? " active" : "");
+    chip.textContent = opt;
+    chip.addEventListener("click", function() {
+      toggleTagChip(opt);
+      chip.className = "qb-chip" + (_browse.chips.some(function(c) { return c.field === "tag" && c.value === opt; }) ? " active" : "");
+    });
+    tagChips.appendChild(chip);
+  });
+  
+  // History tags
+  if (historyOpts.length) {
+    tagHistLabel.style.display = "block";
+    historyOpts.forEach(function(tag) {
+      var already = _browse.chips.some(function(c) { return c.field === "tag" && c.value === tag; });
+      var chip = document.createElement("button");
+      chip.className = "qb-chip" + (already ? " active" : "");
+      chip.style.opacity = "0.75";
+      chip.style.fontSize = "12px";
+      chip.style.padding = "4px 9px";
+      chip.textContent = tag;
+      chip.addEventListener("click", function() {
+        toggleTagChip(tag);
+        chip.className = "qb-chip" + (_browse.chips.some(function(c) { return c.field === "tag" && c.value === tag; }) ? " active" : "");
+      });
+      tagHistChips.appendChild(chip);
+    });
+  } else {
+    tagHistLabel.style.display = "none";
+  }
+}
+
+function toggleTagChip(value) {
+  toggleChip("tag", value);
+  renderTagsSection();
 }
 
 // ── Field chips ───────────────────────────────────────────────────────────────
@@ -329,8 +451,9 @@ function renderFieldChips() {
   var fields = cache.fields || [];
   var ctx = _getContext();
   
-  // Filter out fields whose parent is not in context
+  // Filter out fields whose parent is not in context (exclude tag field - shown in dedicated section)
   fields = fields.filter(function(f) {
+    if (f.name === "tag") return false;
     if (!f.has_parent) return true;
     return ctx[f.parent];
   });
@@ -357,7 +480,7 @@ function selectField(fdef) {
   
   var ctxStr = _getContextStr();
   var cacheKey = _browse.type + "?" + ctxStr;
-  var cache = _fieldCache[cacheKey] || {fields: [], history: {}};
+  var cache = _fieldCache[cacheKey] || {fields: [], history: {}, historyTags: []};
   var hist = cache.history || {};
   var recent = (hist[fdef.name] || []).slice(0, 8);
   
@@ -372,10 +495,21 @@ function selectField(fdef) {
   hchips.innerHTML = "";
   vrow.style.display = "block";
   
+  // For tag field, also include history tags from cache
+  var schemaOpts = fdef.options ? fdef.options.slice() : [];
+  var historyTagOpts = [];
+  if (fdef.name === "tag") {
+    historyTagOpts = (cache.historyTags || []).filter(function(t) {
+      return schemaOpts.indexOf(t) === -1;
+    });
+  }
+  
   // Schema options
-  if (fdef.options && fdef.options.length) {
+  if (schemaOpts.length || historyTagOpts.length) {
     vtextR.style.display = "none";
-    fdef.options.forEach(function(opt) {
+    
+    // Schema options (full opacity)
+    schemaOpts.forEach(function(opt) {
       var already = _browse.chips.some(function(c) {
         return c.field === fdef.name && c.value === opt;
       });
@@ -391,24 +525,27 @@ function selectField(fdef) {
       vchips.appendChild(chip);
     });
     
-    // Show history values below schema options
-    if (recent.length) {
+    // "from history" label + history tags (faded)
+    if (historyTagOpts.length) {
       hlabel.style.display = "block";
-      recent.forEach(function(val) {
-        if (fdef.options.indexOf(val) !== -1) return; // skip if in schema
+      historyTagOpts.forEach(function(val) {
+        var already = _browse.chips.some(function(c) {
+          return c.field === fdef.name && c.value === val;
+        });
         var chip = document.createElement("button");
-        chip.className = "qb-chip";
+        chip.className = "qb-chip" + (already ? " active" : "");
+        chip.style.opacity = "0.75";
         chip.style.fontSize = "12px";
         chip.style.padding = "4px 9px";
-        chip.style.opacity = "0.7";
         chip.textContent = val;
         chip.addEventListener("click", function() {
           toggleChip(fdef.name, val);
-          closeValueRow();
+          chip.className = "qb-chip" + (_browse.chips.some(function(c) {
+            return c.field === fdef.name && c.value === val;
+          }) ? " active" : "");
         });
         hchips.appendChild(chip);
       });
-      if (!hchips.children.length) hlabel.style.display = "none";
     } else {
       hlabel.style.display = "none";
     }
@@ -451,10 +588,13 @@ function toggleChip(field, value) {
   }
   renderActive();
   updateWherePreview();
+  renderTagsSection();
   runBrowse();
   
-  // Re-fetch fields when parent chips change
+  // Re-fetch fields when parent chips change (invalidates cache for updated context)
   if (field !== "type") {
+    var cacheKey = _browse.type + "?" + _getContextStr();
+    delete _fieldCache[cacheKey];
     fetchFields();
   }
 }
@@ -745,9 +885,11 @@ function clearBrowse() {
   document.getElementById("chip-builder").style.display = "none";
   document.getElementById("where-preview-card").style.display = "none";
   document.getElementById("value-chip-row").style.display = "none";
+  document.getElementById("tags-section").style.display = "none";
   
-  // Re-render type chips
+  // Re-render type chips and hide tags
   renderTypeChips();
+  renderTagsSection();
   
   document.getElementById("result-area").innerHTML = "";
 }
