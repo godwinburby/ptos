@@ -86,7 +86,7 @@ Backup, Log Editor, and Lint — without cluttering the main navigation.
 ## The web app — your main interface
 
 PTOS is designed to be used through a browser. Open it on your phone, tablet, or
-desktop — no installation beyond the initial setup is needed. The app has ten tabs:
+desktop — no installation beyond the initial setup is needed. The app has eleven tabs:
 
 **Home** — your dashboard at a glance. Key metrics from your configured reports,
 overdue items that need attention, and quick-add buttons for your saved presets.
@@ -111,6 +111,10 @@ or pick a date. Autosaves as you type.
 
 **Schema Builder** — add or change record types without touching any files. Define
 fields, dropdowns, and tags through a visual editor.
+
+**Query Builder** — create custom queries, dashboard metrics, and reports with a visual builder. Pick type, fields, and values as chips.
+
+**Settings** — customize your profile, display (currency, date format), dashboard, billing cycles, and backup preferences.
 
 **Backup** — create backups, download them, restore from a previous backup. One
 button to protect everything.

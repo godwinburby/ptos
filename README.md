@@ -22,6 +22,8 @@ No database. No cloud. You own the data completely.
 - [Web Interface](#web-interface)
 - [Pages reference](#pages-reference)
 - [Schema Builder](#schema-builder)
+- [Query Builder](#query-builder)
+- [Settings](#settings)
 - [Backup & Restore](#backup--restore)
 
 ### Configuration
@@ -257,6 +259,30 @@ types, and conditions. See [Adding a new record type](#adding-a-new-record-type)
 Create full or config-only backups, download existing backups, restore from a local
 backup or uploaded ZIP file, and delete old backups. See [Backup & Restore](#backup--restore).
 
+### Query Builder
+
+Visual builder for creating queries, metrics, and dashboards. Features:
+
+- Type → field → value chip-based workflow
+- Tags section with schema-defined and historical tags
+- Advanced WHERE mode for raw expression editing
+- Custom time window with month picker
+- Live records preview
+- Save as Query or Metric
+
+### Settings
+
+Configure user profile and app preferences. Sections:
+
+- **Profile**: user name
+- **Display**: currency symbol, date format (with live examples)
+- **Dashboard**: default dashboard selection
+- **Custom Cycles**: CRUD for billing cycles (day 1-31)
+- **Backup Folders**: core folders locked, custom folders editable
+- **Backup Settings**: auto backup on startup/shutdown triggers
+
+Settings are stored in `config.toml` and editable via the UI.
+
 ### Lint
 
 Run validation on all records against the schema. Results show errors, warnings, and
@@ -336,20 +362,33 @@ Stored in `backups/` with timestamped names:
 
 ## Configuration
 
+All configuration lives in `config.toml`. Most settings can be edited via the **Settings** page in the web app.
+
 ### config.toml
 
 ```toml
+[user]
+name = "Your Name"           # displayed on dashboard
+
 [editor]
-command = "nvim"        # falls back to $EDITOR, then notepad/nvim by OS
+command = "nvim"            # falls back to $EDITOR, then notepad/nvim by OS
 
 [display]
-currency = "₹"          # prefix shown on all numeric output
+currency = "₹"              # prefix shown on all numeric output
+date_format = "DD/MM/YYYY"   # displayed on home page with live example
 
 [cycles]
-billing_cycle = 26      # billing cycle starting on the 26th
+billing_cycle = 26           # billing cycle day (1-31)
+# Add more cycles: billing_cycle = [26, 15]
 
 [dashboard]
-default = "monthly"     # default dashboard shown on web UI home page
+default = "monthly"          # default dashboard shown on web UI home page
+
+[backup]
+auto_on_startup = true      # auto backup when server starts
+auto_on_shutdown = true    # auto backup when server stops
+only_if_changed = true      # skip backup if files unchanged
+max_backups = 10           # keep last N backups
 ```
 
 ### PTOS_HOME environment variable
