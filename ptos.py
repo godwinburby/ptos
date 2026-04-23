@@ -9,7 +9,6 @@ import shutil
 import subprocess
 import uuid
 import zipfile
-import platform
 
 sys.stdout.reconfigure(encoding="utf-8")
 
@@ -736,52 +735,9 @@ def backup_config():
         _log_error(f"Config backup failed: {e}")
         raise
 
-def _force_remove(path, retries=3, delay=0.3):
-    """Remove file/folder, retrying on Windows lock issues."""
-    if platform.system() == "Windows":
-        try:
-            subprocess.run(["cmd", "/c", "rmdir", "/s", "/q", path], 
-                         capture_output=True, timeout=10)
-            return True
-        except:
-            pass
-    for attempt in range(retries):
-        try:
-            if os.path.isdir(path):
-                shutil.rmtree(path)
-            else:
-                os.remove(path)
-            return True
-        except (PermissionError, OSError):
-            if attempt < retries - 1:
-                time.sleep(delay)
-    return False
-
-def _force_copy(src, dst):
-    """Copy file/folder, retrying on Windows lock issues."""
-    if platform.system() == "Windows":
-        try:
-            subprocess.run(["cmd", "/c", "xcopy", src, dst + "\\", "/e", "/i", "/y"], 
-                         capture_output=True, timeout=60)
-            return True
-        except:
-            pass
-    for attempt in range(3):
-        try:
-            if os.path.isdir(src):
-                shutil.copytree(src, dst)
-            else:
-                shutil.copy2(src, dst)
-            return True
-        except (PermissionError, OSError):
-            if attempt < 2:
-                time.sleep(0.3)
-    return False
-
 def restore_data(zip_path):
     """Restore data from a backup ZIP file.
     Overwrites existing files with the contents of the backup.
-    Uses fully atomic operation: temp extract -> backup old -> copy new -> cleanup.
     """
     if not os.path.exists(zip_path):
         raise FileNotFoundError(f"Backup file not found: {zip_path}")
@@ -789,12 +745,10 @@ def restore_data(zip_path):
     temp_dir = os.path.join(BACKUP_DIR, f".restore-{uuid.uuid4().hex[:8]}")
     
     try:
-        # Extract to temp directory
         os.makedirs(temp_dir)
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(temp_dir)
         
-        # Verify extraction contains mandatory folders (config and records)
         folders_in_zip = {item for item in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, item))}
         
         if "config" not in folders_in_zip:
@@ -802,71 +756,33 @@ def restore_data(zip_path):
         if "records" not in folders_in_zip:
             raise Exception("Invalid backup: records/ folder not found in archive")
         
-        # Fully atomic restore: backup -> copy new -> delete old backup
-        # Step 1: Create .bak backups of existing folders (skip if locked by OneDrive)
-        print("Backing up current files...")
-        bak_dirs = []
         for item in os.listdir(temp_dir):
             src = os.path.join(temp_dir, item)
             dst = os.path.join(BASE_DIR, item)
             
-            if os.path.exists(dst):
-                bak_path = dst + ".bak"
-                if os.path.exists(bak_path):
-                    _force_remove(bak_path)
-                if os.path.isdir(dst):
-                    copied = _force_copy(dst, bak_path)
-                else:
-                    copied = _force_copy(dst, bak_path)
-                if copied:
-                    bak_dirs.append((dst, bak_path))
-        
-        # Step 2: Copy new files from temp to destination
-        print("Restoring files...")
-        try:
-            for item in os.listdir(temp_dir):
-                print(f"  Restoring {item}...")
-                src = os.path.join(temp_dir, item)
-                dst = os.path.join(BASE_DIR, item)
-                
-                if os.path.isdir(src):
-                    if os.path.exists(dst):
-                        _force_remove(dst)
-                    _force_copy(src, dst)
-                else:
-                    if os.path.exists(dst):
-                        _force_remove(dst)
-                    _force_copy(src, dst)
-        except Exception:
-            # Step 2 failed - restore from .bak backups
-            for dst, bak_path in bak_dirs:
+            if os.path.isdir(src):
                 if os.path.exists(dst):
-                    _force_remove(dst)
-                shutil.move(bak_path, dst)
-            raise
+                    shutil.rmtree(dst)
+                shutil.copytree(src, dst)
+            else:
+                if os.path.exists(dst):
+                    os.remove(dst)
+                shutil.copy2(src, dst)
         
-        # Step 3: Success - delete .bak backups
-        for dst, bak_path in bak_dirs:
-            if os.path.exists(bak_path):
-                _force_remove(bak_path)
-        
-        # Step 4: Invalidate caches so web app picks up restored files
         for key in ("config", "schema", "queries", "presets", "derived_fields", "numeric_fields"):
             _CACHE.pop(key, None)
         
-        # Cleanup temp directory
-        _force_remove(temp_dir)
+        shutil.rmtree(temp_dir)
         
     except Exception as e:
         if os.path.exists(temp_dir):
-            _force_remove(temp_dir)
+            shutil.rmtree(temp_dir)
         _log_error(f"Restore failed: {e}")
         raise
 
 def restore_config(zip_path):
     """Restore config from a backup ZIP file (config/ folder only).
     Overwrites existing config files with the contents of the backup.
-    Uses atomic operation: backup old -> copy new -> cleanup.
     """
     if not os.path.exists(zip_path):
         raise FileNotFoundError(f"Backup file not found: {zip_path}")
@@ -874,68 +790,27 @@ def restore_config(zip_path):
     temp_dir = os.path.join(BACKUP_DIR, f".restore-config-{uuid.uuid4().hex[:8]}")
     
     try:
-        # Extract to temp directory
         os.makedirs(temp_dir)
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(temp_dir)
         
-        # Verify extraction contains config folder
         config_temp = os.path.join(temp_dir, "config")
         if not os.path.isdir(config_temp):
             raise Exception("Invalid backup: config/ folder not found in archive")
         
-        # Backup existing config
         config_dst = os.path.join(BASE_DIR, "config")
-        config_bak = config_dst + ".bak"
         if os.path.exists(config_dst):
-            if os.path.isdir(config_dst):
-                if os.path.exists(config_bak):
-                    shutil.rmtree(config_bak)
-                shutil.copytree(config_dst, config_bak)
-            else:
-                shutil.copy2(config_dst, config_bak)
+            shutil.rmtree(config_dst)
+        shutil.copytree(config_temp, config_dst)
         
-        # Copy new config files
-        try:
-            for item in os.listdir(config_temp):
-                src = os.path.join(config_temp, item)
-                dst = os.path.join(config_dst, item)
-                if os.path.exists(dst):
-                    if os.path.isdir(dst):
-                        shutil.rmtree(dst)
-                    else:
-                        os.remove(dst)
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst)
-                else:
-                    shutil.copy2(src, dst)
-        except Exception:
-            # Restore from backup
-            if os.path.exists(config_dst):
-                if os.path.isdir(config_dst):
-                    shutil.rmtree(config_dst)
-                else:
-                    os.remove(config_dst)
-            if os.path.exists(config_bak):
-                shutil.move(config_bak, config_dst)
-            raise
-        
-        # Success - delete backup
-        if os.path.exists(config_bak):
-            if os.path.isdir(config_bak):
-                _force_remove(config_bak)
-            else:
-                os.remove(config_bak)
-        
-        # Invalidate config cache so web app picks up restored files
         for key in ("config",):
             _CACHE.pop(key, None)
         
-        _force_remove(temp_dir)
+        shutil.rmtree(temp_dir)
         
     except Exception as e:
         if os.path.exists(temp_dir):
-            _force_remove(temp_dir)
+            shutil.rmtree(temp_dir)
         _log_error(f"Config restore failed: {e}")
         raise
 
