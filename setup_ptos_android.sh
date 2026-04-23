@@ -99,13 +99,12 @@ fi
 # ── Download Android scripts to $HOME ────────────────────────────────────────
 echo ""
 echo "Downloading scripts..."
-for script in start_ptos_android.sh update_ptos_android.sh setup_ptos_android.sh; do
+for script in start_ptos_android.sh setup_ptos_android.sh; do
     curl -fsSL "https://raw.githubusercontent.com/godwinburby/ptos/main/$script" \
          -o "$HOME/$script" 2>/dev/null || true
     chmod +x "$HOME/$script" 2>/dev/null || true
 done
 chmod +x "$HOME/start_ptos_android.sh" \
-         "$HOME/update_ptos_android.sh" \
          "$HOME/setup_ptos_android.sh" 2>/dev/null || true
 
 # ── Refresh widget shortcuts ────────────────────────────────────────────────────
@@ -114,7 +113,6 @@ echo "Creating widget shortcuts..."
 mkdir -p "$HOME/.shortcuts"
 rm -f "$HOME/.shortcuts"/*.sh
 ln -s "$HOME/start_ptos_android.sh" "$HOME/.shortcuts/Start_PTOS.sh" 2>/dev/null || true
-ln -s "$HOME/update_ptos_android.sh" "$HOME/.shortcuts/Update_PTOS.sh" 2>/dev/null || true
 echo "Shortcuts created."
 
 echo ""

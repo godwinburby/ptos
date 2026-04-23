@@ -1,6 +1,7 @@
 #!/bin/bash
 # PTOS Start Script for Linux
 # Run from the PTOS folder: ./start_ptos_linux.sh
+# Automatically updates from git if available, then starts the server.
 
 echo "=========================================="
 echo "  PTOS Web Server"
@@ -33,7 +34,23 @@ if [ -z "$PYTHON" ]; then
     exit 1
 fi
 
+# ── Check for updates (if git repo) ───────────────────────────────────────────
+if [ -d ".git" ]; then
+    echo "Checking for updates..."
+    git pull || true
+    echo "Already up to date."
+else
+    echo "Not a git repo - skipping update check."
+fi
+
+# ── Check/install dependencies ────────────────────────────────────────────────
+if ! $PYTHON -c "import flask" 2>/dev/null; then
+    echo "Installing Flask and tomli-w..."
+    $PYTHON -m pip install flask tomli-w --break-system-packages --quiet
+fi
+
 # ── Kill any existing PTOS server ────────────────────────────────────────────
+echo ""
 echo "Checking for existing server..."
 pkill -f "python.*ptos_web.py" 2>/dev/null || true
 

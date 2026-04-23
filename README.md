@@ -90,15 +90,7 @@ Download all files from the repository, then run the setup script for your platf
 | Windows | `setup_ptos_windows.bat` | `start_ptos_windows.bat` |
 | Android/Termux | `bash setup_ptos_android.sh` | `bash start_ptos_android.sh` |
 
-**Update PTOS:**
-
-| Platform | Command |
-|----------|---------|
-| Linux / macOS | `bash update_ptos_linux.sh` |
-| Windows | `update_ptos_windows.bat` |
-| Android/Termux | `bash update_ptos_android.sh` |
-
-Or update directly from the web UI by clicking the Update button in the top banner.
+The start script automatically checks for updates from GitHub and starts the server.
 
 The setup script creates all folders and config files. `--init` (CLI equivalent) is
 safe to re-run — it will not overwrite existing files.
@@ -115,12 +107,9 @@ ptos/
 ├── setup_ptos_linux.sh    # Linux setup script
 ├── setup_ptos_windows.bat  # Windows setup script
 ├── setup_ptos_android.sh   # Android/Termux setup script
-├── start_ptos_linux.sh     # Linux start script
-├── start_ptos_windows.bat  # Windows start script
-├── start_ptos_android.sh   # Android/Termux start script
-├── update_ptos_linux.sh    # Linux update script
-├── update_ptos_windows.bat # Windows update script
-├── update_ptos_android.sh   # Android/Termux update script
+├── start_ptos_linux.sh     # Linux start script (auto-updates)
+├── start_ptos_windows.bat  # Windows start script (auto-updates)
+├── start_ptos_android.sh   # Android/Termux start script (auto-updates)
 ├── config/
 │   ├── config.toml      # Editor, currency, cycles, dashboard
 │   ├── schema.toml      # Record types, fields, validation

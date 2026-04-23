@@ -89,7 +89,7 @@ if [ "$INIT_NEEDED" = true ]; then
 fi
 
 # ── Make companion scripts executable ────────────────────────────────────────
-for script in start_ptos_linux.sh update_ptos_linux.sh; do
+for script in start_ptos_linux.sh; do
     [ -f "$PTOS_DIR/$script" ] && chmod +x "$PTOS_DIR/$script" && echo "Marked executable: $script"
 done
 
