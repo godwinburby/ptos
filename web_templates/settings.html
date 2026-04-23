@@ -1,0 +1,241 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-title">Settings</div>
+
+<div id="save-msg" style="display:none;margin-bottom:14px;"></div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Profile</div>
+  <div class="field-group">
+    <label>User Name</label>
+    <input type="text" id="user-name" value="{{ user_name }}" placeholder="Your name">
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Display</div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;">
+    <div class="field-group" style="flex:1;min-width:120px;">
+      <label>Currency Symbol</label>
+      <input type="text" id="currency" value="{{ currency }}" placeholder="₹" maxlength="5" style="width:80px;">
+    </div>
+    <div class="field-group" style="flex:1;min-width:160px;">
+      <label>Date Format</label>
+      <select id="date-format">
+        {% for code, label, example in date_formats %}
+        <option value="{{ code }}" {% if code == date_format %}selected{% endif %}>{{ label }} — {{ example }}</option>
+        {% endfor %}
+      </select>
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Dashboard</div>
+  <div class="field-group" style="flex:1;min-width:160px;">
+    <label>Default Dashboard</label>
+    <select id="default-dashboard">
+      <option value="">— none —</option>
+      {% for db in dashboards %}
+      <option value="{{ db }}" {% if db == default_dashboard %}selected{% endif %}>{{ db }}</option>
+      {% endfor %}
+    </select>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Custom Cycles</div>
+  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Define billing/reporting cycles as day-of-month they start. Usage: <code>-t clinic</code> (current) or <code>-t clinic-1</code> (previous)
+  </p>
+  <table id="cycles-table" style="width:100%;border-collapse:collapse;">
+    <thead>
+      <tr style="border-bottom:1px solid var(--border);">
+        <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--sub);font-weight:600;">Name</th>
+        <th style="text-align:left;padding:8px 12px;font-size:12px;color:var(--sub);font-weight:600;width:80px;">Day (1-31)</th>
+        <th style="text-align:right;padding:8px 12px;font-size:12px;color:var(--sub);font-weight:600;width:50px;">Delete</th>
+      </tr>
+    </thead>
+    <tbody id="cycles-tbody">
+    </tbody>
+  </table>
+  <button onclick="addCycle()" class="btn btn-ghost btn-sm" style="margin-top:12px;">+ Add Cycle</button>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Backup Folders</div>
+  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Folders to include in full backup. Core folders (records, config, templates, journal) are always included and cannot be removed.
+  </p>
+  <div id="backup-folders-list" style="display:flex;flex-direction:column;gap:8px;"></div>
+  <div style="display:flex;gap:10px;margin-top:12px;">
+    <input type="text" id="new-folder-input" placeholder="Add custom folder (e.g., notes)" style="flex:1;font-size:14px;">
+    <button onclick="addBackupFolder()" class="btn btn-ghost btn-sm">Add</button>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Backup Settings</div>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;">
+      <input type="checkbox" id="auto-backup-startup" style="width:18px;height:18px;">
+      Auto backup on startup
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;">
+      <input type="checkbox" id="auto-backup-shutdown" style="width:18px;height:18px;">
+      Auto backup on shutdown
+    </label>
+    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;">
+      <input type="checkbox" id="backup-if-changed" style="width:18px;height:18px;">
+      Backup if files changed
+    </label>
+  </div>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;">
+    <div class="field-group" style="flex:1;min-width:120px;">
+      <label>Max Full Backups</label>
+      <input type="number" id="max-full-backups" min="1" max="100" style="width:80px;">
+    </div>
+    <div class="field-group" style="flex:1;min-width:120px;">
+      <label>Max Config Backups</label>
+      <input type="number" id="max-config-backups" min="1" max="100" style="width:80px;">
+    </div>
+  </div>
+</div>
+
+<div style="display:flex;gap:10px;margin-top:20px;">
+  <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
+</div>
+
+<script>
+(function() {
+  var cycles = {{ cycles | tojson }};
+  var coreFolders = ["records", "config", "templates", "journal"];
+  var backupFolders = {{ backup_folders | tojson }};
+  
+  document.getElementById("auto-backup-startup").checked = {{ 'true' if backup.get('auto_backup_on_startup', true) else 'false' }};
+  document.getElementById("auto-backup-shutdown").checked = {{ 'true' if backup.get('auto_backup_on_shutdown', true) else 'false' }};
+  document.getElementById("backup-if-changed").checked = {{ 'true' if backup.get('backup_if_files_changed', true) else 'false' }};
+  document.getElementById("max-full-backups").value = {{ backup.get('max_full_backups', 10) }};
+  document.getElementById("max-config-backups").value = {{ backup.get('max_config_backups', 10) }};
+  
+  function renderBackupFolders() {
+    var list = document.getElementById("backup-folders-list");
+    list.innerHTML = "";
+    backupFolders.forEach(function(folder) {
+      var isCore = coreFolders.indexOf(folder) !== -1;
+      var div = document.createElement("div");
+      div.style.cssText = "display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:6px;background:var(--bg);";
+      div.innerHTML =
+        '<span style="flex:1;font-size:14px;">' + folder + (isCore ? ' <span style="font-size:11px;color:var(--sub);">(core)</span>' : '') + '</span>' +
+        (isCore ? '<span style="font-size:12px;color:var(--sub);">locked</span>' :
+          '<button onclick="removeBackupFolder(\'' + folder + '\')" style="background:none;border:none;color:var(--error);cursor:pointer;font-size:16px;">✕</button>');
+      list.appendChild(div);
+    });
+  }
+  
+  window.addBackupFolder = function() {
+    var input = document.getElementById("new-folder-input");
+    var name = input.value.trim().toLowerCase().replace(/[^a-z0-9_-]/g, "-");
+    if (name && backupFolders.indexOf(name) === -1) {
+      backupFolders.push(name);
+      input.value = "";
+      renderBackupFolders();
+    }
+  };
+  
+  window.removeBackupFolder = function(folder) {
+    var idx = backupFolders.indexOf(folder);
+    if (idx !== -1) {
+      backupFolders.splice(idx, 1);
+      renderBackupFolders();
+    }
+  };
+  
+  function renderCycles() {
+    var tbody = document.getElementById("cycles-tbody");
+    tbody.innerHTML = "";
+    cycles.forEach(function(c, i) {
+      var tr = document.createElement("tr");
+      tr.style.borderBottom = "1px solid var(--border)";
+      tr.innerHTML =
+        '<td style="padding:8px 12px;"><input type="text" value="'+c.name+'" placeholder="cycle-name"'+
+        ' style="width:100%;font-size:14px;" data-cycle-idx="'+i+'" data-field="name" oninput="updateCycle(this)"></td>'+
+        '<td style="padding:8px 12px;"><input type="number" value="'+c.day+'" min="1" max="31"'+
+        ' style="width:70px;font-size:14px;" data-cycle-idx="'+i+'" data-field="day" oninput="updateCycle(this)"></td>'+
+        '<td style="padding:8px 12px;text-align:right;"><button onclick="removeCycle('+i+')" '+
+        ' style="background:none;border:none;color:var(--error);cursor:pointer;font-size:16px;">✕</button></td>';
+      tbody.appendChild(tr);
+    });
+  }
+  
+  window.addCycle = function() {
+    cycles.push({name: "", day: 1});
+    renderCycles();
+  };
+  
+  window.removeCycle = function(idx) {
+    cycles.splice(idx, 1);
+    renderCycles();
+  };
+  
+  window.updateCycle = function(input) {
+    var idx = parseInt(input.dataset.cycleIdx);
+    var field = input.dataset.field;
+    cycles[idx][field] = field === "day" ? parseInt(input.value) || 1 : input.value;
+  };
+  
+  window.saveSettings = function() {
+    var userName = document.getElementById("user-name").value.trim();
+    var currency = document.getElementById("currency").value.trim();
+    var dateFormat = document.getElementById("date-format").value;
+    var defaultDashboard = document.getElementById("default-dashboard").value;
+    
+    var validCycles = cycles.filter(function(c) { return c.name && c.day; })
+      .map(function(c) { return {name: c.name.toLowerCase().replace(/[^a-z0-9-]/g, "-"), day: c.day}; });
+    
+    fetch("/settings/save", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({
+        user_name: userName,
+        currency: currency,
+        date_format: dateFormat,
+        cycles: validCycles,
+        auto_backup_on_startup: document.getElementById("auto-backup-startup").checked,
+        auto_backup_on_shutdown: document.getElementById("auto-backup-shutdown").checked,
+        backup_if_files_changed: document.getElementById("backup-if-changed").checked,
+        max_full_backups: parseInt(document.getElementById("max-full-backups").value) || 10,
+        max_config_backups: parseInt(document.getElementById("max-config-backups").value) || 10,
+        default_dashboard: defaultDashboard,
+        backup_folders: backupFolders
+      })
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      var msg = document.getElementById("save-msg");
+      if (data.ok) {
+        msg.className = "msg msg-success";
+        msg.textContent = "Settings saved successfully";
+      } else {
+        msg.className = "msg msg-error";
+        msg.textContent = "Error: " + (data.error || "Save failed");
+      }
+      msg.style.display = "block";
+      msg.scrollIntoView({behavior: "smooth"});
+      setTimeout(function() { msg.style.display = "none"; }, 3000);
+    })
+    .catch(function(err) {
+      var msg = document.getElementById("save-msg");
+      msg.className = "msg msg-error";
+      msg.textContent = "Error: " + err.message;
+      msg.style.display = "block";
+    });
+  };
+  
+  renderCycles();
+  renderBackupFolders();
+})();
+</script>
+
+{% endblock %}

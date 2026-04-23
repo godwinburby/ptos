@@ -132,6 +132,24 @@ def get_config():
     return ptos.get_config()
 
 
+def save_config(config_dict):
+    """Save PTOS configuration.
+    
+    Args:
+        config_dict: Configuration dict to save to config.toml.
+    
+    Returns:
+        dict: Result with ok and message.
+    """
+    try:
+        import tomli_w
+        with open(ptos.CONFIG_PATH, "wb") as f:
+            tomli_w.dump(config_dict, f)
+        return {"ok": True, "message": "Settings saved"}
+    except Exception as e:
+        return {"ok": False, "message": str(e)}
+
+
 def get_schema():
     """Get record schema definition.
     

@@ -763,6 +763,84 @@ def schema_builder_preview_lint():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/settings")
+def settings_page():
+    cfg = svc.get_config()
+    user = cfg.get("user", {})
+    display = cfg.get("display", {})
+    cycles_raw = cfg.get("cycles", {})
+    backup = cfg.get("backup", {})
+    dashboard = cfg.get("dashboard", {})
+    
+    cycles = [{"name": k, "day": v} for k, v in cycles_raw.items()]
+    
+    date_formats = [
+        ("indian", "Indian", "15 Mar 2025"),
+        ("us", "US", "Mar 15, 2025"),
+        ("eu", "EU", "15 Mar 2025"),
+        ("iso", "ISO", "2025-03-15"),
+    ]
+    
+    dashboards = list(svc.get_dashboard_names()) if hasattr(svc, 'get_dashboard_names') else []
+    
+    return render_template("settings.html",
+        tab="settings", title="Settings", now=_now_str(),
+        user_name=user.get("name", ""),
+        currency=display.get("currency", "₹"),
+        date_format=display.get("date_format", "indian"),
+        date_formats=date_formats,
+        cycles=cycles,
+        backup=backup,
+        backup_folders=backup.get("folders", []),
+        dashboards=dashboards,
+        default_dashboard=dashboard.get("default", ""))
+
+
+@app.route("/settings/save", methods=["POST"])
+def settings_save():
+    try:
+        data = request.get_json(silent=True) or {}
+        cfg = svc.get_config()
+        
+        if "user_name" in data:
+            cfg.setdefault("user", {})["name"] = data["user_name"]
+        if "currency" in data:
+            cfg.setdefault("display", {})["currency"] = data["currency"]
+        if "date_format" in data:
+            cfg.setdefault("display", {})["date_format"] = data["date_format"]
+        if "cycles" in data and isinstance(data["cycles"], list):
+            cfg["cycles"] = {c["name"]: int(c["day"]) for c in data["cycles"] if c.get("name") and c.get("day")}
+        
+        if "auto_backup_on_startup" in data or "auto_backup_on_shutdown" in data or "backup_if_files_changed" in data:
+            cfg.setdefault("backup", {})["auto_backup_on_startup"] = bool(data.get("auto_backup_on_startup"))
+            cfg.setdefault("backup", {})["auto_backup_on_shutdown"] = bool(data.get("auto_backup_on_shutdown"))
+            cfg.setdefault("backup", {})["backup_if_files_changed"] = bool(data.get("backup_if_files_changed"))
+        
+        if "max_full_backups" in data:
+            cfg.setdefault("backup", {})["max_full_backups"] = max(1, min(100, int(data["max_full_backups"])))
+        if "max_config_backups" in data:
+            cfg.setdefault("backup", {})["max_config_backups"] = max(1, min(100, int(data["max_config_backups"])))
+        
+        if "default_dashboard" in data:
+            db_val = data["default_dashboard"]
+            cfg["dashboard"] = {"default": db_val} if db_val else {}
+        
+        if "backup_folders" in data and isinstance(data["backup_folders"], list):
+            core_folders = ["records", "config", "templates", "journal"]
+            valid_folders = list(data["backup_folders"])
+            for cf in core_folders:
+                if cf not in valid_folders:
+                    valid_folders.insert(0, cf)
+            cfg.setdefault("backup", {})["folders"] = valid_folders
+        
+        result = svc.save_config(cfg)
+        if result.get("ok"):
+            return jsonify(ok=True)
+        return jsonify(ok=False, error=result.get("message", "Save failed"))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Backup
 # ══════════════════════════════════════════════════════════════════════════════
