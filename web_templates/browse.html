@@ -114,10 +114,28 @@
     </div>
   </div>
 
-  <!-- ── WHERE Preview ── -->
-  <div id="where-preview-card" style="display:none;margin-bottom:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
-    <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">PREVIEW</div>
-    <pre id="where-preview" style="margin:0;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;"></pre>
+  <!-- ── Advanced Editor ── -->
+  <div id="advanced-section" style="margin-bottom:12px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+      <div style="font-size:11px;color:var(--sub);font-weight:600;">WHERE</div>
+      <button id="adv-toggle-btn" onclick="toggleAdvancedMode()"
+              style="background:none;border:none;font-size:11px;color:var(--accent);cursor:pointer;font-weight:600;">
+        Edit
+      </button>
+    </div>
+    <div id="adv-preview" style="display:block;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
+      <pre id="where-preview" style="margin:0;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;"></pre>
+    </div>
+    <div id="adv-editor" style="display:none;">
+      <textarea id="where-editor" rows="3"
+               style="width:100%;font-family:monospace;font-size:12px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);resize:vertical;"
+               placeholder="e.g. type=followup AND intent=trial AND (tag=a OR tag=b)"></textarea>
+      <div style="display:flex;gap:8px;margin-top:8px;">
+        <button class="btn btn-primary btn-sm" onclick="applyAdvancedExpr()">Apply</button>
+        <button class="btn btn-ghost btn-sm" onclick="cancelAdvancedExpr()">Cancel</button>
+      </div>
+      <div class="hint" style="margin-top:6px;">= != &gt; &lt; &gt;= &lt;= ~(contains) !~(not contains) · AND OR NOT ( )</div>
+    </div>
   </div>
 
   <!-- ── Time and Group ── -->
@@ -158,22 +176,6 @@
     <label>Search</label>
     <input type="text" id="b-search" placeholder="full-text search…"
            oninput="debouncedBrowse()">
-  </div>
-
-  <!-- ── Expression filter ── -->
-  <div class="field-group" style="margin-bottom:12px;">
-    <label style="display:flex;align-items:center;justify-content:space-between;">
-      <span>Expression filter</span>
-      <button onclick="toggleExprMode()" id="expr-toggle-btn"
-              style="background:none;border:none;font-size:11px;color:var(--accent);
-                     cursor:pointer;font-weight:600;padding:0;">show</button>
-    </label>
-    <div id="expr-row" style="display:none;">
-      <input type="text" id="b-expr"
-             placeholder='e.g. AND (domain=self OR domain=home)'
-             oninput="updateWherePreview(); debouncedBrowse()" style="font-family:monospace;font-size:13px;">
-      <div class="hint">= != &gt; &lt; &gt;= &lt;= ~(contains) !~(not contains) · AND OR NOT ( )</div>
-    </div>
   </div>
 
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
@@ -400,15 +402,15 @@ function renderTagsSection() {
   tagChips.innerHTML = "";
   tagHistChips.innerHTML = "";
   
-  // Schema options
+  // Schema options (only show selected if it's tag=value, not tag!=value)
   schemaOpts.forEach(function(opt) {
-    var already = _browse.chips.some(function(c) { return c.field === "tag" && c.value === opt; });
+    var already = _browse.chips.some(function(c) { return c.field === "tag" && c.op === "=" && c.value === opt; });
     var chip = document.createElement("button");
     chip.className = "qb-chip" + (already ? " active" : "");
     chip.textContent = opt;
     chip.addEventListener("click", function() {
       toggleTagChip(opt);
-      chip.className = "qb-chip" + (_browse.chips.some(function(c) { return c.field === "tag" && c.value === opt; }) ? " active" : "");
+      chip.className = "qb-chip" + (_browse.chips.some(function(c) { return c.field === "tag" && c.op === "=" && c.value === opt; }) ? " active" : "");
     });
     tagChips.appendChild(chip);
   });
@@ -417,7 +419,7 @@ function renderTagsSection() {
   if (historyOpts.length) {
     tagHistLabel.style.display = "block";
     historyOpts.forEach(function(tag) {
-      var already = _browse.chips.some(function(c) { return c.field === "tag" && c.value === tag; });
+      var already = _browse.chips.some(function(c) { return c.field === "tag" && c.op === "=" && c.value === tag; });
       var chip = document.createElement("button");
       chip.className = "qb-chip" + (already ? " active" : "");
       chip.style.opacity = "0.75";
@@ -426,7 +428,7 @@ function renderTagsSection() {
       chip.textContent = tag;
       chip.addEventListener("click", function() {
         toggleTagChip(tag);
-        chip.className = "qb-chip" + (_browse.chips.some(function(c) { return c.field === "tag" && c.value === tag; }) ? " active" : "");
+        chip.className = "qb-chip" + (_browse.chips.some(function(c) { return c.field === "tag" && c.op === "=" && c.value === tag; }) ? " active" : "");
       });
       tagHistChips.appendChild(chip);
     });
@@ -644,13 +646,12 @@ window.removeFilter = function(idx) {
 // ── WHERE Preview ────────────────────────────────────────────────────────────
 function updateWherePreview() {
   var el = document.getElementById("where-preview");
-  var card = document.getElementById("where-preview-card");
   
   var lines = [];
   
   // Build WHERE from chips
   var whereParts = _browse.chips.map(function(c) { return c.field + c.op + c.value; });
-  var expr = document.getElementById("b-expr").value.trim();
+  var expr = document.getElementById("b-expr") ? document.getElementById("b-expr").value.trim() : "";
   if (expr) whereParts.push(expr);
   
   if (whereParts.length) {
@@ -676,21 +677,112 @@ function updateWherePreview() {
     lines.push("search = \"" + searchEl.value.trim() + "\"");
   }
   
-  // Show/hide preview card
+  // Show/hide preview card (always visible when chip-builder is visible)
   if (lines.length) {
-    card.style.display = "block";
     el.innerHTML = lines.join("\n");
   } else {
-    card.style.display = "none";
-    el.innerHTML = "";
+    el.innerHTML = "# no filters";
   }
 }
 
-// ── Expression toggle ───────────────────────────────────────────────────────
+// ── Advanced mode ────────────────────────────────────────────────────────────
+var _advMode = false;
+var _savedChips = [];
+
+window.toggleAdvancedMode = function() {
+  var previewEl = document.getElementById("adv-preview");
+  var editorEl = document.getElementById("adv-editor");
+  var toggleBtn = document.getElementById("adv-toggle-btn");
+  var editor = document.getElementById("where-editor");
+  
+  if (!_advMode) {
+    // Enter edit mode - save chips, show editor with current WHERE
+    _savedChips = _browse.chips.slice();
+    _advMode = true;
+    previewEl.style.display = "none";
+    editorEl.style.display = "block";
+    toggleBtn.textContent = "Cancel";
+    // Populate editor with WHERE clause
+    var whereParts = _browse.chips.map(function(c) { return c.field + c.op + c.value; });
+    editor.value = whereParts.join(" AND ");
+    editor.focus();
+  } else {
+    // Cancel edit mode
+    _advMode = false;
+    previewEl.style.display = "block";
+    editorEl.style.display = "none";
+    toggleBtn.textContent = "Edit";
+  }
+};
+
+window.applyAdvancedExpr = function() {
+  var editor = document.getElementById("where-editor");
+  var expr = editor.value.trim();
+  
+  if (expr) {
+    // Parse expression into chips (simple parser for basic expressions)
+    _browse.chips = parseExprToChips(expr);
+    renderActive();
+    renderTagsSection();
+    // Invalidate cache and re-fetch if type changed
+    if (_browse.type) {
+      var cacheKey = _browse.type + "?" + _getContextStr();
+      delete _fieldCache[cacheKey];
+      fetchFields();
+    }
+  } else {
+    // Clear all chips if expression is empty
+    _browse.chips = [];
+    renderActive();
+    renderTagsSection();
+  }
+  
+  // Exit edit mode
+  _advMode = false;
+  document.getElementById("adv-preview").style.display = "block";
+  document.getElementById("adv-editor").style.display = "none";
+  document.getElementById("adv-toggle-btn").textContent = "Edit";
+  
+  updateWherePreview();
+  runBrowse();
+};
+
+window.cancelAdvancedExpr = function() {
+  // Restore chips from before edit
+  _browse.chips = _savedChips.slice();
+  _advMode = false;
+  document.getElementById("adv-preview").style.display = "block";
+  document.getElementById("adv-editor").style.display = "none";
+  document.getElementById("adv-toggle-btn").textContent = "Edit";
+  renderActive();
+  renderTagsSection();
+};
+
+// Simple expression parser: "type=followup AND intent=trial" → chips
+function parseExprToChips(expr) {
+  var chips = [];
+  // Remove where = "..." wrapper if present
+  expr = expr.replace(/^where\s*=\s*["']?/, "").replace(/["']?\s*$/, "");
+  // Split by AND (but not inside parentheses)
+  var parts = expr.split(/\s+AND\s+/i);
+  parts.forEach(function(part) {
+    part = part.trim();
+    if (!part) return;
+    // Match field=operator+value
+    var match = part.match(/^(\w+)(\s*[!=<>~]+)\s*(.+)$/);
+    if (match) {
+      var field = match[1].toLowerCase();
+      var op = match[2].trim();
+      var value = match[3].trim().replace(/^[("']|["')]$/g, "");
+      chips.push({field: field, op: op, value: value});
+    }
+  });
+  return chips;
+}
+
+// ── Expression toggle (legacy - keep for compatibility) ────────────────────
 window.toggleExprMode = function() {
-  _exprVisible = !_exprVisible;
-  document.getElementById("expr-row").style.display = _exprVisible ? "block" : "none";
-  document.getElementById("expr-toggle-btn").textContent = _exprVisible ? "hide" : "show";
+  toggleAdvancedMode();
 };
 
 // ── Init ────────────────────────────────────────────────────────────────────
@@ -825,7 +917,7 @@ function _params() {
   const search = document.getElementById("b-search") ? document.getElementById("b-search").value.trim() : "";
   const group  = document.getElementById("b-group")  ? document.getElementById("b-group").value  : "";
   const sort   = document.getElementById("b-sort")   ? document.getElementById("b-sort").value   : "";
-  const exprEl = document.getElementById("b-expr");
+  const exprEl = document.getElementById("where-editor");
   const expr   = exprEl ? exprEl.value.trim() : "";
   
   // Build where from state
@@ -870,6 +962,7 @@ function clearBrowse() {
   _browse._activeField = null;
   _browse.exprManual = "";
   _fieldCache = {};
+  _advMode = false;
   
   // Reset UI
   document.getElementById("b-search").value = "";
@@ -881,9 +974,13 @@ function clearBrowse() {
   window._bCloseMonthPicker();
   document.getElementById("b-month-text").textContent = "Pick a month";
   
+  // Reset advanced mode UI
+  document.getElementById("adv-preview").style.display = "block";
+  document.getElementById("adv-editor").style.display = "none";
+  document.getElementById("adv-toggle-btn").textContent = "Edit";
+  
   // Hide builder elements
   document.getElementById("chip-builder").style.display = "none";
-  document.getElementById("where-preview-card").style.display = "none";
   document.getElementById("value-chip-row").style.display = "none";
   document.getElementById("tags-section").style.display = "none";
   
