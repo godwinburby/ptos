@@ -265,10 +265,20 @@
   {% if recent_cols %}
   <div style="overflow-x:auto;">
     <table class="data-table">
-      <thead><tr>{% for c in recent_cols %}<th>{{ c }}</th>{% endfor %}</tr></thead>
+      <thead><tr>{% for c in recent_cols %}<th>{{ c }}</th>{% endfor %}<th style="width:80px"></th></tr></thead>
       <tbody>
         {% for row in recent_rows %}
-        <tr>{% for c in recent_cols %}<td>{{ row.get(c,'') }}</td>{% endfor %}</tr>
+        <tr>
+          {% for c in recent_cols %}<td>{{ row.get(c,'') }}</td>{% endfor %}
+          <td style="white-space:nowrap;">
+            {% if row._line %}
+            <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
+              href="/edit?filepath={{ row._filepath|urlencode }}&lineno={{ row._lineno }}&line={{ row._line|urlencode }}&return_to=/">✎</a>
+            <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
+              onclick="openDelete({{ loop.index0 }})">✕</button>
+            {% endif %}
+          </td>
+        </tr>
         {% endfor %}
       </tbody>
     </table>
@@ -277,8 +287,66 @@
 </div>
 {% endif %}
 
-{% if multi_presets %}
+<!-- delete modal -->
+<div id="del-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;max-width:420px;width:90%;box-shadow:0 12px 40px rgba(0,0,0,.25);">
+    <div style="font-weight:700;font-size:16px;margin-bottom:12px;">Delete Record?</div>
+    <div id="del-line" style="font-family:monospace;font-size:12px;background:var(--bg);padding:10px;border-radius:8px;margin-bottom:16px;word-break:break-all;"></div>
+    <div id="del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn btn-ghost" onclick="closeDelete()">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--error);" onclick="doDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
 <script>
+window._recentRecords = {{ recent_rows|tojson }};
+
+function openDelete(idx) {
+  var r = (window._recentRecords || [])[idx];
+  if (!r || !r._line) return;
+  window._editRecord = r;
+  document.getElementById("del-line").textContent = r._line;
+  document.getElementById("del-msg").style.display = "none";
+  document.getElementById("del-dialog").style.display = "flex";
+}
+
+function closeDelete() { document.getElementById("del-dialog").style.display = "none"; }
+
+function doDelete() {
+  var r = window._editRecord;
+  if (!r) return;
+  var msg = document.getElementById("del-msg");
+  fetch("/api/records/delete", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      filepath: r._filepath,
+      old_line: r._line,
+      lineno: r._lineno
+    })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      closeDelete();
+      window.location.reload();
+    } else {
+      msg.textContent = d.error || "Delete failed";
+      msg.style.display = "block";
+    }
+  })
+  .catch(function(e) {
+    msg.textContent = String(e);
+    msg.style.display = "block";
+  });
+}
+
+document.getElementById("del-dialog").addEventListener("click", function(e) {
+  if (e.target === this) closeDelete();
+});
+
 function addMultiPreset(name, btn) {
   const today = new Date().toISOString().split("T")[0];
   const msg   = document.getElementById("multi-msg-home");
@@ -317,8 +385,6 @@ function addMultiPreset(name, btn) {
     msg.style.display = "block";
   });
 }
-
 </script>
-{% endif %}
 
 {% endblock %}
