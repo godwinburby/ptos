@@ -1,0 +1,594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <title>PTOS{% if title %} · {{ title }}{% endif %}</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:        #F4F6FB;
+      --card:      #FFFFFF;
+      --border:    #E4E7EF;
+      --accent:    #4F6BED;
+      --accent-d:  #3A54D4;
+      --accent-lt: #EEF1FB;
+      --success:   #2E7D56;
+      --success-lt:#EBF5F0;
+      --error:     #C0392B;
+      --error-lt:  #FDECEA;
+      --warn:      #E8803A;
+      --text:      #1A1D2E;
+      --sub:       #6B7280;
+      --nav-h:     60px;
+      --safe-b:    env(safe-area-inset-bottom, 0px);
+      --sidebar-w: 220px;
+    }
+    html, body { height: 100%; }
+    body {
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-size: 16px; background: var(--bg); color: var(--text);
+      display: flex; flex-direction: column; min-height: 100%;
+      -webkit-text-size-adjust: 100%;
+    }
+    /* slightly larger text on small screens for readability */
+    @media (max-width: 767px) {
+      body        { font-size: 16px; }
+      .stat-value { font-size: 26px !important; }
+      .card       { padding: 16px; }
+      label       { font-size: 13px; }
+      input[type=text], input[type=number], input[type=date], select, textarea {
+        font-size: 16px; /* prevents iOS zoom on focus */
+        padding: 12px 14px;
+      }
+      .btn        { font-size: 16px; padding: 13px 22px; }
+      .btn-sm     { font-size: 14px; padding: 9px 15px; }
+      .due-name   { font-size: 15px; }
+      .due-meta   { font-size: 13px; }
+    }
+
+    /* ── Mobile topbar ── */
+    .topbar {
+      background: var(--card); border-bottom: 1px solid var(--border);
+      padding: 12px 18px; display: flex; align-items: center;
+      justify-content: space-between; position: sticky; top: 0; z-index: 100;
+    }
+    .brand     { font-size: 18px; font-weight: 800; color: var(--accent); }
+    .brand-tag { font-size: 11px; color: var(--sub); margin-left: 6px; }
+    .topbar-date { font-size: 12px; color: var(--sub); }
+    .sidebar { display: none; }
+
+    /* ── Main scroll area ── */
+    .main {
+      flex: 1; overflow-y: auto;
+      padding: 16px 16px calc(var(--nav-h) + var(--safe-b) + 8px);
+    }
+
+    /* ── Bottom nav ── */
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0;
+      height: calc(var(--nav-h) + var(--safe-b));
+      background: var(--card); border-top: 1px solid var(--border);
+      display: flex; z-index: 200; padding-bottom: var(--safe-b);
+    }
+    .nav-item {
+      flex: 1; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 3px;
+      text-decoration: none; color: var(--sub);
+      font-size: 10px; font-weight: 600; padding: 6px 0;
+      transition: color .15s; -webkit-tap-highlight-color: transparent;
+    }
+    .nav-item.active { color: var(--accent); }
+    .nav-item svg    { width: 22px; height: 22px; }
+    .nav-add-wrap {
+      background: var(--accent); border-radius: 14px;
+      width: 46px; height: 30px;
+      display: flex; align-items: center; justify-content: center;
+    }
+    .nav-item.nav-add { color: var(--accent); }
+
+    /* ── More menu dropdown ── */
+    .more-menu {
+      position: fixed; inset: 0; z-index: 400;
+      display: flex; flex-direction: column; justify-content: flex-end;
+    }
+    .more-menu-overlay {
+      position: absolute; inset: 0; background: rgba(0,0,0,.45);
+    }
+    .more-menu-content {
+      position: relative; background: var(--card); border-radius: 16px 16px 0 0;
+      padding: 8px 0 calc(var(--safe-b) + 12px);
+      max-height: 70vh; overflow-y: auto;
+    }
+    .more-menu-header {
+      font-size: 13px; font-weight: 700; color: var(--sub);
+      padding: 8px 20px 12px; border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+    }
+    .more-menu-item {
+      display: flex; align-items: center; gap: 14px;
+      padding: 14px 20px; font-size: 15px; font-weight: 600;
+      color: var(--text); text-decoration: none;
+      transition: background .15s;
+    }
+    .more-menu-item:hover, .more-menu-item.active {
+      background: var(--bg); color: var(--accent);
+    }
+    .more-menu-item svg {
+      width: 22px; height: 22px; flex-shrink: 0;
+      color: var(--sub);
+    }
+    .more-menu-item:hover svg, .more-menu-item.active svg {
+      color: var(--accent);
+    }
+
+    /* ── Desktop layout ── */
+    @media (min-width: 768px) {
+      body { flex-direction: row; }
+      .topbar { display: none; }
+      .bottom-nav { display: none; }
+      .more-menu { display: none !important; }
+      .sidebar {
+        display: flex; flex-direction: column;
+        width: var(--sidebar-w); min-height: 100vh;
+        background: var(--card); border-right: 1px solid var(--border);
+        padding: 0; flex-shrink: 0;
+        position: sticky; top: 0; height: 100vh; overflow-y: auto;
+      }
+      .sidebar-brand {
+        padding: 22px 20px 18px;
+        border-bottom: 1px solid var(--border);
+      }
+      .sidebar-brand .brand     { display: block; font-size: 20px; }
+      .sidebar-brand .brand-tag { display: block; margin-left: 0; margin-top: 3px; }
+      .sidebar-nav { flex: 1; padding: 8px 0; }
+      .sidebar-nav a {
+        display: flex; align-items: center; gap: 10px;
+        padding: 11px 20px; font-size: 14px; font-weight: 600;
+        color: var(--sub); text-decoration: none;
+        border-left: 3px solid transparent;
+        transition: color .15s, background .15s;
+      }
+      .sidebar-nav a:hover { background: var(--bg); color: var(--text); }
+      .sidebar-nav a.active {
+        color: var(--accent); border-left-color: var(--accent);
+        background: var(--accent-lt);
+      }
+      .sidebar-nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
+      .sidebar-footer {
+        padding: 16px 20px; border-top: 1px solid var(--border);
+        font-size: 11px; color: var(--sub);
+      }
+      .sidebar-footer a { color: var(--accent); text-decoration: none; }
+      .main { padding: 28px 32px; }
+      .floating-stop { bottom: 20px; right: 20px; }
+    }
+
+    /* ── Shared components ── */
+    .page-title { font-size: 20px; font-weight: 800; margin-bottom: 18px; }
+
+    .floating-stop {
+      position: fixed; bottom: 76px; right: 16px;
+      width: 48px; height: 48px; border-radius: 50%;
+      background: var(--error); color: #fff; border: none;
+      font-size: 18px; font-weight: 700; cursor: pointer;
+      box-shadow: 0 4px 12px rgba(0,0,0,.2);
+      display: flex; align-items: center; justify-content: center;
+      z-index: 150; transition: transform .15s, box-shadow .15s;
+    }
+    .floating-stop:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
+    .floating-stop:active { transform: scale(.95); }
+    .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
+    .card-title { font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
+
+    /* stat grid */
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .stat-label { font-size: 11px; color: var(--sub); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
+    .stat-value { font-size: 28px; font-weight: 800; color: var(--text); margin: 6px 0 2px; line-height: 1; }
+    .stat-sub   { font-size: 12px; color: var(--sub); }
+    .stat-card.c-accent { background: var(--accent); border-color: var(--accent); }
+    .stat-card.c-warn   { background: var(--warn);   border-color: var(--warn); }
+    .stat-card.c-accent .stat-label,
+    .stat-card.c-accent .stat-value,
+    .stat-card.c-accent .stat-sub,
+    .stat-card.c-warn .stat-label,
+    .stat-card.c-warn .stat-value,
+    .stat-card.c-warn .stat-sub { color: #fff; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+    @media (max-width: 480px) {
+      .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+    }
+
+    /* forms */
+    .field-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
+    label { font-size: 12px; color: var(--sub); font-weight: 600; }
+    .req { color: var(--error); }
+    input[type=text], input[type=number], input[type=date], select, textarea {
+      font-family: inherit; font-size: 15px;
+      background: var(--bg); border: 1.5px solid var(--border);
+      border-radius: 9px; padding: 11px 13px;
+      color: var(--text); outline: none; width: 100%;
+      transition: border-color .15s; -webkit-appearance: none;
+    }
+    input:focus, select:focus, textarea:focus {
+      border-color: var(--accent); background: #fff;
+    }
+    select {
+      background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B7280' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+      background-repeat: no-repeat; background-position: right 12px center; padding-right: 34px;
+    }
+    .hint { font-size: 11px; color: var(--sub); margin-top: 3px; }
+
+    /* buttons */
+    .btn {
+      display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+      font-family: inherit; font-size: 15px; font-weight: 700;
+      padding: 12px 22px; border: none; border-radius: 10px;
+      cursor: pointer; text-decoration: none;
+      transition: opacity .15s, background .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .btn-primary { background: var(--accent);  color: #fff; }
+    .btn-primary:hover { background: var(--accent-d); }
+    .btn-success { background: var(--success); color: #fff; }
+    .btn-warn    { background: var(--warn);    color: #fff; }
+    .btn-ghost   { background: var(--bg); color: var(--text); border: 1.5px solid var(--border); }
+    .btn-ghost:hover { background: var(--border); }
+    .btn-full    { width: 100%; }
+    .btn-sm      { font-size: 13px; padding: 8px 14px; border-radius: 8px; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    /* chips / tags */
+    .chip-group { display: flex; flex-wrap: wrap; gap: 8px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 7px 13px; border-radius: 20px; font-size: 13px; font-weight: 600;
+      background: var(--bg); border: 1.5px solid var(--border);
+      cursor: pointer; user-select: none; transition: all .15s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .chip input { display: none; }
+    .chip.selected { background: var(--accent-lt); border-color: var(--accent); color: var(--accent); }
+
+    /* preset chips */
+    .preset-chip {
+      display: inline-flex; align-items: center; gap: 5px;
+      padding: 8px 14px; border-radius: 20px; font-size: 13px; font-weight: 600;
+      background: var(--accent-lt); color: var(--accent);
+      border: 1.5px solid var(--accent); text-decoration: none; transition: all .15s;
+    }
+    .preset-chip:hover { background: var(--accent); color: #fff; }
+
+    /* output */
+    .output {
+      background: #1E2130; color: #D4D8E8;
+      font-family: "Consolas","Courier New",monospace; font-size: 13px;
+      padding: 14px 16px; border-radius: 10px;
+      white-space: pre; overflow: auto;
+      min-height: 80px; max-height: 460px; line-height: 1.6;
+    }
+
+    /* messages */
+    .msg { padding: 12px 16px; border-radius: 9px; font-size: 14px; margin-bottom: 14px; font-weight: 500; }
+    .msg-success { background: var(--success-lt); color: var(--success); }
+    .msg-error   { background: var(--error-lt);   color: var(--error); }
+
+    /* due rows */
+    .due-row { display: flex; align-items: flex-start; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+    .due-row:last-child { border-bottom: none; }
+    .due-badge { min-width: 42px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 700; flex-shrink: 0; }
+    .due-badge.hot  { background: var(--error-lt);  color: var(--error); }
+    .due-badge.warm { background: #FEF3E7; color: var(--warn); }
+    .due-badge.cool { background: var(--accent-lt); color: var(--accent); }
+    .due-name { font-size: 14px; font-weight: 700; line-height: 1.3; }
+    .due-meta { font-size: 12px; color: var(--sub); margin-top: 2px; }
+
+    /* step dots for add flow */
+    .steps { display: flex; gap: 6px; align-items: center; margin-bottom: 20px; }
+    .step-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: all .2s; }
+    .step-dot.active { background: var(--accent); width: 22px; border-radius: 4px; }
+    .step-dot.done   { background: var(--success); }
+
+    .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+
+    /* type cards for add step 1 */
+    .type-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    @media (min-width: 768px) { .type-grid { grid-template-columns: repeat(3,1fr); } }
+    .type-card {
+      background: var(--bg); border: 2px solid var(--border); border-radius: 12px;
+      padding: 16px 14px; text-align: center; cursor: pointer;
+      font-size: 15px; font-weight: 700; color: var(--text);
+      transition: all .15s; -webkit-tap-highlight-color: transparent;
+    }
+    .type-card:hover, .type-card.selected { background: var(--accent-lt); border-color: var(--accent); color: var(--accent); }
+    .type-card-icon { font-size: 22px; margin-bottom: 6px; }
+
+    /* ── Data tables (consistent with query builder) ── */
+    .data-table {
+      width: 100%; border-collapse: collapse; font-size: 14px;
+    }
+    .data-table th {
+      padding: 12px 14px; text-align: left; font-weight: 600;
+      color: var(--text); background: var(--bg); 
+      border-bottom: 2px solid var(--border); white-space: nowrap;
+    }
+    .data-table td {
+      padding: 10px 14px; border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+    .data-table tr:last-child td {
+      border-bottom: none;
+    }
+    .data-table tbody tr:hover {
+      background: var(--accent-lt);
+    }
+    /* Right-aligned cells for numeric values */
+    .data-table th.text-right,
+    .data-table td.text-right {
+      text-align: right;
+    }
+    /* Numeric columns */
+    .data-table th.numeric,
+    .data-table td.numeric {
+      text-align: right; font-feature-settings: "tnum";
+      font-variant-numeric: tabular-nums;
+    }
+    /* Footer/total row styling */
+    .data-table tr.total-row {
+      font-weight: 700; border-top: 2px solid var(--border);
+    }
+
+    @media (min-width: 768px) {
+      .field-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+    }
+  </style>
+</head>
+<body>
+
+<div class="topbar">
+  <div><span class="brand">PTOS</span><span class="brand-tag">Plain Text OS</span></div>
+  <div class="topbar-date">{{ now }}</div>
+</div>
+
+<aside class="sidebar">
+  <div class="sidebar-brand">
+    <span class="brand">PTOS</span>
+    <span class="brand-tag">Plain Text Operating System</span>
+  </div>
+  <nav class="sidebar-nav">
+    <a href="/"        class="{% if tab=='home'    %}active{% endif %}">{% include 'icons/home.html'    ignore missing %} Home</a>
+    <a href="/add"     class="{% if tab=='add'     %}active{% endif %}">{% include 'icons/add.html'     ignore missing %} Add Record</a>
+    <a href="/due"     class="{% if tab=='due'     %}active{% endif %}">{% include 'icons/due.html'     ignore missing %} Due List</a>
+    <a href="/queries" class="{% if tab=='queries' %}active{% endif %}">{% include 'icons/query.html'   ignore missing %} Queries</a>
+    <a href="/browse"  class="{% if tab=='browse'  %}active{% endif %}">{% include 'icons/browse.html'  ignore missing %} Browse</a>
+    <a href="/journal" class="{% if tab=='journal' %}active{% endif %}">{% include 'icons/journal.html' ignore missing %} Journal</a>
+    <a href="/editor"  class="{% if tab=='editor'  %}active{% endif %}">{% include 'icons/editor.html'  ignore missing %} Log Editor</a>
+    <a href="/lint"    class="{% if tab=='lint'    %}active{% endif %}">{% include 'icons/lint.html'    ignore missing %} Lint</a>
+    <a href="/schema-builder" class="{% if tab=='schema_builder' %}active{% endif %}">Schema Builder</a>
+    <a href="/query-builder" class="{% if tab=='query_builder' %}active{% endif %}">Query Builder</a>
+    <a href="/backup" class="{% if tab=='backup' %}active{% endif %}">Backup</a>
+    <a href="/settings" class="{% if tab=='settings' %}active{% endif %}">Settings</a>
+  </nav>
+  <div class="sidebar-footer">
+    <a href="https://github.com/godwinburby/ptos" target="_blank">⭐ github.com/godwinburby/ptos</a>
+    <br><br>
+    <button onclick="stopServer()" style="width:100%;padding:8px 14px;border-radius:8px;border:none;background:var(--error);color:#fff;font-size:13px;font-weight:600;cursor:pointer;opacity:.85;">
+      Stop Server
+    </button>
+  </div>
+</aside>
+
+<main class="main">
+  {% block content %}{% endblock %}
+</main>
+
+<nav class="bottom-nav">
+  <a href="/"        class="nav-item {% if tab=='home'    %}active{% endif %}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+    <span>Home</span>
+  </a>
+  <a href="/queries" class="nav-item {% if tab=='queries' %}active{% endif %}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+    <span>Queries</span>
+  </a>
+  <a href="/add"     class="nav-item nav-add {% if tab=='add' %}active{% endif %}">
+    <div class="nav-add-wrap">
+      <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" width="22" height="22"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+    </div>
+    <span>Add</span>
+  </a>
+  <a href="/browse" class="nav-item {% if tab=='browse' %}active{% endif %}">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+    <span>Browse</span>
+  </a>
+  <a href="#" id="more-btn" class="nav-item" onclick="toggleMoreMenu(event)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1"/><circle cx="12" cy="5" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+    <span>More</span>
+  </a>
+</nav>
+
+<!-- Floating Stop button -->
+<button class="floating-stop" onclick="stopServer()" title="Stop Server">
+  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+</button>
+
+<!-- More menu dropdown -->
+<div id="more-menu" class="more-menu" style="display:none;">
+  <div class="more-menu-overlay" onclick="toggleMoreMenu(event)"></div>
+  <div class="more-menu-content">
+    <div class="more-menu-header">More</div>
+    <a href="/journal" class="more-menu-item {% if tab=='journal' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      Journal
+    </a>
+    <a href="/due" class="more-menu-item {% if tab=='due' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      Due List
+    </a>
+    <a href="/schema-builder" class="more-menu-item {% if tab=='schema_builder' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+      Schema Builder
+    </a>
+    <a href="/query-builder" class="more-menu-item {% if tab=='query_builder' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      Query Builder
+    </a>
+    <a href="/backup" class="more-menu-item {% if tab=='backup' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      Backup
+    </a>
+    <a href="/settings" class="more-menu-item {% if tab=='settings' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      Settings
+    </a>
+    <a href="/editor" class="more-menu-item {% if tab=='editor' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      Log Editor
+    </a>
+    <a href="/lint" class="more-menu-item {% if tab=='lint' %}active{% endif %}">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+      Lint
+    </a>
+    <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
+    <a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+      Stop Server
+    </a>
+  </div>
+</div>
+
+<!-- Add Option Modal -->
+<div id="add-option-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:12px;max-width:400px;width:90%;padding:20px;">
+    <h3 style="margin:0 0 12px;color:var(--text);">Add New Option</h3>
+    <p style="margin:0 0 16px;color:var(--sub);">Add "<span id="add-option-value" style="font-weight:600;color:var(--accent);"></span>" to <span id="add-option-field"></span>?</p>
+    <p id="add-option-parent-msg" style="margin:0 0 16px;color:var(--sub);display:none;">This will be added to <span id="add-option-parent-key"></span> options.</p>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button onclick="closeAddOptionModal()" style="padding:8px 16px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);cursor:pointer;">Cancel</button>
+      <button onclick="confirmAddOption()" style="padding:8px 16px;border-radius:6px;border:none;background:var(--accent);color:#fff;cursor:pointer;">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Editable Options ────────────────────────────────────────────────────────────────
+let pendingOption = null;
+
+function getFieldInfo(fieldName) {
+    const allFields = window.field_defs || [];
+    return allFields.find(f => f.name === fieldName) || {};
+}
+
+function addNewOption(fieldName) {
+    const newVal = prompt('Enter new option for ' + fieldName + ':');
+    if (!newVal || !newVal.trim()) return;
+    
+    const val = newVal.trim();
+    const fieldInfo = getFieldInfo(fieldName);
+    const select = document.getElementById('field-' + fieldName);
+    const currentOptions = fieldInfo.options || [];
+    
+    // Check if option already exists
+    if (currentOptions.includes(val)) {
+        alert('Option already exists');
+        return;
+    }
+    
+    // For parent-dependent, need parent value
+    if (fieldInfo.option_source === 'parent_dependent') {
+        const parentField = fieldInfo.parent;
+        const parentSelect = document.querySelector(`[name="${parentField}"]`);
+        const parentVal = parentSelect?.value;
+        if (!parentVal) {
+            alert('Please select ' + parentField + ' first');
+            return;
+        }
+        pendingOption = {
+            select: select,
+            fieldInfo: fieldInfo,
+            value: val,
+            parentValue: parentVal
+        };
+        document.getElementById('add-option-value').textContent = val;
+        document.getElementById('add-option-field').textContent = fieldName;
+        document.getElementById('add-option-parent-msg').style.display = 'block';
+        document.getElementById('add-option-parent-key').textContent = parentField + '=' + parentVal;
+        document.getElementById('add-option-modal').style.display = 'flex';
+        return;
+    }
+    
+    pendingOption = {
+        select: select,
+        fieldInfo: fieldInfo,
+        value: val,
+        parentValue: null
+    };
+    document.getElementById('add-option-value').textContent = val;
+    document.getElementById('add-option-field').textContent = fieldName;
+    document.getElementById('add-option-parent-msg').style.display = 'none';
+    document.getElementById('add-option-modal').style.display = 'flex';
+}
+
+function closeAddOptionModal() {
+    document.getElementById('add-option-modal').style.display = 'none';
+    pendingOption = null;
+}
+
+async function confirmAddOption() {
+    if (!pendingOption) return;
+    
+    const { select, fieldInfo, value, parentValue } = pendingOption;
+    const typeName = fieldInfo.type_name || new URLSearchParams(window.location.search).get('type');
+    
+    const payload = {
+        type_name: typeName,
+        field_name: fieldInfo.name,
+        new_option: value,
+        option_source: fieldInfo.option_source,
+        parent_field: fieldInfo.parent,
+        parent_value: parentValue,
+        shared_key: fieldInfo.shared_key || ''
+    };
+    
+    try {
+        const resp = await fetch('/add-field-option', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        });
+        const result = await resp.json();
+        if (result.success) {
+            // Add new option to select
+            const opt = document.createElement('option');
+            opt.value = value;
+            opt.textContent = value;
+            opt.selected = true;
+            select.appendChild(opt);
+            // Reload to refresh options
+            location.reload();
+        } else {
+            alert('Error: ' + (result.error || 'Failed to add option'));
+        }
+    } catch (e) {
+        alert('Error: ' + e.message);
+    }
+    
+    closeAddOptionModal();
+}
+
+function toggleMoreMenu(e) {
+  if (e) e.preventDefault();
+  var menu = document.getElementById("more-menu");
+  menu.style.display = menu.style.display === "none" ? "flex" : "none";
+}
+function stopServer() {
+  if (!confirm("Stop PTOS server?")) return;
+  document.body.style.cssText = "display:block;margin:0;padding:0;";
+  document.body.innerHTML = "<div style='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;'><h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p></div>";
+  fetch("/shutdown");
+}
+</script>
+
+</body>
+</html>
