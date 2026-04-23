@@ -351,6 +351,12 @@ function resetQuery() {
   q.time = "tm";
   _fieldCache = {};
   _cacheSet = [];
+  
+  // Exit advanced mode UI
+  document.getElementById("qb-adv-editor").style.display = "none";
+  document.getElementById("qb-adv-preview").style.display = "block";
+  document.getElementById("qb-adv-toggle").textContent = "Edit";
+  
   renderEditor();
   triggerLivePreview();
 }
@@ -470,6 +476,20 @@ function _buildQueryEditor(container, name) {
     '</div>';
   container.appendChild(c2);
 
+  // Tags section
+  var cTags = document.createElement("div");
+  cTags.className = "card"; cTags.style.marginBottom = "10px";
+  cTags.id = "qb-tags-card";
+  cTags.style.display = _typeFromChips(q) ? "block" : "none";
+  cTags.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
+      '<span style="font-size:11px;color:var(--sub);font-weight:600;">TAGS</span>'+
+    '</div>'+
+    '<div id="qb-tag-chips" class="chip-group"></div>'+
+    '<div id="qb-tag-history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">from history:</div>'+
+    '<div id="qb-tag-history-chips" class="chip-group"></div>';
+  container.appendChild(cTags);
+
   // 3. Time window
   container.appendChild(_mkCard("Time window",
     '<select id="qb-time" onchange="_updateQ(\'time\',this.value)">'+
@@ -477,23 +497,27 @@ function _buildQueryEditor(container, name) {
       return '<option value="'+o[1]+'"'+(o[1]===q.time?" selected":"")+'>'+o[0]+'</option>';
     }).join("")+'</select>'));
 
-  // 4. Expression filter (collapsed)
+  // Advanced mode for expression filter
   var c4 = document.createElement("div");
   c4.className = "card"; c4.style.marginBottom = "10px";
   c4.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;">'+
-      '<label style="margin:0;">Expression filter '+
-        '<span style="font-size:11px;color:var(--sub);font-weight:400;">(optional, advanced)</span></label>'+
-      '<button id="expr-toggle" onclick="toggleExpr(this)"'+
-      ' style="background:none;border:none;font-size:11px;color:var(--accent);cursor:pointer;font-weight:700;">'+
-      (q._exprManual?'hide':'show')+'</button>'+
+    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
+      '<span style="font-size:11px;color:var(--sub);font-weight:600;">WHERE</span>'+
+      '<button id="qb-adv-toggle" onclick="_toggleAdvancedMode()"'+
+      ' style="background:none;border:none;font-size:11px;color:var(--accent);cursor:pointer;font-weight:600;">Edit</button>'+
     '</div>'+
-    '<div id="qb-expr-area" style="display:'+(q._exprManual?'block':'none')+';margin-top:8px;">'+
-      '<input type="text" id="qb-expr" value="'+_esc(q._exprManual||'')+'"'+
-      ' placeholder="type=expense AND (domain=self OR domain=home)"'+
-      ' style="font-family:monospace;font-size:13px;"'+
-      ' oninput="_onExprInput(this.value)">'+
-      '<div class="hint" style="margin-top:4px;">= != &gt; &lt; ~ !~ AND OR NOT ( ) — ANDed with chip filters</div>'+
+    '<div id="qb-adv-preview" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">'+
+      '<pre id="qb-where-preview" style="margin:0;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;"></pre>'+
+    '</div>'+
+    '<div id="qb-adv-editor" style="display:none;">'+
+      '<textarea id="qb-where-editor" rows="3"'+
+      ' style="width:100%;font-family:monospace;font-size:12px;padding:10px;border-radius:8px;border:1px solid var(--border);resize:vertical;"'+
+      ' placeholder="e.g. type=expense AND (tag=a OR tag=b)"></textarea>'+
+      '<div style="display:flex;gap:8px;margin-top:8px;">'+
+        '<button onclick="_applyAdvancedExpr()" class="btn btn-primary btn-sm">Apply</button>'+
+        '<button onclick="_cancelAdvancedExpr()" class="btn btn-ghost btn-sm">Cancel</button>'+
+      '</div>'+
+      '<div class="hint" style="margin-top:6px;">= != &gt; &lt; ~ !~ AND OR NOT ( )</div>'+
     '</div>';
   container.appendChild(c4);
 
@@ -548,11 +572,13 @@ function _buildQueryEditor(container, name) {
     _fetchFields(sel, q, function() {
       _renderFieldChips(q);
       _renderActiveChips(q);
+      _renderTagsSection(q);
       _updateGroupSortDropdowns(q);
       _updatePreview(q);
       triggerLivePreview();
     });
   } else {
+    _renderTagsSection(q);
     _updatePreview(q);
     triggerLivePreview();
   }
@@ -607,6 +633,10 @@ function _buildWhereExpr(q) {
   return parts.join(" AND ");
 }
 
+function _buildFullWhereExpr(q) {
+  return _buildWhereExpr(q);
+}
+
 function _buildChipFilters(q) {
   return (q._chips||[]).map(function(c){ return c.field+c.op+c.value; });
 }
@@ -625,15 +655,102 @@ function _onExprInput(val) {
   triggerLivePreview();
 }
 
-function toggleExpr(btn) {
-  var area = document.getElementById("qb-expr-area");
-  var open = area.style.display==="none";
-  area.style.display = open ? "block" : "none";
-  btn.textContent = open ? "hide" : "show";
-  if (!open && _cur) {
-    _st.queries[_cur.name]._exprManual = "";
-    _updatePreview(_st.queries[_cur.name]);
+// ── Advanced mode for WHERE expression ──────────────────────────────────────
+var _savedQBExprManual = "";
+var _savedQBChips = [];
+
+window._toggleAdvancedMode = function() {
+  if (!_cur || _cur.section !== "queries") return;
+  var q = _st.queries[_cur.name];
+  var previewEl = document.getElementById("qb-adv-preview");
+  var editorEl = document.getElementById("qb-adv-editor");
+  var toggleBtn = document.getElementById("qb-adv-toggle");
+  var editor = document.getElementById("qb-where-editor");
+  
+  if (editorEl.style.display === "none") {
+    // Enter edit mode
+    _savedQBExprManual = q._exprManual || "";
+    _savedQBChips = (q._chips || []).slice();
+    editorEl.style.display = "block";
+    previewEl.style.display = "none";
+    toggleBtn.textContent = "Cancel";
+    // Populate editor with WHERE clause
+    var whereParts = (q._chips||[]).map(function(c) { return c.field + c.op + c.value; });
+    if (q._exprManual) whereParts.push(q._exprManual);
+    editor.value = whereParts.join(" AND ");
+    editor.focus();
+  } else {
+    // Cancel edit mode
+    editorEl.style.display = "none";
+    previewEl.style.display = "block";
+    toggleBtn.textContent = "Edit";
   }
+};
+
+window._applyAdvancedExpr = function() {
+  if (!_cur || _cur.section !== "queries") return;
+  var q = _st.queries[_cur.name];
+  var editor = document.getElementById("qb-where-editor");
+  var expr = editor.value.trim();
+  
+  // Parse expression into chips and manual expression
+  var parts = _parseQBExpr(expr);
+  q._chips = parts.chips;
+  q._exprManual = parts.manual;
+  
+  _renderActiveChips(q);
+  _renderFieldChips(q);
+  _renderTagsSection(q);
+  _updatePreview(q);
+  triggerLivePreview();
+  
+  // Exit edit mode
+  document.getElementById("qb-adv-editor").style.display = "none";
+  document.getElementById("qb-adv-preview").style.display = "block";
+  document.getElementById("qb-adv-toggle").textContent = "Edit";
+};
+
+window._cancelAdvancedExpr = function() {
+  if (!_cur || _cur.section !== "queries") return;
+  var q = _st.queries[_cur.name];
+  
+  // Restore chips and expression
+  q._chips = _savedQBChips.slice();
+  q._exprManual = _savedQBExprManual;
+  
+  _renderActiveChips(q);
+  _renderFieldChips(q);
+  _renderTagsSection(q);
+  _updatePreview(q);
+  
+  // Exit edit mode
+  document.getElementById("qb-adv-editor").style.display = "none";
+  document.getElementById("qb-adv-preview").style.display = "block";
+  document.getElementById("qb-adv-toggle").textContent = "Edit";
+};
+
+// Parse expression into chips + manual remainder
+function _parseQBExpr(expr) {
+  var chips = [], manual = [];
+  if (!expr) return {chips, manual:""};
+  
+  // Simple split by AND (but preserve parentheses)
+  var parts = expr.split(/\s+AND\s+/i);
+  parts.forEach(function(p) {
+    p = p.trim();
+    if (!p) return;
+    var m = p.match(/^([a-z_][a-z0-9_]*)(\s*[!=<>~]+)\s*(.+)$/i);
+    if (m) {
+      chips.push({field: m[1].toLowerCase(), op: m[2].trim(), value: m[3].trim()});
+    } else if (p) {
+      manual.push(p);
+    }
+  });
+  return {chips, manual: manual.join(" AND ")};
+}
+
+function toggleExpr(btn) {
+  _toggleAdvancedMode();
 }
 
 function _renderTypeChips(q) {
@@ -667,6 +784,7 @@ function _onTypeClick(type, q) {
     _fetchFields(type, q, function() {
       _renderFieldChips(q);
       _renderActiveChips(q);
+      _renderTagsSection(q);
       _updateGroupSortDropdowns(q);
       _updatePreview(q);
       triggerLivePreview();
@@ -676,6 +794,7 @@ function _onTypeClick(type, q) {
     // remove all non-type chips when clearing type
     q._chips = [];
     _renderActiveChips(q);
+    _renderTagsSection(q);
     _updatePreview(q);
     triggerLivePreview();
   }
@@ -719,12 +838,13 @@ function _fetchFields(type, q, cb) {
         return !f.is_int && f.name!=="type";
       }),
       history: data.history_fields || {},
+      historyTags: data.history_tags || [],  // Store for tags section
       dimensions: data.dimensions || []
     };
     _cacheSet.push(cacheKey);
     cb();
   })
-  .catch(function(){ _fieldCache[cacheKey]={fields:[],history:{},dimensions:[]}; cb(); });
+  .catch(function(){ _fieldCache[cacheKey]={fields:[],history:{},historyTags:[],dimensions:[]}; cb(); });
 }
 
 function _updateGroupSortDropdowns(q) {
@@ -760,6 +880,7 @@ function _renderFieldChips(q) {
   // Filter out fields whose parent is not in context
   var ctx = _getContext(q);
   fields = fields.filter(function(f) {
+    if (f.name === "tag") return false;  // Exclude tag - shown in dedicated section
     if (!f.has_parent) return true;
     return ctx[f.parent];
   });
@@ -776,6 +897,102 @@ function _renderFieldChips(q) {
     chip.addEventListener("click", function(){ _onFieldClick(f, q); });
     el.appendChild(chip);
   });
+}
+
+function _renderTagsSection(q) {
+  var tagsCard = document.getElementById("qb-tags-card");
+  var tagChips = document.getElementById("qb-tag-chips");
+  var tagHistLabel = document.getElementById("qb-tag-history-label");
+  var tagHistChips = document.getElementById("qb-tag-history-chips");
+  
+  if (!_typeFromChips(q)) {
+    tagsCard.style.display = "none";
+    return;
+  }
+  
+  var type = _typeFromChips(q);
+  var ctxStr = _getContextStr(q);
+  var cacheKey = type + "?" + ctxStr;
+  var cache = _fieldCache[cacheKey] || {fields: [], history: {}, historyTags: []};
+  
+  // Find tag field definition
+  var tagField = cache.fields.find(function(f) { return f.name === "tag"; });
+  
+  var schemaOpts = tagField ? (tagField.options || []) : [];
+  var historyTags = cache.historyTags || [];
+  var historyOpts = historyTags.filter(function(t) { return schemaOpts.indexOf(t) === -1; });
+  
+  // Show message if no tags available yet
+  if (!schemaOpts.length && !historyOpts.length) {
+    tagChips.innerHTML = '<span style="font-size:12px;color:var(--sub);">Select field values above to see tags</span>';
+    tagHistLabel.style.display = "none";
+    return;
+  }
+  
+  // Always show tags card when type is selected
+  tagsCard.style.display = "block";
+  tagChips.innerHTML = "";
+  tagHistChips.innerHTML = "";
+  
+  // Schema options
+  schemaOpts.forEach(function(opt) {
+    var already = (q._chips||[]).some(function(c) { return c.field === "tag" && c.op === "=" && c.value === opt; });
+    var chip = document.createElement("button");
+    chip.className = "qb-chip" + (already ? " active" : "");
+    chip.textContent = opt;
+    chip.addEventListener("click", function() {
+      _toggleTagChip(opt, q);
+      chip.className = "qb-chip" + ((q._chips||[]).some(function(c) { return c.field === "tag" && c.op === "=" && c.value === opt; }) ? " active" : "");
+    });
+    tagChips.appendChild(chip);
+  });
+  
+  // History tags
+  if (historyOpts.length) {
+    tagHistLabel.style.display = "block";
+    historyOpts.forEach(function(tag) {
+      var already = (q._chips||[]).some(function(c) { return c.field === "tag" && c.op === "=" && c.value === tag; });
+      var chip = document.createElement("button");
+      chip.className = "qb-chip" + (already ? " active" : "");
+      chip.style.opacity = "0.75";
+      chip.style.fontSize = "12px";
+      chip.style.padding = "4px 9px";
+      chip.textContent = tag;
+      chip.addEventListener("click", function() {
+        _toggleTagChip(tag, q);
+        chip.className = "qb-chip" + ((q._chips||[]).some(function(c) { return c.field === "tag" && c.op === "=" && c.value === tag; }) ? " active" : "");
+      });
+      tagHistChips.appendChild(chip);
+    });
+  } else {
+    tagHistLabel.style.display = "none";
+  }
+}
+
+function _toggleTagChip(value, q) {
+  var chips = q._chips || [];
+  var idx = chips.findIndex(function(c) { return c.field === "tag" && c.op === "=" && c.value === value; });
+  if (idx !== -1) {
+    chips.splice(idx, 1);
+  } else {
+    chips.push({field: "tag", op: "=", value: value});
+  }
+  q._chips = chips;
+  _renderActiveChips(q);
+  _renderTagsSection(q);
+  _updatePreview(q);
+  triggerLivePreview();
+  // Invalidate cache and re-fetch with updated context
+  var type = _typeFromChips(q);
+  if (type) {
+    var ctxStr = _getContextStr(q);
+    var cacheKey = type + "?" + ctxStr;
+    delete _fieldCache[cacheKey];
+    _fetchFields(type, q, function() {
+      _renderFieldChips(q);
+      _renderTagsSection(q);
+    });
+  }
 }
 
 function _onFieldClick(fdef, q) {
@@ -884,11 +1101,12 @@ function _toggleValueChip(field, value, q) {
   _updatePreview(q);
   triggerLivePreview();
   
-  // Re-fetch fields when parent chips change (to update child field options)
+  // Re-fetch fields when parent chips change (to update child field options and tags)
   var type = _typeFromChips(q);
   if (type && field !== "type") {
     _fetchFields(type, q, function() {
       _renderFieldChips(q);
+      _renderTagsSection(q);
       _updateGroupSortDropdowns(q);
       closeValueArea();
     });
@@ -973,6 +1191,17 @@ function _updatePreview(q) {
   if (q.sum)
     lines.push('sum   = <span class="p-opt">true</span>');
   el.innerHTML = lines.join("<br>");
+  
+  // Update advanced mode preview - show full expression including _exprManual
+  var advPreview = document.getElementById("qb-where-preview");
+  if (advPreview) {
+    var fullExpr = _buildFullWhereExpr(q);
+    if (fullExpr) {
+      advPreview.textContent = "where = \"" + fullExpr + "\"";
+    } else {
+      advPreview.textContent = "# no filters";
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
