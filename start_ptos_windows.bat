@@ -1,7 +1,7 @@
 @echo off
 :: PTOS Start Script for Windows
 :: Run from inside the ptos folder.
-:: Kept simple -- no pipes, no parentheses in strings.
+:: Automatically updates from git if available, then starts the server.
 
 echo ==========================================
 echo   PTOS Web Server
@@ -30,7 +30,28 @@ if "%PYTHON%"=="" (
     exit /b 1
 )
 
+:: Check for updates (if git repo)
+if exist ".git" (
+    echo Checking for updates...
+    git pull >nul 2>&1
+    if not errorlevel 1 (
+        echo Updated from GitHub.
+    ) else (
+        echo Already up to date.
+    )
+) else (
+    echo Not a git repo - skipping update check.
+)
+
+:: Check/install dependencies
+%PYTHON% -c "import flask" 2>nul
+if errorlevel 1 (
+    echo Installing Flask and tomli-w...
+    %PYTHON% -m pip install flask tomli-w --quiet
+)
+
 :: Kill anything on port 5000
+echo.
 echo Checking port 5000...
 for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5000 " ^| findstr LISTENING') do (
     taskkill /F /PID %%a >nul 2>&1

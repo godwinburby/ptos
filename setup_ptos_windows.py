@@ -138,7 +138,7 @@ print("Open in browser: http://localhost:5000")
 print("Press Ctrl+C in this window to stop the server.")
 print()
 print("To start PTOS next time:  start_ptos_windows.bat")
-print("To update PTOS:           update_ptos_windows.bat")
+print("(Start script automatically updates PTOS if new version available)")
 print()
 
 flask_proc = subprocess.Popen(

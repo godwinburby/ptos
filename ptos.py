@@ -3273,7 +3273,7 @@ date_format = "indian"
 
 [backup]
 # Folders to include in full backup
-# Note: Keep in sync with Android update preserved folders in update_ptos_android.sh
+# Note: Keep in sync with Android start script preserved folders in start_ptos_android.sh
 folders = ["records", "config", "templates", "journal", "tasks", "exports", "notes", "scripts"]
 
 # Auto-backup settings
