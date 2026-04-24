@@ -207,7 +207,10 @@
   <div class="card-title">Quick Add</div>
   <div class="chip-group">
     {% for name in presets %}
-    <a href="/add?preset={{ name }}" class="preset-chip">+ {{ name }}</a>
+    <span class="preset-chip-wrap">
+      <a href="/add?preset={{ name }}" class="preset-chip">+ {{ name }}</a>
+      <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
+    </span>
     {% endfor %}
   </div>
 </div>
@@ -219,9 +222,12 @@
   <div class="card-title">Quick Add (multi)</div>
   <div class="chip-group">
     {% for name, refs in multi_presets.items() %}
-    <button class="preset-chip" onclick="addMultiPreset('{{ name }}', this)">
-      + {{ name }} <span style="opacity:.6;font-size:11px;">({{ refs }})</span>
-    </button>
+    <span class="preset-chip-wrap">
+      <button class="preset-chip" onclick="addMultiPreset('{{ name }}', this)">
+        + {{ name }} <span style="opacity:.6;font-size:11px;">({{ refs }})</span>
+      </button>
+      <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
+    </span>
     {% endfor %}
   </div>
   <div id="multi-msg-home" style="font-size:13px;margin-top:8px;display:none;"></div>
@@ -340,6 +346,26 @@ function doDelete() {
   .catch(function(e) {
     msg.textContent = String(e);
     msg.style.display = "block";
+  });
+}
+
+function deletePreset(name, btn) {
+  if (!confirm("Delete preset '" + name + "'?\n\nThis cannot be undone.")) return;
+  fetch("/api/preset_delete", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      location.reload();
+    } else {
+      alert("Delete failed: " + (d.error || "Unknown error"));
+    }
+  })
+  .catch(e => {
+    alert("Delete failed: " + String(e));
   });
 }
 
