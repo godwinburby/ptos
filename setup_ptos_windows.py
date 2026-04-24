@@ -88,11 +88,11 @@ rc, out, err = run(
     [sys.executable, "-m", "pip", "install", "flask", "tomli-w", "--quiet"],
 )
 if rc != 0:
-    # Try without --quiet in case it's a flag issue
-    rc, out, err = run([sys.executable, "-m", "pip", "install", "flask"])
+    # Retry without --quiet in case it's a flag issue
+    rc, out, err = run([sys.executable, "-m", "pip", "install", "flask", "tomli-w"])
     if rc != 0:
-        print(f"WARNING: Flask install may have failed.\n{err}")
-        print("You can try manually:  py -m pip install flask")
+        print(f"WARNING: Flask/tomli-w install may have failed.\n{err}")
+        print("You can try manually:  py -m pip install flask tomli-w")
     else:
         print("Flask installed.")
 else:
@@ -145,7 +145,19 @@ flask_proc = subprocess.Popen(
     [sys.executable, "ptos_web.py"],
     cwd=ptos_dir,
 )
-time.sleep(2)
+
+# Wait for Flask to be ready (up to 15s)
+import urllib.request
+print("Waiting for server", end="", flush=True)
+for _ in range(15):
+    try:
+        urllib.request.urlopen("http://localhost:5000", timeout=1)
+        break
+    except Exception:
+        print(".", end="", flush=True)
+        time.sleep(1)
+print()
+
 webbrowser.open("http://localhost:5000")
 
 try:

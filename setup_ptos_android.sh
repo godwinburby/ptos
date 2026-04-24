@@ -14,11 +14,14 @@ echo ""
 if [ ! -d "$HOME/storage/shared" ]; then
     echo "Requesting storage permission..."
     termux-setup-storage
-    echo ""
-    echo "If a permission dialog appeared, grant it, then re-run this script."
-    echo "If no dialog appeared and ~/storage/shared still doesn't exist, run:"
-    echo "  termux-setup-storage"
-    exit 0
+    sleep 3
+    if [ ! -d "$HOME/storage/shared" ]; then
+        echo ""
+        echo "Storage permission not granted (or dialog still pending)."
+        echo "Grant the permission when prompted, then re-run this script."
+        echo "If no dialog appeared, run:  termux-setup-storage"
+        exit 1
+    fi
 fi
 
 cd "$HOME/storage/shared"
@@ -41,8 +44,7 @@ fi
 # ── Install or use existing ────────────────────────────────────────────────────
 if [ -d "$PTOS_DIR" ]; then
     echo "PTOS already installed at: $PTOS_DIR"
-    echo "Updating Termux packages..."
-    pkg update -y && pkg upgrade -y
+    echo "Skipping package upgrade (only done on fresh install)."
 else
     echo "--- Downloading PTOS ---"
     mkdir -p "$HOME/storage/shared"

@@ -37,8 +37,11 @@ fi
 # ── Check for updates (if git repo) ───────────────────────────────────────────
 if [ -d ".git" ]; then
     echo "Checking for updates..."
-    git pull || true
-    echo "Already up to date."
+    if git pull 2>&1 | grep -q "Already up to date"; then
+        echo "Already up to date."
+    else
+        echo "Updated from GitHub."
+    fi
 else
     echo "Not a git repo - skipping update check."
 fi
@@ -75,6 +78,15 @@ echo ""
 
 $PYTHON ptos_web.py &
 FLASK_PID=$!
-sleep 2
+
+# Wait for Flask to be ready (up to 15s)
+echo "Waiting for server..."
+for i in $(seq 1 15); do
+    if curl -sf http://localhost:5000 >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
 xdg-open http://localhost:5000 2>/dev/null || true
 wait $FLASK_PID

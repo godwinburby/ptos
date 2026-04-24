@@ -37,7 +37,7 @@ if exist ".git" (
     if not errorlevel 1 (
         echo Updated from GitHub.
     ) else (
-        echo Already up to date.
+        echo Could not reach GitHub - continuing with local version.
     )
 ) else (
     echo Not a git repo - skipping update check.
@@ -65,5 +65,6 @@ echo Press Ctrl+C to stop.
 echo.
 
 :: Start Flask in foreground - shows output, Ctrl+C to stop
+timeout /t 2 /nobreak >nul
 start http://localhost:5000
 %PYTHON% ptos_web.py
