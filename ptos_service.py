@@ -31,6 +31,11 @@ class PTOSError(Exception):
     """Raised instead of sys.exit() so callers can handle gracefully."""
     pass
 
+def _disp(s):
+    """Convert underscore-separated value to space-separated for display only."""
+    return str(s).replace("_", " ") if s is not None else ""
+
+
 def _safe_exit(msg=""):
     raise PTOSError(str(msg))
 
@@ -108,7 +113,7 @@ def _parse_record(line, format_date=True):
     d, kv, note = parsed
     row = {"date": fmt_date(d) if format_date else str(d)}
     for k, v in kv.items():
-        row[k] = ", ".join(v) if isinstance(v, list) else str(v)
+        row[k] = _disp(", ".join(v)) if isinstance(v, list) else _disp(str(v))
     # append derived fields — pass record date for date arithmetic
     computed = ptos.compute_derived(kv, record_date=d)
     for fname, val in computed.items():
@@ -611,7 +616,7 @@ def get_group(filters, time="tm", group_fields=None,
     grand_count = 0
     grand_total = 0
     for key in sorted(counts):
-        label = "  ".join(key) if isinstance(key, tuple) else key
+        label = "  ".join(_disp(k) for k in key) if isinstance(key, tuple) else _disp(key)
         cnt   = counts[key]
         s     = sums.get(key, 0)
         grand_count += cnt
@@ -668,10 +673,10 @@ def get_pivot(filters, time="tm", row_field="type", col_field="month",
     rows       = []
     for row_label in row_order:
         row_total = 0
-        r = {"label": row_label}
+        r = {"label": _disp(row_label)}
         for c in cols:
             val = table[row_label].get(c, 0)
-            r[c]           = val
+            r[_disp(c)]    = val
             row_total      += val
             col_totals[c]  += val
         r["total"] = row_total
@@ -679,9 +684,9 @@ def get_pivot(filters, time="tm", row_field="type", col_field="month",
         rows.append(r)
 
     return {
-        "cols":        cols,
+        "cols":        [_disp(c) for c in cols],
         "rows":        rows,
-        "col_totals":  col_totals,
+        "col_totals":  {_disp(k): v for k, v in col_totals.items()},
         "grand":       grand,
         "row_field":   row_field,
         "col_field":   col_field,
@@ -893,9 +898,9 @@ def get_metric(name, time="tm"):
             c1, _  = ptos._run_base_query(q1, queries, start, end, cycles)
             c2, _  = ptos._run_base_query(q2, queries, start, end, cycles)
             if c2 == 0:
-                return {"name": name, "value": "no data", "raw": None}
+                return {"name": _disp(name), "value": "no data", "raw": None}
             raw = (c1 / c2) * 100
-            return {"name": name, "value": f"{raw:.1f}%  ({c1}/{c2})", "raw": raw}
+            return {"name": _disp(name), "value": f"{raw:.1f}%  ({c1}/{c2})", "raw": raw}
 
         if "avg" in m:
             uf = m.get("unit_field")
@@ -903,7 +908,7 @@ def get_metric(name, time="tm"):
             if uf and uw:
                 lines, total = ptos._run_base_query_lines(m["avg"], queries, start, end, cycles)
                 if not lines:
-                    return {"name": name, "value": "no data", "raw": None}
+                    return {"name": _disp(name), "value": "no data", "raw": None}
                 units = sum(uw.get(
                     (ptos.safe_parse_line(l) or (None,{},None))[1].get(uf,""), 1)
                     for l in lines)
@@ -911,13 +916,13 @@ def get_metric(name, time="tm"):
             else:
                 cnt, total = ptos._run_base_query(m["avg"], queries, start, end, cycles)
                 if cnt == 0:
-                    return {"name": name, "value": "no data", "raw": None}
+                    return {"name": _disp(name), "value": "no data", "raw": None}
                 raw = total / cnt
-            return {"name": name, "value": ptos.fmt_avg(raw), "raw": raw}
+            return {"name": _disp(name), "value": ptos.fmt_avg(raw), "raw": raw}
 
         if "sum" in m:
             _, total = ptos._run_base_query(m["sum"], queries, start, end, cycles)
-            return {"name": name, "value": ptos.fmt(total), "raw": total}
+            return {"name": _disp(name), "value": ptos.fmt(total), "raw": total}
 
         if "max" in m or "min" in m:
             key = "max" if "max" in m else "min"
@@ -927,9 +932,9 @@ def get_metric(name, time="tm"):
                 for l in lines]
             values = [v for v in values if v is not None]
             if not values:
-                return {"name": name, "value": "no data", "raw": None}
+                return {"name": _disp(name), "value": "no data", "raw": None}
             raw = max(values) if key == "max" else min(values)
-            return {"name": name, "value": ptos.fmt(raw), "raw": raw}
+            return {"name": _disp(name), "value": ptos.fmt(raw), "raw": raw}
 
         if "derived" in m:
             # Evaluate arithmetic expression referencing metric names or base query names.
@@ -984,18 +989,18 @@ def get_metric(name, time="tm"):
                 eval_expr = _re.sub(rf'\b{token}\b', str(val), eval_expr)
             # safe eval — only digits, spaces, and arithmetic operators (including scientific notation e)
             if not _re.match(r'^[\d\s\.\+\-\*\/\(\)e]+$', eval_expr):
-                return {"name": name, "value": f"unsafe expression: {eval_expr}", "raw": None}
+                return {"name": _disp(name), "value": f"unsafe expression: {eval_expr}", "raw": None}
             try:
                 raw = float(eval(eval_expr))  # noqa: S307
                 formatted = ptos.fmt(int(raw)) if raw == int(raw) else ptos.fmt_avg(raw)
-                return {"name": name, "value": formatted, "raw": raw}
+                return {"name": _disp(name), "value": formatted, "raw": raw}
             except Exception as e:
-                return {"name": name, "value": f"eval error: {e}", "raw": None}
+                return {"name": _disp(name), "value": f"eval error: {e}", "raw": None}
 
     except Exception as e:
-        return {"name": name, "value": f"error: {e}", "raw": None}
+        return {"name": _disp(name), "value": f"error: {e}", "raw": None}
 
-    return {"name": name, "value": "?", "raw": None}
+    return {"name": _disp(name), "value": "?", "raw": None}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1056,20 +1061,20 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
                 value = str(cnt)
                 if total > 0:
                     value += f"  ({ptos.fmt(total)})"
-                items.append({"name": item_name, "value": value, "raw": cnt,
+                items.append({"name": _disp(item_name), "value": value, "raw": cnt,
                                "kind": "query", "item_time": item_time})
             except Exception as e:
-                items.append({"name": item_name, "value": f"error: {e}", "raw": None,
+                items.append({"name": _disp(item_name), "value": f"error: {e}", "raw": None,
                                "kind": "query", "item_time": item_time})
         else:
-            items.append({"name": item_name, "value": "not found", "raw": None,
+            items.append({"name": _disp(item_name), "value": "not found", "raw": None,
                            "kind": "unknown", "item_time": item_time})
 
     # Build period string based on dashboard's time
     period_start, period_end = _resolve_time(time) if use_dashboard_time else _resolve_time(item_time)
     
     return {
-        "name":   name,
+        "name":   _disp(name),
         "period": f"{period_start} to {period_end}",
         "items":  items,
     }

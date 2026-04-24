@@ -1006,6 +1006,11 @@ def fmt_datetime(dt_obj):
     """Format datetime object: date part uses configured format, time stays HH:MM."""
     return f"{fmt_date(dt_obj)} {dt_obj.strftime('%H:%M')}"
 
+def _disp(s):
+    """Convert underscore-separated value to space-separated for display only.
+    Applied at render time; never touches stored values or filter expressions."""
+    return str(s).replace("_", " ") if s is not None else ""
+
 # --------------------------------------------------
 # Schema helpers
 # --------------------------------------------------
@@ -2175,7 +2180,7 @@ def pivot_results(results, row_field, col_field, count_mode=False, sort_col=None
     return table, cols, rows
 
 def render_group(counts, sums, has_amount, fields):
-    label_fn = lambda key: "  ".join(key) if isinstance(key, tuple) else key
+    label_fn = lambda key: "  ".join(_disp(k) for k in key) if isinstance(key, tuple) else _disp(key)
 
     if has_amount:
         # show count and sum together
@@ -2203,9 +2208,9 @@ def render_group(counts, sums, has_amount, fields):
 
 def render_pivot(table, cols, rows, row_field):
     width = 12
-    header = f"{row_field:15}"
+    header = f"{_disp(row_field):15}"
     for c in cols:
-        header += f"{c:>{width}}"
+        header += f"{_disp(c):>{width}}"
     header += f"{'Total':>{width}}"
     print()
     print(header)
@@ -2215,7 +2220,7 @@ def render_pivot(table, cols, rows, row_field):
     grand      = 0
     for row in rows:
         row_total = 0
-        line      = f"{row:15}"
+        line      = f"{_disp(row):15}"
         for c in cols:
             val = table[row].get(c, 0)
             line += f"{val:>{width}}"
@@ -2285,9 +2290,9 @@ def run_metric(name, queries, start, end, cycles):
         c1, _   = _run_base_query(q1, queries, start, end, cycles)
         c2, _   = _run_base_query(q2, queries, start, end, cycles)
         if c2 == 0:
-            print(f"{name:<24} no data")
+            print(f"{_disp(name):<24} no data")
         else:
-            print(f"{name:<24} {(c1/c2)*100:.1f}%  ({c1}/{c2})")
+            print(f"{_disp(name):<24} {(c1/c2)*100:.1f}%  ({c1}/{c2})")
         return True
 
     if "avg" in m:
@@ -2297,7 +2302,7 @@ def run_metric(name, queries, start, end, cycles):
             # weighted average: divide total by sum of per-record unit weights
             lines, total = _run_base_query_lines(m["avg"], queries, start, end, cycles)
             if not lines:
-                print(f"{name:<24} no data")
+                print(f"{_disp(name):<24} no data")
                 return True
             units = 0
             for line in lines:
@@ -2306,25 +2311,25 @@ def run_metric(name, queries, start, end, cycles):
                 if isinstance(val, list):
                     val = val[0]
                 units += unit_weights.get(val, 1)
-            print(f"{name:<24} {fmt_avg(total / units)}")
+            print(f"{_disp(name):<24} {fmt_avg(total / units)}")
         else:
             count, total = _run_base_query(m["avg"], queries, start, end, cycles)
             if count == 0:
-                print(f"{name:<24} no data")
+                print(f"{_disp(name):<24} no data")
             else:
-                print(f"{name:<24} {fmt_avg(total / count)}")
+                print(f"{_disp(name):<24} {fmt_avg(total / count)}")
         return True
 
     if "sum" in m:
         _, total = _run_base_query(m["sum"], queries, start, end, cycles)
-        print(f"{name:<24} {fmt(total)}")
+        print(f"{_disp(name):<24} {fmt(total)}")
         return True
 
     if "max" in m or "min" in m:
         key      = "max" if "max" in m else "min"
         lines, _ = _run_base_query_lines(m[key], queries, start, end, cycles)
         if not lines:
-            print(f"{name:<24} no data")
+            print(f"{_disp(name):<24} no data")
             return True
         values = []
         for line in lines:
@@ -2333,10 +2338,10 @@ def run_metric(name, queries, start, end, cycles):
             if v is not None:
                 values.append(v)
         if not values:
-            print(f"{name:<24} no data")
+            print(f"{_disp(name):<24} no data")
         else:
             result = max(values) if key == "max" else min(values)
-            print(f"{name:<24} {fmt(result)}")
+            print(f"{_disp(name):<24} {fmt(result)}")
         return True
 
     if "derived" in m:
@@ -2386,14 +2391,14 @@ def run_metric(name, queries, start, end, cycles):
         for token, val in resolved.items():
             eval_expr = re.sub(rf'\b{token}\b', str(val), eval_expr)
         if not re.match(r'^[\d\s\.\+\-\*\/\(\)e]+$', eval_expr):
-            print(f"{name:<24} unsafe: [{eval_expr!r}]")
+            print(f"{_disp(name):<24} unsafe: [{eval_expr!r}]")
             return True
         try:
             result = float(eval(eval_expr))  # noqa: S307
             formatted = fmt(int(result)) if result == int(result) else fmt_avg(result)
-            print(f"{name:<24} {formatted}")
+            print(f"{_disp(name):<24} {formatted}")
         except Exception as e:
-            print(f"{name:<24} error: {e}")
+            print(f"{_disp(name):<24} error: {e}")
         return True
 
     return False
@@ -2402,7 +2407,7 @@ def run_dashboard(name, queries, start, end, cycles):
     dashboards = queries.get("dashboards", {})
     if name not in dashboards:
         return False
-    print(f"\nDashboard: {name}")
+    print(f"\nDashboard: {_disp(name)}")
     print(f"Period:    {start} to {end}")
     print("-" * 40)
     for item in dashboards[name].get("metrics", []):
@@ -2411,7 +2416,7 @@ def run_dashboard(name, queries, start, end, cycles):
         if item in queries:
             count, total = _run_base_query(item, queries, start, end, cycles)
             suffix = f"  ({fmt(total)})" if total > 0 else ""
-            print(f"{item:<24} {count}{suffix}")
+            print(f"{_disp(item):<24} {count}{suffix}")
     print()
     return True
 
@@ -2453,7 +2458,7 @@ def show_fields(results):
             star   = "★ " if is_dim else "  "
             if is_dim:
                 good.append(field)
-            print(f"{star}{field:12} {', '.join(sorted(fields[field]))}")
+            print(f"{star}{_disp(field):12} {', '.join(_disp(v) for v in sorted(fields[field]))}")
         print()
         for f in good[:3]:
             suggested_groups.append(f"ptos -y {rtype} -G {f}")
@@ -4260,8 +4265,8 @@ def _render_single_table(lines, label=None):
             row["note"] = note or ""
         rows.append(row)
 
-    # natural column widths
-    natural = {f: len(f) for f in all_fields}
+    # natural column widths — header uses display name (spaces), values also displayed
+    natural = {f: len(_disp(f)) for f in all_fields}
     for row in rows:
         for f in all_fields:
             natural[f] = max(natural[f], len(row.get(f, "")))
@@ -4295,12 +4300,12 @@ def _render_single_table(lines, label=None):
     else:
         print()
 
-    header = gap.join(f.ljust(widths[f]) for f in all_fields)
+    header = gap.join(_disp(f).ljust(widths[f]) for f in all_fields)
     print(header)
     print("-" * len(header))
 
     for row in rows:
-        cells = [trunc(row.get(f, ""), widths[f]).ljust(widths[f]) for f in all_fields]
+        cells = [trunc(_disp(row.get(f, "")), widths[f]).ljust(widths[f]) for f in all_fields]
         print(gap.join(cells))
 
 
