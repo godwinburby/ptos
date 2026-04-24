@@ -3074,6 +3074,47 @@ def save_as_preset(name, record, note=None):
     atomic_write(presets_path, new_content)
     print(f"Preset '{name}' saved to presets.toml")
 
+
+def delete_preset(name):
+    """Delete a preset from presets.toml by name."""
+    presets_path = os.path.join(CONFIG_DIR, "presets.toml")
+    if not os.path.exists(presets_path):
+        return
+
+    with open(presets_path, "r", encoding="utf-8") as f:
+        lines = f.readlines()
+
+    header = f"[presets.{name}]"
+    start_idx = None
+    for i, line in enumerate(lines):
+        if line.strip() == header:
+            start_idx = i
+            break
+
+    if start_idx is None:
+        raise ValueError(f"Preset '{name}' not found")
+
+    # find end of this block
+    end_idx = len(lines)
+    for i in range(start_idx + 1, len(lines)):
+        stripped = lines[i].strip()
+        if stripped.startswith("[") and not stripped.startswith("#"):
+            end_idx = i
+            break
+
+    # rebuild: remove the block
+    before = lines[:start_idx]
+    after = lines[end_idx:]
+    while before and before[-1].strip() == "":
+        before.pop()
+    while after and after[0].strip() == "":
+        after.pop(0)
+
+    result = before + after
+    atomic_write(presets_path, "".join(result))
+    print(f"Preset '{name}' deleted from presets.toml")
+
+
 def interactive_add(schema, date=None, save_preset_name=None):
     record, note = complete_record(schema, {})
     problems     = validate_record(schema, record)
@@ -3824,6 +3865,7 @@ def build_parser(cycles):
     add.add_argument("-d", "--date",                    help="Date for the record (YYYY-MM-DD, default: today)")
     add.add_argument("-p", "--preset",       nargs="*", help="Quick-add from preset")
     add.add_argument("--save-preset",                   help="Save the record being added as a preset under this name")
+    add.add_argument("--delete-preset",                  help="Delete a preset by name")
 
     qry = p.add_argument_group("Query")
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
@@ -4408,6 +4450,10 @@ def main():
 
     if args.edit:
         edit_target(args.edit)
+        return
+
+    if args.delete_preset:
+        delete_preset(args.delete_preset)
         return
 
     if args.preset is not None:

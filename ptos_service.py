@@ -1835,6 +1835,14 @@ def save_as_preset(name, record, note=None):
         raise PTOSError(str(e))
 
 
+def delete_preset(name):
+    """Delete a preset by name."""
+    try:
+        ptos.delete_preset(name)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
 def get_backup_config():
     """Get backup configuration."""
     return ptos.get_backup_config()

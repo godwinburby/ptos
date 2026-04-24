@@ -2143,6 +2143,22 @@ def api_save_preset():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/api/preset_delete", methods=["POST"])
+def api_preset_delete():
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify(ok=False, error="Preset name required")
+    try:
+        svc.delete_preset(name)
+        svc.invalidate_cache("presets")
+        return jsonify(ok=True)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
 @app.route("/shutdown", methods=["GET", "POST"])
 def shutdown_server():
     def _exit():
