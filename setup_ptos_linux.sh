@@ -119,10 +119,18 @@ echo "Open in browser: http://localhost:5000"
 echo "Press Ctrl+C to stop."
 echo ""
 
-# Start Flask in background, wait for it to be ready, then open browser
 $PYTHON ptos_web.py &
 FLASK_PID=$!
-sleep 2
+
+# Wait for Flask to be ready (up to 15s)
+echo "Waiting for server..."
+for i in $(seq 1 15); do
+    if curl -sf http://localhost:5000 >/dev/null 2>&1; then
+        break
+    fi
+    sleep 1
+done
+
 xdg-open http://localhost:5000 2>/dev/null || true
 
 # Bring Flask back to foreground so Ctrl+C works naturally

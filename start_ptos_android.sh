@@ -70,9 +70,10 @@ else
         
         if [ -f "$TMP_DIR/ptos.zip" ]; then
             mkdir -p "$TMP_DIR/new"
-            unzip -q "$TMP_DIR/ptos.zip" -d "$TMP_DIR/new"
-            
-            if [ -d "$TMP_DIR/new/ptos-main" ]; then
+            if ! unzip -q "$TMP_DIR/ptos.zip" -d "$TMP_DIR/new"; then
+                echo "Warning: Zip extraction failed (download may be incomplete). Skipping update."
+                rm -rf "$TMP_DIR"
+            elif [ -d "$TMP_DIR/new/ptos-main" ]; then
                 # Preserved directories and files (user data that must not be overwritten)
                 PRESERVED="config records journal notes tasks scripts backups exports templates .version __pycache__ .git"
                 
