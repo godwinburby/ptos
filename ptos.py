@@ -34,11 +34,11 @@ GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
 
 
 def get_log_files():
-    """Get list of log files from records/, excluding sync conflicts."""
+    """Get list of log files from records/, excluding conflict files."""
     if not os.path.isdir(RECORDS_DIR):
         return []
     return sorted(f for f in os.listdir(RECORDS_DIR)
-                  if f.endswith(".log") and "sync-conflict" not in f.lower())
+                  if f.endswith(".log") and "conflict" not in f.lower())
 
 
 def get_backup_config():
