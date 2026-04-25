@@ -894,34 +894,33 @@ def get_metric(name, time="tm"):
 
     try:
         if "ratio" in m:
-            q1, q2 = m["ratio"]
-            c1, _  = ptos._run_base_query(q1, queries, start, end, cycles)
-            c2, _  = ptos._run_base_query(q2, queries, start, end, cycles)
-            if c2 == 0:
+            def _resolve(op):
+                if op in metrics:
+                    dep = metrics[op]
+                    if "sum" in dep:
+                        _, t = ptos._run_base_query(dep["sum"], queries, start, end, cycles,
+                                                    sum_field=dep.get("field"))
+                        return t
+                    elif "avg" in dep:
+                        cnt, total = ptos._run_base_query(dep["avg"], queries, start, end, cycles)
+                        return (total / cnt) if cnt else 0
+                    elif "ratio" in dep:
+                        v1 = _resolve(dep["ratio"][0])
+                        v2 = _resolve(dep["ratio"][1])
+                        return (v1 / v2 * 100) if v2 else 0
+                # base query — return count
+                c, _ = ptos._run_base_query(op, queries, start, end, cycles)
+                return c
+            v1 = _resolve(q1 := m["ratio"][0])
+            v2 = _resolve(q2 := m["ratio"][1])
+            if v2 == 0:
                 return {"name": _disp(name), "value": "no data", "raw": None}
-            raw = (c1 / c2) * 100
-            return {"name": _disp(name), "value": f"{raw:.1f}%  ({c1}/{c2})", "raw": raw}
-
-        if "avg" in m:
-            uf = m.get("unit_field")
-            uw = m.get("unit_weights")
-            if uf and uw:
-                lines, total = ptos._run_base_query_lines(m["avg"], queries, start, end, cycles)
-                if not lines:
-                    return {"name": _disp(name), "value": "no data", "raw": None}
-                units = sum(uw.get(
-                    (ptos.safe_parse_line(l) or (None,{},None))[1].get(uf,""), 1)
-                    for l in lines)
-                raw = total / units if units else 0
-            else:
-                cnt, total = ptos._run_base_query(m["avg"], queries, start, end, cycles)
-                if cnt == 0:
-                    return {"name": _disp(name), "value": "no data", "raw": None}
-                raw = total / cnt
-            return {"name": _disp(name), "value": ptos.fmt_avg(raw), "raw": raw}
+            raw = (v1 / v2) * 100
+            return {"name": _disp(name), "value": f"{raw:.1f}%  ({v1:.0f}/{v2:.0f})", "raw": raw}
 
         if "sum" in m:
-            _, total = ptos._run_base_query(m["sum"], queries, start, end, cycles)
+            _, total = ptos._run_base_query(m["sum"], queries, start, end, cycles,
+                                            sum_field=m.get("field"))
             return {"name": _disp(name), "value": ptos.fmt(total), "raw": total}
 
         if "max" in m or "min" in m:
@@ -950,11 +949,21 @@ def get_metric(name, time="tm"):
                 if token in metrics:
                     dep_m = metrics[token]
                     if "sum" in dep_m:
-                        _, val = ptos._run_base_query(dep_m["sum"], queries, start, end, cycles)
+                        _, val = ptos._run_base_query(dep_m["sum"], queries, start, end, cycles,
+                                                      sum_field=dep_m.get("field"))
                     elif "ratio" in dep_m:
-                        c1, _ = ptos._run_base_query(dep_m["ratio"][0], queries, start, end, cycles)
-                        c2, _ = ptos._run_base_query(dep_m["ratio"][1], queries, start, end, cycles)
-                        val = (c1 / c2 * 100) if c2 else 0
+                        dq1, dq2 = dep_m["ratio"][0], dep_m["ratio"][1]
+                        def _res(op):
+                            if op in metrics:
+                                dm = metrics[op]
+                                if "sum" in dm:
+                                    _, t = ptos._run_base_query(dm["sum"], queries, start, end, cycles,
+                                                                sum_field=dm.get("field"))
+                                    return t
+                            c, _ = ptos._run_base_query(op, queries, start, end, cycles)
+                            return c
+                        dc1, dc2 = _res(dq1), _res(dq2)
+                        val = (dc1 / dc2 * 100) if dc2 else 0
                     elif "avg" in dep_m:
                         cnt, total = ptos._run_base_query(dep_m["avg"], queries, start, end, cycles)
                         val = (total / cnt) if cnt else 0

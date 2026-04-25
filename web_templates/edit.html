@@ -74,6 +74,13 @@
       {% elif f.is_int %}
       <input type="number" name="{{ f.name }}" min="0" inputmode="numeric"
              value="{{ field_values.get(f.name, '') }}" placeholder="0">
+      {% elif f.is_month %}
+      <input type="month" name="{{ f.name }}"
+             value="{{ field_values.get(f.name, '') }}">
+      {% elif f.is_date %}
+      <input type="date" name="{{ f.name }}"
+             value="{{ field_values.get(f.name, '') }}"
+             max="{{ today }}">
       {% else %}
       <input type="text" name="{{ f.name }}"
              value="{{ field_values.get(f.name, '') }}"
