@@ -558,6 +558,7 @@ def add_post():
             selected_type=rtype, field_defs=fd,
             global_field_defs=_build_global_field_defs(schema, record),
             tag_options=svc.resolve_tags(schema, ts, record),
+            tag_context=svc.get_tag_context(rtype, record),
             field_values=record, today=dt.date.today().isoformat(),
             msg=" | ".join(problems), msg_type="error", last_line=None)
     try:
@@ -612,6 +613,27 @@ def add_field_option():
             parent_value=parent_value,
             shared_key=shared_key
         )
+        
+        if result.get("success"):
+            return jsonify({"success": True})
+        return jsonify({"success": False, "error": result.get("error", "Failed")}), 400
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
+
+
+
+@app.route("/add-global-field-option", methods=["POST"])
+def add_global_field_option():
+    """Add a new option to a global field."""
+    try:
+        data = request.get_json() or {}
+        field_name = data.get("field_name", "").strip()
+        new_option = data.get("new_option", "").strip()
+        
+        if not field_name or not new_option:
+            return jsonify({"success": False, "error": "Missing required fields"}), 400
+        
+        result = svc.add_global_field_option(field_name, new_option)
         
         if result.get("success"):
             return jsonify({"success": True})

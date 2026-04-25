@@ -1729,6 +1729,11 @@ def add_field_option(type_name, field_name, new_option, option_source,
                                  parent_field, parent_value, shared_key)
 
 
+def add_global_field_option(field_name, new_option):
+    """Add a new option to a global field in schema.toml."""
+    return ptos.add_global_field_option(field_name, new_option)
+
+
 def add_tag_option(rtype, tag_field, parent_value, new_tag):
     """Add a new tag option to schema.toml.
     
