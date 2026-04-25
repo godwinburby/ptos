@@ -2286,13 +2286,33 @@ def run_metric(name, queries, start, end, cycles):
     m = metrics[name]
 
     if "ratio" in m:
-        q1, q2  = m["ratio"]
-        c1, _   = _run_base_query(q1, queries, start, end, cycles)
-        c2, _   = _run_base_query(q2, queries, start, end, cycles)
-        if c2 == 0:
+        def _resolve_ratio_operand(op, queries, start, end, cycles):
+            """Return (count, total) for op — resolving as metric or base query."""
+            metrics = queries.get("metrics", {})
+            if op in metrics:
+                dep = metrics[op]
+                if "sum" in dep:
+                    return _run_base_query(dep["sum"], queries, start, end, cycles,
+                                          sum_field=dep.get("field"))
+                elif "avg" in dep:
+                    return _run_base_query(dep["avg"], queries, start, end, cycles)
+                elif "ratio" in dep:
+                    dq1, dq2 = dep["ratio"]
+                    dc1, _ = _resolve_ratio_operand(dq1, queries, start, end, cycles)
+                    dc2, _ = _resolve_ratio_operand(dq2, queries, start, end, cycles)
+                    return dc1, dc2
+            return _run_base_query(op, queries, start, end, cycles)
+
+        q1, q2 = m["ratio"]
+        c1, t1 = _resolve_ratio_operand(q1, queries, start, end, cycles)
+        c2, t2 = _resolve_ratio_operand(q2, queries, start, end, cycles)
+        # use totals (sums) when operands are sum metrics, else counts
+        v1 = t1 if t1 else c1
+        v2 = t2 if t2 else c2
+        if v2 == 0:
             print(f"{_disp(name):<24} no data")
         else:
-            print(f"{_disp(name):<24} {(c1/c2)*100:.1f}%  ({c1}/{c2})")
+            print(f"{_disp(name):<24} {(v1/v2)*100:.1f}%  ({v1}/{v2})")
         return True
 
     if "avg" in m:
@@ -2357,11 +2377,21 @@ def run_metric(name, queries, start, end, cycles):
                 # temporarily capture stdout by running the metric and reading raw value
                 dep_m = metrics[token]
                 if "sum" in dep_m:
-                    _, val = _run_base_query(dep_m["sum"], queries, start, end, cycles)
+                    _, val = _run_base_query(dep_m["sum"], queries, start, end, cycles,
+                                            sum_field=dep_m.get("field"))
                 elif "ratio" in dep_m:
-                    c1, _ = _run_base_query(dep_m["ratio"][0], queries, start, end, cycles)
-                    c2, _ = _run_base_query(dep_m["ratio"][1], queries, start, end, cycles)
-                    val = (c1 / c2 * 100) if c2 else 0
+                    def _res_derived(op):
+                        if op in metrics:
+                            dm = metrics[op]
+                            if "sum" in dm:
+                                _, t = _run_base_query(dm["sum"], queries, start, end, cycles,
+                                                       sum_field=dm.get("field"))
+                                return t
+                        c, _ = _run_base_query(op, queries, start, end, cycles)
+                        return c
+                    dc1 = _res_derived(dep_m["ratio"][0])
+                    dc2 = _res_derived(dep_m["ratio"][1])
+                    val = (dc1 / dc2 * 100) if dc2 else 0
                 elif "avg" in dep_m:
                     cnt, total = _run_base_query(dep_m["avg"], queries, start, end, cycles)
                     val = (total / cnt) if cnt else 0

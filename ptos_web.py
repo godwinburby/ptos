@@ -151,6 +151,8 @@ def _build_field_defs(schema, rtype, current_record=None):
         if fname == "tag": continue
         field_meta = schema.get("fields", {}).get(fname, {})
         is_int     = isinstance(field_meta, dict) and field_meta.get("type") == "int"
+        is_date    = isinstance(field_meta, dict) and field_meta.get("type") == "date"
+        is_month   = isinstance(field_meta, dict) and field_meta.get("type") == "month"
         unit       = field_meta.get("unit", "") if isinstance(field_meta, dict) else ""
         field_def  = type_schema.get("fields", {}).get(fname, {})
         parent     = field_def.get("parent") if isinstance(field_def, dict) else None
@@ -203,6 +205,8 @@ def _build_field_defs(schema, rtype, current_record=None):
             "parent_options": parent_options,
             "type_name":       rtype,
             "is_int":         is_int,
+            "is_date":        is_date,
+            "is_month":       is_month,
             "unit":           unit,
             "parent":         parent or "",
             "has_parent":     has_parent,
