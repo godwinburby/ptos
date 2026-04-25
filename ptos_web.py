@@ -2107,7 +2107,8 @@ def api_type_fields(rtype):
                 dimensions.append(fname)
         
         # Always include date for sorting (applies to all record types)
-        dimensions.append("date")
+        if "date" not in dimensions:
+            dimensions.insert(0, "date")
         
         return jsonify(fields=defs, dimensions=dimensions,
                        history_tags=history.get("filtered_tags", history.get("tags", [])),

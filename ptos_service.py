@@ -537,6 +537,9 @@ def get_records(filters, time="tm", search=None, sort=None,
         def _sk(line):
             p = ptos.safe_parse_line(line)
             if not p: return (1, 0, "")
+            # date is in p[0], other fields in p[1]
+            if sort == "date":
+                return (0, p[0], "")
             v = p[1].get(sort, "")
             if isinstance(v, list): v = v[0] if v else ""
             try:    return (0, int(v), "")
