@@ -1034,15 +1034,20 @@ function renderRecords(d) {
   if (!d.records||!d.records.length)
     return `<div class="card" style="color:var(--sub);text-align:center;padding:32px;">No records found.</div>`;
   const cols  = d.columns||[];
-  const heads = cols.map(c=>`<th>${c}</th>`).join("") + `<th style="width:80px"></th>`;
-  const rows  = d.records.map((r,i) => {
-    const cells = cols.map(c=>`<td>${r[c]||""}</td>`).join("");
+  const heads = cols.map(c=>`<th class="sortable" onclick="sortTable(this,'${c.replace(/'/g,"\\'")}')">${c}</th>`).join("") + `<th style="width:80px"></th>`;
+  // store data globally for sorting
+  window._browseData = {cols: cols, records: d.records, count: d.count, total: d.total, total_fmt: d.total_fmt, start: d.start, end: d.end, time_label: d.time_label, filters: d.filters};
+  const rows  = d.records.map((r) => {
+    const cells = cols.map(c => {
+      const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
+      return `<td>${r[rk] || ""}</td>`;
+    }).join("");
     const acts  = r._line
       ? `<td style="white-space:nowrap;">
            <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
              href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
            <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-             onclick='openDelete(${i})'>✕</button>
+             onclick='openDeleteRecord(${JSON.stringify(r).replace(/'/g,"\\'").replace(/"/g,"&quot;")})'>✕</button>
          </td>`
       : `<td></td>`;
     return `<tr>${cells}${acts}</tr>`;
@@ -1051,11 +1056,74 @@ function renderRecords(d) {
   window._browseRecords = d.records;
   return `<div class="card">
     ${summaryBar(d)}
-    <div style="overflow-x:auto;"><table class="data-table">
+    <div style="overflow-x:auto;"><table class="data-table" id="browse-table">
       <thead><tr>${heads}</tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody id="browse-tbody">${rows}</tbody>
     </table></div>
   </div>`;
+}
+
+// ── Table column sorting ────────────────────────────────────────────────────
+let _sortCol = null;
+let _sortAsc = true;
+
+function sortTable(th, col) {
+  const data = window._browseData;
+  if (!data || !data.records) return;
+  
+  // toggle direction if same column, otherwise reset to asc
+  if (_sortCol === col) {
+    _sortAsc = !_sortAsc;
+  } else {
+    _sortCol = col;
+    _sortAsc = true;
+  }
+  
+  // update header styles
+  document.querySelectorAll("#browse-table th.sortable").forEach(h => {
+    h.classList.remove("sort-asc","sort-desc");
+  });
+  th.classList.add(_sortAsc ? "sort-asc" : "sort-desc");
+  
+  // sort records
+  const colLower = col.toLowerCase();
+  const sorted = [...data.records].sort((a, b) => {
+    const ak = Object.keys(a).find(k => k.toLowerCase() === colLower) || col;
+    const bk = Object.keys(b).find(k => k.toLowerCase() === colLower) || col;
+    let va = a[ak] || "", vb = b[bk] || "";
+    // numeric sort
+    const na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) return _sortAsc ? na - nb : nb - na;
+    // date sort (ISO format)
+    if (/^\d{4}-\d{2}-\d{2}/.test(va) && /^\d{4}-\d{2}-\d{2}/.test(vb)) {
+      return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    // string sort
+    return _sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+  
+  // rebuild tbody
+  const tbody = document.getElementById("browse-tbody");
+  if (!tbody) return;
+  const rows = sorted.map((r) => {
+    const cells = data.cols.map(c => {
+      const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
+      return `<td>${r[rk] || ""}</td>`;
+    }).join("");
+    const rowIdx = data.records.indexOf(r);
+    const acts  = r._line
+      ? `<td style="white-space:nowrap;">
+           <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
+             href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
+           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
+             onclick='openDeleteRecord(${JSON.stringify(r).replace(/'/g,"\\'").replace(/"/g,"&quot;")})'>✕</button>
+         </td>`
+      : `<td></td>`;
+    return `<tr>${cells}${acts}</tr>`;
+  }).join("");
+  tbody.innerHTML = rows;
+  // update modal access
+  window._browseRecords = sorted;
 }
 
 // ── Delete modal ──────────────────────────────────────────────────────────────
@@ -1063,6 +1131,11 @@ let _editRecord = null;
 
 function openDelete(idx) {
   const r = (window._browseRecords || [])[idx];
+  if (!r || !r._line) return;
+  openDeleteRecord(r);
+}
+
+function openDeleteRecord(r) {
   if (!r || !r._line) return;
   _editRecord = r;
   document.getElementById("del-line").textContent   = r._line;
