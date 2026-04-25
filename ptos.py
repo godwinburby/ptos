@@ -2262,13 +2262,13 @@ def render_summary(results, start, end, time_label, filters, total, sum_field=No
 # Dashboard engine
 # --------------------------------------------------
 
-def _run_base_query(name, queries, start, end, cycles):
+def _run_base_query(name, queries, start, end, cycles, sum_field=None):
     q = queries[name]
     where = q.get("where", "") if isinstance(q, dict) else ""
     if not isinstance(where, str):
         sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
     filters = [where] if where.strip() else []
-    results, total = scan_records(start, end, filters, None)
+    results, total = scan_records(start, end, filters, None, sum_field=sum_field)
     return len(results), total
 
 def _run_base_query_lines(name, queries, start, end, cycles):
@@ -2321,7 +2321,8 @@ def run_metric(name, queries, start, end, cycles):
         return True
 
     if "sum" in m:
-        _, total = _run_base_query(m["sum"], queries, start, end, cycles)
+        sum_field = m.get("field")
+        _, total = _run_base_query(m["sum"], queries, start, end, cycles, sum_field=sum_field)
         print(f"{_disp(name):<24} {fmt(total)}")
         return True
 
