@@ -1537,14 +1537,16 @@ function triggerLivePreview() {
            '</tbody></table>';
       } else if (recs.records && recs.records.length) {
         var cols = recs.columns || [];
+        window._qbCols = cols;
+        window._qbRecords = recs.records;
         area.innerHTML = '<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;font-size:13px;">' +
           '<span>' + recs.records.length + ' records</span>' +
           summaryBar(recs) +
            '</div>' +
            '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">' +
-           '<table class="data-table"><thead><tr>' +
-           cols.map(c => '<th>'+_esc(c)+'</th>').join('') +
-           '</tr></thead><tbody>' +
+           '<table class="data-table" id="qb-table"><thead><tr>' +
+           cols.map(c => '<th class="sortable" onclick="qbSortTable(this,\''+c.replace(/'/g,"\\'")+'\')">'+_esc(c)+'</th>').join('') +
+           '</tr></thead><tbody id="qb-tbody">' +
            recs.records.slice(0, 20).map(r => '<tr>' + cols.map(c => '<td>'+_esc(r[c]||'')+'</td>').join('') + '</tr>').join('') +
            '</tbody></table></div>';
       } else {
@@ -1561,6 +1563,47 @@ function summaryBar(d) {
   if (d.avg_fmt)   parts.push('<span>Avg: <strong>'+d.avg_fmt+'</strong></span>');
   if (d.time_label) parts.push('<span style="color:var(--sub);">'+d.time_label+'</span>');
   return parts.length ? '<div style="display:flex;gap:12px;">' + parts.join('') + '</div>' : '';
+}
+
+var _qbSortCol = null;
+var _qbSortAsc = true;
+
+function qbSortTable(th, col) {
+  const data = window._qbRecords;
+  if (!data) return;
+  
+  if (_qbSortCol === col) {
+    _qbSortAsc = !_qbSortAsc;
+  } else {
+    _qbSortCol = col;
+    _qbSortAsc = true;
+  }
+  
+  document.querySelectorAll("#qb-table th.sortable").forEach(h => h.classList.remove("sort-asc","sort-desc"));
+  th.classList.add(_qbSortAsc ? "sort-asc" : "sort-desc");
+  
+  const colLower = col.toLowerCase();
+  const sorted = [...data].sort((a, b) => {
+    const ak = Object.keys(a).find(k => k.toLowerCase() === colLower) || col;
+    const bk = Object.keys(b).find(k => k.toLowerCase() === colLower) || col;
+    let va = a[ak] || "", vb = b[bk] || "";
+    const na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) return _qbSortAsc ? na - nb : nb - na;
+    if (/^\d{4}-\d{2}-\d{2}/.test(va) && /^\d{4}-\d{2}-\d{2}/.test(vb)) {
+      return _qbSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    return _qbSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+  
+  const cols = window._qbCols || [];
+  const tbody = document.getElementById("qb-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = sorted.map(r => '<tr>' + cols.map(c => {
+    const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
+    return '<td>'+_esc(r[rk]||'')+'</td>';
+  }).join('') + '</tr>').join('');
+  
+  window._qbRecords = sorted;
 }
 
 function showDueEditor() {

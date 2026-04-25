@@ -344,21 +344,27 @@ function renderTrend(d) {
 
 // ── Records with edit/delete ──────────────────────────────────────────────────
 let _qRecords = [];
+let _qSortCol = null;
+let _qSortAsc = true;
 
 function renderRecords(d) {
   if (!d.records || !d.records.length)
     return `<div class="card" style="color:var(--sub);text-align:center;padding:24px;">No records found.</div>`;
   _qRecords = d.records;
   const cols  = (d.columns || []).filter(c => !c.startsWith("_"));
-  const heads = cols.map(c=>`<th>${c}</th>`).join("") + `<th style="width:80px"></th>`;
+  window._qCols = cols;
+  const heads = cols.map(c=>`<th class="sortable" onclick="qSortTable(this,'${c.replace(/'/g,"\\'")}')">${c}</th>`).join("") + `<th style="width:80px"></th>`;
   const rows  = d.records.map((r,i) => {
-    const cells = cols.map(c=>`<td>${r[c]||""}</td>`).join("");
+    const cells = cols.map(c => {
+      const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
+      return `<td>${r[rk] || ""}</td>`;
+    }).join("");
     const acts  = r._line
       ? `<td style="white-space:nowrap;">
            <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
              href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
            <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-             onclick="qOpenDelete(${i})">✕</button>
+             onclick="qOpenDeleteRecord(${JSON.stringify(r).replace(/'/g,"\\'").replace(/"/g,"&quot;")})">✕</button>
          </td>`
       : `<td></td>`;
     return `<tr>${cells}${acts}</tr>`;
@@ -366,11 +372,59 @@ function renderRecords(d) {
   return `<div class="card">
     ${exprBadge(d)}
     ${summaryBar(d)}
-    <div style="overflow-x:auto;margin-top:8px;"><table class="data-table">
+    <div style="overflow-x:auto;margin-top:8px;"><table class="data-table" id="queries-table">
       <thead><tr>${heads}</tr></thead>
-      <tbody>${rows}</tbody>
+      <tbody id="queries-tbody">${rows}</tbody>
     </table></div>
   </div>`;
+}
+
+function qSortTable(th, col) {
+  const data = _qRecords;
+  if (!data) return;
+  
+  if (_qSortCol === col) {
+    _qSortAsc = !_qSortAsc;
+  } else {
+    _qSortCol = col;
+    _qSortAsc = true;
+  }
+  
+  document.querySelectorAll("#queries-table th.sortable").forEach(h => h.classList.remove("sort-asc","sort-desc"));
+  th.classList.add(_qSortAsc ? "sort-asc" : "sort-desc");
+  
+  const colLower = col.toLowerCase();
+  const sorted = [...data].sort((a, b) => {
+    const ak = Object.keys(a).find(k => k.toLowerCase() === colLower) || col;
+    const bk = Object.keys(b).find(k => k.toLowerCase() === colLower) || col;
+    let va = a[ak] || "", vb = b[bk] || "";
+    const na = parseFloat(va), nb = parseFloat(vb);
+    if (!isNaN(na) && !isNaN(nb)) return _qSortAsc ? na - nb : nb - na;
+    if (/^\d{4}-\d{2}-\d{2}/.test(va) && /^\d{4}-\d{2}-\d{2}/.test(vb)) {
+      return _qSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
+    }
+    return _qSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+  });
+  
+  const cols = (window._qCols || []).filter(c => !c.startsWith("_"));
+  const tbody = document.getElementById("queries-tbody");
+  if (!tbody) return;
+  tbody.innerHTML = sorted.map(r => {
+    const cells = cols.map(c => {
+      const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
+      return `<td>${r[rk] || ""}</td>`;
+    }).join("");
+    const acts = r._line ? `<td style="white-space:nowrap;">
+      <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
+        href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
+      <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
+        onclick="qOpenDeleteRecord(${JSON.stringify(r).replace(/'/g,"\\'").replace(/"/g,"&quot;")})">✕</button>
+    </td>` : `<td></td>`;
+    return `<tr>${cells}${acts}</tr>`;
+  }).join("");
+  
+  _qRecords = sorted;
+  window._qCols = cols;
 }
 
 function summaryBar(d) {
@@ -389,6 +443,11 @@ let _qDelRecord = null;
 
 function qOpenDelete(idx) {
   const r = _qRecords[idx];
+  if (!r || !r._line) return;
+  qOpenDeleteRecord(r);
+}
+
+function qOpenDeleteRecord(r) {
   if (!r || !r._line) return;
   _qDelRecord = r;
   document.getElementById("q-del-line").textContent  = r._line;

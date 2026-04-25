@@ -318,9 +318,20 @@
     }
     .data-table th {
       padding: 12px 14px; text-align: left; font-weight: 600;
-      color: var(--text); background: var(--bg); 
+      color: var(--text); background: var(--bg);
       border-bottom: 2px solid var(--border); white-space: nowrap;
     }
+    .data-table th.sortable {
+      cursor: pointer; user-select: none;
+    }
+    .data-table th.sortable:hover {
+      background: var(--accent-lt);
+    }
+    .data-table th.sortable:hover::before { content: "↕ "; opacity: .4; }
+    .data-table th.sort-asc::before { content: ""; }
+    .data-table th.sort-desc::before { content: ""; }
+    .data-table th.sort-asc::after { content: " ↑"; color: var(--accent); }
+    .data-table th.sort-desc::after { content: " ↓"; color: var(--accent); }
     .data-table td {
       padding: 10px 14px; border-bottom: 1px solid var(--border);
       vertical-align: top;
@@ -482,6 +493,86 @@
 <script>
 // ── Editable Options ────────────────────────────────────────────────────────────────
 let pendingOption = null;
+
+function getFieldInfo(fieldName) {
+    const allFields = window.field_defs || [];
+    return allFields.find(f => f.name === fieldName) || {};
+}
+
+// ── Generic Table Column Sort ─────────────────────────────────────────────────────
+function initTableSort(tableId, colsKey, recordsKey) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const thead = table.querySelector("thead");
+    if (!thead) return;
+    const headers = thead.querySelectorAll("th");
+    headers.forEach((th, idx) => {
+        if (idx >= (colsKey ? window[colsKey]?.length || 0 : 0)) return;
+        th.classList.add("sortable");
+        th.addEventListener("click", () => {
+            const col = colsKey ? window[colsKey][idx] : th.textContent.trim();
+            genericSortTable(tableId, colsKey, recordsKey, th, col);
+        });
+    });
+}
+
+function genericSortTable(tableId, colsKey, recordsKey, th, col) {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const tbody = table.querySelector("tbody");
+    if (!tbody) return;
+    
+    // toggle direction if same column, otherwise reset to asc
+    const stored = window._sortState = window._sortState || {};
+    if (stored.col === col) {
+        stored.asc = !stored.asc;
+    } else {
+        stored.col = col;
+        stored.asc = true;
+    }
+    
+    // update header styles
+    table.querySelectorAll("th.sortable").forEach(h => h.classList.remove("sort-asc","sort-desc"));
+    th.classList.add(stored.asc ? "sort-asc" : "sort-desc");
+    
+    // get records
+    const records = recordsKey ? window[recordsKey] : null;
+    if (!records) return;
+    
+    // sort
+    const colLower = col.toLowerCase();
+    const sorted = [...records].sort((a, b) => {
+        const ak = Object.keys(a).find(k => k.toLowerCase() === colLower) || col;
+        const bk = Object.keys(b).find(k => k.toLowerCase() === colLower) || col;
+        let va = a[ak] || "", vb = b[bk] || "";
+        const na = parseFloat(va), nb = parseFloat(vb);
+        if (!isNaN(na) && !isNaN(nb)) return stored.asc ? na - nb : nb - na;
+        if (/^\d{4}-\d{2}-\d{2}/.test(va) && /^\d{4}-\d{2}-\d{2}/.test(vb)) {
+            return stored.asc ? va.localeCompare(vb) : vb.localeCompare(va);
+        }
+        return stored.asc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+    });
+    
+    // rebuild tbody
+    const cols = colsKey ? window[colsKey] : Object.keys(records[0] || {});
+    tbody.innerHTML = sorted.map(r => {
+        const cells = cols.map(c => {
+            const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
+            return `<td>${r[rk] || ""}</td>`;
+        }).join("");
+        const acts = r._line ? `<td style="white-space:nowrap;">
+            <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
+              href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
+            <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
+              onclick='openDeleteRecord(${JSON.stringify(r).replace(/'/g,"\\'").replace(/"/g,"&quot;")})'>✕</button>
+         </td>` : `<td></td>`;
+        return `<tr>${cells}${acts}</tr>`;
+    }).join("");
+    
+    // update records reference
+    if (recordsKey) window[recordsKey] = sorted;
+}
+
 
 function getFieldInfo(fieldName) {
     const allFields = window.field_defs || [];
