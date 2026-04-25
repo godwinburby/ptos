@@ -488,6 +488,40 @@ function getFieldInfo(fieldName) {
     return allFields.find(f => f.name === fieldName) || {};
 }
 
+function addGlobalFieldOption(fieldName, selectId) {
+    const newVal = prompt('Enter new option for ' + fieldName + ':');
+    if (!newVal || !newVal.trim()) return;
+    
+    const val = newVal.trim();
+    const select = document.getElementById(selectId);
+    
+    // Check if option already exists
+    const exists = Array.from(select.options).some(o => o.value === val);
+    if (exists) {
+        alert('Option already exists');
+        return;
+    }
+    
+    fetch('/add-global-field-option', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({field_name: fieldName, new_option: val})
+    })
+    .then(r => r.json())
+    .then(result => {
+        if (result.success) {
+            const opt = document.createElement('option');
+            opt.value = val;
+            opt.textContent = val;
+            opt.selected = true;
+            select.appendChild(opt);
+        } else {
+            alert('Error: ' + (result.error || 'Failed to add option'));
+        }
+    })
+    .catch(e => alert('Error: ' + e.message));
+}
+
 function addNewOption(fieldName) {
     const newVal = prompt('Enter new option for ' + fieldName + ':');
     if (!newVal || !newVal.trim()) return;

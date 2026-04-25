@@ -197,12 +197,17 @@
           <span style="color:var(--sub);font-weight:400;font-size:11px;"> optional</span>
         </label>
         {% if f.options %}
-        <select name="{{ f.name }}">
-          <option value="">— none —</option>
-          {% for opt in f.options %}
-          <option value="{{ opt }}" {% if f.value == opt %}selected{% endif %}>{{ opt }}</option>
-          {% endfor %}
-        </select>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <select name="{{ f.name }}" id="field-{{ f.name }}">
+            <option value="">— none —</option>
+            {% for opt in f.options %}
+            <option value="{{ opt }}" {% if f.value == opt %}selected{% endif %}>{{ opt }}</option>
+            {% endfor %}
+          </select>
+          <button type="button" onclick="addGlobalFieldOption('{{ f.name }}', 'field-{{ f.name }}')"
+                  style="padding:4px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;"
+                  title="Add new option">+</button>
+        </div>
         {% else %}
         <input type="text" name="{{ f.name }}"
                value="{{ f.value }}"

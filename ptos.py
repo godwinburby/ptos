@@ -2731,6 +2731,39 @@ def add_field_option(type_name, field_name, new_option, option_source,
     return {"success": True}
 
 
+def add_global_field_option(field_name, new_option):
+    """Add a new option to a global field in schema.toml."""
+    schema = get_schema()
+    new_opt = new_option.strip()
+    if not new_opt:
+        return {"success": False, "error": "Empty option"}
+    
+    gfields = schema.get("global_fields", {})
+    if field_name not in gfields:
+        return {"success": False, "error": f"Global field {field_name} not found"}
+    
+    fdef = gfields[field_name]
+    if not isinstance(fdef, dict):
+        return {"success": False, "error": "Invalid field definition"}
+    
+    opts = fdef.get("options", [])
+    if not isinstance(opts, list):
+        return {"success": False, "error": "Not an options field"}
+    
+    if new_opt in opts:
+        return {"success": True}
+    
+    opts.append(new_opt)
+    fdef["options"] = sorted(opts)
+    
+    try:
+        _save_schema(schema)
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+    
+    return {"success": True}
+
+
 def resolve_field(schema, type_schema, field, record):
     """Prompt user for a single field value."""
     # integer field  (from global [fields] metadata)
