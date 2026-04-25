@@ -183,9 +183,9 @@
     .card-title { font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
 
     /* stat grid */
-    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; }
+    .stat-card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 16px; min-width: 0; overflow: hidden; }
     .stat-label { font-size: 11px; color: var(--sub); font-weight: 700; text-transform: uppercase; letter-spacing: .4px; }
-    .stat-value { font-size: 28px; font-weight: 800; color: var(--text); margin: 6px 0 2px; line-height: 1; }
+    .stat-value { font-size: 28px; font-weight: 800; color: var(--text); margin: 6px 0 2px; line-height: 1.1; overflow-wrap: break-word; word-break: break-word; }
     .stat-sub   { font-size: 12px; color: var(--sub); }
     .stat-card.c-accent { background: var(--accent); border-color: var(--accent); }
     .stat-card.c-warn   { background: var(--warn);   border-color: var(--warn); }
@@ -195,7 +195,7 @@
     .stat-card.c-warn .stat-label,
     .stat-card.c-warn .stat-value,
     .stat-card.c-warn .stat-sub { color: #fff; }
-    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+    .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 160px)); gap: 12px; }
     @media (max-width: 480px) {
       .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
     }
