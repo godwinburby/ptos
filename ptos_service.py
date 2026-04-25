@@ -923,6 +923,29 @@ def get_metric(name, time="tm"):
                                             sum_field=m.get("field"))
             return {"name": _disp(name), "value": ptos.fmt(total), "raw": total}
 
+        if "avg" in m:
+            unit_field = m.get("unit_field")
+            unit_weights = m.get("unit_weights")
+            if unit_field and unit_weights:
+                lines, total = ptos._run_base_query_lines(m["avg"], queries, start, end, cycles)
+                if not lines:
+                    return {"name": _disp(name), "value": "no data", "raw": None}
+                units = 0
+                for line in lines:
+                    kv = (ptos.safe_parse_line(line) or (None, {}, None))[1]
+                    val = kv.get(unit_field, "")
+                    if isinstance(val, list):
+                        val = val[0]
+                    units += unit_weights.get(val, 1)
+                raw = total / units if units else 0
+                return {"name": _disp(name), "value": ptos.fmt_avg(raw), "raw": raw}
+            else:
+                cnt, total = ptos._run_base_query(m["avg"], queries, start, end, cycles)
+                if cnt == 0:
+                    return {"name": _disp(name), "value": "no data", "raw": None}
+                raw = total / cnt
+                return {"name": _disp(name), "value": ptos.fmt_avg(raw), "raw": raw}
+
         if "max" in m or "min" in m:
             key = "max" if "max" in m else "min"
             lines, _ = ptos._run_base_query_lines(m[key], queries, start, end, cycles)
