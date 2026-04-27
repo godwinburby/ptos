@@ -281,7 +281,7 @@
             <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
               href="/edit?filepath={{ row._filepath|urlencode }}&lineno={{ row._lineno }}&line={{ row._line|urlencode }}&return_to=/">✎</a>
             <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-              onclick="openDeleteRecord({{ row|tojson }})">✕</button>
+              data-row='{{ row|tojson }}' onclick="openDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
             {% endif %}
           </td>
         </tr>
@@ -349,12 +349,12 @@ function homeSort(th, col) {
             const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
             return `<td>${r[rk] || ""}</td>`;
         }).join("");
-        const acts = r._line ? `<td style="white-space:nowrap;">
+const acts = r._line ? `<td style="white-space:nowrap;">
             <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
               href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=/">✎</a>
             <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-              onclick='openDeleteRecord(${JSON.stringify(r).replace(/'/g,"\\'").replace(/"/g,"&quot;")})'>✕</button>
-         </td>` : `<td></td>`;
+              data-row='${JSON.stringify(r)}' onclick="openDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
+          </td>` : `<td></td>`;
         return `<tr>${cells}${acts}</tr>`;
     }).join("");
     
@@ -374,6 +374,10 @@ function openDeleteRecord(r) {
   document.getElementById("del-line").textContent = r._line;
   document.getElementById("del-msg").style.display = "none";
   document.getElementById("del-dialog").style.display = "flex";
+}
+
+function closeDelete() {
+  document.getElementById("del-dialog").style.display = "none";
 }
 
 function doDelete() {

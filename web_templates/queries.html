@@ -364,7 +364,7 @@ function renderRecords(d) {
            <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
              href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
            <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-             onclick="qOpenDeleteRecord(${JSON.stringify(r).replace(/'/g,"\\'").replace(/"/g,"&quot;")})">✕</button>
+             data-row='${JSON.stringify(r)}' onclick="qOpenDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
          </td>`
       : `<td></td>`;
     return `<tr>${cells}${acts}</tr>`;
@@ -418,7 +418,7 @@ function qSortTable(th, col) {
       <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
         href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
       <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-        onclick="qOpenDeleteRecord(${JSON.stringify(r).replace(/'/g,"\\'").replace(/"/g,"&quot;")})">✕</button>
+        data-row='${JSON.stringify(r)}' onclick="qOpenDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
     </td>` : `<td></td>`;
     return `<tr>${cells}${acts}</tr>`;
   }).join("");
