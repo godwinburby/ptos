@@ -51,6 +51,18 @@
   </div>
 </div>
 
+<div id="rec-del-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;max-width:420px;width:90%;box-shadow:0 12px 40px rgba(0,0,0,.25);">
+    <div style="font-weight:700;font-size:16px;margin-bottom:12px;">Delete Record?</div>
+    <div id="rec-del-line" style="font-family:monospace;font-size:12px;background:var(--bg);padding:10px;border-radius:8px;margin-bottom:16px;word-break:break-all;"></div>
+    <div id="rec-del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;">
+      <button class="btn btn-ghost" onclick="qbCloseDelete()">Cancel</button>
+      <button class="btn btn-primary" style="background:var(--error);" onclick="qbDoDelete()">Delete</button>
+    </div>
+  </div>
+</div>
+
 <style>
   /* ── Section tab bar ─────────────────────────────────────────────────────── */
   .qb-section-bar {
@@ -1465,6 +1477,54 @@ function confirmDelete() {
   .catch(function(e){ showMsg("✖ "+e,false); });
 }
 
+// ── Record delete from table ──────────────────────────────────────────────────
+var _qbDelRecord = null;
+
+function qbOpenDeleteRecord(r) {
+  if (!r || !r._line) return;
+  _qbDelRecord = r;
+  document.getElementById("rec-del-line").textContent = r._line;
+  document.getElementById("rec-del-msg").style.display = "none";
+  document.getElementById("rec-del-dialog").style.display = "flex";
+}
+
+function qbCloseDelete() {
+  document.getElementById("rec-del-dialog").style.display = "none";
+}
+
+function qbDoDelete() {
+  var r = _qbDelRecord;
+  if (!r) return;
+  var msg = document.getElementById("rec-del-msg");
+  fetch("/api/records/delete", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({
+      filepath: r._filepath,
+      old_line: r._line,
+      lineno: r._lineno
+    })
+  })
+  .then(function(res) { return res.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      qbCloseDelete();
+      window.location.reload();
+    } else {
+      msg.textContent = d.error || "Delete failed";
+      msg.style.display = "block";
+    }
+  })
+  .catch(function(e) {
+    msg.textContent = "Delete failed: " + String(e);
+    msg.style.display = "block";
+  });
+}
+
+document.getElementById("rec-del-dialog").addEventListener("click", function(e) {
+  if (e.target === this) qbCloseDelete();
+});
+
 // ── Save all ──────────────────────────────────────────────────────────────────
 function saveAll() {
   // sync all where expressions from chips before saving
@@ -1546,8 +1606,10 @@ function triggerLivePreview() {
            '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">' +
            '<table class="data-table" id="qb-table"><thead><tr>' +
            cols.map(c => '<th class="sortable" onclick="qbSortTable(this,\''+c.replace(/'/g,"\\'")+'\')">'+_esc(c)+'</th>').join('') +
-           '</tr></thead><tbody id="qb-tbody">' +
-           recs.records.slice(0, 20).map(r => '<tr>' + cols.map(c => '<td>'+_esc(r[c]||'')+'</td>').join('') + '</tr>').join('') +
+           '<th style="width:80px"></th></tr></thead><tbody id="qb-tbody">' +
+           recs.records.map(r => '<tr>' + cols.map(c => '<td>'+_esc(r[c]||'')+'</td>').join('') +
+           (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to=/query-builder">✎</a><button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row=\''+JSON.stringify(r)+'\' onclick="qbOpenDeleteRecord(JSON.parse(this.dataset.row))">✕</button></td>' : '<td></td>') +
+           '</tr>').join('') +
            '</tbody></table></div>';
       } else {
         area.innerHTML = '<div style="color:var(--sub);padding:16px;">No records found.</div>';
@@ -1601,7 +1663,9 @@ function qbSortTable(th, col) {
   tbody.innerHTML = sorted.map(r => '<tr>' + cols.map(c => {
     const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
     return '<td>'+_esc(r[rk]||'')+'</td>';
-  }).join('') + '</tr>').join('');
+  }).join('') +
+  (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to=/query-builder">✎</a><button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row=\''+JSON.stringify(r)+'\' onclick="qbOpenDeleteRecord(JSON.parse(this.dataset.row))">✕</button></td>' : '<td></td>') +
+  '</tr>').join('');
   
   window._qbRecords = sorted;
 }
