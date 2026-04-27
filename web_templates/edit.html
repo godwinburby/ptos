@@ -81,6 +81,37 @@
       <input type="date" name="{{ f.name }}"
              value="{{ field_values.get(f.name, '') }}"
              max="{{ today }}">
+      {% elif f.is_datetime %}
+      <div class="datetime-picker-wrap" data-field="{{ f.name }}">
+        <input type="date"
+               id="date-part-{{ f.name }}"
+               style="flex:2;min-width:0;"
+               oninput="syncDatetime('{{ f.name }}')">
+        <div style="display:flex;gap:4px;align-items:center;flex:1;min-width:0;">
+          <select id="hour-part-{{ f.name }}"
+                  style="flex:1;min-width:0;"
+                  onchange="syncDatetime('{{ f.name }}')">
+            {% for h in range(24) %}
+            <option value="{{ '%02d'|format(h) }}">{{ '%02d'|format(h) }}</option>
+            {% endfor %}
+          </select>
+          <span style="font-weight:700;color:var(--sub);">:</span>
+          <select id="min-part-{{ f.name }}"
+                  style="flex:1;min-width:0;"
+                  onchange="syncDatetime('{{ f.name }}')">
+            {% for m in [0,5,10,15,20,25,30,35,40,45,50,55] %}
+            <option value="{{ '%02d'|format(m) }}">{{ '%02d'|format(m) }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <input type="hidden"
+               name="{{ f.name }}"
+               id="hidden-{{ f.name }}"
+               value="{{ field_values.get(f.name, '') }}">
+      </div>
+      <div style="font-size:11px;color:var(--sub);margin-top:4px;">
+        Leave date blank to skip · time in 5-min steps
+      </div>
       {% else %}
       <input type="text" name="{{ f.name }}"
              value="{{ field_values.get(f.name, '') }}"
@@ -336,6 +367,59 @@ document.getElementById("edit-form").addEventListener("submit", function() {
     });
   });
 })();
+</script>
+
+<style>
+.datetime-picker-wrap {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.datetime-picker-wrap select,
+.datetime-picker-wrap input[type="date"] {
+  width: auto;
+}
+</style>
+
+<script>
+// ── Datetime picker sync ─────────────────────────────────────────────────────
+function syncDatetime(field) {
+  var d = document.getElementById("date-part-" + field).value;
+  var h = document.getElementById("hour-part-" + field).value;
+  var m = document.getElementById("min-part-"  + field).value;
+  var hidden = document.getElementById("hidden-" + field);
+  hidden.value = d ? (d + "T" + h + ":" + m) : "";
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  // Initialise from existing values
+  document.querySelectorAll(".datetime-picker-wrap").forEach(function(wrap) {
+    var field  = wrap.dataset.field;
+    var hidden = document.getElementById("hidden-" + field);
+    if (!hidden || !hidden.value) return;
+    var parts = hidden.value.split("T");
+    if (parts.length < 2) return;
+    var datePart = parts[0];
+    var timeParts = parts[1].split(":");
+    var h = timeParts[0] || "09";
+    var rawMin = parseInt(timeParts[1] || "0", 10);
+    var m = ("0" + (Math.round(rawMin / 5) * 5 % 60)).slice(-2);
+    document.getElementById("date-part-" + field).value = datePart;
+    document.getElementById("hour-part-" + field).value = h;
+    document.getElementById("min-part-"  + field).value = m;
+  });
+
+  // Default 09:00 for blank datetime pickers
+  document.querySelectorAll(".datetime-picker-wrap").forEach(function(wrap) {
+    var field  = wrap.dataset.field;
+    var hidden = document.getElementById("hidden-" + field);
+    if (hidden && !hidden.value) {
+      document.getElementById("hour-part-" + field).value = "09";
+      document.getElementById("min-part-"  + field).value = "00";
+    }
+  });
+});
 </script>
 
 {% endblock %}

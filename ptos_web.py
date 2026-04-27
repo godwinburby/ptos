@@ -150,9 +150,10 @@ def _build_field_defs(schema, rtype, current_record=None):
     for fname in all_fields:
         if fname == "tag": continue
         field_meta = schema.get("fields", {}).get(fname, {})
-        is_int     = isinstance(field_meta, dict) and field_meta.get("type") == "int"
-        is_date    = isinstance(field_meta, dict) and field_meta.get("type") == "date"
-        is_month   = isinstance(field_meta, dict) and field_meta.get("type") == "month"
+        is_int      = isinstance(field_meta, dict) and field_meta.get("type") == "int"
+        is_date     = isinstance(field_meta, dict) and field_meta.get("type") == "date"
+        is_month    = isinstance(field_meta, dict) and field_meta.get("type") == "month"
+        is_datetime = isinstance(field_meta, dict) and field_meta.get("type") == "datetime"
         unit       = field_meta.get("unit", "") if isinstance(field_meta, dict) else ""
         field_def  = type_schema.get("fields", {}).get(fname, {})
         parent     = field_def.get("parent") if isinstance(field_def, dict) else None
@@ -207,6 +208,7 @@ def _build_field_defs(schema, rtype, current_record=None):
             "is_int":         is_int,
             "is_date":        is_date,
             "is_month":       is_month,
+            "is_datetime":    is_datetime,
             "unit":           unit,
             "parent":         parent or "",
             "has_parent":     has_parent,
@@ -2095,6 +2097,7 @@ def api_type_fields(rtype):
                 "required":             False,
                 "options":              fdef.get("options", []),
                 "is_int":               fdef.get("type") == "int",
+                "is_datetime":          fdef.get("type") == "datetime",
                 "unit":                 fdef.get("unit", ""),
                 "parent":               "",
                 "has_parent":           False,

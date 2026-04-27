@@ -769,7 +769,7 @@ def restore_data(zip_path):
                     os.remove(dst)
                 shutil.copy2(src, dst)
         
-        for key in ("config", "schema", "queries", "presets", "derived_fields", "numeric_fields"):
+        for key in ("config", "schema", "queries", "presets", "derived_fields", "numeric_fields", "datetime_fields"):
             _CACHE.pop(key, None)
         
         shutil.rmtree(temp_dir)
@@ -1023,6 +1023,15 @@ def numeric_fields():
             if isinstance(meta, dict) and meta.get("type") == "int"
         ]
     return _CACHE["numeric_fields"]
+
+def datetime_fields():
+    """Return list of field names declared as type=datetime in schema."""
+    if "datetime_fields" not in _CACHE:
+        _CACHE["datetime_fields"] = [
+            f for f, meta in get_schema().get("fields", {}).items()
+            if isinstance(meta, dict) and meta.get("type") == "datetime"
+        ]
+    return _CACHE["datetime_fields"]
 
 def non_dimension_fields():
     """Return set of fields marked dimension=false in schema (for show_fields filtering)."""
@@ -1416,12 +1425,16 @@ def _eval_cond(kv, cond):
         if cur_scalar == int(cur_scalar) and float(val) == int(float(val)):
             cur_scalar, val = int(cur_scalar), int(val)
     except (ValueError, TypeError):
-        # not numeric — try date
+        # not numeric — try datetime first, then date
         try:
-            cur_scalar = parse_date(str(cur_scalar))
-            val = parse_date(str(val))
+            cur_scalar = dt.datetime.fromisoformat(str(cur_scalar))
+            val        = dt.datetime.fromisoformat(str(val))
         except (ValueError, TypeError):
-            pass  # fall through to string comparison
+            try:
+                cur_scalar = parse_date(str(cur_scalar))
+                val        = parse_date(str(val))
+            except (ValueError, TypeError):
+                pass  # fall through to string comparison
 
     ops = {
         ">":  lambda a, b: a > b,
@@ -1932,6 +1945,17 @@ def validate_record(schema, record):
         if isinstance(meta, dict) and meta.get("type") == "int" and field in record:
             if not str(record[field]).isdigit():
                 problems.append(f"Field '{field}' must be integer")
+
+    # datetime fields — validate ISO format YYYY-MM-DDTHH:MM
+    for field, meta in schema.get("fields", {}).items():
+        if isinstance(meta, dict) and meta.get("type") == "datetime" and field in record:
+            try:
+                dt.datetime.fromisoformat(str(record[field]))
+            except (ValueError, TypeError):
+                problems.append(
+                    f"Field '{field}' must be datetime format YYYY-MM-DDTHH:MM "
+                    f"(e.g. 2026-04-20T10:30) — got '{record[field]}'"
+                )
 
     # allowed field names
     allowed_fields = {"type", "tag"}
@@ -2801,6 +2825,18 @@ def resolve_field(schema, type_schema, field, record):
     field_meta = schema.get("fields", {}).get(field, {})
     if isinstance(field_meta, dict) and field_meta.get("type") == "int":
         return input_int(f"Enter {field}")
+
+    # datetime field — prompt with format hint and validate
+    if isinstance(field_meta, dict) and field_meta.get("type") == "datetime":
+        while True:
+            raw = input(f"  {field} (YYYY-MM-DDTHH:MM, e.g. 2026-04-20T10:30): ").strip()
+            if not raw:
+                return ""
+            try:
+                dt.datetime.fromisoformat(raw)
+                return raw
+            except ValueError:
+                print(f"  Invalid format. Use YYYY-MM-DDTHH:MM (e.g. 2026-04-20T10:30)")
 
     field_def = type_schema.get("fields", {}).get(field, {})
 
@@ -4410,8 +4446,17 @@ def _render_single_table(lines, label=None):
     print(header)
     print("-" * len(header))
 
+    dt_fields = set(datetime_fields())
     for row in rows:
-        cells = [trunc(_disp(row.get(f, "")), widths[f]).ljust(widths[f]) for f in all_fields]
+        def _fmt_cell(f, v):
+            if f in dt_fields and v:
+                try:
+                    parsed = dt.datetime.fromisoformat(str(v))
+                    return parsed.strftime("%d-%b %H:%M")
+                except (ValueError, TypeError):
+                    pass
+            return _disp(v)
+        cells = [trunc(_fmt_cell(f, row.get(f, "")), widths[f]).ljust(widths[f]) for f in all_fields]
         print(gap.join(cells))
 
 
