@@ -112,8 +112,18 @@ def _parse_record(line, format_date=True):
         return None
     d, kv, note = parsed
     row = {"date": fmt_date(d) if format_date else str(d)}
+    _dt_fields = set(ptos.datetime_fields())
     for k, v in kv.items():
-        row[k] = _disp(", ".join(v)) if isinstance(v, list) else _disp(str(v))
+        raw = ", ".join(v) if isinstance(v, list) else str(v)
+        if k in _dt_fields and raw:
+            try:
+                import datetime as _dt_mod
+                parsed_dt = _dt_mod.datetime.fromisoformat(raw)
+                row[k] = parsed_dt.strftime("%d-%b-%Y %H:%M")
+            except (ValueError, TypeError):
+                row[k] = _disp(raw)
+        else:
+            row[k] = _disp(raw)
     # append derived fields — pass record date for date arithmetic
     computed = ptos.compute_derived(kv, record_date=d)
     for fname, val in computed.items():
