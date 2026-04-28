@@ -855,8 +855,8 @@ function _fetchFields(type, q, cb) {
     delete _fieldCache[oldKey];
   }
   
-  var url = "/api/type_fields/"+encodeURIComponent(type);
-  if (ctxStr) url += "?context="+encodeURIComponent(ctxStr);
+  var url = "/api/type_fields/"+endecodeURIComponent(type);
+  if (ctxStr) url += "?context="+endecodeURIComponent(ctxStr);
   
   fetch(url)
   .then(function(r){ return r.json(); })
@@ -1482,7 +1482,7 @@ var _qbDelRecord = null;
 
 function qbOpenDeleteRecord(r) {
   if (typeof r === "string") {
-    try { r = JSON.parse(decodeURIComponent(r)); } catch(e) { return; }
+    try { r = JSON.parse(deddecodeURIComponent(r)); } catch(e) { return; }
   }
   if (!r || !r._line) return;
   _qbDelRecord = r;
@@ -1610,8 +1610,7 @@ function triggerLivePreview() {
            '<table class="data-table" id="qb-table"><thead><tr>' +
            cols.map(c => '<th class="sortable" onclick="qbSortTable(this,\''+c.replace(/'/g,"\\'")+'\')">'+_esc(c)+'</th>').join('') +
            '<th style="width:80px"></th></tr></thead><tbody id="qb-tbody">' +
-recs.records.map(r => '<tr>' + cols.map(c => '<td>'+_esc(r[c]||'')+'</td>').join('') +
-            (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" onclick="qbOpenDeleteRecord(\''+encodeURIComponent(JSON.stringify(r))+'\')">✕</button></td>' : '<td></td>') +
+recs.records.map(r => '<tr>' + cols.map(c => '<td>'+_esc(r[c]||'')+'</td>').join('') + (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+endecodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+endecodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row="'+_esc(JSON.stringify(r))+'" onclick="qbOpenDeleteRecord(this.dataset.row)">✕</button></td>' : '<td></td>') +
            '</tr>').join('') +
            '</tbody></table></div>';
       } else {
@@ -1667,7 +1666,7 @@ function qbSortTable(th, col) {
     const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
     return '<td>'+_esc(r[rk]||'')+'</td>';
   }).join('') +
-  (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" onclick="qbOpenDeleteRecord(\''+encodeURIComponent(JSON.stringify(r))+'\')">✕</button></td>' : '<td></td>') +
+  (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+endecodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+endecodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row="'+_esc(JSON.stringify(r))+'" onclick="qbOpenDeleteRecord(this.dataset.row)">✕</button></td>' : '<td></td>') +
   '</tr>').join('');
   
   window._qbRecords = sorted;
@@ -1752,7 +1751,7 @@ function fetchDueFieldsForType(typeName) {
   keyEl.innerHTML = '<span style="font-size:12px;color:var(--border);">Loading…</span>';
   sortEl.innerHTML = '<span style="font-size:12px;color:var(--border);">Loading…</span>';
   
-  fetch("/api/type_fields/"+encodeURIComponent(typeName))
+  fetch("/api/type_fields/"+endecodeURIComponent(typeName))
   .then(function(r){ return r.json(); })
   .then(function(data) {
     var fields = (data.fields||[]).filter(function(f){ return !f.is_int && f.name!=="type"; });
