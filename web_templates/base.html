@@ -715,6 +715,187 @@ function toggleMoreMenu(e) {
   var menu = document.getElementById("more-menu");
   menu.style.display = menu.style.display === "none" ? "flex" : "none";
 }
+
+// ── Keyboard Shortcuts ────────────────────────────────────────────────────────
+(function() {
+  // Navigation shortcuts
+  var NAV = {
+    "g h": "/",
+    "g a": "/add",
+    "g b": "/browse",
+    "g q": "/queries",
+    "g j": "/journal",
+    "g d": "/due",
+    "g e": "/editor",
+    "g l": "/lint",
+    "g s": "/settings",
+    "g k": "/backup",
+    "g c": "/schema-builder",
+    "g u": "/query-builder",
+  };
+
+  // Help overlay HTML
+  var HELP_HTML = `
+  <div id="kb-overlay"
+       onclick="if(event.target===this)closeKbHelp()"
+       style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
+              z-index:9999;display:flex;align-items:center;justify-content:center;">
+    <div style="background:var(--card);border-radius:14px;padding:24px 28px;
+              max-width:520px;width:92%;max-height:85vh;overflow-y:auto;
+              border:1px solid var(--border);">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
+        <div style="font-size:17px;font-weight:800;color:var(--text);">Keyboard Shortcuts</div>
+        <button onclick="closeKbHelp()"
+                style="background:none;border:none;font-size:20px;color:var(--sub);cursor:pointer;padding:0 4px;">✕</button>
+      </div>
+
+      <div style="font-size:12px;font-weight:700;color:var(--sub);
+                  text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Navigation</div>
+      <table class="data-table" style="margin-bottom:18px;width:100%;">
+        <thead><tr><th style="width:180px;">Shortcut</th><th>Page</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>G</kbd> <kbd>H</kbd></td><td>Home</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>A</kbd></td><td>Add Record</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>B</kbd></td><td>Browse</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>Q</kbd></td><td>Queries</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>U</kbd></td><td>Query Builder</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>J</kbd></td><td>Journal</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>D</kbd></td><td>Due List</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>E</kbd></td><td>Log Editor</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>L</kbd></td><td>Lint</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>S</kbd></td><td>Settings</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>C</kbd></td><td>Schema Builder</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>K</kbd></td><td>Backup</td></tr>
+        </tbody>
+      </table>
+
+      <div style="font-size:12px;font-weight:700;color:var(--sub);
+                  text-transform:uppercase;letter-spacing:.6px;margin:16px 0 10px;">Actions</div>
+      <table class="data-table" style="width:100%;">
+        <thead><tr><th style="width:180px;">Shortcut</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close overlay / cancel</td></tr>
+          <tr><td><kbd>/</kbd></td><td>Focus search / filter (Browse)</td></tr>
+          <tr><td><kbd>N</kbd></td><td>New record (same as G A)</td></tr>
+        </tbody>
+      </table>
+
+      <div style="font-size:11px;color:var(--sub);margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
+        Press G then the second key within 1.5s
+      </div>
+    </div>
+  </div>
+  <style>
+  #kb-overlay kbd {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 26px;
+    padding: 3px 7px;
+    background: var(--bg);
+    border: 1px solid var(--border);
+    border-radius: 5px;
+    font-size: 12px;
+    font-family: monospace;
+    font-weight: 700;
+    color: var(--text);
+    line-height: 1.4;
+    box-shadow: 0 1px 0 var(--border);
+    margin-right: 2px;
+  }
+  #kb-overlay td:first-child {
+    white-space: nowrap;
+  }
+  </style>
+  `;
+
+  // Inject overlay once
+  document.addEventListener("DOMContentLoaded", function() {
+    var div = document.createElement("div");
+    div.innerHTML = HELP_HTML;
+    document.body.appendChild(div.firstElementChild);
+  });
+
+  window.closeKbHelp = function() {
+    var el = document.getElementById("kb-overlay");
+    if (el) el.style.display = "none";
+  };
+
+  function openKbHelp() {
+    var el = document.getElementById("kb-overlay");
+    if (el) el.style.display = "flex";
+  }
+
+  // Key state
+  var _g = false, _gTimer = null;
+
+  document.addEventListener("keydown", function(e) {
+    // Ignore when typing in inputs, textareas, selects
+    var tag = document.activeElement && document.activeElement.tagName;
+    if (tag === "INPUT" || tag === "TEXTAREA" || tag === "SELECT") return;
+    // Ignore modifier combos (except our own)
+    if (e.ctrlKey || e.metaKey || e.altKey) return;
+
+    var key = e.key.toLowerCase();
+
+    // Escape — close overlay
+    if (key === "escape") {
+      closeKbHelp();
+      _g = false;
+      clearTimeout(_gTimer);
+      return;
+    }
+
+    // ? — show help
+    if (key === "?" || (e.shiftKey && e.key === "?")) {
+      e.preventDefault();
+      openKbHelp();
+      return;
+    }
+
+    // N — go to add record
+    if (key === "n" && !_g) {
+      e.preventDefault();
+      window.location = "/add";
+      return;
+    }
+
+    // / — focus search input if present on page
+    if (key === "/") {
+      var search = document.querySelector(
+        "input[name='q'], input[placeholder*='search' i], input[placeholder*='filter' i], #browse-search, #q"
+      );
+      if (search) {
+        e.preventDefault();
+        search.focus();
+        search.select();
+      }
+      return;
+    }
+
+    // G prefix — start two-key nav chord
+    if (key === "g" && !_g) {
+      _g = true;
+      clearTimeout(_gTimer);
+      _gTimer = setTimeout(function() { _g = false; }, 1500);
+      return;
+    }
+
+    // Second key after G
+    if (_g) {
+      _g = false;
+      clearTimeout(_gTimer);
+      var chord = "g " + key;
+      if (NAV[chord]) {
+        e.preventDefault();
+        window.location = NAV[chord];
+      }
+      return;
+    }
+  });
+})();
+// ── End Keyboard Shortcuts ────────────────────────────────────────────────────
 function stopServer() {
   if (!confirm("Stop PTOS server?")) return;
   document.body.style.cssText = "display:block;margin:0;padding:0;";
