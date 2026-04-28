@@ -739,7 +739,7 @@ function toggleMoreMenu(e) {
   <div id="kb-overlay"
        onclick="if(event.target===this)closeKbHelp()"
        style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
-              z-index:9999;display:flex;align-items:center;justify-content:center;">
+              z-index:9999;align-items:center;justify-content:center;">
     <div style="background:var(--card);border-radius:14px;padding:24px 28px;
               max-width:520px;width:92%;max-height:85vh;overflow-y:auto;
               border:1px solid var(--border);">
@@ -815,6 +815,9 @@ function toggleMoreMenu(e) {
     var div = document.createElement("div");
     div.innerHTML = HELP_HTML;
     document.body.appendChild(div.firstElementChild);
+    // Ensure overlay is hidden on load
+    var el = document.getElementById("kb-overlay");
+    if (el) el.style.display = "none";
   });
 
   window.closeKbHelp = function() {
