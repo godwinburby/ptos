@@ -80,62 +80,24 @@
 
   </div>
 
-    <!-- field selector -->
-    <div style="margin-bottom:8px;">
-      <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">FIELDS</div>
-      <div id="field-chips" class="chip-group"></div>
-    </div>
-
-    <!-- value selector — appears after tapping a field chip -->
-    <div id="value-chip-row" style="display:none;padding:10px;background:var(--bg);
-         border-radius:8px;border:1px solid var(--border);margin-bottom:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="font-size:11px;color:var(--sub);font-weight:600;">
-          VALUES FOR <span id="value-chip-label" style="color:var(--accent);"></span>
-        </div>
-        <button onclick="closeValueRow()"
-                style="background:none;border:none;font-size:16px;color:var(--sub);
-                       cursor:pointer;padding:0 4px;line-height:1;">✕</button>
-      </div>
-      <div id="value-chips" class="chip-group" style="margin-bottom:6px;"></div>
-      <div id="history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">from history:</div>
-      <div id="history-chips" class="chip-group" style="opacity:0.65;margin-bottom:4px;"></div>
-      <div id="value-text-row" style="display:none;margin-top:8px;flex;gap:8px;">
-        <input type="text" id="value-text-input" placeholder="type a value…"
-               style="flex:1;padding:8px 12px;border-radius:8px;
-                      border:1px solid var(--border);background:var(--card);
-                      color:var(--text);font-size:14px;"
-               onkeydown="if(event.key==='Enter') addTextFilter()">
-        <button onclick="addTextFilter()"
-                style="padding:8px 16px;border-radius:8px;border:none;
-                       background:var(--accent);color:#fff;font-size:14px;
-                       font-weight:600;cursor:pointer;margin-top:6px;">Add</button>
-      </div>
-    </div>
   </div>
 
-  <!-- ── Advanced Editor ── -->
+  <!-- ── WHERE expression editor (always visible) ── -->
   <div id="advanced-section" style="margin-bottom:12px;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
       <div style="font-size:11px;color:var(--sub);font-weight:600;">WHERE</div>
-      <button id="adv-toggle-btn" onclick="toggleAdvancedMode()"
-              style="background:none;border:none;font-size:11px;color:var(--accent);cursor:pointer;font-weight:600;">
-        Edit
-      </button>
+      <span style="font-size:11px;color:var(--sub);">= != &gt; &lt; &gt;= &lt;= ~contains · AND OR NOT ( )</span>
     </div>
-    <div id="adv-preview" style="display:block;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">
-      <pre id="where-preview" style="margin:0;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;"></pre>
-    </div>
-    <div id="adv-editor" style="display:none;">
-      <textarea id="where-editor" rows="3"
-               style="width:100%;font-family:monospace;font-size:12px;padding:10px;border-radius:8px;border:1px solid var(--border);background:var(--card);resize:vertical;"
-               placeholder="e.g. type=followup AND intent=trial AND (tag=a OR tag=b)"></textarea>
-      <div style="display:flex;gap:8px;margin-top:8px;">
-        <button class="btn btn-primary btn-sm" onclick="applyAdvancedExpr()">Apply</button>
-        <button class="btn btn-ghost btn-sm" onclick="cancelAdvancedExpr()">Cancel</button>
-      </div>
-      <div class="hint" style="margin-top:6px;">= != &gt; &lt; &gt;= &lt;= ~(contains) !~(not contains) · AND OR NOT ( )</div>
-    </div>
+    <textarea id="where-editor" rows="2"
+              style="width:100%;font-family:monospace;font-size:13px;padding:10px;
+                     border-radius:8px;border:1.5px solid var(--border);
+                     background:var(--bg);color:var(--text);resize:vertical;outline:none;
+                     transition:border-color .15s;"
+              placeholder="e.g. type=followup AND (intent=trial OR intent=decision) AND NOT result=deceased"
+              oninput="onExprInput()"
+              onfocus="this.style.borderColor='var(--accent)'"
+              onblur="this.style.borderColor='var(--border)'"></textarea>
+    <div id="expr-error" style="display:none;font-size:11px;color:var(--error);margin-top:4px;"></div>
   </div>
 
   <!-- ── Time and Group ── -->
@@ -368,6 +330,7 @@ function renderTypeChips() {
       _browse.chips.unshift({field: "type", op: "=", value: t});
       _browse._activeField = null;
       renderTypeChips();
+      syncExprFromChips();
       document.getElementById("chip-builder").style.display = "block";
       fetchFields();
     });
@@ -651,7 +614,7 @@ function toggleChip(field, value) {
     _browse.chips.push({field: field, op: "=", value: value});
   }
   renderActive();
-  updateWherePreview();
+  syncExprFromChips();
   renderTagsSection();
   runBrowse();
   
@@ -705,147 +668,143 @@ window.removeFilter = function(idx) {
   }
 };
 
-// ── WHERE Preview ────────────────────────────────────────────────────────────
-function updateWherePreview() {
-  var el = document.getElementById("where-preview");
-  
-  var lines = [];
-  
-  // Build WHERE from chips
-  var whereParts = _browse.chips.map(function(c) { return c.field + c.op + c.value; });
-  var expr = document.getElementById("b-expr") ? document.getElementById("b-expr").value.trim() : "";
-  if (expr) whereParts.push(expr);
-  
-  if (whereParts.length) {
-    lines.push("where = \"" + whereParts.join(" AND ") + "\"");
-  }
-  
-  // Time
-  var timeEl = document.getElementById("b-time");
-  if (timeEl && timeEl.value && timeEl.value !== "tm") {
-    var timeText = timeEl.options[timeEl.selectedIndex].text;
-    lines.push("time  = \"" + timeEl.value + "\"  ← " + timeText);
-  }
-  
-  // Group
-  var groupEl = document.getElementById("b-group");
-  if (groupEl && groupEl.value) {
-    lines.push("group = [\"" + groupEl.value + "\"]");
-  }
-  
-  // Search
-  var searchEl = document.getElementById("b-search");
-  if (searchEl && searchEl.value.trim()) {
-    lines.push("search = \"" + searchEl.value.trim() + "\"");
-  }
-  
-  // Show/hide preview card (always visible when chip-builder is visible)
-  if (lines.length) {
-    el.innerHTML = lines.join("\n");
-  } else {
-    el.innerHTML = "# no filters";
-  }
+// ── Chips → boolean expression ───────────────────────────────────────────────
+function chipsToExpr(chips) {
+  if (!chips.length) return "";
+  // Group chips by field
+  var byField = {};
+  var order   = [];
+  chips.forEach(function(c) {
+    if (!byField[c.field]) { byField[c.field] = []; order.push(c.field); }
+    byField[c.field].push(c);
+  });
+  // Same field → OR, different fields → AND
+  var parts = order.map(function(field) {
+    var group = byField[field];
+    if (group.length === 1) return group[0].field + group[0].op + group[0].value;
+    return "(" + group.map(function(c) {
+      return c.field + c.op + c.value;
+    }).join(" OR ") + ")";
+  });
+  return parts.join(" AND ");
 }
 
-// ── Advanced mode ────────────────────────────────────────────────────────────
-var _advMode = false;
-var _savedChips = [];
-
-window.toggleAdvancedMode = function() {
-  var previewEl = document.getElementById("adv-preview");
-  var editorEl = document.getElementById("adv-editor");
-  var toggleBtn = document.getElementById("adv-toggle-btn");
+// ── Sync chips → expr textarea ───────────────────────────────────────────────
+function syncExprFromChips() {
   var editor = document.getElementById("where-editor");
-  
-  if (!_advMode) {
-    // Enter edit mode - save chips, show editor with current WHERE
-    _savedChips = _browse.chips.slice();
-    _advMode = true;
-    previewEl.style.display = "none";
-    editorEl.style.display = "block";
-    toggleBtn.textContent = "Cancel";
-    // Populate editor with WHERE clause
-    var whereParts = _browse.chips.map(function(c) { return c.field + c.op + c.value; });
-    editor.value = whereParts.join(" AND ");
-    editor.focus();
-  } else {
-    // Cancel edit mode
-    _advMode = false;
-    previewEl.style.display = "block";
-    editorEl.style.display = "none";
-    toggleBtn.textContent = "Edit";
+  if (!editor) return;
+  var expr = chipsToExpr(_browse.chips);
+  // Only update if user is not currently editing
+  if (document.activeElement !== editor) {
+    editor.value = expr;
   }
-};
+  document.getElementById("expr-error").style.display = "none";
+}
 
-window.applyAdvancedExpr = function() {
-  var editor = document.getElementById("where-editor");
-  var expr = editor.value.trim();
-  
-  if (expr) {
-    // Parse expression into chips (simple parser for basic expressions)
-    _browse.chips = parseExprToChips(expr);
-    renderActive();
-    renderTagsSection();
-    // Invalidate cache and re-fetch if type changed
-    if (_browse.type) {
-      var cacheKey = _browse.type + "?" + _getContextStr();
-      delete _fieldCache[cacheKey];
-      fetchFields();
+// ── updateWherePreview (kept for compatibility, now a no-op) ─────────────────
+function updateWherePreview() {
+  syncExprFromChips();
+}
+
+// ── Expression input handler (live, debounced) ───────────────────────────────
+var _exprTimer = null;
+window.onExprInput = function() {
+  clearTimeout(_exprTimer);
+  _exprTimer = setTimeout(function() {
+    var expr = document.getElementById("where-editor").value.trim();
+    // Parse back to chips for chip UI sync
+    var parsed = parseExprToChips(expr);
+    if (parsed !== null) {
+      _browse.chips = parsed;
+      renderActive();
+      renderTagsSection();
+      if (_browse.type) fetchFields();
     }
-  } else {
-    // Clear all chips if expression is empty
-    _browse.chips = [];
-    renderActive();
-    renderTagsSection();
-  }
-  
-  // Exit edit mode
-  _advMode = false;
-  document.getElementById("adv-preview").style.display = "block";
-  document.getElementById("adv-editor").style.display = "none";
-  document.getElementById("adv-toggle-btn").textContent = "Edit";
-  
-  updateWherePreview();
-  runBrowse();
+    document.getElementById("expr-error").style.display = "none";
+    runBrowse();
+  }, 400);
 };
 
-window.cancelAdvancedExpr = function() {
-  // Restore chips from before edit
-  _browse.chips = _savedChips.slice();
-  _advMode = false;
-  document.getElementById("adv-preview").style.display = "block";
-  document.getElementById("adv-editor").style.display = "none";
-  document.getElementById("adv-toggle-btn").textContent = "Edit";
-  renderActive();
-  renderTagsSection();
-};
-
-// Simple expression parser: "type=followup AND intent=trial" → chips
+// ── Expression parser: expr string → chips array ──────────────────────────────
+// Returns array of chips, or null if expression is too complex to represent as chips
 function parseExprToChips(expr) {
+  expr = expr.trim();
+  if (!expr) return [];
+  // Strip where = "..." wrapper
+  expr = expr.replace(/^where\s*=\s*["']?/i, "").replace(/["']?\s*$/i, "").trim();
+  if (!expr) return [];
+
   var chips = [];
-  // Remove where = "..." wrapper if present
-  expr = expr.replace(/^where\s*=\s*["']?/, "").replace(/["']?\s*$/, "");
-  // Split by AND (but not inside parentheses)
-  var parts = expr.split(/\s+AND\s+/i);
-  parts.forEach(function(part) {
-    part = part.trim();
-    if (!part) return;
-    // Match field=operator+value
-    var match = part.match(/^(\w+)(\s*[!=<>~]+)\s*(.+)$/);
-    if (match) {
-      var field = match[1].toLowerCase();
-      var op = match[2].trim();
-      var value = match[3].trim().replace(/^[("']|["')]$/g, "");
-      chips.push({field: field, op: op, value: value});
+  // Split top-level AND parts (not inside parens)
+  var andParts = splitTopLevel(expr, "AND");
+
+  for (var i = 0; i < andParts.length; i++) {
+    var part = andParts[i].trim();
+    if (!part) continue;
+
+    // Unwrap outer parens: (category=food OR category=grocery)
+    var inner = unwrapParens(part);
+    if (inner !== null) {
+      // OR group — all parts must be same field
+      var orParts = splitTopLevel(inner, "OR");
+      for (var j = 0; j < orParts.length; j++) {
+        var chip = parseSimpleChip(orParts[j].trim());
+        if (!chip) return null; // too complex
+        chips.push(chip);
+      }
+    } else {
+      // Simple condition
+      var chip = parseSimpleChip(part);
+      if (!chip) return null;
+      chips.push(chip);
     }
-  });
+  }
   return chips;
 }
 
-// ── Expression toggle (legacy - keep for compatibility) ────────────────────
-window.toggleExprMode = function() {
-  toggleAdvancedMode();
-};
+function parseSimpleChip(part) {
+  var m = part.match(/^(\w+)\s*(!~|!=|>=|<=|~|=|>|<)\s*(.+)$/);
+  if (!m) return null;
+  return { field: m[1].toLowerCase(), op: m[2], value: m[3].trim().replace(/^["']|["']$/g, "") };
+}
+
+function splitTopLevel(expr, op) {
+  var re = new RegExp("\\s+" + op + "\\s+", "i");
+  var parts = [], depth = 0, cur = "", i = 0;
+  while (i < expr.length) {
+    if (expr[i] === "(") { depth++; cur += expr[i++]; }
+    else if (expr[i] === ")") { depth--; cur += expr[i++]; }
+    else {
+      var rest = expr.slice(i);
+      var m = rest.match(new RegExp("^\\s+" + op + "\\s+", "i"));
+      if (m && depth === 0) { parts.push(cur); cur = ""; i += m[0].length; }
+      else { cur += expr[i++]; }
+    }
+  }
+  if (cur.trim()) parts.push(cur);
+  return parts;
+}
+
+function unwrapParens(s) {
+  s = s.trim();
+  if (s[0] === "(" && s[s.length - 1] === ")") {
+    var inner = s.slice(1, -1);
+    var depth = 0;
+    for (var i = 0; i < inner.length; i++) {
+      if (inner[i] === "(") depth++;
+      if (inner[i] === ")") depth--;
+      if (depth < 0) return null; // unbalanced
+    }
+    return inner;
+  }
+  return null;
+}
+
+// Legacy compat
+window.toggleAdvancedMode   = function() {};
+window.applyAdvancedExpr    = function() {};
+window.cancelAdvancedExpr   = function() {};
+window.toggleExprMode       = function() {};
 
 // ── Init ────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function() {
@@ -980,14 +939,11 @@ function _params() {
   const group  = document.getElementById("b-group")  ? document.getElementById("b-group").value  : "";
   const sort   = document.getElementById("b-sort")   ? document.getElementById("b-sort").value   : "";
   const exprEl = document.getElementById("where-editor");
-  const expr   = exprEl ? exprEl.value.trim() : "";
-  
-  // Build where from state
-  const where = _browse.chips.map(function(c) {
-    return c.field + c.op + c.value;
-  });
-  
-  return {where, expr, time, search, group, sort};
+  // Use textarea value if present, otherwise build from chips
+  const editorExpr = exprEl ? exprEl.value.trim() : "";
+  const expr = editorExpr || chipsToExpr(_browse.chips);
+  // Send as single expr — backend handles full boolean parsing
+  return {where: [], expr, time, search, group, sort};
 }
 
 function runBrowse() {
@@ -1036,10 +992,15 @@ function clearBrowse() {
   window._bCloseMonthPicker();
   document.getElementById("b-month-text").textContent = "Pick a month";
   
-  // Reset advanced mode UI
-  document.getElementById("adv-preview").style.display = "block";
-  document.getElementById("adv-editor").style.display = "none";
-  document.getElementById("adv-toggle-btn").textContent = "Edit";
+  // Reset advanced mode UI (elements may not exist in new layout)
+  var advPreview = document.getElementById("adv-preview");
+  var advEditor  = document.getElementById("adv-editor");
+  var advToggle  = document.getElementById("adv-toggle-btn");
+  if (advPreview) advPreview.style.display = "block";
+  if (advEditor)  advEditor.style.display  = "none";
+  if (advToggle)  advToggle.textContent    = "Edit";
+  var exprErr = document.getElementById("expr-error");
+  if (exprErr) exprErr.style.display = "none";
   
   // Hide builder elements
   document.getElementById("chip-builder").style.display = "none";
@@ -1244,18 +1205,8 @@ function showSaveQuery() {
   msg.style.display = "none";
   document.getElementById("query-name-input").value = "";
 
-  // build unified expression preview (mirrors server-side _filters_to_expr)
-  const parts = [];
-  if (p.where.length) parts.push(...p.where);
-  let exprPreview = "";
-  if (p.expr && parts.length) {
-    const combined = parts.join(" AND ");
-    exprPreview = `(${combined}) AND (${p.expr})`;
-  } else if (p.expr) {
-    exprPreview = p.expr;
-  } else if (parts.length) {
-    exprPreview = parts.join(" AND ");
-  }
+  // build unified expression preview — expr is now always the single source of truth
+  const exprPreview = p.expr || "";
 
   const previewLines = [];
   if (exprPreview) previewLines.push(`where = "${exprPreview}"`);
