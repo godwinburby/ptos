@@ -2042,6 +2042,51 @@ def api_records_delete():
 # API
 # ══════════════════════════════════════════════════════════════════════════════
 
+
+@app.route("/api/records/bulk_delete", methods=["POST"])
+def api_records_bulk_delete():
+    data    = request.get_json(silent=True) or {}
+    records = data.get("records", [])
+    if not records:
+        return jsonify(ok=False, error="No records provided")
+    # Validate all filepaths before touching anything
+    for r in records:
+        fp = r.get("filepath", "")
+        if not fp or not os.path.abspath(fp).startswith(
+                os.path.abspath(svc.RECORDS_DIR)):
+            return jsonify(ok=False, error=f"Invalid filepath: {fp}")
+    try:
+        result = svc.bulk_delete(records)
+        return jsonify(ok=True, **result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/records/bulk_set", methods=["POST"])
+def api_records_bulk_set():
+    data     = request.get_json(silent=True) or {}
+    records  = data.get("records", [])
+    set_args = data.get("set_args", [])
+    if not records:
+        return jsonify(ok=False, error="No records provided")
+    if not set_args:
+        return jsonify(ok=False, error="No set_args provided")
+    # Validate all filepaths
+    for r in records:
+        fp = r.get("filepath", "")
+        if not fp or not os.path.abspath(fp).startswith(
+                os.path.abspath(svc.RECORDS_DIR)):
+            return jsonify(ok=False, error=f"Invalid filepath: {fp}")
+    try:
+        result = svc.bulk_set(records, set_args)
+        return jsonify(ok=True, **result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
 @app.route("/api/type_fields/<rtype>")
 def api_type_fields(rtype):
     try:

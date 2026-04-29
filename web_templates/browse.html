@@ -247,6 +247,68 @@
   </div>
 </div>
 
+
+<!-- Bulk action bar (appears when rows selected) -->
+<div id="bulk-bar"
+     style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);
+            background:var(--card);border:1.5px solid var(--accent);border-radius:12px;
+            padding:10px 16px;box-shadow:0 4px 24px rgba(0,0,0,.18);
+            display:none;align-items:center;gap:10px;z-index:400;white-space:nowrap;">
+  <span id="bulk-count" style="font-size:13px;font-weight:700;color:var(--accent);min-width:80px;"></span>
+  <button class="btn btn-ghost btn-sm" onclick="bulkSetOpen()" style="font-size:12px;">✎ Set Field</button>
+  <button class="btn btn-ghost btn-sm" onclick="bulkDeleteOpen()"
+          style="font-size:12px;color:var(--error);">✕ Delete</button>
+  <button class="btn btn-ghost btn-sm" onclick="clearSelection()" style="font-size:12px;">✕ Deselect</button>
+</div>
+
+<!-- Bulk delete confirm dialog -->
+<div id="bulk-del-dialog"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+            z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:340px;
+              box-shadow:0 8px 32px rgba(0,0,0,.2);">
+    <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--error);">Bulk Delete</div>
+    <div id="bulk-del-msg-top" style="font-size:13px;color:var(--sub);margin-bottom:14px;"></div>
+    <div id="bulk-del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" style="flex:1;background:var(--error);"
+              onclick="bulkDeleteConfirm()">Delete All</button>
+      <button class="btn btn-ghost" style="flex:1;"
+              onclick="document.getElementById('bulk-del-dialog').style.display='none'">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Bulk set dialog -->
+<div id="bulk-set-dialog"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
+            z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:360px;
+              box-shadow:0 8px 32px rgba(0,0,0,.2);">
+    <div style="font-size:16px;font-weight:700;margin-bottom:14px;">Set Field on Selected</div>
+    <div class="field-group" style="margin-bottom:10px;">
+      <label style="font-size:12px;">Field name</label>
+      <input type="text" id="bulk-set-field" placeholder="e.g. status, category"
+             style="font-size:14px;">
+    </div>
+    <div class="field-group" style="margin-bottom:14px;">
+      <label style="font-size:12px;">New value</label>
+      <input type="text" id="bulk-set-value" placeholder="new value"
+             style="font-size:14px;">
+    </div>
+    <div id="bulk-set-preview"
+         style="font-size:12px;color:var(--sub);font-family:monospace;
+                background:var(--bg);padding:8px;border-radius:6px;
+                margin-bottom:12px;display:none;"></div>
+    <div id="bulk-set-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" style="flex:1;" onclick="bulkSetConfirm()">Apply</button>
+      <button class="btn btn-ghost"   style="flex:1;"
+              onclick="document.getElementById('bulk-set-dialog').style.display='none'">Cancel</button>
+    </div>
+  </div>
+</div>
+
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
 var _browse = {
@@ -1034,14 +1096,19 @@ function renderRecords(d) {
   if (!d.records||!d.records.length)
     return `<div class="card" style="color:var(--sub);text-align:center;padding:32px;">No records found.</div>`;
   const cols  = d.columns||[];
-  const heads = cols.map(c=>`<th class="sortable" onclick="sortTable(this,'${c.replace(/'/g,"\\'")}')">${c}</th>`).join("") + `<th style="width:80px"></th>`;
+  const cbHead = `<th style="width:32px;text-align:center;"><input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this)" title="Select all"></th>`;
+  const heads = cbHead + cols.map(c=>`<th class="sortable" onclick="sortTable(this,'${c.replace(/'/g,"\\'")}')">${c}</th>`).join("") + `<th style="width:80px"></th>`;
   // store data globally for sorting
   window._browseData = {cols: cols, records: d.records, count: d.count, total: d.total, total_fmt: d.total_fmt, start: d.start, end: d.end, time_label: d.time_label, filters: d.filters};
-  const rows  = d.records.map((r) => {
+  const rows  = d.records.map((r, idx) => {
     const cells = cols.map(c => {
       const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
       return `<td>${r[rk] || ""}</td>`;
     }).join("");
+    const cbCell = r._line
+      ? `<td style="text-align:center;"><input type="checkbox" class="row-cb"
+           data-idx="${idx}" onchange="onRowCheck(this)"></td>`
+      : `<td></td>`;
     const acts  = r._line
       ? `<td style="white-space:nowrap;">
            <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
@@ -1050,10 +1117,11 @@ function renderRecords(d) {
              data-row='${JSON.stringify(r)}' onclick="openDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
          </td>`
       : `<td></td>`;
-    return `<tr>${cells}${acts}</tr>`;
+    return `<tr>${cbCell}${cells}${acts}</tr>`;
   }).join("");
   // store records for modal access
   window._browseRecords = d.records;
+  document.dispatchEvent(new CustomEvent("browse:results"));
   return `<div class="card">
     ${summaryBar(d)}
     <div style="overflow-x:auto;"><table class="data-table" id="browse-table">
@@ -1105,12 +1173,16 @@ function sortTable(th, col) {
   // rebuild tbody
   const tbody = document.getElementById("browse-tbody");
   if (!tbody) return;
-  const rows = sorted.map((r) => {
+  const rows = sorted.map((r, idx) => {
     const cells = data.cols.map(c => {
       const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
       return `<td>${r[rk] || ""}</td>`;
     }).join("");
     const rowIdx = data.records.indexOf(r);
+    const cbCell = r._line
+      ? `<td style="text-align:center;"><input type="checkbox" class="row-cb"
+           data-idx="${idx}" onchange="onRowCheck(this)"></td>`
+      : `<td></td>`;
     const acts  = r._line
       ? `<td style="white-space:nowrap;">
            <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
@@ -1119,7 +1191,7 @@ function sortTable(th, col) {
              data-row='${JSON.stringify(r)}' onclick="openDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
          </td>`
       : `<td></td>`;
-    return `<tr>${cells}${acts}</tr>`;
+    return `<tr>${cbCell}${cells}${acts}</tr>`;
   }).join("");
   tbody.innerHTML = rows;
   // update modal access
@@ -1238,5 +1310,157 @@ document.getElementById("query-name-input").addEventListener("keydown", function
 document.getElementById("del-dialog").addEventListener("click", function(e) {
   if (e.target === this) closeDelete();
 });
+</script>
+<script>
+// ── Bulk selection ────────────────────────────────────────────────────────────
+var _selected = new Set(); // indices into window._browseRecords
+
+function onRowCheck(cb) {
+  const idx = parseInt(cb.dataset.idx);
+  if (cb.checked) _selected.add(idx);
+  else             _selected.delete(idx);
+  updateBulkBar();
+}
+
+function toggleSelectAll(cb) {
+  const boxes = document.querySelectorAll(".row-cb");
+  _selected.clear();
+  boxes.forEach(function(box) {
+    box.checked = cb.checked;
+    if (cb.checked) _selected.add(parseInt(box.dataset.idx));
+  });
+  updateBulkBar();
+}
+
+function clearSelection() {
+  _selected.clear();
+  document.querySelectorAll(".row-cb").forEach(function(b) { b.checked = false; });
+  const sa = document.getElementById("select-all-cb");
+  if (sa) sa.checked = false;
+  updateBulkBar();
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById("bulk-bar");
+  const cnt = document.getElementById("bulk-count");
+  if (_selected.size > 0) {
+    cnt.textContent = _selected.size + " selected";
+    bar.style.display = "flex";
+  } else {
+    bar.style.display = "none";
+  }
+}
+
+function _selectedRecords() {
+  const recs = window._browseRecords || [];
+  return [..._selected].map(function(i) { return recs[i]; }).filter(Boolean);
+}
+
+// ── Bulk delete ───────────────────────────────────────────────────────────────
+function bulkDeleteOpen() {
+  const n = _selected.size;
+  if (!n) return;
+  document.getElementById("bulk-del-msg-top").textContent =
+    "Delete " + n + " record" + (n > 1 ? "s" : "") + "? This cannot be undone (backup is kept).";
+  document.getElementById("bulk-del-msg").style.display = "none";
+  document.getElementById("bulk-del-dialog").style.display = "flex";
+}
+
+function bulkDeleteConfirm() {
+  const records = _selectedRecords().map(function(r) {
+    return { filepath: r._filepath, line: r._line, lineno: r._lineno };
+  });
+  const msg = document.getElementById("bulk-del-msg");
+  fetch("/api/records/bulk_delete", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ records: records })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      document.getElementById("bulk-del-dialog").style.display = "none";
+      clearSelection();
+      runBrowse();
+    } else {
+      msg.textContent = d.error || "Delete failed";
+      msg.style.display = "block";
+    }
+  })
+  .catch(function(e) {
+    msg.textContent = String(e);
+    msg.style.display = "block";
+  });
+}
+
+// ── Bulk set ──────────────────────────────────────────────────────────────────
+function bulkSetOpen() {
+  if (!_selected.size) return;
+  document.getElementById("bulk-set-field").value  = "";
+  document.getElementById("bulk-set-value").value  = "";
+  document.getElementById("bulk-set-preview").style.display = "none";
+  document.getElementById("bulk-set-msg").style.display    = "none";
+  document.getElementById("bulk-set-dialog").style.display = "flex";
+  document.getElementById("bulk-set-field").focus();
+}
+
+// Show preview as field=value is typed
+["bulk-set-field", "bulk-set-value"].forEach(function(id) {
+  document.addEventListener("DOMContentLoaded", function() {
+    var el = document.getElementById(id);
+    if (el) el.addEventListener("input", function() {
+      var f = document.getElementById("bulk-set-field").value.trim();
+      var v = document.getElementById("bulk-set-value").value.trim();
+      var preview = document.getElementById("bulk-set-preview");
+      if (f && v) {
+        preview.textContent = "Will apply: " + f + "=" + v +
+          " to " + _selected.size + " record" + (_selected.size > 1 ? "s" : "");
+        preview.style.display = "block";
+      } else {
+        preview.style.display = "none";
+      }
+    });
+  });
+});
+
+function bulkSetConfirm() {
+  const field = document.getElementById("bulk-set-field").value.trim();
+  const value = document.getElementById("bulk-set-value").value.trim();
+  const msg   = document.getElementById("bulk-set-msg");
+  if (!field || !value) {
+    msg.textContent = "Field and value are required";
+    msg.style.display = "block";
+    return;
+  }
+  const records = _selectedRecords().map(function(r) {
+    return { filepath: r._filepath, line: r._line, lineno: r._lineno };
+  });
+  fetch("/api/records/bulk_set", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ records: records, set_args: [field + "=" + value] })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      document.getElementById("bulk-set-dialog").style.display = "none";
+      clearSelection();
+      runBrowse();
+    } else {
+      msg.textContent = d.error || "Set failed";
+      msg.style.display = "block";
+    }
+  })
+  .catch(function(e) {
+    msg.textContent = String(e);
+    msg.style.display = "block";
+  });
+}
+
+// Clear selection when browse results are refreshed
+const _origRunBrowse = typeof runBrowse === "function" ? runBrowse : null;
+
+// Reset selection state when new results arrive
+document.addEventListener("browse:results", function() { clearSelection(); });
+
+// ── End Bulk selection ────────────────────────────────────────────────────────
 </script>
 {% endblock %}
