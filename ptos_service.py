@@ -1464,6 +1464,65 @@ def delete_record(filepath, old_line, lineno=None):
     return {"deleted_line": old_line}
 
 
+
+def bulk_delete(records):
+    """Delete multiple records.
+    records: list of {filepath, line, lineno} dicts.
+    Returns {deleted, errors} counts.
+    """
+    deleted = 0
+    errors  = []
+    # Group by filepath so we only backup each file once
+    from collections import defaultdict
+    by_file = defaultdict(list)
+    for r in records:
+        by_file[r["filepath"]].append(r)
+
+    for filepath, recs in by_file.items():
+        if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+            errors.append(f"Invalid filepath: {filepath}")
+            continue
+        _backup_file(filepath)
+        # Delete in reverse lineno order so indices stay valid
+        sorted_recs = sorted(recs, key=lambda r: r.get("lineno", 0) or 0, reverse=True)
+        for r in sorted_recs:
+            try:
+                _update_record_in_file(filepath, r["line"], None, lineno=r.get("lineno"))
+                deleted += 1
+            except Exception as e:
+                errors.append(str(e))
+    return {"deleted": deleted, "errors": errors}
+
+
+def bulk_set(records, set_args):
+    """Apply --set changes to multiple records.
+    records: list of {filepath, line, lineno} dicts.
+    set_args: list of "field=value" strings.
+    Returns {updated, errors} counts.
+    """
+    updated = 0
+    errors  = []
+    from collections import defaultdict
+    by_file = defaultdict(list)
+    for r in records:
+        by_file[r["filepath"]].append(r)
+
+    for filepath, recs in by_file.items():
+        if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+            errors.append(f"Invalid filepath: {filepath}")
+            continue
+        _backup_file(filepath)
+        for r in recs:
+            try:
+                new_line, changed_date = ptos.apply_set(r["line"], set_args, None)
+                if new_line != r["line"]:
+                    _update_record_in_file(filepath, r["line"], new_line,
+                                           lineno=r.get("lineno"))
+                    updated += 1
+            except Exception as e:
+                errors.append(str(e))
+    return {"updated": updated, "errors": errors}
+
 def restore_config(zip_path):
     """Restore config from a backup zip file.
     Validates contents, backs up current config first, then restores atomically.
