@@ -158,6 +158,11 @@ A record missing a date or type is broken — Lint will error.
 `ptos_web.py` is a mobile-first Flask web app — the primary interface for all
 day-to-day use. It shares all data and logic with the CLI through `ptos_service.py`.
 
+The web app uses a service layer (`ptos_service.py`) between the Flask
+frontend (`ptos_web.py`) and the core engine (`ptos.py`). This layer handles
+record CRUD, bulk operations, dashboard orchestration, and structured API
+responses for the web UI.
+
 ### Starting the web app
 
 ```bash
@@ -187,6 +192,14 @@ summary (up to 5 rows), quick-add preset buttons, and today's records. A dropdow
 lets you switch between dashboards. The default dashboard is set in `config.toml`
 under `[dashboard] default`.
 
+Features:
+- Personalized greeting with user name
+- Dashboard selector dropdown
+- Quick-add preset chips and multi-record preset buttons
+- Overdue items with heat indicators (hot / warm / cool)
+- Today's records table with inline edit/delete
+- **Table column sorting** — click headers to sort
+
 <img src="images/ptos_home.png" width="260" alt="PTOS Home dashboard with metrics, Quick Add presets, and multi-presets">
 
 ### + Add Record
@@ -210,16 +223,18 @@ appear automatically. Features:
 ### Browse
 
 Filter, search, and group records. Features:
-
 - Type selector and time window
+- **Chip-based filter builder** with active filter display
 - Free-text expression filter (full boolean syntax: `AND`, `OR`, `NOT`, parentheses)
-- Free-text search
+- Free-text search with debounced auto-search
 - Group by field
 - Sort by field
 - Specific log file selection
+- **Bulk operations** — multi-select rows, bulk edit/delete
+- **Table column sorting** — click headers to sort
 - Inline edit and delete for each result row
+- **Save as Query dialog** for naming queries
 - Export current results to CSV
-- Save current filter as a named query (Save as Query button)
 
 <img src="images/ptos_browse.png" width="260" alt="Browse screen with type chips, active filter chips, and query preview">
 
@@ -262,12 +277,14 @@ backup or uploaded ZIP file, and delete old backups. See [Backup & Restore](#bac
 ### Query Builder
 
 Visual builder for creating queries, metrics, and dashboards. Features:
-
+- **Multi-section interface** (Queries/Metrics/Dashboards)
 - Type → field → value chip-based workflow
 - Tags section with schema-defined and historical tags
+- **WHERE expression builder with chips**
+- **Live records preview** (auto-updates as you build)
 - Advanced WHERE mode for raw expression editing
 - Custom time window with month picker
-- Live records preview
+- **Dashboard editor** for managing dashboard metrics
 - Save as Query or Metric
 
 ### Settings
@@ -282,6 +299,34 @@ Configure user profile and app preferences. Sections:
 - **Backup Settings**: auto backup on startup/shutdown triggers
 
 Settings are stored in `config.toml` and editable via the UI.
+
+### Keyboard Shortcuts
+
+Press `?` from any page to view all shortcuts. Navigation uses a two-key chord: press `G` then the second key within 1.5 seconds.
+
+**Navigation:**
+| Shortcut | Page |
+|----------|------|
+| `G` `H` | [Home](#home) |
+| `G` `A` | [+ Add Record](#-add-record) |
+| `G` `B` | [Browse](#browse) |
+| `G` `Q` | [Queries](#queries) |
+| `G` `U` | [Query Builder](#query-builder) |
+| `G` `J` | [Journal](#journal) |
+| `G` `D` | [Due](#due) |
+| `G` `E` | [Log Editor](#log-editor) |
+| `G` `L` | [Lint](#lint) |
+| `G` `S` | [Settings](#settings) |
+| `G` `C` | [Schema Builder](#schema-builder) |
+| `G` `K` | [Backup](#backup--restore) |
+
+**Actions:**
+| Shortcut | Action |
+|----------|--------|
+| `?` | Show help overlay |
+| `Esc` | Close overlay / cancel |
+| `/` | Focus search/filter (Browse page) |
+| `N` | New record (same as `G` `A`) |
 
 ### Lint
 
@@ -500,7 +545,6 @@ unit_weights = { food = 1, transport = 2 }
 ```
 
 ### Derived metrics — arithmetic over other metrics and base queries
-
 ```toml
 [metrics.balance]
 derived = "income_this_month - expenses_this_month"
@@ -512,6 +556,28 @@ derived = "balance / income_this_month * 100"
 Tokens in the expression can be other metrics or base queries directly. Base queries
 used in derived metrics yield their numeric total. The base query's own time window
 applies when it has one defined.
+
+### Special tokens for date/day arithmetic
+
+In addition to other metrics and base queries, derived metrics support these
+special tokens (automatically available in the expression context):
+
+| Token | Description | Example |
+|-------|-------------|---------|
+| `cycle_day` | Days elapsed since cycle start (1-indexed) | Day 5 of a 26th-starting cycle |
+| `cycle_days` | Total days in current cycle | 30 (varies by month) |
+| `month_day` | Day of month (1-31) | 30 |
+| `month_days` | Total days in current month | 30 |
+
+These use the first cycle defined in `config.toml` `[cycles]` section, falling
+back to month-based calculation if no cycle is defined.
+
+Example:
+```toml
+[metrics.snacks_daily_quota]
+derived = "(1200 - snacks_work) / (cycle_days - cycle_day)"
+time = "clinic"
+```
 
 ### Dashboards — named collections of metrics and queries
 
