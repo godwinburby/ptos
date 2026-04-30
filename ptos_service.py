@@ -984,28 +984,34 @@ def get_metric(name, time="tm"):
                     continue
                 if token in metrics:
                     dep_m = metrics[token]
+                    # Use dependency metric's own time window
+                    dep_time = dep_m.get("time", "tm")
+                    dep_start, dep_end = ptos.resolve_time(dep_time, cycles)
                     if "sum" in dep_m:
-                        _, val = ptos._run_base_query(dep_m["sum"], queries, start, end, cycles,
+                        _, val = ptos._run_base_query(dep_m["sum"], queries, dep_start, dep_end, cycles,
                                                       sum_field=dep_m.get("field"))
                     elif "ratio" in dep_m:
                         dq1, dq2 = dep_m["ratio"][0], dep_m["ratio"][1]
                         def _res(op):
                             if op in metrics:
                                 dm = metrics[op]
+                                # Use sub-metric's own time
+                                dm_time = dm.get("time", "tm")
+                                dm_start, dm_end = ptos.resolve_time(dm_time, cycles)
                                 if "sum" in dm:
-                                    _, t = ptos._run_base_query(dm["sum"], queries, start, end, cycles,
-                                                                sum_field=dm.get("field"))
+                                    _, t = ptos._run_base_query(dm["sum"], queries, dm_start, dm_end, cycles,
+                                                               sum_field=dm.get("field"))
                                     return t
                             c, _ = ptos._run_base_query(op, queries, start, end, cycles)
                             return c
                         dc1, dc2 = _res(dq1), _res(dq2)
                         val = (dc1 / dc2 * 100) if dc2 else 0
                     elif "avg" in dep_m:
-                        cnt, total = ptos._run_base_query(dep_m["avg"], queries, start, end, cycles)
+                        cnt, total = ptos._run_base_query(dep_m["avg"], queries, dep_start, dep_end, cycles)
                         val = (total / cnt) if cnt else 0
                     elif "max" in dep_m or "min" in dep_m:
                         key2 = "max" if "max" in dep_m else "min"
-                        dep_lines, _ = ptos._run_base_query_lines(dep_m[key2], queries, start, end, cycles)
+                        dep_lines, _ = ptos._run_base_query_lines(dep_m[key2], queries, dep_start, dep_end, cycles)
                         dep_vals = [ptos.numeric_value(
                             (ptos.safe_parse_line(l) or (None, {}, None))[1])
                             for l in dep_lines]
@@ -1023,8 +1029,11 @@ def get_metric(name, time="tm"):
                         if target in queries:
                             query_name = target
                     q_resolved = queries.get(query_name, {})
+                    # Use query's own time window
+                    q_time = q_resolved.get("time", "tm") if isinstance(q_resolved, dict) else "tm"
+                    q_start, q_end = ptos.resolve_time(q_time, cycles)
                     if isinstance(q_resolved, dict) and "where" in q_resolved:
-                        _, val = ptos._run_base_query(query_name, queries, start, end, cycles)
+                        _, val = ptos._run_base_query(query_name, queries, q_start, q_end, cycles)
                     else:
                         val = 0
                     resolved[token] = val
@@ -1073,8 +1082,9 @@ def get_metric(name, time="tm"):
             eval_expr = expr
             for token, val in resolved.items():
                 eval_expr = _re.sub(rf'\b{token}\b', str(val), eval_expr)
+            
             # safe eval — only digits, spaces, and arithmetic operators (including scientific notation e)
-            if not _re.match(r'^[\d\s\.\+\-\*\/\(\)e]+$', eval_expr):
+            if not _re.match(r'^[\d\s\.+\-*/()e]+$', eval_expr):
                 return {"name": _disp(name), "value": f"unsafe expression: {eval_expr}", "raw": None}
             try:
                 raw = float(eval(eval_expr))  # noqa: S307
@@ -1082,10 +1092,10 @@ def get_metric(name, time="tm"):
                 return {"name": _disp(name), "value": formatted, "raw": raw}
             except Exception as e:
                 return {"name": _disp(name), "value": f"eval error: {e}", "raw": None}
-
+            
     except Exception as e:
         return {"name": _disp(name), "value": f"error: {e}", "raw": None}
-
+    
     return {"name": _disp(name), "value": "?", "raw": None}
 
 
@@ -1130,16 +1140,23 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
             item_time = time
         else:
             # Use each item's own time from queries.toml, fallback to dashboard's time
-            q = queries_dict.get(item_name, {})
+            if item_name in metrics:
+                # For metrics, read time from metrics section
+                q = metrics.get(item_name, {})
+            else:
+                # For queries, read from queries section
+                q = queries_dict.get(item_name, {})
             item_time = q.get("time", time)
         
         # Get start/end for this item
         item_start, item_end = _resolve_time(item_time)
+        item_period = f"{item_start} to {item_end}"
         
         if item_name in metrics:
             item = get_metric(item_name, item_time)
             item["kind"] = "metric"
             item["item_time"] = item_time
+            item["item_period"] = item_period
             items.append(item)
         elif item_name in queries_dict:
             try:
@@ -1148,20 +1165,17 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
                 if total > 0:
                     value += f"  ({ptos.fmt(total)})"
                 items.append({"name": _disp(item_name), "value": value, "raw": cnt,
-                               "kind": "query", "item_time": item_time})
+                               "kind": "query", "item_time": item_time, "item_period": item_period})
             except Exception as e:
                 items.append({"name": _disp(item_name), "value": f"error: {e}", "raw": None,
-                               "kind": "query", "item_time": item_time})
+                               "kind": "query", "item_time": item_time, "item_period": item_period})
         else:
             items.append({"name": _disp(item_name), "value": "not found", "raw": None,
-                           "kind": "unknown", "item_time": item_time})
-
-    # Build period string based on dashboard's time
-    period_start, period_end = _resolve_time(time) if use_dashboard_time else _resolve_time(item_time)
+                           "kind": "unknown", "item_time": item_time, "item_period": item_period})
     
     return {
         "name":   _disp(name),
-        "period": f"{period_start} to {period_end}",
+        "period": f"{_resolve_time(time)[0]} to {_resolve_time(time)[1]}",
         "items":  items,
     }
 

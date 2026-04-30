@@ -2400,15 +2400,23 @@ def run_metric(name, queries, start, end, cycles):
             if token in metrics and token not in resolved:
                 # temporarily capture stdout by running the metric and reading raw value
                 dep_m = metrics[token]
+                
+                # Use the dependency metric's own time window, not the parent's
+                dep_time = dep_m.get("time", "tm")  # default to "tm" if not specified
+                dep_start, dep_end = resolve_time(dep_time, cycles)
+                
                 if "sum" in dep_m:
-                    _, val = _run_base_query(dep_m["sum"], queries, start, end, cycles,
+                    _, val = _run_base_query(dep_m["sum"], queries, dep_start, dep_end, cycles,
                                             sum_field=dep_m.get("field"))
                 elif "ratio" in dep_m:
                     def _res_derived(op):
                         if op in metrics:
                             dm = metrics[op]
+                            # Use the sub-metric's own time
+                            dm_time = dm.get("time", "tm")
+                            dm_start, dm_end = resolve_time(dm_time)
                             if "sum" in dm:
-                                _, t = _run_base_query(dm["sum"], queries, start, end, cycles,
+                                _, t = _run_base_query(dm["sum"], queries, dm_start, dm_end, cycles,
                                                        sum_field=dm.get("field"))
                                 return t
                         c, _ = _run_base_query(op, queries, start, end, cycles)
@@ -2417,11 +2425,11 @@ def run_metric(name, queries, start, end, cycles):
                     dc2 = _res_derived(dep_m["ratio"][1])
                     val = (dc1 / dc2 * 100) if dc2 else 0
                 elif "avg" in dep_m:
-                    cnt, total = _run_base_query(dep_m["avg"], queries, start, end, cycles)
+                    cnt, total = _run_base_query(dep_m["avg"], queries, dep_start, dep_end, cycles)
                     val = (total / cnt) if cnt else 0
                 elif "max" in dep_m or "min" in dep_m:
                     key2 = "max" if "max" in dep_m else "min"
-                    dep_lines, _ = _run_base_query_lines(dep_m[key2], queries, start, end, cycles)
+                    dep_lines, _ = _run_base_query_lines(dep_m[key2], queries, dep_start, dep_end, cycles)
                     dep_vals = [numeric_value(parse_line(l)[1]) for l in dep_lines]
                     dep_vals = [v for v in dep_vals if v is not None]
                     val = (max(dep_vals) if key2 == "max" else min(dep_vals)) if dep_vals else 0
@@ -2437,15 +2445,53 @@ def run_metric(name, queries, start, end, cycles):
                     if target in queries:
                         query_name = target
                 q_resolved = queries.get(query_name, {})
+                
+                # Use query's own time if specified
+                q_time = q_resolved.get("time", "tm") if isinstance(q_resolved, dict) else "tm"
+                q_start, q_end = resolve_time(q_time, cycles)
+                
                 if isinstance(q_resolved, dict) and "where" in q_resolved:
-                    _, val = _run_base_query(query_name, queries, start, end, cycles)
+                    _, val = _run_base_query(query_name, queries, q_start, q_end, cycles)
                     resolved[token] = val
                 else:
                     resolved[token] = 0
+        
+        # Add special tokens for date/day arithmetic
+        import calendar as _cal
+        now = dt.date.today()
+        month_days = _cal.monthrange(now.year, now.month)[1]
+        month_day = now.day
+        
+        # Try to use first configured cycle
+        cycle_start_day = None
+        for _name, day in cycles.items():
+            cycle_start_day = day
+            break
+        
+        if cycle_start_day:
+            if now.day >= cycle_start_day:
+                cycle_start = dt.date(now.year, now.month, cycle_start_day)
+            else:
+                prev = now.replace(day=1) - dt.timedelta(days=1)
+                cycle_start = dt.date(prev.year, prev.month, cycle_start_day)
+            next_month = cycle_start.replace(day=28) + dt.timedelta(days=4)
+            next_cycle_start = next_month.replace(day=cycle_start_day)
+            cycle_end = next_cycle_start - dt.timedelta(days=1)
+            cycle_days = (cycle_end - cycle_start).days + 1
+            cycle_day = (now - cycle_start).days + 1
+        else:
+            cycle_days = month_days
+            cycle_day = month_day
+        
+        resolved['cycle_day'] = cycle_day
+        resolved['cycle_days'] = cycle_days
+        resolved['month_day'] = month_day
+        resolved['month_days'] = month_days
+        
         eval_expr = expr
         for token, val in resolved.items():
             eval_expr = re.sub(rf'\b{token}\b', str(val), eval_expr)
-        if not re.match(r'^[\d\s\.\+\-\*\/\(\)e]+$', eval_expr):
+        if not re.match(r'^[\d\s\.+\-*/()e]+$', eval_expr):
             print(f"{_disp(name):<24} unsafe: [{eval_expr!r}]")
             return True
         try:
