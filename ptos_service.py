@@ -1029,6 +1029,47 @@ def get_metric(name, time="tm"):
                         val = 0
                     resolved[token] = val
             # substitute resolved names with numeric values
+            # Handle special tokens for date/day arithmetic
+            import calendar as _cal
+            
+            now = dt.date.today()
+            
+            # Default values (month-based)
+            month_days = _cal.monthrange(now.year, now.month)[1]
+            month_day = now.day
+            
+            # Try to use first configured cycle
+            cycle_start_day = None
+            for _name, day in cycles.items():
+                cycle_start_day = day
+                break  # Use first cycle defined
+            
+            if cycle_start_day:
+                # Calculate cycle start date
+                if now.day >= cycle_start_day:
+                    cycle_start = dt.date(now.year, now.month, cycle_start_day)
+                else:
+                    prev = now.replace(day=1) - dt.timedelta(days=1)
+                    cycle_start = dt.date(prev.year, prev.month, cycle_start_day)
+                
+                # Calculate cycle end (start of next cycle)
+                next_month = cycle_start.replace(day=28) + dt.timedelta(days=4)
+                next_cycle_start = next_month.replace(day=cycle_start_day)
+                cycle_end = next_cycle_start - dt.timedelta(days=1)
+                
+                cycle_days = (cycle_end - cycle_start).days + 1
+                cycle_day = (now - cycle_start).days + 1  # 1-indexed
+            else:
+                # No cycle defined, use month
+                cycle_days = month_days
+                cycle_day = month_day
+            
+            # Add special tokens to resolved dict
+            resolved['cycle_day'] = cycle_day
+            resolved['cycle_days'] = cycle_days
+            resolved['month_day'] = month_day
+            resolved['month_days'] = month_days
+            
             eval_expr = expr
             for token, val in resolved.items():
                 eval_expr = _re.sub(rf'\b{token}\b', str(val), eval_expr)
