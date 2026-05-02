@@ -387,11 +387,13 @@ def home():
     
     cfg = svc.get_config()
     username = cfg.get("user", {}).get("name", "User")
-    
+    freq, rem = svc.get_frequent_presets(6)
+
     return render_template("home.html",
         tab="home", title="Home", now=_now_str(), greeting=_greeting(),
         username=username,
-        frequent_presets=svc.get_frequent_presets(6),
+        frequent_presets=freq,
+        remaining_presets=rem,
         multi_presets=multi_presets,
         due_count=due_count, due_rows=due_rows[:5],
         due_configs=list(due_configs.keys()), selected_due=selected_due or "default",

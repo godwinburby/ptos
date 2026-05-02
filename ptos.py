@@ -3153,111 +3153,78 @@ def save_query(name, args, extra_filters):
     print(f"Run with: ptos -q {name}")
 
 def save_as_preset(name, record, note=None):
-    """Write a preset to presets.toml.
+    """Write a preset to presets.toml using tomli-w.
     If a preset with the same name already exists it is replaced.
     note: optional note string to store alongside the record fields.
     """
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+
     presets_path = os.path.join(CONFIG_DIR, "presets.toml")
 
-    # build the new block lines
-    block_lines = [f"[presets.{name}]"]
-    for k, v in record.items():
-        if k == "tag":
-            if isinstance(v, list):
-                tags = ", ".join(f'"{t}"' for t in v)
-                block_lines.append(f"tag      = [{tags}]")
-            else:
-                block_lines.append(f'tag      = ["{v}"]')
-        elif k == "amount":
-            block_lines.append(f"amount   = {v}")
-        else:
-            block_lines.append("{:<8} = \"{}\"".format(k, v))
-    if note:
-        escaped = note.replace('"', '\\"')
-        block_lines.append(f'note     = "{escaped}"')
-    if "amount" not in record:
-        block_lines.append("# amount omitted — will be prompted each time")
-    new_block = "\n".join(block_lines) + "\n"
-
-    # Read existing content
-    existing = ""
+    # Load existing data
+    data = {"presets": {}}
     if os.path.exists(presets_path):
-        with open(presets_path, "r", encoding="utf-8") as f:
-            existing = f.read()
-            lines = existing.splitlines(keepends=True)
+        with open(presets_path, "rb") as f:
+            try:
+                import tomllib
+            except ImportError:
+                import tomli as tomllib
+            data = tomllib.load(f)
 
-    # replace existing block if name already exists
-    if existing:
-        header = f"[presets.{name}]"
-        start_idx = None
-        for i, line in enumerate(lines):
-            if line.strip() == header:
-                start_idx = i
-                break
+    if "presets" not in data:
+        data["presets"] = {}
 
-        if start_idx is not None:
-            # find end of this block — next [section] header or EOF
-            end_idx = len(lines)
-            for i in range(start_idx + 1, len(lines)):
-                stripped = lines[i].strip()
-                if stripped.startswith("[") and not stripped.startswith("#"):
-                    end_idx = i
-                    break
+    # Build new preset entry
+    entry = {}
+    for k, v in record.items():
+        if k == "tag" and isinstance(v, str):
+            entry[k] = [v]
+        else:
+            entry[k] = v
+    if note:
+        entry["note"] = note
 
-            # rebuild file: everything before + new block + everything after
-            before = lines[:start_idx]
-            after = lines[end_idx:]
-            # strip trailing blank lines from before
-            while before and before[-1].strip() == "":
-                before.pop()
-            result = before + ["\n", new_block] + after
-            atomic_write(presets_path, "".join(result))
-            print(f"Preset '{name}' updated in presets.toml")
-            return
+    data["presets"][name] = entry
 
-    # no existing block — append
-    new_content = existing.rstrip() + "\n" + new_block if existing else new_block
-    atomic_write(presets_path, new_content)
+    _backup_file(presets_path)
+    with open(presets_path, "wb") as f:
+        tomli_w.dump(data, f)
+    _CACHE.pop("presets", None)
     print(f"Preset '{name}' saved to presets.toml")
 
 
 def delete_preset(name):
-    """Delete a preset from presets.toml by name."""
+    """Delete a preset from presets.toml using tomli-w."""
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+
     presets_path = os.path.join(CONFIG_DIR, "presets.toml")
     if not os.path.exists(presets_path):
         return
 
-    with open(presets_path, "r", encoding="utf-8") as f:
-        lines = f.readlines()
+    with open(presets_path, "rb") as f:
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
+        data = tomllib.load(f)
 
-    header = f"[presets.{name}]"
-    start_idx = None
-    for i, line in enumerate(lines):
-        if line.strip() == header:
-            start_idx = i
-            break
-
-    if start_idx is None:
+    presets = data.get("presets", {})
+    if name not in presets:
         raise ValueError(f"Preset '{name}' not found")
 
-    # find end of this block
-    end_idx = len(lines)
-    for i in range(start_idx + 1, len(lines)):
-        stripped = lines[i].strip()
-        if stripped.startswith("[") and not stripped.startswith("#"):
-            end_idx = i
-            break
+    del presets[name]
+    data["presets"] = presets
 
-    # rebuild: remove the block
-    before = lines[:start_idx]
-    after = lines[end_idx:]
-    while before and before[-1].strip() == "":
-        before.pop()
-    while after and after[0].strip() == "":
-        after.pop(0)
-
-    result = before + after
-    atomic_write(presets_path, "".join(result))
+    _backup_file(presets_path)
+    with open(presets_path, "wb") as f:
+        tomli_w.dump(data, f)
+    _CACHE.pop("presets", None)
     print(f"Preset '{name}' deleted from presets.toml")
 
 
