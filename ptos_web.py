@@ -867,9 +867,7 @@ def schema_builder_save():
                                          new_global_fields=global_fields,
                                          new_shared_defs=shared_defs,
                                          new_field_meta=field_meta)
-        # _save_schema handles backup + cache invalidation via tomli_w
-        import ptos as _ptos_engine
-        _ptos_engine._save_schema(new_schema)
+        svc.save_schema(new_schema)
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -1211,7 +1209,7 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
                        new_field_meta=None):
     """
     Merge Schema Builder state with the existing schema dict.
-    Returns a plain Python dict ready for tomli_w.dump() via ptos._save_schema().
+    Returns a plain Python dict ready for tomli_w.dump() via svc.save_schema().
     Same logic as the old _build_schema_toml but produces a dict instead of strings.
     """
     schema = {}
@@ -1377,136 +1375,6 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
 # ══════════════════════════════════════════════════════════════════════════════
 # Query Builder
 # ══════════════════════════════════════════════════════════════════════════════
-# Query Builder
-# ══════════════════════════════════════════════════════════════════════════════
-
-def _normalise_query_for_write(v):
-    """Normalise a raw query dict read from TOML for writing back via _write_queries_toml.
-    Handles list→string for group field (TOML stores group = ["category"]).
-    """
-    g = v.get("group", "")
-    if isinstance(g, list):
-        g = g[0] if g else ""
-    return {
-        "where":  v.get("where", ""),
-        "time":   v.get("time", "tm"),
-        "sum":    bool(v.get("sum", False)),
-        "group":  g,
-        "sort":   v.get("sort", ""),
-        "search": v.get("search", ""),
-    }
-
-
-def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None):
-    """Build and write queries.toml using tomli-w.
-    raw_queries:    {name: {where, time, group, search, sort, sum}}
-    raw_metrics:    {name: {kind, base, base2, derived, unit_field, unit_weights, time, ...}}
-    raw_dashboards: {name: {metrics: [...]}}
-    raw_aliases:    {name: {alias: target}}   (optional)
-    raw_due:        {config_name: {type, key, sort_by, days, exclude_results}} (optional)
-    Raises ValueError on invalid names, Exception on write failure.
-    """
-    import re as _re
-    import tomli_w
-    if raw_aliases is None:
-        raw_aliases = {}
-    for n in list(raw_queries) + list(raw_metrics) + list(raw_dashboards) + list(raw_aliases):
-        if not _re.match(r'^[a-z][a-z0-9_]*$', n):
-            raise ValueError(
-                f"Invalid name '{n}' — use lowercase letters, numbers, underscores")
-
-    data = {}
-
-    for name, q in raw_queries.items():
-        entry = {}
-        if q.get("where", "").strip():
-            entry["where"] = q["where"].strip()
-        entry["time"] = q.get("time", "tm")
-        group = q.get("group")
-        if group:
-            entry["group"] = group if isinstance(group, list) else [group.strip()]
-        if q.get("sort"):
-            entry["sort"] = q["sort"] if isinstance(q["sort"], str) else str(q["sort"])
-        if q.get("search"):
-            entry["search"] = q["search"] if isinstance(q["search"], str) else str(q["search"])
-        if q.get("sum"):
-            entry["sum"] = True
-        data[name] = entry
-
-    # Metrics
-    metrics = {}
-    for name, m in raw_metrics.items():
-        entry = {}
-        kind = m.get("kind", "avg")
-        base = m.get("base", "").strip()
-        base2 = m.get("base2", "").strip()
-        derived = m.get("derived", "").strip()
-        unit_field = m.get("unit_field", "").strip()
-        unit_weights = m.get("unit_weights") or {}
-
-        if derived:
-            entry["derived"] = derived
-        elif kind == "ratio" and base and base2:
-            entry["ratio"] = [base, base2]
-        elif kind in ("avg", "sum", "max", "min") and base:
-            entry[kind] = base
-
-        if kind == "avg" and unit_field:
-            entry["unit_field"] = unit_field
-        if kind == "avg" and unit_weights:
-            entry["unit_weights"] = unit_weights
-
-        for k, v in (m.get("_raw") or {}).items():
-            entry[k] = v
-
-        if m.get("time"):
-            entry["time"] = m["time"]
-
-        metrics[name] = entry
-    if metrics:
-        data["metrics"] = metrics
-
-    # Dashboards
-    dashboards = {}
-    for name, db in raw_dashboards.items():
-        entry = {}
-        items = db.get("metrics", [])
-        if items:
-            entry["metrics"] = items
-        dashboards[name] = entry
-    if dashboards:
-        data["dashboards"] = dashboards
-
-    # Aliases
-    for name, a in (raw_aliases or {}).items():
-        alias = a.get("alias", "").strip()
-        if alias:
-            data[name] = {"alias": alias}
-
-    # Due configs
-    all_due = raw_due if raw_due else {}
-    if all_due and isinstance(all_due, dict):
-        due = {}
-        for due_name, due_cfg in all_due.items():
-            if not due_cfg or not isinstance(due_cfg, dict):
-                continue
-            entry = {}
-            if due_cfg.get("type"):
-                entry["type"] = due_cfg["type"]
-            if due_cfg.get("key"):
-                entry["key"] = due_cfg["key"]
-            if due_cfg.get("sort_by"):
-                entry["sort_by"] = due_cfg["sort_by"]
-            if due_cfg.get("days"):
-                entry["days"] = due_cfg["days"]
-            if due_cfg.get("exclude_results") and isinstance(due_cfg["exclude_results"], list):
-                entry["exclude_results"] = due_cfg["exclude_results"]
-            due[due_name] = entry
-        if due:
-            data["due"] = due
-
-    with ptos.AtomicWrite(svc.QUERIES_PATH, "queries") as w:
-        tomli_w.dump(data, w.stream)
 
 @app.route("/query-builder")
 def query_builder():
@@ -1573,7 +1441,7 @@ def query_builder_save():
     """Receive full queries state from builder and rewrite queries.toml."""
     data = request.get_json(silent=True) or {}
     try:
-        _write_queries_toml(
+        svc.save_queries_full(
             data.get("queries", {}),
             data.get("metrics", {}),
             data.get("dashboards", {}),
@@ -1608,23 +1476,23 @@ def query_builder_delete():
             if name not in queries.get("metrics", {}):
                 return jsonify(ok=False, error=f"Metric '{name}' not found")
             del queries["metrics"][name]
-            _write_queries_toml(_raw_q(), queries.get("metrics", {}),
+            svc.save_queries_full(_raw_q(), queries.get("metrics", {}),
                                 queries.get("dashboards", {}), _raw_a())
         elif kind == "dashboard":
             if name not in queries.get("dashboards", {}):
                 return jsonify(ok=False, error=f"Dashboard '{name}' not found")
             del queries["dashboards"][name]
-            _write_queries_toml(_raw_q(), queries.get("metrics", {}),
+            svc.save_queries_full(_raw_q(), queries.get("metrics", {}),
                                 queries.get("dashboards", {}), _raw_a())
         elif kind == "alias":
-            _write_queries_toml(_raw_q(), queries.get("metrics", {}),
+            svc.save_queries_full(_raw_q(), queries.get("metrics", {}),
                                 queries.get("dashboards", {}),
                                 {k: v for k, v in _raw_a().items() if k != name})
         else:
             if name not in queries or name in reserved:
                 return jsonify(ok=False, error=f"Query '{name}' not found")
             del queries[name]
-            _write_queries_toml(_raw_q(), queries.get("metrics", {}),
+            svc.save_queries_full(_raw_q(), queries.get("metrics", {}),
                                 queries.get("dashboards", {}), _raw_a())
         return jsonify(ok=True)
     except Exception as e:
