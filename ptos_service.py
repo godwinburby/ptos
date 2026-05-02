@@ -62,11 +62,6 @@ QUERIES_PATH = ptos.QUERIES_PATH
 # Centralizes file I/O for easier future changes
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _backup_file(path):
-    """Backup file before modification - wraps engine function."""
-    ptos._backup_file(path)
-
-
 def _update_record_in_file(filepath, old_line, new_line, lineno):
     """Update record in file - wraps engine file operations.
     
@@ -173,7 +168,7 @@ def get_config():
 
 
 def save_config(config_dict):
-    """Save PTOS configuration.
+    """Save PTOS configuration atomically with backup.
     
     Args:
         config_dict: Configuration dict to save to config.toml.
@@ -183,9 +178,8 @@ def save_config(config_dict):
     """
     try:
         import tomli_w
-        with open(ptos.CONFIG_PATH, "wb") as f:
-            tomli_w.dump(config_dict, f)
-        ptos._invalidate("config")
+        with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
+            tomli_w.dump(config_dict, w.stream)
         return {"ok": True, "message": "Settings saved"}
     except Exception as e:
         return {"ok": False, "message": str(e)}
@@ -1584,7 +1578,6 @@ def bulk_delete(records):
         if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
             errors.append(f"Invalid filepath: {filepath}")
             continue
-        _backup_file(filepath)
         # Delete in reverse lineno order so indices stay valid
         sorted_recs = sorted(recs, key=lambda r: r.get("lineno", 0) or 0, reverse=True)
         for r in sorted_recs:
@@ -1613,7 +1606,6 @@ def bulk_set(records, set_args):
         if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
             errors.append(f"Invalid filepath: {filepath}")
             continue
-        _backup_file(filepath)
         for r in recs:
             try:
                 new_line, changed_date = ptos.apply_set(r["line"], set_args, None)
@@ -1754,6 +1746,127 @@ def restore_config(zip_path):
     invalidate_all()
 
     return {"ok": True, "message": "Config restored successfully"}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Query TOML management (full write)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None):
+    """Build and write queries.toml using tomli-w with atomic write.
+
+    raw_queries:    {name: {where, time, group, search, sort, sum}}
+    raw_metrics:    {name: {kind, base, base2, derived, unit_field, unit_weights, time, ...}}
+    raw_dashboards: {name: {metrics: [...]}}
+    raw_aliases:    {name: {alias: target}}   (optional)
+    raw_due:        {config_name: {type, key, sort_by, days, exclude_results}} (optional)
+
+    Raises:
+        PTOSError on invalid names or write failure.
+    """
+    import re
+    import tomli_w
+
+    if raw_aliases is None:
+        raw_aliases = {}
+
+    for n in list(raw_queries) + list(raw_metrics) + list(raw_dashboards) + list(raw_aliases):
+        if not re.match(r'^[a-z][a-z0-9_]*$', n):
+            raise PTOSError(
+                f"Invalid name '{n}' — use lowercase letters, numbers, underscores")
+
+    data = {}
+
+    for name, q in raw_queries.items():
+        entry = {}
+        if q.get("where", "").strip():
+            entry["where"] = q["where"].strip()
+        entry["time"] = q.get("time", "tm")
+        group = q.get("group")
+        if group:
+            entry["group"] = group if isinstance(group, list) else [group.strip()]
+        if q.get("sort"):
+            entry["sort"] = q["sort"] if isinstance(q["sort"], str) else str(q["sort"])
+        if q.get("search"):
+            entry["search"] = q["search"] if isinstance(q["search"], str) else str(q["search"])
+        if q.get("sum"):
+            entry["sum"] = True
+        data[name] = entry
+
+    # Metrics
+    metrics = {}
+    for name, m in raw_metrics.items():
+        entry = {}
+        kind = m.get("kind", "avg")
+        base = m.get("base", "").strip()
+        base2 = m.get("base2", "").strip()
+        derived = m.get("derived", "").strip()
+        unit_field = m.get("unit_field", "").strip()
+        unit_weights = m.get("unit_weights") or {}
+
+        if derived:
+            entry["derived"] = derived
+        elif kind == "ratio" and base and base2:
+            entry["ratio"] = [base, base2]
+        elif kind in ("avg", "sum", "max", "min") and base:
+            entry[kind] = base
+
+        if kind == "avg" and unit_field:
+            entry["unit_field"] = unit_field
+        if kind == "avg" and unit_weights:
+            entry["unit_weights"] = unit_weights
+
+        for k, v in (m.get("_raw") or {}).items():
+            entry[k] = v
+
+        if m.get("time"):
+            entry["time"] = m["time"]
+
+        metrics[name] = entry
+    if metrics:
+        data["metrics"] = metrics
+
+    # Dashboards
+    dashboards = {}
+    for name, db in raw_dashboards.items():
+        entry = {}
+        items = db.get("metrics", [])
+        if items:
+            entry["metrics"] = items
+        dashboards[name] = entry
+    if dashboards:
+        data["dashboards"] = dashboards
+
+    # Aliases
+    for name, a in (raw_aliases or {}).items():
+        alias = a.get("alias", "").strip()
+        if alias:
+            data[name] = {"alias": alias}
+
+    # Due configs
+    all_due = raw_due if raw_due else {}
+    if all_due and isinstance(all_due, dict):
+        due = {}
+        for due_name, due_cfg in all_due.items():
+            if not due_cfg or not isinstance(due_cfg, dict):
+                continue
+            entry = {}
+            if due_cfg.get("type"):
+                entry["type"] = due_cfg["type"]
+            if due_cfg.get("key"):
+                entry["key"] = due_cfg["key"]
+            if due_cfg.get("sort_by"):
+                entry["sort_by"] = due_cfg["sort_by"]
+            if due_cfg.get("days"):
+                entry["days"] = due_cfg["days"]
+            if due_cfg.get("exclude_results") and isinstance(due_cfg["exclude_results"], list):
+                entry["exclude_results"] = due_cfg["exclude_results"]
+            due[due_name] = entry
+        if due:
+            data["due"] = due
+
+    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+        tomli_w.dump(data, w.stream)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2143,4 +2256,19 @@ def write_toml(filepath, data, resource=None):
 def get_queries():
     """Get queries configuration."""
     return ptos.get_queries()
+
+
+def save_schema(schema_dict):
+    """Save schema dict to schema.toml atomically with backup and cache invalidation.
+    
+    Args:
+        schema_dict: Complete schema dict to write.
+    
+    Raises:
+        PTOSError on failure.
+    """
+    try:
+        ptos._save_schema(schema_dict)
+    except Exception as e:
+        raise PTOSError(str(e))
 
