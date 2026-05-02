@@ -1380,7 +1380,7 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
 
     with open(svc.QUERIES_PATH, "wb") as f:
         tomli_w.dump(data, f)
-    svc.invalidate_cache("queries")
+    svc.invalidate("queries")
 
 @app.route("/query-builder")
 def query_builder():
@@ -1694,9 +1694,7 @@ def editor_save():
         return jsonify(ok=False, error=f"File not found: {file}")
     svc.write_file(path, content)
     # invalidate caches — editor can modify any config file
-    for key in ("schema", "config", "queries", "presets",
-                "derived_fields", "numeric_fields"):
-        svc.invalidate_cache(key)
+    svc.invalidate_all()
     return jsonify(ok=True)
 
 
@@ -2197,9 +2195,8 @@ def api_save_preset():
     if not record.get("type"):
         return jsonify(ok=False, error="No record type in form — fill at least the type field")
     try:
-        svc.invalidate_cache("presets")
         svc.save_as_preset(name, record, note=note)
-        svc.invalidate_cache("presets")
+        svc.invalidate("presets")
         return jsonify(ok=True, name=name)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -2224,7 +2221,7 @@ def api_preset_delete():
         return jsonify(ok=False, error="Preset name required")
     try:
         svc.delete_preset(name)
-        svc.invalidate_cache("presets")
+        svc.invalidate("presets")
         return jsonify(ok=True)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))

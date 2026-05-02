@@ -769,9 +769,8 @@ def restore_data(zip_path):
                     os.remove(dst)
                 shutil.copy2(src, dst)
         
-        for key in ("config", "schema", "queries", "presets", "derived_fields", "numeric_fields", "datetime_fields"):
-            _CACHE.pop(key, None)
-        
+        _invalidate_all()
+
         shutil.rmtree(temp_dir)
         
     except Exception as e:
@@ -803,11 +802,10 @@ def restore_config(zip_path):
             shutil.rmtree(config_dst)
         shutil.copytree(config_temp, config_dst)
         
-        for key in ("config",):
-            _CACHE.pop(key, None)
-        
+        _invalidate("config")
+
         shutil.rmtree(temp_dir)
-        
+
     except Exception as e:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
@@ -897,6 +895,32 @@ PRESETS_PATH = os.path.join(CONFIG_DIR, "presets.toml")
 # --------------------------------------------------
 
 _CACHE = {}
+
+# Maps resource names to the cache keys they depend on
+_CACHE_DEPS = {
+    "schema":  ["schema", "derived_fields", "numeric_fields", "datetime_fields"],
+    "queries": ["queries"],
+    "config":  ["config"],
+    "presets": ["presets"],
+}
+
+
+def _invalidate(resource):
+    """Invalidate cache for a resource and all its dependent keys."""
+    if isinstance(resource, str):
+        resource = [resource]
+    keys = set()
+    for r in resource:
+        keys.update(_CACHE_DEPS.get(r, [r]))
+    for key in keys:
+        _CACHE.pop(key, None)
+
+
+def _invalidate_all():
+    """Invalidate every cached key."""
+    for key in list(_CACHE.keys()):
+        _CACHE.pop(key, None)
+
 
 def _load(key, path):
     if key not in _CACHE:
@@ -2979,7 +3003,7 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
 
             try:
                 _save_schema(schema)
-                _CACHE.pop("schema", None)
+                _invalidate("schema")
             except Exception as e:
                 print(f"  ✘ Failed to save schema: {e}")
                 return
@@ -3125,7 +3149,7 @@ def save_query(name, args, extra_filters):
     _backup_file(QUERIES_PATH)
     with open(QUERIES_PATH, "wb") as f:
         tomli_w.dump(queries, f)
-    _CACHE.pop("queries", None)
+    _invalidate("queries")
 
     print(f"\nQuery '{name}' saved to queries.toml")
     print(f"Run with: ptos -q {name}")
@@ -3170,7 +3194,7 @@ def save_as_preset(name, record, note=None):
     _backup_file(presets_path)
     with open(presets_path, "wb") as f:
         tomli_w.dump(data, f)
-    _CACHE.pop("presets", None)
+    _invalidate("presets")
     print(f"Preset '{name}' saved to presets.toml")
 
 
@@ -3202,7 +3226,7 @@ def delete_preset(name):
     _backup_file(presets_path)
     with open(presets_path, "wb") as f:
         tomli_w.dump(data, f)
-    _CACHE.pop("presets", None)
+    _invalidate("presets")
     print(f"Preset '{name}' deleted from presets.toml")
 
 
@@ -3724,7 +3748,7 @@ def set_user_name(name):
     _backup_file(CONFIG_PATH)
     with open(CONFIG_PATH, "wb") as f:
         tomli_w.dump(config, f)
-    _CACHE.pop("config", None)
+    _invalidate("config")
 
     print(f"User name set to: {name}")
 
@@ -3798,7 +3822,7 @@ def set_date_format(fmt):
     _backup_file(CONFIG_PATH)
     with open(CONFIG_PATH, "wb") as f:
         tomli_w.dump(config, f)
-    _CACHE.pop("config", None)
+    _invalidate("config")
 
     print(f"Date format set to: {fmt}")
 

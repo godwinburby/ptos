@@ -80,16 +80,42 @@ def _update_record_in_file(filepath, old_line, new_line, lineno):
     ptos.rewrite_line_in_file(filepath, old_line, new_line, lineno=lineno)
 
 
-def invalidate_cache(keys):
-    """Invalidate internal cache entries.
+# ── Cache manager ────────────────────────────────────────────────────────────
+# Each resource maps to its cache key + dependent keys invalidated together.
+
+_CACHE_MAP = {
+    "schema":   ["schema", "derived_fields", "numeric_fields", "datetime_fields"],
+    "queries":  ["queries"],
+    "config":   ["config"],
+    "presets":  ["presets"],
+}
+
+
+def invalidate(resource):
+    """Invalidate cache for a resource and all its dependents.
     
     Args:
-        keys: Single key string or list of keys to invalidate.
+        resource: One of "schema", "queries", "config", "presets",
+                  or a list/tuple of such keys.
     """
-    if isinstance(keys, str):
-        keys = [keys]
+    if isinstance(resource, str):
+        resource = [resource]
+    keys = set()
+    for r in resource:
+        keys.update(_CACHE_MAP.get(r, [r]))
     for key in keys:
         ptos._CACHE.pop(key, None)
+
+
+def invalidate_all():
+    """Invalidate every cached resource (e.g. after restore)."""
+    for key in list(ptos._CACHE.keys()):
+        ptos._CACHE.pop(key, None)
+
+
+def invalidate_cache(keys):
+    """Backwards-compatible wrapper. Prefer invalidate() for new code."""
+    invalidate(keys)
 
 
 def _cycles():
@@ -1423,7 +1449,7 @@ def save_query(name, where_expr, time="tm", group=None, search=None,
     _backup_file(ptos.QUERIES_PATH)
     with open(ptos.QUERIES_PATH, "wb") as f:
         tomli_w.dump(data, f)
-    invalidate_cache("queries")
+    invalidate("queries")
 
     return {"ok": True, "name": name}
 
@@ -1592,7 +1618,7 @@ def increment_preset_use(name):
         data["presets"] = presets
         with open(path, "wb") as f:
             tomli_w.dump(data, f)
-        ptos._CACHE.pop("presets", None)
+        invalidate("presets")
     except Exception:
         pass
 
@@ -1696,9 +1722,8 @@ def restore_config(zip_path):
         raise PTOSError(f"Failed to restore config: {e}")
     
     # Invalidate caches
-    for key in ("schema", "config", "queries", "presets", "derived_fields", "numeric_fields"):
-        ptos._CACHE.pop(key, None)
-    
+    invalidate_all()
+
     return {"ok": True, "message": "Config restored successfully"}
 
 
@@ -1969,15 +1994,13 @@ def add_tag_option(rtype, tag_field, parent_value, new_tag):
         
         # Backup schema before modification
         ptos._backup_file(ptos.SCHEMA_PATH)
-        
+
         # Save schema
         ptos._save_schema(schema)
-        
+
         # Invalidate schema cache so new options appear immediately
-        ptos._CACHE.pop("schema", None)
-        ptos._CACHE.pop("derived_fields", None)
-        ptos._CACHE.pop("numeric_fields", None)
-        
+        invalidate("schema")
+
         return {"success": True, "message": f"Added '{new_tag}' to {tag_field}.{parent_value}"}
     except Exception as e:
         raise PTOSError(str(e))
@@ -2055,18 +2078,6 @@ def backup_if_needed():
         return ptos.backup_if_needed()
     except Exception as e:
         raise PTOSError(str(e))
-
-
-def invalidate_cache(keys):
-    """Invalidate internal cache entries.
-    
-    Args:
-        keys: Single key string or list of keys to invalidate.
-    """
-    if isinstance(keys, str):
-        keys = [keys]
-    for key in keys:
-        ptos._CACHE.pop(key, None)
 
 
 def check_backup_folders():
