@@ -2924,14 +2924,10 @@ def resolve_tags(schema, type_schema, record):
     return sorted(allowed_tags)
 
 def add_tags_to_schema(schema_path, rtype, record, new_tags):
-    """Add new tags to schema.toml under the correct context.
-    Finds the best matching [type.X.tags.fieldname] options.value section
+    """Add new tags to schema.toml using tomli-w via _save_schema().
+    Finds the best matching type.X.tags.fieldname options.value section
     based on current record field values. Creates section if missing.
     """
-    import re
-
-    # find which tag trigger field has a value in the current record
-    # prefer fields that already have a tags section defined
     schema = get_schema()
     type_schema = schema.get("type", {}).get(rtype, {})
     tag_section = type_schema.get("tags", {})
@@ -2939,7 +2935,6 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
     target_field = None
     target_value = None
 
-    # prefer existing tag section field with a matching value
     for field, trigger in tag_section.items():
         val = record.get(field)
         if val and not isinstance(val, list):
@@ -2947,7 +2942,6 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
             target_value = val
             break
 
-    # fall back to first required field that has a value and options
     if not target_field:
         for field in type_schema.get("required", []):
             val = record.get(field)
@@ -2960,41 +2954,36 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
         print(f"  Could not determine tag context — skipping schema update.")
         return
 
-    schema_text = open(schema_path, encoding="utf-8").read()
-    section_key = f"[type.{rtype}.tags.{target_field}]"
+    type_key = rtype
+    if "type" not in schema:
+        schema["type"] = {}
+    if type_key not in schema["type"]:
+        schema["type"][type_key] = {}
+    if "tags" not in schema["type"][type_key]:
+        schema["type"][type_key]["tags"] = {}
+    if target_field not in schema["type"][type_key]["tags"]:
+        schema["type"][type_key]["tags"][target_field] = {}
+
+    field_tags = schema["type"][type_key]["tags"][target_field]
+    option_key = target_value
+    if option_key not in field_tags:
+        field_tags[option_key] = []
 
     for tag in new_tags:
         ans = input(f"  Add tag '{tag}' to schema under {rtype} › {target_field}={target_value}? (y/N): ").strip().lower()
         if ans != "y":
             continue
+        if tag not in field_tags[option_key]:
+            field_tags[option_key].append(tag)
+            field_tags[option_key] = sorted(field_tags[option_key])
 
-        option_key = f"options.{target_value}"
-        # does the section exist?
-        if section_key in schema_text:
-            # does the options.value line exist?
-            pattern = rf'(options\.{re.escape(target_value)}\s*=\s*\[)([^\]]*?)(\])'
-            match = re.search(pattern, schema_text)
-            if match:
-                # append to existing list
-                existing = match.group(2).strip()
-                if existing:
-                    new_list = f'{existing}, "{tag}"'
-                else:
-                    new_list = f'"{tag}"'
-                schema_text = schema_text[:match.start()] +                               f'{match.group(1)}{new_list}{match.group(3)}' +                               schema_text[match.end():]
-            else:
-                # section exists but this options.value line doesn't — append after section header
-                schema_text = schema_text.replace(
-                    section_key,
-                    f"{section_key}\n{option_key} = [\"" + tag + "\"]"
-                )
-        else:
-            # section doesn't exist at all — append to end of file
-            schema_text = (schema_text.rstrip() +
-                           f"\n\n{section_key}\n{option_key} = [\"" + tag + "\"]\n")
-
-        atomic_write(schema_path, schema_text)
-        print(f"  ✔ Added '{tag}' to schema.")
+            try:
+                _save_schema(schema)
+                _CACHE.pop("schema", None)
+            except Exception as e:
+                print(f"  ✘ Failed to save schema: {e}")
+                return
+            print(f"  ✔ Added '{tag}' to schema.")
 
 
 def complete_record(schema, record):
@@ -3077,15 +3066,15 @@ def _filters_to_expr(filters):
 
 
 def save_query(name, args, extra_filters):
-    """Append a new saved query block to queries.toml from current CLI args.
+    """Save a named query to queries.toml from current CLI args using tomli-w.
 
-    where is always saved as a single expression string:
-      where = "type=expense AND domain=self"
-      where = "tag=jayden AND tag=fruits AND type=expense"
-      where = "(category=home OR category=household) AND amount>100"
-
-    This single format is unambiguous and easy for any UI to consume.
+    where is always saved as a single expression string.
     """
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+
     queries = get_queries()
     if name in queries:
         ans = input(f"Query '{name}' already exists. Overwrite? (y/N): ").strip().lower()
@@ -3093,62 +3082,51 @@ def save_query(name, args, extra_filters):
             print("Cancelled.")
             return
 
-    lines = [f"\n[{name}]"]
-
-    # Reconstruct --where filters only (not -y / --tag injections)
     where_filters = [item for group in (args.where or []) for item in group]
-
-    # Conditions added by -y and --tag shortcuts
     type_filter = [f"type={args.type}"] if getattr(args, "type", None) else []
     tag_filters = [f"tag={t}" for t in (args.tag or [])]
 
     all_conditions = where_filters + type_filter + tag_filters
     expr = _filters_to_expr(all_conditions)
+
+    entry = {}
     if expr:
-        val = expr.replace('"', '\\"')
-        lines.append(f'where = "{val}"')
+        entry["where"] = expr
 
     if getattr(args, "date_from", None) or getattr(args, "date_to", None):
         if getattr(args, "date_from", None):
-            lines.append(f'from  = "{args.date_from}"')
+            entry["from"] = args.date_from
         if getattr(args, "date_to", None):
-            lines.append(f'to    = "{args.date_to}"')
+            entry["to"] = args.date_to
     else:
-        lines.append(f'time  = "{args.time}"')
+        entry["time"] = args.time
 
     if getattr(args, "search", None):
-        lines.append(f'search = "{args.search}"')
+        entry["search"] = args.search
 
     if getattr(args, "group", None):
-        group_val = args.group if isinstance(args.group, list) else [args.group]
-        items = ", ".join(f'"{g}"' for g in group_val)
-        lines.append(f"group = [{items}]")
+        entry["group"] = args.group if isinstance(args.group, list) else [args.group]
 
     if getattr(args, "pivot", None):
-        items = ", ".join(f'"{p}"' for p in args.pivot)
-        lines.append(f"pivot = [{items}]")
+        entry["pivot"] = list(args.pivot)
         if getattr(args, "count", False):
-            lines.append("count = true")
+            entry["count"] = True
         if getattr(args, "sort", None):
-            lines.append(f'sort  = "{args.sort}"')
+            entry["sort"] = args.sort
 
     if getattr(args, "trend", None) is not None:
-        lines.append(f"trend = {args.trend}")
+        entry["trend"] = args.trend
 
     if getattr(args, "sum", False):
-        lines.append("sum   = true")
+        entry["sum"] = True
 
-    block = "\n".join(lines)
-    
-    # Read existing content and append
-    existing = ""
-    if os.path.exists(QUERIES_PATH):
-        with open(QUERIES_PATH, "r", encoding="utf-8") as f:
-            existing = f.read()
-    
-    new_content = existing.rstrip() + "\n" + block + "\n" if existing else block + "\n"
-    atomic_write(QUERIES_PATH, new_content)
-    
+    queries[name] = entry
+
+    _backup_file(QUERIES_PATH)
+    with open(QUERIES_PATH, "wb") as f:
+        tomli_w.dump(queries, f)
+    _CACHE.pop("queries", None)
+
     print(f"\nQuery '{name}' saved to queries.toml")
     print(f"Run with: ptos -q {name}")
 
@@ -3722,71 +3700,33 @@ def init_ptos():
 
 
 def set_user_name(name):
-    """Set the user name in config.toml."""
+    """Set the user name in config.toml using tomli-w."""
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+
     if not name or not name.strip():
         sys.exit("Error: Name cannot be empty.")
-    
+
     name = name.strip()
-    
+
     if not os.path.exists(CONFIG_PATH):
         sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
-    
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            content = f.read()
-    except Exception as e:
-        sys.exit(f"Error reading config: {e}")
-    
-    lines = content.split("\n")
-    new_lines = []
-    user_section_found = False
-    name_updated = False
-    
-    for i, line in enumerate(lines):
-        stripped = line.strip()
-        
-        if stripped == "[user]":
-            user_section_found = True
-            new_lines.append(line)
-            continue
-        
-        if user_section_found and stripped.startswith("name"):
-            new_lines.append(f'name = "{name}"')
-            name_updated = True
-            user_section_found = False
-            continue
-        
-        if user_section_found and stripped.startswith("["):
-            new_lines.append(f'name = "{name}"')
-            new_lines.append("")
-            user_section_found = False
-            new_lines.append(line)
-            continue
-        
-        if user_section_found and i == len(lines) - 1:
-            new_lines.append(f'name = "{name}"')
-            name_updated = True
-            continue
-        
-        new_lines.append(line)
-    
-    if not name_updated:
-        if "[user]" in content:
-            new_lines.append(f'name = "{name}"')
-        else:
-            new_lines.append("")
-            new_lines.append("[user]")
-            new_lines.append(f'name = "{name}"')
-    
-    try:
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            f.write("\n".join(new_lines))
-        print(f"User name set to: {name}")
-        
-        for key in ("config",):
-            _CACHE.pop(key, None)
-    except Exception as e:
-        sys.exit(f"Error writing config: {e}")
+
+    with open(CONFIG_PATH, "rb") as f:
+        config = tomllib.load(f)
+
+    if "user" not in config:
+        config["user"] = {}
+    config["user"]["name"] = name
+
+    _backup_file(CONFIG_PATH)
+    with open(CONFIG_PATH, "wb") as f:
+        tomli_w.dump(config, f)
+    _CACHE.pop("config", None)
+
+    print(f"User name set to: {name}")
 
 
 def validate_date_format(fmt):
@@ -3825,96 +3765,42 @@ def validate_date_format(fmt):
 
 
 def set_date_format(fmt):
-    """Set the date format in config.toml."""
+    """Set the date format in config.toml using tomli-w."""
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+
     if fmt is None or not isinstance(fmt, str):
         sys.exit("Error: Date format must be a string.")
-    
+
     fmt = fmt.strip()
     if not fmt:
         sys.exit("Error: Date format cannot be empty.")
-    
-    # Validate format
+
     try:
         validate_date_format(fmt)
     except ValueError as e:
         sys.exit(str(e))
-    
+
     if not os.path.exists(CONFIG_PATH):
         sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
-    
-    try:
-        with open(CONFIG_PATH, "r", encoding="utf-8") as f:
-            lines = f.readlines()
-    except Exception as e:
-        sys.exit(f"Error reading config: {e}")
-    
-    new_lines = []
-    in_display_section = False
-    date_format_updated = False
-    
-    for line in lines:
-        stripped = line.strip()
-        
-        # Track if we're in the [display] section
-        if stripped == "[display]":
-            in_display_section = True
-            new_lines.append(line)
-            continue
-        
-        # If we're in display section and find date_format, replace it
-        if in_display_section and stripped.startswith("date_format"):
-            new_lines.append(f'date_format = "{fmt}"\n')
-            date_format_updated = True
-            continue
-        
-        # If we encounter a new section header while in display section
-        if in_display_section and stripped.startswith("[") and stripped != "[display]":
-            # Add missing date_format before leaving display section
-            if not date_format_updated:
-                new_lines.append(f'date_format = "{fmt}"\n')
-                date_format_updated = True
-            in_display_section = False
-            new_lines.append(line)
-            continue
-        
-        # Skip original date_format lines we're replacing
-        if stripped.startswith("date_format"):
-            continue
-        
-        new_lines.append(line)
-    
-    # If we're still in display section at EOF, add date_format
-    if in_display_section and not date_format_updated:
-        new_lines.append(f'date_format = "{fmt}"\n')
-        date_format_updated = True
-    
-    # If no display section found at all, create it
-    if not date_format_updated:
-        # Find where to insert [display] section - after [editor] if it exists
-        insert_index = 0
-        for i, line in enumerate(new_lines):
-            if line.strip() == "[editor]":
-                insert_index = i + 1
-                while insert_index < len(new_lines) and new_lines[insert_index].strip():
-                    insert_index += 1
-                break
-        
-        # Insert blank line and display section
-        if insert_index < len(new_lines):
-            new_lines.insert(insert_index, f'[display]\ncurrency = "₹"\ndate_format = "{fmt}"\n')
-        else:
-            new_lines.append(f'\n[display]\ncurrency = "₹"\ndate_format = "{fmt}"\n')
-        date_format_updated = True
-    
-    try:
-        with open(CONFIG_PATH, "w", encoding="utf-8") as f:
-            f.writelines(new_lines)
-        print(f"Date format set to: {fmt}")
-        
-        for key in ("config",):
-            _CACHE.pop(key, None)
-    except Exception as e:
-        sys.exit(f"Error writing config: {e}")
+
+    with open(CONFIG_PATH, "rb") as f:
+        config = tomllib.load(f)
+
+    if "display" not in config:
+        config["display"] = {}
+        if "currency" not in config.get("display", {}):
+            config["display"]["currency"] = "₹"
+    config["display"]["date_format"] = fmt
+
+    _backup_file(CONFIG_PATH)
+    with open(CONFIG_PATH, "wb") as f:
+        tomli_w.dump(config, f)
+    _CACHE.pop("config", None)
+
+    print(f"Date format set to: {fmt}")
 
 # --------------------------------------------------
 # CLI  — argument parsing only, no logic
