@@ -8,8 +8,8 @@ import sys, os, re, datetime as dt, json, csv, tempfile, platform, subprocess, u
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
+import ptos
 from ptos_service import PTOSError
-# import ptos  # DEPRECATED: use ptos_service instead
 
 from flask import (Flask, render_template, request, redirect,
                    url_for, jsonify, send_file)
@@ -1286,8 +1286,6 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
             raise ValueError(
                 f"Invalid name '{n}' — use lowercase letters, numbers, underscores")
 
-    svc._backup_file(svc.QUERIES_PATH)
-
     data = {}
 
     for name, q in raw_queries.items():
@@ -1378,9 +1376,8 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
         if due:
             data["due"] = due
 
-    with open(svc.QUERIES_PATH, "wb") as f:
-        tomli_w.dump(data, f)
-    svc.invalidate("queries")
+    with ptos.AtomicWrite(svc.QUERIES_PATH, "queries") as w:
+        tomli_w.dump(data, w.stream)
 
 @app.route("/query-builder")
 def query_builder():

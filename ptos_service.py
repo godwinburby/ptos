@@ -76,7 +76,6 @@ def _update_record_in_file(filepath, old_line, new_line, lineno):
         new_line: New record line (or None to delete)
         lineno: Line number for precise targeting
     """
-    ptos._backup_file(filepath)
     ptos.rewrite_line_in_file(filepath, old_line, new_line, lineno=lineno)
 
 
@@ -1446,10 +1445,8 @@ def save_query(name, where_expr, time="tm", group=None, search=None,
 
     data[name] = entry
 
-    _backup_file(ptos.QUERIES_PATH)
-    with open(ptos.QUERIES_PATH, "wb") as f:
-        tomli_w.dump(data, f)
-    invalidate("queries")
+    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+        tomli_w.dump(data, w.stream)
 
     return {"ok": True, "name": name}
 
@@ -1604,7 +1601,6 @@ def increment_preset_use(name):
         path = ptos.PRESETS_PATH
         if not os.path.exists(path):
             return
-        _backup_file(path)
         with open(path, "rb") as f:
             try:
                 import tomllib
@@ -1616,9 +1612,8 @@ def increment_preset_use(name):
             return
         presets[name]["use_count"] = presets[name].get("use_count", 0) + 1
         data["presets"] = presets
-        with open(path, "wb") as f:
-            tomli_w.dump(data, f)
-        invalidate("presets")
+        with ptos.AtomicWrite(path, "presets") as w:
+            tomli_w.dump(data, w.stream)
     except Exception:
         pass
 
@@ -1991,15 +1986,9 @@ def add_tag_option(rtype, tag_field, parent_value, new_tag):
         
         tag_options[parent_value].append(new_tag)
         tag_options[parent_value] = sorted(tag_options[parent_value])
-        
-        # Backup schema before modification
-        ptos._backup_file(ptos.SCHEMA_PATH)
 
-        # Save schema
+        # Save schema (handles backup + atomic write + cache invalidation)
         ptos._save_schema(schema)
-
-        # Invalidate schema cache so new options appear immediately
-        invalidate("schema")
 
         return {"success": True, "message": f"Added '{new_tag}' to {tag_field}.{parent_value}"}
     except Exception as e:

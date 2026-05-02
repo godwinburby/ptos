@@ -459,6 +459,54 @@ def _backup_file(path):
     if os.path.exists(path):
         shutil.copy2(path, path + ".bak")
 
+
+class AtomicWrite:
+    """Context manager for atomic file writes with backup and cache invalidation.
+
+    Usage:
+        with AtomicWrite(path, "queries") as w:
+            tomli_w.dump(data, w.stream)
+
+    On success: writes via temp file + atomic rename, removes .bak, invalidates cache.
+    On failure: removes temp, restores from .bak, logs error.
+    """
+
+    def __init__(self, path, resource=None):
+        self.path = path
+        self.resource = resource
+        self.backup_path = path + ".bak"
+        self.temp_path = path + ".tmp"
+        self._stream = None
+
+    def __enter__(self):
+        if os.path.exists(self.path):
+            shutil.copy2(self.path, self.backup_path)
+        return self
+
+    @property
+    def stream(self):
+        if self._stream is None:
+            self._stream = open(self.temp_path, "wb")
+        return self._stream
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        if self._stream is not None:
+            self._stream.close()
+
+        if exc_type is None:
+            os.replace(self.temp_path, self.path)
+            if os.path.exists(self.backup_path):
+                os.remove(self.backup_path)
+            if self.resource:
+                _invalidate(self.resource)
+        else:
+            if os.path.exists(self.temp_path):
+                os.remove(self.temp_path)
+            if os.path.exists(self.backup_path):
+                shutil.copy2(self.backup_path, self.path)
+                os.remove(self.backup_path)
+            _log_error(f"Atomic write failed for {self.path}: {exc_val}")
+
 # --------------------------------------------------
 # Doctor — check PTOS health
 # --------------------------------------------------
@@ -1663,7 +1711,6 @@ def rewrite_line_in_file(filepath, old_line, new_line, lineno=None):
             )
         idx = hits[0]
 
-    _backup_file(filepath)
     if new_line is None:
         lines.pop(idx)
     else:
@@ -2778,15 +2825,15 @@ def resolve_options_for_value(type_schema, field, parent_value):
 
 
 def _save_schema(schema):
-    """Save schema to config/schema.toml using tomli-w."""
+    """Save schema to config/schema.toml using tomli-w with atomic write."""
     try:
         import tomli_w
     except ImportError:
         raise RuntimeError("tomli-w not installed: pip install tomli-w")
-    
+
     toml_path = os.path.join(CONFIG_DIR, "schema.toml")
-    with open(toml_path, "wb") as f:
-        tomli_w.dump(schema, f)
+    with AtomicWrite(toml_path, "schema") as w:
+        tomli_w.dump(schema, w.stream)
 
 
 def add_field_option(type_name, field_name, new_option, option_source,
@@ -3003,7 +3050,6 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
 
             try:
                 _save_schema(schema)
-                _invalidate("schema")
             except Exception as e:
                 print(f"  ✘ Failed to save schema: {e}")
                 return
@@ -3146,10 +3192,8 @@ def save_query(name, args, extra_filters):
 
     queries[name] = entry
 
-    _backup_file(QUERIES_PATH)
-    with open(QUERIES_PATH, "wb") as f:
-        tomli_w.dump(queries, f)
-    _invalidate("queries")
+    with AtomicWrite(QUERIES_PATH, "queries") as w:
+        tomli_w.dump(queries, w.stream)
 
     print(f"\nQuery '{name}' saved to queries.toml")
     print(f"Run with: ptos -q {name}")
@@ -3191,10 +3235,8 @@ def save_as_preset(name, record, note=None):
 
     data["presets"][name] = entry
 
-    _backup_file(presets_path)
-    with open(presets_path, "wb") as f:
-        tomli_w.dump(data, f)
-    _invalidate("presets")
+    with AtomicWrite(presets_path, "presets") as w:
+        tomli_w.dump(data, w.stream)
     print(f"Preset '{name}' saved to presets.toml")
 
 
@@ -3223,10 +3265,8 @@ def delete_preset(name):
     del presets[name]
     data["presets"] = presets
 
-    _backup_file(presets_path)
-    with open(presets_path, "wb") as f:
-        tomli_w.dump(data, f)
-    _invalidate("presets")
+    with AtomicWrite(presets_path, "presets") as w:
+        tomli_w.dump(data, w.stream)
     print(f"Preset '{name}' deleted from presets.toml")
 
 
@@ -3745,10 +3785,8 @@ def set_user_name(name):
         config["user"] = {}
     config["user"]["name"] = name
 
-    _backup_file(CONFIG_PATH)
-    with open(CONFIG_PATH, "wb") as f:
-        tomli_w.dump(config, f)
-    _invalidate("config")
+    with AtomicWrite(CONFIG_PATH, "config") as w:
+        tomli_w.dump(config, w.stream)
 
     print(f"User name set to: {name}")
 
@@ -3819,10 +3857,8 @@ def set_date_format(fmt):
             config["display"]["currency"] = "₹"
     config["display"]["date_format"] = fmt
 
-    _backup_file(CONFIG_PATH)
-    with open(CONFIG_PATH, "wb") as f:
-        tomli_w.dump(config, f)
-    _invalidate("config")
+    with AtomicWrite(CONFIG_PATH, "config") as w:
+        tomli_w.dump(config, w.stream)
 
     print(f"Date format set to: {fmt}")
 
