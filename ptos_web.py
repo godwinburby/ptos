@@ -1269,15 +1269,16 @@ def _normalise_query_for_write(v):
 
 
 def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None):
-    """Build and atomically write queries.toml from dicts.
-    raw_queries:    {name: {where, time, sum, group, search}}
-    raw_metrics:    {name: {kind, base, base2, derived}}
+    """Build and write queries.toml using tomli-w.
+    raw_queries:    {name: {where, time, group, search, sort, sum}}
+    raw_metrics:    {name: {kind, base, base2, derived, unit_field, unit_weights, time, ...}}
     raw_dashboards: {name: {metrics: [...]}}
     raw_aliases:    {name: {alias: target}}   (optional)
-    raw_due:       {type, key, sort_by, days, exclude_results} (optional)
+    raw_due:        {config_name: {type, key, sort_by, days, exclude_results}} (optional)
     Raises ValueError on invalid names, Exception on write failure.
     """
     import re as _re
+    import tomli_w
     if raw_aliases is None:
         raw_aliases = {}
     for n in list(raw_queries) + list(raw_metrics) + list(raw_dashboards) + list(raw_aliases):
@@ -1285,117 +1286,100 @@ def _write_queries_toml(raw_queries, raw_metrics, raw_dashboards, raw_aliases=No
             raise ValueError(
                 f"Invalid name '{n}' — use lowercase letters, numbers, underscores")
 
-    try:
-        old_queries = svc.get_queries()
-    except Exception:
-        old_queries = {}
+    svc._backup_file(svc.QUERIES_PATH)
 
-    lines = [
-        "# --------------------------------------------------",
-        "# PTOS QUERIES  (managed by Query Builder)",
-        "# --------------------------------------------------",
-        "",
-    ]
+    data = {}
 
-    # ── Base queries ──────────────────────────────────────────────────────────
     for name, q in raw_queries.items():
-        lines.append(f"[{name}]")
+        entry = {}
         if q.get("where", "").strip():
-            val = q["where"].strip().replace('"', '\\"')
-            lines.append(f'where = "{val}"')
-        lines.append(f'time  = "{q.get("time", "tm")}"')
-        if q.get("group", "").strip():
-            lines.append(f'group = ["{q["group"].strip()}"]')
-        if q.get("sort", "").strip():
-            lines.append(f'sort = "{q["sort"].strip()}"')
-        if q.get("search", "").strip():
-            lines.append(f'search = "{q["search"].strip()}"')
+            entry["where"] = q["where"].strip()
+        entry["time"] = q.get("time", "tm")
+        group = q.get("group")
+        if group:
+            entry["group"] = group if isinstance(group, list) else [group.strip()]
+        if q.get("sort"):
+            entry["sort"] = q["sort"] if isinstance(q["sort"], str) else str(q["sort"])
+        if q.get("search"):
+            entry["search"] = q["search"] if isinstance(q["search"], str) else str(q["search"])
         if q.get("sum"):
-            lines.append("sum   = true")
-        lines.append("")
+            entry["sum"] = True
+        data[name] = entry
 
-    # ── Metrics ───────────────────────────────────────────────────────────────
+    # Metrics
+    metrics = {}
     for name, m in raw_metrics.items():
-        lines.append(f"[metrics.{name}]")
-        kind  = m.get("kind", "avg")
-        base  = m.get("base",  "").strip()
+        entry = {}
+        kind = m.get("kind", "avg")
+        base = m.get("base", "").strip()
         base2 = m.get("base2", "").strip()
         derived = m.get("derived", "").strip()
         unit_field = m.get("unit_field", "").strip()
         unit_weights = m.get("unit_weights") or {}
-        raw = m.get("_raw") or {}
-        
-        if derived:
-            lines.append(f'derived = "{derived}"')
-        elif kind == "ratio" and base and base2:
-            lines.append(f'ratio = ["{base}", "{base2}"]')
-        elif kind in ("avg", "sum", "max", "min") and base:
-            lines.append(f'{kind} = "{base}"')
-        
-        # Unit field and weights for avg
-        if kind == "avg" and unit_field:
-            lines.append(f'unit_field   = "{unit_field}"')
-        if kind == "avg" and unit_weights:
-            uw_parts = [f'{k} = {v}' for k, v in unit_weights.items()]
-            lines.append(f'unit_weights = {{ {", ".join(uw_parts)} }}')
-        
-        # Any extra raw fields
-        for k, v in raw.items():
-            if isinstance(v, str):
-                lines.append(f'{k} = "{v}"')
-            elif isinstance(v, bool):
-                lines.append(f'{k} = {"true" if v else "false"}')
-            elif isinstance(v, int):
-                lines.append(f'{k} = {v}')
-            elif isinstance(v, list):
-                s = ", ".join(f'"{x}"' if isinstance(x, str) else str(x) for x in v)
-                lines.append(f"{k} = [{s}]")
-            elif isinstance(v, dict):
-                lines.append(f'{k} = {json.dumps(v)}')
-        
-        lines.append("")
 
-    # ── Alias queries ─────────────────────────────────────────────────────────
+        if derived:
+            entry["derived"] = derived
+        elif kind == "ratio" and base and base2:
+            entry["ratio"] = [base, base2]
+        elif kind in ("avg", "sum", "max", "min") and base:
+            entry[kind] = base
+
+        if kind == "avg" and unit_field:
+            entry["unit_field"] = unit_field
+        if kind == "avg" and unit_weights:
+            entry["unit_weights"] = unit_weights
+
+        for k, v in (m.get("_raw") or {}).items():
+            entry[k] = v
+
+        if m.get("time"):
+            entry["time"] = m["time"]
+
+        metrics[name] = entry
+    if metrics:
+        data["metrics"] = metrics
+
+    # Dashboards
+    dashboards = {}
+    for name, db in raw_dashboards.items():
+        entry = {}
+        items = db.get("metrics", [])
+        if items:
+            entry["metrics"] = items
+        dashboards[name] = entry
+    if dashboards:
+        data["dashboards"] = dashboards
+
+    # Aliases
     for name, a in (raw_aliases or {}).items():
         alias = a.get("alias", "").strip()
         if alias:
-            lines.append(f"[{name}]")
-            lines.append(f'alias = "{alias}"')
-            lines.append("")
+            data[name] = {"alias": alias}
 
-    # ── Dashboards ────────────────────────────────────────────────────────────
-    for name, db in raw_dashboards.items():
-        lines.append(f"[dashboards.{name}]")
-        items = db.get("metrics", [])
-        if items:
-            items_str = ", ".join(f'"{i}"' for i in items)
-            lines.append(f"metrics = [{items_str}]")
-        lines.append("")
-    
-    # ── Due settings (multiple configs) ─────────────────────────────────────────
-    # raw_due is a dict: {config_name: {type, key, sort_by, days, exclude_results}}
+    # Due configs
     all_due = raw_due if raw_due else {}
     if all_due and isinstance(all_due, dict):
+        due = {}
         for due_name, due_cfg in all_due.items():
             if not due_cfg or not isinstance(due_cfg, dict):
                 continue
-            # Always write as [due.name] format
-            lines.append(f"[due.{due_name}]")
+            entry = {}
             if due_cfg.get("type"):
-                lines.append(f'type = "{due_cfg["type"]}"')
+                entry["type"] = due_cfg["type"]
             if due_cfg.get("key"):
-                lines.append(f'key = "{due_cfg["key"]}"')
+                entry["key"] = due_cfg["key"]
             if due_cfg.get("sort_by"):
-                lines.append(f'sort_by = "{due_cfg["sort_by"]}"')
+                entry["sort_by"] = due_cfg["sort_by"]
             if due_cfg.get("days"):
-                lines.append(f"days = {due_cfg['days']}")
+                entry["days"] = due_cfg["days"]
             if due_cfg.get("exclude_results") and isinstance(due_cfg["exclude_results"], list):
-                opts = ", ".join(f'"{x}"' for x in due_cfg["exclude_results"])
-                lines.append(f"exclude_results = [{opts}]")
-            lines.append("")
+                entry["exclude_results"] = due_cfg["exclude_results"]
+            due[due_name] = entry
+        if due:
+            data["due"] = due
 
-    svc._backup_file(svc.QUERIES_PATH)
-    svc.atomic_write(svc.QUERIES_PATH, "\n".join(lines))
+    with open(svc.QUERIES_PATH, "wb") as f:
+        tomli_w.dump(data, f)
     svc.invalidate_cache("queries")
 
 @app.route("/query-builder")
