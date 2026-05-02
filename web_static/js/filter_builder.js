@@ -134,6 +134,7 @@
 
     // ── API fetch ──────────────────────────────────────────────────────────────
     self._ctxStr = function() {
+      // For cache key — field=value pairs joined by &
       var out = {};
       self._chips.forEach(function(c) { if (c.field !== "type") out[c.field] = c.value; });
       return Object.keys(out).sort().map(function(k) { return k+"="+out[k]; }).join("&");
@@ -146,8 +147,11 @@
       if (self._cache[k]) { cb && cb(self._cache[k]); return; }
       if (self._lru.length >= 20) delete self._cache[self._lru.shift()];
       var url = "/api/type_fields/" + encodeURIComponent(self._type);
-      var ctx = self._ctxStr();
-      if (ctx) url += "?" + ctx;
+      // API expects context as ?context=field:value,field:value
+      var out = {};
+      self._chips.forEach(function(c) { if (c.field !== "type") out[c.field] = c.value; });
+      var pairs = Object.keys(out).sort().map(function(k) { return k+":"+out[k]; });
+      if (pairs.length) url += "?context=" + encodeURIComponent(pairs.join(","));
       fetch(url)
         .then(function(r) { return r.json(); })
         .then(function(data) {
