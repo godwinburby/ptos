@@ -201,18 +201,39 @@
   {% endif %}
 </div>
 
-<!-- quick add presets -->
-{% if presets %}
+<!-- quick add presets — frequent first, rest collapsible -->
+{% if frequent_presets or presets %}
 <div class="card">
-  <div class="card-title">Quick Add</div>
-  <div class="chip-group">
-    {% for name in presets %}
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <div class="card-title" style="margin:0;">Quick Add</div>
+    {% if remaining_presets %}
+    <button onclick="toggleAllPresets(this)"
+            style="background:none;border:none;font-size:12px;color:var(--accent);
+                   cursor:pointer;font-weight:600;padding:0;">Show all ▾</button>
+    {% endif %}
+  </div>
+  <!-- Frequent presets -->
+  <div class="chip-group" id="frequent-presets">
+    {% for name in frequent_presets %}
     <span class="preset-chip-wrap">
-      <a href="/add?preset={{ name }}" class="preset-chip">+ {{ name }}</a>
+      <a href="/add?preset={{ name }}" class="preset-chip"
+         onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
       <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
     </span>
     {% endfor %}
   </div>
+  <!-- Remaining presets (collapsed by default) -->
+  {% if remaining_presets %}
+  <div class="chip-group" id="remaining-presets" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+    {% for name in remaining_presets %}
+    <span class="preset-chip-wrap">
+      <a href="/add?preset={{ name }}" class="preset-chip"
+         onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
+      <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -407,6 +428,24 @@ function doDelete() {
     msg.textContent = String(e);
     msg.style.display = "block";
   });
+}
+
+function trackPreset(name) {
+  // Fire-and-forget — increment use_count in background
+  fetch("/api/preset_use", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name: name})
+  }).catch(function(){});
+  // Don't prevent the link navigation
+}
+
+function toggleAllPresets(btn) {
+  var el = document.getElementById("remaining-presets");
+  if (!el) return;
+  var open = el.style.display !== "none";
+  el.style.display = open ? "none" : "flex";
+  btn.textContent  = open ? "Show all ▾" : "Show less ▲";
 }
 
 function deletePreset(name, btn) {

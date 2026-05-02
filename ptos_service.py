@@ -1578,6 +1578,36 @@ def bulk_set(records, set_args):
                 errors.append(str(e))
     return {"updated": updated, "errors": errors}
 
+
+def increment_preset_use(name):
+    """Increment use_count for a preset in presets.toml.
+    Creates the field if not present. No-op if preset not found."""
+    try:
+        import tomli_w
+        presets = ptos.get_presets()
+        if name not in presets:
+            return
+        _backup_file(ptos.PRESETS_PATH)
+        presets[name]["use_count"] = presets[name].get("use_count", 0) + 1
+        with open(ptos.PRESETS_PATH, "wb") as f:
+            tomli_w.dump(presets, f)
+        ptos._CACHE.pop("presets", None)
+    except Exception:
+        pass  # never fail a UI action over a counter
+
+
+def get_frequent_presets(n=6):
+    """Return top N preset names sorted by use_count descending.
+    Falls back to alphabetical for presets with equal counts."""
+    presets = ptos.get_presets()
+    singles = {k: v for k, v in presets.items()
+               if isinstance(v, dict) and not v.get("records")}
+    ranked = sorted(
+        singles.keys(),
+        key=lambda k: (-singles[k].get("use_count", 0), k)
+    )
+    return ranked[:n], ranked[n:]
+
 def restore_config(zip_path):
     """Restore config from a backup zip file.
     Validates contents, backs up current config first, then restores atomically.
