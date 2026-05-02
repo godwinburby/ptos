@@ -391,9 +391,7 @@ def home():
     return render_template("home.html",
         tab="home", title="Home", now=_now_str(), greeting=_greeting(),
         username=username,
-        frequent_presets=svc.get_frequent_presets(6)[0],
-        remaining_presets=svc.get_frequent_presets(6)[1],
-        presets=sorted(presets.keys()),
+        frequent_presets=svc.get_frequent_presets(6),
         multi_presets=multi_presets,
         due_count=due_count, due_rows=due_rows[:5],
         due_configs=list(due_configs.keys()), selected_due=selected_due or "default",
@@ -2225,7 +2223,6 @@ def api_save_preset():
 
 @app.route("/api/preset_use", methods=["POST"])
 def api_preset_use():
-    """Increment use_count for a preset (called when user taps a preset chip)."""
     data = request.get_json(silent=True) or {}
     name = (data.get("name") or "").strip()
     if name:
