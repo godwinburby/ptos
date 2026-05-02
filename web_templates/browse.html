@@ -23,82 +23,8 @@
 <div class="page-title">Browse</div>
 
 <div class="card">
-  <!-- ── Type chips ── -->
-  <div style="margin-bottom:12px;">
-    <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">TYPE</div>
-    <div id="b-type-chips" class="chip-group"></div>
-  </div>
-
-  <!-- ── Chip filter builder ── -->
-  <div id="chip-builder" style="display:none;margin-bottom:12px;">
-    <!-- active filter chips -->
-    <div id="active-chips" style="display:none;margin-bottom:10px;">
-      <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">ACTIVE FILTERS</div>
-      <div id="active-chip-list" class="chip-group"></div>
-    </div>
-
-<!-- field selector -->
-    <div style="margin-bottom:8px;">
-      <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">FIELDS</div>
-      <div id="field-chips" class="chip-group"></div>
-    </div>
-
-    <!-- value selector — appears after tapping a field chip -->
-    <div id="value-chip-row" style="display:none;padding:10px;background:var(--bg);
-         border-radius:8px;border:1px solid var(--border);margin-bottom:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="font-size:11px;color:var(--sub);font-weight:600;">
-          VALUES FOR <span id="value-chip-label" style="color:var(--accent);"></span>
-        </div>
-        <button onclick="closeValueRow()"
-                style="background:none;border:none;font-size:16px;color:var(--sub);
-                       cursor:pointer;padding:0 4px;line-height:1;">✕</button>
-      </div>
-      <div id="value-chips" class="chip-group" style="margin-bottom:6px;"></div>
-      <div id="history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">from history:</div>
-      <div id="history-chips" class="chip-group" style="opacity:0.65;margin-bottom:4px;"></div>
-      <div id="value-text-row" style="display:none;margin-top:8px;flex;gap:8px;">
-        <input type="text" id="value-text-input" placeholder="type a value…"
-               style="flex:1;padding:8px 12px;border-radius:8px;
-                      border:1px solid var(--border);background:var(--card);
-                      color:var(--text);font-size:14px;"
-               onkeydown="if(event.key==='Enter') addTextFilter()">
-        <button onclick="addTextFilter()"
-                style="padding:8px 16px;border-radius:8px;border:none;
-                       background:var(--accent);color:#fff;font-size:14px;
-                       font-weight:600;cursor:pointer;margin-top:6px;">Add</button>
-      </div>
-    </div>
-
-    <!-- Tags section -->
-    <div id="tags-section" style="display:none;margin-bottom:12px;">
-      <div style="font-size:11px;color:var(--sub);font-weight:600;margin-bottom:6px;">TAGS</div>
-      <div id="tag-chips" class="chip-group"></div>
-      <div id="tag-history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">from history:</div>
-      <div id="tag-history-chips" class="chip-group"></div>
-    </div>
-
-  </div>
-
-  </div>
-
-  <!-- ── WHERE expression editor (always visible) ── -->
-  <div id="advanced-section" style="margin-bottom:12px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div style="font-size:11px;color:var(--sub);font-weight:600;">WHERE</div>
-      <span style="font-size:11px;color:var(--sub);">= != &gt; &lt; &gt;= &lt;= ~contains · AND OR NOT ( )</span>
-    </div>
-    <textarea id="where-editor" rows="2"
-              style="width:100%;font-family:monospace;font-size:13px;padding:10px;
-                     border-radius:8px;border:1.5px solid var(--border);
-                     background:var(--bg);color:var(--text);resize:vertical;outline:none;
-                     transition:border-color .15s;"
-              placeholder="e.g. type=followup AND (intent=trial OR intent=decision) AND NOT result=deceased"
-              oninput="onExprInput()"
-              onfocus="this.style.borderColor='var(--accent)'"
-              onblur="this.style.borderColor='var(--border)'"></textarea>
-    <div id="expr-error" style="display:none;font-size:11px;color:var(--error);margin-top:4px;"></div>
-  </div>
+  <!-- ── FilterBuilder ── -->
+  <div id="browse-filter" style="margin-bottom:12px;"></div>
 
   <!-- ── Time and Group ── -->
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
@@ -273,538 +199,60 @@
 
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
-var _browse = {
-  type: null,           // current type filter
-  chips: [],            // [{field, op, value}]
-  exprManual: "",       // manual expression
-  search: "",           // text search
-  _activeField: null    // currently selected field for value picker
-};
-var _fieldCache = {};   // cached fields per context: {type?ctx: {fields, history}}
-var _exprVisible = false;
 var _types = {{ types | tojson }};
 
-// ── Build context from chips ──────────────────────────────────────────────────
-function _getContext() {
-  var ctx = {};
-  _browse.chips.forEach(function(c) {
-    if (c.field !== "type") ctx[c.field] = c.value;
+// ── FilterBuilder instance ───────────────────────────────────────────────────
+var _fb = null;
+document.addEventListener("DOMContentLoaded", function() {
+  _fb = new FilterBuilder({
+    containerId: "browse-filter",
+    types: _types,
+    onRun: function(expr) { runBrowse(); }
   });
-  return ctx;
-}
+  _fb.init();
 
-function _getContextStr() {
-  var ctx = _getContext();
-  return Object.keys(ctx).map(function(k){ return k+":"+ctx[k]; }).join(",");
-}
-
-// ── Type chips ────────────────────────────────────────────────────────────────
-function renderTypeChips() {
-  var el = document.getElementById("b-type-chips");
-  el.innerHTML = "";
-  
-  // "All types" chip
-  var allChip = document.createElement("button");
-  allChip.className = "qb-chip" + (_browse.type === null ? " active" : "");
-  allChip.textContent = "All";
-  allChip.addEventListener("click", function() {
-    _browse.type = null;
-    _browse.chips = [];
-    _browse._activeField = null;
-    renderTypeChips();
-    document.getElementById("chip-builder").style.display = "none";
-    document.getElementById("where-preview-card").style.display = "none";
-    runBrowse();
-  });
-  el.appendChild(allChip);
-  
-  // Individual type chips
-  _types.forEach(function(t) {
-    var chip = document.createElement("button");
-    chip.className = "qb-chip" + (_browse.type === t ? " active" : "");
-    chip.textContent = t;
-    chip.addEventListener("click", function() {
-      _browse.type = t;
-      // Remove old type chip and add new one
-      _browse.chips = _browse.chips.filter(function(c) { return c.field !== "type"; });
-      _browse.chips.unshift({field: "type", op: "=", value: t});
-      _browse._activeField = null;
-      renderTypeChips();
-      syncExprFromChips();
-      document.getElementById("chip-builder").style.display = "block";
-      fetchFields();
-    });
-    el.appendChild(chip);
-  });
-}
-
-// ── Fetch fields with context ────────────────────────────────────────────────
-function fetchFields() {
-  if (!_browse.type) return;
-  var ctxStr = _getContextStr();
-  var cacheKey = _browse.type + "?" + ctxStr;
-  
-  if (_fieldCache[cacheKey] && _fieldCache[cacheKey].fields) {
-    renderFieldChips();
-    return;
-  }
-  
-  var url = "/api/type_fields/" + encodeURIComponent(_browse.type);
-  if (ctxStr) url += "?context=" + encodeURIComponent(ctxStr);
-  
-  fetch(url)
-  .then(function(r) { return r.json(); })
-  .then(function(data) {
-    _fieldCache[cacheKey] = {
-      fields: (data.fields || []).filter(function(f) { return !f.is_int && f.name !== "type"; }),
-      history: data.history_fields || {},
-      historyTags: data.history_tags || []
-    };
-    
-    // Update group/sort dropdowns
-    var grp = document.getElementById("b-group");
-    var sortSel = document.getElementById("b-sort");
-    var savedGroup = grp && grp.value && grp.value !== "" ? grp.value : "";
-    var savedSort = sortSel && sortSel.value && sortSel.value !== "" ? sortSel.value : "";
-    grp.innerHTML = '<option value="">— select —</option>';
-    if (sortSel) sortSel.innerHTML = '<option value="">— select —</option>';
-    (data.dimensions||[]).forEach(function(f) {
-      var o = document.createElement("option");
-      o.value = f; o.textContent = f; grp.appendChild(o);
-      var o2 = document.createElement("option");
-      o2.value = f; o2.textContent = f;
-      if (sortSel) sortSel.appendChild(o2);
-    });
-    // Restore selected values if still valid
-    if (savedGroup && grp.querySelector('option[value="'+savedGroup+'"]')) grp.value = savedGroup;
-    if (savedSort && sortSel && sortSel.querySelector('option[value="'+savedSort+'"]')) sortSel.value = savedSort;
-    
-    renderFieldChips();
-    renderTagsSection();
-    updateWherePreview();
-    runBrowse();
-  })
-  .catch(function() {
-    _fieldCache[cacheKey] = {fields: [], history: {}, historyTags: []};
-    renderFieldChips();
-    renderTagsSection();
-  });
-}
-
-// ── Tags section (auto-shows when type selected) ───────────────────────────
-function renderTagsSection() {
-  var tagsSection = document.getElementById("tags-section");
-  var tagChips = document.getElementById("tag-chips");
-  var tagHistLabel = document.getElementById("tag-history-label");
-  var tagHistChips = document.getElementById("tag-history-chips");
-  
-  if (!_browse.type) {
-    tagsSection.style.display = "none";
-    return;
-  }
-  
-  var ctxStr = _getContextStr();
-  var cacheKey = _browse.type + "?" + ctxStr;
-  var cache = _fieldCache[cacheKey] || {fields: [], history: {}, historyTags: []};
-  
-  // Find tag field definition
-  var tagField = cache.fields.find(function(f) { return f.name === "tag"; });
-  if (!tagField) {
-    tagsSection.style.display = "none";
-    return;
-  }
-  
-  var schemaOpts = tagField.options || [];
-  var historyTags = cache.historyTags || [];
-  var historyOpts = historyTags.filter(function(t) { return schemaOpts.indexOf(t) === -1; });
-  
-  if (!schemaOpts.length && !historyOpts.length) {
-    tagsSection.style.display = "none";
-    return;
-  }
-  
-  tagsSection.style.display = "block";
-  tagChips.innerHTML = "";
-  tagHistChips.innerHTML = "";
-  
-  // Schema options (only show selected if it's tag=value, not tag!=value)
-  schemaOpts.forEach(function(opt) {
-    var already = _browse.chips.some(function(c) { return c.field === "tag" && c.op === "=" && c.value === opt; });
-    var chip = document.createElement("button");
-    chip.className = "qb-chip" + (already ? " active" : "");
-    chip.textContent = opt;
-    chip.addEventListener("click", function() {
-      toggleTagChip(opt);
-      chip.className = "qb-chip" + (_browse.chips.some(function(c) { return c.field === "tag" && c.op === "=" && c.value === opt; }) ? " active" : "");
-    });
-    tagChips.appendChild(chip);
-  });
-  
-  // History tags
-  if (historyOpts.length) {
-    tagHistLabel.style.display = "block";
-    historyOpts.forEach(function(tag) {
-      var already = _browse.chips.some(function(c) { return c.field === "tag" && c.op === "=" && c.value === tag; });
-      var chip = document.createElement("button");
-      chip.className = "qb-chip" + (already ? " active" : "");
-      chip.style.opacity = "0.75";
-      chip.style.fontSize = "12px";
-      chip.style.padding = "4px 9px";
-      chip.textContent = tag;
-      chip.addEventListener("click", function() {
-        toggleTagChip(tag);
-        chip.className = "qb-chip" + (_browse.chips.some(function(c) { return c.field === "tag" && c.op === "=" && c.value === tag; }) ? " active" : "");
-      });
-      tagHistChips.appendChild(chip);
-    });
-  } else {
-    tagHistLabel.style.display = "none";
-  }
-}
-
-function toggleTagChip(value) {
-  toggleChip("tag", value);
-  renderTagsSection();
-}
-
-// ── Field chips ───────────────────────────────────────────────────────────────
-function renderFieldChips() {
-  var row = document.getElementById("field-chips");
-  row.innerHTML = "";
-  
-  var ctxStr = _getContextStr();
-  var cacheKey = _browse.type + "?" + ctxStr;
-  var cache = _fieldCache[cacheKey] || {fields: [], history: {}};
-  var fields = cache.fields || [];
-  var ctx = _getContext();
-  
-  // Filter out fields whose parent is not in context (exclude tag field - shown in dedicated section)
-  fields = fields.filter(function(f) {
-    if (f.name === "tag") return false;
-    if (!f.has_parent) return true;
-    return ctx[f.parent];
-  });
-  
-  fields.forEach(function(f) {
-    var isActive  = (_browse._activeField === f.name);
-    var hasFilter = _browse.chips.some(function(c) { return c.field === f.name; });
-    var chip = document.createElement("button");
-    chip.className = "qb-chip" + (isActive ? " active" : hasFilter ? " selected" : "");
-    var label = f.name;
-    if (f.has_parent && !ctx[f.parent]) label += "*";
-    chip.textContent = label;
-    chip.title = f.has_parent && !ctx[f.parent] ? "Select " + f.parent + " first" : f.name;
-    chip.addEventListener("click", function() { selectField(f); });
-    row.appendChild(chip);
-  });
-}
-
-// ── Value picker ─────────────────────────────────────────────────────────────
-function selectField(fdef) {
-  if (_browse._activeField === fdef.name) { closeValueRow(); return; }
-  _browse._activeField = fdef.name;
-  renderFieldChips();
-  
-  var ctxStr = _getContextStr();
-  var cacheKey = _browse.type + "?" + ctxStr;
-  var cache = _fieldCache[cacheKey] || {fields: [], history: {}, historyTags: []};
-  var hist = cache.history || {};
-  var recent = (hist[fdef.name] || []).slice(0, 8);
-  
-  document.getElementById("value-chip-label").textContent = fdef.name;
-  var vrow   = document.getElementById("value-chip-row");
-  var vchips = document.getElementById("value-chips");
-  var hchips = document.getElementById("history-chips");
-  var hlabel = document.getElementById("history-label");
-  var vtextR = document.getElementById("value-text-row");
-  
-  vchips.innerHTML = "";
-  hchips.innerHTML = "";
-  vrow.style.display = "block";
-  
-  // For tag field, also include history tags from cache
-  var schemaOpts = fdef.options ? fdef.options.slice() : [];
-  var historyTagOpts = [];
-  if (fdef.name === "tag") {
-    historyTagOpts = (cache.historyTags || []).filter(function(t) {
-      return schemaOpts.indexOf(t) === -1;
-    });
-  }
-  
-  // Schema options
-  if (schemaOpts.length || historyTagOpts.length) {
-    vtextR.style.display = "none";
-    
-    // Schema options (full opacity)
-    schemaOpts.forEach(function(opt) {
-      var already = _browse.chips.some(function(c) {
-        return c.field === fdef.name && c.value === opt;
-      });
-      var chip = document.createElement("button");
-      chip.className = "qb-chip" + (already ? " active" : "");
-      chip.textContent = opt;
-      chip.addEventListener("click", function() {
-        toggleChip(fdef.name, opt);
-        chip.className = "qb-chip" + (_browse.chips.some(function(c) {
-          return c.field === fdef.name && c.value === opt;
-        }) ? " active" : "");
-      });
-      vchips.appendChild(chip);
-    });
-    
-    // "from history" label + history tags (faded)
-    if (historyTagOpts.length) {
-      hlabel.style.display = "block";
-      historyTagOpts.forEach(function(val) {
-        var already = _browse.chips.some(function(c) {
-          return c.field === fdef.name && c.value === val;
-        });
-        var chip = document.createElement("button");
-        chip.className = "qb-chip" + (already ? " active" : "");
-        chip.style.opacity = "0.75";
-        chip.style.fontSize = "12px";
-        chip.style.padding = "4px 9px";
-        chip.textContent = val;
-        chip.addEventListener("click", function() {
-          toggleChip(fdef.name, val);
-          chip.className = "qb-chip" + (_browse.chips.some(function(c) {
-            return c.field === fdef.name && c.value === val;
-          }) ? " active" : "");
-        });
-        hchips.appendChild(chip);
-      });
-    } else {
-      hlabel.style.display = "none";
-    }
-  } else {
-    // No schema options - show history as chips, or text input
-    if (recent.length) {
-      vtextR.style.display = "none";
-      recent.forEach(function(val) {
-        var already = _browse.chips.some(function(c) {
-          return c.field === fdef.name && c.value === val;
-        });
-        var chip = document.createElement("button");
-        chip.className = "qb-chip" + (already ? " active" : "");
-        chip.textContent = val;
-        chip.addEventListener("click", function() {
-          toggleChip(fdef.name, val);
-          closeValueRow();
-        });
-        vchips.appendChild(chip);
-      });
-      hlabel.style.display = "none";
-    } else {
-      vtextR.style.display = "flex";
-      hlabel.style.display = "none";
-      setTimeout(function() {
-        document.getElementById("value-text-input").focus();
-      }, 50);
+  // Restore URL params
+  var params = new URLSearchParams(window.location.search);
+  var time = params.get("time");
+  if (time === "custom") {
+    var ct = params.get("custom_time");
+    if (ct && ct.length >= 7) {
+      document.getElementById("b-time").value = "custom";
+      document.getElementById("b-custom-time").style.display = "block";
+      document.getElementById("b-month-text").textContent = ct.substring(0, 7);
     }
   }
-}
+});
 
-function toggleChip(field, value) {
-  var idx = _browse.chips.findIndex(function(c) {
-    return c.field === field && c.value === value;
-  });
-  if (idx !== -1) {
-    _browse.chips.splice(idx, 1);
-  } else {
-    _browse.chips.push({field: field, op: "=", value: value});
-  }
-  renderActive();
-  syncExprFromChips();
-  renderTagsSection();
-  runBrowse();
-  
-  // Re-fetch fields when parent chips change (invalidates cache for updated context)
-  if (field !== "type") {
-    var cacheKey = _browse.type + "?" + _getContextStr();
-    delete _fieldCache[cacheKey];
-    fetchFields();
-  }
-}
-
-window.closeValueRow = function() {
-  _browse._activeField = null;
-  document.getElementById("value-chip-row").style.display = "none";
-  renderFieldChips();
-};
-
-window.addTextFilter = function() {
-  if (!_browse._activeField) return;
-  var val = document.getElementById("value-text-input").value.trim();
-  if (!val) return;
-  toggleChip(_browse._activeField, val);
-  document.getElementById("value-text-input").value = "";
-  closeValueRow();
-};
-
-// ── Active chips ──────────────────────────────────────────────────────────────
-function renderActive() {
-  var wrap = document.getElementById("active-chips");
-  var list = document.getElementById("active-chip-list");
-  if (!_browse.chips.length) { wrap.style.display = "none"; return; }
-  wrap.style.display = "block";
-  list.innerHTML = "";
-  _browse.chips.forEach(function(c, i) {
-    var chip = document.createElement("span");
-    chip.className = "qb-active-chip";
-    chip.innerHTML = c.field + c.op + c.value +
-      ' <button onclick="removeFilter(' + i + ')">×</button>';
-    list.appendChild(chip);
-  });
-}
-
-window.removeFilter = function(idx) {
-  var removed = _browse.chips[idx];
-  _browse.chips.splice(idx, 1);
-  renderActive();
-  updateWherePreview();
-  runBrowse();
-  if (removed && removed.field !== "type") {
-    fetchFields();
-  }
-};
-
-// ── Chips → boolean expression ───────────────────────────────────────────────
-function chipsToExpr(chips) {
-  if (!chips.length) return "";
-  // Group chips by field
-  var byField = {};
-  var order   = [];
-  chips.forEach(function(c) {
-    if (!byField[c.field]) { byField[c.field] = []; order.push(c.field); }
-    byField[c.field].push(c);
-  });
-  // Same field → OR, different fields → AND
-  var parts = order.map(function(field) {
-    var group = byField[field];
-    if (group.length === 1) return group[0].field + group[0].op + group[0].value;
-    return "(" + group.map(function(c) {
-      return c.field + c.op + c.value;
-    }).join(" OR ") + ")";
-  });
-  return parts.join(" AND ");
-}
-
-// ── Sync chips → expr textarea ───────────────────────────────────────────────
-function syncExprFromChips() {
-  var editor = document.getElementById("where-editor");
-  if (!editor) return;
-  var expr = chipsToExpr(_browse.chips);
-  // Only update if user is not currently editing
-  if (document.activeElement !== editor) {
-    editor.value = expr;
-  }
-  document.getElementById("expr-error").style.display = "none";
-}
-
-// ── updateWherePreview (kept for compatibility, now a no-op) ─────────────────
-function updateWherePreview() {
-  syncExprFromChips();
-}
-
-// ── Expression input handler (live, debounced) ───────────────────────────────
-var _exprTimer = null;
-window.onExprInput = function() {
-  clearTimeout(_exprTimer);
-  _exprTimer = setTimeout(function() {
-    var expr = document.getElementById("where-editor").value.trim();
-    // Parse back to chips for chip UI sync
-    var parsed = parseExprToChips(expr);
-    if (parsed !== null) {
-      _browse.chips = parsed;
-      renderActive();
-      renderTagsSection();
-      if (_browse.type) fetchFields();
-    }
-    document.getElementById("expr-error").style.display = "none";
-    runBrowse();
-  }, 400);
-};
-
-// ── Expression parser: expr string → chips array ──────────────────────────────
-// Returns array of chips, or null if expression is too complex to represent as chips
-function parseExprToChips(expr) {
-  expr = expr.trim();
-  if (!expr) return [];
-  // Strip where = "..." wrapper
-  expr = expr.replace(/^where\s*=\s*["']?/i, "").replace(/["']?\s*$/i, "").trim();
-  if (!expr) return [];
-
-  var chips = [];
-  // Split top-level AND parts (not inside parens)
-  var andParts = splitTopLevel(expr, "AND");
-
-  for (var i = 0; i < andParts.length; i++) {
-    var part = andParts[i].trim();
-    if (!part) continue;
-
-    // Unwrap outer parens: (category=food OR category=grocery)
-    var inner = unwrapParens(part);
-    if (inner !== null) {
-      // OR group — all parts must be same field
-      var orParts = splitTopLevel(inner, "OR");
-      for (var j = 0; j < orParts.length; j++) {
-        var chip = parseSimpleChip(orParts[j].trim());
-        if (!chip) return null; // too complex
-        chips.push(chip);
-      }
-    } else {
-      // Simple condition
-      var chip = parseSimpleChip(part);
-      if (!chip) return null;
-      chips.push(chip);
-    }
-  }
-  return chips;
-}
-
-function parseSimpleChip(part) {
-  var m = part.match(/^(\w+)\s*(!~|!=|>=|<=|~|=|>|<)\s*(.+)$/);
-  if (!m) return null;
-  return { field: m[1].toLowerCase(), op: m[2], value: m[3].trim().replace(/^["']|["']$/g, "") };
-}
-
-function splitTopLevel(expr, op) {
-  var re = new RegExp("\\s+" + op + "\\s+", "i");
-  var parts = [], depth = 0, cur = "", i = 0;
-  while (i < expr.length) {
-    if (expr[i] === "(") { depth++; cur += expr[i++]; }
-    else if (expr[i] === ")") { depth--; cur += expr[i++]; }
-    else {
-      var rest = expr.slice(i);
-      var m = rest.match(new RegExp("^\\s+" + op + "\\s+", "i"));
-      if (m && depth === 0) { parts.push(cur); cur = ""; i += m[0].length; }
-      else { cur += expr[i++]; }
-    }
-  }
-  if (cur.trim()) parts.push(cur);
-  return parts;
-}
-
-function unwrapParens(s) {
-  s = s.trim();
-  if (s[0] === "(" && s[s.length - 1] === ")") {
-    var inner = s.slice(1, -1);
-    var depth = 0;
-    for (var i = 0; i < inner.length; i++) {
-      if (inner[i] === "(") depth++;
-      if (inner[i] === ")") depth--;
-      if (depth < 0) return null; // unbalanced
-    }
-    return inner;
-  }
-  return null;
-}
-
-// Legacy compat
+// ── Legacy stubs (called by remaining browse code) ───────────────────────────
+function renderTypeChips()  {}
+function renderActiveChips(){}
+function renderFieldChips() {}
+function renderTagsSection(){}
+function fetchFields()      {}
+function toggleChip(f,v)    { if (_fb) _fb._toggleChip(f,"=",v); }
+function closeValueRow()    { if (_fb) _fb.closeValueRow(); }
+function addTextFilter()    { if (_fb) _fb.addTextValue(); }
+function syncExprFromChips(){ if (_fb) _fb._syncExprFromChips(); }
+function chipsToExpr(chips) { return _fb ? _fb._chipsToExpr() : ""; }
+function updateWherePreview(){ if (_fb) _fb._syncExprFromChips(); }
+function parseExprToChips(e){ return _fb ? _fb._parseExpr(e) : []; }
+function onExprInput()      { if (_fb) _fb._onExprInput(); }
 window.toggleAdvancedMode   = function() {};
 window.applyAdvancedExpr    = function() {};
 window.cancelAdvancedExpr   = function() {};
 window.toggleExprMode       = function() {};
+
+// Legacy _browse shim — keeps _params() and clearBrowse() working
+var _browse = {
+  get type() { return _fb ? _fb._type : null; },
+  get chips(){ return _fb ? _fb._chips : []; },
+  exprManual: "",
+  search: "",
+  _activeField: null
+};
+var _fieldCache = {};
+var _exprVisible = false;
 
 // ── Init ────────────────────────────────────────────────────────────────────
 document.addEventListener("DOMContentLoaded", function() {
@@ -938,11 +386,8 @@ function _params() {
   const search = document.getElementById("b-search") ? document.getElementById("b-search").value.trim() : "";
   const group  = document.getElementById("b-group")  ? document.getElementById("b-group").value  : "";
   const sort   = document.getElementById("b-sort")   ? document.getElementById("b-sort").value   : "";
-  const exprEl = document.getElementById("where-editor");
-  // Use textarea value if present, otherwise build from chips
-  const editorExpr = exprEl ? exprEl.value.trim() : "";
-  const expr = editorExpr || chipsToExpr(_browse.chips);
-  // Send as single expr — backend handles full boolean parsing
+  // FilterBuilder is the single source of truth for the expression
+  const expr = _fb ? _fb.getExpr() : "";
   return {where: [], expr, time, search, group, sort};
 }
 
@@ -976,41 +421,18 @@ function exportCSV() {
 function clearBrowse() {
   // Reset state
   _browse.type = null;
-  _browse.chips = [];
-  _browse._activeField = null;
-  _browse.exprManual = "";
+  // Clear FilterBuilder
+  if (_fb) _fb.clear();
   _fieldCache = {};
-  _advMode = false;
-  
-  // Reset UI
+
+  // Reset other UI
   document.getElementById("b-search").value = "";
-  if (document.getElementById("where-editor")) document.getElementById("where-editor").value = "";
   document.getElementById("b-time").value = "tm";
   document.getElementById("b-custom-time").style.display = "none";
   document.getElementById("b-group").value = "";
   document.getElementById("b-sort").value = "";
   window._bCloseMonthPicker();
   document.getElementById("b-month-text").textContent = "Pick a month";
-  
-  // Reset advanced mode UI (elements may not exist in new layout)
-  var advPreview = document.getElementById("adv-preview");
-  var advEditor  = document.getElementById("adv-editor");
-  var advToggle  = document.getElementById("adv-toggle-btn");
-  if (advPreview) advPreview.style.display = "block";
-  if (advEditor)  advEditor.style.display  = "none";
-  if (advToggle)  advToggle.textContent    = "Edit";
-  var exprErr = document.getElementById("expr-error");
-  if (exprErr) exprErr.style.display = "none";
-  
-  // Hide builder elements
-  document.getElementById("chip-builder").style.display = "none";
-  document.getElementById("value-chip-row").style.display = "none";
-  document.getElementById("tags-section").style.display = "none";
-  
-  // Re-render type chips and hide tags
-  renderTypeChips();
-  renderTagsSection();
-  
   document.getElementById("result-area").innerHTML = "";
 }
 
@@ -1414,4 +836,7 @@ document.addEventListener("browse:results", function() { clearSelection(); });
 
 // ── End Bulk selection ────────────────────────────────────────────────────────
 </script>
+{% block scripts %}
+<script src="/static/js/filter_builder.js"></script>
+{% endblock %}
 {% endblock %}

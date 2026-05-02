@@ -436,107 +436,30 @@ function onNameChange() {
 function _buildQueryEditor(container, name) {
   var q = _st.queries[name];
 
-  // 1. Type chips
-  var c1 = _mkCard("Record type",
-    '<div style="font-size:11px;color:var(--sub);margin-bottom:8px;">'+
-    'Pick a type to load field chips. Leave as "all types" to query everything.</div>'+
-    '<div id="qb-type-chips" class="chip-group"></div>');
-  container.appendChild(c1);
+  // 1+2+Tags+WHERE — FilterBuilder handles all filter UI
+  var fbCard = document.createElement("div");
+  fbCard.className = "card"; fbCard.style.marginBottom = "10px";
+  var fbCid = "qb-fb-" + name.replace(/[^a-z0-9]/gi,"_");
+  fbCard.innerHTML = '<div id="' + fbCid + '"></div>';
+  container.appendChild(fbCard);
 
-  // 2. Field/value chip area
-  var c2 = document.createElement("div");
-  c2.className = "card"; c2.style.marginBottom = "10px";
-  c2.id = "qb-field-card";
-  c2.style.display = _typeFromChips(q) ? "block" : "none";
-  c2.innerHTML =
-    '<label>Filter by field</label>'+
-    '<div style="font-size:11px;color:var(--sub);margin-bottom:8px;">'+
-    'Tap a field → tap a value to add it as a filter.</div>'+
-    '<div id="qb-active-chips" class="chip-group" style="min-height:10px;margin-bottom:10px;"></div>'+
-    '<div style="font-size:11px;color:var(--sub);font-weight:700;margin-bottom:6px;">FIELDS</div>'+
-    '<div id="qb-field-chips" class="chip-group" style="margin-bottom:8px;"></div>'+
-    '<div id="qb-value-area" style="display:none;padding:10px;background:var(--bg);'+
-    'border-radius:8px;border:1px solid var(--border);">'+
-      '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">'+
-        '<span style="font-size:11px;color:var(--sub);font-weight:700;">VALUES FOR '+
-        '<span id="qb-val-label" style="color:var(--accent);"></span></span>'+
-        '<button onclick="closeValueArea()" style="background:none;border:none;color:var(--sub);'+
-        'cursor:pointer;font-size:16px;line-height:1;">✕</button>'+
-      '</div>'+
-      '<div id="qb-value-chips" class="chip-group" style="margin-bottom:6px;"></div>'+
-      '<div id="qb-history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">Recent:</div>'+
-      '<div id="qb-history-chips" class="chip-group" style="opacity:0.65;margin-bottom:4px;"></div>'+
-      '<div id="qb-val-text" style="display:none;gap:8px;margin-top:6px;">'+
-        '<input type="text" id="qb-val-input" placeholder="type a value…" style="flex:1;font-size:14px;"'+
-        ' onkeydown="if(event.key===\'Enter\') addTextChip()">'+
-        '<button onclick="addTextChip()" class="btn btn-ghost btn-sm" style="margin-top:6px;">Add</button>'+
-      '</div>'+
-    '</div>';
-  container.appendChild(c2);
+  var fb = new FilterBuilder({
+    containerId: fbCid,
+    types: _types,
+    onRun: function(expr) {
+      if (!_cur || _cur.name !== name) return;
+      var parsed = fb._parseExpr(expr);
+      if (parsed !== null) { q._chips = parsed; q._exprManual = ""; }
+      else { q._exprManual = expr; q._chips = []; }
+      q.where = _buildWhereExpr(q);
+      _updatePreview(q);
+      triggerLivePreview();
+    }
+  });
+  fb.init();
+  fb.setExpr(_buildWhereExpr(q));
+  q._fb = fb;
 
-  // Tags section
-  var cTags = document.createElement("div");
-  cTags.className = "card"; cTags.style.marginBottom = "10px";
-  cTags.id = "qb-tags-card";
-  cTags.style.display = _typeFromChips(q) ? "block" : "none";
-  cTags.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
-      '<span style="font-size:11px;color:var(--sub);font-weight:600;">TAGS</span>'+
-    '</div>'+
-    '<div id="qb-tag-chips" class="chip-group"></div>'+
-    '<div id="qb-tag-history-label" style="display:none;font-size:11px;color:var(--sub);margin-top:8px;margin-bottom:4px;">from history:</div>'+
-    '<div id="qb-tag-history-chips" class="chip-group"></div>';
-  container.appendChild(cTags);
-
-  // 3. Time window
-  var timeCard = document.createElement("div");
-  timeCard.className = "card"; timeCard.style.marginBottom = "10px";
-  timeCard.innerHTML =
-    '<div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;">'+
-      '<div class="field-group" style="flex:1;min-width:140px;">'+
-        '<label>Time</label>'+
-        '<select id="qb-time" onchange="qbOnTimeChange(this.value)">'+
-        _timeOpts.map(function(o){
-          return '<option value="'+o[1]+'"'+(o[1]===q.time?" selected":"")+'>'+o[0]+'</option>';
-        }).join("")+'</select>'+
-      '</div>'+
-      '<div id="qb-custom-time" class="field-group" style="display:none;flex:1;min-width:140px;">'+
-        '<label>Custom Month</label>'+
-        '<button id="qb-month-picker-btn" onclick="qbTogglePicker(event)"'+
-                ' style="display:flex;align-items:center;justify-content:space-between;'+
-                       'padding:9px 12px;border-radius:6px;border:1px solid var(--border);'+
-                       'background:var(--bg);color:var(--text);font-size:14px;font-weight:500;'+
-                       'cursor:pointer;min-width:140px;">'+
-          '<span id="qb-month-text">Pick a month</span>'+
-          '<span style="font-size:10px;color:var(--sub);">▼</span>'+
-        '</button>'+
-      '</div>'+
-    '</div>';
-  container.appendChild(timeCard);
-
-  // Advanced mode for expression filter
-  var c4 = document.createElement("div");
-  c4.className = "card"; c4.style.marginBottom = "10px";
-  c4.innerHTML =
-    '<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">'+
-      '<span style="font-size:11px;color:var(--sub);font-weight:600;">WHERE</span>'+
-      '<button id="qb-adv-toggle" onclick="_toggleAdvancedMode()"'+
-      ' style="background:none;border:none;font-size:11px;color:var(--accent);cursor:pointer;font-weight:600;">Edit</button>'+
-    '</div>'+
-    '<div id="qb-adv-preview" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;">'+
-      '<pre id="qb-where-preview" style="margin:0;font-family:monospace;font-size:12px;white-space:pre-wrap;word-break:break-all;"></pre>'+
-    '</div>'+
-    '<div id="qb-adv-editor" style="display:none;">'+
-      '<textarea id="qb-where-editor" rows="3"'+
-      ' style="width:100%;font-family:monospace;font-size:12px;padding:10px;border-radius:8px;border:1px solid var(--border);resize:vertical;"'+
-      ' placeholder="e.g. type=expense AND (tag=a OR tag=b)"></textarea>'+
-      '<div style="display:flex;gap:8px;margin-top:8px;">'+
-        '<button onclick="_applyAdvancedExpr()" class="btn btn-primary btn-sm">Apply</button>'+
-        '<button onclick="_cancelAdvancedExpr()" class="btn btn-ghost btn-sm">Cancel</button>'+
-      '</div>'+
-      '<div class="hint" style="margin-top:6px;">= != &gt; &lt; ~ !~ AND OR NOT ( )</div>'+
-    '</div>';
-  container.appendChild(c4);
 
   // 5. Search
   container.appendChild(_mkCard("Full-text search",
@@ -655,8 +578,20 @@ function _typeFromChips(q) {
 }
 
 function _buildWhereExpr(q) {
-  var parts = (q._chips||[]).map(function(c){ return c.field+c.op+c.value; });
-  var manual = (q._exprManual||"").trim();
+  var chips  = q._chips || [];
+  var manual = (q._exprManual || "").trim();
+  if (!chips.length) return manual;
+  // Group same-field chips with OR, different fields with AND
+  var byField = {}, order = [];
+  chips.forEach(function(c) {
+    if (!byField[c.field]) { byField[c.field] = []; order.push(c.field); }
+    byField[c.field].push(c);
+  });
+  var parts = order.map(function(f) {
+    var grp = byField[f];
+    if (grp.length === 1) return grp[0].field + grp[0].op + grp[0].value;
+    return "(" + grp.map(function(c){ return c.field+c.op+c.value; }).join(" OR ") + ")";
+  });
   if (manual) parts.push(manual);
   return parts.join(" AND ");
 }
@@ -687,435 +622,48 @@ function _onExprInput(val) {
 var _savedQBExprManual = "";
 var _savedQBChips = [];
 
-window._toggleAdvancedMode = function() {
-  if (!_cur || _cur.section !== "queries") return;
-  var q = _st.queries[_cur.name];
-  var previewEl = document.getElementById("qb-adv-preview");
-  var editorEl = document.getElementById("qb-adv-editor");
-  var toggleBtn = document.getElementById("qb-adv-toggle");
-  var editor = document.getElementById("qb-where-editor");
-  
-  if (editorEl.style.display === "none") {
-    // Enter edit mode
-    _savedQBExprManual = q._exprManual || "";
-    _savedQBChips = (q._chips || []).slice();
-    editorEl.style.display = "block";
-    previewEl.style.display = "none";
-    toggleBtn.textContent = "Cancel";
-    // Populate editor with WHERE clause
-    var whereParts = (q._chips||[]).map(function(c) { return c.field + c.op + c.value; });
-    if (q._exprManual) whereParts.push(q._exprManual);
-    editor.value = whereParts.join(" AND ");
-    editor.focus();
-  } else {
-    // Cancel edit mode
-    editorEl.style.display = "none";
-    previewEl.style.display = "block";
-    toggleBtn.textContent = "Edit";
-  }
-};
+// ── Legacy stubs — FilterBuilder now owns type/field/tags/WHERE UI ──────────
+window._toggleAdvancedMode = function() {};
+window._applyAdvancedExpr  = function() {};
+window._cancelAdvancedExpr = function() {};
+function toggleExpr(btn) {}
+function _parseQBExpr(expr) { return {chips: [], manual: expr}; }
 
-window._applyAdvancedExpr = function() {
-  if (!_cur || _cur.section !== "queries") return;
-  var q = _st.queries[_cur.name];
-  var editor = document.getElementById("qb-where-editor");
-  var expr = editor.value.trim();
-  
-  // Parse expression into chips and manual expression
-  var parts = _parseQBExpr(expr);
-  q._chips = parts.chips;
-  q._exprManual = parts.manual;
-  
-  _renderActiveChips(q);
-  _renderFieldChips(q);
-  _renderTagsSection(q);
-  _updatePreview(q);
-  triggerLivePreview();
-  
-  // Exit edit mode
-  document.getElementById("qb-adv-editor").style.display = "none";
-  document.getElementById("qb-adv-preview").style.display = "block";
-  document.getElementById("qb-adv-toggle").textContent = "Edit";
-};
-
-window._cancelAdvancedExpr = function() {
-  if (!_cur || _cur.section !== "queries") return;
-  var q = _st.queries[_cur.name];
-  
-  // Restore chips and expression
-  q._chips = _savedQBChips.slice();
-  q._exprManual = _savedQBExprManual;
-  
-  _renderActiveChips(q);
-  _renderFieldChips(q);
-  _renderTagsSection(q);
-  _updatePreview(q);
-  
-  // Exit edit mode
-  document.getElementById("qb-adv-editor").style.display = "none";
-  document.getElementById("qb-adv-preview").style.display = "block";
-  document.getElementById("qb-adv-toggle").textContent = "Edit";
-};
-
-// Parse expression into chips + manual remainder
-function _parseQBExpr(expr) {
-  var chips = [], manual = [];
-  if (!expr) return {chips, manual:""};
-  
-  // Simple split by AND (but preserve parentheses)
-  var parts = expr.split(/\s+AND\s+/i);
-  parts.forEach(function(p) {
-    p = p.trim();
-    if (!p) return;
-    var m = p.match(/^([a-z_][a-z0-9_]*)(\s*[!=<>~]+)\s*(.+)$/i);
-    if (m) {
-      chips.push({field: m[1].toLowerCase(), op: m[2].trim(), value: m[3].trim()});
-    } else if (p) {
-      manual.push(p);
-    }
-  });
-  return {chips, manual: manual.join(" AND ")};
-}
-
-function toggleExpr(btn) {
-  _toggleAdvancedMode();
-}
-
-function _renderTypeChips(q) {
-  var el = document.getElementById("qb-type-chips");
-  if (!el) return;
-  el.innerHTML = "";
-  var sel = _typeFromChips(q);
-  // all types chip
-  var all = document.createElement("button");
-  all.className = "qb-chip" + (!sel?" active":"");
-  all.textContent = "all types";
-  all.addEventListener("click", function(){ _onTypeClick(null, q); });
-  el.appendChild(all);
-  _types.forEach(function(t) {
-    var chip = document.createElement("button");
-    chip.className = "qb-chip" + (t===sel?" active":"");
-    chip.textContent = t;
-    chip.addEventListener("click", function(){ _onTypeClick(t, q); });
-    el.appendChild(chip);
-  });
-}
-
-function _onTypeClick(type, q) {
-  q._chips = (q._chips||[]).filter(function(c){ return c.field!=="type"; });
-  if (type) q._chips.unshift({field:"type",op:"=",value:type});
-  q._activeField = null;
-  _renderTypeChips(q);
-  var fc = document.getElementById("qb-field-card");
-  if (type) {
-    fc.style.display = "block";
-    _fetchFields(type, q, function() {
-      _renderFieldChips(q);
-      _renderActiveChips(q);
-      _renderTagsSection(q);
-      _updateGroupSortDropdowns(q);
-      _updatePreview(q);
-      triggerLivePreview();
-    });
-  } else {
-    fc.style.display = "none";
-    // remove all non-type chips when clearing type
-    q._chips = [];
-    _renderActiveChips(q);
-    _renderTagsSection(q);
-    _updatePreview(q);
-    triggerLivePreview();
-  }
-}
-
-// Build context object from chips (e.g., {domain: "self", category: "transport"})
-function _getContext(q) {
-  var ctx = {};
-  (q._chips||[]).forEach(function(c) {
-    if (c.field !== "type") ctx[c.field] = c.value;
-  });
-  return ctx;
-}
-
-// Build context string for API (e.g., "domain:self,category:transport")
-function _getContextStr(q) {
-  var ctx = _getContext(q);
-  return Object.keys(ctx).map(function(k){ return k+":"+ctx[k]; }).join(",");
-}
-
-function _fetchFields(type, q, cb) {
-  var ctxStr = _getContextStr(q);
-  var cacheKey = type + "?" + ctxStr;
-  
-  if (_fieldCache[cacheKey] && _fieldCache[cacheKey].fields) { cb(); return; }
-  
-  // Evict oldest if over limit
-  if (_cacheSet.length >= 20) {
-    var oldKey = _cacheSet.shift();
-    delete _fieldCache[oldKey];
-  }
-  
-  var url = "/api/type_fields/"+endecodeURIComponent(type);
-  if (ctxStr) url += "?context="+endecodeURIComponent(ctxStr);
-  
-  fetch(url)
-  .then(function(r){ return r.json(); })
-  .then(function(data) {
-    _fieldCache[cacheKey] = {
-      fields: (data.fields||[]).filter(function(f){
-        return !f.is_int && f.name!=="type";
-      }),
-      history: data.history_fields || {},
-      historyTags: data.history_tags || [],  // Store for tags section
-      dimensions: data.dimensions || []
-    };
-    _cacheSet.push(cacheKey);
-    cb();
-  })
-  .catch(function(){ _fieldCache[cacheKey]={fields:[],history:{},historyTags:[],dimensions:[]}; cb(); });
-}
-
-function _updateGroupSortDropdowns(q) {
-  var grp = document.getElementById("qb-group");
-  var sort = document.getElementById("qb-sort");
-  if (!grp || !sort) return;
-  
-  var type = _typeFromChips(q);
-  var ctxStr = _getContextStr(q);
-  var cacheKey = type + "?" + ctxStr;
-  var dims = (_fieldCache[cacheKey] || {}).dimensions || [];
-  
-  grp.innerHTML = '<option value="">— select —</option>';
-  sort.innerHTML = '<option value="">— select —</option>';
-  dims.forEach(function(d) {
-    grp.innerHTML += '<option value="'+d+'">'+d+'</option>';
-    sort.innerHTML += '<option value="'+d+'">'+d+'</option>';
-  });
-  
-  if (q.group && grp.querySelector('option[value="'+q.group+'"]')) grp.value = q.group;
-  if (q.sort && sort.querySelector('option[value="'+q.sort+'"]')) sort.value = q.sort;
-}
-
-function _renderFieldChips(q) {
-  var el = document.getElementById("qb-field-chips");
-  if (!el) return;
-  el.innerHTML = "";
-  var type = _typeFromChips(q);
-  var ctxStr = _getContextStr(q);
-  var cacheKey = type + "?" + ctxStr;
-  var fields = (_fieldCache[cacheKey]||{}).fields || [];
-  
-  // Filter out fields whose parent is not in context
-  var ctx = _getContext(q);
-  fields = fields.filter(function(f) {
-    if (f.name === "tag") return false;  // Exclude tag - shown in dedicated section
-    if (!f.has_parent) return true;
-    return ctx[f.parent];
-  });
-  
-  fields.forEach(function(f) {
-    var active  = q._activeField===f.name;
-    var hasChip = (q._chips||[]).some(function(c){ return c.field===f.name; });
-    var chip = document.createElement("button");
-    chip.className = "qb-chip"+(active?" active":hasChip?" selected":"");
-    var label = f.name;
-    if (f.has_parent && !ctx[f.parent]) label += "*";
-    chip.textContent = label;
-    chip.title = f.has_parent && !ctx[f.parent] ? "Select "+f.parent+" first" : f.name;
-    chip.addEventListener("click", function(){ _onFieldClick(f, q); });
-    el.appendChild(chip);
-  });
-}
-
-function _renderTagsSection(q) {
-  var tagsCard = document.getElementById("qb-tags-card");
-  var tagChips = document.getElementById("qb-tag-chips");
-  var tagHistLabel = document.getElementById("qb-tag-history-label");
-  var tagHistChips = document.getElementById("qb-tag-history-chips");
-  
-  if (!_typeFromChips(q)) {
-    tagsCard.style.display = "none";
-    return;
-  }
-  
-  var type = _typeFromChips(q);
-  var ctxStr = _getContextStr(q);
-  var cacheKey = type + "?" + ctxStr;
-  var cache = _fieldCache[cacheKey] || {fields: [], history: {}, historyTags: []};
-  
-  // Find tag field definition
-  var tagField = cache.fields.find(function(f) { return f.name === "tag"; });
-  
-  var schemaOpts = tagField ? (tagField.options || []) : [];
-  var historyTags = cache.historyTags || [];
-  var historyOpts = historyTags.filter(function(t) { return schemaOpts.indexOf(t) === -1; });
-  
-  // Show message if no tags available yet
-  if (!schemaOpts.length && !historyOpts.length) {
-    tagChips.innerHTML = '<span style="font-size:12px;color:var(--sub);">Select field values above to see tags</span>';
-    tagHistLabel.style.display = "none";
-    return;
-  }
-  
-  // Always show tags card when type is selected
-  tagsCard.style.display = "block";
-  tagChips.innerHTML = "";
-  tagHistChips.innerHTML = "";
-  
-  // Schema options
-  schemaOpts.forEach(function(opt) {
-    var already = (q._chips||[]).some(function(c) { return c.field === "tag" && c.op === "=" && c.value === opt; });
-    var chip = document.createElement("button");
-    chip.className = "qb-chip" + (already ? " active" : "");
-    chip.textContent = opt;
-    chip.addEventListener("click", function() {
-      _toggleTagChip(opt, q);
-      chip.className = "qb-chip" + ((q._chips||[]).some(function(c) { return c.field === "tag" && c.op === "=" && c.value === opt; }) ? " active" : "");
-    });
-    tagChips.appendChild(chip);
-  });
-  
-  // History tags
-  if (historyOpts.length) {
-    tagHistLabel.style.display = "block";
-    historyOpts.forEach(function(tag) {
-      var already = (q._chips||[]).some(function(c) { return c.field === "tag" && c.op === "=" && c.value === tag; });
-      var chip = document.createElement("button");
-      chip.className = "qb-chip" + (already ? " active" : "");
-      chip.style.opacity = "0.75";
-      chip.style.fontSize = "12px";
-      chip.style.padding = "4px 9px";
-      chip.textContent = tag;
-      chip.addEventListener("click", function() {
-        _toggleTagChip(tag, q);
-        chip.className = "qb-chip" + ((q._chips||[]).some(function(c) { return c.field === "tag" && c.op === "=" && c.value === tag; }) ? " active" : "");
-      });
-      tagHistChips.appendChild(chip);
-    });
-  } else {
-    tagHistLabel.style.display = "none";
-  }
-}
+// ── FilterBuilder owns these — stubs kept for any remaining call sites ──────
+function _renderTypeChips(q)  { if (q&&q._fb) q._fb._renderTypeRow(); }
+function _fetchFields(t,q,cb) { if (q&&q._fb) q._fb._fetch(cb||function(){}); else if(cb) cb({}); }
+function _renderFieldChips(q) { if (q&&q._fb) q._fb._renderFieldRow(); }
+function _renderTagsSection(q){ if (q&&q._fb) q._fb._renderTagsSection(); }
+function _renderActiveChips(q){ if (q&&q._fb) q._fb._renderActiveChips(); }
 
 function _toggleTagChip(value, q) {
-  var chips = q._chips || [];
-  var idx = chips.findIndex(function(c) { return c.field === "tag" && c.op === "=" && c.value === value; });
-  if (idx !== -1) {
-    chips.splice(idx, 1);
-  } else {
-    chips.push({field: "tag", op: "=", value: value});
+  if (q && q._fb) { q._fb._toggleChip("tag", "=", value); }
+  else {
+    var chips = q._chips || [];
+    var idx = chips.findIndex(function(c){return c.field==="tag"&&c.value===value;});
+    if (idx !== -1) chips.splice(idx,1); else chips.push({field:"tag",op:"=",value:value});
+    q._chips = chips;
   }
-  q._chips = chips;
-  _renderActiveChips(q);
-  _renderTagsSection(q);
+  q.where = _buildWhereExpr(q);
   _updatePreview(q);
   triggerLivePreview();
-  // Invalidate cache and re-fetch with updated context
-  var type = _typeFromChips(q);
-  if (type) {
-    var ctxStr = _getContextStr(q);
-    var cacheKey = type + "?" + ctxStr;
-    delete _fieldCache[cacheKey];
-    _fetchFields(type, q, function() {
-      _renderFieldChips(q);
-      _renderTagsSection(q);
-    });
-  }
 }
 
 function _onFieldClick(fdef, q) {
-  if (q._activeField===fdef.name) { closeValueArea(); return; }
-  q._activeField = fdef.name;
-  _renderFieldChips(q);
-  var va = document.getElementById("qb-value-area");
-  var vl = document.getElementById("qb-val-label");
-  var vc = document.getElementById("qb-value-chips");
-  var vh = document.getElementById("qb-history-chips");
-  var vhl = document.getElementById("qb-history-label");
-  var vt = document.getElementById("qb-val-text");
-  va.style.display = "block";
-  vl.textContent = fdef.name;
-  vc.innerHTML = "";
-  vh.innerHTML = "";
-  
-  var type = _typeFromChips(q);
-  var ctxStr = _getContextStr(q);
-  var cacheKey = type + "?" + ctxStr;
-  var cache = _fieldCache[cacheKey] || {};
-  var hist = cache.history || {};
-  var recent = (hist[fdef.name]||[]).slice(0, 8);
-  
-  // Schema options (if field has predefined options)
-  if (fdef.options && fdef.options.length) {
-    vt.style.display = "none";
-    fdef.options.forEach(function(opt) {
-      var already = (q._chips||[]).some(function(c){
-        return c.field===fdef.name && c.value===opt;
-      });
-      var chip = document.createElement("button");
-      chip.className = "qb-chip"+(already?" active":"");
-      chip.textContent = opt;
-      chip.addEventListener("click", function() {
-        _toggleValueChip(fdef.name, opt, q);
-        chip.className = "qb-chip"+((q._chips||[]).some(function(c){
-          return c.field===fdef.name&&c.value===opt;
-        })?" active":"");
-      });
-      vc.appendChild(chip);
-    });
-    // Show history values below schema options (if any not in schema)
-    if (recent.length) {
-      vhl.style.display = "block";
-      recent.forEach(function(val) {
-        var already = (q._chips||[]).some(function(c){
-          return c.field===fdef.name && c.value===val;
-        });
-        // Skip if already shown in schema options
-        if (already || fdef.options.indexOf(val)!==-1) return;
-        var chip = document.createElement("button");
-        chip.className = "qb-chip";
-        chip.style.fontSize = "12px";
-        chip.style.padding = "4px 9px";
-        chip.style.opacity = "0.7";
-        chip.textContent = val;
-        chip.addEventListener("click", function() {
-          _toggleValueChip(fdef.name, val, q);
-          closeValueArea();
-        });
-        vh.appendChild(chip);
-      });
-      // Hide "Recent:" label if no chips added
-      if (!vh.children.length) vhl.style.display = "none";
-    } else {
-      vhl.style.display = "none";
-    }
-  } else {
-    // No schema options - show history as chips, or text input
-    if (recent.length) {
-      vt.style.display = "none";
-      recent.forEach(function(val) {
-        var already = (q._chips||[]).some(function(c){
-          return c.field===fdef.name && c.value===val;
-        });
-        var chip = document.createElement("button");
-        chip.className = "qb-chip"+(already?" active":"");
-        chip.textContent = val;
-        chip.addEventListener("click", function() {
-          _toggleValueChip(fdef.name, val, q);
-          closeValueArea();
-        });
-        vc.appendChild(chip);
-      });
-      vhl.style.display = "none";
-    } else {
-      vt.style.display = "flex";
-      setTimeout(function(){
-        var inp = document.getElementById("qb-val-input");
-        if (inp) inp.focus();
-      },50);
-      vhl.style.display = "none";
-    }
+  if (q && q._fb) q._fb._onFieldClick(fdef);
+}
+
+function _toggleValueChip(field, value, q) {
+  if (q && q._fb) q._fb._toggleChip(field, "=", value);
+  else {
+    var idx = (q._chips||[]).findIndex(function(c){return c.field===field&&c.value===value;});
+    if (!q._chips) q._chips = [];
+    if (idx !== -1) q._chips.splice(idx,1);
+    else q._chips.push({field:field,op:"=",value:value});
   }
+  q.where = _buildWhereExpr(q);
+  _updatePreview(q);
+  triggerLivePreview();
 }
 
 function _toggleValueChip(field, value, q) {
@@ -1144,55 +692,14 @@ function _toggleValueChip(field, value, q) {
 function addTextChip() {
   if (!_cur) return;
   var q = _st.queries[_cur.name];
-  var inp = document.getElementById("qb-val-input");
-  var val = inp ? inp.value.trim() : "";
-  if (!val||!q._activeField) return;
-  q._chips = (q._chips||[]).filter(function(c){ return c.field!==q._activeField; });
-  q._chips.push({field:q._activeField,op:"=",value:val});
-  inp.value = "";
-  closeValueArea();
-  _renderFieldChips(q);
-  _renderActiveChips(q);
-  _updatePreview(q);
-  triggerLivePreview();
+  if (q && q._fb) q._fb.addTextValue();
 }
 
 function closeValueArea() {
-  var va = document.getElementById("qb-value-area");
-  if (va) va.style.display = "none";
-  if (_cur&&_st.queries[_cur.name]) {
-    _st.queries[_cur.name]._activeField = null;
-    _renderFieldChips(_st.queries[_cur.name]);
-  }
-}
-
-function _renderActiveChips(q) {
-  var el = document.getElementById("qb-active-chips");
-  if (!el) return;
-  el.innerHTML = "";
-  (q._chips||[]).filter(function(c){ return c.field!=="type"; })
-  .forEach(function(c, i) {
-    var chip = document.createElement("span");
-    chip.className = "qb-active-chip";
-    chip.innerHTML = _esc(c.field+c.op+c.value) +
-      ' <button onclick="_removeActiveChip('+i+')">×</button>';
-    el.appendChild(chip);
-  });
-}
-
-window._removeActiveChip = function(visualIdx) {
   if (!_cur) return;
   var q = _st.queries[_cur.name];
-  var nonType = (q._chips||[]).filter(function(c){ return c.field!=="type"; });
-  var chipToRemove = nonType[visualIdx];
-  if (!chipToRemove) return;
-  var realIdx = (q._chips||[]).indexOf(chipToRemove);
-  if (realIdx!==-1) q._chips.splice(realIdx,1);
-  _renderFieldChips(q);
-  _renderActiveChips(q);
-  _updatePreview(q);
-  triggerLivePreview();
-};
+  if (q && q._fb) q._fb.closeValueRow();
+}
 
 function _updatePreview(q) {
   q.where = _buildWhereExpr(q);
@@ -1220,16 +727,8 @@ function _updatePreview(q) {
     lines.push('sum   = <span class="p-opt">true</span>');
   el.innerHTML = lines.join("<br>");
   
-  // Update advanced mode preview - show full expression including _exprManual
-  var advPreview = document.getElementById("qb-where-preview");
-  if (advPreview) {
-    var fullExpr = _buildFullWhereExpr(q);
-    if (fullExpr) {
-      advPreview.textContent = "where = \"" + fullExpr + "\"";
-    } else {
-      advPreview.textContent = "# no filters";
-    }
-  }
+  // Sync FilterBuilder textarea with updated expression
+  if (q._fb) q._fb.setExpr(_buildWhereExpr(q));
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1610,7 +1109,7 @@ function triggerLivePreview() {
            '<table class="data-table" id="qb-table"><thead><tr>' +
            cols.map(c => '<th class="sortable" onclick="qbSortTable(this,\''+c.replace(/'/g,"\\'")+'\')">'+_esc(c)+'</th>').join('') +
            '<th style="width:80px"></th></tr></thead><tbody id="qb-tbody">' +
-recs.records.map(r => '<tr>' + cols.map(c => '<td>'+_esc(r[c]||'')+'</td>').join('') + (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+endecodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+endecodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row="'+_esc(JSON.stringify(r))+'" onclick="qbOpenDeleteRecord(this.dataset.row)">✕</button></td>' : '<td></td>') +
+recs.records.map(r => '<tr>' + cols.map(c => '<td>'+_esc(r[c]||'')+'</td>').join('') + (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row="'+_esc(JSON.stringify(r))+'" onclick="qbOpenDeleteRecord(this.dataset.row)">✕</button></td>' : '<td></td>') +
            '</tr>').join('') +
            '</tbody></table></div>';
       } else {
@@ -1666,7 +1165,7 @@ function qbSortTable(th, col) {
     const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
     return '<td>'+_esc(r[rk]||'')+'</td>';
   }).join('') +
-  (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+endecodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+endecodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row="'+_esc(JSON.stringify(r))+'" onclick="qbOpenDeleteRecord(this.dataset.row)">✕</button></td>' : '<td></td>') +
+  (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row="'+_esc(JSON.stringify(r))+'" onclick="qbOpenDeleteRecord(this.dataset.row)">✕</button></td>' : '<td></td>') +
   '</tr>').join('');
   
   window._qbRecords = sorted;
@@ -1751,7 +1250,7 @@ function fetchDueFieldsForType(typeName) {
   keyEl.innerHTML = '<span style="font-size:12px;color:var(--border);">Loading…</span>';
   sortEl.innerHTML = '<span style="font-size:12px;color:var(--border);">Loading…</span>';
   
-  fetch("/api/type_fields/"+endecodeURIComponent(typeName))
+  fetch("/api/type_fields/"+encodeURIComponent(typeName))
   .then(function(r){ return r.json(); })
   .then(function(data) {
     var fields = (data.fields||[]).filter(function(f){ return !f.is_int && f.name!=="type"; });
@@ -1994,4 +1493,7 @@ window.qbOnTimeChange = function(val) {
   <div id="qb-picker-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
 </div>
 
+{% block scripts %}
+<script src="/static/js/filter_builder.js"></script>
+{% endblock %}
 {% endblock %}
