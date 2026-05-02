@@ -201,11 +201,18 @@
   {% endif %}
 </div>
 
-<!-- quick add — top N by use_count -->
+<!-- quick add — frequent presets + toggle for rest -->
 {% if frequent_presets %}
 <div class="card">
-  <div class="card-title">Quick Add</div>
-  <div class="chip-group">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+    <div class="card-title" style="margin:0;">Quick Add</div>
+    {% if remaining_presets %}
+    <button onclick="toggleAllPresets(this)"
+            style="background:none;border:none;font-size:12px;color:var(--accent);
+                   cursor:pointer;font-weight:600;padding:0;">Show all ▾</button>
+    {% endif %}
+  </div>
+  <div class="chip-group" id="frequent-presets">
     {% for name in frequent_presets %}
     <span class="preset-chip-wrap">
       <a href="/add?preset={{ name }}" class="preset-chip"
@@ -214,6 +221,17 @@
     </span>
     {% endfor %}
   </div>
+  {% if remaining_presets %}
+  <div class="chip-group" id="remaining-presets" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+    {% for name in remaining_presets %}
+    <span class="preset-chip-wrap">
+      <a href="/add?preset={{ name }}" class="preset-chip"
+         onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
+      <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
+    </span>
+    {% endfor %}
+  </div>
+  {% endif %}
 </div>
 {% endif %}
 
@@ -416,7 +434,14 @@ function trackPreset(name) {
     headers: {"Content-Type": "application/json"},
     body: JSON.stringify({name: name})
   }).catch(function(){});
-  // Don't preventDefault — link navigates normally
+}
+
+function toggleAllPresets(btn) {
+  var el = document.getElementById("remaining-presets");
+  if (!el) return;
+  var open = el.style.display !== "none";
+  el.style.display = open ? "none" : "flex";
+  btn.textContent  = open ? "Show all ▾" : "Show less ▲";
 }
 
 function deletePreset(name, btn) {

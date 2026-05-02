@@ -1579,44 +1579,6 @@ def bulk_set(records, set_args):
     return {"updated": updated, "errors": errors}
 
 
-def get_frequent_presets(n=6, days=30):
-    """Return top N preset names ranked by how often their type
-    appears in records from the last `days` days.
-
-    Presets with the same-frequency type are sorted alphabetically.
-    Multi-record presets (with a 'records' key) are excluded.
-    Returns only the top N — the rest are not shown on the home page.
-    """
-    import datetime as _dt
-    presets = ptos.get_presets()
-    singles = {
-        k: v for k, v in presets.items()
-        if isinstance(v, dict) and not v.get("records") and not v.get("alias")
-    }
-    if not singles:
-        return []
-
-    # Count type occurrences in last `days` days from records
-    cutoff = _dt.date.today() - _dt.timedelta(days=days)
-    end    = _dt.date.today()
-    type_counts = {}
-    try:
-        raw, _ = ptos.scan_records(cutoff, end, [], None)
-        for _date, kv, _note in raw:
-            t = kv.get("type", "")
-            if t:
-                type_counts[t] = type_counts.get(t, 0) + 1
-    except Exception:
-        pass
-
-    # Rank presets: most-used type first, then alphabetical
-    ranked = sorted(
-        singles.keys(),
-        key=lambda k: (-type_counts.get(singles[k].get("type", ""), 0), k)
-    )
-    return ranked[:n]
-
-
 def increment_preset_use(name):
     """Increment use_count for a named preset using tomllib/tomli_w.
     Adds the field if not present. Silent no-op on any error."""
@@ -1626,14 +1588,12 @@ def increment_preset_use(name):
         if not os.path.exists(path):
             return
         _backup_file(path)
-        # Read full presets file
         with open(path, "rb") as f:
             try:
                 import tomllib
             except ImportError:
                 import tomli as tomllib
             data = tomllib.load(f)
-        # data structure: {"presets": {"auto": {"type": "expense", ...}, ...}}
         presets = data.get("presets", {})
         if name not in presets:
             return
@@ -1643,12 +1603,13 @@ def increment_preset_use(name):
             tomli_w.dump(data, f)
         ptos._CACHE.pop("presets", None)
     except Exception:
-        pass  # never fail a UI action over a counter
+        pass
 
 
 def get_frequent_presets(n=6):
-    """Return top N single preset names sorted by use_count descending.
-    Alphabetical tiebreak. Multi-record and alias presets excluded."""
+    """Return top N single presets sorted by use_count descending.
+    Alphabetical tiebreak. Multi-record and alias presets excluded.
+    Returns (frequent, remaining) tuple for home page display."""
     presets = ptos.get_presets()
     singles = {
         k: v for k, v in presets.items()
@@ -1660,7 +1621,8 @@ def get_frequent_presets(n=6):
         singles.keys(),
         key=lambda k: (-singles[k].get("use_count", 0), k)
     )
-    return ranked[:n]
+    return ranked[:n], ranked[n:]
+
 
 def restore_config(zip_path):
     """Restore config from a backup zip file.
