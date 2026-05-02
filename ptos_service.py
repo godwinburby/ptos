@@ -1377,17 +1377,16 @@ def run_query(name, time=None):
 
 def save_query(name, where_expr, time="tm", group=None, search=None,
                pivot=None, count=False, sort=None, trend=None, overwrite=False):
-    """Save a named query to queries.toml in unified expression format.
+    """Save a named query to queries.toml using tomli-w.
 
     where_expr: a single expression string already in canonical form,
                 e.g. "type=expense AND domain!=work"
-                Callers should use ptos._filters_to_expr() to build this
-                from a list of conditions if needed.
 
     Returns: {"ok": True, "name": name}
     Raises:  PTOSError on failure or name conflict (when overwrite=False).
     """
     import re as _re
+    import tomli_w
     name = name.strip().replace(" ", "_").lower()
     if not name:
         raise PTOSError("Query name cannot be empty")
@@ -1395,43 +1394,35 @@ def save_query(name, where_expr, time="tm", group=None, search=None,
         raise PTOSError("Name must be lowercase letters, numbers and underscores only")
 
     try:
-        queries = ptos.get_queries()
-    except PTOSError:
-        queries = {}
+        data = ptos._load("queries", ptos.QUERIES_PATH)
+    except Exception:
+        data = {}
 
-    if name in queries and not overwrite:
+    if name in data and name not in ("metrics", "dashboards", "due") and not overwrite:
         raise PTOSError(f"Query '{name}' already exists in queries.toml")
 
-    lines = [f"\n[{name}]"]
-
+    entry = {}
     if where_expr and where_expr.strip():
-        val = where_expr.strip().replace('"', '\\"')
-        lines.append(f'where = "{val}"')
-
-    lines.append(f'time  = "{time}"')
-
+        entry["where"] = where_expr.strip()
+    entry["time"] = time
     if group:
-        items = ", ".join(f'"{g}"' for g in (group if isinstance(group, list) else [group]))
-        lines.append(f"group = [{items}]")
-
+        entry["group"] = group if isinstance(group, list) else [group]
     if sort:
-        lines.append(f'sort = "{sort}"')
-
+        entry["sort"] = sort
     if search:
-        lines.append(f'search = "{search}"')
-
+        entry["search"] = search
     if pivot and len(pivot) >= 2:
-        items = ", ".join(f'"{p}"' for p in pivot)
-        lines.append(f"pivot = [{items}]")
+        entry["pivot"] = pivot
         if count:
-            lines.append("count = true")
-
+            entry["count"] = True
     if trend is not None:
-        lines.append(f"trend = {trend}")
+        entry["trend"] = trend
+
+    data[name] = entry
 
     _backup_file(ptos.QUERIES_PATH)
-    with open(ptos.QUERIES_PATH, "a", encoding="utf-8") as f:
-        f.write("\n".join(lines) + "\n")
+    with open(ptos.QUERIES_PATH, "wb") as f:
+        tomli_w.dump(data, f)
     invalidate_cache("queries")
 
     return {"ok": True, "name": name}
