@@ -474,6 +474,7 @@ def add_get():
     types   = schema.get("types", {}).get("allowed", [])
     presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
+    freq_presets, rem_presets = svc.get_frequent_presets(6)
     multi_presets = _multi_presets()
     selected_type = request.args.get("type", "")
     preset_name   = request.args.get("preset", "")
@@ -523,7 +524,7 @@ def add_get():
         tag_context = svc.get_tag_context(selected_type, field_values)
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
-        types=types, presets=sorted(presets.keys()),
+        types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
         multi_presets=multi_presets,
         selected_type=selected_type, field_defs=field_defs,
         global_field_defs=global_field_defs,
