@@ -118,91 +118,16 @@
 
 <div id="result-area"></div>
 
-<!-- Delete modal -->
-<div id="del-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
-     z-index:500;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;width:340px;
-              box-shadow:0 8px 32px rgba(0,0,0,.2);">
-    <div style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--error);">Delete Record</div>
-    <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">This cannot be undone (backup is kept).</div>
-    <div id="del-line" style="font-family:monospace;font-size:12px;background:var(--bg);
-         padding:8px;border-radius:6px;word-break:break-all;margin-bottom:14px;"></div>
-    <div id="del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
-    <div style="display:flex;gap:10px;">
-      <button class="btn btn-primary" style="flex:1;background:var(--error);" onclick="doDelete()">Delete</button>
-      <button class="btn btn-ghost"   style="flex:1;" onclick="closeDelete()">Cancel</button>
-    </div>
-  </div>
-</div>
+<!-- Modals injected by RecordTable -->
 
-
-<!-- Bulk action bar (appears when rows selected) -->
-<div id="bulk-bar"
-     style="display:none;position:fixed;bottom:70px;left:50%;transform:translateX(-50%);
-            background:var(--card);border:1.5px solid var(--accent);border-radius:12px;
-            padding:10px 16px;box-shadow:0 4px 24px rgba(0,0,0,.18);
-            display:none;align-items:center;gap:10px;z-index:400;white-space:nowrap;">
-  <span id="bulk-count" style="font-size:13px;font-weight:700;color:var(--accent);min-width:80px;"></span>
-  <button class="btn btn-ghost btn-sm" onclick="bulkSetOpen()" style="font-size:12px;">✎ Set Field</button>
-  <button class="btn btn-ghost btn-sm" onclick="bulkDeleteOpen()"
-          style="font-size:12px;color:var(--error);">✕ Delete</button>
-  <button class="btn btn-ghost btn-sm" onclick="clearSelection()" style="font-size:12px;">✕ Deselect</button>
-</div>
-
-<!-- Bulk delete confirm dialog -->
-<div id="bulk-del-dialog"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
-            z-index:500;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;width:340px;
-              box-shadow:0 8px 32px rgba(0,0,0,.2);">
-    <div style="font-size:16px;font-weight:700;margin-bottom:8px;color:var(--error);">Bulk Delete</div>
-    <div id="bulk-del-msg-top" style="font-size:13px;color:var(--sub);margin-bottom:14px;"></div>
-    <div id="bulk-del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
-    <div style="display:flex;gap:10px;">
-      <button class="btn btn-primary" style="flex:1;background:var(--error);"
-              onclick="bulkDeleteConfirm()">Delete All</button>
-      <button class="btn btn-ghost" style="flex:1;"
-              onclick="document.getElementById('bulk-del-dialog').style.display='none'">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<!-- Bulk set dialog -->
-<div id="bulk-set-dialog"
-     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
-            z-index:500;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;width:360px;
-              box-shadow:0 8px 32px rgba(0,0,0,.2);">
-    <div style="font-size:16px;font-weight:700;margin-bottom:14px;">Set Field on Selected</div>
-    <div class="field-group" style="margin-bottom:10px;">
-      <label style="font-size:12px;">Field name</label>
-      <input type="text" id="bulk-set-field" placeholder="e.g. status, category"
-             style="font-size:14px;">
-    </div>
-    <div class="field-group" style="margin-bottom:14px;">
-      <label style="font-size:12px;">New value</label>
-      <input type="text" id="bulk-set-value" placeholder="new value"
-             style="font-size:14px;">
-    </div>
-    <div id="bulk-set-preview"
-         style="font-size:12px;color:var(--sub);font-family:monospace;
-                background:var(--bg);padding:8px;border-radius:6px;
-                margin-bottom:12px;display:none;"></div>
-    <div id="bulk-set-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
-    <div style="display:flex;gap:10px;">
-      <button class="btn btn-primary" style="flex:1;" onclick="bulkSetConfirm()">Apply</button>
-      <button class="btn btn-ghost"   style="flex:1;"
-              onclick="document.getElementById('bulk-set-dialog').style.display='none'">Cancel</button>
-    </div>
-  </div>
-</div>
-
+<script src="/static/js/record_table.js"></script>
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
 var _types = {{ types | tojson }};
 
-// ── FilterBuilder instance ───────────────────────────────────────────────────
+// ── FilterBuilder + RecordTable instances ────────────────────────────────────
 var _fb = null;
+var _rt = null;
 document.addEventListener("DOMContentLoaded", function() {
   _fb = new FilterBuilder({
     containerId: "browse-filter",
@@ -210,6 +135,27 @@ document.addEventListener("DOMContentLoaded", function() {
     onRun: function(expr) { runBrowse(); }
   });
   _fb.init();
+
+  _rt = new RecordTable({
+    containerId: "result-area",
+    returnTo: "/browse",
+    enableBulk: true,
+    onRefresh: function() { runBrowse(); }
+  });
+  RecordTable._sort   = function(th,col){ _rt._sort(th,col); };
+  RecordTable._check  = function(cb){ _rt._check(cb); };
+  RecordTable._selAll = function(cb){ _rt._selAll(cb); };
+  RecordTable._openDel= function(r){ _rt._openDel(r); };
+  RecordTable._del    = function(){ _rt._del(); };
+  RecordTable._delClose=function(){ _rt._delClose(); };
+  RecordTable._bkDelOpen   =function(){ _rt._bkDelOpen(); };
+  RecordTable._bkDelClose  =function(){ _rt._bkDelClose(); };
+  RecordTable._bkDelConfirm=function(){ _rt._bkDelConfirm(); };
+  RecordTable._bkSetOpen   =function(){ _rt._bkSetOpen(); };
+  RecordTable._bkSetClose  =function(){ _rt._bkSetClose(); };
+  RecordTable._bkSetConfirm=function(){ _rt._bkSetConfirm(); };
+  RecordTable._bkPrev      =function(){ _rt._bkPrev(); };
+  RecordTable._bkClear     =function(){ _rt._bkClear(); };
 
   // Restore URL params
   var params = new URLSearchParams(window.location.search);
@@ -401,7 +347,14 @@ function runBrowse() {
   .then(r => r.json())
   .then(d => {
     if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
-    area.innerHTML = renderResult(d.data);
+    const data = d.data;
+    if (!data) { area.innerHTML = errorCard("No data"); return; }
+    if (data.kind === "group") {
+      area.innerHTML = renderGroup(data);
+    } else {
+      area.innerHTML = "";
+      if (_rt) _rt.render(data);
+    }
   })
   .catch(e => {
     area.innerHTML = errorCard(String(e));
@@ -419,13 +372,9 @@ function exportCSV() {
 }
 
 function clearBrowse() {
-  // Reset state
-  _browse.type = null;
-  // Clear FilterBuilder
   if (_fb) _fb.clear();
+  if (_rt) _rt.clear();
   _fieldCache = {};
-
-  // Reset other UI
   document.getElementById("b-search").value = "";
   document.getElementById("b-time").value = "tm";
   document.getElementById("b-custom-time").style.display = "none";
@@ -433,7 +382,6 @@ function clearBrowse() {
   document.getElementById("b-sort").value = "";
   window._bCloseMonthPicker();
   document.getElementById("b-month-text").textContent = "Pick a month";
-  document.getElementById("result-area").innerHTML = "";
 }
 
 function errorCard(msg) {
@@ -454,7 +402,11 @@ function summaryBar(d) {
 function renderResult(d) {
   if (!d) return errorCard("No data");
   if (d.kind === "group") return renderGroup(d);
-  return renderRecords(d);
+  // records: hand off to RecordTable
+  var container = document.getElementById("result-area");
+  if (container) container.innerHTML = "";
+  if (_rt) _rt.render(d);
+  return "";
 }
 
 function renderGroup(d) {
@@ -473,150 +425,6 @@ function renderGroup(d) {
     ${summaryBar(d)}
     <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${heads}</tr></thead><tbody>${rows}${foot}</tbody></table></div>
   </div>`;
-}
-
-function renderRecords(d) {
-  if (!d.records||!d.records.length)
-    return `<div class="card" style="color:var(--sub);text-align:center;padding:32px;">No records found.</div>`;
-  const cols  = d.columns||[];
-  const cbHead = `<th style="width:32px;text-align:center;"><input type="checkbox" id="select-all-cb" onchange="toggleSelectAll(this)" title="Select all"></th>`;
-  const heads = cbHead + cols.map(c=>`<th class="sortable" onclick="sortTable(this,'${c.replace(/'/g,"\\'")}')">${c}</th>`).join("") + `<th style="width:80px"></th>`;
-  // store data globally for sorting
-  window._browseData = {cols: cols, records: d.records, count: d.count, total: d.total, total_fmt: d.total_fmt, start: d.start, end: d.end, time_label: d.time_label, filters: d.filters};
-  const rows  = d.records.map((r, idx) => {
-    const cells = cols.map(c => {
-      const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
-      return `<td>${r[rk] || ""}</td>`;
-    }).join("");
-    const cbCell = r._line
-      ? `<td style="text-align:center;"><input type="checkbox" class="row-cb"
-           data-idx="${idx}" onchange="onRowCheck(this)"></td>`
-      : `<td></td>`;
-    const acts  = r._line
-      ? `<td style="white-space:nowrap;">
-           <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
-             href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
-           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-             data-row='${JSON.stringify(r)}' onclick="openDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
-         </td>`
-      : `<td></td>`;
-    return `<tr>${cbCell}${cells}${acts}</tr>`;
-  }).join("");
-  // store records for modal access
-  window._browseRecords = d.records;
-  document.dispatchEvent(new CustomEvent("browse:results"));
-  return `<div class="card">
-    ${summaryBar(d)}
-    <div style="overflow-x:auto;"><table class="data-table" id="browse-table">
-      <thead><tr>${heads}</tr></thead>
-      <tbody id="browse-tbody">${rows}</tbody>
-    </table></div>
-  </div>`;
-}
-
-// ── Table column sorting ────────────────────────────────────────────────────
-let _sortCol = null;
-let _sortAsc = true;
-
-function sortTable(th, col) {
-  const data = window._browseData;
-  if (!data || !data.records) return;
-  
-  // toggle direction if same column, otherwise reset to asc
-  if (_sortCol === col) {
-    _sortAsc = !_sortAsc;
-  } else {
-    _sortCol = col;
-    _sortAsc = true;
-  }
-  
-  // update header styles
-  document.querySelectorAll("#browse-table th.sortable").forEach(h => {
-    h.classList.remove("sort-asc","sort-desc");
-  });
-  th.classList.add(_sortAsc ? "sort-asc" : "sort-desc");
-  
-  // sort records
-  const colLower = col.toLowerCase();
-  const sorted = [...data.records].sort((a, b) => {
-    const ak = Object.keys(a).find(k => k.toLowerCase() === colLower) || col;
-    const bk = Object.keys(b).find(k => k.toLowerCase() === colLower) || col;
-    let va = a[ak] || "", vb = b[bk] || "";
-    // numeric sort
-    const na = parseFloat(va), nb = parseFloat(vb);
-    if (!isNaN(na) && !isNaN(nb)) return _sortAsc ? na - nb : nb - na;
-    // date sort (ISO format)
-    if (/^\d{4}-\d{2}-\d{2}/.test(va) && /^\d{4}-\d{2}-\d{2}/.test(vb)) {
-      return _sortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-    }
-    // string sort
-    return _sortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
-  });
-  
-  // rebuild tbody
-  const tbody = document.getElementById("browse-tbody");
-  if (!tbody) return;
-  const rows = sorted.map((r, idx) => {
-    const cells = data.cols.map(c => {
-      const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
-      return `<td>${r[rk] || ""}</td>`;
-    }).join("");
-    const rowIdx = data.records.indexOf(r);
-    const cbCell = r._line
-      ? `<td style="text-align:center;"><input type="checkbox" class="row-cb"
-           data-idx="${idx}" onchange="onRowCheck(this)"></td>`
-      : `<td></td>`;
-    const acts  = r._line
-      ? `<td style="white-space:nowrap;">
-           <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
-             href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
-           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-             data-row='${JSON.stringify(r)}' onclick="openDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
-         </td>`
-      : `<td></td>`;
-    return `<tr>${cbCell}${cells}${acts}</tr>`;
-  }).join("");
-  tbody.innerHTML = rows;
-  // update modal access
-  window._browseRecords = sorted;
-}
-
-// ── Delete modal ──────────────────────────────────────────────────────────────
-let _editRecord = null;
-
-function openDelete(idx) {
-  const r = (window._browseRecords || [])[idx];
-  if (!r || !r._line) return;
-  openDeleteRecord(r);
-}
-
-function openDeleteRecord(r) {
-  if (!r || !r._line) return;
-  _editRecord = r;
-  document.getElementById("del-line").textContent   = r._line;
-  document.getElementById("del-msg").style.display  = "none";
-  document.getElementById("del-dialog").style.display = "flex";
-}
-
-function closeDelete() { document.getElementById("del-dialog").style.display = "none"; }
-
-function doDelete() {
-  if (!_editRecord) return;
-  const msg = document.getElementById("del-msg");
-  fetch("/api/records/delete", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      filepath: _editRecord._filepath,
-      old_line: _editRecord._line,
-      lineno:   _editRecord._lineno
-    })
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) { closeDelete(); runBrowse(); }
-    else { msg.textContent = d.error; msg.style.display = "block"; }
-  })
-  .catch(e => { msg.textContent = String(e); msg.style.display = "block"; });
 }
 
 
@@ -680,161 +488,6 @@ document.getElementById("query-name-input").addEventListener("keydown", function
   if (e.key === "Enter") doSaveQuery();
   if (e.key === "Escape") hideQueryDialog();
 });
-document.getElementById("del-dialog").addEventListener("click", function(e) {
-  if (e.target === this) closeDelete();
-});
-</script>
-<script>
-// ── Bulk selection ────────────────────────────────────────────────────────────
-var _selected = new Set(); // indices into window._browseRecords
-
-function onRowCheck(cb) {
-  const idx = parseInt(cb.dataset.idx);
-  if (cb.checked) _selected.add(idx);
-  else             _selected.delete(idx);
-  updateBulkBar();
-}
-
-function toggleSelectAll(cb) {
-  const boxes = document.querySelectorAll(".row-cb");
-  _selected.clear();
-  boxes.forEach(function(box) {
-    box.checked = cb.checked;
-    if (cb.checked) _selected.add(parseInt(box.dataset.idx));
-  });
-  updateBulkBar();
-}
-
-function clearSelection() {
-  _selected.clear();
-  document.querySelectorAll(".row-cb").forEach(function(b) { b.checked = false; });
-  const sa = document.getElementById("select-all-cb");
-  if (sa) sa.checked = false;
-  updateBulkBar();
-}
-
-function updateBulkBar() {
-  const bar = document.getElementById("bulk-bar");
-  const cnt = document.getElementById("bulk-count");
-  if (_selected.size > 0) {
-    cnt.textContent = _selected.size + " selected";
-    bar.style.display = "flex";
-  } else {
-    bar.style.display = "none";
-  }
-}
-
-function _selectedRecords() {
-  const recs = window._browseRecords || [];
-  return [..._selected].map(function(i) { return recs[i]; }).filter(Boolean);
-}
-
-// ── Bulk delete ───────────────────────────────────────────────────────────────
-function bulkDeleteOpen() {
-  const n = _selected.size;
-  if (!n) return;
-  document.getElementById("bulk-del-msg-top").textContent =
-    "Delete " + n + " record" + (n > 1 ? "s" : "") + "? This cannot be undone (backup is kept).";
-  document.getElementById("bulk-del-msg").style.display = "none";
-  document.getElementById("bulk-del-dialog").style.display = "flex";
-}
-
-function bulkDeleteConfirm() {
-  const records = _selectedRecords().map(function(r) {
-    return { filepath: r._filepath, line: r._line, lineno: r._lineno };
-  });
-  const msg = document.getElementById("bulk-del-msg");
-  fetch("/api/records/bulk_delete", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ records: records })
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    if (d.ok) {
-      document.getElementById("bulk-del-dialog").style.display = "none";
-      clearSelection();
-      runBrowse();
-    } else {
-      msg.textContent = d.error || "Delete failed";
-      msg.style.display = "block";
-    }
-  })
-  .catch(function(e) {
-    msg.textContent = String(e);
-    msg.style.display = "block";
-  });
-}
-
-// ── Bulk set ──────────────────────────────────────────────────────────────────
-function bulkSetOpen() {
-  if (!_selected.size) return;
-  document.getElementById("bulk-set-field").value  = "";
-  document.getElementById("bulk-set-value").value  = "";
-  document.getElementById("bulk-set-preview").style.display = "none";
-  document.getElementById("bulk-set-msg").style.display    = "none";
-  document.getElementById("bulk-set-dialog").style.display = "flex";
-  document.getElementById("bulk-set-field").focus();
-}
-
-// Show preview as field=value is typed
-["bulk-set-field", "bulk-set-value"].forEach(function(id) {
-  document.addEventListener("DOMContentLoaded", function() {
-    var el = document.getElementById(id);
-    if (el) el.addEventListener("input", function() {
-      var f = document.getElementById("bulk-set-field").value.trim();
-      var v = document.getElementById("bulk-set-value").value.trim();
-      var preview = document.getElementById("bulk-set-preview");
-      if (f && v) {
-        preview.textContent = "Will apply: " + f + "=" + v +
-          " to " + _selected.size + " record" + (_selected.size > 1 ? "s" : "");
-        preview.style.display = "block";
-      } else {
-        preview.style.display = "none";
-      }
-    });
-  });
-});
-
-function bulkSetConfirm() {
-  const field = document.getElementById("bulk-set-field").value.trim();
-  const value = document.getElementById("bulk-set-value").value.trim();
-  const msg   = document.getElementById("bulk-set-msg");
-  if (!field || !value) {
-    msg.textContent = "Field and value are required";
-    msg.style.display = "block";
-    return;
-  }
-  const records = _selectedRecords().map(function(r) {
-    return { filepath: r._filepath, line: r._line, lineno: r._lineno };
-  });
-  fetch("/api/records/bulk_set", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ records: records, set_args: [field + "=" + value] })
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    if (d.ok) {
-      document.getElementById("bulk-set-dialog").style.display = "none";
-      clearSelection();
-      runBrowse();
-    } else {
-      msg.textContent = d.error || "Set failed";
-      msg.style.display = "block";
-    }
-  })
-  .catch(function(e) {
-    msg.textContent = String(e);
-    msg.style.display = "block";
-  });
-}
-
-// Clear selection when browse results are refreshed
-const _origRunBrowse = typeof runBrowse === "function" ? runBrowse : null;
-
-// Reset selection state when new results arrive
-document.addEventListener("browse:results", function() { clearSelection(); });
-
-// ── End Bulk selection ────────────────────────────────────────────────────────
 </script>
 {% block scripts %}
 <script src="/static/js/filter_builder.js"></script>

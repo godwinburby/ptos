@@ -65,25 +65,11 @@
        style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
 </div>
 
-<!-- Delete modal -->
-<div id="q-del-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);
-     z-index:500;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;width:340px;
-              box-shadow:0 8px 32px rgba(0,0,0,.2);">
-    <div style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--error);">Delete Record</div>
-    <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">This cannot be undone (backup is kept).</div>
-    <div id="q-del-line" style="font-family:monospace;font-size:12px;background:var(--bg);
-         padding:8px;border-radius:6px;word-break:break-all;margin-bottom:14px;"></div>
-    <div id="q-del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
-    <div style="display:flex;gap:10px;">
-      <button class="btn btn-primary" style="flex:1;background:var(--error);" onclick="qDoDelete()">Delete</button>
-      <button class="btn btn-ghost"   style="flex:1;" onclick="qCloseDelete()">Cancel</button>
-    </div>
-  </div>
-</div>
+<!-- Delete modal injected by RecordTable -->
 
 <div id="result-area"></div>
 
+<script src="/static/js/record_table.js"></script>
 <script>
 // ── Queries month picker ─────────────────────────────────────────────────────
 (function() {
@@ -217,7 +203,14 @@ function runQuery() {
   .then(r => r.json())
   .then(d => {
     if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
-    area.innerHTML = renderResult(d.data);
+    const data = d.data;
+    if (!data) { area.innerHTML = errorCard("No data"); return; }
+    if (data.kind === "records") {
+      area.innerHTML = "";
+      if (_rt) _rt.render(data);
+    } else {
+      area.innerHTML = renderResult(data);
+    }
   })
   .catch(e => { area.innerHTML = errorCard(String(e)); });
 }
@@ -342,91 +335,7 @@ function renderTrend(d) {
   </div>`;
 }
 
-// ── Records with edit/delete ──────────────────────────────────────────────────
-let _qRecords = [];
-let _qSortCol = null;
-let _qSortAsc = true;
-
-function renderRecords(d) {
-  if (!d.records || !d.records.length)
-    return `<div class="card" style="color:var(--sub);text-align:center;padding:24px;">No records found.</div>`;
-  _qRecords = d.records;
-  const cols  = (d.columns || []).filter(c => !c.startsWith("_"));
-  window._qCols = cols;
-  const heads = cols.map(c=>`<th class="sortable" onclick="qSortTable(this,'${c.replace(/'/g,"\\'")}')">${c}</th>`).join("") + `<th style="width:80px"></th>`;
-  const rows  = d.records.map((r,i) => {
-    const cells = cols.map(c => {
-      const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
-      return `<td>${r[rk] || ""}</td>`;
-    }).join("");
-    const acts  = r._line
-      ? `<td style="white-space:nowrap;">
-           <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
-             href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
-           <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-             data-row='${JSON.stringify(r)}' onclick="qOpenDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
-         </td>`
-      : `<td></td>`;
-    return `<tr>${cells}${acts}</tr>`;
-  }).join("");
-  return `<div class="card">
-    ${exprBadge(d)}
-    ${summaryBar(d)}
-    <div style="overflow-x:auto;margin-top:8px;"><table class="data-table" id="queries-table">
-      <thead><tr>${heads}</tr></thead>
-      <tbody id="queries-tbody">${rows}</tbody>
-    </table></div>
-  </div>`;
-}
-
-function qSortTable(th, col) {
-  const data = _qRecords;
-  if (!data) return;
-  
-  if (_qSortCol === col) {
-    _qSortAsc = !_qSortAsc;
-  } else {
-    _qSortCol = col;
-    _qSortAsc = true;
-  }
-  
-  document.querySelectorAll("#queries-table th.sortable").forEach(h => h.classList.remove("sort-asc","sort-desc"));
-  th.classList.add(_qSortAsc ? "sort-asc" : "sort-desc");
-  
-  const colLower = col.toLowerCase();
-  const sorted = [...data].sort((a, b) => {
-    const ak = Object.keys(a).find(k => k.toLowerCase() === colLower) || col;
-    const bk = Object.keys(b).find(k => k.toLowerCase() === colLower) || col;
-    let va = a[ak] || "", vb = b[bk] || "";
-    const na = parseFloat(va), nb = parseFloat(vb);
-    if (!isNaN(na) && !isNaN(nb)) return _qSortAsc ? na - nb : nb - na;
-    if (/^\d{4}-\d{2}-\d{2}/.test(va) && /^\d{4}-\d{2}-\d{2}/.test(vb)) {
-      return _qSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-    }
-    return _qSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
-  });
-  
-  const cols = (window._qCols || []).filter(c => !c.startsWith("_"));
-  const tbody = document.getElementById("queries-tbody");
-  if (!tbody) return;
-  tbody.innerHTML = sorted.map(r => {
-    const cells = cols.map(c => {
-      const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
-      return `<td>${r[rk] || ""}</td>`;
-    }).join("");
-    const acts = r._line ? `<td style="white-space:nowrap;">
-      <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
-        href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=${encodeURIComponent(window.location.pathname)}">✎</a>
-      <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-        data-row='${JSON.stringify(r)}' onclick="qOpenDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
-    </td>` : `<td></td>`;
-    return `<tr>${cells}${acts}</tr>`;
-  }).join("");
-  
-  _qRecords = sorted;
-  window._qCols = cols;
-}
-
+// ── Records: delegated to RecordTable ────────────────────────────────────────
 function summaryBar(d) {
   const parts = [];
   if (d.count !== undefined) parts.push(`<span>${d.count} records</span>`);
@@ -438,49 +347,33 @@ function summaryBar(d) {
     : "";
 }
 
-// ── Delete modal ──────────────────────────────────────────────────────────────
-let _qDelRecord = null;
-
-function qOpenDelete(idx) {
-  const r = _qRecords[idx];
-  if (!r || !r._line) return;
-  qOpenDeleteRecord(r);
+function renderRecords(d) {
+  var area = document.getElementById("result-area");
+  if (area) area.innerHTML = "";
+  if (_rt) _rt.render(d);
+  return "";
 }
 
-function qOpenDeleteRecord(r) {
-  if (!r || !r._line) return;
-  _qDelRecord = r;
-  document.getElementById("q-del-line").textContent  = r._line;
-  document.getElementById("q-del-msg").style.display = "none";
-  document.getElementById("q-del-dialog").style.display = "flex";
-}
-
-function qCloseDelete() {
-  document.getElementById("q-del-dialog").style.display = "none";
-}
-
-function qDoDelete() {
-  if (!_qDelRecord) return;
-  const msg = document.getElementById("q-del-msg");
-  fetch("/api/records/delete", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({
-      filepath: _qDelRecord._filepath,
-      old_line: _qDelRecord._line,
-      lineno:   _qDelRecord._lineno
-    })
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) { qCloseDelete(); runQuery(); }
-    else { msg.textContent = d.error; msg.style.display = "block"; }
-  })
-  .catch(e => { msg.textContent = String(e); msg.style.display = "block"; });
-}
-
-document.getElementById("q-del-dialog").addEventListener("click", function(e) {
-  if (e.target === this) qCloseDelete();
+// ── RecordTable instance ─────────────────────────────────────────────────────
+var _rt = new RecordTable({
+  containerId: "result-area",
+  enableBulk: true,
+  onRefresh: function() { runQuery(); }
 });
+RecordTable._sort    = function(th,col){ _rt._sort(th,col); };
+RecordTable._check   = function(cb){ _rt._check(cb); };
+RecordTable._selAll  = function(cb){ _rt._selAll(cb); };
+RecordTable._openDel = function(r){ _rt._openDel(r); };
+RecordTable._del     = function(){ _rt._del(); };
+RecordTable._delClose= function(){ _rt._delClose(); };
+RecordTable._bkDelOpen   =function(){ _rt._bkDelOpen(); };
+RecordTable._bkDelClose  =function(){ _rt._bkDelClose(); };
+RecordTable._bkDelConfirm=function(){ _rt._bkDelConfirm(); };
+RecordTable._bkSetOpen   =function(){ _rt._bkSetOpen(); };
+RecordTable._bkSetClose  =function(){ _rt._bkSetClose(); };
+RecordTable._bkSetConfirm=function(){ _rt._bkSetConfirm(); };
+RecordTable._bkPrev      =function(){ _rt._bkPrev(); };
+RecordTable._bkClear     =function(){ _rt._bkClear(); };
 
 // ── Auto-run from URL params (?run=name&time=code) ────────────────────────────
 (function() {
