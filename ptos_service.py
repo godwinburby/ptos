@@ -440,13 +440,6 @@ def get_history_suggestions(rtype, context_record=None):
         if k in fields_with_options and counter:
             field_defaults[k] = counter.most_common(1)[0][0]
 
-    # global_fields with options: most common value for pre-selection in panel
-    for fname, fdef in schema.get("global_fields", {}).items():
-        if isinstance(fdef, dict) and fdef.get("options") and fname in field_counts:
-            counter = field_counts[fname]
-            if counter:
-                field_defaults[fname] = counter.most_common(1)[0][0]
-
     # Calculate filtered tags based on context_record
     filtered_tags = set()
     if context_record:
