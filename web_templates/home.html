@@ -304,7 +304,7 @@ document.addEventListener("DOMContentLoaded", function() {
   var _rt = new RecordTable({
     containerId: "home-records-area",
     returnTo: "/",
-    enableBulk: false,
+    enableBulk: true,
     onRefresh: function() { window.location.reload(); }
   });
   RecordTable._sort    = function(th,col){ _rt._sort(th,col); };
@@ -313,6 +313,14 @@ document.addEventListener("DOMContentLoaded", function() {
   RecordTable._openDel = function(r){ _rt._openDel(r); };
   RecordTable._del     = function(){ _rt._del(); };
   RecordTable._delClose= function(){ _rt._delClose(); };
+  RecordTable._bkDelOpen   =function(){ _rt._bkDelOpen(); };
+  RecordTable._bkDelClose  =function(){ _rt._bkDelClose(); };
+  RecordTable._bkDelConfirm=function(){ _rt._bkDelConfirm(); };
+  RecordTable._bkSetOpen   =function(){ _rt._bkSetOpen(); };
+  RecordTable._bkSetClose  =function(){ _rt._bkSetClose(); };
+  RecordTable._bkSetConfirm=function(){ _rt._bkSetConfirm(); };
+  RecordTable._bkPrev      =function(){ _rt._bkPrev(); };
+  RecordTable._bkClear     =function(){ _rt._bkClear(); };
   _rt.render({
     records: window._recentRecords || [],
     columns: window._recentCols   || [],
