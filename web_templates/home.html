@@ -287,146 +287,39 @@
 {% if recent_rows %}
 <div class="card">
   <div class="card-title">Today's Records</div>
-  {% if recent_cols %}
-  <div style="overflow-x:auto;">
-    <table class="data-table" id="home-table">
-      <thead><tr>{% for c in recent_cols %}<th class="sortable" onclick="homeSort(this,'{{ c }}')">{{ c }}</th>{% endfor %}<th style="width:80px"></th></tr></thead>
-      <tbody id="home-tbody">
-        {% for row in recent_rows %}
-        <tr>
-          {% for c in recent_cols %}<td>{{ row.get(c,'') }}</td>{% endfor %}
-          <td style="white-space:nowrap;">
-            {% if row._line %}
-            <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
-              href="/edit?filepath={{ row._filepath|urlencode }}&lineno={{ row._lineno }}&line={{ row._line|urlencode }}&return_to=/">✎</a>
-            <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-              data-row='{{ row|tojson }}' onclick="openDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
-            {% endif %}
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% endif %}
+  <div id="home-records-area"></div>
 </div>
 {% endif %}
 
-<!-- delete modal -->
-<div id="del-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;max-width:420px;width:90%;box-shadow:0 12px 40px rgba(0,0,0,.25);">
-    <div style="font-weight:700;font-size:16px;margin-bottom:12px;">Delete Record?</div>
-    <div id="del-line" style="font-family:monospace;font-size:12px;background:var(--bg);padding:10px;border-radius:8px;margin-bottom:16px;word-break:break-all;"></div>
-    <div id="del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button class="btn btn-ghost" onclick="closeDelete()">Cancel</button>
-      <button class="btn btn-primary" style="background:var(--error);" onclick="doDelete()">Delete</button>
-    </div>
-  </div>
-</div>
+<!-- Delete modal injected by RecordTable -->
 
+<script src="/static/js/record_table.js"></script>
 <script>
 window._recentRecords = {{ recent_rows|tojson }};
-window._recentCols = {{ recent_cols|tojson }};
+window._recentCols    = {{ recent_cols|tojson }};
 
-function homeSort(th, col) {
-    const records = window._recentRecords;
-    if (!records) return;
-    
-    // toggle direction if same column, otherwise reset to asc
-    if (window._homeSortCol === col) {
-        window._homeSortAsc = !window._homeSortAsc;
-    } else {
-        window._homeSortCol = col;
-        window._homeSortAsc = true;
-    }
-    
-    // update header styles
-    document.querySelectorAll("#home-table th.sortable").forEach(h => h.classList.remove("sort-asc","sort-desc"));
-    th.classList.add(window._homeSortAsc ? "sort-asc" : "sort-desc");
-    
-    // sort
-    const colLower = col.toLowerCase();
-    const sorted = [...records].sort((a, b) => {
-        const ak = Object.keys(a).find(k => k.toLowerCase() === colLower) || col;
-        const bk = Object.keys(b).find(k => k.toLowerCase() === colLower) || col;
-        let va = a[ak] || "", vb = b[bk] || "";
-        const na = parseFloat(va), nb = parseFloat(vb);
-        if (!isNaN(na) && !isNaN(nb)) return window._homeSortAsc ? na - nb : nb - na;
-        if (/^\d{4}-\d{2}-\d{2}/.test(va) && /^\d{4}-\d{2}-\d{2}/.test(vb)) {
-            return window._homeSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-        }
-        return window._homeSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
-    });
-    
-    // rebuild tbody
-    const cols = window._recentCols || [];
-    const tbody = document.getElementById("home-tbody");
-    if (!tbody) return;
-    tbody.innerHTML = sorted.map(r => {
-        const cells = cols.map(c => {
-            const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
-            return `<td>${r[rk] || ""}</td>`;
-        }).join("");
-const acts = r._line ? `<td style="white-space:nowrap;">
-            <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;"
-              href="/edit?filepath=${encodeURIComponent(r._filepath)}&lineno=${r._lineno}&line=${encodeURIComponent(r._line)}&return_to=/">✎</a>
-            <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);"
-              data-row='${JSON.stringify(r)}' onclick="openDeleteRecord(JSON.parse(this.dataset.row))">✕</button>
-          </td>` : `<td></td>`;
-        return `<tr>${cells}${acts}</tr>`;
-    }).join("");
-    
-    // update records reference
-    window._recentRecords = sorted;
-}
-
-function openDelete(idx) {
-  var r = (window._recentRecords || [])[idx];
-  if (!r || !r._line) return;
-  openDeleteRecord(r);
-}
-
-function openDeleteRecord(r) {
-  if (!r || !r._line) return;
-  window._editRecord = r;
-  document.getElementById("del-line").textContent = r._line;
-  document.getElementById("del-msg").style.display = "none";
-  document.getElementById("del-dialog").style.display = "flex";
-}
-
-function closeDelete() {
-  document.getElementById("del-dialog").style.display = "none";
-}
-
-function doDelete() {
-  var r = window._editRecord;
-  if (!r) return;
-  var msg = document.getElementById("del-msg");
-  fetch("/api/records/delete", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      filepath: r._filepath,
-      old_line: r._line,
-      lineno: r._lineno
-    })
-  })
-  .then(function(res) { return res.json(); })
-  .then(function(d) {
-    if (d.ok) {
-      closeDelete();
-      window.location.reload();
-    } else {
-      msg.textContent = d.error || "Delete failed";
-      msg.style.display = "block";
-    }
-  })
-  .catch(function(e) {
-    msg.textContent = String(e);
-    msg.style.display = "block";
+document.addEventListener("DOMContentLoaded", function() {
+  var area = document.getElementById("home-records-area");
+  if (!area) return;
+  var _rt = new RecordTable({
+    containerId: "home-records-area",
+    returnTo: "/",
+    enableBulk: false,
+    onRefresh: function() { window.location.reload(); }
   });
-}
+  RecordTable._sort    = function(th,col){ _rt._sort(th,col); };
+  RecordTable._check   = function(cb){ _rt._check(cb); };
+  RecordTable._selAll  = function(cb){ _rt._selAll(cb); };
+  RecordTable._openDel = function(r){ _rt._openDel(r); };
+  RecordTable._del     = function(){ _rt._del(); };
+  RecordTable._delClose= function(){ _rt._delClose(); };
+  _rt.render({
+    records: window._recentRecords || [],
+    columns: window._recentCols   || [],
+    count:   (window._recentRecords||[]).length
+  });
+});
+
 
 function trackPreset(name) {
   fetch("/api/preset_use", {
@@ -463,10 +356,6 @@ function deletePreset(name, btn) {
     alert("Delete failed: " + String(e));
   });
 }
-
-document.getElementById("del-dialog").addEventListener("click", function(e) {
-  if (e.target === this) closeDelete();
-});
 
 function addMultiPreset(name, btn) {
   const today = new Date().toISOString().split("T")[0];
