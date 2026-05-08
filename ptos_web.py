@@ -260,6 +260,16 @@ def _resolve_multi_preset(name):
         if isinstance(ref, dict) and "records" in ref:
             return None, f"nested multi-record presets not supported"
         record = dict(ref)
+        # Strip metadata fields (e.g. use_count) not in the record schema
+        known = {"type", "tag", "note"}
+        known.update(schema.get("fields", {}).keys())
+        known.update(schema.get("global_fields", {}).keys())
+        rtype = record.get("type")
+        if rtype:
+            ts = schema.get("type", {}).get(rtype, {})
+            known.update(ts.get("required", []))
+            known.update(ts.get("fields", {}).keys())
+        record = {k: v for k, v in record.items() if k in known}
         problems = svc.validate_record(schema, record)
         if problems:
             return None, f"preset '{item}': {problems[0]}"
