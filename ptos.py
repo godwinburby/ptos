@@ -971,6 +971,9 @@ def _invalidate_all():
 
 
 def _load(key, path):
+    """Load a TOML file once and cache it.
+    Cache is invalidated via _invalidate(resource) on writes.
+    Exits on parse errors or missing files."""
     if key not in _CACHE:
         try:
             with open(path, "rb") as f:
@@ -1275,15 +1278,22 @@ def today():
     return dt.date.today()
 
 def parse_date(s):
+    """Parse an ISO date string into a date object.
+    Accepts YYYY-MM-DD format. Raises ValueError on invalid input."""
     return dt.date.fromisoformat(s)
 
+
 def month_range(year, month):
+    """Return (start_date, end_date) inclusive bounds for a given month.
+    Handles December correctly by wrapping to the next year."""
     start = dt.date(year, month, 1)
     end   = dt.date(year + 1, 1, 1) - dt.timedelta(days=1) if month == 12 \
             else dt.date(year, month + 1, 1) - dt.timedelta(days=1)
     return start, end
 
 def quarter_range(year, quarter):
+    """Return (start_date, end_date) inclusive bounds for a quarter.
+    Quarter is 0-indexed (0 = Jan-Mar, 1 = Apr-Jun, 2 = Jul-Sep, 3 = Oct-Dec)."""
     start_month = quarter * 3 + 1
     start = dt.date(year, start_month, 1)
     end   = dt.date(year + 1, 1, 1) - dt.timedelta(days=1) if start_month + 3 > 12 \
@@ -1291,6 +1301,9 @@ def quarter_range(year, quarter):
     return start, end
 
 def resolve_cycle(start_day, offset=0):
+    """Return (start_date, end_date) for a custom billing cycle.
+    A cycle runs from start_day of one month to start_day-1 of the next month.
+    offset=0 = current cycle, offset=1 = previous cycle, etc."""
     now = today()
     if now.day >= start_day:
         start = dt.date(now.year, now.month, start_day)
@@ -1335,6 +1348,14 @@ _TIME_ALIASES = {
 }
 
 def resolve_time(keyword, cycles):
+    """Resolve a time keyword into (start_date, end_date) inclusive bounds.
+
+    Accepted keywords:
+      td/today, yd/yesterday, tw/this-week, lw/last-week,
+      tm/this-month, lm/last-month, tq/this-quarter, lq/last-quarter,
+      ty/this-year, ly/last-year, all,
+      YYYY-MM (literal month),
+      <cycle_name> or <cycle_name>-N (custom cycles from config)."""
     keyword = _TIME_ALIASES.get(keyword, keyword)
     now = today()
 
@@ -1407,6 +1428,9 @@ def safe_parse_line(line):
         return None
 
 def build_record_line(date, record, note=None):
+    """Build a log line from its components.
+    Format: YYYY-MM-DD key=value key=value ... | note
+    Multi-value fields (lists) produce repeated key=value pairs."""
     parts = []
     for k, v in record.items():
         if isinstance(v, list):
@@ -1935,6 +1959,10 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
     return results, total
 
 def append_record(line):
+    """Append a single log line to the correct yearly file.
+    Extracts the year from the line's first 4 characters,
+    routes to records/<YEAR>.log, and writes atomically.
+    Creates the records directory and yearly file if missing."""
     os.makedirs(RECORDS_DIR, exist_ok=True)
     year = line[:4]
     path = os.path.join(RECORDS_DIR, f"{year}.log")
@@ -1994,6 +2022,10 @@ def _get_field_options(schema, type_schema, field, record):
     return None
 
 def validate_record(schema, record):
+    """Validate a record dict against the schema. Returns list of error strings.
+    Checks: type is allowed, required fields present, int fields valid,
+    datetime fields valid ISO, field names known, option values valid,
+    conditional requirements satisfied. Empty list = valid."""
     problems = []
     rtype    = record.get("type")
 
@@ -2275,6 +2307,8 @@ def pivot_results(results, row_field, col_field, count_mode=False, sort_col=None
     return table, cols, rows
 
 def render_group(counts, sums, has_amount, fields):
+    """Print a grouped count/summary table to stdout.
+    CLI-only. has_amount controls whether a total column is shown."""
     label_fn = lambda key: "  ".join(_disp(k) for k in key) if isinstance(key, tuple) else _disp(key)
 
     if has_amount:
@@ -2302,6 +2336,7 @@ def render_group(counts, sums, has_amount, fields):
         print(f"{'Total':<20} {grand}")
 
 def render_pivot(table, cols, rows, row_field):
+    """Print a pivot/cross-tab table to stdout. CLI-only."""
     width = 12
     header = f"{_disp(row_field):15}"
     for c in cols:
@@ -2334,6 +2369,7 @@ def render_pivot(table, cols, rows, row_field):
     print()
 
 def render_summary(results, start, end, time_label, filters, total, sum_field=None):
+    """Print a query summary header to stdout. CLI-only."""
     count = len(results)
     rows  = [("Time range", f"{start} to {end} ({time_label})")]
     if results:
@@ -2358,6 +2394,8 @@ def render_summary(results, start, end, time_label, filters, total, sum_field=No
 # --------------------------------------------------
 
 def _run_base_query(name, queries, start, end, cycles, sum_field=None):
+    """Run a named base query. Returns (count, total_sum).
+    sum_field controls which field is summed; None defaults to amount."""
     q = queries[name]
     where = q.get("where", "") if isinstance(q, dict) else ""
     if not isinstance(where, str):
@@ -2367,6 +2405,8 @@ def _run_base_query(name, queries, start, end, cycles, sum_field=None):
     return len(results), total
 
 def _run_base_query_lines(name, queries, start, end, cycles):
+    """Run a named base query. Returns (raw_lines, total_sum).
+    Unlike _run_base_query, returns full raw log lines for post-processing."""
     q = queries[name]
     where = q.get("where", "") if isinstance(q, dict) else ""
     if not isinstance(where, str):
@@ -2375,6 +2415,14 @@ def _run_base_query_lines(name, queries, start, end, cycles):
     return scan_records(start, end, filters, None)
 
 def run_metric(name, queries, start, end, cycles):
+    """Compute and print a named metric. Returns True if found, False if not.
+
+    Metric types (defined under [metrics] in queries.toml):
+      sum     — sum of a field across matching records
+      avg     — average (simple or weighted)
+      ratio   — percentage of two sub-metrics
+      max/min — extreme values across matching records
+      derived — arithmetic expression referencing other metrics"""
     metrics = queries.get("metrics", {})
     if name not in metrics:
         return False
@@ -2597,6 +2645,9 @@ def run_dashboard(name, queries, start, end, cycles):
 # --------------------------------------------------
 
 def show_fields(results):
+    """Analyze records and print all discovered fields grouped by type.
+    Flags recommended dimension fields and suggests group/pivot commands.
+    CLI-only."""
     bad = non_dimension_fields()
     types = {}
     for line in results:
@@ -3271,6 +3322,9 @@ def delete_preset(name):
 
 
 def interactive_add(schema, date=None, save_preset_name=None):
+    """Interactive guided record addition.
+    Prompts user for all fields, validates, shows preview, asks for
+    confirmation, then appends. Optionally saves as a preset."""
     record, note = complete_record(schema, {})
     problems     = validate_record(schema, record)
     if problems:
@@ -3294,6 +3348,9 @@ def interactive_add(schema, date=None, save_preset_name=None):
             save_as_preset(preset_name, record)
 
 def quick_add(args):
+    """Non-interactive record addition from command-line args.
+    Handles: preset listing, alias resolution, multi-record presets,
+    single-record presets with optional field overrides."""
     presets = get_presets()
     if not args.preset:
         print("\nAvailable presets:\n")
@@ -3396,6 +3453,8 @@ def quick_add(args):
 # --------------------------------------------------
 
 def get_today_journal():
+    """Return the path to today's journal file, creating it from
+    template if it doesn't exist. Creates year subdirectory as needed."""
     today_str = today().isoformat()
     year_dir  = os.path.join(JOURNAL_DIR, today_str[:4])
     os.makedirs(year_dir, exist_ok=True)
@@ -3418,6 +3477,8 @@ def get_today_journal():
 # --------------------------------------------------
 
 def resolve_editor():
+    """Return the editor command as a list of args.
+    Priority: config.editor.command > $EDITOR > notepad (win) / nvim."""
     cmd = get_config().get("editor", {}).get("command")
     if cmd:
         return cmd.split()
@@ -3426,6 +3487,9 @@ def resolve_editor():
     return ["notepad"] if os.name == "nt" else ["nvim"]
 
 def edit_target(target):
+    """Open a PTOS file in the system editor.
+    Targets: records, schema, queries, config, presets, daily.
+    Single-letter shortcuts supported (r, s, q, c, p, d/j, x)."""
     shortcuts = {
         "r": "records", "s": "schema", "q": "queries",
         "c": "config",  "p": "presets", "d": "daily", "j": "daily", "x": "script",
@@ -3734,6 +3798,11 @@ def _write_if_missing(path, content, label):
         print(f"  created  {label}")
 
 def init_ptos():
+    """Initialize PTOS directory structure and config files.
+    Creates config/, records/, journal/, templates/ directories and
+    writes default config.toml, schema.toml, queries.toml, presets.toml,
+    daily.md, and the current year's empty record file.
+    Safe to re-run — skips existing files."""
     print("\nInitializing PTOS...\n")
 
     for d in [CONFIG_DIR, RECORDS_DIR, JOURNAL_DIR, TEMPLATE_DIR]:
