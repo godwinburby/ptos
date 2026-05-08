@@ -51,17 +51,7 @@
   </div>
 </div>
 
-<div id="rec-del-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;max-width:420px;width:90%;box-shadow:0 12px 40px rgba(0,0,0,.25);">
-    <div style="font-weight:700;font-size:16px;margin-bottom:12px;">Delete Record?</div>
-    <div id="rec-del-line" style="font-family:monospace;font-size:12px;background:var(--bg);padding:10px;border-radius:8px;margin-bottom:16px;word-break:break-all;"></div>
-    <div id="rec-del-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
-    <div style="display:flex;gap:10px;justify-content:flex-end;">
-      <button class="btn btn-ghost" onclick="qbCloseDelete()">Cancel</button>
-      <button class="btn btn-primary" style="background:var(--error);" onclick="qbDoDelete()">Delete</button>
-    </div>
-  </div>
-</div>
+<!-- Record delete modal injected by RecordTable -->
 
 <style>
   /* ── Section tab bar ─────────────────────────────────────────────────────── */
@@ -149,6 +139,8 @@
   .p-dim   { color:#697098; }
 </style>
 
+<script src="/static/js/filter_builder.js"></script>
+<script src="/static/js/record_table.js"></script>
 <script>
 var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{} };
 var _cur = null;
@@ -604,6 +596,14 @@ function _buildChipFilters(q) {
   return (q._chips||[]).map(function(c){ return c.field+c.op+c.value; });
 }
 
+function _getContextStr(q) {
+  var ctx = {};
+  (q._chips||[]).forEach(function(c) {
+    if (c.field !== "type") ctx[c.field] = c.value;
+  });
+  return Object.keys(ctx).sort().map(function(k){ return k+":"+ctx[k]; }).join(",");
+}
+
 function _updateQ(field, val) {
   if (!_cur||_cur.section!=="queries") return;
   _st.queries[_cur.name][field] = val;
@@ -631,10 +631,53 @@ function _parseQBExpr(expr) { return {chips: [], manual: expr}; }
 
 // ── FilterBuilder owns these — stubs kept for any remaining call sites ──────
 function _renderTypeChips(q)  { if (q&&q._fb) q._fb._renderTypeRow(); }
-function _fetchFields(t,q,cb) { if (q&&q._fb) q._fb._fetch(cb||function(){}); else if(cb) cb({}); }
+function _fetchFields(t, q, cb) {
+  if (!q || !q._fb) { if (cb) cb(); return; }
+  var ctxStr = _getContextStr(q);
+  var cacheKey = t + "?" + ctxStr;
+  if (_fieldCache[cacheKey]) { cb(); return; }
+  if (_cacheSet.length >= 20) {
+    var oldKey = _cacheSet.shift();
+    delete _fieldCache[oldKey];
+  }
+  var url = "/api/type_fields/" + encodeURIComponent(t);
+  if (ctxStr) url += "?context=" + encodeURIComponent(ctxStr);
+  fetch(url)
+    .then(function(r){ return r.json(); })
+    .then(function(data) {
+      _fieldCache[cacheKey] = {
+        fields: (data.fields||[]).filter(function(f){ return !f.is_int && f.name!=="type"; }),
+        dimensions: data.dimensions || []
+      };
+      _cacheSet.push(cacheKey);
+      cb();
+    })
+    .catch(function() {
+      _fieldCache[cacheKey] = { fields: [], dimensions: [] };
+      _cacheSet.push(cacheKey);
+      cb();
+    });
+}
 function _renderFieldChips(q) { if (q&&q._fb) q._fb._renderFieldRow(); }
 function _renderTagsSection(q){ if (q&&q._fb) q._fb._renderTagsSection(); }
 function _renderActiveChips(q){ if (q&&q._fb) q._fb._renderActiveChips(); }
+function _updateGroupSortDropdowns(q) {
+  var grp = document.getElementById("qb-group");
+  var sort = document.getElementById("qb-sort");
+  if (!grp || !sort) return;
+  var type = _typeFromChips(q);
+  var ctxStr = _getContextStr(q);
+  var cacheKey = type + "?" + ctxStr;
+  var dims = (_fieldCache[cacheKey] || {}).dimensions || [];
+  grp.innerHTML = '<option value="">— select —</option>';
+  sort.innerHTML = '<option value="">— select —</option>';
+  dims.forEach(function(d) {
+    grp.innerHTML += '<option value="'+d+'">'+d+'</option>';
+    sort.innerHTML += '<option value="'+d+'">'+d+'</option>';
+  });
+  if (q.group && grp.querySelector('option[value="'+q.group+'"]')) grp.value = q.group;
+  if (q.sort && sort.querySelector('option[value="'+q.sort+'"]')) sort.value = q.sort;
+}
 
 function _toggleTagChip(value, q) {
   if (q && q._fb) { q._fb._toggleChip("tag", "=", value); }
@@ -976,56 +1019,6 @@ function confirmDelete() {
   .catch(function(e){ showMsg("✖ "+e,false); });
 }
 
-// ── Record delete from table ──────────────────────────────────────────────────
-var _qbDelRecord = null;
-
-function qbOpenDeleteRecord(r) {
-  if (typeof r === "string") {
-    try { r = JSON.parse(deddecodeURIComponent(r)); } catch(e) { return; }
-  }
-  if (!r || !r._line) return;
-  _qbDelRecord = r;
-  document.getElementById("rec-del-line").textContent = r._line;
-  document.getElementById("rec-del-msg").style.display = "none";
-  document.getElementById("rec-del-dialog").style.display = "flex";
-}
-
-function qbCloseDelete() {
-  document.getElementById("rec-del-dialog").style.display = "none";
-}
-
-function qbDoDelete() {
-  var r = _qbDelRecord;
-  if (!r) return;
-  var msg = document.getElementById("rec-del-msg");
-  fetch("/api/records/delete", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({
-      filepath: r._filepath,
-      old_line: r._line,
-      lineno: r._lineno
-    })
-  })
-  .then(function(res) { return res.json(); })
-  .then(function(d) {
-    if (d.ok) {
-      qbCloseDelete();
-      window.location.reload();
-    } else {
-      msg.textContent = d.error || "Delete failed";
-      msg.style.display = "block";
-    }
-  })
-  .catch(function(e) {
-    msg.textContent = "Delete failed: " + String(e);
-    msg.style.display = "block";
-  });
-}
-
-document.getElementById("rec-del-dialog").addEventListener("click", function(e) {
-  if (e.target === this) qbCloseDelete();
-});
 
 // ── Save all ──────────────────────────────────────────────────────────────────
 function saveAll() {
@@ -1067,56 +1060,68 @@ document.getElementById("del-modal").addEventListener("click", function(e) {
   if (e.target===this) closeDeleteModal();
 });
 
-// ── Live Records Preview ────────────────────────────────────────────────────────
+// ── Live Records Preview ─────────────────────────────────────────────────────
+var _qbRt = null;  // RecordTable instance for live preview
+
+function _initQbRt() {
+  if (_qbRt) return;
+  _qbRt = new RecordTable({
+    containerId: "qb-live-area",
+    returnTo: "/query-builder",
+    enableBulk: true,
+    onRefresh: function() { triggerLivePreview(); }
+  });
+  RecordTable._sort    = function(th,col){ _qbRt._sort(th,col); };
+  RecordTable._check   = function(cb){ _qbRt._check(cb); };
+  RecordTable._selAll  = function(cb){ _qbRt._selAll(cb); };
+  RecordTable._openDel = function(r){ _qbRt._openDel(r); };
+  RecordTable._del     = function(){ _qbRt._del(); };
+  RecordTable._delClose= function(){ _qbRt._delClose(); };
+  RecordTable._bkDelOpen   =function(){ _qbRt._bkDelOpen(); };
+  RecordTable._bkDelClose  =function(){ _qbRt._bkDelClose(); };
+  RecordTable._bkDelConfirm=function(){ _qbRt._bkDelConfirm(); };
+  RecordTable._bkSetOpen   =function(){ _qbRt._bkSetOpen(); };
+  RecordTable._bkSetClose  =function(){ _qbRt._bkSetClose(); };
+  RecordTable._bkSetConfirm=function(){ _qbRt._bkSetConfirm(); };
+  RecordTable._bkPrev      =function(){ _qbRt._bkPrev(); };
+  RecordTable._bkClear     =function(){ _qbRt._bkClear(); };
+}
+
 function triggerLivePreview() {
   if (!_cur || _cur.section !== "queries") return;
   clearTimeout(_liveTimer);
-  _liveTimer = setTimeout(() => {
+  _liveTimer = setTimeout(function() {
     var area = document.getElementById("qb-live-area");
     if (!area) return;
+    _initQbRt();
     var q = _st.queries[_cur.name];
     var grpEl = document.getElementById("qb-group");
     var sortEl = document.getElementById("qb-sort");
     var group = grpEl ? grpEl.value : "";
-    var sort = sortEl ? sortEl.value : "";
+    var sort  = sortEl ? sortEl.value : "";
     area.innerHTML = '<div style="color:var(--sub);padding:16px;">Loading…</div>';
     fetch("/browse/run", {
-      method: "POST", headers: {"Content-Type": "application/json"},
-      body: JSON.stringify({where: _buildChipFilters(q), expr: q._exprManual || "", time: q.time || "tm", group: group, sort: sort})
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({where:_buildChipFilters(q), expr:q._exprManual||"", time:q.time||"tm", group:group, sort:sort})
     })
-    .then(r => r.json())
-    .then(d => {
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
       if (!d.ok) { area.innerHTML = '<div style="color:var(--error);padding:16px;">'+_esc(d.error)+'</div>'; return; }
       var recs = d.data;
       if (recs.kind === "group") {
-        area.innerHTML = '<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;font-size:13px;">' +
-          '<span>' + (recs.grand_count || 0) + ' records</span>' +
-          summaryBar(recs) +
-'</div>' +
-           '<table class="data-table"><thead><tr><th>Group</th><th>Count</th>' +
-           (recs.has_amount ? '<th style="text-align:right">Total</th>' : '') + '</tr></thead><tbody>' +
-           (recs.rows || []).map(r => '<tr><td>'+_esc(r.key)+'</td><td>'+r.count+'</td>' + (recs.has_amount ? '<td style="text-align:right">'+(r.total_fmt||'')+'</td>' : '') + '</tr>').join('') +
-           '</tbody></table>';
-      } else if (recs.records && recs.records.length) {
-        var cols = recs.columns || [];
-        window._qbCols = cols;
-        window._qbRecords = recs.records;
-        area.innerHTML = '<div style="margin-bottom:10px;display:flex;align-items:center;gap:12px;font-size:13px;">' +
-          '<span>' + recs.records.length + ' records</span>' +
-          summaryBar(recs) +
-           '</div>' +
-           '<div style="overflow-x:auto;border:1px solid var(--border);border-radius:8px;">' +
-           '<table class="data-table" id="qb-table"><thead><tr>' +
-           cols.map(c => '<th class="sortable" onclick="qbSortTable(this,\''+c.replace(/'/g,"\\'")+'\')">'+_esc(c)+'</th>').join('') +
-           '<th style="width:80px"></th></tr></thead><tbody id="qb-tbody">' +
-recs.records.map(r => '<tr>' + cols.map(c => '<td>'+_esc(r[c]||'')+'</td>').join('') + (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row="'+_esc(JSON.stringify(r))+'" onclick="qbOpenDeleteRecord(this.dataset.row)">✕</button></td>' : '<td></td>') +
-           '</tr>').join('') +
-           '</tbody></table></div>';
+        var hasTot = recs.has_amount;
+        var head = '<th>Group</th><th>Count</th>'+(hasTot?'<th style="text-align:right">Total</th>':'');
+        var rows = (recs.rows||[]).map(function(r){
+          return '<tr><td>'+_esc(r.key)+'</td><td>'+r.count+'</td>'+(hasTot?'<td style="text-align:right">'+(r.total_fmt||'')+'</td>':'')+'</tr>';
+        }).join('');
+        area.innerHTML = summaryBar(recs)+
+          '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
       } else {
-        area.innerHTML = '<div style="color:var(--sub);padding:16px;">No records found.</div>';
+        area.innerHTML = "";
+        _qbRt.render(recs);
       }
     })
-    .catch(e => { area.innerHTML = '<div style="color:var(--error);padding:16px;">'+_esc(String(e))+'</div>'; });
+    .catch(function(e){ area.innerHTML = '<div style="color:var(--error);padding:16px;">'+_esc(String(e))+'</div>'; });
   }, 400);
 }
 
@@ -1131,45 +1136,48 @@ function summaryBar(d) {
 var _qbSortCol = null;
 var _qbSortAsc = true;
 
-function qbSortTable(th, col) {
-  const data = window._qbRecords;
-  if (!data) return;
-  
-  if (_qbSortCol === col) {
-    _qbSortAsc = !_qbSortAsc;
-  } else {
-    _qbSortCol = col;
-    _qbSortAsc = true;
-  }
-  
-  document.querySelectorAll("#qb-table th.sortable").forEach(h => h.classList.remove("sort-asc","sort-desc"));
-  th.classList.add(_qbSortAsc ? "sort-asc" : "sort-desc");
-  
-  const colLower = col.toLowerCase();
-  const sorted = [...data].sort((a, b) => {
-    const ak = Object.keys(a).find(k => k.toLowerCase() === colLower) || col;
-    const bk = Object.keys(b).find(k => k.toLowerCase() === colLower) || col;
-    let va = a[ak] || "", vb = b[bk] || "";
-    const na = parseFloat(va), nb = parseFloat(vb);
-    if (!isNaN(na) && !isNaN(nb)) return _qbSortAsc ? na - nb : nb - na;
-    if (/^\d{4}-\d{2}-\d{2}/.test(va) && /^\d{4}-\d{2}-\d{2}/.test(vb)) {
-      return _qbSortAsc ? va.localeCompare(vb) : vb.localeCompare(va);
-    }
-    return _qbSortAsc ? String(va).localeCompare(String(vb)) : String(vb).localeCompare(String(va));
+
+// ── Save all ──────────────────────────────────────────────────────────────────
+function saveAll() {
+  // sync all where expressions from chips before saving
+  Object.keys(_st.queries).forEach(function(n) {
+    _st.queries[n].where = _buildWhereExpr(_st.queries[n]);
   });
-  
-  const cols = window._qbCols || [];
-  const tbody = document.getElementById("qb-tbody");
-  if (!tbody) return;
-  tbody.innerHTML = sorted.map(r => '<tr>' + cols.map(c => {
-    const rk = Object.keys(r).find(k => k.toLowerCase() === c.toLowerCase()) || c;
-    return '<td>'+_esc(r[rk]||'')+'</td>';
-  }).join('') +
-  (r._line ? '<td style="white-space:nowrap;"><a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to=/query-builder">✎</a> <button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row="'+_esc(JSON.stringify(r))+'" onclick="qbOpenDeleteRecord(this.dataset.row)">✕</button></td>' : '<td></td>') +
-  '</tr>').join('');
-  
-  window._qbRecords = sorted;
+  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due };
+  Object.entries(_st.queries).forEach(function(e) {
+    var k=e[0],v=e[1];
+    payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
+  });
+  var btn = document.getElementById("save-btn");
+  btn.disabled=true; btn.textContent="Saving…";
+  fetch("/query-builder/save", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(payload)
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    btn.disabled=false; btn.textContent="💾 Save All";
+    if (d.ok) showMsg("✔ Saved to queries.toml",true);
+    else      showMsg("✖ "+d.error,false);
+  })
+  .catch(function(e){
+    btn.disabled=false; btn.textContent="💾 Save All";
+    showMsg("✖ "+e,false);
+  });
 }
+
+function showMsg(text, ok) {
+  var el = document.getElementById("save-msg");
+  el.textContent=text; el.style.color=ok?"var(--success)":"var(--error)";
+  el.style.display="inline";
+  if (ok) setTimeout(function(){ el.style.display="none"; },3000);
+}
+
+document.getElementById("del-modal").addEventListener("click", function(e) {
+  if (e.target===this) closeDeleteModal();
+});
+
+
 
 function showDueEditor() {
   var ed = document.getElementById("entry-editor");
@@ -1493,7 +1501,4 @@ window.qbOnTimeChange = function(val) {
   <div id="qb-picker-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
 </div>
 
-{% block scripts %}
-<script src="/static/js/filter_builder.js"></script>
-{% endblock %}
 {% endblock %}

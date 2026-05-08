@@ -103,7 +103,9 @@ function RecordTable(opts) {
             '<div style="font-size:16px;font-weight:700;margin-bottom:14px;">Set Field on Selected</div>' +
             '<div class="field-group" style="margin-bottom:10px;">' +
               '<label style="font-size:12px;">Field name</label>' +
-              '<input type="text" id="'+M.bkField+'" placeholder="e.g. status, category" style="font-size:14px;" oninput="RecordTable._bkPrev()">' +
+              '<select id="'+M.bkField+'" style="font-size:14px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100%;" onchange="RecordTable._bkPrev()">' +
+                '<option value="">— select field —</option>' +
+              '</select>' +
             '</div>' +
             '<div class="field-group" style="margin-bottom:10px;">' +
               '<label style="font-size:12px;">New value</label>' +
@@ -349,7 +351,11 @@ function RecordTable(opts) {
   // ── bulk set ───────────────────────────────────────────────────────────────
   self._bkSetOpen = function() {
     if (!_selected.length) return;
-    ge(M.bkField).value = "";
+    var sel = ge(M.bkField);
+    sel.innerHTML = '<option value="">— select field —</option>';
+    _cols.forEach(function(c) {
+      sel.innerHTML += '<option value="'+c+'">'+c+'</option>';
+    });
     ge(M.bkValue).value = "";
     ge(M.bkPrev).style.display = "none";
     ge(M.bkSetMsg).style.display = "none";
