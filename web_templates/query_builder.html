@@ -144,10 +144,10 @@
 
 <script src="/static/js/filter_builder.js"></script>
 <script src="/static/js/record_table.js"></script>
+<script src="/static/js/drag.js"></script>
 <script>
 var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{} };
 var _cur = null;
-var _dragIdx = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
 var _timeOpts = {{ time_options | tojson }};
@@ -937,8 +937,6 @@ function _renderDashChips(db) {
   (db.metrics||[]).forEach(function(item, i) {
     var chip = document.createElement("span");
     chip.className = "dash-chip";
-    chip.draggable = true;
-    chip.dataset.index = i;
     var m = _st.metrics[item];
     var tag = m ? (m.derived ? "derived" : "metric") : "query";
     chip.innerHTML =
@@ -946,30 +944,7 @@ function _renderDashChips(db) {
       tag+'</span>'+
       item+
       ' <button onclick="removeDashItem('+i+')">×</button>';
-    chip.addEventListener("dragstart", function(e) {
-      _dragIdx = i;
-      this.classList.add("dragging");
-    });
-    chip.addEventListener("dragover", function(e) {
-      e.preventDefault();
-      this.classList.add("drag-over");
-    });
-    chip.addEventListener("dragleave", function() {
-      this.classList.remove("drag-over");
-    });
-    chip.addEventListener("drop", function(e) {
-      e.preventDefault();
-      if (_dragIdx === null || _dragIdx === i) return;
-      var item = db.metrics.splice(_dragIdx, 1)[0];
-      db.metrics.splice(i, 0, item);
-      _renderDashChips(db);
-    });
-    chip.addEventListener("dragend", function() {
-      _dragIdx = null;
-      document.querySelectorAll(".dash-chip").forEach(function(c) {
-        c.classList.remove("dragging", "drag-over");
-      });
-    });
+    _makeDraggable(chip, db.metrics, i, function() { _renderDashChips(db); }, ".dash-chip");
     el.appendChild(chip);
   });
 }
