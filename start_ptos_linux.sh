@@ -37,10 +37,10 @@ fi
 # ── Check for updates (if git repo) ───────────────────────────────────────────
 if [ -d ".git" ]; then
     echo "Checking for updates..."
-    if git pull 2>&1 | grep -q "Already up to date"; then
-        echo "Already up to date."
+    if git pull --ff-only 2>&1; then
+        echo "Updated."
     else
-        echo "Updated from GitHub."
+        echo "Warning: git pull failed. Continuing with local version."
     fi
 else
     echo "Not a git repo - skipping update check."
