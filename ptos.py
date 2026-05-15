@@ -3407,7 +3407,7 @@ def quick_add(args):
                 ref = presets[target]
             if isinstance(ref, dict) and "records" in ref:
                 sys.exit(f"Preset '{name}': nested multi-record presets not supported ('{item}')")
-            resolved.append(dict(ref))
+            resolved.append({k: v for k, v in ref.items() if k not in ("use_count", "usage_count")})
 
         print(f"\nMulti-record preset '{name}' — {len(resolved)} record(s)\n")
         for i, rec_template in enumerate(resolved, 1):
@@ -3425,7 +3425,7 @@ def quick_add(args):
         return
 
     # ── single-record preset ──────────────────────────────────────────────────
-    record = dict(preset_data)
+    record = {k: v for k, v in preset_data.items() if k not in ("use_count", "usage_count")}
     for item in args.preset[1:]:
         if "=" not in item:
             continue
