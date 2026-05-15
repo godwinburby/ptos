@@ -543,6 +543,7 @@ def add_post():
     types  = schema.get("types", {}).get("allowed", [])
     presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
+    freq_presets, rem_presets = svc.get_frequent_presets(6)
     rtype     = request.form.get("type","").strip()
     date_str  = request.form.get("date", dt.date.today().isoformat()).strip()
     note      = request.form.get("note","").strip() or None
@@ -572,7 +573,7 @@ def add_post():
         fd = _build_field_defs(schema, rtype, record)
         return render_template("add.html",
             tab="add", title="Add Record", now=_now_str(),
-            types=types, presets=sorted(presets.keys()),
+            types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
             multi_presets=_multi_presets(),
             selected_type=rtype, field_defs=fd,
             global_field_defs=_build_global_field_defs(schema, record),
@@ -587,7 +588,7 @@ def add_post():
         fd = _build_field_defs(schema, rtype, record)
         return render_template("add.html",
             tab="add", title="Add Record", now=_now_str(),
-            types=types, presets=sorted(presets.keys()),
+            types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
             multi_presets=_multi_presets(),
             selected_type=rtype, field_defs=fd,
             global_field_defs=_build_global_field_defs(schema, record),
@@ -597,7 +598,7 @@ def add_post():
             msg=str(e), msg_type="error", last_line=None)
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
-        types=types, presets=sorted(presets.keys()),
+        types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
         multi_presets=_multi_presets(),
         selected_type="", field_defs=[], tag_options=[],
         tag_context=[],
