@@ -108,6 +108,9 @@
   }
   .dash-chip button { background:none;border:none;color:var(--accent);
     cursor:pointer;font-size:14px;padding:0;line-height:1;font-weight:700; }
+  .dash-chip[draggable] { cursor:grab; }
+  .dash-chip.dragging  { opacity:.4; }
+  .dash-chip.drag-over { border-color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent); }
   .qb-chip {
     display:inline-flex;align-items:center;gap:4px;padding:6px 12px;
     border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;
@@ -144,6 +147,7 @@
 <script>
 var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{} };
 var _cur = null;
+var _dragIdx = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
 var _timeOpts = {{ time_options | tojson }};
@@ -933,6 +937,8 @@ function _renderDashChips(db) {
   (db.metrics||[]).forEach(function(item, i) {
     var chip = document.createElement("span");
     chip.className = "dash-chip";
+    chip.draggable = true;
+    chip.dataset.index = i;
     var m = _st.metrics[item];
     var tag = m ? (m.derived ? "derived" : "metric") : "query";
     chip.innerHTML =
@@ -940,6 +946,30 @@ function _renderDashChips(db) {
       tag+'</span>'+
       item+
       ' <button onclick="removeDashItem('+i+')">×</button>';
+    chip.addEventListener("dragstart", function(e) {
+      _dragIdx = i;
+      this.classList.add("dragging");
+    });
+    chip.addEventListener("dragover", function(e) {
+      e.preventDefault();
+      this.classList.add("drag-over");
+    });
+    chip.addEventListener("dragleave", function() {
+      this.classList.remove("drag-over");
+    });
+    chip.addEventListener("drop", function(e) {
+      e.preventDefault();
+      if (_dragIdx === null || _dragIdx === i) return;
+      var item = db.metrics.splice(_dragIdx, 1)[0];
+      db.metrics.splice(i, 0, item);
+      _renderDashChips(db);
+    });
+    chip.addEventListener("dragend", function() {
+      _dragIdx = null;
+      document.querySelectorAll(".dash-chip").forEach(function(c) {
+        c.classList.remove("dragging", "drag-over");
+      });
+    });
     el.appendChild(chip);
   });
 }
