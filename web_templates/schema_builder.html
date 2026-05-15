@@ -210,6 +210,7 @@
   }
 </style>
 
+<script src="/static/js/drag.js"></script>
 <script>
 // ── State ─────────────────────────────────────────────────────────────────────
 // _state.types: ["expense","income",...]
@@ -225,35 +226,6 @@ var _state = {
   // derived_fields live inside type_schemas[tname].derived_fields
 };
 var _currentType = null;
-var _dragIdx = null;
-
-function _makeDraggable(chip, items, idx, rerender) {
-  chip.draggable = true;
-  chip.addEventListener("dragstart", function() {
-    _dragIdx = idx;
-    this.classList.add("dragging");
-  });
-  chip.addEventListener("dragover", function(e) {
-    e.preventDefault();
-    this.classList.add("drag-over");
-  });
-  chip.addEventListener("dragleave", function() {
-    this.classList.remove("drag-over");
-  });
-  chip.addEventListener("drop", function(e) {
-    e.preventDefault();
-    if (_dragIdx === null || _dragIdx === idx) return;
-    var item = items.splice(_dragIdx, 1)[0];
-    items.splice(idx, 0, item);
-    rerender();
-  });
-  chip.addEventListener("dragend", function() {
-    _dragIdx = null;
-    document.querySelectorAll(".opt-chip").forEach(function(c) {
-      c.classList.remove("dragging", "drag-over");
-    });
-  });
-}
 
 // ── Boot: load from server schema ────────────────────────────────────────────
 (function() {
@@ -466,7 +438,7 @@ function renderRequired(ts) {
     var chip = document.createElement("span");
     chip.className = "opt-chip";
     chip.innerHTML = r + ' <button onclick="removeRequired(' + i + ')">×</button>';
-    _makeDraggable(chip, ts.required, i, function() { renderRequired(ts()); });
+    _makeDraggable(chip, ts.required, i, function() { renderRequired(ts()); }, ".opt-chip");
     el.appendChild(chip);
   });
 }
@@ -584,7 +556,7 @@ function makeFieldRow(fname, fdef) {
         chip.className = "opt-chip";
         chip.innerHTML = opt + ' <button onclick="removeParentOpt(\'' +
           fname + '\',\'' + pval + '\',' + i + ')">×</button>';
-        _makeDraggable(chip, childOpts, i, function() { renderFields(ts()); });
+        _makeDraggable(chip, childOpts, i, function() { renderFields(ts()); }, ".opt-chip");
         chipsDiv.appendChild(chip);
       });
       section.appendChild(chipsDiv);
@@ -641,7 +613,7 @@ function makeFieldRow(fname, fdef) {
       chip.className = "opt-chip";
       chip.innerHTML = opt + ' <button onclick="removeOption(\'' +
         fname + '\',' + i + ')">×</button>';
-      _makeDraggable(chip, fdef.options, i, function() { renderFields(ts()); });
+      _makeDraggable(chip, fdef.options, i, function() { renderFields(ts()); }, ".opt-chip");
       chipsDiv2.appendChild(chip);
     });
     opts.appendChild(chipsDiv2);
@@ -812,7 +784,7 @@ function makeTagRule(tfield, rule) {
       chip.className = "opt-chip";
       chip.innerHTML = tag + ' <button onclick="removeTag(\'' +
         tfield + '\',\'' + fval + '\',' + ti + ')">×</button>';
-      _makeDraggable(chip, tags, ti, function() { renderTags(ts()); });
+      _makeDraggable(chip, tags, ti, function() { renderTags(ts()); }, ".opt-chip");
       chipDiv.appendChild(chip);
     });
     row.appendChild(chipDiv);
@@ -909,7 +881,7 @@ function makeGlobalFieldRow(fname, fdef) {
       chip.className = "opt-chip";
       chip.innerHTML = opt + ' <button onclick="removeGlobalOption(\'' +
         fname + '\',' + i + ')">×</button>';
-      _makeDraggable(chip, fdef.options, i, function() { renderGlobalFields(); });
+      _makeDraggable(chip, fdef.options, i, function() { renderGlobalFields(); }, ".opt-chip");
       chipsDiv.appendChild(chip);
     });
 
@@ -1080,7 +1052,7 @@ function makeSharedRow(sname, sdef) {
       var chip = document.createElement("span");
       chip.className = "opt-chip";
       chip.innerHTML = opt + ' <button onclick="removeSharedOption(\'' + sname + '\',' + i + ')">×</button>';
-      _makeDraggable(chip, sdef.options, i, function() { renderSharedDefs(); });
+      _makeDraggable(chip, sdef.options, i, function() { renderSharedDefs(); }, ".opt-chip");
       chipsDiv.appendChild(chip);
     });
     var hint2 = document.createElement("div");
