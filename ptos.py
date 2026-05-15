@@ -3107,8 +3107,9 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
             print(f"  ✔ Added '{tag}' to schema.")
 
 
-def complete_record(schema, record):
-    """Fill missing required and conditional fields interactively. Returns (record, note)."""
+def complete_record(schema, record, skip_optional=False):
+    """Fill missing required and conditional fields interactively. Returns (record, note).
+    When skip_optional=True, skips tags, note, and global fields prompts."""
     rtype = record.get("type")
     if not rtype:
         rtype          = choose_from_list("Select type:", schema["types"]["allowed"])
@@ -3127,6 +3128,9 @@ def complete_record(schema, record):
             if field not in record:
                 record[field] = resolve_field(schema, type_schema, field, record)
 
+    if skip_optional:
+        return record, None
+
     # tags — always prompt so user can confirm, add to, or clear preset tags
     allowed = resolve_tags(schema, type_schema, record)
     existing_tags = record.get("tag", [])
@@ -3143,8 +3147,7 @@ def complete_record(schema, record):
     if tags:
         record["tag"] = tags
     elif existing_tags and not tags:
-        # user pressed Enter with no input — keep existing preset tags
-        pass  # record["tag"] already set from preset
+        pass
 
     note = input("\nAdd note (optional): ").strip()
 
@@ -3154,7 +3157,7 @@ def complete_record(schema, record):
         print("\nAdditional info (all optional — press Enter to skip each):")
         for fname, fdef in gfields.items():
             if fname in record:
-                continue  # already set by preset or inline arg
+                continue
             opts = fdef.get("options", []) if isinstance(fdef, dict) else []
             if opts:
                 val = choose_from_list_optional(f"  {fname}", opts)
@@ -3413,7 +3416,7 @@ def quick_add(args):
         for i, rec_template in enumerate(resolved, 1):
             print(f"── Record {i} ──────────────────────────────")
             record = dict(rec_template)
-            record, note = complete_record(schema, record)
+            record, note = complete_record(schema, record, skip_optional=True)
             problems = validate_record(schema, record)
             if problems:
                 sys.exit(f"Record {i}: {problems[0]}")
