@@ -3537,14 +3537,10 @@ def edit_target(target):
 # --------------------------------------------------
 
 def _load_starter(name):
-    """Load starter content from starters/ or templates/ folder.
+    """Load starter content from starters/ folder.
     Falls back to a minimal stub if the file is missing."""
-    if name == "journal":
-        base = TEMPLATE_DIR
-        fname = "daily.md"
-    else:
-        base = STARTER_DIR
-        fname = f"starter_{name}.toml"
+    base = STARTER_DIR
+    fname = f"starter_{name}.toml" if name != "journal" else "starter_journal.md"
     path = os.path.join(base, fname)
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
