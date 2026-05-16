@@ -47,7 +47,7 @@ if exist ".git" (
 %PYTHON% -c "import flask" 2>nul
 if errorlevel 1 (
     echo Installing Flask and tomli-w...
-    %PYTHON% -m pip install flask tomli-w --quiet
+    %PYTHON% -m pip install flask tomli-w pytest --quiet
 )
 
 :: Kill anything on port 5000
