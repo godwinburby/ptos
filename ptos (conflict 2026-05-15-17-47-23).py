@@ -32,11 +32,6 @@ VERSION_FILE = os.path.join(BASE_DIR, ".version")
 GITHUB_REPO = "godwinburby/ptos"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
 
-SCHEMA_PATH  = os.path.join(CONFIG_DIR, "schema.toml")
-QUERIES_PATH = os.path.join(CONFIG_DIR, "queries.toml")
-CONFIG_PATH  = os.path.join(CONFIG_DIR, "config.toml")
-PRESETS_PATH = os.path.join(CONFIG_DIR, "presets.toml")
-
 
 def get_log_files():
     """Get list of log files from records/, excluding conflict files."""
@@ -98,7 +93,7 @@ def should_backup():
                     ts_str = f.replace("ptos-backup-full-", "").replace(".zip", "")
                     backup_time = dt.datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
                     backup_files.append((backup_time, os.path.join(BACKUP_DIR, f)))
-                except (ValueError, AttributeError):
+                except:
                     continue
         
         if backup_files:
@@ -126,7 +121,7 @@ def should_backup():
                         # Check if file modified after last backup
                         if os.path.getmtime(file_path) > last_backup_timestamp:
                             return True
-                    except OSError:
+                    except:
                         continue
     
     return False
@@ -154,7 +149,7 @@ def get_backup_preview():
                     ts_str = f.replace("ptos-backup-full-", "").replace(".zip", "")
                     backup_time = dt.datetime.strptime(ts_str, "%Y%m%d_%H%M%S")
                     backup_files.append((backup_time, f))
-                except (ValueError, AttributeError):
+                except:
                     continue
         
         if backup_files:
@@ -255,7 +250,7 @@ def get_restore_preview(backup_path):
                 dt_str = match.group(1)
                 dt_obj = dt.datetime.strptime(dt_str, "%Y%m%d_%H%M%S")
                 preview["backup_date"] = dt_obj.isoformat()
-            except (ValueError, AttributeError):
+            except:
                 pass
         
         # Read backup contents
@@ -292,7 +287,7 @@ def get_restore_preview(backup_path):
                     with zipf.open('.last_backup_info') as f:
                         metadata = json.loads(f.read().decode('utf-8'))
                         preview["metadata"] = metadata
-            except Exception:
+            except:
                 pass
         
         # Format sizes
@@ -938,6 +933,10 @@ def check_backup_folders():
             missing.append(folder)
     return len(missing) == 0, missing
 
+SCHEMA_PATH  = os.path.join(CONFIG_DIR, "schema.toml")
+QUERIES_PATH = os.path.join(CONFIG_DIR, "queries.toml")
+CONFIG_PATH  = os.path.join(CONFIG_DIR, "config.toml")
+PRESETS_PATH = os.path.join(CONFIG_DIR, "presets.toml")
 
 # --------------------------------------------------
 # Config cache  (load once, reuse everywhere)
@@ -1334,23 +1333,6 @@ def resolve_date(value):
         return value
     except ValueError:
         sys.exit(f"Invalid date '{value}'. Use YYYY-MM-DD, today, or yesterday.")
-
-class TimeCode:
-    """Named constants for the short time-range codes used throughout PTOS.
-    These mirror the keys of _TIME_ALIASES. Use these instead of bare strings
-    so that misspellings become AttributeError rather than silent wrong results."""
-    TODAY        = "td"
-    YESTERDAY    = "yd"
-    THIS_WEEK    = "tw"
-    LAST_WEEK    = "lw"
-    THIS_MONTH   = "tm"
-    LAST_MONTH   = "lm"
-    THIS_QUARTER = "tq"
-    LAST_QUARTER = "lq"
-    THIS_YEAR    = "ty"
-    LAST_YEAR    = "ly"
-    ALL          = "all"
-
 
 _TIME_ALIASES = {
     "td":  "today",
@@ -2539,7 +2521,7 @@ def run_metric(name, queries, start, end, cycles):
                 dep_m = metrics[token]
                 
                 # Use the dependency metric's own time window, not the parent's
-                dep_time = dep_m.get("time", TimeCode.THIS_MONTH)  # default to "tm" if not specified
+                dep_time = dep_m.get("time", "tm")  # default to "tm" if not specified
                 dep_start, dep_end = resolve_time(dep_time, cycles)
                 
                 if "sum" in dep_m:
@@ -2550,7 +2532,7 @@ def run_metric(name, queries, start, end, cycles):
                         if op in metrics:
                             dm = metrics[op]
                             # Use the sub-metric's own time
-                            dm_time = dm.get("time", TimeCode.THIS_MONTH)
+                            dm_time = dm.get("time", "tm")
                             dm_start, dm_end = resolve_time(dm_time)
                             if "sum" in dm:
                                 _, t = _run_base_query(dm["sum"], queries, dm_start, dm_end, cycles,
@@ -2584,7 +2566,7 @@ def run_metric(name, queries, start, end, cycles):
                 q_resolved = queries.get(query_name, {})
                 
                 # Use query's own time if specified
-                q_time = q_resolved.get("time", TimeCode.THIS_MONTH) if isinstance(q_resolved, dict) else TimeCode.THIS_MONTH
+                q_time = q_resolved.get("time", "tm") if isinstance(q_resolved, dict) else "tm"
                 q_start, q_end = resolve_time(q_time, cycles)
                 
                 if isinstance(q_resolved, dict) and "where" in q_resolved:
@@ -3125,9 +3107,8 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
             print(f"  ✔ Added '{tag}' to schema.")
 
 
-def complete_record(schema, record, skip_optional=False):
-    """Fill missing required and conditional fields interactively. Returns (record, note).
-    When skip_optional=True, skips tags, note, and global fields prompts."""
+def complete_record(schema, record):
+    """Fill missing required and conditional fields interactively. Returns (record, note)."""
     rtype = record.get("type")
     if not rtype:
         rtype          = choose_from_list("Select type:", schema["types"]["allowed"])
@@ -3146,9 +3127,6 @@ def complete_record(schema, record, skip_optional=False):
             if field not in record:
                 record[field] = resolve_field(schema, type_schema, field, record)
 
-    if skip_optional:
-        return record, None
-
     # tags — always prompt so user can confirm, add to, or clear preset tags
     allowed = resolve_tags(schema, type_schema, record)
     existing_tags = record.get("tag", [])
@@ -3165,7 +3143,8 @@ def complete_record(schema, record, skip_optional=False):
     if tags:
         record["tag"] = tags
     elif existing_tags and not tags:
-        pass
+        # user pressed Enter with no input — keep existing preset tags
+        pass  # record["tag"] already set from preset
 
     note = input("\nAdd note (optional): ").strip()
 
@@ -3175,7 +3154,7 @@ def complete_record(schema, record, skip_optional=False):
         print("\nAdditional info (all optional — press Enter to skip each):")
         for fname, fdef in gfields.items():
             if fname in record:
-                continue
+                continue  # already set by preset or inline arg
             opts = fdef.get("options", []) if isinstance(fdef, dict) else []
             if opts:
                 val = choose_from_list_optional(f"  {fname}", opts)
@@ -3434,7 +3413,7 @@ def quick_add(args):
         for i, rec_template in enumerate(resolved, 1):
             print(f"── Record {i} ──────────────────────────────")
             record = dict(rec_template)
-            record, note = complete_record(schema, record, skip_optional=True)
+            record, note = complete_record(schema, record)
             problems = validate_record(schema, record)
             if problems:
                 sys.exit(f"Record {i}: {problems[0]}")
