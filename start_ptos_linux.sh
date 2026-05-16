@@ -49,7 +49,7 @@ fi
 # ── Check/install dependencies ────────────────────────────────────────────────
 if ! $PYTHON -c "import flask" 2>/dev/null; then
     echo "Installing Flask and tomli-w..."
-    $PYTHON -m pip install flask tomli-w --break-system-packages --quiet
+    $PYTHON -m pip install flask tomli-w pytest --break-system-packages --quiet
 fi
 
 # ── Kill any existing PTOS server ────────────────────────────────────────────
