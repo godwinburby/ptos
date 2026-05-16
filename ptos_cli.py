@@ -930,7 +930,7 @@ def main():
         print("\nNo records found.\n")
         if final_filters:
             all_results, _ = scan_records(dt.date.min, dt.date.max, [], None)
-            known = {k for line in all_results for p in [safe_parse_line(line)] if p for k in p[1]}
+            known = {k for line in all_results for p in [ptos.safe_parse_line(line)] if p for k in p[1]}
             known.update({"type", "tag"})
             for f in final_filters:
                 m = re.match(r"(\w+)(!~|!=|>=|<=|~|=|>|<)", f)
