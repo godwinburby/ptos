@@ -1215,13 +1215,8 @@ ptos -j               # short form
 ptos --edit j         # same via edit shortcut
 ```
 
-The built-in template follows an ARRIVE → ENGAGE → RELEASE structure:
-
-- **ARRIVE** — ground yourself before the day: reality check, body, mood, a word or verse, intention, prayer
-- **ENGAGE** — top 3 tasks, home item, one person to love well, habits, drift checks at 11 / 2 / 5
-- **RELEASE** — end of day: wins, where you drifted, gratitude, one thing to carry forward
-
-The template ships as `templates/daily.md` — edit it to customise the
-default journal format (falls back to a built-in stub if the file is missing).
+The template ships as `starters/starter_journal.md` — `--init` copies it to
+`templates/daily.md`. Edit `templates/daily.md` to customise the journal format
+(falls back to a built-in stub if both files are missing).
 
 Journal files are stored at `journal/YYYY/YYYY-MM-DD.md`.
