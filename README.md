@@ -103,15 +103,24 @@ safe to re-run — it will not overwrite existing files.
 
 ```
 ptos/
-├── ptos.py                 # Core CLI engine
+├── ptos.py                 # Core engine
+├── ptos_cli.py             # CLI argument parser and entry point
 ├── ptos_service.py         # Service layer (shared by web UI and CLI)
 ├── ptos_web.py             # Web UI (Flask)
-├── setup_ptos_linux.sh    # Linux setup script
+├── ptos.bat                # Windows wrapper
+├── ptw.bat                 # Windows test wrapper
+├── .version                # Current version SHA (used by update checks)
+├── setup_ptos_linux.sh     # Linux setup script
 ├── setup_ptos_windows.bat  # Windows setup script
 ├── setup_ptos_android.sh   # Android/Termux setup script
 ├── start_ptos_linux.sh     # Linux start script (auto-updates)
 ├── start_ptos_windows.bat  # Windows start script (auto-updates)
 ├── start_ptos_android.sh   # Android/Termux start script (auto-updates)
+├── starters/               # Default configs shipped with the project
+│   ├── starter_config.toml # Default settings (used by --init)
+│   ├── starter_schema.toml # Default record types (used by --init)
+│   ├── starter_queries.toml# Example queries (used by --init)
+│   └── starter_presets.toml# Example presets (used by --init)
 ├── config/
 │   ├── config.toml      # Editor, currency, cycles, dashboard
 │   ├── schema.toml      # Record types, fields, validation
@@ -119,8 +128,11 @@ ptos/
 │   └── presets.toml     # Quick-add shortcuts
 ├── records/
 │   └── 2026.log         # One file per year
-├── exports/             # CSV exports land here
+├── exports/             # CSV exports land here (created on demand)
+├── backups/             # ZIP backups land here (created on demand)
 ├── web_templates/       # HTML templates for web UI
+├── web_static/          # CSS, JS, icons for web UI
+├── images/              # Screenshots for README
 ├── journal/
 │   └── 2026/
 │       └── 2026-03-10.md
@@ -408,6 +420,13 @@ Stored in `backups/` with timestamped names:
 ## Configuration
 
 All configuration lives in `config.toml`. Most settings can be edited via the **Settings** page in the web app.
+
+### Starter configs (`starters/`)
+
+When you run `--init` (or the setup script), PTOS copies default configs from
+`starters/` into `config/`. These starter files ship with the project — edit
+the copies in `config/`, not the originals. If you delete `config/` and re-init,
+the starters are used again.
 
 ### config.toml
 
@@ -1202,7 +1221,7 @@ The built-in template follows an ARRIVE → ENGAGE → RELEASE structure:
 - **ENGAGE** — top 3 tasks, home item, one person to love well, habits, drift checks at 11 / 2 / 5
 - **RELEASE** — end of day: wins, where you drifted, gratitude, one thing to carry forward
 
-The template is embedded in `ptos.py` — it works without a `templates/daily.md`
-file. Place your own `templates/daily.md` to override it.
+The template ships as `templates/daily.md` — edit it to customise the
+default journal format (falls back to a built-in stub if the file is missing).
 
 Journal files are stored at `journal/YYYY/YYYY-MM-DD.md`.
