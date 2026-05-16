@@ -1,0 +1,41 @@
+# --------------------------------------------------
+# PTOS QUERIES
+# --------------------------------------------------
+# Base queries  →  referenced by metrics and dashboards
+# Metrics        →  ratio or avg over base queries
+# Dashboards     →  named list of metrics + base queries
+# Saved queries  →  any filter + time + group/pivot combo
+#
+# Usage:
+#   ptos -q <name>              run a saved query
+#   ptos -q <name> -t last-month   override time window
+#   ptos -q                     list all queries
+# --------------------------------------------------
+
+[expenses_this_month]
+where = "type=expense"
+time  = "this-month"
+sum   = true
+
+[expenses_last_month]
+where = "type=expense"
+time  = "last-month"
+sum   = true
+
+[expenses_by_category]
+where = "type=expense"
+time  = "this-month"
+group = "category"
+
+[monthly_trend]
+where = "type=expense"
+time  = "this-month"
+
+[income_this_month]
+where = "type=income"
+time  = "this-month"
+sum   = true
+
+[balance]
+where = "type=expense or type=income"
+time  = "this-month"

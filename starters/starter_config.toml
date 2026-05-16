@@ -1,0 +1,29 @@
+[user]
+name = "User"
+
+[editor]
+command = "nvim"
+
+[display]
+currency = "₹"
+date_format = "indian"
+
+[cycles]
+# Define billing/reporting cycles as day-of-month they start
+# Example: clinic = 26  means cycle runs 26th → 25th next month
+# Usage:   ptos -t clinic      (current cycle)
+#          ptos -t clinic-1    (previous cycle)
+
+[backup]
+# Folders to include in full backup
+# Note: Keep in sync with Android start script preserved folders in start_ptos_android.sh
+folders = ["records", "config", "templates", "journal", "tasks", "exports", "notes", "scripts"]
+
+# Auto-backup settings
+auto_backup_on_startup = true
+auto_backup_on_shutdown = true
+backup_if_files_changed = true
+
+# Retention settings
+max_full_backups = 10
+max_config_backups = 10

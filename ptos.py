@@ -23,6 +23,7 @@ CONFIG_DIR   = os.path.join(BASE_DIR, "config")
 RECORDS_DIR  = os.path.join(BASE_DIR, "records")
 JOURNAL_DIR  = os.path.join(BASE_DIR, "journal")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
+STARTER_DIR  = os.path.join(BASE_DIR, "starters")
 EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
 BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
 BACKUP_FOLDERS = ["records", "config", "templates"]
@@ -548,7 +549,7 @@ def doctor_check(verbose=False, fix=False, json_output=False):
     if not os.path.exists(config_file):
         errors.append("config/config.toml missing")
         if fix:
-            _write_if_missing(CONFIG_PATH, _STARTER_CONFIG, "config/config.toml")
+            _write_if_missing(CONFIG_PATH, _load_starter("config"), "config/config.toml")
             fixes_applied.append("Created config/config.toml")
     else:
         messages.append(("config/config.toml", "Exists"))
@@ -557,7 +558,7 @@ def doctor_check(verbose=False, fix=False, json_output=False):
     if not os.path.exists(schema_file):
         errors.append("config/schema.toml missing")
         if fix:
-            _write_if_missing(SCHEMA_PATH, _STARTER_SCHEMA, "config/schema.toml")
+            _write_if_missing(SCHEMA_PATH, _load_starter("schema"), "config/schema.toml")
             fixes_applied.append("Created config/schema.toml")
     else:
         messages.append(("config/schema.toml", "Exists"))
@@ -566,7 +567,7 @@ def doctor_check(verbose=False, fix=False, json_output=False):
     if not os.path.exists(queries_file):
         warnings.append("config/queries.toml missing (optional)")
         if fix:
-            _write_if_missing(QUERIES_PATH, _STARTER_QUERIES, "config/queries.toml")
+            _write_if_missing(QUERIES_PATH, _load_starter("queries"), "config/queries.toml")
             fixes_applied.append("Created config/queries.toml")
     else:
         messages.append(("config/queries.toml", "Exists"))
@@ -575,7 +576,7 @@ def doctor_check(verbose=False, fix=False, json_output=False):
     if not os.path.exists(presets_file):
         warnings.append("config/presets.toml missing (optional)")
         if fix:
-            _write_if_missing(PRESETS_PATH, _STARTER_PRESETS, "config/presets.toml")
+            _write_if_missing(PRESETS_PATH, _load_starter("presets"), "config/presets.toml")
             fixes_applied.append("Created config/presets.toml")
     else:
         messages.append(("config/presets.toml", "Exists"))
@@ -613,7 +614,7 @@ def doctor_check(verbose=False, fix=False, json_output=False):
     if not os.path.exists(template_file):
         warnings.append("templates/daily.md missing (optional)")
         if fix:
-            _write_if_missing(template_file, _STARTER_JOURNAL, "templates/daily.md")
+            _write_if_missing(template_file, _load_starter("journal"), "templates/daily.md")
             fixes_applied.append("Created templates/daily.md")
     else:
         messages.append(("templates/daily.md", "Exists"))
@@ -3486,7 +3487,7 @@ def get_today_journal():
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
         else:
-            content = _STARTER_JOURNAL.replace("{{date}}", today_str)
+            content = _load_starter("journal").replace("{{date}}", today_str)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(content)
     return path
@@ -3535,278 +3536,27 @@ def edit_target(target):
 # Init
 # --------------------------------------------------
 
-# --------------------------------------------------
-# Starter file content  (written by --init, no external templates needed)
-# --------------------------------------------------
-
-_STARTER_CONFIG = """[user]
-name = "User"
-
-[editor]
-command = "nvim"
-
-[display]
-currency = "₹"
-date_format = "indian"
-
-[cycles]
-# Define billing/reporting cycles as day-of-month they start
-# Example: clinic = 26  means cycle runs 26th → 25th next month
-# Usage:   ptos -t clinic      (current cycle)
-#          ptos -t clinic-1    (previous cycle)
-
-[backup]
-# Folders to include in full backup
-# Note: Keep in sync with Android start script preserved folders in start_ptos_android.sh
-folders = ["records", "config", "templates", "journal", "tasks", "exports", "notes", "scripts"]
-
-# Auto-backup settings
-auto_backup_on_startup = true
-auto_backup_on_shutdown = true
-backup_if_files_changed = true
-
-# Retention settings
-max_full_backups = 10
-max_config_backups = 10
-"""
-
-_STARTER_QUERIES = """# --------------------------------------------------
-# PTOS QUERIES
-# --------------------------------------------------
-# Base queries  →  referenced by metrics and dashboards
-# Metrics        →  ratio or avg over base queries
-# Dashboards     →  named list of metrics + base queries
-# Saved queries  →  any filter + time + group/pivot combo
-#
-# Usage:
-#   ptos -q <name>              run a saved query
-#   ptos -q <name> -t last-month   override time window
-#   ptos -q                     list all queries
-# --------------------------------------------------
-
-[expenses_this_month]
-where = "type=expense"
-time  = "this-month"
-sum   = true
-
-[expenses_last_month]
-where = "type=expense"
-time  = "last-month"
-sum   = true
-
-[expenses_by_category]
-where = "type=expense"
-time  = "this-month"
-group = "category"
-
-[monthly_trend]
-where = "type=expense"
-time  = "this-month"
-
-[income_this_month]
-where = "type=income"
-time  = "this-month"
-sum   = true
-
-[balance]
-where = "type=expense or type=income"
-time  = "this-month"
-"""
-
-_STARTER_PRESETS = """# --------------------------------------------------
-# PTOS PRESETS
-# --------------------------------------------------
-# Quick-add shortcuts for frequent records.
-# Usage:  ptos -p <name>
-#         ptos -p <name> field=value   (override a field)
-#         ptos -p <name> -d yesterday
-# --------------------------------------------------
-
-[presets.supplies]
-type     = "expense"
-domain   = "work"
-category = "supplies"
-
-[presets.travel]
-type     = "expense"
-domain   = "work"
-category = "travel"
-
-[presets.meals]
-type     = "expense"
-domain   = "work"
-category = "meals"
-
-[presets.utilities]
-type     = "expense"
-domain   = "work"
-category = "utilities"
-"""
-
-_STARTER_SCHEMA = """# --------------------------------------------------
-# PTOS SCHEMA
-# --------------------------------------------------
-#
-# Every type follows the same pattern:
-#
-#   required = ["field1", "field2"]
-#
-#   [type.X.fields.fieldname]
-#   options = ["a", "b", "c"]               # flat list
-#
-#   [type.X.fields.fieldname]               # parent-dependent
-#   parent = "other_field"
-#   options.value1 = ["a", "b"]
-#   options.value2 = ["c", "d"]
-#
-#   [type.X.fields.fieldname]               # reuse shared definition
-#   use = "shared.fieldname"
-#
-#   [type.X.tags.fieldname]                 # tags triggered by field value
-#   options.value1 = ["tag_a", "tag_b"]
-#
-#   [type.X.conditions.fieldname]           # conditionally required field
-#   when = { other_field = "value" }
-#
-# --------------------------------------------------
-
-[types]
-allowed = ["expense", "income", "exercise", "learning"]
-
-# --------------------------------------------------
-# GLOBAL FIELD METADATA
-# --------------------------------------------------
-
-[fields.amount]
-type         = "int"
-dimension    = false
-aggregatable = true
-
-[fields.duration]
-type         = "int"
-dimension    = false
-aggregatable = true
-
-[fields.domain]
-type      = "string"
-dimension = true
-
-[fields.category]
-type      = "string"
-dimension = true
-
-[fields.tag]
-type      = "string"
-dimension = true
-multi     = true
-
-# --------------------------------------------------
-# SHARED FIELD DEFINITIONS
-# --------------------------------------------------
-
-# (add shared fields here and reference with  use = "shared.fieldname")
-
-# ==================================================
-# GLOBAL OPTIONAL FIELDS
-# ==================================================
-# These fields appear on EVERY record type — always optional.
-# Uncomment and customise to enable them.
-# They show in a collapsible "Additional info" panel in the web UI
-# and are prompted after the note in the CLI.
-#
-# [global_fields.person]
-# type    = "string"
-# options = ["alice", "bob"]    # omit for free-text
-#
-# [global_fields.context]
-# type    = "string"
-# options = ["home", "work", "travel"]
-#
-# [global_fields.project]
-# type    = "string"
-# # no options = free-text entry
-
-# ==================================================
-# TYPES  —  add your own below using the pattern above
-# ==================================================
-
-# ----------------------
-# EXPENSE
-# ----------------------
-
-[type.expense]
-required = ["domain", "category", "amount"]
-
-[type.expense.fields.domain]
-options = ["self", "home", "work"]
-
-[type.expense.fields.category]
-parent       = "domain"
-options.self = ["food", "transport", "entertainment", "personal", "medical", "other"]
-options.home = ["grocery", "utilities", "rent", "household", "maintenance", "other"]
-options.work = ["supplies", "travel", "meals", "equipment", "services", "other"]
-
-[type.expense.tags.category]
-options.food      = ["snacks", "coffee", "restaurant", "delivery"]
-options.transport = ["auto", "bus", "metro", "taxi", "fuel"]
-options.grocery   = ["vegetables", "milk", "groceries", "essentials"]
-
-# ----------------------
-# INCOME
-# ----------------------
-
-[type.income]
-required = ["source", "amount"]
-
-[type.income.fields.source]
-options = ["salary", "freelance", "gift", "refund", "sales", "other"]
-
-# ----------------------
-# EXERCISE
-# ----------------------
-
-[type.exercise]
-required = ["activity", "duration"]
-
-[type.exercise.fields.activity]
-options = ["walk", "run", "cycle", "strength", "yoga", "stretch", "sport", "other"]
-
-[type.exercise.tags.activity]
-options.walk = ["morning", "evening"]
-options.run  = ["morning", "evening"]
-options.yoga = ["morning", "evening"]
-
-# ----------------------
-# LEARNING
-# ----------------------
-
-[type.learning]
-required = ["topic", "source", "domain"]
-
-[type.learning.fields.source]
-options = ["book", "course", "video", "podcast", "article", "other"]
-
-[type.learning.fields.domain]
-options = ["self", "work", "other"]
-"""
-
-_STARTER_JOURNAL = """# {{date}}
-
-## Today
-Top 3:
-- [ ] 
-- [ ] 
-- [ ] 
-
-## End of Day
-Wins:
-
-Drifted:
-
-Grateful for:
-
-Tomorrow:
-"""
+def _load_starter(name):
+    """Load starter content from starters/ or templates/ folder.
+    Falls back to a minimal stub if the file is missing."""
+    if name == "journal":
+        base = TEMPLATE_DIR
+        fname = "daily.md"
+    else:
+        base = STARTER_DIR
+        fname = f"starter_{name}.toml"
+    path = os.path.join(base, fname)
+    if os.path.exists(path):
+        with open(path, encoding="utf-8") as f:
+            return f.read()
+    stubs = {
+        "config":  "[user]\nname = \"User\"\n\n[display]\ncurrency = \"₹\"\ndate_format = \"indian\"\n",
+        "schema":  "[types]\nallowed = []\n",
+        "queries": "# no starter queries\n",
+        "presets": "# no starter presets\n",
+        "journal": "# {{date}}\n\n## Today\n\n## End of Day\n",
+    }
+    return stubs.get(name, "")
 
 def _write_if_missing(path, content, label):
     if os.path.exists(path):
@@ -3827,13 +3577,13 @@ def init_ptos():
     for d in [CONFIG_DIR, RECORDS_DIR, JOURNAL_DIR, TEMPLATE_DIR]:
         os.makedirs(d, exist_ok=True)
 
-    _write_if_missing(CONFIG_PATH,  _STARTER_CONFIG,  "config/config.toml")
-    _write_if_missing(SCHEMA_PATH,  _STARTER_SCHEMA,  "config/schema.toml")
-    _write_if_missing(QUERIES_PATH, _STARTER_QUERIES, "config/queries.toml")
-    _write_if_missing(PRESETS_PATH, _STARTER_PRESETS, "config/presets.toml")
+    _write_if_missing(CONFIG_PATH,  _load_starter("config"),  "config/config.toml")
+    _write_if_missing(SCHEMA_PATH,  _load_starter("schema"),  "config/schema.toml")
+    _write_if_missing(QUERIES_PATH, _load_starter("queries"), "config/queries.toml")
+    _write_if_missing(PRESETS_PATH, _load_starter("presets"), "config/presets.toml")
     _write_if_missing(
         os.path.join(TEMPLATE_DIR, "daily.md"),
-        _STARTER_JOURNAL,
+        _load_starter("journal"),
         "templates/daily.md"
     )
 

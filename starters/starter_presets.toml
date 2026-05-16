@@ -1,0 +1,28 @@
+# --------------------------------------------------
+# PTOS PRESETS
+# --------------------------------------------------
+# Quick-add shortcuts for frequent records.
+# Usage:  ptos -p <name>
+#         ptos -p <name> field=value   (override a field)
+#         ptos -p <name> -d yesterday
+# --------------------------------------------------
+
+[presets.supplies]
+type     = "expense"
+domain   = "work"
+category = "supplies"
+
+[presets.travel]
+type     = "expense"
+domain   = "work"
+category = "travel"
+
+[presets.meals]
+type     = "expense"
+domain   = "work"
+category = "meals"
+
+[presets.utilities]
+type     = "expense"
+domain   = "work"
+category = "utilities"
