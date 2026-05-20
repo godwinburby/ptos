@@ -2033,6 +2033,13 @@ def get_today_journal():
     return ptos.get_today_journal()
 
 
+def save_journal(date_str, content):
+    """Save journal content for a given date."""
+    year_dir = os.path.join(JOURNAL_DIR, date_str[:4])
+    os.makedirs(year_dir, exist_ok=True)
+    write_file(os.path.join(year_dir, f"{date_str}.md"), content)
+
+
 def save_as_preset(name, record, note=None):
     """Save a record as a preset."""
     try:
@@ -2071,6 +2078,23 @@ def atomic_write(filepath, content):
     """Write content to file atomically."""
     try:
         return ptos.atomic_write(filepath, content)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def write_toml(filepath, data, resource=None):
+    """Write a dict to a TOML file atomically, with cache invalidation.
+    Wraps ptos.AtomicWrite so callers never need to import ptos directly.
+
+    Args:
+        filepath: Destination path (e.g. svc.QUERIES_PATH).
+        data:     Dict to serialise as TOML.
+        resource: Cache resource name to invalidate on success (e.g. "queries").
+    """
+    import tomli_w
+    try:
+        with ptos.AtomicWrite(filepath, resource) as w:
+            tomli_w.dump(data, w.stream)
     except Exception as e:
         raise PTOSError(str(e))
 
