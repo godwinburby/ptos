@@ -2908,7 +2908,7 @@ def add_field_option(type_name, field_name, new_option, option_source,
                     parent_field="", parent_value="", shared_key=""):
     """Add a new option to schema.toml and save."""
     schema = get_schema()
-    new_opt = new_option.strip()
+    new_opt = new_option.strip().replace(" ", "_")
     if not new_opt:
         return {"success": False, "error": "Empty option"}
     
@@ -2974,7 +2974,7 @@ def add_field_option(type_name, field_name, new_option, option_source,
 def add_global_field_option(field_name, new_option):
     """Add a new option to a global field in schema.toml."""
     schema = get_schema()
-    new_opt = new_option.strip()
+    new_opt = new_option.strip().replace(" ", "_")
     if not new_opt:
         return {"success": False, "error": "Empty option"}
     
