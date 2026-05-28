@@ -1613,7 +1613,8 @@ def increment_preset_use(name):
 
 def get_frequent_presets(n=6):
     """Return top N single presets sorted by use_count descending.
-    Alphabetical tiebreak. Multi-record and alias presets excluded.
+    Remaining presets sorted alphabetically for fast scanning.
+    Multi-record and alias presets excluded.
     Returns (frequent, remaining) tuple for home page display."""
     presets = ptos.get_presets()
     singles = {
@@ -1626,7 +1627,7 @@ def get_frequent_presets(n=6):
         singles.keys(),
         key=lambda k: (-singles[k].get("use_count", 0), k)
     )
-    return ranked[:n], ranked[n:]
+    return ranked[:n], sorted(ranked[n:])
 
 
 def restore_config(zip_path):
