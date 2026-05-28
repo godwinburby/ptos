@@ -225,6 +225,7 @@ appear automatically. Features:
 - Tag checkboxes plus a custom tags field
 - Preset loading — pick a preset from a dropdown to pre-fill the form
 - Save as Preset — fill the form, click Save as Preset, name it, done
+- Frequent presets — most-used presets shown at the top with a "show all" toggle
 - Multi-record presets — add a group of related records in one tap
 - History-based defaults — most common values for option fields are pre-selected
 - Cascade suggestions — picking a field value (e.g. `source=mgm`) suggests the
@@ -296,7 +297,7 @@ Visual builder for creating queries, metrics, and dashboards. Features:
 - **Live records preview** (auto-updates as you build)
 - Advanced WHERE mode for raw expression editing
 - Custom time window with month picker
-- **Dashboard editor** for managing dashboard metrics
+- **Dashboard editor** for managing dashboard metrics (drag-and-drop reorder items)
 - Save as Query or Metric
 
 ### Settings
@@ -355,6 +356,7 @@ Navigate to the **Schema Builder** tab in the web app to:
 - Define required and optional fields per type
 - Set field types (text, int, options)
 - Configure conditional fields and tags
+- Drag-and-drop reorder field options, shared options, and chips
 
 No need to edit `schema.toml` directly for most changes.
 
@@ -832,7 +834,7 @@ ptos --edit d        # today's journal
 
 | Flag | Short | Description |
 |------|-------|-------------|
-| `--group field [field ...]` | `-G` | Group by one or more fields. Counts records; sums numeric fields when present |
+| `--group field [field ...]` | `-G` | Group by one or more fields. Virtual fields: `day` (YYYY-MM-DD), `month` (YYYY-MM), `year` |
 | `--group ?` | | Discover available group fields for current results |
 | `--pivot ROW COL` | `-v` | Pivot table |
 | `--pivot ?` | | Discover available pivot fields |
@@ -1174,6 +1176,12 @@ ptos --type expense --group domain category
 
 # Group expenses by month over the year
 ptos --type expense --time this-year --group month
+
+# Group expenses by day for this month
+ptos --type expense --time this-month --group day
+
+# Group by year (multi-year data)
+ptos --type expense --time all --group year
 
 # Pivot: domain vs category
 ptos --type expense --pivot domain category --count
