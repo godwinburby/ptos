@@ -2272,7 +2272,8 @@ def group_results(results, fields, sum_field=None):
         d, kv, _ = parse_line(line)
         key_parts = []
         for field in fields:
-            if field == "month": key_parts.append(d.strftime("%Y-%m"))
+            if field == "day": key_parts.append(d.strftime("%Y-%m-%d"))
+            elif field == "month": key_parts.append(d.strftime("%Y-%m"))
             elif field == "year": key_parts.append(str(d.year))
             else: key_parts.append(str(kv.get(field, "-")))
         key    = tuple(key_parts)
