@@ -206,8 +206,7 @@ function runQuery() {
     const data = d.data;
     if (!data) { area.innerHTML = errorCard("No data"); return; }
     if (data.kind === "records") {
-      area.innerHTML = "";
-      if (_rt) _rt.render(data);
+      renderRecords(data);
     } else {
       area.innerHTML = renderResult(data);
     }
@@ -274,12 +273,14 @@ function renderDashboard(d) {
       <div class="stat-sub">${d.time_label||""}</div>
     </div>`).join("");
   return `<div class="card"><div class="card-title">Dashboard · ${d.name}</div>
+    ${exprBadge(d)}
     <div class="stat-grid">${items}</div></div>`;
 }
 
 function renderMetric(d) {
   return `<div class="card">
     <div class="card-title">Metric</div>
+    ${exprBadge(d)}
     <div style="font-size:28px;font-weight:800;color:var(--accent);">${d.value}</div>
     <div style="font-size:13px;color:var(--sub);margin-top:4px;">${d.name.replace(/_/g," ")}</div>
   </div>`;
@@ -351,6 +352,13 @@ function renderRecords(d) {
   var area = document.getElementById("result-area");
   if (area) area.innerHTML = "";
   if (_rt) _rt.render(d);
+  // inject query badge above the table (RecordTable clears innerHTML)
+  var badge = exprBadge(d);
+  if (badge.trim() && area && area.firstChild) {
+    var wrap = document.createElement("div");
+    wrap.innerHTML = badge;
+    area.insertBefore(wrap, area.firstChild);
+  }
   return "";
 }
 
