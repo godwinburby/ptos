@@ -25,6 +25,16 @@ class TestGroupResults:
         assert sums == {}
         assert has_amount is False
 
+    def test_group_by_day(self, monkeypatch):
+        monkeypatch.setattr(ptos, "numeric_fields", lambda: ["amount"])
+        results = [
+            "2026-01-15 type=expense amount=50",
+            "2026-01-16 type=expense amount=30",
+        ]
+        counts, sums, has_amount = ptos.group_results(results, ["day"])
+        assert counts == {("2026-01-15",): 1, ("2026-01-16",): 1}
+        assert sums == {("2026-01-15",): 50, ("2026-01-16",): 30}
+
     def test_group_by_month(self, monkeypatch):
         monkeypatch.setattr(ptos, "numeric_fields", lambda: ["amount"])
         results = [
