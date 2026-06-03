@@ -17,6 +17,29 @@ from flask import (Flask, render_template, request, redirect,
 app = Flask(__name__, template_folder="web_templates", static_folder="web_static", static_url_path="/static")
 app.secret_key = "ptos-local-only"
 
+from functools import wraps
+from flask import request, Response
+
+def _check_auth(username, password):
+    try:
+        cfg = svc.get_config()
+        auth = cfg.get("auth", {})
+        return username == auth.get("username", "") and password == auth.get("password", "")
+    except:
+        return False
+
+@app.before_request
+def require_auth():
+    if request.path.startswith("/static/"):
+        return None
+    auth = request.authorization
+    if not auth or not _check_auth(auth.username, auth.password):
+        return Response(
+            'PTOS — Access denied',
+            401,
+            {'WWW-Authenticate': 'Basic realm="PTOS"'}
+        )
+
 _TIME_OPTIONS_BASE = [
     ("Today","td"),("Yesterday","yd"),("This week","tw"),("Last week","lw"),
     ("This month","tm"),("Last month","lm"),("This quarter","tq"),
