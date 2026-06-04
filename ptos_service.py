@@ -1182,10 +1182,10 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
                 value = str(cnt)
                 if total > 0:
                     value += f"  ({ptos.fmt(total)})"
-                items.append({"name": _disp(item_name), "value": value, "raw": cnt,
+                items.append({"name": _disp(item_name), "raw_name": item_name, "value": value, "raw": cnt,
                                "kind": "query", "item_time": item_time, "item_period": item_period})
             except Exception as e:
-                items.append({"name": _disp(item_name), "value": f"error: {e}", "raw": None,
+                items.append({"name": _disp(item_name), "raw_name": item_name, "value": f"error: {e}", "raw": None,
                                "kind": "query", "item_time": item_time, "item_period": item_period})
         else:
             items.append({"name": _disp(item_name), "value": "not found", "raw": None,
