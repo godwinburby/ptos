@@ -56,6 +56,9 @@ No database. No cloud. You own the data completely.
 - [Validation](#validation)
 - [Journal (CLI)](#journal-cli)
 
+### Deployment
+- [Server deployment (PythonAnywhere)](#server-deployment)
+
 ---
 
 ## What it is
@@ -84,18 +87,81 @@ The web app is the primary interface. The CLI is the engine underneath — avail
 
 ## Installation & Setup Scripts
 
-Download all files from the repository, then run the setup script for your platform:
+**You only need to download the setup file(s) for your platform — they download
+PTOS from GitHub, install dependencies, and create all config files automatically.**
 
-| Platform | Setup | Start |
-|----------|-------|-------|
-| Linux / macOS | `bash setup_ptos_linux.sh` | `bash start_ptos_linux.sh` |
-| Windows | `setup_ptos_windows.bat` | `start_ptos_windows.bat` |
-| Android/Termux | `bash setup_ptos_android.sh` | `bash start_ptos_android.sh` |
+### Windows
 
-The start script automatically checks for updates from GitHub and starts the server.
+Windows needs two files — download both into the same folder:
 
-The setup script creates all folders and config files. `--init` (CLI equivalent) is
-safe to re-run — it will not overwrite existing files.
+- [`setup_ptos_windows.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat)
+- [`setup_ptos_windows.py`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.py)
+
+Then double-click `setup_ptos_windows.bat` to run.
+
+Or from PowerShell (downloads both automatically):
+```powershell
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.py
+setup_ptos_windows.bat
+```
+
+The `.bat` file's only job is to find Python on your system and hand off to
+`setup_ptos_windows.py`, which does all the real work. Both files must be in
+the same folder. Git is required on Windows — install from
+[git-scm.com](https://git-scm.com/download/win) or run `winget install Git.Git`.
+
+### Linux / macOS
+
+Single file — one script handles everything:
+
+```bash
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_linux.sh
+bash setup_ptos_linux.sh
+```
+
+### Android / Termux
+
+Single file — one script handles everything:
+
+```bash
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_android.sh
+bash setup_ptos_android.sh
+```
+
+### What the setup script does
+
+1. Checks Python version (3.11+ required)
+2. Clones PTOS from GitHub via `git clone` (Windows requires git; Linux/Android falls back to `curl` if git is unavailable)
+3. Installs Flask and tomli-w via pip
+4. Runs `ptos --init` to create `config/`, `records/`, `journal/` and starter config files
+5. Asks for your name and sets it in `config.toml`
+6. Starts the web server and opens the browser
+
+Safe to re-run — setup skips steps that are already done.
+
+### Starting PTOS after setup
+
+Use the start script — it checks for updates on every launch:
+
+| Platform | Start command |
+|----------|--------------|
+| Windows | `start_ptos_windows.bat` |
+| Linux / macOS | `bash start_ptos_linux.sh` |
+| Android/Termux | `bash start_ptos_android.sh` |
+
+### Alternative — git clone directly
+
+If you already have git and prefer to manage things yourself:
+
+```bash
+git clone https://github.com/godwinburby/ptos.git
+cd ptos
+python ptos.py --init     # create config/ and starter files
+python ptos_web.py        # start the web server
+```
+
+`--init` is safe to re-run — it will never overwrite existing config files.
 
 ---
 
@@ -110,12 +176,13 @@ ptos/
 ├── ptos.bat                # Windows wrapper
 ├── ptw.bat                 # Windows test wrapper
 ├── .version                # Current version SHA (used by update checks)
-├── setup_ptos_linux.sh     # Linux setup script
-├── setup_ptos_windows.bat  # Windows setup script
-├── setup_ptos_android.sh   # Android/Termux setup script
-├── start_ptos_linux.sh     # Linux start script (auto-updates)
-├── start_ptos_windows.bat  # Windows start script (auto-updates)
-├── start_ptos_android.sh   # Android/Termux start script (auto-updates)
+├── setup_ptos_linux.sh     # Linux/macOS setup (single file)
+├── setup_ptos_android.sh   # Android/Termux setup (single file)
+├── setup_ptos_windows.bat  # Windows setup — finds Python, calls setup_ptos_windows.py
+├── setup_ptos_windows.py   # Windows setup — does the actual work (git, pip, init)
+├── start_ptos_linux.sh     # Linux start script (checks for updates, starts server)
+├── start_ptos_windows.bat  # Windows start script (checks for updates, starts server)
+├── start_ptos_android.sh   # Android/Termux start script (checks for updates, starts server)
 ├── starters/               # Default configs shipped with the project
 │   ├── starter_config.toml # Default settings (used by --init)
 │   ├── starter_schema.toml # Default record types (used by --init)
@@ -229,7 +296,11 @@ appear automatically. Features:
 - Multi-record presets — add a group of related records in one tap
 - History-based defaults — most common values for option fields are pre-selected
 - Cascade suggestions — picking a field value (e.g. `source=mgm`) suggests the
-  most common co-occurring values for related fields
+  most common co-occurring values for related fields. Purely history-driven — no
+  config needed. PTOS scans past records of the same type that share the chosen
+  value and pre-selects the most frequent value for every other option field.
+- Log Editor inline validation — the editor highlights parse errors as you type
+  without needing to save first
 
 <img src="images/ptos_presets.png" width="260" alt="Add Record screen showing preset chips and record type tiles"> <img src="images/ptos_add_record.png" width="260" alt="Add Record form with domain, category, amount fields and tag chips">
 
@@ -451,10 +522,18 @@ billing_cycle = 26           # billing cycle day (1-31)
 default = "monthly"          # default dashboard shown on web UI home page
 
 [backup]
-auto_on_startup = true      # auto backup when server starts
-auto_on_shutdown = true    # auto backup when server stops
-only_if_changed = true      # skip backup if files unchanged
-max_backups = 10           # keep last N backups
+auto_backup_on_startup  = true   # auto backup when web server starts
+auto_backup_on_shutdown = true   # auto backup when web server stops
+backup_if_files_changed = true   # skip backup if files unchanged since last backup
+max_backups             = 10     # keep last N full backups
+max_config_backups      = 10     # keep last N config-only backups
+folders = ["records", "config", "templates", "journal", "notes"]
+
+# Optional — HTTP Basic Auth for server deployments (e.g. PythonAnywhere)
+# Without this anyone who knows the URL can access your data.
+[auth]
+username = "yourname"
+password = "yourpassword"
 ```
 
 ### PTOS_HOME environment variable
@@ -813,6 +892,7 @@ ptos --edit d        # today's journal
 | `--date DATE` | `-d` | Date for the record. Accepts `YYYY-MM-DD`, `today`, `yesterday` (default: today) |
 | `--preset [name] [field=value ...]` | `-p` | Quick-add from preset. Override fields inline |
 | `--save-preset NAME` | | Save the record being added as a preset under this name |
+| `--delete-preset NAME` | | Delete a preset by name from `presets.toml` |
 
 ### Query
 
@@ -826,7 +906,19 @@ ptos --edit d        # today's journal
 | `--type TYPE` | `-y` | Filter by record type |
 | `--tag TAG` | `-g` | Filter by tag (repeatable: `--tag auto --tag bus`) |
 | `--search text` | `-S` | Full-text search |
-| `--save NAME` | | Save current query filters and analysis to queries.toml |
+| `--save NAME` | | Save current query filters and analysis to `queries.toml` under that name |
+
+```bash
+# Save a query for reuse
+ptos --where type=expense --group category --time tm --save monthly_by_cat
+ptos --query monthly_by_cat                    # run it any time after
+ptos --query monthly_by_cat --time last-month  # override time at run time
+
+# Custom date ranges
+ptos --where type=expense --from 2026-01-01 --to 2026-03-31
+ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --table
+ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --export q1_spend
+```
 | `--file FILENAME` | | Read from a specific file in `records/` (e.g. `2025.log`) |
 | `--select field ...` | | Show only specified fields. Date, type always included; add `note` to include notes |
 
@@ -891,12 +983,71 @@ ptos -y test -t td --delete --all
 | `--lint` | `-l` | Lint all records against schema |
 | `--lint --fix` | | Open each log file that has errors in the editor after linting |
 | `--journal` | `-j` | Open today's journal (creates from template if new) |
-| `--edit [TARGET]` | `-e` | Edit a workspace file — `r s q c p d/j x` |
+| `--edit [TARGET]` | `-e` | Edit a workspace file (see targets below) |
 | `--init` | | Initialise workspace (safe to re-run — will not overwrite existing files) |
 | `--backup-full` | | Create full backup (records/, config/, templates/, backups/) |
 | `--backup-config` | | Create config-only backup (schema, queries, presets, config) |
+| `--restore-full [PATH]` | | Restore from full backup. Shows interactive list if no path given |
+| `--restore-config [PATH]` | | Restore from config-only backup. Shows interactive list if no path given |
+| `--list-backups` | | List all available backups in `backups/` |
+| `--delete-preset NAME` | | Delete a preset by name from `presets.toml` |
+| `--set-name NAME` | | Set user name in `config.toml` |
+| `--set-date-format FORMAT` | | Set date display format: `indian` `us` `eu` `readable` `iso` or custom strftime |
 | `--doctor` | | Check PTOS installation health |
 | `--doctor --fix` | | Auto-fix issues found by --doctor |
+
+### `--edit` targets
+
+| Target | File opened |
+|--------|-------------|
+| `r` | This year's records log (`records/YYYY.log`) |
+| `s` | `config/schema.toml` |
+| `q` | `config/queries.toml` |
+| `c` | `config/config.toml` |
+| `p` | `config/presets.toml` |
+| `d` or `j` | Today's journal |
+| `x` | `exports/` folder |
+
+```bash
+ptos --edit s        # open schema.toml
+ptos --edit q        # open queries.toml
+ptos --edit c        # open config.toml
+ptos --edit p        # open presets.toml
+ptos --edit r        # open this year's records log
+ptos --edit d        # open today's journal
+```
+
+### Config shortcuts
+
+```bash
+ptos --set-name "Godwin"                   # update name in config.toml
+ptos --set-date-format indian              # DD-Mon-YYYY e.g. 02-Jun-2026
+ptos --set-date-format us                  # MM/DD/YYYY
+ptos --set-date-format iso                 # YYYY-MM-DD
+ptos --set-date-format "%d %B %Y"         # custom strftime: 02 June 2026
+```
+
+### Backup and restore
+
+```bash
+ptos --backup-full                         # create full backup
+ptos --backup-config                       # create config-only backup
+ptos --list-backups                        # list all backups
+ptos --restore-full                        # interactive list to pick from
+ptos --restore-full backups/ptos-backup-full-20260602_100000.zip
+ptos --restore-config                      # interactive list to pick from
+```
+
+### Query saving
+
+```bash
+# Run a query and save it for reuse
+ptos --where type=expense --group category --time tm --save monthly_by_cat
+
+# Custom date range
+ptos --where type=expense --from 2026-01-01 --to 2026-03-31
+ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --table
+```
 
 ---
 
@@ -957,7 +1108,18 @@ ptos --where type=expense tag=restaurant         # tag match
 ptos --where "type=sale product~comfort"         # field contains (case-insensitive)
 ```
 
-**Operators:** `=` `!=` `>` `<` `>=` `<=` `~` (contains) `!~` (not contains)
+**Operators:**
+
+| Operator | Meaning | Example |
+|----------|---------|---------|
+| `=` | equals | `type=expense` |
+| `!=` | not equal | `domain!=work` |
+| `>` | greater than | `amount>500` |
+| `<` | less than | `amount<100` |
+| `>=` | greater than or equal | `amount>=1000` |
+| `<=` | less than or equal | `duration<=30` |
+| `~` | contains (case-insensitive) | `product~comfort` |
+| `!~` | does not contain | `note!~draft` |
 
 **OR values** — use `|` to match any of several values on `=` and `!=`:
 
@@ -1228,3 +1390,52 @@ The template ships as `starters/starter_journal.md` — `--init` copies it to
 (falls back to a built-in stub if both files are missing).
 
 Journal files are stored at `journal/YYYY/YYYY-MM-DD.md`.
+
+---
+
+## Server deployment
+
+PTOS web can be deployed to a server (e.g. PythonAnywhere) for access from any
+browser — phone, work PC, or tablet — without running Termux.
+
+### Password protection
+
+PTOS has built-in HTTP Basic Auth. Add an `[auth]` block to `config.toml` —
+no code changes needed:
+
+```toml
+[auth]
+username = "yourname"
+password = "yourpassword"
+```
+
+All routes are protected automatically. Without this block, the app is open to
+anyone who knows the URL — always set it before deploying to a public server.
+
+### PythonAnywhere (free tier)
+
+1. Clone PTOS into your home directory via the Bash console:
+   ```bash
+   git clone git@github.com:godwinburby/ptos.git
+   ```
+2. Copy your `config/config.toml` and `records/` into the cloned folder
+3. Create a **Manual configuration** web app (Python 3.11+)
+4. Edit the WSGI file:
+
+```python
+import sys, os
+project_home = '/home/yourusername'
+if project_home not in sys.path:
+    sys.path.insert(0, project_home)
+os.environ['PTOS_HOME'] = '/home/yourusername/ptos'
+os.chdir('/home/yourusername/ptos')
+from ptos_web import app as application
+```
+
+5. Add static files mapping: URL `/static/` → `/home/yourusername/ptos/web_static/`
+6. Install Flask: `pip install flask --user`
+7. Hit **Reload**
+
+The `PTOS_HOME` environment variable tells PTOS where its data lives regardless
+of where the WSGI process runs from. Free tier requires a manual renewal click
+every 3 months — PythonAnywhere sends an email reminder.
