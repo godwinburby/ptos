@@ -1006,7 +1006,7 @@ ptos -y test -t td --delete --all
 | `c` | `config/config.toml` |
 | `p` | `config/presets.toml` |
 | `d` or `j` | Today's journal |
-| `x` | `exports/` folder |
+| `x` | `ptos.py` itself (the engine script) |
 
 ```bash
 ptos --edit s        # open schema.toml
