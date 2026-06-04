@@ -405,8 +405,11 @@ def home():
                     "sub":   item.get("sub", sub),
                     "kind":  kind,
                 }
+                raw_name = item.get("raw_name", item["name"])
                 if kind == "query":
-                    stat["query_url"] = f"/queries?run={item['name']}"
+                    stat["query_url"] = f"/queries?run={raw_name}"
+                elif kind == "metric":
+                    stat["query_url"] = f"/queries?run={raw_name}"
                 stats.append(stat)
     except Exception:
         pass
