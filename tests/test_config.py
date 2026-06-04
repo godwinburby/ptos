@@ -176,6 +176,69 @@ class TestVersion:
         ptos.save_current_version("def456")
         assert (tmp_path / ".version").read_text().strip() == "def456"
 
+    def test_init_version_skips_if_exists(self, tmp_path, monkeypatch):
+        ver_file = tmp_path / ".version"
+        ver_file.write_text("existing")
+        monkeypatch.setattr(ptos, "VERSION_FILE", str(ver_file))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        ptos.init_version()
+        assert ver_file.read_text().strip() == "existing"
+
+    def test_init_version_uses_git(self, tmp_path, monkeypatch):
+        ver_file = tmp_path / ".version"
+        monkeypatch.setattr(ptos, "VERSION_FILE", str(ver_file))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        (tmp_path / ".git").mkdir()
+        import subprocess
+        orig = subprocess.run
+        def fake_run(*a, **kw):
+            class Res:
+                returncode = 0
+                stdout = "deadbeef\n"
+                stderr = ""
+            return Res()
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        ptos.init_version()
+        assert ver_file.read_text().strip() == "deadbeef"
+
+    def test_init_version_uses_github_fallback(self, tmp_path, monkeypatch):
+        ver_file = tmp_path / ".version"
+        monkeypatch.setattr(ptos, "VERSION_FILE", str(ver_file))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        class FakeResponse:
+            def read(self): return b'{"sha": "fromapi"}'
+            def __enter__(self): return self
+            def __exit__(self, *a): pass
+            def __iter__(self): return iter([b'{"sha": "fromapi"}'])
+        import urllib.request
+        monkeypatch.setattr(urllib.request, "urlopen", lambda *a, **kw: FakeResponse())
+        ptos.init_version()
+        assert ver_file.read_text().strip() == "fromapi"
+
+
+class TestResolveEditor:
+    def test_config_takes_priority(self, monkeypatch):
+        monkeypatch.setattr(ptos, "get_config", lambda: {"editor": {"command": "nvim"}})
+        monkeypatch.delenv("EDITOR", raising=False)
+        assert ptos.resolve_editor() == ["nvim"]
+
+    def test_env_var_when_no_config(self, monkeypatch):
+        monkeypatch.setattr(ptos, "get_config", lambda: {})
+        monkeypatch.setenv("EDITOR", "code --wait")
+        assert ptos.resolve_editor() == ["code", "--wait"]
+
+    def test_fallback_notepad_on_windows(self, monkeypatch):
+        monkeypatch.setattr(ptos, "get_config", lambda: {})
+        monkeypatch.delenv("EDITOR", raising=False)
+        monkeypatch.setattr(os, "name", "nt")
+        assert ptos.resolve_editor() == ["notepad"]
+
+    def test_fallback_nvim_on_unix(self, monkeypatch):
+        monkeypatch.setattr(ptos, "get_config", lambda: {})
+        monkeypatch.delenv("EDITOR", raising=False)
+        monkeypatch.setattr(os, "name", "posix")
+        assert ptos.resolve_editor() == ["nvim"]
+
 
 class TestCurrency:
     def test_currency_from_config(self, cfg):
