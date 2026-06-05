@@ -1284,6 +1284,16 @@ def parse_date(s):
     return dt.date.fromisoformat(s)
 
 
+def parse_from_to(s):
+    """Parse a --from/--to argument into a date object.
+    Accepts YYYY-MM-DD or YYYY-MM (1st of that month)."""
+    if s is None:
+        return None
+    if re.fullmatch(r"\d{4}-\d{2}", s):
+        return dt.date(*map(int, s.split("-")), 1)
+    return dt.date.fromisoformat(s)
+
+
 def month_range(year, month):
     """Return (start_date, end_date) inclusive bounds for a given month.
     Handles December correctly by wrapping to the next year."""
