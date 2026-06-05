@@ -2137,7 +2137,7 @@ def validate_schema_structure(schema):
       - conditions reference existing fields
     """
     issues = []
-    valid_field_types = {"int", "string", "datetime"}
+    valid_field_types = {"int", "string", "datetime", "bool"}
 
     # --- [types] section ---
     if "types" not in schema or not isinstance(schema.get("types"), dict):
