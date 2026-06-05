@@ -99,7 +99,7 @@ fields appear automatically. Use a preset to pre-fill common entries with one ta
 The form remembers your past choices and suggests your most-used values.
 
 **Queries** — run saved reports in one click. Pick a report, choose a time window
-(this month, last month, a specific month, etc.), and results appear instantly.
+(this month, last month, a specific month / year / date, etc.), and results appear instantly.
 No typing, no commands.
 
 **Browse** — filter and explore records. Pick a type, set filters, group or sort
