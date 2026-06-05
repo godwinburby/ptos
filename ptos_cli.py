@@ -131,7 +131,7 @@ def build_parser(cycles):
     qry = p.add_argument_group("Query")
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
     qry.add_argument("-w", "--where",  nargs="+", action="append",  help="Filter expressions — operators: = != > < >= <= ~(contains) !~(not contains)\n  Simple: --where type=expense --where amount>100\n  Expression: --where \"(category=home OR category=household) AND amount>100\"")
-    qry.add_argument("-t", "--time",   default="this-month",        help="Time window — full or short: td yd tw lw tm lm tq lq ty ly YYYY-MM, or custom cycles from config.toml")
+    qry.add_argument("-t", "--time",   default="this-month",        help="Time window — full or short: td yd tw lw tm lm tq lq ty ly YYYY YYYY-MM, or custom cycles from config.toml")
     qry.add_argument("-f", "--from",   dest="date_from",            help="Start date YYYY-MM-DD")
     qry.add_argument("-T", "--to",     dest="date_to",              help="End date YYYY-MM-DD")
     qry.add_argument("-y", "--type",                                help="Filter by record type")
