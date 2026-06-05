@@ -223,3 +223,69 @@ class TestAddTagsToSchema:
         ptos.add_tags_to_schema("", "expense", {"type": "expense", "category": "food"}, ["dining"])
         out = capsys.readouterr().out
         assert "permission denied" in out
+
+
+class TestValidateSchemaStructure:
+    """Tests for ptos.validate_schema_structure()."""
+
+    def test_valid_schema(self):
+        schema = {
+            "types": {"allowed": ["expense", "income"]},
+            "fields": {"amount": {"type": "int"}},
+            "global_fields": {"project": {"type": "string"}},
+            "shared": {"payment_method": {"type": "string", "options": ["cash", "card"]}},
+            "type": {
+                "expense": {
+                    "required": ["amount", "category"],
+                    "fields": {
+                        "category": {"options": ["food", "transport"]},
+                        "vendor": {"parent": "category", "options": {"food": ["a"], "transport": ["b"]}},
+                    }
+                },
+                "income": {
+                    "required": ["amount"],
+                    "fields": {
+                        "source": {"use": "shared.payment_method"},
+                        "notes": {"type": "string"},
+                    }
+                }
+            }
+        }
+        assert ptos.validate_schema_structure(schema) == []
+
+    def test_missing_types_section(self):
+        assert ptos.validate_schema_structure({}) != []
+
+    def test_type_with_no_section(self):
+        schema = {"types": {"allowed": ["ghost"]}, "type": {}}
+        issues = ptos.validate_schema_structure(schema)
+        assert any("ghost" in i and "no [type.ghost]" in i for i in issues)
+
+    def test_unknown_field_type(self):
+        schema = {"types": {"allowed": ["t"]}, "type": {"t": {"fields": {"x": {"type": "bool"}}}}}
+        issues = ptos.validate_schema_structure(schema)
+        assert any("bool" in i for i in issues)
+
+    def test_missing_required_field_def(self):
+        schema = {"types": {"allowed": ["t"]}, "type": {"t": {"required": ["missing"], "fields": {}}}}
+        issues = ptos.validate_schema_structure(schema)
+        assert any("required" in i and "missing" in i for i in issues)
+
+    def test_bad_parent_ref(self):
+        schema = {"types": {"allowed": ["t"]}, "type": {"t": {"fields": {"x": {"parent": "nope"}}}}}
+        issues = ptos.validate_schema_structure(schema)
+        assert any("parent" in i and "nope" in i for i in issues)
+
+    def test_bad_use_ref(self):
+        schema = {"types": {"allowed": ["t"]},
+                  "type": {"t": {"fields": {"x": {"use": "shared.nonexistent"}}}},
+                  "shared": {}}
+        issues = ptos.validate_schema_structure(schema)
+        assert any("nonexistent" in i for i in issues)
+
+    def test_use_without_dot(self):
+        schema = {"types": {"allowed": ["t"]},
+                  "type": {"t": {"fields": {"x": {"use": "badformat"}}}},
+                  "shared": {}}
+        issues = ptos.validate_schema_structure(schema)
+        assert any("badformat" in i and "expected format" in i for i in issues)
