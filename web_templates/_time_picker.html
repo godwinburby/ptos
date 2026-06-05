@@ -1,0 +1,44 @@
+<div id="{{ prefix }}custom-block" class="field-group" style="display:none;flex-wrap:wrap;gap:10px;align-items:end;">
+  <div class="field-group" style="flex:1;min-width:120px;margin-bottom:0;">
+    <label>Month</label>
+    <button id="{{ prefix }}month-picker-btn" type="button"
+            style="display:flex;align-items:center;justify-content:space-between;
+                   width:100%;padding:9px 12px;border-radius:6px;border:1px solid var(--border);
+                   background:var(--bg);color:var(--text);font-size:14px;font-weight:500;
+                   cursor:pointer;">
+      <span id="{{ prefix }}month-text">Pick a month</span>
+      <span style="font-size:10px;color:var(--sub);">▼</span>
+    </button>
+  </div>
+  <div class="field-group" style="flex:1;min-width:80px;margin-bottom:0;">
+    <label>Year</label>
+    <input id="{{ prefix }}year-input" type="number" placeholder="YYYY"
+           min="{{ year_range[0] }}" max="{{ year_range[-1] }}"
+           style="width:100%;padding:9px 12px;border-radius:6px;border:1px solid var(--border);
+                  background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;">
+  </div>
+  <div class="field-group" style="flex:1;min-width:140px;margin-bottom:0;">
+    <label>Day</label>
+    <input id="{{ prefix }}day-input" type="date"
+           style="width:100%;padding:9px 12px;border-radius:6px;border:1px solid var(--border);
+                  background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;">
+  </div>
+</div>
+
+<div id="{{ prefix }}month-picker-popup"
+     style="display:none;position:fixed;z-index:600;
+            background:var(--card);border:1px solid var(--border);
+            border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);
+            padding:16px;width:252px;">
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
+    <button type="button" data-tp-prev
+            style="background:none;border:none;font-size:20px;color:var(--text);
+                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&lt;</button>
+    <span id="{{ prefix }}picker-year" style="font-weight:700;font-size:15px;color:var(--text);"></span>
+    <button type="button" data-tp-next
+            style="background:none;border:none;font-size:20px;color:var(--text);
+                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&gt;</button>
+  </div>
+  <div id="{{ prefix }}picker-grid"
+       style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
+</div>

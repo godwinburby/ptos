@@ -21,163 +21,62 @@
   </div>
     <div class="field-group">
     <label>Time Override</label>
-    <select id="q-time" onchange="onQTimeChange(this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
+    <select id="q-time-select" onchange="onQTimeChange(this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
       <option value="">(query default)</option>
       {% for label, code in time_options %}
       <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
       {% endfor %}
     </select>
   </div>
-  <!-- month picker on its own row for mobile -->
-  <div id="q-custom-time" class="field-group" style="display:none;">
-    <label>Custom Month</label>
-    <button id="q-month-picker-btn" onclick="qTogglePicker(event)"
-            style="display:flex;align-items:center;justify-content:space-between;
-                   padding:9px 12px;border-radius:6px;border:1px solid var(--border);
-                   background:var(--bg);color:var(--text);font-size:14px;font-weight:500;
-                   cursor:pointer;min-width:140px;">
-      <span id="q-month-text">{% if custom_time and custom_time|length >= 7 %}{{ custom_time[:7] }}{% else %}Pick a month{% endif %}</span>
-      <span style="font-size:10px;color:var(--sub);">▼</span>
-    </button>
-  </div>
+  {% with prefix="q-" %}
+  {% include "_time_picker.html" %}
+  {% endwith %}
   <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
     <button class="btn btn-ghost btn-sm" onclick="clearOut()">✕ Clear</button>
     <a id="builder-link" href="/query-builder" class="btn btn-ghost btn-sm">Query Builder</a>
   </div>
 </div>
 
-<!-- queries month picker popup -->
-<div id="q-month-picker-popup"
-     style="display:none;position:fixed;z-index:600;
-            background:var(--card);border:1px solid var(--border);
-            border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);
-            padding:16px;width:252px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-    <button onclick="qShiftYear(-1)"
-            style="background:none;border:none;font-size:20px;color:var(--text);
-                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&lt;</button>
-    <span id="q-picker-year" style="font-weight:700;font-size:15px;color:var(--text);"></span>
-    <button onclick="qShiftYear(1)"
-            style="background:none;border:none;font-size:20px;color:var(--text);
-                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&gt;</button>
-  </div>
-  <div id="q-picker-grid"
-       style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
-</div>
 
 <!-- Delete modal injected by RecordTable -->
 
 <div id="result-area"></div>
 
 <script src="/static/js/record_table.js"></script>
+<script src="/static/js/time_picker.js"></script>
 <script>
-// ── Queries month picker ─────────────────────────────────────────────────────
+// ── Queries TimePicker ─────────────────────────────────────────────────────
+var tp;
 (function() {
-  var MONTHS  = ["Jan","Feb","Mar","Apr","May","Jun",
-                 "Jul","Aug","Sep","Oct","Nov","Dec"];
-  var yearMin = {{ year_range[0] }};
-  var yearMax = {{ year_range[-1] }};
-  var selYear = new Date().getFullYear();
-  var selMonth = null;
-
-  function render() {
-    document.getElementById("q-picker-year").textContent = selYear;
-    var grid = document.getElementById("q-picker-grid");
-    grid.innerHTML = "";
-    MONTHS.forEach(function(name, i) {
-      var mm = String(i + 1).padStart(2, "0");
-      var active = (selMonth === mm);
-      var btn = document.createElement("button");
-      btn.textContent = name;
-      btn.style.cssText =
-        "padding:9px 0;border-radius:8px;cursor:pointer;font-size:13px;" +
-        "border:1px solid " + (active ? "var(--accent)" : "var(--border)") + ";" +
-        "background:"       + (active ? "var(--accent)" : "var(--bg)")     + ";" +
-        "color:"            + (active ? "#fff"           : "var(--text)")  + ";" +
-        "font-weight:"      + (active ? "700"            : "400")          + ";";
-      btn.addEventListener("click", function() {
-        selMonth = mm;
-        qClose();
-        document.getElementById("q-month-text").textContent =
-          selYear + "-" + mm;
-        runQuery();
-      });
-      grid.appendChild(btn);
-    });
-  }
-
-  window.qShiftYear = function(d) {
-    var n = selYear + d;
-    if (n < yearMin || n > yearMax) return;
-    selYear = n; render();
-  };
-
-  window.qTogglePicker = function(e) {
-    e.stopPropagation();
-    var pop = document.getElementById("q-month-picker-popup");
-    if (pop.style.display === "none") {
-      render();
-      var btn  = document.getElementById("q-month-picker-btn");
-      var rect = btn.getBoundingClientRect();
-      pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
-      var POP_W = 260;
-      pop.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - POP_W)) + "px";
-      pop.style.display = "block";
-    } else { qClose(); }
-  };
-
-  function qClose() {
-    document.getElementById("q-month-picker-popup").style.display = "none";
-  }
-  window._qCloseMonthPicker = qClose;
-
-  document.addEventListener("click", function(e) {
-    var pop = document.getElementById("q-month-picker-popup");
-    if (!pop || pop.style.display === "none") return;
-    if (!pop.contains(e.target) && e.target.id !== "q-month-picker-btn") qClose();
+  tp = new TimePicker({
+    prefix: "q-",
+    yearMin: {{ year_range[0] }},
+    yearMax: {{ year_range[-1] }},
+    onChange: function(code) { runQuery(); }
   });
 
-  window._qGetTime = function() {
-    var t = document.getElementById("q-time").value;
-    if (t === "custom") {
-      return (selMonth) ? selYear + "-" + selMonth : null;
-    }
-    return t || null;
-  };
-  
   // Restore state from URL params
   (function() {
     var params = new URLSearchParams(window.location.search);
     var time = params.get("time");
     if (time === "custom") {
-      var ct = params.get("custom_time");
-      if (ct && ct.length >= 7) {
-        document.getElementById("q-time").value = "custom";
-        document.getElementById("q-custom-time").style.display = "block";
-        selYear = parseInt(ct.substring(0, 4));
-        selMonth = ct.substring(5, 7);
-        document.getElementById("q-month-text").textContent = ct.substring(0, 7);
-      }
+      tp.setTime("custom", params.get("custom_time"));
+    } else if (time) {
+      tp.setTime(time);
     }
   })();
 })();
 
-function onQTimeChange(val) {
-  var div = document.getElementById("q-custom-time");
-  if (val === "custom") {
-    div.style.display = "flex";
-  } else {
-    div.style.display = "none";
-    window._qCloseMonthPicker();
-    if (val) runQuery();
-  }
-}
+function onQTimeChange(val) { tp.onSelectChange(val); }
+
+window._qGetTime = function() { return tp.getTime(); };
 
 function runQuery() {
   const raw  = document.getElementById("q-select").value;
   const time = window._qGetTime();
-  // if custom chosen but no month picked yet, wait
-  if (document.getElementById("q-time").value === "custom" && !time) return;
+  // if custom chosen but no value picked yet, wait
+  const timeVal = document.getElementById("q-time-select").value;
+  if (timeVal === "custom" && !time) return;
   const area = document.getElementById("result-area");
   if (!raw) return;
   const [kind, ...rest] = raw.split(":");
@@ -216,10 +115,8 @@ function runQuery() {
 
 function clearOut() {
   document.getElementById("q-select").value = "";
-  document.getElementById("q-time").value = "";
-  document.getElementById("q-custom-time").style.display = "none";
-  window._qCloseMonthPicker();
-  document.getElementById("q-month-text").textContent = "Pick a month";
+  document.getElementById("q-time-select").value = "";
+  if (tp) tp.reset();
   document.getElementById("result-area").innerHTML = "";
 }
 
@@ -405,13 +302,9 @@ RecordTable._bkClear     =function(){ _rt._bkClear(); };
   sel.value = found;
 
   // set time override if provided
-  var timeSel = document.getElementById("q-time");
-  if (time && timeSel) {
-    // check if it's a valid option
-    for (var j = 0; j < timeSel.options.length; j++) {
-      if (timeSel.options[j].value === time) {
-        timeSel.value = time; break;
-      }
+  if (time) {
+    if (tp) {
+      tp.setTime(time, params.get("custom_time"));
     }
   }
 
