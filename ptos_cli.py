@@ -132,8 +132,8 @@ def build_parser(cycles):
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
     qry.add_argument("-w", "--where",  nargs="+", action="append",  help="Filter expressions — operators: = != > < >= <= ~(contains) !~(not contains)\n  Simple: --where type=expense --where amount>100\n  Expression: --where \"(category=home OR category=household) AND amount>100\"")
     qry.add_argument("-t", "--time",   default="this-month",        help="Time window — full or short: td yd tw lw tm lm tq lq ty ly YYYY YYYY-MM, or custom cycles from config.toml")
-    qry.add_argument("-f", "--from",   dest="date_from",            help="Start date YYYY-MM-DD or YYYY-MM")
-    qry.add_argument("-T", "--to",     dest="date_to",              help="End date YYYY-MM-DD or YYYY-MM")
+    qry.add_argument("-f", "--from",   dest="date_from",            help="Start date YYYY-MM-DD, YYYY-MM, or YYYY")
+    qry.add_argument("-T", "--to",     dest="date_to",              help="End date YYYY-MM-DD, YYYY-MM, or YYYY")
     qry.add_argument("-y", "--type",                                help="Filter by record type")
     qry.add_argument("-g", "--tag",    action="append",             help="Filter by tag (repeatable)")
     qry.add_argument("-S", "--search",                              help="Full-text search")
@@ -881,9 +881,9 @@ def main():
     if args.date_from or args.date_to:
         try:
             start = ptos.parse_from_to(str(args.date_from)) if args.date_from else dt.date.min
-            end   = ptos.parse_from_to(str(args.date_to))   if args.date_to   else dt.date.max
+            end   = ptos.parse_from_to(str(args.date_to), as_end=True) if args.date_to else dt.date.max
         except ValueError:
-            sys.exit("Invalid date format. Use YYYY-MM-DD or YYYY-MM.")
+            sys.exit("Invalid date format. Use YYYY-MM-DD, YYYY-MM, or YYYY.")
         time_label = "custom range"
     else:
         try:
