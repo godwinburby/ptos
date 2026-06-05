@@ -262,9 +262,9 @@ class TestValidateSchemaStructure:
         assert any("ghost" in i and "no [type.ghost]" in i for i in issues)
 
     def test_unknown_field_type(self):
-        schema = {"types": {"allowed": ["t"]}, "type": {"t": {"fields": {"x": {"type": "bool"}}}}}
+        schema = {"types": {"allowed": ["t"]}, "type": {"t": {"fields": {"x": {"type": "float"}}}}}
         issues = ptos.validate_schema_structure(schema)
-        assert any("bool" in i for i in issues)
+        assert any("float" in i for i in issues)
 
     def test_missing_required_field_def(self):
         schema = {"types": {"allowed": ["t"]}, "type": {"t": {"required": ["missing"], "fields": {}}}}
