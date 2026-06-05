@@ -901,8 +901,8 @@ ptos --edit d        # today's journal
 | `--query [name]` | `-q` | Run a saved query. No name = list all queries, metrics, dashboards |
 | `--where expr ...` | `-w` | Filter expressions. Simple: `field=value`. Boolean: `"field=a AND field!=b"` |
 | `--time TIME` | `-t` | Time window (see below). Default: `this-month` |
-| `--from YYYY-MM-DD / YYYY-MM` | `-f` | Start date (use with `--to` for custom ranges) |
-| `--to YYYY-MM-DD / YYYY-MM` | `-T` | End date |
+| `--from YYYY-MM-DD / YYYY-MM / YYYY` | `-f` | Start date (use with `--to` for custom ranges) |
+| `--to YYYY-MM-DD / YYYY-MM / YYYY` | `-T` | End date |
 | `--type TYPE` | `-y` | Filter by record type |
 | `--tag TAG` | `-g` | Filter by tag (repeatable: `--tag auto --tag bus`) |
 | `--search text` | `-S` | Full-text search |
@@ -914,9 +914,10 @@ ptos --where type=expense --group category --time tm --save monthly_by_cat
 ptos --query monthly_by_cat                    # run it any time after
 ptos --query monthly_by_cat --time last-month  # override time at run time
 
-# Custom date ranges (accepts YYYY-MM-DD or YYYY-MM)
+# Custom date ranges (accepts YYYY-MM-DD, YYYY-MM, or YYYY)
 ptos --where type=expense --from 2026-01-01 --to 2026-03-31
-ptos --where type=expense --from 2026-01 --to 2026-03           # YYYY-MM expands to 1st of month
+ptos --where type=expense --from 2026-01 --to 2026-03           # YYYY-MM expands to 1st/last of month
+ptos --where type=expense --from 2026 --to 2026                  # full year
 ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --table
 ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --export q1_spend
 ```

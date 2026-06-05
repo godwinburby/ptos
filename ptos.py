@@ -1284,13 +1284,22 @@ def parse_date(s):
     return dt.date.fromisoformat(s)
 
 
-def parse_from_to(s):
+def parse_from_to(s, as_end=False):
     """Parse a --from/--to argument into a date object.
-    Accepts YYYY-MM-DD or YYYY-MM (1st of that month)."""
+    Accepts YYYY-MM-DD, YYYY-MM, or YYYY.
+    When as_end=True: YYYY → Dec 31, YYYY-MM → last day of month.
+    When as_end=False: YYYY → Jan 1, YYYY-MM → 1st of month."""
     if s is None:
         return None
+    if re.fullmatch(r"\d{4}", s):
+        year = int(s)
+        return dt.date(year, 12, 31) if as_end else dt.date(year, 1, 1)
     if re.fullmatch(r"\d{4}-\d{2}", s):
-        return dt.date(*map(int, s.split("-")), 1)
+        year, month = map(int, s.split("-"))
+        if as_end:
+            return dt.date(year + 1, 1, 1) - dt.timedelta(days=1) if month == 12 \
+                   else dt.date(year, month + 1, 1) - dt.timedelta(days=1)
+        return dt.date(year, month, 1)
     return dt.date.fromisoformat(s)
 
 
