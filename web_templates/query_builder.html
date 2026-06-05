@@ -1,4 +1,11 @@
 {% extends "base.html" %}
+
+{% set qb_tp_html %}
+{% with prefix = "qb-" %}
+{% include "_time_picker.html" %}
+{% endwith %}
+{% endset %}
+
 {% block content %}
 
 <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
@@ -144,6 +151,7 @@
 
 <script src="/static/js/filter_builder.js"></script>
 <script src="/static/js/record_table.js"></script>
+<script src="/static/js/time_picker.js"></script>
 <script src="/static/js/drag.js"></script>
 <script>
 var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{} };
@@ -347,8 +355,15 @@ function select(section, name) {
 }
 
 // ── Reset current query ───────────────────────────────────────────────────────
+function _clearTime() {
+  var sel = document.getElementById("qb-time-select");
+  if (sel) sel.value = "";
+  if (window._qb_tp) window._qb_tp.reset();
+  _updateQ("time", "");
+}
+
 function resetQuery() {
-  // Deselect and go to empty state
+  _clearTime();
   _cur = null;
   document.getElementById("entry-editor").style.display = "none";
   document.getElementById("entry-empty").style.display = "block";
@@ -456,6 +471,43 @@ function _buildQueryEditor(container, name) {
   fb.setExpr(_buildWhereExpr(q));
   q._fb = fb;
 
+  // 3. Time window
+  container.appendChild(_mkCard("Time window",
+    '<select id="qb-time-select" onchange="window._onQBTimeChange(this.value)">'+
+    _timeOpts.map(function(o){
+      return '<option value="'+o[1]+'"'+(o[1]===q.time?" selected":"")+'>'+o[0]+'</option>';
+    }).join("")+'</select>'+
+    '<button onclick="_clearTime()" title="Clear time selection" style="margin-left:6px;background:none;border:none;cursor:pointer;color:var(--sub);font-size:16px;line-height:1;">×</button>'));
+  container.insertAdjacentHTML("beforeend", {{ qb_tp_html|tojson }});
+  if (!window._qb_tp) window._qb_tp = {};
+  window._qb_tp = new TimePicker({
+    prefix: "qb-",
+    yearMin: {{ year_range[0] }},
+    yearMax: {{ year_range[-1] }},
+    onChange: function(val) {
+      if (val && val !== "custom") _updateQ("time", val);
+    }
+  });
+
+  // 4. Expression filter (collapsed)
+  var c4 = document.createElement("div");
+  c4.className = "card"; c4.style.marginBottom = "10px";
+  c4.innerHTML =
+    '<div style="display:flex;align-items:center;justify-content:space-between;">'+
+      '<label style="margin:0;">Expression filter '+
+        '<span style="font-size:11px;color:var(--sub);font-weight:400;">(optional, advanced)</span></label>'+
+      '<button id="expr-toggle" onclick="toggleExpr(this)"'+
+      ' style="background:none;border:none;font-size:11px;color:var(--accent);cursor:pointer;font-weight:700;">'+
+      (q._exprManual?'hide':'show')+'</button>'+
+    '</div>'+
+    '<div id="qb-expr-area" style="display:'+(q._exprManual?'block':'none')+';margin-top:8px;">'+
+      '<input type="text" id="qb-expr" value="'+_esc(q._exprManual||'')+'"'+
+      ' placeholder="type=expense AND (domain=self OR domain=home)"'+
+      ' style="font-family:monospace;font-size:13px;"'+
+      ' oninput="_onExprInput(this.value)">'+
+      '<div class="hint" style="margin-top:4px;">= != &gt; &lt; ~ !~ AND OR NOT ( ) — ANDed with chip filters</div>'+
+    '</div>';
+  container.appendChild(c4);
 
   // 5. Search
   container.appendChild(_mkCard("Full-text search",
@@ -504,14 +556,14 @@ function _buildQueryEditor(container, name) {
   // ── now render chips ──────────────────────────────────────────────────────
   _renderTypeChips(q);
   
-  // Restore custom time picker state if query has custom time
-  if (q.time && q.time.match(/^\d{4}-\d{2}$/)) {
-    var timeSelect = document.getElementById("qb-time");
-    if (timeSelect) timeSelect.value = "custom";
-    var customDiv = document.getElementById("qb-custom-time");
-    if (customDiv) customDiv.style.display = "block";
-    var monthText = document.getElementById("qb-month-text");
-    if (monthText) monthText.textContent = q.time;
+  // Restore custom time picker state if query has a custom time value
+  if (q.time && (q.time.match(/^\d{4}-\d{2}(?:-\d{2})?$/) || q.time.match(/^\d{4}$/))) {
+    var sel = document.getElementById("qb-time-select");
+    if (sel) sel.value = "custom";
+    if (window._qb_tp) {
+      window._qb_tp.setTime("custom", q.time);
+      window._qb_tp._showCustom(true);
+    }
   }
   
   var sel = _typeFromChips(q);
@@ -1411,99 +1463,10 @@ function addNewDue() {
   select("due", name);
 }
 
-// Query builder month picker
-(function() {
-  var MONTHS  = ["Jan","Feb","Mar","Apr","May","Jun",
-                 "Jul","Aug","Sep","Oct","Nov","Dec"];
-  var yearMin = {{ year_range[0] }};
-  var yearMax = {{ year_range[-1] }};
-  var selYear = new Date().getFullYear();
-  var selMonth = null;
-
-  function render() {
-    document.getElementById("qb-picker-year").textContent = selYear;
-    var grid = document.getElementById("qb-picker-grid");
-    grid.innerHTML = "";
-    MONTHS.forEach(function(name, i) {
-      var mm = String(i + 1).padStart(2, "0");
-      var active = (selMonth === mm);
-      var btn = document.createElement("button");
-      btn.textContent = name;
-      btn.style.cssText =
-        "padding:9px 0;border-radius:8px;cursor:pointer;font-size:13px;" +
-        "border:1px solid " + (active ? "var(--accent)" : "var(--border)") + ";" +
-        "background:"       + (active ? "var(--accent)" : "var(--bg)")     + ";" +
-        "color:"            + (active ? "#fff"           : "var(--text)")  + ";" +
-        "font-weight:"      + (active ? "700"            : "400")          + ";";
-      btn.addEventListener("click", function() {
-        selMonth = mm;
-        qbClose();
-        document.getElementById("qb-month-text").textContent =
-          selYear + "-" + mm;
-        _updateQ("time", selYear + "-" + mm);
-      });
-      grid.appendChild(btn);
-    });
-  }
-
-  window.qbShiftYear = function(d) {
-    var n = selYear + d;
-    if (n < yearMin || n > yearMax) return;
-    selYear = n; render();
-  };
-
-  window.qbTogglePicker = function(e) {
-    e.stopPropagation();
-    var pop = document.getElementById("qb-month-picker-popup");
-    if (pop.style.display === "none") {
-      render();
-      var btn  = document.getElementById("qb-month-picker-btn");
-      var rect = btn.getBoundingClientRect();
-      pop.style.top  = (rect.bottom + window.scrollY + 6) + "px";
-      var POP_W = 260;
-      pop.style.left = Math.max(4, Math.min(rect.left, window.innerWidth - POP_W)) + "px";
-      pop.style.display = "block";
-    } else { qbClose(); }
-  };
-
-  function qbClose() {
-    document.getElementById("qb-month-picker-popup").style.display = "none";
-  }
-  window._qbCloseMonthPicker = qbClose;
-  window._qbGetCustomTime = function() {
-    return selMonth ? selYear + "-" + selMonth : null;
-  };
-})();
-
-window.qbOnTimeChange = function(val) {
-  var div = document.getElementById("qb-custom-time");
-  if (val === "custom") {
-    div.style.display = "block";
-  } else {
-    div.style.display = "none";
-    window._qbCloseMonthPicker();
-    if (val) _updateQ("time", val);
-  }
+window._onQBTimeChange = function(val) {
+  if (window._qb_tp) window._qb_tp.onSelectChange(val);
 };
 
 </script>
-
-<!-- query builder month picker popup -->
-<div id="qb-month-picker-popup"
-     style="display:none;position:fixed;z-index:600;
-            background:var(--card);border:1px solid var(--border);
-            border-radius:12px;box-shadow:0 8px 32px rgba(0,0,0,.22);
-            padding:16px;width:252px;">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-    <button onclick="qbShiftYear(-1)"
-            style="background:none;border:none;font-size:20px;color:var(--text);
-                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&lt;</button>
-    <span id="qb-picker-year" style="font-weight:700;font-size:15px;color:var(--text);"></span>
-    <button onclick="qbShiftYear(1)"
-            style="background:none;border:none;font-size:20px;color:var(--text);
-                   cursor:pointer;padding:2px 10px;border-radius:6px;line-height:1;">&gt;</button>
-  </div>
-  <div id="qb-picker-grid" style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
-</div>
 
 {% endblock %}

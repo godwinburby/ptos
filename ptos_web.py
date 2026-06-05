@@ -85,6 +85,8 @@ def _build_period_label(time_code, custom_time, cycles):
       "tq"     → "This quarter"
       "all"    → "All time"
       "2026-04"→ "Apr 2026"
+      "2026"   → "2026"
+      "2026-04-15" → "15 Apr 2026"
       "clinic" → "Clinic"
       "custom" → "Custom"
     """
@@ -101,6 +103,15 @@ def _build_period_label(time_code, custom_time, cycles):
     # Check standard codes first
     if time_code in labels:
         return labels[time_code]
+    
+    # Handle YYYY (bare year)
+    if re.fullmatch(r"\d{4}", time_code):
+        return time_code
+    
+    # Handle YYYY-MM-DD (full date)
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", time_code):
+        year, month, day = int(time_code[:4]), int(time_code[5:7]), int(time_code[8:10])
+        return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
     
     # Handle YYYY-MM format (custom month)
     if re.fullmatch(r"\d{4}-\d{2}", time_code):
@@ -122,6 +133,11 @@ def _build_period_label(time_code, custom_time, cycles):
             year, month = int(custom_time[:4]), int(custom_time[5:7])
             dt_obj = dt.datetime(year, month, 1)
             return dt_obj.strftime("%b %Y")
+        if re.fullmatch(r"\d{4}", custom_time):
+            return custom_time
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", custom_time):
+            year, month, day = int(custom_time[:4]), int(custom_time[5:7]), int(custom_time[8:10])
+            return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
         return "Custom"
     
     # Fallback - try to use custom_time if provided
@@ -129,6 +145,11 @@ def _build_period_label(time_code, custom_time, cycles):
         year, month = int(custom_time[:4]), int(custom_time[5:7])
         dt_obj = dt.datetime(year, month, 1)
         return dt_obj.strftime("%b %Y")
+    if custom_time and re.fullmatch(r"\d{4}", custom_time):
+        return custom_time
+    if custom_time and re.fullmatch(r"\d{4}-\d{2}-\d{2}", custom_time):
+        year, month, day = int(custom_time[:4]), int(custom_time[5:7]), int(custom_time[8:10])
+        return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
     
     return "Custom"
 
@@ -385,7 +406,7 @@ def home():
         # time_param present = user explicitly picked a window to override all metrics.
         time_param  = request.args.get("time", None)
         custom_time = request.args.get("custom_time", "")
-        if time_param == "custom" and custom_time and re.match(r"\d{4}-\d{2}", custom_time):
+        if time_param == "custom" and custom_time and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
             time_code = custom_time
         else:
             time_code = time_param or "tm"
@@ -1615,7 +1636,7 @@ def browse_run():
     raw_time = data.get("time","tm")
     _valid = {code for _, code in _get_time_options()}
     if raw_time and raw_time not in _valid and \
-       not re.fullmatch(r"\d{4}-\d{2}", raw_time):
+       not re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", raw_time):
         raw_time = "tm"
     time = raw_time
     search = data.get("search","") or None
