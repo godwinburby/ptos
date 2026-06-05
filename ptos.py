@@ -1390,7 +1390,7 @@ def resolve_time(keyword, cycles):
       td/today, yd/yesterday, tw/this-week, lw/last-week,
       tm/this-month, lm/last-month, tq/this-quarter, lq/last-quarter,
       ty/this-year, ly/last-year, all,
-      YYYY-MM (literal month), YYYY (literal year),
+      YYYY-MM-DD (single day), YYYY-MM (literal month), YYYY (literal year),
       <cycle_name> or <cycle_name>-N (custom cycles from config)."""
     keyword = _TIME_ALIASES.get(keyword, keyword)
     now = today()
@@ -1411,6 +1411,11 @@ def resolve_time(keyword, cycles):
     if re.fullmatch(r"\d{4}-\d{2}", keyword):
         year, month = map(int, keyword.split("-"))
         return month_range(year, month)
+
+    # YYYY-MM-DD
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", keyword):
+        d = dt.date.fromisoformat(keyword)
+        return d, d
 
     if keyword == "today":     return now, now
     if keyword == "yesterday": y = now - dt.timedelta(days=1); return y, y

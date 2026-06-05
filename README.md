@@ -900,7 +900,7 @@ ptos --edit d        # today's journal
 |------|-------|-------------|
 | `--query [name]` | `-q` | Run a saved query. No name = list all queries, metrics, dashboards |
 | `--where expr ...` | `-w` | Filter expressions. Simple: `field=value`. Boolean: `"field=a AND field!=b"` |
-| `--time TIME` | `-t` | Time window (see below). Default: `this-month` |
+| `--time TIME` | `-t` | Time window (see below). Accepts: `td/yd/tw/lw/tm/lm/tq/lq/ty/ly`, `YYYY`, `YYYY-MM`, `YYYY-MM-DD`. Default: `this-month` |
 | `--from YYYY-MM-DD / YYYY-MM / YYYY` | `-f` | Start date (use with `--to` for custom ranges) |
 | `--to YYYY-MM-DD / YYYY-MM / YYYY` | `-T` | End date |
 | `--type TYPE` | `-y` | Filter by record type |
@@ -1071,6 +1071,7 @@ ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --table
 | `last-year` | Previous year |
 | `YYYY` | Specific year, e.g. `2026` |
 | `YYYY-MM` | Specific month, e.g. `2026-03` |
+| `YYYY-MM-DD` | Specific day, e.g. `2026-03-15` |
 | `all` | No date filter |
 | Custom cycles | Defined in `config.toml` — e.g. `billing_cycle`, `billing_cycle-1` |
 
