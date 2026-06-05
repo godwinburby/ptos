@@ -367,7 +367,7 @@ Visual builder for creating queries, metrics, and dashboards. Features:
 - **WHERE expression builder with chips**
 - **Live records preview** (auto-updates as you build)
 - Advanced WHERE mode for raw expression editing
-- Custom time window with month picker
+- Custom time window (year, year-month, or full-date) with month picker popup
 - **Dashboard editor** for managing dashboard metrics (drag-and-drop reorder items)
 - Save as Query or Metric
 
