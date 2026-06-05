@@ -86,7 +86,10 @@ Backup, Log Editor, and Lint — without cluttering the main navigation.
 ## The web app — your main interface
 
 PTOS is designed to be used through a browser. Open it on your phone, tablet, or
-desktop — no installation beyond the initial setup is needed. The app has eleven tabs:
+desktop — no installation beyond the initial setup is needed.
+
+The bottom navigation has five main sections. Everything else is one tap away
+under **More**.
 
 **Home** — your dashboard at a glance. Key metrics from your configured reports,
 overdue items that need attention, and quick-add buttons for your saved presets.
@@ -101,28 +104,18 @@ No typing, no commands.
 
 **Browse** — filter and explore records. Pick a type, set filters, group or sort
 the results, and export to CSV if you need to take the data elsewhere. Click any
-result row to edit it.
+row to open the edit form for that record.
 
-**Due** — see clients or items that haven't been followed up on. Sorted by urgency.
-Adjust the threshold (1 day, 3 days, 7 days, etc.) to focus on what's most overdue.
+**More** — everything else in one place:
 
-**Journal** — daily markdown journal. One entry per day. Navigate with Prev / Next
-or pick a date. Autosaves as you type.
-
-**Schema Builder** — add or change record types without touching any files. Define
-fields, dropdowns, and tags through a visual editor.
-
-**Query Builder** — create custom queries, dashboard metrics, and reports with a visual builder. Pick type, fields, and values as chips.
-
-**Settings** — customize your profile, display (currency, date format), dashboard, billing cycles, and backup preferences.
-
-**Backup** — create backups, download them, restore from a previous backup. One
-button to protect everything.
-
-**Lint** — check your records for errors. Runs automatically and lists any issues.
-
-**Log Editor** — view and edit the raw log file directly. Only needed if you need
-to correct a record that can't be fixed through Browse → Edit.
+- **Due** — items that haven't been followed up on, sorted by how long they have been waiting
+- **Journal** — daily journal, one entry per day, navigate with Prev / Next or pick a date. Press **Save** when done — it does not save automatically
+- **Schema Builder** — add or change record types without touching any files
+- **Query Builder** — create custom queries, metrics, and reports with a visual builder
+- **Settings** — currency, date format, dashboard layout, billing cycles, and backup preferences
+- **Backup** — create, download, and restore backups
+- **Lint** — check records for errors and list any issues
+- **Log Editor** — view and edit the raw log file directly, only needed for corrections that cannot be made through Browse
 
 For day-to-day use you only need **Home**, **Add Record**, and **Journal**.
 
@@ -159,17 +152,14 @@ and Queries tabs handle the most common changes through a visual interface.
 
 ### `schema.toml` — what you can record
 
-This is the heart of the system. It defines every record type. Out of the box it
-comes with four types to get you started:
-
-- **expense** — money going out, with domain (self / home / work), category, and amount
-- **income** — money coming in, with source and amount
-- **exercise** — physical activity, with activity type and duration
-- **learning** — books, podcasts, courses — with topic, source, and domain
+This is the heart of the system. It defines every record type. PTOS ships with
+example record types to get you started — personal finance types like expense and
+income, and personal tracking types like exercise and learning. Each comes with
+sensible field defaults you can adjust to suit your own life.
 
 For each type, the schema defines which fields are required, what values each field
 accepts, and which tags appear as checkboxes in the form. Use the **Schema Builder**
-tab in the app to add or change record types — no file editing needed.
+in the app to add or change record types — no file editing needed.
 
 ### `queries.toml` — your saved reports
 
@@ -191,36 +181,54 @@ Create presets directly from the Add Record form: fill in the fields, click
 **Load preset** dropdown at the top of the form.
 
 Presets can also trigger multiple records at once — for example, a "morning routine"
-preset that logs exercise, water intake, and medication in one tap.
+preset that logs exercise, water intake, and medication in one tap. These
+multi-presets are created by editing `presets.toml` directly rather than through
+the Add Record form, and are listed separately under **Multi-presets** on the
+Home screen.
 
 ### `config.toml` — basic settings
 
-Three settings:
+The main settings you will care about:
 
-- **editor** — which text editor opens when editing files from the terminal
 - **currency** — the symbol shown next to all money values (default: `₹`)
-- **cycles** — custom billing or reporting periods, e.g. `billing_cycle = 26`
+- **cycles** — custom billing or reporting periods, e.g. `billing_cycle = 26` starts a cycle on the 26th of each month
+- **dashboard** — which dashboard shows by default on the Home screen
+- **user.name** — your name, shown in the app header
+- **editor** — which text editor opens when using the command line
+
+The Settings tab in the app lets you change most of these without opening the file.
 
 ---
 
 ## First time setup
 
-Download all the files from the repository and run the setup script for your platform:
+Download only the setup file(s) for your platform — the setup script downloads
+PTOS from GitHub and creates all folders and config files automatically.
+
+**Windows** — download both files into the same folder, then double-click
+`setup_ptos_windows.bat`:
+- `setup_ptos_windows.bat`
+- `setup_ptos_windows.py`
+
+**Linux / macOS:**
+```
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_linux.sh
+bash setup_ptos_linux.sh
+```
+
+**Android (Termux):**
+```
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_android.sh
+bash setup_ptos_android.sh
+```
+
+After setup, use the start script to launch the web app:
 
 | Platform | Run this |
 |----------|----------|
-| Linux / macOS | `./setup_ptos_linux.sh` |
-| Windows | `setup_ptos_windows.bat` |
-| Android (Termux) | `./setup_ptos_android.sh` |
-
-The setup script creates all folders and config files. After setup, use the start
-script to launch the web app:
-
-| Platform | Run this |
-|----------|----------|
-| Linux / macOS | `./start_ptos_linux.sh` |
+| Linux / macOS | `bash start_ptos_linux.sh` |
 | Windows | `start_ptos_windows.bat` |
-| Android (Termux) | `./start_ptos_android.sh` |
+| Android (Termux) | `bash start_ptos_android.sh` |
 
 Then open `http://localhost:5000` in your browser. On Android (Termux) the script
 opens the browser automatically.
@@ -259,8 +267,9 @@ Do not rename or move them — the app finds them by name and location.
 **The Note field is free text.** Use it for context the structured fields can't capture.
 It goes after the `|` in the log line.
 
-**Automatic safety copies.** Every time you save a record or journal, PTOS creates
-a backup first. If you need to undo a mistake, the backup is there.
+**Safety copies.** PTOS can create a backup automatically on startup and shutdown —
+controlled by a setting in `config.toml`. If you need to undo a mistake, go to the
+**Backup** tab to restore a previous version.
 
 **Nothing leaves this computer.** All data stays local.
 
@@ -268,11 +277,13 @@ a backup first. If you need to undo a mistake, the backup is there.
 
 ## Your data is safe
 
-**Automatic backups.** PTOS keeps the last 10 backups automatically. Go to the
-**Backup** tab to create a manual backup, download one, or restore from a previous version.
+**Backups.** PTOS keeps up to 10 backups and can create them automatically on
+startup and shutdown. Go to the **Backup** tab (under More) to create a manual
+backup, download one to your device, or restore from a previous version.
 
-**Crash protection.** Every time you save, PTOS makes a backup copy first. If
-something goes wrong, your data is safe.
+**Plain text protection.** Even without a backup, your records are plain text files.
+You can open them in any text editor, copy them to another device, or email them
+to yourself at any time.
 
 **Plain text.** Your records are just text files — no special software needed to read them.
 
@@ -300,11 +311,11 @@ Full CLI reference is in `README.md`.
 |---------|-------------|
 | App won't open | Run `python3 ptos_web.py` directly to see error messages, or run `ptos --doctor`. |
 | "schema.toml not found" | Run the setup script for your platform first. |
-| A field or dropdown option is missing | Go to **Schema Builder** tab — add or edit the field there. |
-| Record saved with wrong values | Go to **Browse** tab — find the record, click the **Edit** button next to it. |
+| A field or dropdown option is missing | Go to **More → Schema Builder** — add or edit the field there. |
+| Record saved with wrong values | Go to **Browse** — find the record and click the row to open the edit form. |
 | A query is missing or producing unexpected results | Go to **Browse**, set your filters, then click **Save as Query** to save. |
-| Want to check for data errors | Go to **Lint** tab. |
-| Need to restore a previous backup | Go to **Backup** tab — find your backup and click Restore. |
+| Want to check for data errors | Go to **More → Lint**. |
+| Need to restore a previous backup | Go to **More → Backup** — find your backup and click Restore. |
 | Something looks broken and you can't figure it out | Don't change anything — reach out for help and describe what you saw. |
 
 ---
