@@ -901,8 +901,8 @@ ptos --edit d        # today's journal
 | `--query [name]` | `-q` | Run a saved query. No name = list all queries, metrics, dashboards |
 | `--where expr ...` | `-w` | Filter expressions. Simple: `field=value`. Boolean: `"field=a AND field!=b"` |
 | `--time TIME` | `-t` | Time window (see below). Default: `this-month` |
-| `--from YYYY-MM-DD` | `-f` | Start date (use with `--to` for custom ranges) |
-| `--to YYYY-MM-DD` | `-T` | End date |
+| `--from YYYY-MM-DD / YYYY-MM` | `-f` | Start date (use with `--to` for custom ranges) |
+| `--to YYYY-MM-DD / YYYY-MM` | `-T` | End date |
 | `--type TYPE` | `-y` | Filter by record type |
 | `--tag TAG` | `-g` | Filter by tag (repeatable: `--tag auto --tag bus`) |
 | `--search text` | `-S` | Full-text search |
@@ -914,8 +914,9 @@ ptos --where type=expense --group category --time tm --save monthly_by_cat
 ptos --query monthly_by_cat                    # run it any time after
 ptos --query monthly_by_cat --time last-month  # override time at run time
 
-# Custom date ranges
+# Custom date ranges (accepts YYYY-MM-DD or YYYY-MM)
 ptos --where type=expense --from 2026-01-01 --to 2026-03-31
+ptos --where type=expense --from 2026-01 --to 2026-03           # YYYY-MM expands to 1st of month
 ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --table
 ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --export q1_spend
 ```
@@ -995,6 +996,7 @@ ptos -y test -t td --delete --all
 | `--set-date-format FORMAT` | | Set date display format: `indian` `us` `eu` `readable` `iso` or custom strftime |
 | `--doctor` | | Check PTOS installation health |
 | `--doctor --fix` | | Auto-fix issues found by --doctor |
+| `--check-schema` | | Validate schema.toml structure (missing types, bad refs, unknown field types) |
 
 ### `--edit` targets
 
@@ -1044,8 +1046,9 @@ ptos --restore-config                      # interactive list to pick from
 # Run a query and save it for reuse
 ptos --where type=expense --group category --time tm --save monthly_by_cat
 
-# Custom date range
+# Custom date range (accepts YYYY-MM-DD or YYYY-MM)
 ptos --where type=expense --from 2026-01-01 --to 2026-03-31
+ptos --where type=expense --from 2026-01 --to 2026-03
 ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --table
 ```
 
@@ -1065,6 +1068,7 @@ ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --table
 | `last-quarter` | Previous calendar quarter |
 | `this-year` | Jan 1 to Dec 31 |
 | `last-year` | Previous year |
+| `YYYY` | Specific year, e.g. `2026` |
 | `YYYY-MM` | Specific month, e.g. `2026-03` |
 | `all` | No date filter |
 | Custom cycles | Defined in `config.toml` — e.g. `billing_cycle`, `billing_cycle-1` |
@@ -1200,6 +1204,8 @@ type    = "int"
 derived = "(today - date) > 30"
 type    = "bool"
 ```
+
+Valid field types for derived fields: `int`, `string`, `datetime`, `bool`.
 
 Expressions support: `today`, `date`, `today - date` (returns days as int), and any
 numeric field from the record. Boolean results display as `true`/`false`.
@@ -1365,12 +1371,18 @@ ptos --type expense --pivot ?
 ## Validation
 
 ```bash
-ptos --lint          # check all records against schema
-ptos --lint --fix    # open files with errors in the editor
+ptos --lint             # check all records against schema
+ptos --lint --fix       # open files with errors in the editor
+ptos --check-schema     # validate schema.toml structure
 ```
 
 Lint catches: missing required fields, invalid field values, unknown fields,
 conditional required violations (e.g. `fit` missing when `outcome=prescribed`).
+
+`--check-schema` validates the schema file itself: every type in `[types].allowed`
+must have a `[type.X]` section, field types must be `int`/`string`/`datetime`/`bool`,
+required fields must have a definition, and `parent`/`use`/condition references
+must point to existing fields. Run this after editing `schema.toml` by hand.
 
 ---
 
