@@ -2125,6 +2125,103 @@ def validate_record(schema, record):
 
     return problems
 
+
+def validate_schema_structure(schema):
+    """Validate schema.toml structure and return a list of error strings
+    (empty list = schema is valid). Checks:
+      - Every [types].allowed type has a [type.X] section
+      - Field types are int, string, or datetime
+      - required fields have a [type.X.fields.Y] definition
+      - parent references point to an existing field
+      - use references point to an existing [shared.X] key
+      - conditions reference existing fields
+    """
+    issues = []
+    valid_field_types = {"int", "string", "datetime"}
+
+    # --- [types] section ---
+    if "types" not in schema or not isinstance(schema.get("types"), dict):
+        issues.append("Missing [types] section")
+        return issues
+    types_allowed = schema["types"].get("allowed", [])
+    if not isinstance(types_allowed, list):
+        issues.append("[types].allowed must be a list")
+        return issues
+
+    # --- global [fields] type checks ---
+    for fname, fdef in schema.get("fields", {}).items():
+        ft = fdef.get("type")
+        if ft is not None and ft not in valid_field_types:
+            issues.append(f"[fields.{fname}]: unknown type '{ft}' (expected int, string, or datetime)")
+
+    # --- [global_fields] type checks ---
+    for fname, fdef in schema.get("global_fields", {}).items():
+        ft = fdef.get("type")
+        if ft is not None and ft not in valid_field_types:
+            issues.append(f"[global_fields.{fname}]: unknown type '{ft}' (expected int, string, or datetime)")
+
+    # --- [shared] type checks ---
+    for fname, fdef in schema.get("shared", {}).items():
+        ft = fdef.get("type")
+        if ft is not None and ft not in valid_field_types:
+            issues.append(f"[shared.{fname}]: unknown type '{ft}' (expected int, string, or datetime)")
+
+    # --- per-type checks ---
+    all_types = schema.get("type", {})
+    for t in types_allowed:
+        if t not in all_types:
+            issues.append(f"Type '{t}' is in [types].allowed but has no [type.{t}] section")
+
+    all_known_fields = set(schema.get("fields", {}).keys()) | set(schema.get("global_fields", {}).keys())
+
+    for tname, tschema in all_types.items():
+        type_fields = tschema.get("fields", {})
+
+        # required fields must have a field definition
+        for req in tschema.get("required", []):
+            if req not in type_fields and req not in all_known_fields:
+                issues.append(f"Type '{tname}': required field '{req}' has no [type.{tname}.fields.{req}] or [global_fields.{req}] definition")
+
+        # per-type field checks
+        for fname, fdef in type_fields.items():
+            ft = fdef.get("type")
+            if ft is not None and ft not in valid_field_types:
+                issues.append(f"Type '{tname}': field '{fname}' has unknown type '{ft}' (expected int, string, or datetime)")
+
+            parent = fdef.get("parent")
+            if parent is not None and parent not in type_fields:
+                issues.append(f"Type '{tname}': field '{fname}' parent='{parent}' but '{parent}' has no [type.{tname}.fields.{parent}] definition")
+
+            use = fdef.get("use")
+            if use is not None:
+                parts = str(use).split(".", 1)
+                if len(parts) != 2:
+                    issues.append(f"Type '{tname}': field '{fname}' use='{use}' — expected format 'shared.NAME'")
+                else:
+                    shared_key = parts[1]
+                    if shared_key not in schema.get("shared", {}):
+                        issues.append(f"Type '{tname}': field '{fname}' references [shared.{shared_key}] which doesn't exist")
+
+        # tags: check trigger fields exist
+        for tag_field, tag_opts in tschema.get("tags", {}).items():
+            if tag_field not in type_fields and tag_field not in all_known_fields:
+                issues.append(f"Type '{tname}': tags section references field '{tag_field}' with no [type.{tname}.fields.{tag_field}] definition")
+
+            # if options is a dict (parent-dependent), check the parent field
+            if isinstance(tag_opts, dict):
+                for parent_val, _ in tag_opts.items():
+                    pass  # parent values are free-form, not checked
+
+        # conditions: check when-fields exist
+        for cond_field, cond_rule in tschema.get("conditions", {}).items():
+            condition = cond_rule.get("when", {}) if isinstance(cond_rule, dict) else {}
+            for when_field in condition:
+                if when_field not in type_fields and when_field not in all_known_fields:
+                    issues.append(f"Type '{tname}': condition on '{cond_field}' references field '{when_field}' with no definition")
+
+    return issues
+
+
 def lint_records(records, schema):
     """Validate all records. Returns set of log file paths containing errors."""
     total_errors   = 0

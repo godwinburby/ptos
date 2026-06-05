@@ -186,6 +186,7 @@ def build_parser(cycles):
     utl.add_argument("--list-backups", action="store_true", help="List available backups in backups/ folder")
     utl.add_argument("--doctor", action="store_true", help="Check PTOS installation health")
     utl.add_argument("--doctor-fix", dest="doctor_fix", action="store_true", help="With --doctor: fix any issues found")
+    utl.add_argument("--check-schema", action="store_true", help="Validate schema.toml structure and report issues")
 
     return p
 
@@ -740,6 +741,18 @@ def main():
             fix=args.doctor_fix
         )
         print_doctor_results(errors, warnings, messages, fixes, verbose=True, fix=args.doctor_fix)
+        return
+
+    if args.check_schema:
+        schema = get_schema()
+        issues = ptos.validate_schema_structure(schema)
+        if issues:
+            print("Schema issues found:\n")
+            for i, err in enumerate(issues, 1):
+                print(f"  {i}. {err}")
+            print(f"\n{len(issues)} issue(s) found.")
+        else:
+            print("Schema looks valid!")
         return
 
     if args.backup_full:
