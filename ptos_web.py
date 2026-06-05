@@ -1563,10 +1563,10 @@ def queries_run():
     kind = data.get("kind","q")
     name = data.get("name","")
     raw_time = data.get("time","") or None
-    # reject any value that is not a known alias and not a valid YYYY or YYYY-MM
+    # reject any value that is not a known alias and not a valid YYYY, YYYY-MM, or YYYY-MM-DD
     _valid = {code for _, code in _get_time_options()}
     if raw_time and raw_time not in _valid and \
-       not re.fullmatch(r"\d{4}(?:-\d{2})?", raw_time):
+       not re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", raw_time):
         return jsonify(ok=False, error=f"Invalid time window: {raw_time}")
     time = raw_time
     try:

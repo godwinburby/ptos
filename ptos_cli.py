@@ -95,6 +95,7 @@ def build_parser(cycles):
             "  ptos --query myquery --time tq\n"
             "  ptos --due\n"
             "  ptos --time 2026-03\n"
+            "  ptos --time 2026-03-15\n"
             "  ptos --from 2026-01-01 --to 2026-03-31\n"
             "  ptos --lint\n"
             "  ptos --backup-full\n"
@@ -114,7 +115,8 @@ def build_parser(cycles):
             "  last-quarter       lq\n"
             "  this-year          ty\n"
             "  last-year          ly\n"
-            "  YYYY-MM            (e.g. 2026-03)\n"
+            "  YYYY-MM              (e.g. 2026-03)\n"
+            "  YYYY-MM-DD           (e.g. 2026-03-15)\n"
             "  custom cycles defined in config.toml (e.g. clinic, clinic-1)\n"
         ),
         formatter_class=argparse.RawTextHelpFormatter,
@@ -131,7 +133,7 @@ def build_parser(cycles):
     qry = p.add_argument_group("Query")
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
     qry.add_argument("-w", "--where",  nargs="+", action="append",  help="Filter expressions — operators: = != > < >= <= ~(contains) !~(not contains)\n  Simple: --where type=expense --where amount>100\n  Expression: --where \"(category=home OR category=household) AND amount>100\"")
-    qry.add_argument("-t", "--time",   default="this-month",        help="Time window — full or short: td yd tw lw tm lm tq lq ty ly YYYY YYYY-MM, or custom cycles from config.toml")
+    qry.add_argument("-t", "--time",   default="this-month",        help="Time window — full or short: td yd tw lw tm lm tq lq ty ly YYYY YYYY-MM YYYY-MM-DD, or custom cycles from config.toml")
     qry.add_argument("-f", "--from",   dest="date_from",            help="Start date YYYY-MM-DD, YYYY-MM, or YYYY")
     qry.add_argument("-T", "--to",     dest="date_to",              help="End date YYYY-MM-DD, YYYY-MM, or YYYY")
     qry.add_argument("-y", "--type",                                help="Filter by record type")
@@ -891,7 +893,7 @@ def main():
         except ValueError:
             valid = ("today/td  yesterday/yd  this-week/tw  last-week/lw\n"
                      "  this-month/tm  last-month/lm  this-quarter/tq  last-quarter/lq\n"
-                     "  this-year/ty  last-year/ly  all  YYYY-MM")
+                     "  this-year/ty  last-year/ly  all  YYYY  YYYY-MM  YYYY-MM-DD")
             cycle_names = "  " + "  ".join(cycles.keys()) if cycles else ""
             sys.exit(
                 f"Invalid time keyword: '{args.time}'\n\n"
