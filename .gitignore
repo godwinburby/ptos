@@ -23,6 +23,7 @@ ptos_error.log
 .stfolder/
 .stversions/
 .stignore
+*conflict*
 
 # Misc
 test.txt
