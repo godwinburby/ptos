@@ -42,9 +42,9 @@ var tp;
     params.set('dashboard', db);
     if (time === '') {
       // Per query — no time param sent; each metric uses its own query time
-    } else if (time === 'custom') {
+    } else if (time === 'year' || time === 'month' || time === 'date') {
       var ct = tp.getTime();
-      if (ct) { params.set('time', 'custom'); params.set('custom_time', ct); }
+      if (ct) { params.set('time', time); params.set('custom_time', ct); }
     } else if (time === 'range') {
       var r = tp.getRange();
       if (r) { params.set('time', 'range'); }
@@ -70,8 +70,8 @@ var tp;
   (function() {
     var params = new URLSearchParams(window.location.search);
     var time = params.get("time");
-    if (time === "custom") {
-      tp.setTime("custom", params.get("custom_time"));
+    if (time === "year" || time === "month" || time === "date") {
+      tp.setTime(time, params.get("custom_time"));
     } else if (time === "range") {
       tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
     } else if (time) {

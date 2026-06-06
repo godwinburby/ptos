@@ -44,7 +44,7 @@ _TIME_OPTIONS_BASE = [
     ("Today","td"),("Yesterday","yd"),("This week","tw"),("Last week","lw"),
     ("This month","tm"),("Last month","lm"),("This quarter","tq"),
     ("Last quarter","lq"),("This year","ty"),("Last year","ly"),("All time","all"),
-    ("Custom","custom"),("Date range","range"),
+    ("Specific year","year"),("Specific month","month"),("Specific date","date"),("Date range","range"),
 ]
 _YEAR_RANGE = list(range(dt.date.today().year - 10, dt.date.today().year + 1))
 
@@ -140,8 +140,8 @@ def _build_period_label(time_code, custom_time, cycles, from_date=None, to_date=
         if time_code.startswith(cycle_name + "-"):
             return cycle_name.capitalize()
     
-    # Handle "custom" without a specific time
-    if time_code == "custom" and custom_time:
+    # Handle "custom", "year", "month", "date" with custom_time
+    if time_code in ("custom","year","month","date") and custom_time:
         if re.fullmatch(r"\d{4}-\d{2}", custom_time):
             year, month = int(custom_time[:4]), int(custom_time[5:7])
             dt_obj = dt.datetime(year, month, 1)
@@ -154,16 +154,18 @@ def _build_period_label(time_code, custom_time, cycles, from_date=None, to_date=
         return "Custom"
     
     # Fallback - try to use custom_time if provided
-    if custom_time and re.fullmatch(r"\d{4}-\d{2}", custom_time):
-        year, month = int(custom_time[:4]), int(custom_time[5:7])
-        dt_obj = dt.datetime(year, month, 1)
-        return dt_obj.strftime("%b %Y")
-    if custom_time and re.fullmatch(r"\d{4}", custom_time):
-        return custom_time
-    if custom_time and re.fullmatch(r"\d{4}-\d{2}-\d{2}", custom_time):
-        year, month, day = int(custom_time[:4]), int(custom_time[5:7]), int(custom_time[8:10])
-        return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
-    
+    if time_code in ("custom","year","month","date") and custom_time:
+        if re.fullmatch(r"\d{4}-\d{2}", custom_time):
+            year, month = int(custom_time[:4]), int(custom_time[5:7])
+            dt_obj = dt.datetime(year, month, 1)
+            return dt_obj.strftime("%b %Y")
+        if re.fullmatch(r"\d{4}", custom_time):
+            return custom_time
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", custom_time):
+            year, month, day = int(custom_time[:4]), int(custom_time[5:7]), int(custom_time[8:10])
+            return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
+        return "Custom"
+
     return "Custom"
 
 def _build_field_defs(schema, rtype, current_record=None):
@@ -424,7 +426,7 @@ def home():
         if from_date:
             time_code = "range"
             use_dashboard_time = True
-        elif time_param == "custom" and custom_time and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
+        elif time_param in ("custom","year","month","date") and custom_time and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
             time_code = custom_time
         else:
             time_code = time_param or "tm"

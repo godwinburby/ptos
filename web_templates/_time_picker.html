@@ -1,4 +1,14 @@
-<div id="{{ prefix }}custom-block" class="field-group" style="display:none;flex-wrap:wrap;gap:10px;align-items:end;">
+<div id="{{ prefix }}year-block" class="field-group" style="display:none;flex-wrap:wrap;gap:10px;align-items:end;">
+  <div class="field-group" style="flex:1;min-width:80px;margin-bottom:0;">
+    <label>Year</label>
+    <input id="{{ prefix }}year-input" type="number" placeholder="YYYY"
+           min="{{ year_range[0] }}" max="{{ year_range[-1] }}"
+           style="width:100%;padding:9px 12px;border-radius:6px;border:1px solid var(--border);
+                  background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;">
+  </div>
+</div>
+
+<div id="{{ prefix }}month-block" class="field-group" style="display:none;flex-wrap:wrap;gap:10px;align-items:end;">
   <div class="field-group" style="flex:1;min-width:120px;margin-bottom:0;">
     <label>Month</label>
     <button id="{{ prefix }}month-picker-btn" type="button"
@@ -17,8 +27,11 @@
            style="width:100%;padding:9px 12px;border-radius:6px;border:1px solid var(--border);
                   background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;">
   </div>
+</div>
+
+<div id="{{ prefix }}date-block" class="field-group" style="display:none;flex-wrap:wrap;gap:10px;align-items:end;">
   <div class="field-group" style="flex:1;min-width:140px;margin-bottom:0;">
-    <label>Day</label>
+    <label>Date</label>
     <input id="{{ prefix }}day-input" type="date"
            style="width:100%;padding:9px 12px;border-radius:6px;border:1px solid var(--border);
                   background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;">

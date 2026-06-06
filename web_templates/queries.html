@@ -59,12 +59,10 @@ var tp;
   (function() {
     var params = new URLSearchParams(window.location.search);
     var time = params.get("time");
-    if (time === "custom") {
-      tp.setTime("custom", params.get("custom_time"));
-    } else if (time === "range") {
+    if (time === "range") {
       tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
     } else if (time) {
-      tp.setTime(time);
+      tp.setTime(time, params.get("custom_time"));
     }
   })();
 })();
@@ -311,11 +309,7 @@ RecordTable._bkClear     =function(){ _rt._bkClear(); };
   // set time override if provided
   if (time) {
     if (tp) {
-      if (time === "range") {
-        tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
-      } else {
-        tp.setTime(time, params.get("custom_time"));
-      }
+      tp.setTime(time, params.get("custom_time"));
     }
   }
 

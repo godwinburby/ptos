@@ -1,6 +1,11 @@
 (function(global) {
   "use strict";
 
+  var MODE_YEAR  = "year";
+  var MODE_MONTH = "month";
+  var MODE_DATE  = "date";
+  var MODE_RANGE = "range";
+
   var MONTHS = ["Jan","Feb","Mar","Apr","May","Jun",
                 "Jul","Aug","Sep","Oct","Nov","Dec"];
 
@@ -23,14 +28,20 @@
     var sel = this._el("time-select");
     if (!sel) return null;
     var val = sel.value;
-    if (val === "range") return "range";
-    if (val !== "custom") return val || null;
-    var dy = this._el("day-input");
-    if (dy && dy.value) return dy.value;
-    if (this.selMonth) return this.selYear + "-" + this.selMonth;
-    var yr = this._el("year-input");
-    if (yr && yr.value) return yr.value;
-    return null;
+    if (val === MODE_RANGE) return MODE_RANGE;
+    if (val === MODE_YEAR) {
+      var yr = this._el("year-input");
+      return yr && yr.value ? yr.value : null;
+    }
+    if (val === MODE_MONTH) {
+      if (this.selMonth) return this.selYear + "-" + this.selMonth;
+      return null;
+    }
+    if (val === MODE_DATE) {
+      var dy = this._el("day-input");
+      return dy && dy.value ? dy.value : null;
+    }
+    return val || null;
   };
 
   TimePicker.prototype.getRange = function() {
@@ -63,64 +74,92 @@
     if (fi) fi.value = "";
     var ti = this._el("to-date");
     if (ti) ti.value = "";
-    this._showCustom(false);
-    this._showRange(false);
+    this._hideAll();
     this.closePicker();
   };
 
   TimePicker.prototype.setTime = function(code, customTime, fromDate, toDate) {
     var sel = this._el("time-select");
     if (!sel) return;
-    if (code && code !== "custom" && code !== "range") {
+    if (code && code !== MODE_YEAR && code !== MODE_MONTH &&
+        code !== MODE_DATE && code !== MODE_RANGE) {
       for (var i = 0; i < sel.options.length; i++) {
         if (sel.options[i].value === code) {
           sel.value = code;
-          this._showCustom(false);
-          this._showRange(false);
+          this._hideAll();
           this.closePicker();
           return;
         }
       }
     }
-    if (code === "range") {
-      sel.value = "range";
-      this._showCustom(false);
-      this._showRange(true);
+    if (code === MODE_RANGE) {
+      sel.value = MODE_RANGE;
+      this._hideAll();
+      var rb = this._el("range-block");
+      if (rb) rb.style.display = "flex";
       if (fromDate) { var fi = this._el("from-date"); if (fi) fi.value = fromDate; }
       if (toDate)   { var ti = this._el("to-date");   if (ti) ti.value = toDate; }
       return;
     }
+    if (code === MODE_YEAR) {
+      sel.value = MODE_YEAR;
+      this._hideAll();
+      var yb = this._el("year-block");
+      if (yb) yb.style.display = "flex";
+      if (customTime && /^\d{4}$/.test(customTime)) {
+        var yi = this._el("year-input");
+        if (yi) yi.value = customTime;
+      }
+      return;
+    }
+    if (code === MODE_MONTH) {
+      sel.value = MODE_MONTH;
+      this._hideAll();
+      var mb = this._el("month-block");
+      if (mb) mb.style.display = "flex";
+      if (customTime && customTime.length >= 7 && /^\d{4}-\d{2}/.test(customTime)) {
+        this.selYear = parseInt(customTime.substring(0, 4));
+        this.selMonth = customTime.substring(5, 7);
+        var mt = this._el("month-text");
+        if (mt) mt.textContent = customTime.substring(0, 7);
+      }
+      return;
+    }
+    if (code === MODE_DATE) {
+      sel.value = MODE_DATE;
+      this._hideAll();
+      var db = this._el("date-block");
+      if (db) db.style.display = "flex";
+      if (customTime && /^\d{4}-\d{2}-\d{2}$/.test(customTime)) {
+        var di2 = this._el("day-input");
+        if (di2) di2.value = customTime;
+      }
+      return;
+    }
+    // fallback — treat as "custom" for backwards compat
     sel.value = "custom";
-    this._showCustom(true);
-    this._showRange(false);
-    if (customTime && customTime.length >= 7 && /^\d{4}-\d{2}/.test(customTime)) {
-      this.selYear = parseInt(customTime.substring(0, 4));
-      this.selMonth = customTime.substring(5, 7);
-      var mt = this._el("month-text");
-      if (mt) mt.textContent = customTime.substring(0, 7);
-    }
-    if (customTime && /^\d{4}$/.test(customTime)) {
-      var yi = this._el("year-input");
-      if (yi) yi.value = customTime;
-    }
-    if (customTime && /^\d{4}-\d{2}-\d{2}$/.test(customTime)) {
-      var di = this._el("day-input");
-      if (di) di.value = customTime;
-    }
+    this._hideAll();
   };
 
   TimePicker.prototype.onSelectChange = function(val) {
-    if (val === "custom") { this._showCustom(true); this._showRange(false); return; }
-    if (val === "range")  { this._showCustom(false); this._showRange(true);  return; }
-    this._showCustom(false);
-    this._showRange(false);
+    if (val === MODE_YEAR)  { this._hideAll(); var yb = this._el("year-block");  if (yb) yb.style.display = "flex"; return; }
+    if (val === MODE_MONTH) { this._hideAll(); var mb = this._el("month-block"); if (mb) mb.style.display = "flex"; return; }
+    if (val === MODE_DATE)  { this._hideAll(); var db = this._el("date-block");  if (db) db.style.display = "flex"; return; }
+    if (val === MODE_RANGE) { this._hideAll(); var rb = this._el("range-block"); if (rb) rb.style.display = "flex"; return; }
+    this._hideAll();
     this.closePicker();
     this.onChange(val);
   };
 
-  TimePicker.prototype._showRange = function(show) {
-    var el = this._el("range-block");
-    if (el) el.style.display = show ? "block" : "none";
+  TimePicker.prototype._hideAll = function() {
+    var yb = this._el("year-block");
+    var mb = this._el("month-block");
+    var db = this._el("date-block");
+    var rb = this._el("range-block");
+    if (yb) yb.style.display = "none";
+    if (mb) mb.style.display = "none";
+    if (db) db.style.display = "none";
+    if (rb) rb.style.display = "none";
   };
 
   TimePicker.prototype.shiftYear = function(d) {
@@ -151,11 +190,6 @@
   TimePicker.prototype.closePicker = function() {
     var pop = this._el("month-picker-popup");
     if (pop) pop.style.display = "none";
-  };
-
-  TimePicker.prototype._showCustom = function(show) {
-    var el = this._el("custom-block");
-    if (el) el.style.display = show ? "block" : "none";
   };
 
   TimePicker.prototype._renderGrid = function() {
@@ -224,10 +258,10 @@
     var fi = this._el("from-date");
     var ti = this._el("to-date");
     if (fi) fi.addEventListener("change", function() {
-      self.onChange("range");
+      self.onChange(MODE_RANGE);
     });
     if (ti) ti.addEventListener("change", function() {
-      self.onChange("range");
+      self.onChange(MODE_RANGE);
     });
   };
 
