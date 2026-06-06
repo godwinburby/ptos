@@ -44,7 +44,7 @@ _TIME_OPTIONS_BASE = [
     ("Today","td"),("Yesterday","yd"),("This week","tw"),("Last week","lw"),
     ("This month","tm"),("Last month","lm"),("This quarter","tq"),
     ("Last quarter","lq"),("This year","ty"),("Last year","ly"),("All time","all"),
-    ("Custom","custom"),
+    ("Custom","custom"),("Date range","range"),
 ]
 _YEAR_RANGE = list(range(dt.date.today().year - 10, dt.date.today().year + 1))
 
@@ -76,7 +76,7 @@ def _greeting():
     h = dt.datetime.now().hour
     return "morning" if h < 12 else "afternoon" if h < 17 else "evening"
 
-def _build_period_label(time_code, custom_time, cycles):
+def _build_period_label(time_code, custom_time, cycles, from_date=None, to_date=None):
     """Build a human-readable label from time code.
     
     Examples:
@@ -103,6 +103,19 @@ def _build_period_label(time_code, custom_time, cycles):
     # Check standard codes first
     if time_code in labels:
         return labels[time_code]
+    
+    # Handle range
+    if time_code == "range":
+        if from_date or to_date:
+            parts = []
+            if from_date:
+                d = dt.date.fromisoformat(from_date) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", from_date) else None
+                parts.append("From " + (f"{d.day} {d.strftime('%b %Y')}" if d else from_date))
+            if to_date:
+                d = dt.date.fromisoformat(to_date) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", to_date) else None
+                parts.append("to " + (f"{d.day} {d.strftime('%b %Y')}" if d else to_date))
+            return " ".join(parts)
+        return "Date range"
     
     # Handle YYYY (bare year)
     if re.fullmatch(r"\d{4}", time_code):
@@ -406,20 +419,26 @@ def home():
         # time_param present = user explicitly picked a window to override all metrics.
         time_param  = request.args.get("time", None)
         custom_time = request.args.get("custom_time", "")
-        if time_param == "custom" and custom_time and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
+        from_date   = request.args.get("from_date") or None
+        to_date     = request.args.get("to_date") or None
+        if from_date:
+            time_code = "range"
+            use_dashboard_time = True
+        elif time_param == "custom" and custom_time and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
             time_code = custom_time
         else:
             time_code = time_param or "tm"
-        use_dashboard_time = time_param is not None
+        use_dashboard_time = time_param is not None or from_date is not None
 
         cycles = cfg.get("cycles", {})
         if db_name and db_name in dashboards:
-            db = svc.get_dashboard(db_name, time_code, use_dashboard_time)
+            db = svc.get_dashboard(db_name, time_code, use_dashboard_time,
+                                   from_date=from_date, to_date=to_date)
             for item in db["items"]:
                 kind = item.get("kind", "unknown")
                 # Each card shows its own query's time window, not a global label
                 item_time = item.get("item_time", time_code)
-                sub = _build_period_label(item_time, custom_time, cycles)
+                sub = _build_period_label(item_time, custom_time, cycles, from_date=from_date, to_date=to_date)
                 stat = {
                     "label": item["name"].replace("_"," "),
                     "value": item["value"],
@@ -461,6 +480,8 @@ def home():
         year_range=_YEAR_RANGE,
         current_time=request.args.get("time", ""),   # "" selects Per query option
         custom_time=request.args.get("custom_time", ""),
+        from_date=request.args.get("from_date", ""),
+        to_date=request.args.get("to_date", ""),
         recent_rows=recent_rows, recent_cols=recent_cols)
 
 
@@ -1576,23 +1597,31 @@ def queries_get():
         dashboards=list(all_q.get("dashboards",{}).keys()),
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
         current_time=request.args.get("time", ""),
-        custom_time=request.args.get("custom_time", ""))
+        custom_time=request.args.get("custom_time", ""),
+        from_date=request.args.get("from_date", ""),
+        to_date=request.args.get("to_date", ""))
 
 @app.route("/queries/run", methods=["POST"])
 def queries_run():
     data = request.get_json(silent=True) or {}
     kind = data.get("kind","q")
     name = data.get("name","")
+    from_date = data.get("from_date") or None
+    to_date   = data.get("to_date") or None
     raw_time = data.get("time","") or None
     # reject any value that is not a known alias and not a valid YYYY, YYYY-MM, or YYYY-MM-DD
     _valid = {code for _, code in _get_time_options()}
-    if raw_time and raw_time not in _valid and \
+    if from_date:
+        time = "range"
+    elif raw_time and raw_time not in _valid and \
        not re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", raw_time):
         return jsonify(ok=False, error=f"Invalid time window: {raw_time}")
-    time = raw_time
+    else:
+        time = raw_time
     try:
         if kind == "d":
-            result = svc.get_dashboard(name, time or "tm", use_dashboard_time=True)
+            result = svc.get_dashboard(name, time or "tm", use_dashboard_time=True,
+                                       from_date=from_date, to_date=to_date)
             result["kind"] = "dashboard"
             # Add human-readable time label
             cfg = svc.get_config()
@@ -1601,10 +1630,10 @@ def queries_run():
             time_for_label = time or "tm"
             result["time_label"] = _build_period_label(time_for_label, custom_time, cycles)
         elif kind == "m":
-            result = svc.get_metric(name, time or "tm")
+            result = svc.get_metric(name, time or "tm", from_date=from_date, to_date=to_date)
             result["kind"] = "metric"
         else:
-            result = svc.run_query(name, time)
+            result = svc.run_query(name, time, from_date=from_date, to_date=to_date)
         return jsonify(ok=True, data=result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -1628,17 +1657,24 @@ def browse_get():
         tab="browse", title="Browse", now=_now_str(),
         types=types, log_files=log_files, time_options=_get_time_options(), year_range=_YEAR_RANGE,
         current_time=request.args.get("time", "tm"),
-        custom_time=request.args.get("custom_time", ""))
+        custom_time=request.args.get("custom_time", ""),
+        from_date=request.args.get("from_date", ""),
+        to_date=request.args.get("to_date", ""))
 
 @app.route("/browse/run", methods=["POST"])
 def browse_run():
     data   = request.get_json(silent=True) or {}
     raw_time = data.get("time","tm")
+    from_date = data.get("from_date") or None
+    to_date   = data.get("to_date") or None
     _valid = {code for _, code in _get_time_options()}
-    if raw_time and raw_time not in _valid and \
+    if from_date:
+        time = "range"
+    elif raw_time and raw_time not in _valid and \
        not re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", raw_time):
-        raw_time = "tm"
-    time = raw_time
+        time = "tm"
+    else:
+        time = raw_time
     search = data.get("search","") or None
     group  = data.get("group","") or None
     sort   = data.get("sort","") or None
@@ -1658,11 +1694,13 @@ def browse_run():
         filters = []
     try:
         if group:
-            result = svc.get_group(filters, time, [group], from_file=file)
+            result = svc.get_group(filters, time, [group], from_file=file,
+                                   from_date=from_date, to_date=to_date)
             result["kind"] = "group"
         else:
             result = svc.get_records(filters, time, search=search,
-                                     sort=sort, from_file=file)
+                                     sort=sort, from_file=file,
+                                     from_date=from_date, to_date=to_date)
             result["kind"] = "records"
         return jsonify(ok=True, data=result)
     except PTOSError as e:
@@ -1678,6 +1716,8 @@ def browse_export():
     time   = params.get("time","tm")
     search = params.get("search","") or None
     file   = params.get("file","") or None
+    from_date = params.get("from_date") or None
+    to_date   = params.get("to_date") or None
     if isinstance(where, str):
         where = [where] if where.strip() else []
     if expr and where:
@@ -1690,7 +1730,8 @@ def browse_export():
     else:
         filters = []
     try:
-        data    = svc.get_records(filters, time, search=search, from_file=file)
+        data    = svc.get_records(filters, time, search=search, from_file=file,
+                                  from_date=from_date, to_date=to_date)
         records = data["records"]
         cols    = [c for c in data["columns"] if not c.startswith("_")]
         tl      = _TIME_DICT.get(time, time)

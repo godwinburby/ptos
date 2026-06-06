@@ -45,6 +45,11 @@ var tp;
     } else if (time === 'custom') {
       var ct = tp.getTime();
       if (ct) { params.set('time', 'custom'); params.set('custom_time', ct); }
+    } else if (time === 'range') {
+      var r = tp.getRange();
+      if (r) { params.set('time', 'range'); }
+      if (r && r.from) params.set('from_date', r.from);
+      if (r && r.to)   params.set('to_date', r.to);
     } else {
       params.set('time', time);
     }
@@ -67,6 +72,8 @@ var tp;
     var time = params.get("time");
     if (time === "custom") {
       tp.setTime("custom", params.get("custom_time"));
+    } else if (time === "range") {
+      tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
     } else if (time) {
       tp.setTime(time);
     }

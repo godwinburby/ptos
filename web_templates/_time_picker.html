@@ -42,3 +42,18 @@
   <div id="{{ prefix }}picker-grid"
        style="display:grid;grid-template-columns:repeat(3,1fr);gap:6px;"></div>
 </div>
+
+<div id="{{ prefix }}range-block" class="field-group" style="display:none;flex-wrap:wrap;gap:10px;align-items:end;">
+  <div class="field-group" style="flex:1;min-width:140px;margin-bottom:0;">
+    <label>From</label>
+    <input id="{{ prefix }}from-date" type="date"
+           style="width:100%;padding:9px 12px;border-radius:6px;border:1px solid var(--border);
+                  background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;">
+  </div>
+  <div class="field-group" style="flex:1;min-width:140px;margin-bottom:0;">
+    <label>To</label>
+    <input id="{{ prefix }}to-date" type="date"
+           style="width:100%;padding:9px 12px;border-radius:6px;border:1px solid var(--border);
+                  background:var(--bg);color:var(--text);font-size:14px;box-sizing:border-box;">
+  </div>
+</div>

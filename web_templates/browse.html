@@ -149,7 +149,11 @@ var tp;
     var params = new URLSearchParams(window.location.search);
     var run = params.get("run");
     var time = params.get("time");
-    if (time) tp.setTime(time, params.get("custom_time"));
+    if (time === "range") {
+      tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
+    } else if (time) {
+      tp.setTime(time, params.get("custom_time"));
+    }
     if (run && run.startsWith("q:")) {
       // Load from query - for now just show chip builder
     }
@@ -203,7 +207,12 @@ function _params() {
   const sort   = document.getElementById("b-sort")   ? document.getElementById("b-sort").value   : "";
   // FilterBuilder is the single source of truth for the expression
   const expr = _fb ? _fb.getExpr() : "";
-  return {where: [], expr, time, search, group, sort};
+  var from_date = null, to_date = null;
+  if (time === "range" && tp) {
+    var r = tp.getRange();
+    if (r) { from_date = r.from; to_date = r.to; }
+  }
+  return {where: [], expr, time, search, group, sort, from_date, to_date};
 }
 
 function runBrowse() {
