@@ -246,7 +246,7 @@
     }
 
     var yi = this._el("year-input");
-    if (yi) yi.addEventListener("change", function() {
+    if (yi) yi.addEventListener("input", function() {
       if (yi.value && yi.value.length === 4) self.onChange(yi.value);
     });
 
