@@ -274,6 +274,7 @@ under `[dashboard] default`.
 Features:
 - Personalized greeting with user name
 - Dashboard selector dropdown
+- Time window selector (presets + specific year/month/date/range)
 - Quick-add preset chips and multi-record preset buttons
 - Overdue items with heat indicators (hot / warm / cool)
 - Today's records table with inline edit/delete
@@ -307,7 +308,7 @@ appear automatically. Features:
 ### Browse
 
 Filter, search, and group records. Features:
-- Type selector and time window
+- Type selector and time window (presets + specific year/month/date/range)
 - **Chip-based filter builder** with active filter display
 - Free-text expression filter (full boolean syntax: `AND`, `OR`, `NOT`, parentheses)
 - Free-text search with debounced auto-search
@@ -367,7 +368,7 @@ Visual builder for creating queries, metrics, and dashboards. Features:
 - **WHERE expression builder with chips**
 - **Live records preview** (auto-updates as you build)
 - Advanced WHERE mode for raw expression editing
-- Custom time window (year, year-month, or full-date) with month picker popup
+- Granular time window (specific year, month, date, or date range) with month picker popup
 - **Dashboard editor** for managing dashboard metrics (drag-and-drop reorder items)
 - Save as Query or Metric
 

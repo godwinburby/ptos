@@ -57,8 +57,9 @@ The form even suggests your most-used values from history.
 
 ### Run a saved report in one click
 
-The **Queries** tab runs your saved reports. Pick a query, and results appear
-instantly — record count, total, average, and a full table. No typing filters every time.
+The **Queries** tab runs your saved reports. Pick a query, override the time
+window (presets or specific year/month/date/range), and results appear instantly
+— record count, total, average, and a full table. No typing filters every time.
 
 <img src="images/ptos_queries.png" width="260" alt="Queries screen showing expense query results with totals and record table">
 
@@ -93,17 +94,20 @@ under **More**.
 
 **Home** — your dashboard at a glance. Key metrics from your configured reports,
 overdue items that need attention, and quick-add buttons for your saved presets.
+Adjust the time window (presets or specific year/month/date/range) to see
+metrics for any period.
 
 **+ Add Record** — the form you use every day. Pick a record type and the right
 fields appear automatically. Use a preset to pre-fill common entries with one tap.
 The form remembers your past choices and suggests your most-used values.
 
 **Queries** — run saved reports in one click. Pick a report, choose a time window
-(this month, last month, a specific month / year / date, etc.), and results appear instantly.
+(this month, last month, a specific month / year / date / range, etc.), and results appear instantly.
 No typing, no commands.
 
-**Browse** — filter and explore records. Pick a type, set filters, group or sort
-the results, and export to CSV if you need to take the data elsewhere. Click any
+**Browse** — filter and explore records. Pick a type, choose a time window
+(presets or specific year/month/date/range), set filters, group or sort the
+results, and export to CSV if you need to take the data elsewhere. Click any
 row to open the edit form for that record.
 
 **More** — everything else in one place:
