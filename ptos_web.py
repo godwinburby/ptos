@@ -23,7 +23,9 @@ from flask import request, Response
 def _check_auth(username, password):
     try:
         cfg = svc.get_config()
-        auth = cfg.get("auth", {})
+        auth = cfg.get("auth")
+        if auth is None or not auth.get("enabled", False):
+            return True
         return username == auth.get("username", "") and password == auth.get("password", "")
     except:
         return False
@@ -883,6 +885,7 @@ def settings_page():
     cycles_raw = cfg.get("cycles", {})
     backup = cfg.get("backup", {})
     dashboard = cfg.get("dashboard", {})
+    auth = cfg.get("auth", {})
     
     cycles = [{"name": k, "day": v} for k, v in cycles_raw.items()]
     
@@ -912,7 +915,10 @@ def settings_page():
         backup=backup,
         backup_folders=backup.get("folders", []),
         dashboards=dashboards,
-        default_dashboard=dashboard.get("default", ""))
+        default_dashboard=dashboard.get("default", ""),
+        auth_enabled=auth.get("enabled", False),
+        auth_username=auth.get("username", ""),
+        auth_password=auth.get("password", ""))
 
 
 @app.route("/settings/save", methods=["POST"])
@@ -951,6 +957,14 @@ def settings_save():
                 if cf not in valid_folders:
                     valid_folders.insert(0, cf)
             cfg.setdefault("backup", {})["folders"] = valid_folders
+        
+        if "auth_enabled" in data:
+            enabled = bool(data["auth_enabled"])
+            username = data.get("auth_username", "").strip()
+            password = data.get("auth_password", "").strip()
+            if enabled and (not username or not password):
+                return jsonify(ok=False, error="Username and password required when auth is enabled")
+            cfg["auth"] = {"enabled": enabled, "username": username, "password": password}
         
         result = svc.save_config(cfg)
         if result.get("ok"):

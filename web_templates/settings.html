@@ -45,6 +45,27 @@
 </div>
 
 <div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Authentication</div>
+  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Enable password protection for the web UI. Changing credentials takes effect immediately.
+  </p>
+  <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;margin-bottom:14px;">
+    <input type="checkbox" id="auth-enabled" style="width:18px;height:18px;">
+    Require login
+  </label>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;">
+    <div class="field-group" style="flex:1;min-width:140px;">
+      <label>Username</label>
+      <input type="text" id="auth-username" value="{{ auth_username }}" placeholder="Username" style="width:100%;">
+    </div>
+    <div class="field-group" style="flex:1;min-width:140px;">
+      <label>Password</label>
+      <input type="password" id="auth-password" value="{{ auth_password }}" placeholder="Password" style="width:100%;">
+    </div>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
   <div class="card-title">Custom Cycles</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
     Define billing/reporting cycles as day-of-month they start. Usage: <code>-t clinic</code> (current) or <code>-t clinic-1</code> (previous)
@@ -113,6 +134,7 @@
   var coreFolders = ["records", "config", "templates", "journal"];
   var backupFolders = {{ backup_folders | tojson }};
   
+  document.getElementById("auth-enabled").checked = {{ 'true' if auth_enabled else 'false' }};
   document.getElementById("auto-backup-startup").checked = {{ 'true' if backup.get('auto_backup_on_startup', true) else 'false' }};
   document.getElementById("auto-backup-shutdown").checked = {{ 'true' if backup.get('auto_backup_on_shutdown', true) else 'false' }};
   document.getElementById("backup-if-changed").checked = {{ 'true' if backup.get('backup_if_files_changed', true) else 'false' }};
@@ -208,7 +230,10 @@
         max_full_backups: parseInt(document.getElementById("max-full-backups").value) || 10,
         max_config_backups: parseInt(document.getElementById("max-config-backups").value) || 10,
         default_dashboard: defaultDashboard,
-        backup_folders: backupFolders
+        backup_folders: backupFolders,
+        auth_enabled: document.getElementById("auth-enabled").checked,
+        auth_username: document.getElementById("auth-username").value.trim(),
+        auth_password: document.getElementById("auth-password").value
       })
     })
     .then(function(r) { return r.json(); })

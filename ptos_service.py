@@ -185,6 +185,7 @@ def save_config(config_dict):
         import tomli_w
         with open(ptos.CONFIG_PATH, "wb") as f:
             tomli_w.dump(config_dict, f)
+        ptos._invalidate("config")
         return {"ok": True, "message": "Settings saved"}
     except Exception as e:
         return {"ok": False, "message": str(e)}

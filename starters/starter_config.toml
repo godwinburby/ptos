@@ -14,6 +14,12 @@ date_format = "indian"
 # Usage:   ptos -t clinic      (current cycle)
 #          ptos -t clinic-1    (previous cycle)
 
+[auth]
+# Web UI authentication (disable for local-only access)
+enabled = false
+username = ""
+password = ""
+
 [backup]
 # Folders to include in full backup
 # Note: Keep in sync with Android start script preserved folders in start_ptos_android.sh
