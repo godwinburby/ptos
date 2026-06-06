@@ -24,7 +24,9 @@ def _check_auth(username, password):
     try:
         cfg = svc.get_config()
         auth = cfg.get("auth")
-        if auth is None or not auth.get("enabled", False):
+        if auth is None:
+            return True
+        if not auth.get("enabled", True):
             return True
         return username == auth.get("username", "") and password == auth.get("password", "")
     except:
