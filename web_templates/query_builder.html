@@ -556,16 +556,21 @@ function _buildQueryEditor(container, name) {
   // ── now render chips ──────────────────────────────────────────────────────
   _renderTypeChips(q);
   
-  // Restore custom time picker state if query has a custom time value
-  if (q.time && (q.time.match(/^\d{4}-\d{2}(?:-\d{2})?$/) || q.time.match(/^\d{4}$/))) {
+  // Restore custom time picker state
+  if (q.time) {
     var sel = document.getElementById("qb-time-select");
-    if (sel) sel.value = "custom";
-    if (window._qb_tp) {
-      window._qb_tp.setTime("custom", q.time);
-      window._qb_tp._showCustom(true);
+    if (/^\d{4}$/.test(q.time)) {
+      if (sel) sel.value = "year";
+      if (window._qb_tp) window._qb_tp.setTime("year", q.time);
+    } else if (/^\d{4}-\d{2}$/.test(q.time)) {
+      if (sel) sel.value = "month";
+      if (window._qb_tp) window._qb_tp.setTime("month", q.time);
+    } else if (/^\d{4}-\d{2}-\d{2}$/.test(q.time)) {
+      if (sel) sel.value = "date";
+      if (window._qb_tp) window._qb_tp.setTime("date", q.time);
+    } else if (q.time === "range" && window._qb_tp) {
+      window._qb_tp.onSelectChange("range");
     }
-  } else if (q.time === "range" && window._qb_tp) {
-    window._qb_tp.onSelectChange("range");
   }
   
   var sel = _typeFromChips(q);
