@@ -564,6 +564,8 @@ function _buildQueryEditor(container, name) {
       window._qb_tp.setTime("custom", q.time);
       window._qb_tp._showCustom(true);
     }
+  } else if (q.time === "range" && window._qb_tp) {
+    window._qb_tp.onSelectChange("range");
   }
   
   var sel = _typeFromChips(q);
@@ -1156,10 +1158,16 @@ function triggerLivePreview() {
     var sortEl = document.getElementById("qb-sort");
     var group = grpEl ? grpEl.value : "";
     var sort  = sortEl ? sortEl.value : "";
+    var time = q.time || "tm";
+    var from_date = null, to_date = null;
+    if (time === "range") {
+      var r = window._qb_tp ? window._qb_tp.getRange() : null;
+      if (r) { from_date = r.from; to_date = r.to; }
+    }
     area.innerHTML = '<div style="color:var(--sub);padding:16px;">Loading…</div>';
     fetch("/browse/run", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({where:_buildChipFilters(q), expr:q._exprManual||"", time:q.time||"tm", group:group, sort:sort})
+      body: JSON.stringify({where:_buildChipFilters(q), expr:q._exprManual||"", time:time, group:group, sort:sort, from_date:from_date, to_date:to_date})
     })
     .then(function(r){ return r.json(); })
     .then(function(d) {

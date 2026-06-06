@@ -61,6 +61,8 @@ var tp;
     var time = params.get("time");
     if (time === "custom") {
       tp.setTime("custom", params.get("custom_time"));
+    } else if (time === "range") {
+      tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
     } else if (time) {
       tp.setTime(time);
     }
@@ -73,10 +75,15 @@ window._qGetTime = function() { return tp.getTime(); };
 
 function runQuery() {
   const raw  = document.getElementById("q-select").value;
-  const time = window._qGetTime();
+  var time = window._qGetTime();
   // if custom chosen but no value picked yet, wait
   const timeVal = document.getElementById("q-time-select").value;
   if (timeVal === "custom" && !time) return;
+  var from_date = null, to_date = null;
+  if (time === "range" && tp) {
+    var r = tp.getRange();
+    if (r) { from_date = r.from; to_date = r.to; }
+  }
   const area = document.getElementById("result-area");
   if (!raw) return;
   const [kind, ...rest] = raw.split(":");
@@ -97,7 +104,7 @@ function runQuery() {
   area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
   fetch("/queries/run", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({kind, name, time})
+    body: JSON.stringify({kind, name, time, from_date, to_date})
   })
   .then(r => r.json())
   .then(d => {
@@ -304,7 +311,11 @@ RecordTable._bkClear     =function(){ _rt._bkClear(); };
   // set time override if provided
   if (time) {
     if (tp) {
-      tp.setTime(time, params.get("custom_time"));
+      if (time === "range") {
+        tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
+      } else {
+        tp.setTime(time, params.get("custom_time"));
+      }
     }
   }
 

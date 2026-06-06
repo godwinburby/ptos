@@ -524,7 +524,8 @@ def get_conditional_suggestions(rtype, field, value):
 
 # ══════════════════════════════════════════════════════════════════════════════
 def get_records(filters, time="tm", search=None, sort=None,
-                from_file=None, sum_field=None, select=None):
+                from_file=None, sum_field=None, select=None,
+                from_date=None, to_date=None):
     """
     Returns:
       { records: [{date, type, ...fields, note}],
@@ -538,7 +539,13 @@ def get_records(filters, time="tm", search=None, sort=None,
         filters: [str] }
     """
     try:
-        start, end = _resolve_time(time)
+        if from_date:
+            start = ptos.parse_from_to(from_date)
+            end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
+            time_label = "From " + (from_date or "…") + (" to " + to_date if to_date else "")
+        else:
+            start, end = _resolve_time(time)
+            time_label = ptos._TIME_ALIASES.get(time, time)
         raw, total = ptos.scan_records(
             start, end, filters, search,
             from_file=from_file, sum_field=sum_field)
@@ -597,7 +604,6 @@ def get_records(filters, time="tm", search=None, sort=None,
         col_seen = [c for c in col_seen if c in want]
         records  = [{k: v for k, v in r.items() if k in want} for r in records]
 
-    time_label = ptos._TIME_ALIASES.get(time, time)
     count = len(records)
 
     return {
@@ -619,7 +625,8 @@ def get_records(filters, time="tm", search=None, sort=None,
 # ══════════════════════════════════════════════════════════════════════════════
 
 def get_group(filters, time="tm", group_fields=None,
-              sum_field=None, from_file=None):
+              sum_field=None, from_file=None,
+              from_date=None, to_date=None):
     """
     Returns:
       { rows: [{key: str, count: int, total: int, total_fmt: str}],
@@ -633,7 +640,13 @@ def get_group(filters, time="tm", group_fields=None,
     """
     group_fields = group_fields or ["type"]
     try:
-        start, end = _resolve_time(time)
+        if from_date:
+            start = ptos.parse_from_to(from_date)
+            end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
+            time_label = "From " + (from_date or "…") + (" to " + to_date if to_date else "")
+        else:
+            start, end = _resolve_time(time)
+            time_label = ptos._TIME_ALIASES.get(time, time)
         raw, total = ptos.scan_records(start, end, filters, None,
                                        from_file=from_file, sum_field=sum_field)
     except PTOSError:
@@ -666,7 +679,7 @@ def get_group(filters, time="tm", group_fields=None,
         "grand_count":     grand_count,
         "grand_total":     grand_total,
         "grand_total_fmt": ptos.fmt(grand_total) if has_amount else "",
-        "time_label":      ptos._TIME_ALIASES.get(time, time),
+        "time_label":      time_label,
         "start":           str(start),
         "end":             str(end),
     }
@@ -903,7 +916,7 @@ def get_due(config_name=None, days_override=None):
 # Metric
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_metric(name, time="tm"):
+def get_metric(name, time="tm", from_date=None, to_date=None):
     """
     Returns:
       { name: str, value: str, raw: float|int|None }
@@ -911,7 +924,11 @@ def get_metric(name, time="tm"):
     try:
         queries = ptos.get_queries()
         cycles  = _cycles()
-        start, end = _resolve_time(time)
+        if from_date:
+            start = ptos.parse_from_to(from_date)
+            end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
+        else:
+            start, end = _resolve_time(time)
         metrics = queries.get("metrics", {})
     except PTOSError:
         raise
@@ -1121,7 +1138,8 @@ def get_metric(name, time="tm"):
 # Dashboard
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_dashboard(name, time="tm", use_dashboard_time=False):
+def get_dashboard(name, time="tm", use_dashboard_time=False,
+                  from_date=None, to_date=None):
     """
     Returns:
       { name: str,
@@ -1144,8 +1162,13 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
         raise PTOSError(f"Dashboard '{name}' not found")
 
     # Pre-resolve dashboard time for override case
-    if use_dashboard_time:
+    if use_dashboard_time and from_date:
+        db_start = ptos.parse_from_to(from_date)
+        db_end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
+        period_from, period_to = db_start, db_end
+    elif use_dashboard_time:
         db_start, db_end = _resolve_time(time)
+        period_from, period_to = db_start, db_end
     
     items = []
     for item_name in dashboards[name].get("metrics", []):
@@ -1155,7 +1178,10 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
         # Determine which time to use for this item
         if use_dashboard_time:
             # Override: use dashboard's time for all
+            item_start, item_end = db_start, db_end
             item_time = time
+            if from_date:
+                item_time = "range"
         else:
             # Use each item's own time from queries.toml, fallback to dashboard's time
             if item_name in metrics:
@@ -1165,13 +1191,16 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
                 # For queries, read from queries section
                 q = queries_dict.get(item_name, {})
             item_time = q.get("time", time)
-        
-        # Get start/end for this item
-        item_start, item_end = _resolve_time(item_time)
+            if from_date:
+                item_start = ptos.parse_from_to(from_date)
+                item_end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
+                item_time = "range"
+            else:
+                item_start, item_end = _resolve_time(item_time)
         item_period = f"{item_start} to {item_end}"
         
         if item_name in metrics:
-            item = get_metric(item_name, item_time)
+            item = get_metric(item_name, item_time, from_date=from_date, to_date=to_date)
             item["kind"] = "metric"
             item["item_time"] = item_time
             item["item_period"] = item_period
@@ -1191,9 +1220,15 @@ def get_dashboard(name, time="tm", use_dashboard_time=False):
             items.append({"name": _disp(item_name), "value": "not found", "raw": None,
                            "kind": "unknown", "item_time": item_time, "item_period": item_period})
     
+    if from_date:
+        period_from = ptos.parse_from_to(from_date)
+        period_end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
+    else:
+        period_from, period_end = _resolve_time(time)
+    
     return {
         "name":   _disp(name),
-        "period": f"{_resolve_time(time)[0]} to {_resolve_time(time)[1]}",
+        "period": f"{period_from} to {period_end}",
         "items":  items,
     }
 
@@ -1281,7 +1316,7 @@ def run_lint():
 # Query runner (resolves saved query to correct call)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_query(name, time=None):
+def run_query(name, time=None, from_date=None, to_date=None):
     """
     Resolves a named query and returns structured data.
     Returns a dict with a 'kind' key indicating the result type:
@@ -1302,12 +1337,14 @@ def run_query(name, time=None):
         raise PTOSError(str(e))
 
     if name in dashboards:
-        result = get_dashboard(name, time or "tm")
+        result = get_dashboard(name, time or "tm",
+                               from_date=from_date, to_date=to_date)
         result["kind"] = "dashboard"
         return result
 
     if name in metrics:
-        result = get_metric(name, time or "tm")
+        result = get_metric(name, time or "tm",
+                            from_date=from_date, to_date=to_date)
         result["kind"] = "metric"
         return result
 
@@ -1342,7 +1379,8 @@ def run_query(name, time=None):
 
     if "group" in q:
         result = get_group(filters, effective_time, q["group"],
-                           sum_field=q.get("sum_field"))
+                           sum_field=q.get("sum_field"),
+                           from_date=from_date, to_date=to_date)
         result["kind"]       = "group"
         result["query_name"] = name
         result["where_expr"] = where_expr
@@ -1378,7 +1416,8 @@ def run_query(name, time=None):
         result["query_sum"] = q.get("sum")
         return result
 
-    result = get_records(filters, effective_time, search=effective_search)
+    result = get_records(filters, effective_time, search=effective_search,
+                         from_date=from_date, to_date=to_date)
     result["kind"]       = "records"
     result["query_name"] = name
     result["where_expr"] = where_expr

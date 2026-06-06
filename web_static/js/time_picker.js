@@ -23,6 +23,7 @@
     var sel = this._el("time-select");
     if (!sel) return null;
     var val = sel.value;
+    if (val === "range") return "range";
     if (val !== "custom") return val || null;
     var dy = this._el("day-input");
     if (dy && dy.value) return dy.value;
@@ -30,6 +31,23 @@
     var yr = this._el("year-input");
     if (yr && yr.value) return yr.value;
     return null;
+  };
+
+  TimePicker.prototype.getRange = function() {
+    var fi = this._el("from-date");
+    var ti = this._el("to-date");
+    if (!fi || !ti) return null;
+    var fromVal = fi.value || "";
+    var toVal = ti.value || "";
+    if (!fromVal && !toVal) return null;
+    return {from: fromVal, to: toVal};
+  };
+
+  TimePicker.prototype.setRange = function(from, to) {
+    var fi = this._el("from-date");
+    var ti = this._el("to-date");
+    if (fi && from) fi.value = from;
+    if (ti && to) ti.value = to;
   };
 
   TimePicker.prototype.reset = function() {
@@ -41,25 +59,40 @@
     if (yi) yi.value = "";
     var di = this._el("day-input");
     if (di) di.value = "";
+    var fi = this._el("from-date");
+    if (fi) fi.value = "";
+    var ti = this._el("to-date");
+    if (ti) ti.value = "";
     this._showCustom(false);
+    this._showRange(false);
     this.closePicker();
   };
 
-  TimePicker.prototype.setTime = function(code, customTime) {
+  TimePicker.prototype.setTime = function(code, customTime, fromDate, toDate) {
     var sel = this._el("time-select");
     if (!sel) return;
-    if (code && code !== "custom") {
+    if (code && code !== "custom" && code !== "range") {
       for (var i = 0; i < sel.options.length; i++) {
         if (sel.options[i].value === code) {
           sel.value = code;
           this._showCustom(false);
+          this._showRange(false);
           this.closePicker();
           return;
         }
       }
     }
+    if (code === "range") {
+      sel.value = "range";
+      this._showCustom(false);
+      this._showRange(true);
+      if (fromDate) { var fi = this._el("from-date"); if (fi) fi.value = fromDate; }
+      if (toDate)   { var ti = this._el("to-date");   if (ti) ti.value = toDate; }
+      return;
+    }
     sel.value = "custom";
     this._showCustom(true);
+    this._showRange(false);
     if (customTime && customTime.length >= 7 && /^\d{4}-\d{2}/.test(customTime)) {
       this.selYear = parseInt(customTime.substring(0, 4));
       this.selMonth = customTime.substring(5, 7);
@@ -77,10 +110,17 @@
   };
 
   TimePicker.prototype.onSelectChange = function(val) {
-    if (val === "custom") { this._showCustom(true); return; }
+    if (val === "custom") { this._showCustom(true); this._showRange(false); return; }
+    if (val === "range")  { this._showCustom(false); this._showRange(true);  return; }
     this._showCustom(false);
+    this._showRange(false);
     this.closePicker();
     this.onChange(val);
+  };
+
+  TimePicker.prototype._showRange = function(show) {
+    var el = this._el("range-block");
+    if (el) el.style.display = show ? "block" : "none";
   };
 
   TimePicker.prototype.shiftYear = function(d) {
@@ -179,6 +219,15 @@
     var di = this._el("day-input");
     if (di) di.addEventListener("change", function() {
       if (di.value) self.onChange(di.value);
+    });
+
+    var fi = this._el("from-date");
+    var ti = this._el("to-date");
+    if (fi) fi.addEventListener("change", function() {
+      self.onChange("range");
+    });
+    if (ti) ti.addEventListener("change", function() {
+      self.onChange("range");
     });
   };
 
