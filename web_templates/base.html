@@ -410,9 +410,9 @@
   <div class="sidebar-footer">
     <a href="https://github.com/godwinburby/ptos" target="_blank">⭐ github.com/godwinburby/ptos</a>
     <br><br>
-    <button onclick="stopServer()" style="width:100%;padding:8px 14px;border-radius:8px;border:none;background:var(--error);color:#fff;font-size:13px;font-weight:600;cursor:pointer;opacity:.85;">
+    {% if not frozen or desktop_mode %}<button onclick="stopServer()" style="width:100%;padding:8px 14px;border-radius:8px;border:none;background:var(--error);color:#fff;font-size:13px;font-weight:600;cursor:pointer;opacity:.85;">
       Stop Server
-    </button>
+    </button>{% endif %}
   </div>
 </aside>
 
@@ -445,10 +445,12 @@
   </a>
 </nav>
 
+{% if not frozen or desktop_mode %}
 <!-- Floating Stop button -->
 <button class="floating-stop" onclick="stopServer()" title="Stop Server">
   <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
 </button>
+{% endif %}
 
 <!-- More menu dropdown -->
 <div id="more-menu" class="more-menu" style="display:none;">
@@ -488,10 +490,10 @@
       Lint
     </a>
     <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
-    <a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
+    {% if not frozen or desktop_mode %}<a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
       Stop Server
-    </a>
+    </a>{% endif %}
   </div>
 </div>
 
@@ -917,12 +919,14 @@ function toggleMoreMenu(e) {
   });
 })();
 // ── End Keyboard Shortcuts ────────────────────────────────────────────────────
+{% if not frozen or desktop_mode %}
 function stopServer() {
   if (!confirm("Stop PTOS server?")) return;
   document.body.style.cssText = "display:block;margin:0;padding:0;";
   document.body.innerHTML = "<div style='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;'><h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p></div>";
   fetch("/shutdown");
 }
+{% endif %}
 </script>
 
 {% block scripts %}{% endblock %}

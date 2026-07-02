@@ -25,6 +25,11 @@ ptos_error.log
 .stignore
 *conflict*
 
+# Build artifacts
+build/
+dist/
+notes/
+
 # Misc
 test.txt
 scripts/
