@@ -5,18 +5,27 @@
 
 <div class="card">
   <div class="chip-section" style="border-top:3px solid var(--accent);">
-    <div class="chip-section-label" style="color:var(--accent);">Queries</div>
+    <div class="chip-section-header" onclick="toggleSection(this)">
+      <div class="chip-section-label" style="color:var(--accent);">Queries</div>
+      <span class="chip-toggle">−</span>
+    </div>
     <div id="q-chip-group" class="chip-group"></div>
   </div>
   {% if metrics %}
-  <div class="chip-section" style="border-top:3px solid var(--success);">
-    <div class="chip-section-label" style="color:var(--success);">Metrics</div>
+  <div class="chip-section collapsed" style="border-top:3px solid var(--success);">
+    <div class="chip-section-header" onclick="toggleSection(this)">
+      <div class="chip-section-label" style="color:var(--success);">Metrics</div>
+      <span class="chip-toggle">+</span>
+    </div>
     <div id="m-chip-group" class="chip-group"></div>
   </div>
   {% endif %}
   {% if dashboards %}
-  <div class="chip-section" style="border-top:3px solid var(--warn);">
-    <div class="chip-section-label" style="color:var(--warn);">Dashboards</div>
+  <div class="chip-section collapsed" style="border-top:3px solid var(--warn);">
+    <div class="chip-section-header" onclick="toggleSection(this)">
+      <div class="chip-section-label" style="color:var(--warn);">Dashboards</div>
+      <span class="chip-toggle">+</span>
+    </div>
     <div id="d-chip-group" class="chip-group"></div>
   </div>
   {% endif %}
@@ -59,6 +68,13 @@ function _selectChip(kind, name) {
   _qName = name;
   _renderAllChips();
   runQuery();
+}
+
+function toggleSection(el) {
+  var section = el.parentElement;
+  section.classList.toggle("collapsed");
+  el.querySelector(".chip-toggle").textContent =
+    section.classList.contains("collapsed") ? "+" : "−";
 }
 
 function _renderAllChips() {
