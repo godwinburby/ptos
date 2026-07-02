@@ -16,14 +16,23 @@ sys.stdout.reconfigure(encoding="utf-8")
 # Paths
 # --------------------------------------------------
 
-_home    = os.environ.get("PTOS_HOME")
-BASE_DIR = _home if _home else os.path.dirname(os.path.abspath(__file__))
+_home = os.environ.get("PTOS_HOME")
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'ptos')
+elif _home:
+    BASE_DIR = _home
+else:
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+    STARTER_DIR = os.path.join(sys._MEIPASS, 'starters')
+else:
+    STARTER_DIR = os.path.join(BASE_DIR, 'starters')
 
 CONFIG_DIR   = os.path.join(BASE_DIR, "config")
 RECORDS_DIR  = os.path.join(BASE_DIR, "records")
 JOURNAL_DIR  = os.path.join(BASE_DIR, "journal")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
-STARTER_DIR  = os.path.join(BASE_DIR, "starters")
 EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
 BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
 BACKUP_FOLDERS = ["records", "config", "templates"]

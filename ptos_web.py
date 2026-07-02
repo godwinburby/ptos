@@ -14,7 +14,11 @@ from ptos_service import PTOSError
 from flask import (Flask, render_template, request, redirect,
                    url_for, jsonify, send_file)
 
-app = Flask(__name__, template_folder="web_templates", static_folder="web_static", static_url_path="/static")
+_basedir = getattr(sys, '_MEIPASS', None) or os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__,
+    template_folder=os.path.join(_basedir, 'web_templates'),
+    static_folder=os.path.join(_basedir, 'web_static'),
+    static_url_path="/static")
 app.secret_key = "ptos-local-only"
 
 from functools import wraps
