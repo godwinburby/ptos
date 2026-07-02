@@ -1,35 +1,26 @@
 # -*- mode: python ; coding: utf-8 -*-
 import os
 
-data_dirs = [
-    ("web_templates",    "web_templates"),
-    ("web_static",       "web_static"),
-    ("starters",         "starters"),
-]
-
 block_cipher = None
 
 a = Analysis(
     ["desktop_app.py"],
     pathex=[],
     binaries=[],
-    datas=data_dirs,
+    datas=[
+        ("web_templates",    "web_templates"),
+        ("web_static",       "web_static"),
+        ("starters",         "starters"),
+    ],
     hiddenimports=[
         "ptos",
         "ptos_web",
         "ptos_service",
-        "flask",
-        "jinja2",
-        "markupsafe",
-        "werkzeug",
-        "toml",
-        "platformdirs",
     ],
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
     excludes=[
-        "tkinter",
         "PyQt5",
         "PySide2",
         "matplotlib",
@@ -58,7 +49,7 @@ exe = EXE(
     debug=False,
     bootloader_ignore_signals=False,
     strip=False,
-    upx=True,
+    upx=False,
     upx_exclude=[],
     runtime_tmpdir=None,
     console=False,

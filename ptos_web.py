@@ -21,6 +21,13 @@ app = Flask(__name__,
     static_url_path="/static")
 app.secret_key = "ptos-local-only"
 
+@app.context_processor
+def _inject_globals():
+    return {
+        "frozen": bool(getattr(sys, "frozen", False)),
+        "desktop_mode": os.environ.get("DESKTOP_MODE") == "1",
+    }
+
 from functools import wraps
 from flask import request, Response
 
@@ -41,7 +48,7 @@ def require_auth():
     if request.path.startswith("/static/"):
         return None
     auth = request.authorization
-    if not auth or not _check_auth(auth.username, auth.password):
+    if not _check_auth(auth.username if auth else "", auth.password if auth else ""):
         return Response(
             'PTOS — Access denied',
             401,
@@ -2353,6 +2360,10 @@ def api_preset_delete():
 
 @app.route("/shutdown", methods=["GET", "POST"])
 def shutdown_server():
+    try:
+        _exit_backup()
+    except Exception:
+        pass
     def _exit():
         import time
         time.sleep(1)

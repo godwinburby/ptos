@@ -10,14 +10,17 @@ import subprocess
 import uuid
 import zipfile
 
-sys.stdout.reconfigure(encoding="utf-8")
+if sys.stdout:
+    sys.stdout.reconfigure(encoding="utf-8")
 
 # --------------------------------------------------
 # Paths
 # --------------------------------------------------
 
 _home = os.environ.get("PTOS_HOME")
-if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
+DESKTOP_MODE = os.environ.get("DESKTOP_MODE") == "1"
+
+if DESKTOP_MODE:
     BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'ptos')
 elif _home:
     BASE_DIR = _home
