@@ -5,21 +5,22 @@
 
 <div class="card">
   <div class="field-group">
-    <label>Query / Metric / Dashboard</label>
-    <select id="q-select" onchange="runQuery()">
-      <option value="">— select —</option>
-      {% if queries %}<optgroup label="Queries">
-        {% for n in queries %}<option value="q:{{ n }}">{{ n }}</option>{% endfor %}
-      </optgroup>{% endif %}
-      {% if metrics %}<optgroup label="Metrics">
-        {% for n in metrics %}<option value="m:{{ n }}">{{ n }}</option>{% endfor %}
-      </optgroup>{% endif %}
-      {% if dashboards %}<optgroup label="Dashboards">
-        {% for n in dashboards %}<option value="d:{{ n }}">{{ n }}</option>{% endfor %}
-      </optgroup>{% endif %}
-    </select>
+    <label>Queries</label>
+    <div id="q-chip-group" class="chip-group"></div>
   </div>
-    <div class="field-group">
+  {% if metrics %}
+  <div class="field-group">
+    <label>Metrics</label>
+    <div id="m-chip-group" class="chip-group"></div>
+  </div>
+  {% endif %}
+  {% if dashboards %}
+  <div class="field-group">
+    <label>Dashboards</label>
+    <div id="d-chip-group" class="chip-group"></div>
+  </div>
+  {% endif %}
+  <div class="field-group">
     <label>Time Override</label>
     <select id="q-time-select" onchange="onQTimeChange(this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
       <option value="">(query default)</option>
@@ -44,7 +45,34 @@
 
 <script src="/static/js/record_table.js"></script>
 <script src="/static/js/time_picker.js"></script>
+<script src="/static/js/chips.js"></script>
 <script>
+// ── State ──────────────────────────────────────────────────────────────────
+var _qKind = null;
+var _qName = null;
+var _qNames = {{ queries | tojson }};
+var _mNames = {{ metrics | tojson }};
+var _dNames = {{ dashboards | tojson }};
+
+function _selectChip(kind, name) {
+  _qKind = kind;
+  _qName = name;
+  _renderAllChips();
+  runQuery();
+}
+
+function _renderAllChips() {
+  var selected = (_qKind === "q") ? _qName : null;
+  var el = document.getElementById("q-chip-group");
+  if (el) renderChipGroup(el, _qNames, selected, function(n) { _selectChip("q", n); });
+  selected = (_qKind === "m") ? _qName : null;
+  el = document.getElementById("m-chip-group");
+  if (el) renderChipGroup(el, _mNames, selected, function(n) { _selectChip("m", n); });
+  selected = (_qKind === "d") ? _qName : null;
+  el = document.getElementById("d-chip-group");
+  if (el) renderChipGroup(el, _dNames, selected, function(n) { _selectChip("d", n); });
+}
+
 // ── Queries TimePicker ─────────────────────────────────────────────────────
 var tp;
 (function() {
@@ -52,7 +80,7 @@ var tp;
     prefix: "q-",
     yearMin: {{ year_range[0] }},
     yearMax: {{ year_range[-1] }},
-    onChange: function(code) { runQuery(); }
+    onChange: function(code) { if (_qName) runQuery(); }
   });
 
   // Restore state from URL params
@@ -72,7 +100,6 @@ function onQTimeChange(val) { tp.onSelectChange(val); }
 window._qGetTime = function() { return tp.getTime(); };
 
 function runQuery() {
-  const raw  = document.getElementById("q-select").value;
   var time = window._qGetTime();
   // if custom chosen but no value picked yet, wait
   const timeVal = document.getElementById("q-time-select").value;
@@ -83,9 +110,8 @@ function runQuery() {
     if (r) { from_date = r.from; to_date = r.to; }
   }
   const area = document.getElementById("result-area");
-  if (!raw) return;
-  const [kind, ...rest] = raw.split(":");
-  const name = rest.join(":");
+  var kind = _qKind, name = _qName;
+  if (!kind || !name) return;
   // update builder link with selected item
   const builderLink = document.getElementById("builder-link");
   if (builderLink) {
@@ -119,10 +145,12 @@ function runQuery() {
 }
 
 function clearOut() {
-  document.getElementById("q-select").value = "";
+  _qKind = null;
+  _qName = null;
   document.getElementById("q-time-select").value = "";
   if (tp) tp.reset();
   document.getElementById("result-area").innerHTML = "";
+  _renderAllChips();
 }
 
 function errorCard(msg) {
@@ -285,35 +313,33 @@ RecordTable._bkSetConfirm=function(){ _rt._bkSetConfirm(); };
 RecordTable._bkPrev      =function(){ _rt._bkPrev(); };
 RecordTable._bkClear     =function(){ _rt._bkClear(); };
 
-// ── Auto-run from URL params (?run=name&time=code) ────────────────────────────
+// ── Initial render ───────────────────────────────────────────────────────────
+_renderAllChips();
+
+// ── Auto-run from URL params (?run=name&time=code&kind=q|m|d) ────────────────
 (function() {
   var params = new URLSearchParams(window.location.search);
   var run    = params.get("run");
+  var kind   = params.get("kind") || "q";
   var time   = params.get("time") || "";
   if (!run) return;
 
-  // find the matching option in q-select
-  var sel = document.getElementById("q-select");
-  var found = null;
-  for (var i = 0; i < sel.options.length; i++) {
-    var opt = sel.options[i];
-    // options are formatted as "q:name", "m:name", "d:name"
-    var parts = opt.value.split(":");
-    if (parts.length >= 2 && parts.slice(1).join(":") === run) {
-      found = opt.value; break;
-    }
-  }
-  if (!found) return;
-  sel.value = found;
+  // find in the matching list
+  var names;
+  if (kind === "m") names = _mNames;
+  else if (kind === "d") names = _dNames;
+  else names = _qNames;
+  if (names.indexOf(run) === -1) return;
+
+  _qKind = kind;
+  _qName = run;
 
   // set time override if provided
   if (time) {
-    if (tp) {
-      tp.setTime(time, params.get("custom_time"));
-    }
+    if (tp) tp.setTime(time, params.get("custom_time"));
   }
 
-  // scroll results into view after run
+  _renderAllChips();
   runQuery();
   setTimeout(function() {
     var area = document.getElementById("result-area");
