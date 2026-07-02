@@ -95,17 +95,8 @@
   .qb-item-strip {
     display:flex;gap:6px;flex-wrap:wrap;
   }
-  .q-tab {
-    flex-shrink:0;padding:5px 12px;border-radius:20px;
-    border:1.5px solid var(--border);background:var(--bg);
-    font-size:13px;font-weight:600;color:var(--sub);
-    cursor:pointer;transition:all .15s;white-space:nowrap;
-  }
-  .q-tab:hover  { border-color:var(--accent);color:var(--accent); }
-  .q-tab.active { background:var(--accent-lt);border-color:var(--accent);color:var(--accent); }
-  .q-tab-derived { font-style:italic;opacity:0.8; }
-  .q-tab-alias   { opacity:0.65; }
-  .qb-item-none  { font-size:12px;color:var(--border);padding:4px 6px;align-self:center; }
+  .chip-derived { font-style:italic;opacity:0.8; }
+  .chip-alias   { opacity:0.65; }
 
   /* ── Editor/empty area ───────────────────────────────────────────────────── */
   .dash-chip {
@@ -150,6 +141,7 @@
 </style>
 
 <script src="/static/js/filter_builder.js"></script>
+<script src="/static/js/chips.js"></script>
 <script src="/static/js/record_table.js"></script>
 <script src="/static/js/time_picker.js"></script>
 <script src="/static/js/drag.js"></script>
@@ -299,50 +291,38 @@ function _updateSectionCounts() {
   });
 }
 
-function renderDueTabs() {
-  var el = document.getElementById("tabs-due");
-  if (!el) return;
-  el.innerHTML = "";
-  var names = Object.keys(_st.due);
-  if (!names.length) {
-    el.innerHTML = '<span class="qb-item-none">none</span>';
-    return;
-  }
-  names.forEach(function(name) {
-    var btn = document.createElement("button");
-    btn.className = "q-tab" + (name === (_cur && _cur.name) && _cur.section === "due" ? " active" : "");
-    btn.textContent = name;
-    btn.addEventListener("click", function() { select("due", name); });
-    el.appendChild(btn);
+function _extraClassMap(data, section) {
+  var map = {};
+  var keys = Object.keys(data);
+  keys.forEach(function(name) {
+    if (section === "metrics" && data[name].derived) map[name] = "chip-derived";
+    else if (section === "aliases") map[name] = "chip-alias";
   });
+  return map;
 }
 
 function _renderSection(elId, data, section) {
   var el = document.getElementById(elId);
   if (!el) return;
-  el.innerHTML = "";
   var keys = Object.keys(data);
-  if (!keys.length) {
-    el.innerHTML = '<span class="qb-item-none">none</span>';
-    return;
-  }
+  var selected = (_cur && _cur.section === section) ? _cur.name : null;
+  var extraMap = _extraClassMap(data, section);
+  // Build display names with badges for derived metrics
+  var displayNames = {};
   keys.forEach(function(name) {
-    var extraClass = "";
-    var badge = "";
-    if (section==="metrics" && data[name].derived) {
-      extraClass = " q-tab-derived";
-      badge = ' <span style="font-size:10px;background:var(--sub);color:var(--card);padding:1px 5px;border-radius:4px;">fx</span>';
-    } else if (section==="aliases") {
-      extraClass = " q-tab-alias";
+    var label = name;
+    if (section === "metrics" && data[name].derived) {
+      label = name + ' ⚡';
+    } else if (section === "aliases") {
+      label = name + ' ↳';
     }
-    var btn = document.createElement("button");
-    btn.className = "q-tab" + extraClass +
-      (_cur&&_cur.section===section&&_cur.name===name?" active":"");
-    btn.innerHTML = name + badge;
-    btn.title = section==="aliases" ? "→ " + data[name].alias : name;
-    btn.addEventListener("click", function(){ select(section, name); });
-    el.appendChild(btn);
+    displayNames[name] = label;
   });
+  renderChipGroup(el, keys, selected, function(name) { select(section, name); }, extraMap, displayNames);
+}
+
+function renderDueTabs() {
+  _renderSection("tabs-due", _st.due, "due");
 }
 
 function select(section, name) {
