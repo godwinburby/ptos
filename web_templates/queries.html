@@ -4,19 +4,19 @@
 <div class="page-title">Queries</div>
 
 <div class="card">
-  <div class="field-group">
-    <label>Queries</label>
+  <div class="chip-section" style="border-top:3px solid var(--accent);">
+    <div class="chip-section-label" style="color:var(--accent);">Queries</div>
     <div id="q-chip-group" class="chip-group"></div>
   </div>
   {% if metrics %}
-  <div class="field-group">
-    <label>Metrics</label>
+  <div class="chip-section" style="border-top:3px solid var(--success);">
+    <div class="chip-section-label" style="color:var(--success);">Metrics</div>
     <div id="m-chip-group" class="chip-group"></div>
   </div>
   {% endif %}
   {% if dashboards %}
-  <div class="field-group">
-    <label>Dashboards</label>
+  <div class="chip-section" style="border-top:3px solid var(--warn);">
+    <div class="chip-section-label" style="color:var(--warn);">Dashboards</div>
     <div id="d-chip-group" class="chip-group"></div>
   </div>
   {% endif %}
