@@ -1680,15 +1680,21 @@ def browse_get():
         schema = svc.get_schema()
         types  = schema.get("types",{}).get("allowed",[])
         field_types = {}
+        def _set_ft(fname, ftype):
+            field_types[fname] = {
+                "is_int": ftype == "int",
+                "is_date": ftype == "date",
+                "is_month": ftype == "month",
+                "is_datetime": ftype == "datetime",
+            }
         for fname, fmeta in schema.get("fields", {}).items():
             if isinstance(fmeta, dict):
-                ftype = fmeta.get("type", "")
-                field_types[fname] = {
-                    "is_int": ftype == "int",
-                    "is_date": ftype == "date",
-                    "is_month": ftype == "month",
-                    "is_datetime": ftype == "datetime",
-                }
+                _set_ft(fname, fmeta.get("type", ""))
+        for tdef in schema.get("type", {}).values():
+            for fname, fdef in tdef.get("fields", {}).items():
+                if isinstance(fdef, dict) and fname not in field_types:
+                    _set_ft(fname, fdef.get("type", ""))
+        _set_ft("date", "date")
     except PTOSError:
         types = []
         field_types = {}
