@@ -162,23 +162,23 @@
       }
       .sidebar-footer a { color: var(--accent); text-decoration: none; }
       .main { padding: 28px 32px; }
-      .floating-stop { bottom: 20px; right: 20px; }
+      .floating-add { bottom: 20px; right: 20px; }
     }
 
     /* ── Shared components ── */
     .page-title { font-size: 20px; font-weight: 800; margin-bottom: 18px; }
 
-    .floating-stop {
+    .floating-add {
       position: fixed; bottom: 76px; right: 16px;
       width: 48px; height: 48px; border-radius: 50%;
-      background: var(--error); color: #fff; border: none;
-      font-size: 18px; font-weight: 700; cursor: pointer;
+      background: var(--accent); color: #fff; border: none;
+      cursor: pointer;
       box-shadow: 0 4px 12px rgba(0,0,0,.2);
       display: flex; align-items: center; justify-content: center;
       z-index: 150; transition: transform .15s, box-shadow .15s;
     }
-    .floating-stop:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
-    .floating-stop:active { transform: scale(.95); }
+    .floating-add:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
+    .floating-add:active { transform: scale(.95); }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
     .card-title { font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
 
@@ -410,9 +410,9 @@
   <div class="sidebar-footer">
     <a href="https://github.com/godwinburby/ptos" target="_blank">⭐ github.com/godwinburby/ptos</a>
     <br><br>
-    {% if not frozen or desktop_mode %}<button onclick="stopServer()" style="width:100%;padding:8px 14px;border-radius:8px;border:none;background:var(--error);color:#fff;font-size:13px;font-weight:600;cursor:pointer;opacity:.85;">
+    <button onclick="stopServer()" style="width:100%;padding:8px 14px;border-radius:8px;border:none;background:var(--error);color:#fff;font-size:13px;font-weight:600;cursor:pointer;opacity:.85;">
       Stop Server
-    </button>{% endif %}
+    </button>
   </div>
 </aside>
 
@@ -445,12 +445,10 @@
   </a>
 </nav>
 
-{% if not frozen or desktop_mode %}
-<!-- Floating Stop button -->
-<button class="floating-stop" onclick="stopServer()" title="Stop Server">
-  <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
+<!-- Floating Add button -->
+<button class="floating-add" onclick="location.href='/add'" title="Add Record">
+  <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
-{% endif %}
 
 <!-- More menu dropdown -->
 <div id="more-menu" class="more-menu" style="display:none;">
@@ -490,10 +488,10 @@
       Lint
     </a>
     <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
-    {% if not frozen or desktop_mode %}<a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
+    <a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
       Stop Server
-    </a>{% endif %}
+    </a>
   </div>
 </div>
 
@@ -922,9 +920,13 @@ function toggleMoreMenu(e) {
 {% if not frozen or desktop_mode %}
 function stopServer() {
   if (!confirm("Stop PTOS server?")) return;
-  document.body.style.cssText = "display:block;margin:0;padding:0;";
-  document.body.innerHTML = "<div style='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;'><h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p></div>";
-  fetch("/shutdown");
+  if (window.pywebview && window.pywebview.api) {
+    window.pywebview.api.close_app();
+  } else {
+    document.body.style.cssText = "display:block;margin:0;padding:0;";
+    document.body.innerHTML = "<div style='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;'><h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p></div>";
+    fetch("/shutdown").then(() => window.close());
+  }
 }
 {% endif %}
 </script>

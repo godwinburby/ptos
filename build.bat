@@ -1,7 +1,7 @@
 @echo off
 echo ===== Building PTOS Desktop App =====
 echo.
-pip install pystray pillow
+pip install pystray pillow pywebview
 python -m PyInstaller ptos.spec --clean --noconfirm
 if %ERRORLEVEL% NEQ 0 (
     echo.
