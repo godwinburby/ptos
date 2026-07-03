@@ -213,6 +213,7 @@ var tp;
 window._recentRecords = {{ recent_rows|tojson }};
 window._recentCols    = {{ recent_cols|tojson }};
 
+var _fieldTypes = {{ field_types | tojson }};
 document.addEventListener("DOMContentLoaded", function() {
   var area = document.getElementById("home-records-area");
   if (!area) return;
@@ -220,6 +221,7 @@ document.addEventListener("DOMContentLoaded", function() {
     containerId: "home-records-area",
     returnTo: "/",
     enableBulk: true,
+    fieldTypes: _fieldTypes,
     onRefresh: function() { window.location.reload(); }
   });
   RecordTable._sort    = function(th,col){ _rt._sort(th,col); };
@@ -236,6 +238,7 @@ document.addEventListener("DOMContentLoaded", function() {
   RecordTable._bkSetConfirm=function(){ _rt._bkSetConfirm(); };
   RecordTable._bkPrev      =function(){ _rt._bkPrev(); };
   RecordTable._bkClear     =function(){ _rt._bkClear(); };
+  RecordTable._bkFieldChange=function(){ _rt._bkFieldChange(); };
   _rt.render({
     records: window._recentRecords || [],
     columns: window._recentCols   || [],

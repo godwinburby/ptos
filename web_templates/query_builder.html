@@ -1107,12 +1107,14 @@ document.getElementById("del-modal").addEventListener("click", function(e) {
 // ── Live Records Preview ─────────────────────────────────────────────────────
 var _qbRt = null;  // RecordTable instance for live preview
 
+var _qbFieldTypes = {{ field_types | tojson }};
 function _initQbRt() {
   if (_qbRt) return;
   _qbRt = new RecordTable({
     containerId: "qb-live-area",
     returnTo: "/query-builder",
     enableBulk: true,
+    fieldTypes: _qbFieldTypes,
     onRefresh: function() { triggerLivePreview(); }
   });
   RecordTable._sort    = function(th,col){ _qbRt._sort(th,col); };
@@ -1129,6 +1131,7 @@ function _initQbRt() {
   RecordTable._bkSetConfirm=function(){ _qbRt._bkSetConfirm(); };
   RecordTable._bkPrev      =function(){ _qbRt._bkPrev(); };
   RecordTable._bkClear     =function(){ _qbRt._bkClear(); };
+  RecordTable._bkFieldChange=function(){ _qbRt._bkFieldChange(); };
 }
 
 function triggerLivePreview() {
