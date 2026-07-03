@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit
+import sys, os, re, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
@@ -12,7 +12,7 @@ import ptos
 from ptos_service import PTOSError
 
 from flask import (Flask, render_template, request, redirect,
-                   url_for, jsonify, send_file)
+                   url_for, jsonify, send_file, Response)
 
 _basedir = getattr(sys, '_MEIPASS', None) or os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__,
@@ -2390,17 +2390,52 @@ def api_preset_delete():
         return jsonify(ok=False, error=str(e))
 
 
+# ── SSE (Server-Sent Events) ──────────────────────────────────────────────────
+_sse_clients = []
+_sse_lock = threading.Lock()
+
+def _sse_broadcast(event_type, data=""):
+    payload = json.dumps({"type": event_type, "data": data})
+    with _sse_lock:
+        for q in _sse_clients:
+            try:
+                q.put_nowait(payload)
+            except Exception:
+                pass
+
+@app.route("/api/events")
+def api_events():
+    def stream():
+        q = queue.Queue()
+        with _sse_lock:
+            _sse_clients.append(q)
+        try:
+            yield "data: connected\n\n"
+            while True:
+                msg = q.get()
+                if msg is None:
+                    break
+                yield f"data: {msg}\n\n"
+        except GeneratorExit:
+            pass
+        finally:
+            with _sse_lock:
+                if q in _sse_clients:
+                    _sse_clients.remove(q)
+    return Response(stream(), mimetype="text/event-stream")
+
+# ── Shutdown ──────────────────────────────────────────────────────────────────
+
 @app.route("/shutdown", methods=["GET", "POST"])
 def shutdown_server():
+    _sse_broadcast("shutdown")
     try:
         _exit_backup()
     except Exception:
         pass
     def _exit():
-        import time
-        time.sleep(1)
+        time.sleep(3)  # Give SSE time to deliver to all tabs
         os._exit(0)
-    import threading
     threading.Thread(target=_exit, daemon=True).start()
     response = """
     <!DOCTYPE html>

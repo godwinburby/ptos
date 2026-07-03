@@ -65,11 +65,84 @@ def _crash_handler(typ, value, tb):
         pass
     _show_error_dialog("Unexpected Error", "Something went wrong.", msg)
 
+
+# ── Single-instance detection (Windows named mutex) ───────────────────────────
+
+def _is_already_running():
+    try:
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        mutex = kernel32.CreateMutexW(None, False, "PTOS-Desktop-App")
+        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+            kernel32.CloseHandle(mutex)
+            return True
+        return False
+    except Exception:
+        return False
+
+
+# ── System tray icon ──────────────────────────────────────────────────────────
+
+def _run_tray(port):
+    try:
+        import pystray
+        from PIL import Image, ImageDraw
+    except ImportError:
+        _log("pystray/PIL not available, running without tray icon")
+        print("Close the browser window to stop the server.")
+        while True:
+            time.sleep(3600)
+        return
+
+    def _make_image():
+        img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
+        draw = ImageDraw.Draw(img)
+        draw.ellipse([4, 4, 60, 60], fill=(33, 150, 243))
+        draw.text((32, 32), "PT", fill="white", anchor="mm")
+        return img
+
+    def _open_browser():
+        os.startfile(f"http://127.0.0.1:{port}")
+
+    def _stop_server(icon, item):
+        icon.stop()
+        import urllib.request
+        try:
+            urllib.request.urlopen(f"http://127.0.0.1:{port}/shutdown", timeout=3)
+        except Exception:
+            os._exit(0)
+
+    menu = pystray.Menu(
+        pystray.MenuItem("Open Browser", _open_browser, default=True),
+        pystray.Menu.SEPARATOR,
+        pystray.MenuItem("Stop Server", _stop_server),
+    )
+
+    icon = pystray.Icon("ptos", _make_image(), "PTOS", menu)
+    icon.run()
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
 if __name__ == "__main__":
     sys.excepthook = _crash_handler
     os.environ["DESKTOP_MODE"] = "1"
     _log("=== PTOS desktop start ===")
     _log(f"_MEIPASS={getattr(sys, '_MEIPASS', 'none')} frozen={getattr(sys, 'frozen', False)}")
+
+    port = 5000
+
+    # Single-instance check
+    if _is_already_running():
+        _log("Another instance is already running")
+        import ctypes
+        ctypes.windll.user32.MessageBoxW(
+            0,
+            "PTOS is already running.\n\nThe existing server will open in your browser.",
+            "PTOS", 0
+        )
+        os.startfile(f"http://127.0.0.1:{port}")
+        sys.exit(0)
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import ptos
@@ -87,7 +160,6 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    port = 5000
     threading.Thread(
         target=lambda: app.run(host="127.0.0.1", port=port, threaded=True, use_reloader=False),
         daemon=True,
@@ -97,11 +169,8 @@ if __name__ == "__main__":
     _wait_for_server("127.0.0.1", port)
     _log("Server ready, launching browser")
 
-    import webbrowser
-    webbrowser.open(f"http://127.0.0.1:{port}")
+    os.startfile(f"http://127.0.0.1:{port}")
     _log("Browser opened")
 
-    print(f"PTOS running at http://127.0.0.1:{port}")
-    print("Close the browser window to stop the server.")
-    while True:
-        time.sleep(3600)
+    # Show system tray icon (blocks until user clicks Stop Server)
+    _run_tray(port)

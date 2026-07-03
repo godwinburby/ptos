@@ -26,7 +26,6 @@ a = Analysis(
         "matplotlib",
         "scipy",
         "numpy",
-        "PIL",
         "pandas",
         "cv2",
     ],
