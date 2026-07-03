@@ -19,6 +19,7 @@ function RecordTable(opts) {
   var cid        = opts.containerId;
   var enableBulk = opts.enableBulk !== false;
   var onRefresh  = opts.onRefresh || function(){};
+  var _fieldTypes = opts.fieldTypes || {};
 
   // ── private state ──────────────────────────────────────────────────────────
   var _records  = [];
@@ -48,7 +49,8 @@ function RecordTable(opts) {
     bkDelMsg:  "rt-bulk-del-msg",
     bkSet:     "rt-bulk-set-dialog",
     bkField:   "rt-bulk-set-field",
-    bkValue:   "rt-bulk-set-value",
+    bkValContainer: "rt-bulk-set-val-ctnr",
+    bkValInput: "rt-bulk-set-val-input",
     bkPrev:    "rt-bulk-set-preview",
     bkSetMsg:  "rt-bulk-set-msg"
   };
@@ -103,13 +105,13 @@ function RecordTable(opts) {
             '<div style="font-size:16px;font-weight:700;margin-bottom:14px;">Set Field on Selected</div>' +
             '<div class="field-group" style="margin-bottom:10px;">' +
               '<label style="font-size:12px;">Field name</label>' +
-              '<select id="'+M.bkField+'" style="font-size:14px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100%;" onchange="RecordTable._bkPrev()">' +
+              '<select id="'+M.bkField+'" style="font-size:14px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100%;" onchange="RecordTable._bkFieldChange();RecordTable._bkPrev()">' +
                 '<option value="">— select field —</option>' +
               '</select>' +
             '</div>' +
             '<div class="field-group" style="margin-bottom:10px;">' +
               '<label style="font-size:12px;">New value</label>' +
-              '<input type="text" id="'+M.bkValue+'" placeholder="new value" style="font-size:14px;" oninput="RecordTable._bkPrev()">' +
+              '<div id="'+M.bkValContainer+'"></div>' +
             '</div>' +
             '<div id="'+M.bkPrev+'" style="font-size:12px;color:var(--sub);font-family:monospace;background:var(--bg);padding:8px;border-radius:6px;margin-bottom:12px;display:none;"></div>' +
             '<div id="'+M.bkSetMsg+'" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>' +
@@ -349,6 +351,35 @@ function RecordTable(opts) {
   };
 
   // ── bulk set ───────────────────────────────────────────────────────────────
+  function _getBkFieldType() {
+    var f = ge(M.bkField).value.trim();
+    if (!f || !_fieldTypes[f]) return "text";
+    var ft = _fieldTypes[f];
+    if (ft.is_date)     return "date";
+    if (ft.is_month)    return "month";
+    if (ft.is_datetime) return "datetime-local";
+    if (ft.is_int)      return "number";
+    return "text";
+  }
+
+  function _renderBkValueInput(val) {
+    var t = _getBkFieldType();
+    var id = M.bkValInput;
+    var attrs = 'id="'+id+'" style="font-size:14px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100%;box-sizing:border-box;"';
+    if (t === "date" || t === "month" || t === "datetime-local") {
+      return '<input type="'+t+'" '+attrs+' value="'+esc(val)+'" onchange="RecordTable._bkPrev()">';
+    }
+    if (t === "number") {
+      return '<input type="number" '+attrs+' value="'+esc(val)+'" oninput="RecordTable._bkPrev()">';
+    }
+    return '<input type="text" '+attrs+' placeholder="new value" value="'+esc(val)+'" oninput="RecordTable._bkPrev()">';
+  }
+
+  self._bkFieldChange = function() {
+    ge(M.bkValContainer).innerHTML = _renderBkValueInput("");
+    ge(M.bkPrev).style.display = "none";
+  };
+
   self._bkSetOpen = function() {
     if (!_selected.length) return;
     var sel = ge(M.bkField);
@@ -356,7 +387,7 @@ function RecordTable(opts) {
     _cols.forEach(function(c) {
       sel.innerHTML += '<option value="'+c+'">'+c+'</option>';
     });
-    ge(M.bkValue).value = "";
+    ge(M.bkValContainer).innerHTML = _renderBkValueInput("");
     ge(M.bkPrev).style.display = "none";
     ge(M.bkSetMsg).style.display = "none";
     ge(M.bkSet).style.display = "flex";
@@ -366,7 +397,7 @@ function RecordTable(opts) {
   self._bkSetClose = function() { ge(M.bkSet).style.display = "none"; };
 
   self._bkPrev = function() {
-    var f = ge(M.bkField).value.trim(), v = ge(M.bkValue).value.trim();
+    var f = ge(M.bkField).value.trim(), v = ge(M.bkValInput).value.trim();
     var p = ge(M.bkPrev);
     if (f && v) {
       p.textContent = "Will apply: "+f+"="+v+" to "+_selected.length+" record"+(_selected.length>1?"s":"");
@@ -375,7 +406,7 @@ function RecordTable(opts) {
   };
 
   self._bkSetConfirm = function() {
-    var field = ge(M.bkField).value.trim(), value = ge(M.bkValue).value.trim();
+    var field = ge(M.bkField).value.trim(), value = ge(M.bkValInput).value.trim();
     var msg = ge(M.bkSetMsg);
     if (!field || !value) { msg.textContent = "Field and value are required"; msg.style.display = "block"; return; }
     var records = _selRecs().map(function(r){ return {filepath:r._filepath, line:r._line, lineno:r._lineno}; });

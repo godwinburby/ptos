@@ -1679,12 +1679,24 @@ def browse_get():
     try:
         schema = svc.get_schema()
         types  = schema.get("types",{}).get("allowed",[])
+        field_types = {}
+        for fname, fmeta in schema.get("fields", {}).items():
+            if isinstance(fmeta, dict):
+                ftype = fmeta.get("type", "")
+                field_types[fname] = {
+                    "is_int": ftype == "int",
+                    "is_date": ftype == "date",
+                    "is_month": ftype == "month",
+                    "is_datetime": ftype == "datetime",
+                }
     except PTOSError:
         types = []
+        field_types = {}
     log_files = svc.get_log_files()
     return render_template("browse.html",
         tab="browse", title="Browse", now=_now_str(),
-        types=types, log_files=log_files, time_options=_get_time_options(), year_range=_YEAR_RANGE,
+        types=types, field_types=field_types, log_files=log_files,
+        time_options=_get_time_options(), year_range=_YEAR_RANGE,
         current_time=request.args.get("time", "tm"),
         custom_time=request.args.get("custom_time", ""),
         from_date=request.args.get("from_date", ""),
