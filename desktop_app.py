@@ -6,26 +6,6 @@ def _log(msg):
     with open(_log_path, "a") as f:
         f.write(f"{time.strftime('%H:%M:%S')} {msg}\n")
 
-def _find_browser():
-    names = ["msedge", "chrome", "msedge.exe", "chrome.exe"]
-    for name in names:
-        path = shutil.which(name)
-        if path:
-            return path
-    local = os.environ.get("LOCALAPPDATA", "")
-    prog = os.environ.get("ProgramFiles(x86)", "")
-    candidates = [
-        os.path.join(prog, "Microsoft", "Edge", "Application", "msedge.exe") if prog else "",
-        os.path.join(prog.replace(" (x86)", ""), "Microsoft", "Edge", "Application", "msedge.exe"),
-        os.path.join(prog, "Google", "Chrome", "Application", "chrome.exe") if prog else "",
-        os.path.join(local, "Microsoft", "Edge", "Application", "msedge.exe"),
-        os.path.join(local, "Google", "Chrome", "Application", "chrome.exe"),
-    ]
-    for path in candidates:
-        if path and os.path.isfile(path):
-            return path
-    return None
-
 def _wait_for_server(host, port):
     while True:
         try:
@@ -73,12 +53,71 @@ def _is_already_running():
         import ctypes
         kernel32 = ctypes.windll.kernel32
         mutex = kernel32.CreateMutexW(None, False, "PTOS-Desktop-App")
-        if kernel32.GetLastError() == 183:  # ERROR_ALREADY_EXISTS
+        if kernel32.GetLastError() == 183:
             kernel32.CloseHandle(mutex)
             return True
         return False
     except Exception:
         return False
+
+
+# ── PyWebView native window management ────────────────────────────────────────
+
+_window = None
+_stopping = False
+
+def _has_webview():
+    try:
+        import webview
+        return True
+    except ImportError:
+        return False
+
+class _Api:
+    def __init__(self, port):
+        self.port = port
+
+    def close_app(self):
+        global _stopping
+        _stopping = True
+        try:
+            import ptos_service as svc
+            if svc.get_backup_config().get("backup_on_startup", True):
+                svc.backup_if_needed()
+        except Exception:
+            pass
+        _destroy_window()
+
+def _create_window(port):
+    global _window
+    import webview
+    _window = webview.create_window(
+        "PTOS", f"http://127.0.0.1:{port}",
+        width=1100, height=750,
+        resizable=True, text_select=True,
+        js_api=_Api(port),
+    )
+    def _on_closing():
+        global _window
+        if _stopping:
+            return True
+        _window.hide()
+        return False
+    _window.events.closing += _on_closing
+
+def _show_window():
+    if _window:
+        _window.show()
+        try:
+            _window.focus()
+        except TypeError:
+            pass
+
+def _destroy_window():
+    global _window
+    if _window:
+        _window.destroy()
+        _window = None
 
 
 # ── System tray icon ──────────────────────────────────────────────────────────
@@ -89,7 +128,6 @@ def _run_tray(port):
         from PIL import Image, ImageDraw
     except ImportError:
         _log("pystray/PIL not available, running without tray icon")
-        print("Close the browser window to stop the server.")
         while True:
             time.sleep(3600)
         return
@@ -101,10 +139,15 @@ def _run_tray(port):
         draw.text((32, 32), "PT", fill="white", anchor="mm")
         return img
 
-    def _open_browser():
-        os.startfile(f"http://127.0.0.1:{port}")
+    def _open():
+        if _has_webview():
+            _show_window()
+        else:
+            os.startfile(f"http://127.0.0.1:{port}")
 
-    def _stop_server(icon, item):
+    def _stop(icon, item):
+        global _stopping
+        _stopping = True
         icon.stop()
         import urllib.request
         try:
@@ -113,13 +156,14 @@ def _run_tray(port):
             os._exit(0)
 
     menu = pystray.Menu(
-        pystray.MenuItem("Open Browser", _open_browser, default=True),
+        pystray.MenuItem("Open PTOS", _open, default=True),
         pystray.Menu.SEPARATOR,
-        pystray.MenuItem("Stop Server", _stop_server),
+        pystray.MenuItem("Stop Server", _stop),
     )
+    pystray.Icon("ptos", _make_image(), "PTOS", menu).run()
 
-    icon = pystray.Icon("ptos", _make_image(), "PTOS", menu)
-    icon.run()
+    # After icon stops, destroy window and exit
+    _destroy_window()
 
 
 # ── Main ──────────────────────────────────────────────────────────────────────
@@ -132,16 +176,12 @@ if __name__ == "__main__":
 
     port = 5000
 
-    # Single-instance check
     if _is_already_running():
         _log("Another instance is already running")
         import ctypes
-        ctypes.windll.user32.MessageBoxW(
-            0,
-            "PTOS is already running.\n\nThe existing server will open in your browser.",
-            "PTOS", 0
-        )
-        os.startfile(f"http://127.0.0.1:{port}")
+        ctypes.windll.user32.MessageBoxW(0,
+            "PTOS is already running.",
+            "PTOS", 0)
         sys.exit(0)
 
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -167,10 +207,17 @@ if __name__ == "__main__":
     _log("Flask thread started")
 
     _wait_for_server("127.0.0.1", port)
-    _log("Server ready, launching browser")
+    _log("Server ready")
 
-    os.startfile(f"http://127.0.0.1:{port}")
-    _log("Browser opened")
-
-    # Show system tray icon (blocks until user clicks Stop Server)
-    _run_tray(port)
+    # Decide window mode
+    if _has_webview():
+        _log("Using PyWebView native window")
+        _create_window(port)
+        threading.Thread(target=_run_tray, args=(port,), daemon=True).start()
+        import webview
+        webview.start()
+    else:
+        _log("PyWebView not available, using system browser")
+        import webbrowser
+        webbrowser.open(f"http://127.0.0.1:{port}")
+        _run_tray(port)
