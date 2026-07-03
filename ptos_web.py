@@ -183,6 +183,21 @@ def _build_period_label(time_code, custom_time, cycles, from_date=None, to_date=
 
     return "Custom"
 
+def _build_field_types(schema):
+    ft = {}
+    def _set(fname, ftype):
+        ft[fname] = {"is_int": ftype == "int", "is_date": ftype == "date",
+                      "is_month": ftype == "month", "is_datetime": ftype == "datetime"}
+    for fname, fmeta in schema.get("fields", {}).items():
+        if isinstance(fmeta, dict):
+            _set(fname, fmeta.get("type", ""))
+    for tdef in schema.get("type", {}).values():
+        for fname, fdef in tdef.get("fields", {}).items():
+            if isinstance(fdef, dict) and fname not in ft:
+                _set(fname, fdef.get("type", ""))
+    _set("date", "date")
+    return ft
+
 def _build_field_defs(schema, rtype, current_record=None):
     if not rtype: return []
     type_schema  = schema.get("type", {}).get(rtype, {})
@@ -369,8 +384,12 @@ def _multi_presets():
 
 @app.route("/")
 def home():
-    try: schema = svc.get_schema()
-    except: schema = {}
+    try:
+        schema = svc.get_schema()
+        field_types = _build_field_types(schema)
+    except:
+        schema = {}
+        field_types = {}
     presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
     multi_presets = _multi_presets()
@@ -499,7 +518,8 @@ def home():
         custom_time=request.args.get("custom_time", ""),
         from_date=request.args.get("from_date", ""),
         to_date=request.args.get("to_date", ""),
-        recent_rows=recent_rows, recent_cols=recent_cols)
+        recent_rows=recent_rows, recent_cols=recent_cols,
+        field_types=field_types)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1494,9 +1514,11 @@ def query_builder():
         queries = svc.get_queries()
         schema  = svc.get_schema()
         types   = schema.get("types", {}).get("allowed", [])
+        field_types = _build_field_types(schema)
     except Exception:
         queries = {}
         types   = []
+        field_types = {}
     
     # Collect all due configs from nested [due] section or separate [due.*] sections
     all_due_configs = {}
@@ -1541,6 +1563,7 @@ def query_builder():
     return render_template("query_builder.html",
         tab="query_builder", title="Query Builder",
         now=_now_str(), queries=queries, types=types,
+        field_types=field_types,
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
         due_config=all_due_configs)
 
@@ -1614,8 +1637,13 @@ def query_builder_delete():
 
 @app.route("/queries")
 def queries_get():
-    try:    all_q = svc.get_queries()
-    except: all_q = {}
+    try:
+        all_q = svc.get_queries()
+        schema = svc.get_schema()
+        field_types = _build_field_types(schema)
+    except:
+        all_q = {}
+        field_types = {}
     named = [k for k in all_q
              if k not in ("metrics","dashboards","due")
              and not (isinstance(all_q[k], dict) and "alias" in all_q[k])]
@@ -1628,7 +1656,8 @@ def queries_get():
         current_time=request.args.get("time", ""),
         custom_time=request.args.get("custom_time", ""),
         from_date=request.args.get("from_date", ""),
-        to_date=request.args.get("to_date", ""))
+        to_date=request.args.get("to_date", ""),
+        field_types=field_types)
 
 @app.route("/queries/run", methods=["POST"])
 def queries_run():
@@ -1679,22 +1708,7 @@ def browse_get():
     try:
         schema = svc.get_schema()
         types  = schema.get("types",{}).get("allowed",[])
-        field_types = {}
-        def _set_ft(fname, ftype):
-            field_types[fname] = {
-                "is_int": ftype == "int",
-                "is_date": ftype == "date",
-                "is_month": ftype == "month",
-                "is_datetime": ftype == "datetime",
-            }
-        for fname, fmeta in schema.get("fields", {}).items():
-            if isinstance(fmeta, dict):
-                _set_ft(fname, fmeta.get("type", ""))
-        for tdef in schema.get("type", {}).values():
-            for fname, fdef in tdef.get("fields", {}).items():
-                if isinstance(fdef, dict) and fname not in field_types:
-                    _set_ft(fname, fdef.get("type", ""))
-        _set_ft("date", "date")
+        field_types = _build_field_types(schema)
     except PTOSError:
         types = []
         field_types = {}

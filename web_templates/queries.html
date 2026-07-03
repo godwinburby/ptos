@@ -309,9 +309,11 @@ function renderRecords(d) {
 }
 
 // ── RecordTable instance ─────────────────────────────────────────────────────
+var _fieldTypes = {{ field_types | tojson }};
 var _rt = new RecordTable({
   containerId: "result-area",
   enableBulk: true,
+  fieldTypes: _fieldTypes,
   onRefresh: function() { runQuery(); }
 });
 RecordTable._sort    = function(th,col){ _rt._sort(th,col); };
@@ -328,6 +330,7 @@ RecordTable._bkSetClose  =function(){ _rt._bkSetClose(); };
 RecordTable._bkSetConfirm=function(){ _rt._bkSetConfirm(); };
 RecordTable._bkPrev      =function(){ _rt._bkPrev(); };
 RecordTable._bkClear     =function(){ _rt._bkClear(); };
+RecordTable._bkFieldChange=function(){ _rt._bkFieldChange(); };
 
 // ── Initial render ───────────────────────────────────────────────────────────
 _renderAllChips();
