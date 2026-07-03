@@ -1,0 +1,71 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="512" height="512" viewBox="0 0 512 512"
+     xmlns="http://www.w3.org/2000/svg">
+
+    <!-- Blue: #2456F5 -->
+    <!-- Red : #F04B37 -->
+
+    <circle
+        cx="256"
+        cy="256"
+        r="215"
+        fill="none"
+        stroke="#2456F5"
+        stroke-width="24"/>
+
+    <circle cx="430" cy="82" r="28" fill="white"/>
+
+    <circle cx="430" cy="82" r="12" fill="#2456F5"/>
+
+    <g fill="#1744C8">
+
+        <rect x="188" y="150"
+              width="26"
+              height="215"
+              rx="13"/>
+
+        <rect x="188"
+              y="150"
+              width="145"
+              height="26"
+              rx="13"/>
+
+        <path d="
+            M333 163
+            C390 163 390 255 333 255
+            L256 255
+            L256 229
+            L333 229
+            C355 229 355 189 333 189
+            L256 189
+            L256 163
+            Z"/>
+
+        <rect x="240"
+              y="280"
+              width="32"
+              height="140"
+              rx="16"/>
+
+        <rect x="165"
+              y="280"
+              width="150"
+              height="24"
+              rx="12"/>
+
+    </g>
+
+    <polygon
+        points="
+            318,165
+            392,126
+            344,205"
+        fill="#F04B37"/>
+
+    <circle
+        cx="256"
+        cy="256"
+        r="22"
+        fill="#2456F5"/>
+
+</svg>
