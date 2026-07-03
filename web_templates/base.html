@@ -4,6 +4,8 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <link rel="manifest" href="/static/manifest.json">
+  <meta name="theme-color" content="#1976d2">
   <title>PTOS{% if title %} · {{ title }}{% endif %}</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -956,5 +958,6 @@ function stopServer() {
 {% endif %}
 
 {% block scripts %}{% endblock %}
+<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/static/sw.js')}</script>
 </body>
 </html>
