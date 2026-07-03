@@ -422,3 +422,8 @@ function RecordTable(opts) {
   // ── expose on global RecordTable for inline onclick handlers ───────────────
   // (set by the page after instantiation — see usage note below)
 }
+
+// Default no-op stubs — pages override these after instantiation.
+// Defining them here prevents "is not a function" errors on pages
+// whose inline script hasn't (or doesn't) set up a given handler.
+RecordTable._bkFieldChange = function(){};
