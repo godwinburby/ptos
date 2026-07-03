@@ -11,6 +11,7 @@ a = Analysis(
         ("web_templates",    "web_templates"),
         ("web_static",       "web_static"),
         ("starters",         "starters"),
+        ("icon.ico",         "."),
     ],
     hiddenimports=[
         "ptos",

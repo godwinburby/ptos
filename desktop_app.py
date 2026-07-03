@@ -88,6 +88,13 @@ class _Api:
             pass
         _destroy_window()
 
+def _icon_path():
+    try:
+        base = sys._MEIPASS
+    except AttributeError:
+        base = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(base, "icon.ico")
+
 def _create_window(port):
     global _window
     import webview
@@ -95,6 +102,7 @@ def _create_window(port):
         "PTOS", f"http://127.0.0.1:{port}",
         width=1100, height=750,
         resizable=True, text_select=True,
+        icon=_icon_path(),
         js_api=_Api(port),
     )
     def _on_closing():
@@ -133,10 +141,58 @@ def _run_tray(port):
         return
 
     def _make_image():
+        # 64px tray icon matching the PTOS compass+monogram design
         img = Image.new("RGBA", (64, 64), (0, 0, 0, 0))
         draw = ImageDraw.Draw(img)
-        draw.ellipse([4, 4, 60, 60], fill=(33, 150, 243))
-        draw.text((32, 32), "PT", fill="white", anchor="mm")
+        K = 64 / 512
+        blue = (36, 86, 245)
+        red  = (240, 75, 55)
+        dark = (23, 68, 200)
+
+        def rx(x): return int(x * K)
+        def ry(y): return int(y * K)
+
+        # Outer ring
+        r = int(215 * K)
+        w = max(1, int(24 * K))
+        draw.ellipse([32 - r, 32 - r, 32 + r, 32 + r], outline=blue, width=w)
+
+        # Break cover
+        bx, by = rx(430), ry(82)
+        br = int(28 * K)
+        draw.ellipse([bx - br, by - br, bx + br, by + br], fill=(255, 255, 255, 255))
+
+        # Orbit node
+        nr = int(12 * K)
+        draw.ellipse([bx - nr, by - nr, bx + nr, by + nr], fill=blue)
+
+        # P stem
+        draw.rounded_rectangle([rx(188), ry(150), rx(188) + int(26*K), ry(150) + int(215*K)],
+                               radius=int(13*K), fill=dark)
+        # P top
+        draw.rounded_rectangle([rx(188), ry(150), rx(188) + int(145*K), ry(150) + int(26*K)],
+                               radius=int(13*K), fill=dark)
+        # P bowl as thick arc approximation
+        draw.arc([rx(333)-3, ry(163), rx(333)+3, ry(255)], 90, 180, fill=dark, width=int(6*K))
+        draw.arc([rx(333)-3, ry(189), rx(333)+3, ry(229)], 90, 180, fill=dark, width=int(6*K))
+        # fill the gap between arcs with a rect
+        draw.rectangle([rx(333)-3, ry(189), rx(333)+3, ry(229)], fill=dark)
+        # fill left side of bowl
+        draw.rectangle([rx(256), ry(163), rx(333), ry(255)], fill=dark)
+
+        # T stem
+        draw.rounded_rectangle([rx(240), ry(280), rx(240) + int(32*K), ry(280) + int(140*K)],
+                               radius=int(16*K), fill=dark)
+        # T crossbar
+        draw.rounded_rectangle([rx(165), ry(280), rx(165) + int(150*K), ry(280) + int(24*K)],
+                               radius=int(12*K), fill=dark)
+
+        # Compass arrow
+        draw.polygon([(rx(318), ry(165)), (rx(392), ry(126)), (rx(344), ry(205))], fill=red)
+
+        # Center pivot
+        pr = int(22 * K)
+        draw.ellipse([32 - pr, 32 - pr, 32 + pr, 32 + pr], fill=blue)
         return img
 
     def _open():
