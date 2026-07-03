@@ -929,6 +929,30 @@ function stopServer() {
 {% endif %}
 </script>
 
+{% if not frozen or desktop_mode %}
+<script>
+// ── SSE listener — shows "Server stopped" when tray-initiated shutdown fires ──
+(function(){
+  try {
+    var es = new EventSource("/api/events");
+    es.onmessage = function(e) {
+      try {
+        var msg = JSON.parse(e.data);
+        if (msg.type === "shutdown") {
+          es.close();
+          var d = document.createElement("div");
+          d.id = "sse-shutdown-overlay";
+          d.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;";
+          d.innerHTML = "<h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p>";
+          document.body.appendChild(d);
+        }
+      } catch(ex) {}
+    };
+  } catch(ex) {}
+})();
+</script>
+{% endif %}
+
 {% block scripts %}{% endblock %}
 </body>
 </html>
