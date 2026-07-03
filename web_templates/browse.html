@@ -97,6 +97,7 @@
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
 var _types = {{ types | tojson }};
+var _fieldTypes = {{ field_types | tojson }};
 
 // ── FilterBuilder + RecordTable instances ────────────────────────────────────
 var _fb = null;
@@ -113,6 +114,7 @@ document.addEventListener("DOMContentLoaded", function() {
     containerId: "result-area",
     returnTo: "/browse",
     enableBulk: true,
+    fieldTypes: _fieldTypes,
     onRefresh: function() { runBrowse(); }
   });
   RecordTable._sort   = function(th,col){ _rt._sort(th,col); };
@@ -129,6 +131,7 @@ document.addEventListener("DOMContentLoaded", function() {
   RecordTable._bkSetConfirm=function(){ _rt._bkSetConfirm(); };
   RecordTable._bkPrev      =function(){ _rt._bkPrev(); };
   RecordTable._bkClear     =function(){ _rt._bkClear(); };
+  RecordTable._bkFieldChange=function(){ _rt._bkFieldChange(); };
 
 });
 </script>
