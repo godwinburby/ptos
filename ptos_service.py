@@ -23,6 +23,7 @@ ptos.py CLI is unchanged and does not use this file.
 import sys
 import os
 import datetime as dt
+import dataclasses
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -2269,6 +2270,110 @@ def save_schema(schema_dict):
     """
     try:
         ptos._save_schema(schema_dict)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Todo module
+# ══════════════════════════════════════════════════════════════════════════════
+
+import ptos_todo
+
+
+TODO_DIR  = ptos.TODO_DIR
+TODO_PATH = ptos.TODO_PATH
+DONE_PATH = ptos.DONE_PATH
+
+
+def get_todos(include_done=False):
+    """Load all todos from todo.txt. Returns list of Todo dataclass instances."""
+    try:
+        todos, errors = ptos_todo.load_todos(TODO_PATH)
+        if include_done:
+            done, _ = ptos_todo.load_todos(DONE_PATH)
+            todos = todos + done
+        return todos
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def get_todos_bucketed():
+    """Load todos and return bucketed dict (overdue/today/upcoming/someday)."""
+    try:
+        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        return ptos_todo.bucket_todos(todos)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def add_todo_line(text):
+    """Add a raw todo.txt line. Preprocesses pri:/due:/sched: shortcuts."""
+    try:
+        text = ptos_todo.preprocess_todo_text(text)
+        t = ptos_todo.add_todo(TODO_PATH, text)
+        return {"ok": True, "todo": dataclasses.asdict(t)}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def complete_todo_by_line(line_no):
+    """Mark a todo as complete (move to done.txt)."""
+    try:
+        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        target = [t for t in todos if t.line_no == line_no]
+        if not target:
+            raise PTOSError(f"Todo at line {line_no} not found")
+        ptos_todo.complete_todo(target[0])
+        return {"ok": True}
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def delete_todo_by_line(line_no):
+    """Delete a todo by line number."""
+    try:
+        ptos_todo.delete_todo(TODO_PATH, line_no)
+        return {"ok": True}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def edit_todo_by_line(line_no, updates):
+    """Edit fields on a todo by line number."""
+    try:
+        t = ptos_todo.edit_todo(TODO_PATH, line_no, updates)
+        return {"ok": True, "todo": dataclasses.asdict(t)}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def get_todo_projects():
+    """Get all unique +Project tokens from open todos."""
+    try:
+        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        done, _ = ptos_todo.load_todos(DONE_PATH)
+        return ptos_todo.get_projects(todos + done)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def get_todo_contexts():
+    """Get all unique @context tokens from open todos."""
+    try:
+        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        done, _ = ptos_todo.load_todos(DONE_PATH)
+        return ptos_todo.get_contexts(todos + done)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def archive_old_todos(threshold_months=6):
+    """Archive old done tasks to year files. Returns count archived."""
+    try:
+        return ptos_todo.archive_done_todos(DONE_PATH, threshold_months)
     except Exception as e:
         raise PTOSError(str(e))
 
