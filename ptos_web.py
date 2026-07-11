@@ -567,6 +567,114 @@ def due_page():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Todo
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/todo")
+def todo_page():
+    project = request.args.get("project", None)
+    context = request.args.get("context", None)
+    pri = request.args.get("priority", None)
+
+    try:
+        buckets = svc.get_todos_bucketed()
+        projects = svc.get_todo_projects()
+        contexts = svc.get_todo_contexts()
+        error = None
+    except PTOSError as e:
+        buckets = {"overdue": [], "today": [], "upcoming": [], "someday": [], "total_open": 0}
+        projects = []
+        contexts = []
+        error = str(e)
+
+    # apply filters within buckets
+    def _filter_list(todos):
+        result = todos
+        if project:
+            result = [t for t in result if project in t.projects]
+        if context:
+            result = [t for t in result if context in t.contexts]
+        if pri:
+            result = [t for t in result if t.priority == pri.upper()]
+        return result
+
+    for key in ("overdue", "today", "upcoming", "someday"):
+        buckets[key] = _filter_list(buckets[key])
+
+    # today progress: count completed today vs total added today
+    try:
+        all_done, _ = svc.ptos_todo.load_todos(svc.DONE_PATH)
+        today_str = dt.date.today().isoformat()
+        done_today = len([t for t in all_done if t.completed_date and t.completed_date.isoformat() == today_str])
+        total_today = len(buckets["overdue"]) + len(buckets["today"])
+        # most recent 50 done tasks, newest first
+        done_recent = sorted(all_done, key=lambda t: t.completed_date or dt.date.min, reverse=True)[:50]
+    except Exception:
+        done_today = 0
+        total_today = 0
+        done_recent = []
+
+    return render_template("todo.html", tab="todo", title="Todo",
+        now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
+        error=error, selected_project=project, selected_context=context,
+        selected_priority=pri, done_today=done_today, total_today=total_today,
+        done_recent=done_recent)
+
+
+@app.route("/todo/add", methods=["POST"])
+def todo_add():
+    data = request.get_json(silent=True) or {}
+    text = data.get("text", "").strip()
+    if not text:
+        return jsonify(ok=False, error="No text provided")
+    try:
+        result = svc.add_todo_line(text)
+        return jsonify(ok=True, todo=result["todo"])
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/todo/complete", methods=["POST"])
+def todo_complete():
+    data = request.get_json(silent=True) or {}
+    line_no = data.get("line_no")
+    if not line_no:
+        return jsonify(ok=False, error="No line_no provided")
+    try:
+        svc.complete_todo_by_line(int(line_no))
+        return jsonify(ok=True)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/todo/delete", methods=["POST"])
+def todo_delete():
+    data = request.get_json(silent=True) or {}
+    line_no = data.get("line_no")
+    if not line_no:
+        return jsonify(ok=False, error="No line_no provided")
+    try:
+        svc.delete_todo_by_line(int(line_no))
+        return jsonify(ok=True)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/todo/edit", methods=["POST"])
+def todo_edit():
+    data = request.get_json(silent=True) or {}
+    line_no = data.get("line_no")
+    updates = data.get("updates", {})
+    if not line_no:
+        return jsonify(ok=False, error="No line_no provided")
+    try:
+        result = svc.edit_todo_by_line(int(line_no), updates)
+        return jsonify(ok=True, todo=result["todo"])
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Add Record
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2292,6 +2400,28 @@ def api_events():
                     _sse_clients.remove(q)
     return Response(stream(), mimetype="text/event-stream")
 
+# ── Todo notification background thread ─────────────────────────────────────
+
+def _todo_notify_loop(interval_minutes=5):
+    """Background thread: check for due todos periodically and broadcast via SSE."""
+    import ptos_todo as _todo_mod
+    notified = set()  # {(line_no, due_str, due_time)} to avoid re-notifying
+    while True:
+        time.sleep(interval_minutes * 60)
+        try:
+            todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
+            due = _todo_mod.get_due_todos(todos, lookahead_days=1)
+            current = {(t.line_no, str(t.due), t.due_time) for t in due}
+            new = [t for t in due if (t.line_no, str(t.due), t.due_time) not in notified]
+            if new:
+                tasks = [{"line_no": t.line_no, "description": t.description,
+                          "priority": t.priority, "due": str(t.due),
+                          "due_time": t.due_time} for t in new]
+                _sse_broadcast("todo-due", tasks)
+            notified = current
+        except Exception:
+            pass
+
 # ── Shutdown ──────────────────────────────────────────────────────────────────
 
 @app.route("/shutdown", methods=["GET", "POST"])
@@ -2394,6 +2524,27 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Startup backup skipped: {e}")
     
+    # Archive old done tasks on startup
+    try:
+        import ptos_todo as _todo
+        archived = _todo.archive_done_todos(DONE_PATH)
+        if archived:
+            print(f"Archived {archived} old done tasks")
+    except Exception as e:
+        print(f"Archive skipped: {e}")
+    
     print("\nPTOS Web UI")
     print("Open: http://localhost:5000\n")
+
+    # Start todo notification background thread
+    try:
+        todo_cfg = svc.get_config().get("todo", {})
+        notify_min = todo_cfg.get("notify_interval", 5)
+        if notify_min > 0:
+            _t = threading.Thread(target=_todo_notify_loop, args=(notify_min,), daemon=True)
+            _t.start()
+            print(f"Todo notifications enabled (every {notify_min} min)")
+    except Exception:
+        pass
+
     app.run(debug=False, host="127.0.0.1", port=5000)

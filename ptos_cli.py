@@ -158,6 +158,19 @@ def build_parser(cycles):
     ana.add_argument("--export",       nargs="?", const="__AUTO__", metavar="FILENAME",
                      help="Export results to CSV in exports/ folder. Optional filename (no extension).")
 
+    todo = p.add_argument_group("Todo")
+    todo.add_argument("--todo-add", nargs="*", metavar="TEXT",
+                     help="Add a todo (todo.txt format — pri:a +Project @context due:tomorrow)\n"
+                          "  No args = interactive prompt")
+    todo.add_argument("--todo-list", action="store_true",
+                     help="List open todos")
+    todo.add_argument("--todo-done", metavar="N",
+                     help="Mark todo at line N complete")
+    todo.add_argument("--todo-edit", nargs=2, metavar=("N", "KEY=VALUE"),
+                     help="Edit a field on todo at line N  (e.g. --todo-edit 3 due:2026-07-25)")
+    todo.add_argument("--todo-delete", metavar="N",
+                     help="Delete todo at line N")
+
     utl = p.add_argument_group("Utilities")
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
     utl.add_argument("--fix",           action="store_true", help="With --lint: open files with errors in editor")
@@ -700,6 +713,121 @@ def export_csv(results, filename, filters, time_label):
 
 
 # --------------------------------------------------
+# Todo CLI handlers
+# --------------------------------------------------
+
+def _handle_todo_add(args):
+    """Handle --todo-add command."""
+    import ptos_todo
+    if args.todo_add:
+        text = " ".join(args.todo_add)
+    else:
+        # interactive mode
+        print("Enter todo (todo.txt format):")
+        print("  Example: (A) Call supplier +HearSpeechPro @phone due:tomorrow")
+        text = input("  > ").strip()
+        if not text:
+            print("Cancelled.")
+            return
+
+    text = ptos_todo.preprocess_todo_text(text)
+    try:
+        t = ptos_todo.add_todo(ptos.TODO_PATH, text)
+        print(f"Added: {ptos_todo.format_line(t)}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def _handle_todo_list():
+    """Handle --todo-list command."""
+    import ptos_todo
+    todos, errors = ptos_todo.load_todos(ptos.TODO_PATH)
+    done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+
+    open_t = [t for t in todos if not t.done]
+    if not open_t:
+        print("No open todos.")
+        return
+
+    for t in open_t:
+        pri = f"({t.priority}) " if t.priority else ""
+        due = f" due:{t.due.isoformat()}" if t.due else ""
+        proj = " ".join(t.projects)
+        ctx = " ".join(t.contexts)
+        meta = " ".join(filter(None, [proj, ctx]))
+        line = f"  {t.line_no:>3}. {pri}{t.description}"
+        if meta:
+            line += f" {meta}"
+        if due:
+            line += due
+        print(line)
+
+    print(f"\n  {len(open_t)} open, {len(done)} done")
+
+
+def _handle_todo_done(n):
+    """Handle --todo-done command."""
+    import ptos_todo
+    try:
+        line_no = int(n)
+    except ValueError:
+        print(f"Invalid line number: {n}")
+        return
+
+    todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+    target = [t for t in todos if t.line_no == line_no]
+    if not target:
+        print(f"Line {line_no} not found in todo.txt")
+        return
+
+    try:
+        ptos_todo.complete_todo(target[0])
+        print(f"Completed: {ptos_todo.format_line(target[0])}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def _handle_todo_edit(n, kv_str):
+    """Handle --todo-edit command."""
+    import ptos_todo
+    try:
+        line_no = int(n)
+    except ValueError:
+        print(f"Invalid line number: {n}")
+        return
+
+    # parse key=value
+    if "=" not in kv_str:
+        print(f"Invalid format: {kv_str} (expected key=value)")
+        return
+
+    key, val = kv_str.split("=", 1)
+    updates = {key.strip(): val.strip()}
+
+    try:
+        t = ptos_todo.edit_todo(ptos.TODO_PATH, line_no, updates)
+        print(f"Updated: {ptos_todo.format_line(t)}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def _handle_todo_delete(n):
+    """Handle --todo-delete command."""
+    import ptos_todo
+    try:
+        line_no = int(n)
+    except ValueError:
+        print(f"Invalid line number: {n}")
+        return
+
+    try:
+        ptos_todo.delete_todo(ptos.TODO_PATH, line_no)
+        print(f"Deleted line {line_no}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+# --------------------------------------------------
 # Main
 # --------------------------------------------------
 
@@ -723,6 +851,23 @@ def main():
 
     if args.edit:
         edit_target(args.edit)
+        return
+
+    # ---- todo commands ----
+    if args.todo_add is not None:
+        _handle_todo_add(args)
+        return
+    if args.todo_list:
+        _handle_todo_list()
+        return
+    if args.todo_done:
+        _handle_todo_done(args.todo_done)
+        return
+    if args.todo_edit:
+        _handle_todo_edit(args.todo_edit[0], args.todo_edit[1])
+        return
+    if args.todo_delete:
+        _handle_todo_delete(args.todo_delete)
         return
 
     if args.delete_preset:

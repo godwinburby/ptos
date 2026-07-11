@@ -23,7 +23,7 @@ password = ""
 [backup]
 # Folders to include in full backup
 # Note: Keep in sync with Android start script preserved folders in start_ptos_android.sh
-folders = ["records", "config", "templates", "journal", "tasks", "exports", "notes", "scripts"]
+folders = ["records", "config", "templates", "journal", "todo", "exports", "notes", "scripts"]
 
 # Auto-backup settings
 auto_backup_on_startup = true
@@ -33,3 +33,7 @@ backup_if_files_changed = true
 # Retention settings
 max_full_backups = 10
 max_config_backups = 10
+
+[todo]
+# Background notification check interval in minutes (0 = disabled)
+notify_interval = 5

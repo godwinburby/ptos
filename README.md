@@ -343,6 +343,41 @@ dates; forward navigation is blocked past today. Creates a new entry from templa
 for dates with no file. Autosaves after 2.5 seconds of inactivity. Saves with a
 `.bak` backup automatically.
 
+### Todo
+
+Plain-text task manager using the [todo.txt](http://todotxt.org/) format. Tasks live
+in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
+
+**Features:**
+- Overdue / Today / Upcoming / Someday sections with collapsible Done section
+- Priority badges (A=red, B=orange, C=blue), due date badges, project/context chips
+- Quick-add text input with todo.txt syntax (`pri:a Task +Project @context due:tomorrow`)
+- Form modal for structured add/edit (press `n` or click `+`)
+- Inline edit (pencil icon on hover) and delete
+- Project rail for filtering by `+Project`
+- Context and priority filter chips
+- Collapsible `? Help` reference card
+- Background browser notifications via SSE (configurable interval)
+- Automatic archiving: done items older than 6 months move to `done.YYYY.txt` on startup
+
+**Todo.txt format reference:**
+```
+(A) Call supplier +HearSpeechPro @phone due:tomorrow 3pm
+```
+| Part | Description |
+|------|-------------|
+| `(A)` | Priority A-Z. Or type `pri:a` |
+| `+Project` | Project tag (e.g. `+Home`, `+HearSpeechPro`) |
+| `@context` | Context tag (e.g. `@phone`, `@errand`) |
+| `due:date` | Due date — `today`, `tomorrow`, `fri`, `+3d`, `2026-07-12` |
+| `sched:date` | Scheduled date (surfaces when it arrives) |
+| `due:date time` | With time — `due:tomorrow 3pm`, `due:2026-07-12T14:30` |
+
+**Keyboard shortcuts:**
+- `G` `T` — navigate to Todo page
+- `n` — open add form modal (when not in an input)
+- `Escape` — close modal
+
 ### Log Editor
 
 View and edit any `.log` file in `records/` directly in the browser. File selector
@@ -996,6 +1031,11 @@ ptos -y test -t td --delete --all
 | `--delete-preset NAME` | | Delete a preset by name from `presets.toml` |
 | `--set-name NAME` | | Set user name in `config.toml` |
 | `--set-date-format FORMAT` | | Set date display format: `indian` `us` `eu` `readable` `iso` or custom strftime |
+| `--todo [text]` | | Add a todo. Preprocesses pri:/due:/sched: shortcuts |
+| `--todo-list` | | List open todos with bucket grouping |
+| `--todo-done N` | | Mark todo at line N complete |
+| `--todo-edit N key=value` | | Edit a field on a todo |
+| `--todo-delete N` | | Delete a todo by line number |
 | `--doctor` | | Check PTOS installation health |
 | `--doctor --fix` | | Auto-fix issues found by --doctor |
 | `--check-schema` | | Validate schema.toml structure (missing types, bad refs, unknown field types) |

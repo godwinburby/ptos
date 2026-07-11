@@ -1,0 +1,539 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% macro todo_row(t, badge_class) %}
+    <div class="todo-row" data-line="{{ t.line_no }}">
+      <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
+      <div class="todo-pri {{ t.priority or 'none' }}">{{ t.priority or '—' }}</div>
+      <div class="todo-body">
+        <div class="todo-desc">{{ t.description }}</div>
+        <div class="todo-meta">
+          {% if t.due %}<span class="todo-due-badge {{ badge_class }}">{{ t.due.strftime('%d %b') }}{% if t.due_time %} {{ t.due_time }}{% endif %}</span>{% endif %}
+          {% if t.sched %}<span class="todo-context">sched {{ t.sched.strftime('%d %b') }}{% if t.sched_time %} {{ t.sched_time }}{% endif %}</span>{% endif %}
+          {% for p in t.projects %}<span class="todo-project">{{ p }}</span>{% endfor %}
+          {% for c in t.contexts %}<span class="todo-context">{{ c }}</span>{% endfor %}
+        </div>
+      </div>
+      <div class="todo-actions">
+        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.sched.isoformat() if t.sched else '' }}', '{{ t.sched_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}')" title="Edit">✎</button>
+        <button onclick="deleteTodo({{ t.line_no }})" title="Delete">✕</button>
+      </div>
+    </div>
+{% endmacro %}
+
+<style>
+  .todo-quick-add {
+    display:flex; gap:8px; align-items:center;
+    padding:12px 16px; background:var(--card); border:1px solid var(--border);
+    border-radius:12px; margin-bottom:18px;
+  }
+  .todo-quick-add input {
+    flex:1; border:none; outline:none; font-size:15px;
+    background:transparent; color:var(--text);
+  }
+  .todo-quick-add button {
+    padding:8px 16px; border-radius:8px; border:none;
+    background:var(--accent); color:#fff; font-size:13px;
+    font-weight:600; cursor:pointer; white-space:nowrap;
+  }
+  .todo-section { margin-bottom:20px; }
+  .todo-section-header {
+    display:flex; align-items:center; justify-content:space-between;
+    padding:6px 0; margin-bottom:4px; cursor:pointer; user-select:none;
+  }
+  .todo-section-title {
+    font-size:13px; font-weight:700; text-transform:uppercase;
+    letter-spacing:0.5px; color:var(--sub);
+  }
+  .todo-section-count {
+    font-size:12px; color:var(--sub); background:var(--bg);
+    padding:2px 8px; border-radius:10px;
+  }
+  .todo-row {
+    display:flex; align-items:flex-start; gap:12px;
+    padding:10px 0; border-bottom:1px solid var(--border);
+    transition: opacity 0.3s;
+  }
+  .todo-row:last-child { border-bottom:none; }
+  .todo-row.completed { opacity:0.4; text-decoration:line-through; }
+  .todo-check {
+    width:20px; height:20px; border-radius:50%; border:2px solid var(--border);
+    cursor:pointer; flex-shrink:0; margin-top:2px;
+    display:flex; align-items:center; justify-content:center;
+    transition: all 0.2s;
+  }
+  .todo-check:hover { border-color:var(--accent); background:var(--accent-lt); }
+  .todo-check.checked {
+    border-color:var(--success); background:var(--success);
+  }
+  .todo-check.checked::after {
+    content:"\2713"; color:#fff; font-size:12px; font-weight:700;
+  }
+  .todo-pri {
+    min-width:28px; height:22px; border-radius:6px; flex-shrink:0;
+    font-size:11px; font-weight:700; text-align:center; line-height:22px;
+  }
+  .todo-pri.A { background:var(--error-lt); color:var(--error); }
+  .todo-pri.B { background:#FEF3E7; color:var(--warn); }
+  .todo-pri.C, .todo-pri.none { background:var(--accent-lt); color:var(--accent); }
+  .todo-body { flex:1; min-width:0; }
+  .todo-desc { font-size:14px; color:var(--text); }
+  .todo-meta {
+    font-size:12px; color:var(--sub); margin-top:2px;
+    display:flex; gap:6px; align-items:center; flex-wrap:wrap;
+  }
+  .todo-due-badge {
+    font-size:11px; padding:1px 6px; border-radius:4px;
+    font-weight:600;
+  }
+  .todo-due-badge.overdue { background:var(--error-lt); color:var(--error); }
+  .todo-due-badge.today { background:#FEF3E7; color:var(--warn); }
+  .todo-due-badge.future { background:var(--accent-lt); color:var(--accent); }
+  .todo-project {
+    font-size:11px; padding:1px 6px; border-radius:4px;
+    background:var(--bg); color:var(--sub);
+  }
+  .todo-context {
+    font-size:11px; padding:1px 6px; border-radius:4px;
+    background:var(--bg); color:var(--sub);
+  }
+  .todo-actions {
+    display:flex; gap:4px; opacity:0; transition:opacity 0.2s;
+  }
+  .todo-row:hover .todo-actions { opacity:1; }
+  .todo-actions button {
+    background:none; border:none; cursor:pointer; padding:2px 4px;
+    font-size:14px; color:var(--sub); border-radius:4px;
+  }
+  .todo-actions button:hover { background:var(--bg); }
+  .todo-progress {
+    font-size:13px; color:var(--sub); text-align:center;
+    margin-bottom:12px;
+  }
+  .todo-filter-chips {
+    display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;
+  }
+  .todo-chip {
+    font-size:12px; padding:4px 10px; border-radius:6px;
+    border:1px solid var(--border); background:var(--card);
+    color:var(--sub); cursor:pointer; text-decoration:none;
+    transition: all 0.15s;
+  }
+  .todo-chip:hover { border-color:var(--accent); color:var(--accent); }
+  .todo-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .todo-project-rail {
+    display:flex; gap:6px; overflow-x:auto; padding-bottom:8px;
+    margin-bottom:14px; -webkit-overflow-scrolling:touch;
+  }
+  .todo-project-rail::-webkit-scrollbar { display:none; }
+  .todo-proj-chip {
+    font-size:12px; padding:5px 12px; border-radius:8px;
+    border:1px solid var(--border); background:var(--card);
+    color:var(--sub); cursor:pointer; text-decoration:none;
+    white-space:nowrap; transition: all 0.15s;
+  }
+  .todo-proj-chip:hover { border-color:var(--accent); color:var(--accent); }
+  .todo-proj-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .todo-empty {
+    text-align:center; padding:32px; color:var(--sub);
+  }
+  .todo-empty-icon { font-size:36px; margin-bottom:10px; }
+
+  /* Edit modal */
+  .modal-overlay {
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
+    z-index:1000; align-items:center; justify-content:center;
+  }
+  .modal-overlay.open { display:flex; }
+  .modal-box {
+    background:var(--card); border:1px solid var(--border); border-radius:14px;
+    padding:24px; width:90%; max-width:460px;
+  }
+  .modal-box h3 { margin:0 0 16px; font-size:16px; }
+  .modal-field { margin-bottom:12px; }
+  .modal-field label {
+    display:block; font-size:12px; font-weight:600; color:var(--sub);
+    margin-bottom:4px; text-transform:uppercase; letter-spacing:0.3px;
+  }
+  .modal-field input {
+    width:100%; padding:8px 10px; border:1px solid var(--border);
+    border-radius:8px; font-size:14px; background:var(--bg);
+    color:var(--text); box-sizing:border-box;
+  }
+  .modal-field input:focus { outline:none; border-color:var(--accent); }
+  .modal-row { display:flex; gap:10px; }
+  .modal-row .modal-field { flex:1; }
+  .modal-actions {
+    display:flex; gap:8px; justify-content:flex-end; margin-top:18px;
+  }
+  .modal-actions button {
+    padding:8px 18px; border-radius:8px; border:none;
+    font-size:13px; font-weight:600; cursor:pointer;
+  }
+  .btn-cancel { background:var(--bg); color:var(--sub); }
+  .btn-save { background:var(--accent); color:#fff; }
+  .todo-help-card {
+    display:none; margin-top:8px; padding:14px 16px;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    font-size:13px; color:var(--text);
+  }
+  .todo-help-card.open { display:block; }
+  .todo-help-title { font-weight:700; font-size:12px; color:var(--sub); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px; }
+  .todo-help-row { margin-bottom:8px; }
+  .todo-help-row code { font-size:12px; background:var(--bg); padding:2px 6px; border-radius:4px; }
+  .todo-help-table { width:100%; border-collapse:collapse; }
+  .todo-help-table td { padding:3px 0; vertical-align:top; }
+  .todo-help-table td:first-child { width:140px; padding-right:12px; }
+  .todo-help-table code { font-size:12px; background:var(--bg); padding:1px 5px; border-radius:4px; }
+</style>
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
+  <div class="page-title" style="margin:0;">Todo</div>
+</div>
+
+{% if error %}
+<div class="msg msg-error">{{ error }}</div>
+{% endif %}
+
+<!-- Quick Add -->
+<div class="todo-quick-add">
+  <input type="text" id="todo-input" placeholder="Add a task... (pri:a +Project @context due:tomorrow)"
+         onkeydown="if(event.key==='Enter'){addTodo();}" autofocus>
+  <button onclick="addTodo()">Add</button>
+  <button onclick="openAdd()" style="background:var(--bg);color:var(--sub);font-size:16px;width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;" title="Form add (n)">+</button>
+</div>
+
+<div style="margin-bottom:16px;">
+  <a onclick="document.getElementById('todo-help').classList.toggle('open');this.textContent=this.textContent==='Hide help'?'? Help':'Hide help'" style="font-size:12px;color:var(--sub);cursor:pointer;user-select:none;">? Help</a>
+  <div id="todo-help" class="todo-help-card">
+    <div class="todo-help-title">Todo format reference</div>
+    <div class="todo-help-row"><code>(A) Call supplier +HearSpeechPro @phone due:tomorrow 3pm</code></div>
+    <table class="todo-help-table">
+      <tr><td><code>(A)</code></td><td>Priority (A-Z). Or type <code>pri:a</code></td></tr>
+      <tr><td><code>+Project</code></td><td>Project tag. E.g. <code>+Home</code> <code>+HearSpeechPro</code></td></tr>
+      <tr><td><code>@context</code></td><td>Context tag. E.g. <code>@phone</code> <code>@errand</code></td></tr>
+      <tr><td><code>due:date</code></td><td>Due date. <code>today</code> <code>tomorrow</code> <code>fri</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
+      <tr><td><code>sched:date</code></td><td>Scheduled date (surfaces when it arrives)</td></tr>
+      <tr><td><code>due:date time</code></td><td>With time: <code>due:tomorrow 3pm</code> <code>due:2026-07-12T14:30</code></td></tr>
+    </table>
+  </div>
+</div>
+
+{% if done_today > 0 and total_today > 0 %}
+<div class="todo-progress">{{ done_today }}/{{ total_today }} done today</div>
+{% endif %}
+
+<!-- Project Rail -->
+{% if projects %}
+<div class="todo-project-rail">
+  <a href="/todo" class="todo-proj-chip {% if not selected_project %}active{% endif %}">All</a>
+  {% for p in projects %}
+  <a href="/todo?project={{ p|urlencode }}{% if selected_context %}&context={{ selected_context|urlencode }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}"
+     class="todo-proj-chip {% if selected_project==p %}active{% endif %}">{{ p }}</a>
+  {% endfor %}
+</div>
+{% endif %}
+
+<!-- Context/Priority Filters -->
+<div class="todo-filter-chips">
+  {% for c in contexts %}
+  <a href="/todo?context={{ c|urlencode }}{% if selected_project %}&project={{ selected_project|urlencode }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}"
+     class="todo-chip {% if selected_context==c %}active{% endif %}">{{ c }}</a>
+  {% endfor %}
+  {% for p in ["A","B","C"] %}
+  <a href="/todo?priority={{ p }}{% if selected_project %}&project={{ selected_project|urlencode }}{% endif %}{% if selected_context %}&context={{ selected_context|urlencode }}{% endif %}"
+     class="todo-chip {% if selected_priority==p %}active{% endif %}">({{ p }})</a>
+  {% endfor %}
+  {% if selected_context or selected_priority %}
+  <a href="/todo{% if selected_project %}?project={{ selected_project|urlencode }}{% endif %}"
+     class="todo-chip" style="color:var(--error);">Clear filters</a>
+  {% endif %}
+</div>
+
+{% set total_open = buckets.overdue|length + buckets.today|length + buckets.upcoming|length + buckets.someday|length %}
+
+{% if total_open == 0 and not error %}
+<div class="todo-empty">
+  <div class="todo-empty-icon">&#x2705;</div>
+  <div style="font-weight:700;font-size:16px;">All clear</div>
+  <div style="color:var(--sub);font-size:14px;margin-top:4px;">No open tasks</div>
+</div>
+{% endif %}
+
+{% if buckets.overdue %}
+<div class="todo-section">
+  <div class="todo-section-header" onclick="toggleSection('overdue')">
+    <div class="todo-section-title" style="color:var(--error);">Overdue</div>
+    <div class="todo-section-count">{{ buckets.overdue|length }}</div>
+  </div>
+  <div id="sec-overdue">
+    {% for t in buckets.overdue %}{{ todo_row(t, 'overdue') }}{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if buckets.today %}
+<div class="todo-section">
+  <div class="todo-section-header" onclick="toggleSection('today')">
+    <div class="todo-section-title">Today</div>
+    <div class="todo-section-count">{{ buckets.today|length }}</div>
+  </div>
+  <div id="sec-today">
+    {% for t in buckets.today %}{{ todo_row(t, 'today') }}{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if buckets.upcoming %}
+<div class="todo-section">
+  <div class="todo-section-header" onclick="toggleSection('upcoming')">
+    <div class="todo-section-title">Upcoming</div>
+    <div class="todo-section-count">{{ buckets.upcoming|length }}</div>
+  </div>
+  <div id="sec-upcoming">
+    {% for t in buckets.upcoming %}{{ todo_row(t, 'future') }}{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if buckets.someday %}
+<div class="todo-section">
+  <div class="todo-section-header" onclick="toggleSection('someday')">
+    <div class="todo-section-title">Someday</div>
+    <div class="todo-section-count">{{ buckets.someday|length }}</div>
+  </div>
+  <div id="sec-someday">
+    {% for t in buckets.someday %}{{ todo_row(t, 'future') }}{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if done_recent %}
+<div class="todo-section">
+  <div class="todo-section-header" onclick="toggleSection('done')">
+    <div class="todo-section-title" style="color:var(--success);">Done ({{ done_recent|length }})</div>
+    <div class="todo-section-count">{{ done_recent|length }}</div>
+  </div>
+  <div id="sec-done" style="display:none;">
+    {% for t in done_recent %}
+    <div class="todo-row" style="opacity:0.5;">
+      <div class="todo-check checked"></div>
+      <div class="todo-pri {{ t.priority or 'none' }}" style="opacity:0.5;">{{ t.priority or '—' }}</div>
+      <div class="todo-body">
+        <div class="todo-desc" style="text-decoration:line-through;">{{ t.description }}</div>
+        <div class="todo-meta">
+          {% if t.completed_date %}<span style="font-size:11px;color:var(--success);">done {{ t.completed_date.strftime('%d %b') }}</span>{% endif %}
+          {% if t.due %}<span class="todo-due-badge future">{{ t.due.strftime('%d %b') }}</span>{% endif %}
+          {% for p in t.projects %}<span class="todo-project">{{ p }}</span>{% endfor %}
+          {% for c in t.contexts %}<span class="todo-context">{{ c }}</span>{% endfor %}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+<!-- Task Modal (shared for add + edit) -->
+<div class="modal-overlay" id="todo-modal">
+  <div class="modal-box">
+    <h3 id="todo-modal-title">New Task</h3>
+    <input type="hidden" id="modal-line-no" value="">
+    <div class="modal-field">
+      <label>Description</label>
+      <input type="text" id="modal-desc" placeholder="What needs to be done?">
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>Priority</label>
+        <input type="text" id="modal-pri" placeholder="A-Z" maxlength="1">
+      </div>
+      <div class="modal-field">
+        <label>Due</label>
+        <input type="date" id="modal-due">
+      </div>
+      <div class="modal-field">
+        <label>Due Time</label>
+        <input type="time" id="modal-due-time">
+      </div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>Scheduled</label>
+        <input type="date" id="modal-sched">
+      </div>
+      <div class="modal-field">
+        <label>Sched Time</label>
+        <input type="time" id="modal-sched-time">
+      </div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>Projects</label>
+        <input type="text" id="modal-projects" placeholder="+Proj1 +Proj2">
+      </div>
+      <div class="modal-field">
+        <label>Contexts</label>
+        <input type="text" id="modal-contexts" placeholder="@ctx1 @ctx2">
+      </div>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-cancel" onclick="closeTodoModal()">Cancel</button>
+      <button class="btn-save" id="todo-modal-save" onclick="saveTodoModal()">Add</button>
+    </div>
+  </div>
+</div>
+
+<script>
+function toggleSection(name) {
+  const el = document.getElementById('sec-' + name);
+  if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+function addTodo() {
+  const input = document.getElementById('todo-input');
+  const text = input.value.trim();
+  if (!text) return;
+  fetch('/todo/add', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text: text})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) { window.location.reload(); }
+    else { alert(d.error || 'Failed to add todo'); }
+  })
+  .catch(e => alert('Network error'));
+}
+
+function completeTodo(lineNo, el) {
+  el.classList.add('checked');
+  const row = el.closest('.todo-row');
+  setTimeout(() => {
+    row.classList.add('completed');
+    row.style.opacity = '0';
+  }, 300);
+  fetch('/todo/complete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: lineNo})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) { setTimeout(() => window.location.reload(), 500); }
+    else { alert(d.error || 'Failed'); window.location.reload(); }
+  })
+  .catch(() => window.location.reload());
+}
+
+function deleteTodo(lineNo) {
+  if (!confirm('Delete this task?')) return;
+  fetch('/todo/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: lineNo})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) { window.location.reload(); }
+    else { alert(d.error || 'Failed'); }
+  });
+}
+
+function openTodoModal(mode, lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts) {
+  const el = document.getElementById('todo-modal');
+  document.getElementById('todo-modal-title').textContent = mode === 'edit' ? 'Edit Task' : 'New Task';
+  document.getElementById('todo-modal-save').textContent = mode === 'edit' ? 'Save' : 'Add';
+  document.getElementById('modal-line-no').value = mode === 'edit' ? lineNo : '';
+  document.getElementById('modal-desc').value = desc || '';
+  document.getElementById('modal-pri').value = pri || '';
+  document.getElementById('modal-due').value = due || '';
+  document.getElementById('modal-due-time').value = dueTime || '';
+  document.getElementById('modal-sched').value = sched || '';
+  document.getElementById('modal-sched-time').value = schedTime || '';
+  document.getElementById('modal-projects').value = projects || '';
+  document.getElementById('modal-contexts').value = contexts || '';
+  el.classList.add('open');
+  document.getElementById('modal-desc').focus();
+}
+
+function openAdd() { openTodoModal('add'); }
+
+function openEdit(lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts) {
+  openTodoModal('edit', lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts);
+}
+
+function closeTodoModal() {
+  document.getElementById('todo-modal').classList.remove('open');
+}
+
+function saveTodoModal() {
+  const lineNo = document.getElementById('modal-line-no').value;
+  const desc = document.getElementById('modal-desc').value.trim();
+  const pri = document.getElementById('modal-pri').value.trim().toUpperCase();
+  const due = document.getElementById('modal-due').value;
+  const dueTime = document.getElementById('modal-due-time').value;
+  const sched = document.getElementById('modal-sched').value;
+  const schedTime = document.getElementById('modal-sched-time').value;
+  const projects = document.getElementById('modal-projects').value.trim();
+  const contexts = document.getElementById('modal-contexts').value.trim();
+
+  if (!desc) { alert('Description is required'); return; }
+
+  if (lineNo) {
+    // Edit mode
+    const updates = {
+      description: desc,
+      priority: pri || null,
+      due: due ? (dueTime ? due + 'T' + dueTime : due) : null,
+      sched: sched ? (schedTime ? sched + 'T' + schedTime : sched) : null,
+      projects: projects ? projects.split(/\s+/) : [],
+      contexts: contexts ? contexts.split(/\s+/) : []
+    };
+    fetch('/todo/edit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({line_no: parseInt(lineNo), updates: updates})
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) { window.location.reload(); }
+      else { alert(d.error || 'Failed to save'); }
+    });
+  } else {
+    // Add mode — construct todo.txt line
+    let line = desc;
+    if (pri) line = '(' + pri + ') ' + line;
+    if (projects) line += ' ' + projects;
+    if (contexts) line += ' ' + contexts;
+    if (due) line += ' due:' + due + (dueTime ? 'T' + dueTime : '');
+    if (sched) line += ' sched:' + sched + (schedTime ? 'T' + schedTime : '');
+    fetch('/todo/add', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({text: line})
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (d.ok) { window.location.reload(); }
+      else { alert(d.error || 'Failed to add todo'); }
+    });
+  }
+}
+
+document.getElementById('todo-modal').addEventListener('click', function(e) {
+  if (e.target === this) closeTodoModal();
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') closeTodoModal();
+  if (e.key === 'n' && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    const active = document.activeElement;
+    if (active && (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA')) return;
+    e.preventDefault();
+    openAdd();
+  }
+});
+</script>
+{% endblock %}

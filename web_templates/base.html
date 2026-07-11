@@ -401,6 +401,7 @@
     <a href="/"        class="{% if tab=='home'    %}active{% endif %}">{% include 'icons/home.html'    ignore missing %} Home</a>
     <a href="/add"     class="{% if tab=='add'     %}active{% endif %}">{% include 'icons/add.html'     ignore missing %} Add Record</a>
     <a href="/due"     class="{% if tab=='due'     %}active{% endif %}">{% include 'icons/due.html'     ignore missing %} Due List</a>
+    <a href="/todo"    class="{% if tab=='todo'    %}active{% endif %}">{% include 'icons/todo.html'    ignore missing %} Todo</a>
     <a href="/queries" class="{% if tab=='queries' %}active{% endif %}">{% include 'icons/query.html'   ignore missing %} Queries</a>
     <a href="/browse"  class="{% if tab=='browse'  %}active{% endif %}">{% include 'icons/browse.html'  ignore missing %} Browse</a>
     <a href="/journal" class="{% if tab=='journal' %}active{% endif %}">{% include 'icons/journal.html' ignore missing %} Journal</a>
@@ -433,9 +434,9 @@
     {% include 'icons/query.html' ignore missing %}
     <span>Queries</span>
   </a>
-  <a href="/journal" class="nav-item {% if tab=='journal' %}active{% endif %}">
-    {% include 'icons/journal.html' ignore missing %}
-    <span>Journal</span>
+  <a href="/todo" class="nav-item {% if tab=='todo' %}active{% endif %}">
+    {% include 'icons/todo.html' ignore missing %}
+    <span>Todo</span>
   </a>
   <a href="/browse" class="nav-item {% if tab=='browse' %}active{% endif %}">
     {% include 'icons/browse.html' ignore missing %}
@@ -460,6 +461,10 @@
     <a href="/due" class="more-menu-item {% if tab=='due' %}active{% endif %}">
       {% include 'icons/due.html' ignore missing %}
       Due List
+    </a>
+    <a href="/journal" class="more-menu-item {% if tab=='journal' %}active{% endif %}">
+      {% include 'icons/journal.html' ignore missing %}
+      Journal
     </a>
     <a href="/schema-builder" class="more-menu-item {% if tab=='schema_builder' %}active{% endif %}">
       {% include 'icons/schema_builder.html' ignore missing %}
@@ -742,6 +747,7 @@ function toggleMoreMenu(e) {
     "g q": "/queries",
     "g j": "/journal",
     "g d": "/due",
+    "g t": "/todo",
     "g e": "/editor",
     "g l": "/lint",
     "g s": "/settings",
@@ -931,7 +937,21 @@ function stopServer() {
 
 {% if not frozen or desktop_mode %}
 <script>
-// ── SSE listener — shows "Server stopped" when tray-initiated shutdown fires ──
+// ── SSE listener — shutdown overlay + todo notifications ──
+function _showTodoToast(tasks) {
+  var old = document.getElementById("todo-toast");
+  if (old) old.remove();
+  var n = tasks.length;
+  var label = n === 1 ? tasks[0].description : n + " tasks due";
+  var d = document.createElement("div");
+  d.id = "todo-toast";
+  d.style.cssText = "position:fixed;top:12px;right:12px;z-index:9998;background:var(--error);color:#fff;padding:12px 18px;border-radius:10px;font-size:14px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:320px;";
+  d.innerHTML = "\uD83D\uDCCC " + label + ' <span style="margin-left:8px;opacity:.7;font-size:12px;">\u2715</span>';
+  d.onclick = function() { window.location = "/todo"; };
+  d.querySelector("span").onclick = function(e) { e.stopPropagation(); d.remove(); };
+  document.body.appendChild(d);
+  setTimeout(function() { if (d.parentNode) d.remove(); }, 15000);
+}
 (function(){
   try {
     var es = new EventSource("/api/events");
@@ -945,6 +965,21 @@ function stopServer() {
           d.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;";
           d.innerHTML = "<h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p>";
           document.body.appendChild(d);
+        }
+        if (msg.type === "todo-due") {
+          var tasks = msg.data;
+          if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+          }
+          if ("Notification" in window && Notification.permission === "granted") {
+            var body = tasks.map(function(t) {
+              var p = t.priority ? "(" + t.priority + ") " : "";
+              var time = t.due_time ? " at " + t.due_time : "";
+              return p + t.description + " (due " + t.due + time + ")";
+            }).join("\n");
+            new Notification("Todo due", {body: body, icon: "/static/icon-192.png"});
+          }
+          _showTodoToast(tasks);
         }
       } catch(ex) {}
     };

@@ -38,6 +38,9 @@ JOURNAL_DIR  = os.path.join(BASE_DIR, "journal")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
 BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
+TODO_DIR     = os.path.join(BASE_DIR, "todo")
+TODO_PATH    = os.path.join(TODO_DIR, "todo.txt")
+DONE_PATH    = os.path.join(TODO_DIR, "done.txt")
 BACKUP_FOLDERS = ["records", "config", "templates"]
 MAX_BACKUPS = 10  # Keep last 10 backups
 
@@ -3709,7 +3712,7 @@ def init_ptos():
     Safe to re-run — skips existing files."""
     print("\nInitializing PTOS...\n")
 
-    for d in [CONFIG_DIR, RECORDS_DIR, JOURNAL_DIR, TEMPLATE_DIR]:
+    for d in [CONFIG_DIR, RECORDS_DIR, JOURNAL_DIR, TEMPLATE_DIR, TODO_DIR]:
         os.makedirs(d, exist_ok=True)
 
     _write_if_missing(CONFIG_PATH,  _load_starter("config"),  "config/config.toml")
