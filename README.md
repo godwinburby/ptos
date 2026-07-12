@@ -92,24 +92,24 @@ PTOS from GitHub, install dependencies, and create all config files automaticall
 
 ### Windows
 
-Windows needs two files — download both into the same folder:
+Download two files into the same folder:
 
 - [`setup_ptos_windows.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat)
-- [`setup_ptos_windows.py`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.py)
+- [`setup_ptos_windows.ps1`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.ps1)
 
 Then double-click `setup_ptos_windows.bat` to run.
 
 Or from PowerShell (downloads both automatically):
 ```powershell
 curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat
-curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.py
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.ps1
 setup_ptos_windows.bat
 ```
 
-The `.bat` file's only job is to find Python on your system and hand off to
-`setup_ptos_windows.py`, which does all the real work. Both files must be in
-the same folder. Git is required on Windows — install from
-[git-scm.com](https://git-scm.com/download/win) or run `winget install Git.Git`.
+The `.bat` file is a 3-line launcher that hands off to the `.ps1` PowerShell
+script, which does all the real work — Python/Git detection and auto-install
+via `winget`, repo clone, Flask install, init, and server launch. PowerShell
+ships by default on Windows 7+ — no extra install needed.
 
 ### Linux / macOS
 
@@ -178,8 +178,8 @@ ptos/
 ├── .version                # Current version SHA (used by update checks)
 ├── setup_ptos_linux.sh     # Linux/macOS setup (single file)
 ├── setup_ptos_android.sh   # Android/Termux setup (single file)
-├── setup_ptos_windows.bat  # Windows setup — finds Python, calls setup_ptos_windows.py
-├── setup_ptos_windows.py   # Windows setup — does the actual work (git, pip, init)
+├── setup_ptos_windows.bat  # Windows setup — thin launcher (calls .ps1)
+├── setup_ptos_windows.ps1  # Windows setup — PowerShell script with winget auto-install
 ├── start_ptos_linux.sh     # Linux start script (checks for updates, starts server)
 ├── start_ptos_windows.bat  # Windows start script (checks for updates, starts server)
 ├── start_ptos_android.sh   # Android/Termux start script (checks for updates, starts server)
