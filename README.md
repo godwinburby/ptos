@@ -542,6 +542,15 @@ When you run `--init` (or the setup script), PTOS copies default configs from
 the copies in `config/`, not the originals. If you delete `config/` and re-init,
 the starters are used again.
 
+**Starter files:**
+
+| File | Contents |
+|------|----------|
+| `starter_config.toml` | User, editor, display, cycles, dashboard, auth, backup, todo settings |
+| `starter_schema.toml` | 7 record types: expense, income, investment, exercise, sleep, mood, learning — with parent-dependent fields, tags, global optional fields (context, project) |
+| `starter_queries.toml` | 15 base queries + 6 metrics (savings_rate, food_ratio, avg_spend, total_income, total_expenses, avg_mood) + 2 dashboards (default, health) |
+| `starter_presets.toml` | 21 presets with short aliases — coffee, lunch, dinner, groceries, restaurant, auto, bus, metro, petrol, rapido, recharge, broadband, electricity, salary, sip, rd, walk, gym, run, read, course |
+
 ### config.toml
 
 ```toml
