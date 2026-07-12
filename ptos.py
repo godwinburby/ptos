@@ -2776,6 +2776,8 @@ def run_metric(name, queries, start, end, cycles):
             result = float(eval(eval_expr))  # noqa: S307
             formatted = fmt(int(result)) if result == int(result) else fmt_avg(result)
             print(f"{_disp(name):<24} {formatted}")
+        except ZeroDivisionError:
+            print(f"{_disp(name):<24} no data")
         except Exception as e:
             print(f"{_disp(name):<24} error: {e}")
         return True
