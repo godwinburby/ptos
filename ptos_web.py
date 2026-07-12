@@ -575,6 +575,7 @@ def todo_page():
     project = request.args.get("project", None)
     context = request.args.get("context", None)
     pri = request.args.get("priority", None)
+    due_filter = request.args.get("due", None)
 
     try:
         buckets = svc.get_todos_bucketed()
@@ -587,7 +588,7 @@ def todo_page():
         contexts = []
         error = str(e)
 
-    # apply filters within buckets
+    # apply project/context/priority filters within buckets
     def _filter_list(todos):
         result = todos
         if project:
@@ -600,6 +601,17 @@ def todo_page():
 
     for key in ("overdue", "today", "upcoming", "someday"):
         buckets[key] = _filter_list(buckets[key])
+
+    # apply due range filter
+    if due_filter:
+        if due_filter in buckets:
+            for key in list(buckets.keys()):
+                if key != due_filter:
+                    buckets[key] = []
+        elif due_filter == "none":
+            buckets["overdue"] = []
+            buckets["today"] = []
+            buckets["upcoming"] = []
 
     # today progress: count completed today vs total added today
     try:
@@ -617,8 +629,8 @@ def todo_page():
     return render_template("todo.html", tab="todo", title="Todo",
         now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
         error=error, selected_project=project, selected_context=context,
-        selected_priority=pri, done_today=done_today, total_today=total_today,
-        done_recent=done_recent)
+        selected_priority=pri, selected_due=due_filter, done_today=done_today,
+        total_today=total_today, done_recent=done_recent)
 
 
 @app.route("/todo/add", methods=["POST"])
