@@ -107,6 +107,24 @@ x 2026-07-12 2026-07-10 Completed task
 - `resolve_todo_date(s)` — returns `(date, time_str|None)` tuple
 - `archive_done_todos(path, months)` — moves old done items to `done.YYYY.txt`
 
+### Web UI features
+- **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `(`)
+- **Quick pick chips** (collapsible) — Priority, Due shortcuts, Projects, Contexts as toggle chips
+- **Filter chips** (collapsible) — Context, Priority, Due Range (overdue/today/upcoming/someday/none)
+- **Form modal** (shared add+edit) with structured fields
+- **Project rail** — horizontal scroll filter
+- **Overdue/Today/Upcoming/Someday** bucket view with collapsible Done section
+- **Today progress** counter (done/total)
+- **Help card** — todo.txt format reference
+
+### Autocomplete system
+- `_acData` object holds suggestions per prefix (`+`, `@`, `due:`, `(`)
+- `_getCurrentToken()` parses the word being typed and detects its prefix
+- `onTodoInput()` filters `_acData` by typed text and shows dropdown
+- `handleInputKey()` handles ArrowUp/Down/Enter/Escape navigation
+- `pickAC()` inserts selected suggestion with trailing space
+- Input clears on successful add (`input.value = ''` then reload)
+
 ### Archiving
 - Runs on web server startup
 - Items older than 6 months move from `done.txt` to `done.YYYY.txt`

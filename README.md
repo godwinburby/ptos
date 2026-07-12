@@ -352,10 +352,12 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - Overdue / Today / Upcoming / Someday sections with collapsible Done section
 - Priority badges (A=red, B=orange, C=blue), due date badges, project/context chips
 - Quick-add text input with todo.txt syntax (`pri:a Task +Project @context due:tomorrow`)
+- **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `(a` for `(A)`. Arrow keys + Enter to select.
+- **Quick pick chips** (collapsible) — click Priority, Due, Projects, or Context chips to insert into input
+- **Filter chips** (collapsible) — filter by Context, Priority, and Due Range (overdue/today/upcoming/someday/none)
 - Form modal for structured add/edit (press `n` or click `+`)
 - Inline edit (pencil icon on hover) and delete
 - Project rail for filtering by `+Project`
-- Context and priority filter chips
 - Collapsible `? Help` reference card
 - Background browser notifications via SSE (configurable interval)
 - Automatic archiving: done items older than 6 months move to `done.YYYY.txt` on startup
@@ -376,7 +378,9 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 **Keyboard shortcuts:**
 - `G` `T` — navigate to Todo page
 - `n` — open add form modal (when not in an input)
-- `Escape` — close modal
+- `Enter` — submit (in input with autocomplete, or in modal)
+- `Arrow Up`/`Down` — navigate autocomplete suggestions
+- `Escape` — close modal or autocomplete dropdown
 
 ### Log Editor
 
