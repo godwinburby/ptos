@@ -352,8 +352,8 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - Overdue / Today / Upcoming / Someday sections with collapsible Done section
 - Priority badges (A=red, B=orange, C=blue), due date badges, project/context chips
 - Quick-add text input with todo.txt syntax (`pri:a Task +Project @context due:tomorrow`)
-- **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `(a` for `(A)`. Arrow keys + Enter to select.
-- **Quick pick chips** (collapsible) — click Priority, Due, Projects, or Context chips to insert into input
+- **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `sched:t` for `sched:today`, `(a` for `(A)`. Arrow keys + Enter to select.
+- **Quick pick chips** (collapsible) — click Priority, Due, Scheduled, Projects, or Context chips to insert into input
 - **Filter chips** (collapsible) — filter by Context, Priority, and Due Range (overdue/today/upcoming/someday/none)
 - Form modal for structured add/edit (press `n` or click `+`)
 - Inline edit (pencil icon on hover) and delete
