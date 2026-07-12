@@ -150,14 +150,4 @@ metrics = [
 ]
 
 # ══════════════════════════════════════════════════════════════════════════════
-# ALIASES  —  shortcuts for frequently used queries
-# ══════════════════════════════════════════════════════════════════════════════
 
-[exp]    alias = "expenses_this_month"
-[expby]  alias = "expenses_by_category"
-[income] alias = "income_this_month"
-[bal]    alias = "balance"
-[ex]     alias = "exercise_this_month"
-[sl]     alias = "sleep_this_month"
-[md]     alias = "mood_this_month"
-[learn]  alias = "learning_this_month"

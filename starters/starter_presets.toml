@@ -39,11 +39,6 @@ domain   = "home"
 category = "food"
 tag      = ["restaurant", "dinner"]
 
-[presets.co] alias = "coffee"
-[presets.lu] alias = "lunch"
-[presets.gr] alias = "groceries"
-[presets.rt] alias = "restaurant"
-
 # ── TRANSPORT ────────────────────────────────────────────────────────────────
 
 [presets.auto]
