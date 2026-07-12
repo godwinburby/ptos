@@ -1,5 +1,5 @@
 # --------------------------------------------------
-# PTOS SCHEMA
+# PTOS SCHEMA — Starter
 # --------------------------------------------------
 #
 # Every type follows the same pattern:
@@ -14,19 +14,18 @@
 #   options.value1 = ["a", "b"]
 #   options.value2 = ["c", "d"]
 #
-#   [type.X.fields.fieldname]               # reuse shared definition
-#   use = "shared.fieldname"
-#
 #   [type.X.tags.fieldname]                 # tags triggered by field value
 #   options.value1 = ["tag_a", "tag_b"]
 #
 #   [type.X.conditions.fieldname]           # conditionally required field
 #   when = { other_field = "value" }
 #
+# Edit this file to add your own types, fields, and options.
+# Run  ptos --lint  to verify records still pass after changes.
 # --------------------------------------------------
 
 [types]
-allowed = ["expense", "income", "exercise", "learning"]
+allowed = ["expense", "income", "investment", "exercise", "sleep", "mood", "learning"]
 
 # --------------------------------------------------
 # GLOBAL FIELD METADATA
@@ -56,33 +55,20 @@ dimension = true
 multi     = true
 
 # --------------------------------------------------
-# SHARED FIELD DEFINITIONS
-# --------------------------------------------------
-
-# (add shared fields here and reference with  use = "shared.fieldname")
-
-# ==================================================
 # GLOBAL OPTIONAL FIELDS
-# ==================================================
-# These fields appear on EVERY record type — always optional.
-# Uncomment and customise to enable them.
-# They show in a collapsible "Additional info" panel in the web UI
-# and are prompted after the note in the CLI.
-#
-# [global_fields.person]
-# type    = "string"
-# options = ["alice", "bob"]    # omit for free-text
-#
-# [global_fields.context]
-# type    = "string"
-# options = ["home", "work", "travel"]
-#
-# [global_fields.project]
-# type    = "string"
-# # no options = free-text entry
+# --------------------------------------------------
+# These appear on EVERY record type — always optional.
+
+[global_fields.context]
+type    = "string"
+options = ["home", "work", "travel", "outdoor"]
+
+[global_fields.project]
+type    = "string"
+# no options = free-text entry
 
 # ==================================================
-# TYPES  —  add your own below using the pattern above
+# TYPES
 # ==================================================
 
 # ----------------------
@@ -97,14 +83,35 @@ options = ["self", "home", "work"]
 
 [type.expense.fields.category]
 parent       = "domain"
-options.self = ["food", "transport", "entertainment", "personal", "medical", "other"]
-options.home = ["grocery", "utilities", "rent", "household", "maintenance", "other"]
-options.work = ["supplies", "travel", "meals", "equipment", "services", "other"]
+options.self = [
+    "food", "transport", "entertainment", "personal",
+    "health", "education", "electronics", "charity",
+    "travel", "utilities", "other",
+]
+options.home = [
+    "food", "grocery", "rent", "utilities", "household",
+    "maintenance", "clothing", "medical", "gift",
+    "entertainment", "child", "other",
+]
+options.work = [
+    "supplies", "travel", "meals", "equipment",
+    "services", "courier", "maintenance", "other",
+]
 
 [type.expense.tags.category]
-options.food      = ["snacks", "coffee", "restaurant", "delivery"]
-options.transport = ["auto", "bus", "metro", "taxi", "fuel"]
-options.grocery   = ["vegetables", "milk", "groceries", "essentials"]
+options.food        = ["snacks", "coffee", "restaurant", "delivery", "lunch", "dinner", "tea", "bakery", "dessert", "fruits"]
+options.transport  = ["auto", "bus", "metro", "taxi", "rapido", "petrol", "uber", "water_metro"]
+options.grocery    = ["vegetables", "milk", "rice", "essentials", "supermarket"]
+options.entertainment = ["cinema", "book", "subscription", "app", "audible", "game", "liquor"]
+options.utilities  = ["broadband", "recharge", "electricity", "water", "cable"]
+options.medical    = ["medicine", "hospital", "consultation"]
+options.child      = ["school", "tuition", "clothing", "toy", "haircut"]
+options.maintenance = ["electrician", "plumber", "ac", "painting"]
+options.clothing   = ["clothing", "footwear", "gift"]
+options.gift       = ["birthday", "wedding", "festival"]
+options.health     = ["gym", "supplement", "checkup"]
+options.travel     = ["flight", "train", "hotel", "food"]
+options.education  = ["book", "course", "fee", "supplies"]
 
 # ----------------------
 # INCOME
@@ -114,7 +121,34 @@ options.grocery   = ["vegetables", "milk", "groceries", "essentials"]
 required = ["source", "amount"]
 
 [type.income.fields.source]
-options = ["salary", "freelance", "gift", "refund", "sales", "other"]
+options = ["salary", "freelance", "business", "gift", "refund", "cashback", "other"]
+
+[type.income.tags.source.options]
+salary    = ["monthly", "bonus", "arrears"]
+freelance = ["project", "consulting"]
+business  = ["sale", "service"]
+gift      = ["birthday", "festival"]
+refund    = ["return", "cancellation"]
+
+# ----------------------
+# INVESTMENT
+# ----------------------
+
+[type.investment]
+required = ["instrument", "provider", "amount"]
+
+[type.investment.fields.instrument]
+options = ["rd", "fd", "mutual_fund", "ppf", "stocks", "gold", "crypto", "other"]
+
+[type.investment.fields.provider]
+options = ["bank", "broker", "government", "app", "other"]
+
+[type.investment.tags.instrument.options]
+mutual_fund = ["sip", "lumpsum", "switch"]
+stocks      = ["buy", "sell"]
+gold        = ["sip", "coin", "etf"]
+fd          = ["new", "renewal"]
+rd          = ["new", "renewal"]
 
 # ----------------------
 # EXERCISE
@@ -124,12 +158,67 @@ options = ["salary", "freelance", "gift", "refund", "sales", "other"]
 required = ["activity", "duration"]
 
 [type.exercise.fields.activity]
-options = ["walk", "run", "cycle", "strength", "yoga", "stretch", "sport", "other"]
+options = ["walk", "run", "cycle", "strength", "yoga", "swim", "sport", "stretch", "other"]
 
-[type.exercise.tags.activity]
-options.walk = ["morning", "evening"]
-options.run  = ["morning", "evening"]
-options.yoga = ["morning", "evening"]
+[type.exercise.tags.activity.options]
+walk    = ["morning", "evening", "treadmill", "outdoor"]
+run     = ["morning", "evening", "treadmill", "outdoor"]
+cycle   = ["morning", "evening", "outdoor", "stationary"]
+strength = ["gym", "home", "bodyweight"]
+yoga    = ["morning", "evening", "class"]
+swim    = ["pool", "open_water"]
+sport   = ["cricket", "football", "badminton", "tennis", "other"]
+
+# ----------------------
+# SLEEP
+# ----------------------
+
+[type.sleep]
+required = ["quality", "duration"]
+
+[type.sleep.fields.quality]
+options = ["1", "2", "3", "4", "5"]
+
+[type.sleep.fields.quality.labels]
+1 = "terrible"
+2 = "poor"
+3 = "okay"
+4 = "good"
+5 = "great"
+
+[type.sleep.tags.quality.options]
+1 = ["insomnia", "restless", "pain"]
+2 = ["short", "noisy", "hot"]
+3 = ["normal"]
+4 = ["refreshed"]
+5 = ["deep", "perfect"]
+
+# ----------------------
+# MOOD
+# ----------------------
+
+[type.mood]
+required = ["rating", "context"]
+
+[type.mood.fields.rating]
+options = ["1", "2", "3", "4", "5"]
+
+[type.mood.fields.rating.labels]
+1 = "terrible"
+2 = "low"
+3 = "neutral"
+4 = "good"
+5 = "great"
+
+[type.mood.fields.context]
+options = ["work", "home", "social", "health", "travel", "other"]
+
+[type.mood.tags.rating.options]
+1 = ["stressed", "anxious", "angry", "sad", "overwhelmed"]
+2 = ["tired", "unmotivated", "low", "frustrated"]
+3 = ["neutral", "okay", "meh"]
+4 = ["good", "focused", "calm", "content"]
+5 = ["great", "energised", "grateful", "productive", "joyful"]
 
 # ----------------------
 # LEARNING
@@ -139,7 +228,14 @@ options.yoga = ["morning", "evening"]
 required = ["topic", "source", "domain"]
 
 [type.learning.fields.source]
-options = ["book", "course", "video", "podcast", "article", "other"]
+options = ["book", "course", "video", "podcast", "article", "audio_book", "other"]
 
 [type.learning.fields.domain]
-options = ["self", "work", "other"]
+options = ["self", "work"]
+
+[type.learning.fields.topic]
+options = [
+    "coding", "finance", "productivity", "philosophy",
+    "health", "science", "history", "creative",
+    "language", "design", "other",
+]

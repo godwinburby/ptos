@@ -15,7 +15,7 @@ ptos_todo.py     → Todo module (todo.txt parser, CRUD, archiving, notification
 web_templates/   → Jinja2 HTML templates
 web_static/      → CSS, JS, icons
 tests/           → pytest test suite
-starters/        → Default config files shipped with project
+starters/        → Starter configs shipped with project (7 types, 15 queries, 15 presets)
 config/          → User config (created by --init, gitignored)
 records/         → Log files (YYYY.log)
 journal/         → Markdown journal entries

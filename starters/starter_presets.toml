@@ -1,5 +1,5 @@
 # --------------------------------------------------
-# PTOS PRESETS
+# PTOS PRESETS — Starter
 # --------------------------------------------------
 # Quick-add shortcuts for frequent records.
 # Usage:  ptos -p <name>
@@ -7,22 +7,152 @@
 #         ptos -p <name> -d yesterday
 # --------------------------------------------------
 
-[presets.supplies]
-type     = "expense"
-domain   = "work"
-category = "supplies"
+# ── FOOD ─────────────────────────────────────────────────────────────────────
 
-[presets.travel]
+[presets.coffee]
 type     = "expense"
-domain   = "work"
-category = "travel"
+domain   = "self"
+category = "food"
+tag      = ["coffee"]
 
-[presets.meals]
+[presets.lunch]
 type     = "expense"
-domain   = "work"
-category = "meals"
+domain   = "self"
+category = "food"
+tag      = ["lunch"]
 
-[presets.utilities]
+[presets.dinner]
 type     = "expense"
-domain   = "work"
+domain   = "home"
+category = "food"
+tag      = ["dinner"]
+
+[presets.groceries]
+type     = "expense"
+domain   = "home"
+category = "grocery"
+tag      = ["essentials"]
+
+[presets.restaurant]
+type     = "expense"
+domain   = "home"
+category = "food"
+tag      = ["restaurant", "dinner"]
+
+[presets.co] alias = "coffee"
+[presets.lu] alias = "lunch"
+[presets.gr] alias = "groceries"
+[presets.rt] alias = "restaurant"
+
+# ── TRANSPORT ────────────────────────────────────────────────────────────────
+
+[presets.auto]
+type     = "expense"
+domain   = "self"
+category = "transport"
+amount   = 60
+tag      = ["auto"]
+
+[presets.bus]
+type     = "expense"
+domain   = "self"
+category = "transport"
+amount   = 30
+tag      = ["bus"]
+
+[presets.metro]
+type     = "expense"
+domain   = "self"
+category = "transport"
+tag      = ["metro"]
+
+[presets.petrol]
+type     = "expense"
+domain   = "self"
+category = "transport"
+amount   = 200
+tag      = ["petrol"]
+
+[presets.rapido]
+type     = "expense"
+domain   = "self"
+category = "transport"
+tag      = ["rapido"]
+
+# ── UTILITIES ────────────────────────────────────────────────────────────────
+
+[presets.recharge]
+type     = "expense"
+domain   = "self"
 category = "utilities"
+amount   = 500
+note     = "mobile recharge"
+
+[presets.broadband]
+type     = "expense"
+domain   = "home"
+category = "utilities"
+amount   = 600
+tag      = ["broadband"]
+
+[presets.electricity]
+type     = "expense"
+domain   = "home"
+category = "utilities"
+tag      = ["electricity"]
+
+# ── INCOME ───────────────────────────────────────────────────────────────────
+
+[presets.salary]
+type   = "income"
+source = "salary"
+
+# ── INVESTMENT ───────────────────────────────────────────────────────────────
+
+[presets.sip]
+type       = "investment"
+instrument = "mutual_fund"
+provider   = "app"
+amount     = 5000
+tag        = ["sip"]
+
+[presets.rd]
+type       = "investment"
+instrument = "rd"
+provider   = "bank"
+amount     = 2000
+
+# ── EXERCISE ─────────────────────────────────────────────────────────────────
+
+[presets.walk]
+type     = "exercise"
+activity = "walk"
+duration = 30
+tag      = ["morning"]
+
+[presets.gym]
+type     = "exercise"
+activity = "strength"
+duration = 45
+tag      = ["gym"]
+
+[presets.run]
+type     = "exercise"
+activity = "run"
+duration = 30
+tag      = ["morning"]
+
+# ── LEARNING ─────────────────────────────────────────────────────────────────
+
+[presets.read]
+type    = "learning"
+topic   = "other"
+source  = "book"
+domain  = "self"
+duration = 30
+
+[presets.course]
+type    = "learning"
+topic   = "coding"
+source  = "course"
+domain  = "work"

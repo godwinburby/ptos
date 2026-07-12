@@ -1,16 +1,18 @@
 # --------------------------------------------------
-# PTOS QUERIES
+# PTOS QUERIES — Starter
 # --------------------------------------------------
 # Base queries  →  referenced by metrics and dashboards
-# Metrics        →  ratio or avg over base queries
-# Dashboards     →  named list of metrics + base queries
+# Metrics        →  ratio, avg, sum, or derived over base queries
+# Dashboards     →  named collection of metrics + base queries
 # Saved queries  →  any filter + time + group/pivot combo
 #
 # Usage:
 #   ptos -q <name>              run a saved query
 #   ptos -q <name> -t last-month   override time window
-#   ptos -q                     list all queries
+#   ptos -q                     list all queries, metrics, dashboards
 # --------------------------------------------------
+
+# ── EXPENSE QUERIES ──────────────────────────────────────────────────────────
 
 [expenses_this_month]
 where = "type=expense"
@@ -27,15 +29,135 @@ where = "type=expense"
 time  = "this-month"
 group = "category"
 
-[monthly_trend]
+[expenses_by_domain]
 where = "type=expense"
 time  = "this-month"
+group = "domain"
+
+[food_this_month]
+where = "type=expense AND category=food"
+time  = "this-month"
+sum   = true
+
+[transport_this_month]
+where = "type=expense AND category=transport"
+time  = "this-month"
+sum   = true
+
+[utilities_this_month]
+where = "type=expense AND category=utilities"
+time  = "this-month"
+sum   = true
+
+# ── INCOME QUERIES ───────────────────────────────────────────────────────────
 
 [income_this_month]
 where = "type=income"
 time  = "this-month"
 sum   = true
 
-[balance]
-where = "type=expense or type=income"
+[income_by_source]
+where = "type=income"
 time  = "this-month"
+group = "source"
+
+# ── INVESTMENT QUERIES ───────────────────────────────────────────────────────
+
+[investments_this_month]
+where = "type=investment"
+time  = "this-month"
+sum   = true
+
+[investments_by_instrument]
+where = "type=investment"
+time  = "this-month"
+group = "instrument"
+
+# ── BALANCE ──────────────────────────────────────────────────────────────────
+
+[balance]
+where = "type=income OR type=expense"
+time  = "this-month"
+
+# ── HEALTH QUERIES ───────────────────────────────────────────────────────────
+
+[exercise_this_month]
+where = "type=exercise"
+time  = "this-month"
+
+[sleep_this_month]
+where = "type=sleep"
+time  = "this-month"
+
+[mood_this_month]
+where = "type=mood"
+time  = "this-month"
+
+# ── LEARNING QUERIES ─────────────────────────────────────────────────────────
+
+[learning_this_month]
+where = "type=learning"
+time  = "this-month"
+
+# ── TRENDS ───────────────────────────────────────────────────────────────────
+
+[monthly_trend]
+where = "type=expense"
+time  = "this-month"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# METRICS
+# ══════════════════════════════════════════════════════════════════════════════
+
+[metrics.savings_rate]
+derived = "balance / income_this_month * 100"
+
+[metrics.food_ratio]
+ratio = ["food_this_month", "expenses_this_month"]
+
+[metrics.avg_spend]
+avg = "expenses_this_month"
+
+[metrics.total_income]
+sum = "income_this_month"
+
+[metrics.total_expenses]
+sum = "expenses_this_month"
+
+[metrics.avg_mood]
+avg = "mood_this_month"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DASHBOARDS
+# ══════════════════════════════════════════════════════════════════════════════
+
+[dashboards.default]
+metrics = [
+    "income_this_month",
+    "expenses_this_month",
+    "balance",
+    "savings_rate",
+    "total_income",
+    "total_expenses",
+]
+
+[dashboards.health]
+metrics = [
+    "exercise_this_month",
+    "sleep_this_month",
+    "mood_this_month",
+    "avg_mood",
+]
+
+# ══════════════════════════════════════════════════════════════════════════════
+# ALIASES  —  shortcuts for frequently used queries
+# ══════════════════════════════════════════════════════════════════════════════
+
+[exp]    alias = "expenses_this_month"
+[expby]  alias = "expenses_by_category"
+[income] alias = "income_this_month"
+[bal]    alias = "balance"
+[ex]     alias = "exercise_this_month"
+[sl]     alias = "sleep_this_month"
+[md]     alias = "mood_this_month"
+[learn]  alias = "learning_this_month"
