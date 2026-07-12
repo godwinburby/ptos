@@ -2585,7 +2585,7 @@ if __name__ == "__main__":
     # Archive old done tasks on startup
     try:
         import ptos_todo as _todo
-        archived = _todo.archive_done_todos(DONE_PATH)
+        archived = _todo.archive_done_todos(DONE_PATH, threshold_months=archive_mo)
         if archived:
             print(f"Archived {archived} old done tasks")
     except Exception as e:
@@ -2598,6 +2598,7 @@ if __name__ == "__main__":
     try:
         todo_cfg = svc.get_config().get("todo", {})
         notify_min = todo_cfg.get("notify_interval", 5)
+        archive_mo = todo_cfg.get("archive_months", 6)
         if notify_min > 0:
             _t = threading.Thread(target=_todo_notify_loop, args=(notify_min,), daemon=True)
             _t.start()
