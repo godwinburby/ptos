@@ -104,15 +104,16 @@ x 2026-07-12 2026-07-10 Completed task
 - `parse_todo_line(line)` — parses one line into Todo object
 - `format_line(todo)` — formats Todo back to todo.txt line
 - `preprocess_todo_text(text)` — converts `pri:a`, resolves NL dates, handles two-token time patterns
-- `resolve_todo_date(s)` — returns `(date, time_str|None)` tuple
+- `resolve_todo_date(s)` — returns `(date, time_str|None)` tuple; supports `today`, `tomorrow`, `yesterday`, weekdays, `this_week`, `next_week`, `this_month`, `next_month`, `+Nd`, `+Nw`, `+Nm`, `YYYY-MM-DD`
 - `archive_done_todos(path, months)` — moves old done items to `done.YYYY.txt`
 
 ### Web UI features
-- **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `(`)
-- **Quick pick chips** (collapsible) — Priority, Due shortcuts, Projects, Contexts as toggle chips
-- **Filter chips** (collapsible) — Context, Priority, Due Range (overdue/today/upcoming/someday/none)
-- **Form modal** (shared add+edit) with structured fields
-- **Project rail** — horizontal scroll filter
+- **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `sched:`, `(`)
+- **Quick pick chips** (collapsible) — Priority (A-D), Due shortcuts (today/tomorrow/this_week/next_week/this_month/next_month), Scheduled shortcuts, Projects, Contexts as toggle chips
+- **Filter chips** (collapsible) — Context, Priority (A-D), Due Range (overdue/today/upcoming/someday/none) — all toggle on click
+- **Form modal** (shared add+edit) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
+- **Clickable todo chips** — project, context, and priority chips on each todo row link to filtered view; clicking an active filter chip removes that filter
+- **Project rail** — horizontal scroll filter with toggle behavior
 - **Overdue/Today/Upcoming/Someday** bucket view with collapsible Done section
 - **Today progress** counter (done/total)
 - **Help card** — todo.txt format reference
