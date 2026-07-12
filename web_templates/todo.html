@@ -290,6 +290,15 @@
       <button class="add-chip" data-token="due:next week " onclick="toggleAddChip(this,'due')">next week</button>
     </div>
   </div>
+  <div class="chip-group-card">
+    <div class="chip-group-label">Scheduled</div>
+    <div class="chip-row" id="add-chips-sched">
+      <button class="add-chip" data-token="sched:today " onclick="toggleAddChip(this,'sched')">today</button>
+      <button class="add-chip" data-token="sched:tomorrow " onclick="toggleAddChip(this,'sched')">tomorrow</button>
+      <button class="add-chip" data-token="sched:this week " onclick="toggleAddChip(this,'sched')">this week</button>
+      <button class="add-chip" data-token="sched:next week " onclick="toggleAddChip(this,'sched')">next week</button>
+    </div>
+  </div>
   {% if projects %}
   <div class="chip-group-card full-width">
     <div class="chip-group-label">Projects</div>
@@ -528,7 +537,7 @@ function toggleSection(name) {
 
 function addTodo() {
   const input = document.getElementById('todo-input');
-  const text = input.value.trim();
+  const text = reorderTodoText(input.value.trim());
   if (!text) return;
   fetch('/todo/add', {
     method: 'POST',
@@ -681,27 +690,54 @@ function syncAddChips() {
   });
 }
 
+function _insertInZone(text, token, zone) {
+  var later = {proj: /(?:^|\s)(?:@\S+|due:\S+|sched:\S+)/, ctx: /(?:^|\s)(?:due:\S+|sched:\S+)/, due: /(?:^|\s)sched:\S+/};
+  var pat = later[zone];
+  if (pat) {
+    var m = text.match(pat);
+    if (m) return (text.substring(0, m.index) + token + text.substring(m.index)).replace(/\s+/g, ' ').trim();
+  }
+  return text.trimEnd() + ' ' + token;
+}
+
 function toggleAddChip(chip, group) {
   var input = document.getElementById('todo-input');
   var text = input.value;
-  var token = chip.getAttribute('data-token');
-  var idx = text.indexOf(token);
+  var token = chip.getAttribute('data-token').trim() + ' ';
+  var bare = token.trim();
 
   if (group === 'pri') {
     document.querySelectorAll('#add-chips-pri .add-chip').forEach(function(c) {
-      var t = c.getAttribute('data-token');
-      if (text.indexOf(t) !== -1) text = text.replace(t, '');
+      var t = c.getAttribute('data-token').trim();
+      text = text.replace(new RegExp('\\(' + t + '\\)\\s*'), '');
     });
-    if (idx === -1) text = token + text;
-  } else if (idx !== -1) {
-    text = text.replace(token, '');
+    if (text.indexOf(bare) === -1) text = token + text;
+  } else if (text.indexOf(bare) !== -1) {
+    text = text.replace(new RegExp(bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '');
   } else {
-    text = text.trimEnd() + ' ' + token;
+    text = _insertInZone(text, token, group);
   }
 
   input.value = text.replace(/^\s+/, '');
   input.focus();
   syncAddChips();
+}
+
+function reorderTodoText(text) {
+  var pri = '', desc = [], proj = [], ctx = [], due = '', sched = '';
+  var priMatch = text.match(/\(([A-Z])\)\s*/);
+  if (priMatch) {
+    pri = priMatch[0].trim();
+    text = text.replace(priMatch[0], '');
+  }
+  text.trim().split(/\s+/).forEach(function(t) {
+    if (t.startsWith('+')) proj.push(t);
+    else if (t.startsWith('@')) ctx.push(t);
+    else if (t.toLowerCase().startsWith('due:')) due = t;
+    else if (t.toLowerCase().startsWith('sched:')) sched = t;
+    else if (t) desc.push(t);
+  });
+  return [pri, desc.join(' '), proj.join(' '), ctx.join(' '), due, sched].filter(Boolean).join(' ');
 }
 
 function toggleChipSection(id, bar) {
@@ -726,6 +762,12 @@ var _acData = {
     {l:'this week', v:'due:this week '},
     {l:'next week', v:'due:next week '}
   ],
+  'sched:': [
+    {l:'today', v:'sched:today '},
+    {l:'tomorrow', v:'sched:tomorrow '},
+    {l:'this week', v:'sched:this week '},
+    {l:'next week', v:'sched:next week '}
+  ],
   '(': [
     {l:'(A)', v:'(A) '},
     {l:'(B)', v:'(B) '},
@@ -739,9 +781,9 @@ function _getCurrentToken() {
   var val = input.value;
   var pos = input.selectionStart;
   var before = val.substring(0, pos);
-  var m = before.match(/(?:^|\s)([+@].*|due:.*|\(.*|[a-zA-Z]*:.*?)$/);
-  if (!m) return null;
-  var token = m[1];
+  var words = before.split(/\s+/);
+  var token = words[words.length - 1] || '';
+  if (!token) return null;
   for (var prefix in _acData) {
     if (token.toLowerCase().startsWith(prefix) || token === prefix) {
       return {prefix: prefix, query: token.substring(prefix.length), fullToken: token, start: pos - token.length};
