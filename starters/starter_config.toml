@@ -39,3 +39,5 @@ max_config_backups = 10
 [todo]
 # Background notification check interval in minutes (0 = disabled)
 notify_interval = 5
+# Months before done items are archived to done.YYYY.txt
+archive_months = 6
