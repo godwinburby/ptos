@@ -117,6 +117,7 @@ x 2026-07-12 2026-07-10 Completed task
 - **Overdue/Today/Upcoming/Someday** bucket view with collapsible Done section
 - **Today progress** counter (done/total)
 - **Help card** — todo.txt format reference
+- **System notifications** — native OS notifications via `_system_notify()` in background thread; detects platform (Linux: `notify-send`, macOS: `osascript`, Windows: PowerShell toast, Android: `termux-notification`); runs alongside browser SSE notifications
 
 ### Autocomplete system
 - `_acData` object holds suggestions per prefix (`+`, `@`, `due:`, `(`)

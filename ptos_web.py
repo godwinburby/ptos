@@ -2415,6 +2415,44 @@ def api_events():
 
 # ── Todo notification background thread ─────────────────────────────────────
 
+def _detect_notify_platform():
+    if "termux" in os.environ.get("PREFIX", "") or os.path.exists("/data/data/com.termux"):
+        return "termux"
+    if platform.system() == "Linux":
+        return "linux"
+    if platform.system() == "Darwin":
+        return "macos"
+    if platform.system() == "Windows":
+        return "windows"
+    return None
+
+_notify_platform = _detect_notify_platform()
+
+def _system_notify(title, body):
+    try:
+        if _notify_platform == "termux":
+            subprocess.run(["termux-notification", "--title", title, "--content", body],
+                          timeout=5, capture_output=True)
+        elif _notify_platform == "linux":
+            subprocess.run(["notify-send", title, body],
+                          timeout=5, capture_output=True)
+        elif _notify_platform == "macos":
+            script = f'display notification "{body}" with title "{title}"'
+            subprocess.run(["osascript", "-e", script],
+                          timeout=5, capture_output=True)
+        elif _notify_platform == "windows":
+            ps = (
+                '[void][System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms");'
+                '$n=New-Object System.Windows.Forms.NotifyIcon;'
+                '$n.Icon=[System.Drawing.SystemIcons]::Information;'
+                '$n.Visible=$true;'
+                f'$n.ShowBalloonTip(5000,"{title}","{body}",[System.Windows.Forms.ToolTipIcon]::Info)'
+            )
+            subprocess.run(["powershell", "-Command", ps],
+                          timeout=5, capture_output=True)
+    except Exception:
+        pass
+
 def _todo_notify_loop(interval_minutes=5):
     """Background thread: check for due todos periodically and broadcast via SSE."""
     import ptos_todo as _todo_mod
@@ -2431,6 +2469,13 @@ def _todo_notify_loop(interval_minutes=5):
                           "priority": t.priority, "due": str(t.due),
                           "due_time": t.due_time} for t in new]
                 _sse_broadcast("todo-due", tasks)
+                if len(new) == 1:
+                    t = new[0]
+                    p = f"({t.priority}) " if t.priority else ""
+                    body = f"{p}{t.description} (due {t.due})"
+                else:
+                    body = f"{len(new)} tasks due today/tomorrow"
+                _system_notify("Todo due", body)
             notified = current
         except Exception:
             pass
@@ -2556,7 +2601,7 @@ if __name__ == "__main__":
         if notify_min > 0:
             _t = threading.Thread(target=_todo_notify_loop, args=(notify_min,), daemon=True)
             _t.start()
-            print(f"Todo notifications enabled (every {notify_min} min)")
+            print(f"Todo notifications enabled (every {notify_min} min) [{_notify_platform or 'browser-only'}]")
     except Exception:
         pass
 
