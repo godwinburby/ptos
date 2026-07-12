@@ -350,14 +350,15 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 
 **Features:**
 - Overdue / Today / Upcoming / Someday sections with collapsible Done section
-- Priority badges (A=red, B=orange, C=blue), due date badges, project/context chips
-- Quick-add text input with todo.txt syntax (`pri:a Task +Project @context due:tomorrow`)
+- Priority badges (A=red, B=orange, C=blue, D=gray), due date badges, project/context chips
+- Quick-add text input with todo.txt syntax (`(A) Task +Project @context due:tomorrow`)
 - **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `sched:t` for `sched:today`, `(a` for `(A)`. Arrow keys + Enter to select.
-- **Quick pick chips** (collapsible) — click Priority, Due, Scheduled, Projects, or Context chips to insert into input
-- **Filter chips** (collapsible) — filter by Context, Priority, and Due Range (overdue/today/upcoming/someday/none)
-- Form modal for structured add/edit (press `n` or click `+`)
+- **Quick pick chips** (collapsible) — click Priority, Due, Scheduled, Projects, or Context chips to insert into input. Due/Scheduled include `this_week`, `next_week`, `this_month`, `next_month` shortcuts
+- **Filter chips** (collapsible) — filter by Context, Priority (A-D), and Due Range (overdue/today/upcoming/someday/none). Click a chip to toggle filter on/off
+- **Clickable todo chips** — click project, context, or priority chips on any todo row to filter the list; click again to remove filter
+- **Form modal** (press `n` or click `+`) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
 - Inline edit (pencil icon on hover) and delete
-- Project rail for filtering by `+Project`
+- Project rail for filtering by `+Project` with toggle behavior
 - Collapsible `? Help` reference card
 - Background browser notifications via SSE (configurable interval)
 - Automatic archiving: done items older than 6 months move to `done.YYYY.txt` on startup
@@ -368,10 +369,10 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 ```
 | Part | Description |
 |------|-------------|
-| `(A)` | Priority A-Z. Or type `pri:a` |
+| `(A)` | Priority A-D. Or type `pri:a` |
 | `+Project` | Project tag (e.g. `+Home`, `+HearSpeechPro`) |
 | `@context` | Context tag (e.g. `@phone`, `@errand`) |
-| `due:date` | Due date — `today`, `tomorrow`, `fri`, `+3d`, `2026-07-12` |
+| `due:date` | Due date — `today`, `tomorrow`, `fri`, `due:this_week`, `due:next_month`, `+3d`, `2026-07-12` |
 | `sched:date` | Scheduled date (surfaces when it arrives) |
 | `due:date time` | With time — `due:tomorrow 3pm`, `due:2026-07-12T14:30` |
 

@@ -4,14 +4,14 @@
 {% macro todo_row(t, badge_class) %}
     <div class="todo-row" data-line="{{ t.line_no }}">
       <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
-      <div class="todo-pri {{ t.priority or 'none' }}">{{ t.priority or '—' }}</div>
+      <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}"><a href="/todo?{% if not selected_priority or selected_priority!=t.priority %}priority={{ (t.priority or '')|urlencode }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}">{{ t.priority or '—' }}</a></div>
       <div class="todo-body">
         <div class="todo-desc">{{ t.description }}</div>
         <div class="todo-meta">
           {% if t.due %}<span class="todo-due-badge {{ badge_class }}">{{ t.due.strftime('%d %b') }}{% if t.due_time %} {{ t.due_time }}{% endif %}</span>{% endif %}
           {% if t.sched %}<span class="todo-context">sched {{ t.sched.strftime('%d %b') }}{% if t.sched_time %} {{ t.sched_time }}{% endif %}</span>{% endif %}
-          {% for p in t.projects %}<span class="todo-project">{{ p }}</span>{% endfor %}
-          {% for c in t.contexts %}<span class="todo-context">{{ c }}</span>{% endfor %}
+          {% for p in t.projects %}<a class="todo-project{% if selected_project==p %} active{% endif %}" href="/todo?{% if selected_project != p %}project={{ p|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}">{{ p }}</a>{% endfor %}
+          {% for c in t.contexts %}<a class="todo-context{% if selected_context==c %} active{% endif %}" href="/todo?{% if selected_context != c %}context={{ c|urlencode }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}">{{ c }}</a>{% endfor %}
         </div>
       </div>
       <div class="todo-actions">
@@ -76,6 +76,9 @@
   .todo-pri.A { background:var(--error-lt); color:var(--error); }
   .todo-pri.B { background:#FEF3E7; color:var(--warn); }
   .todo-pri.C, .todo-pri.none { background:var(--accent-lt); color:var(--accent); }
+  .todo-pri.D { background:#E8EAED; color:#6c757d; }
+  .todo-pri.active { font-weight:700; box-shadow:0 0 0 2px currentColor; }
+  .todo-pri a { color:inherit; text-decoration:none; display:block; }
   .todo-body { flex:1; min-width:0; }
   .todo-desc { font-size:14px; color:var(--text); }
   .todo-meta {
@@ -92,11 +95,19 @@
   .todo-project {
     font-size:11px; padding:1px 6px; border-radius:4px;
     background:var(--bg); color:var(--sub);
+    text-decoration:none; cursor:pointer;
+    transition: background 0.15s, color 0.15s;
   }
+  .todo-project:hover { background:var(--accent-lt); color:var(--accent); }
+  .todo-project.active { background:var(--accent-lt); color:var(--accent); font-weight:600; }
   .todo-context {
     font-size:11px; padding:1px 6px; border-radius:4px;
     background:var(--bg); color:var(--sub);
+    text-decoration:none; cursor:pointer;
+    transition: background 0.15s, color 0.15s;
   }
+  .todo-context:hover { background:var(--accent-lt); color:var(--accent); }
+  .todo-context.active { background:var(--accent-lt); color:var(--accent); font-weight:600; }
   .todo-actions {
     display:flex; gap:4px; opacity:0; transition:opacity 0.2s;
   }
@@ -180,6 +191,7 @@
   .add-chip.pri-chip.pri-A.selected { background:var(--error); border-color:var(--error); }
   .add-chip.pri-chip.pri-B.selected { background:var(--warn); border-color:var(--warn); }
   .add-chip.pri-chip.pri-C.selected { background:var(--accent); border-color:var(--accent); }
+  .add-chip.pri-chip.pri-D.selected { background:#6c757d; border-color:#6c757d; }
 
   /* Edit modal */
   .modal-overlay {
@@ -214,6 +226,31 @@
   }
   .btn-cancel { background:var(--bg); color:var(--sub); }
   .btn-save { background:var(--accent); color:#fff; }
+  .modal-chips {
+    display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;
+  }
+  .modal-chip {
+    font-size:12px; padding:4px 10px; border-radius:6px; cursor:pointer;
+    background:var(--bg); color:var(--sub); border:1px solid var(--border);
+    transition: background 0.15s, color 0.15s, border-color 0.15s;
+    user-select:none;
+  }
+  .modal-chip:hover { border-color:var(--accent); color:var(--accent); }
+  .modal-chip.selected { background:var(--accent-lt); color:var(--accent); border-color:var(--accent); font-weight:600; }
+  .modal-chip-other { border-style:dashed; color:var(--sub); }
+  .modal-chip-other:hover { color:var(--accent); border-color:var(--accent); }
+  .modal-other-input {
+    width:100%; padding:6px 10px; border:1px solid var(--border);
+    border-radius:8px; font-size:13px; background:var(--bg);
+    color:var(--text); box-sizing:border-box; margin-top:4px;
+  }
+  .modal-other-input:focus { outline:none; border-color:var(--accent); }
+  .modal-field select {
+    width:100%; padding:8px 10px; border:1px solid var(--border);
+    border-radius:8px; font-size:14px; background:var(--bg);
+    color:var(--text); box-sizing:border-box;
+  }
+  .modal-field select:focus { outline:none; border-color:var(--accent); }
   .todo-help-card {
     display:none; margin-top:8px; padding:14px 16px;
     background:var(--card); border:1px solid var(--border); border-radius:10px;
@@ -279,6 +316,7 @@
       <button class="add-chip pri-chip pri-A" data-token="(A) " onclick="toggleAddChip(this,'pri')">(A)</button>
       <button class="add-chip pri-chip pri-B" data-token="(B) " onclick="toggleAddChip(this,'pri')">(B)</button>
       <button class="add-chip pri-chip pri-C" data-token="(C) " onclick="toggleAddChip(this,'pri')">(C)</button>
+      <button class="add-chip pri-chip pri-D" data-token="(D) " onclick="toggleAddChip(this,'pri')">(D)</button>
     </div>
   </div>
   <div class="chip-group-card">
@@ -286,8 +324,10 @@
     <div class="chip-row" id="add-chips-due">
       <button class="add-chip" data-token="due:today " onclick="toggleAddChip(this,'due')">today</button>
       <button class="add-chip" data-token="due:tomorrow " onclick="toggleAddChip(this,'due')">tomorrow</button>
-      <button class="add-chip" data-token="due:this week " onclick="toggleAddChip(this,'due')">this week</button>
-      <button class="add-chip" data-token="due:next week " onclick="toggleAddChip(this,'due')">next week</button>
+      <button class="add-chip" data-token="due:this_week " onclick="toggleAddChip(this,'due')">this week</button>
+      <button class="add-chip" data-token="due:next_week " onclick="toggleAddChip(this,'due')">next week</button>
+      <button class="add-chip" data-token="due:this_month " onclick="toggleAddChip(this,'due')">this month</button>
+      <button class="add-chip" data-token="due:next_month " onclick="toggleAddChip(this,'due')">next month</button>
     </div>
   </div>
   <div class="chip-group-card">
@@ -295,8 +335,10 @@
     <div class="chip-row" id="add-chips-sched">
       <button class="add-chip" data-token="sched:today " onclick="toggleAddChip(this,'sched')">today</button>
       <button class="add-chip" data-token="sched:tomorrow " onclick="toggleAddChip(this,'sched')">tomorrow</button>
-      <button class="add-chip" data-token="sched:this week " onclick="toggleAddChip(this,'sched')">this week</button>
-      <button class="add-chip" data-token="sched:next week " onclick="toggleAddChip(this,'sched')">next week</button>
+      <button class="add-chip" data-token="sched:this_week " onclick="toggleAddChip(this,'sched')">this week</button>
+      <button class="add-chip" data-token="sched:next_week " onclick="toggleAddChip(this,'sched')">next week</button>
+      <button class="add-chip" data-token="sched:this_month " onclick="toggleAddChip(this,'sched')">this month</button>
+      <button class="add-chip" data-token="sched:next_month " onclick="toggleAddChip(this,'sched')">next month</button>
     </div>
   </div>
   {% if projects %}
@@ -330,7 +372,7 @@
       <tr><td><code>(A)</code></td><td>Priority (A-Z). Or type <code>pri:a</code></td></tr>
       <tr><td><code>+Project</code></td><td>Project tag. E.g. <code>+Home</code> <code>+HearSpeechPro</code></td></tr>
       <tr><td><code>@context</code></td><td>Context tag. E.g. <code>@phone</code> <code>@errand</code></td></tr>
-      <tr><td><code>due:date</code></td><td>Due date. <code>today</code> <code>tomorrow</code> <code>fri</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
+      <tr><td><code>due:date</code></td><td>Due date. <code>today</code> <code>tomorrow</code> <code>fri</code> <code>due:this_week</code> <code>due:next_month</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
       <tr><td><code>sched:date</code></td><td>Scheduled date (surfaces when it arrives)</td></tr>
       <tr><td><code>due:date time</code></td><td>With time: <code>due:tomorrow 3pm</code> <code>due:2026-07-12T14:30</code></td></tr>
     </table>
@@ -344,9 +386,9 @@
 <!-- Project Rail -->
 {% if projects %}
 <div class="todo-project-rail">
-  <a href="/todo" class="todo-proj-chip {% if not selected_project %}active{% endif %}">All</a>
+  <a href="/todo{% if selected_project %}?{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% endif %}" class="todo-proj-chip {% if not selected_project %}active{% endif %}">All</a>
   {% for p in projects %}
-  <a href="/todo?project={{ p|urlencode }}{% if selected_context %}&context={{ selected_context|urlencode }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}"
+  <a href="/todo?{% if selected_project != p %}project={{ p|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}"
      class="todo-proj-chip {% if selected_project==p %}active{% endif %}">{{ p }}</a>
   {% endfor %}
 </div>
@@ -364,7 +406,7 @@
     <div class="chip-group-label">Context</div>
     <div class="chip-row">
       {% for c in contexts %}
-      <a href="/todo?context={{ c|urlencode }}{% if selected_project %}&project={{ selected_project|urlencode }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_due %}&due={{ selected_due }}{% endif %}"
+      <a href="/todo?{% if selected_context != c %}context={{ c|urlencode }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}"
          class="todo-chip {% if selected_context==c %}active{% endif %}">{{ c }}</a>
       {% endfor %}
     </div>
@@ -373,8 +415,8 @@
   <div class="chip-group-card">
     <div class="chip-group-label">Priority</div>
     <div class="chip-row">
-      {% for p in ["A","B","C"] %}
-      <a href="/todo?priority={{ p }}{% if selected_project %}&project={{ selected_project|urlencode }}{% endif %}{% if selected_context %}&context={{ selected_context|urlencode }}{% endif %}{% if selected_due %}&due={{ selected_due }}{% endif %}"
+      {% for p in ["A","B","C","D"] %}
+      <a href="/todo?{% if selected_priority != p %}priority={{ p }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}"
          class="todo-chip {% if selected_priority==p %}active{% endif %}">({{ p }})</a>
       {% endfor %}
     </div>
@@ -383,7 +425,7 @@
     <div class="chip-group-label">Due Range</div>
     <div class="chip-row">
       {% for d in ["overdue","today","upcoming","someday","none"] %}
-      <a href="/todo?due={{ d }}{% if selected_project %}&project={{ selected_project|urlencode }}{% endif %}{% if selected_context %}&context={{ selected_context|urlencode }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}"
+      <a href="/todo?{% if selected_due != d %}due={{ d }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}"
          class="todo-chip {% if selected_due==d %}active{% endif %}">{{ d }}</a>
       {% endfor %}
       {% if has_filter %}
@@ -463,14 +505,14 @@
     {% for t in done_recent %}
     <div class="todo-row" style="opacity:0.5;">
       <div class="todo-check checked"></div>
-      <div class="todo-pri {{ t.priority or 'none' }}" style="opacity:0.5;">{{ t.priority or '—' }}</div>
+      <div class="todo-pri {{ t.priority or 'none' }}" style="opacity:0.5;"><a href="/todo?priority={{ (t.priority or '')|urlencode }}">{{ t.priority or '—' }}</a></div>
       <div class="todo-body">
         <div class="todo-desc" style="text-decoration:line-through;">{{ t.description }}</div>
         <div class="todo-meta">
           {% if t.completed_date %}<span style="font-size:11px;color:var(--success);">done {{ t.completed_date.strftime('%d %b') }}</span>{% endif %}
           {% if t.due %}<span class="todo-due-badge future">{{ t.due.strftime('%d %b') }}</span>{% endif %}
-          {% for p in t.projects %}<span class="todo-project">{{ p }}</span>{% endfor %}
-          {% for c in t.contexts %}<span class="todo-context">{{ c }}</span>{% endfor %}
+          {% for p in t.projects %}<a class="todo-project" href="/todo?project={{ p|urlencode }}">{{ p }}</a>{% endfor %}
+          {% for c in t.contexts %}<a class="todo-context" href="/todo?context={{ c|urlencode }}">{{ c }}</a>{% endfor %}
         </div>
       </div>
     </div>
@@ -491,7 +533,13 @@
     <div class="modal-row">
       <div class="modal-field">
         <label>Priority</label>
-        <input type="text" id="modal-pri" placeholder="A-Z" maxlength="1">
+        <select id="modal-pri">
+          <option value="">None</option>
+          <option value="A">A</option>
+          <option value="B">B</option>
+          <option value="C">C</option>
+          <option value="D">D</option>
+        </select>
       </div>
       <div class="modal-field">
         <label>Due</label>
@@ -512,15 +560,25 @@
         <input type="time" id="modal-sched-time">
       </div>
     </div>
-    <div class="modal-row">
-      <div class="modal-field">
-        <label>Projects</label>
-        <input type="text" id="modal-projects" placeholder="+Proj1 +Proj2">
+    <div class="modal-field">
+      <label>Projects</label>
+      <div class="modal-chips" id="modal-project-chips">
+        {% for p in projects %}
+        <span class="modal-chip" data-value="{{ p }}" onclick="toggleModalChip(this)">{{ p }}</span>
+        {% endfor %}
+        <span class="modal-chip modal-chip-other" onclick="toggleOtherInput(this, 'project')">+ New</span>
       </div>
-      <div class="modal-field">
-        <label>Contexts</label>
-        <input type="text" id="modal-contexts" placeholder="@ctx1 @ctx2">
+      <input type="text" class="modal-other-input" id="modal-project-other" placeholder="New project name" style="display:none;" onkeydown="handleOtherKey(event, 'project')">
+    </div>
+    <div class="modal-field">
+      <label>Contexts</label>
+      <div class="modal-chips" id="modal-context-chips">
+        {% for c in contexts %}
+        <span class="modal-chip" data-value="{{ c }}" onclick="toggleModalChip(this)">{{ c }}</span>
+        {% endfor %}
+        <span class="modal-chip modal-chip-other" onclick="toggleOtherInput(this, 'context')">+ New</span>
       </div>
+      <input type="text" class="modal-other-input" id="modal-context-other" placeholder="New context name" style="display:none;" onkeydown="handleOtherKey(event, 'context')">
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeTodoModal()">Cancel</button>
@@ -597,8 +655,21 @@ function openTodoModal(mode, lineNo, desc, pri, due, dueTime, sched, schedTime, 
   document.getElementById('modal-due-time').value = dueTime || '';
   document.getElementById('modal-sched').value = sched || '';
   document.getElementById('modal-sched-time').value = schedTime || '';
-  document.getElementById('modal-projects').value = projects || '';
-  document.getElementById('modal-contexts').value = contexts || '';
+
+  var projList = (projects || '').split(/\s+/).filter(Boolean);
+  document.querySelectorAll('#modal-project-chips .modal-chip:not(.modal-chip-other)').forEach(function(c) {
+    c.classList.toggle('selected', projList.indexOf(c.dataset.value) !== -1);
+  });
+  var ctxList = (contexts || '').split(/\s+/).filter(Boolean);
+  document.querySelectorAll('#modal-context-chips .modal-chip:not(.modal-chip-other)').forEach(function(c) {
+    c.classList.toggle('selected', ctxList.indexOf(c.dataset.value) !== -1);
+  });
+
+  document.getElementById('modal-project-other').style.display = 'none';
+  document.getElementById('modal-project-other').value = '';
+  document.getElementById('modal-context-other').style.display = 'none';
+  document.getElementById('modal-context-other').value = '';
+
   el.classList.add('open');
   document.getElementById('modal-desc').focus();
 }
@@ -613,45 +684,85 @@ function closeTodoModal() {
   document.getElementById('todo-modal').classList.remove('open');
 }
 
+function toggleModalChip(el) {
+  el.classList.toggle('selected');
+}
+
+function toggleOtherInput(chipEl, type) {
+  var input = document.getElementById('modal-' + type + '-other');
+  if (input.style.display === 'none') {
+    input.style.display = '';
+    input.focus();
+  } else {
+    var val = input.value.trim();
+    if (val) {
+      var chip = document.createElement('span');
+      chip.className = 'modal-chip selected';
+      chip.dataset.value = val;
+      chip.textContent = val;
+      chip.onclick = function() { toggleModalChip(this); };
+      chipEl.parentNode.insertBefore(chip, chipEl);
+      input.value = '';
+    }
+    input.style.display = 'none';
+  }
+}
+
+function handleOtherKey(e, type) {
+  if (e.key === 'Enter') {
+    e.preventDefault();
+    var otherChip = document.querySelector('#modal-' + type + '-chips .modal-chip-other');
+    toggleOtherInput(otherChip, type);
+  }
+}
+
+function _collectChips(containerId) {
+  var chips = document.querySelectorAll('#' + containerId + ' .modal-chip.selected');
+  return Array.from(chips).map(function(c) { return c.dataset.value; });
+}
+
 function saveTodoModal() {
-  const lineNo = document.getElementById('modal-line-no').value;
-  const desc = document.getElementById('modal-desc').value.trim();
-  const pri = document.getElementById('modal-pri').value.trim().toUpperCase();
-  const due = document.getElementById('modal-due').value;
-  const dueTime = document.getElementById('modal-due-time').value;
-  const sched = document.getElementById('modal-sched').value;
-  const schedTime = document.getElementById('modal-sched-time').value;
-  const projects = document.getElementById('modal-projects').value.trim();
-  const contexts = document.getElementById('modal-contexts').value.trim();
+  var lineNo = document.getElementById('modal-line-no').value;
+  var desc = document.getElementById('modal-desc').value.trim();
+  var pri = document.getElementById('modal-pri').value.trim().toUpperCase();
+  var due = document.getElementById('modal-due').value;
+  var dueTime = document.getElementById('modal-due-time').value;
+  var sched = document.getElementById('modal-sched').value;
+  var schedTime = document.getElementById('modal-sched-time').value;
+
+  var otherProj = document.getElementById('modal-project-other').value.trim();
+  var otherCtx = document.getElementById('modal-context-other').value.trim();
+  var projs = _collectChips('modal-project-chips');
+  var ctxs = _collectChips('modal-context-chips');
+  if (otherProj) projs.push(otherProj);
+  if (otherCtx) ctxs.push(otherCtx);
 
   if (!desc) { alert('Description is required'); return; }
 
   if (lineNo) {
-    // Edit mode
-    const updates = {
+    var updates = {
       description: desc,
       priority: pri || null,
       due: due ? (dueTime ? due + 'T' + dueTime : due) : null,
       sched: sched ? (schedTime ? sched + 'T' + schedTime : sched) : null,
-      projects: projects ? projects.split(/\s+/) : [],
-      contexts: contexts ? contexts.split(/\s+/) : []
+      projects: projs.map(function(p) { return '+' + p.replace(/^\+/, ''); }),
+      contexts: ctxs.map(function(c) { return '@' + c.replace(/^@/, ''); })
     };
     fetch('/todo/edit', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({line_no: parseInt(lineNo), updates: updates})
     })
-    .then(r => r.json())
-    .then(d => {
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
       if (d.ok) { window.location.reload(); }
       else { alert(d.error || 'Failed to save'); }
     });
   } else {
-    // Add mode — construct todo.txt line
-    let line = desc;
+    var line = desc;
     if (pri) line = '(' + pri + ') ' + line;
-    if (projects) line += ' ' + projects;
-    if (contexts) line += ' ' + contexts;
+    projs.forEach(function(p) { line += ' +' + p.replace(/^\+/, ''); });
+    ctxs.forEach(function(c) { line += ' @' + c.replace(/^@/, ''); });
     if (due) line += ' due:' + due + (dueTime ? 'T' + dueTime : '');
     if (sched) line += ' sched:' + sched + (schedTime ? 'T' + schedTime : '');
     fetch('/todo/add', {
@@ -659,8 +770,8 @@ function saveTodoModal() {
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({text: line})
     })
-    .then(r => r.json())
-    .then(d => {
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
       if (d.ok) { window.location.reload(); }
       else { alert(d.error || 'Failed to add todo'); }
     });
@@ -759,19 +870,24 @@ var _acData = {
   'due:': [
     {l:'today', v:'due:today '},
     {l:'tomorrow', v:'due:tomorrow '},
-    {l:'this week', v:'due:this week '},
-    {l:'next week', v:'due:next week '}
+    {l:'this week', v:'due:this_week '},
+    {l:'next week', v:'due:next_week '},
+    {l:'this month', v:'due:this_month '},
+    {l:'next month', v:'due:next_month '}
   ],
   'sched:': [
     {l:'today', v:'sched:today '},
     {l:'tomorrow', v:'sched:tomorrow '},
-    {l:'this week', v:'sched:this week '},
-    {l:'next week', v:'sched:next week '}
+    {l:'this week', v:'sched:this_week '},
+    {l:'next week', v:'sched:next_week '},
+    {l:'this month', v:'sched:this_month '},
+    {l:'next month', v:'sched:next_month '}
   ],
   '(': [
     {l:'(A)', v:'(A) '},
     {l:'(B)', v:'(B) '},
-    {l:'(C)', v:'(C) '}
+    {l:'(C)', v:'(C) '},
+    {l:'(D)', v:'(D) '}
   ]
 };
 var _acIdx = -1, _acItems = [];

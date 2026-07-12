@@ -20,6 +20,7 @@ app = Flask(__name__,
     static_folder=os.path.join(_basedir, 'web_static'),
     static_url_path="/static")
 app.secret_key = "ptos-local-only"
+app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 @app.context_processor
 def _inject_globals():
@@ -2559,4 +2560,4 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    app.run(debug=False, host="127.0.0.1", port=5000)
+    app.run(debug=True, host="127.0.0.1", port=5000)

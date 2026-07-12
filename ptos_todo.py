@@ -8,7 +8,7 @@ Run:  python ptos_todo.py              (list open todos)
       python ptos_todo.py done N        (mark line N complete)
 """
 
-import os, re, sys, datetime as dt, dataclasses
+import os, re, sys, calendar, datetime as dt, dataclasses
 from dataclasses import dataclass, field
 from typing import Optional, List
 
@@ -65,6 +65,7 @@ def resolve_todo_date(s):
     """Resolve a natural-language date string to (date, time_str|None).
 
     Accepts: today, tomorrow, yesterday, monday-sunday (next occurrence),
+    this_week, next_week, this_month, next_month,
     +Nd (days), +Nw (weeks), +Nm (months), YYYY-MM-DD.
     Time suffixes: "3pm", "3:30pm", "15:30", "3 PM" etc.
     Returns (date, "HH:MM"|None).
@@ -83,6 +84,19 @@ def resolve_todo_date(s):
         resolved_date = today + dt.timedelta(days=1)
     elif date_part == "yesterday":
         resolved_date = today - dt.timedelta(days=1)
+    elif date_part == "this_week":
+        days_until_sat = (5 - today.weekday()) % 7
+        resolved_date = today + dt.timedelta(days=days_until_sat)
+    elif date_part == "next_week":
+        days_until_mon = (7 - today.weekday()) % 7
+        if days_until_mon == 0:
+            days_until_mon = 7
+        resolved_date = today + dt.timedelta(days=days_until_mon)
+    elif date_part == "this_month":
+        last_day = calendar.monthrange(today.year, today.month)[1]
+        resolved_date = today.replace(day=last_day)
+    elif date_part == "next_month":
+        resolved_date = _add_months(today, 1).replace(day=1)
     elif date_part in _WEEKDAYS:
         target = _WEEKDAYS[date_part]
         diff = (target - today.weekday()) % 7
