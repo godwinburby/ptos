@@ -21,6 +21,7 @@ app = Flask(__name__,
     static_url_path="/static")
 app.secret_key = "ptos-local-only"
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config["DEBUG"] = False
 
 @app.context_processor
 def _inject_globals():
@@ -28,6 +29,28 @@ def _inject_globals():
         "frozen": bool(getattr(sys, "frozen", False)),
         "desktop_mode": os.environ.get("DESKTOP_MODE") == "1",
     }
+
+def _wants_json():
+    return (
+        request.path.startswith("/api/")
+        or request.headers.get("X-Requested-With") == "XMLHttpRequest"
+        or request.accept_mimetypes.best == "application/json"
+    )
+
+@app.errorhandler(PTOSError)
+def handle_ptos_error(e):
+    app.logger.warning(f"PTOSError on {request.path}: {e}")
+    if _wants_json():
+        return jsonify({"success": False, "error": str(e)}), 500
+    return render_template("error.html", message=str(e)), 500
+
+@app.errorhandler(Exception)
+def handle_unexpected_error(e):
+    app.logger.error(f"Unhandled exception on {request.path}: {e}", exc_info=True)
+    if _wants_json():
+        return jsonify({"success": False, "error": "Something went wrong."}), 500
+    return render_template("error.html",
+        message="Something went wrong. Check the server log for details."), 500
 
 from functools import wraps
 from flask import request, Response
