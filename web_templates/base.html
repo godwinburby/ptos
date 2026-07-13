@@ -160,8 +160,6 @@
         background: var(--accent-lt);
       }
       .sidebar-nav a svg { width: 18px; height: 18px; flex-shrink: 0; }
-      .sync-pulse { animation: pulse-dot 1.5s infinite; }
-      @keyframes pulse-dot { 0% { opacity: 1; } 50% { opacity: .3; } 100% { opacity: 1; } }
       .sidebar-footer {
         padding: 16px 20px; border-top: 1px solid var(--border);
         font-size: 11px; color: var(--sub);
@@ -412,7 +410,7 @@
     <a href="/schema-builder" class="{% if tab=='schema_builder' %}active{% endif %}">{% include 'icons/schema_builder.html' ignore missing %} Schema Builder</a>
     <a href="/query-builder" class="{% if tab=='query_builder' %}active{% endif %}">{% include 'icons/query_builder.html' ignore missing %} Query Builder</a>
     <a href="/backup" class="{% if tab=='backup' %}active{% endif %}">{% include 'icons/backup.html' ignore missing %} Backup</a>
-    <a href="/settings" class="{% if tab=='settings' %}active{% endif %}">{% include 'icons/settings.html' ignore missing %} Settings <span id="sync-badge" style="display:none;width:8px;height:8px;border-radius:50%;background:var(--sub);margin-left:auto;"></span></a>
+    <a href="/settings" class="{% if tab=='settings' %}active{% endif %}">{% include 'icons/settings.html' ignore missing %} Settings</a>
   </nav>
   <div class="sidebar-footer">
     <a href="https://github.com/godwinburby/ptos" target="_blank">⭐ github.com/godwinburby/ptos</a>
@@ -982,23 +980,6 @@ function _showTodoToast(tasks) {
             new Notification("Todo due", {body: body, icon: "/static/icon-192.png"});
           }
           _showTodoToast(tasks);
-        }
-        if (msg.type === "sync-status") {
-          var s = msg.data;
-          var badge = document.getElementById("sync-badge");
-          if (badge) {
-            var colors = {idle: "var(--sub)", running: "var(--accent)", ok: "var(--success)", conflict: "var(--error)", error: "var(--error)", skipped: "var(--sub)"};
-            badge.style.background = colors[s.status] || "var(--sub)";
-            badge.style.display = "inline-block";
-            if (s.status === "running") {
-              badge.classList.add("sync-pulse");
-            } else {
-              badge.classList.remove("sync-pulse");
-            }
-          }
-        }
-        if (msg.type === "sync-pull" && typeof window._pullSseHandler === "function") {
-          window._pullSseHandler(msg);
         }
       } catch(ex) {}
     };

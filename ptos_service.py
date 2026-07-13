@@ -187,49 +187,6 @@ def save_config(config_dict):
         return {"ok": False, "message": str(e)}
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Sync wrappers
-# ══════════════════════════════════════════════════════════════════════════════
-
-def get_sync_config():
-    import ptos_sync
-    return ptos_sync.get_sync_config()
-
-
-def run_sync_async(force_resync=False):
-    import ptos_sync
-    ptos_sync.run_sync_async(force_resync=force_resync)
-
-
-def get_sync_last_result():
-    import ptos_sync
-    return ptos_sync.get_last_result()
-
-
-def get_sync_platform():
-    import ptos_sync
-    return ptos_sync.get_sync_platform()
-
-
-def save_sync_config(data):
-    try:
-        cfg = ptos.get_config()
-        sync = cfg.setdefault("sync", {})
-        sync["enabled"] = bool(data.get("enabled", False))
-        if "remote_name" in data:
-            sync["remote_name"] = data["remote_name"].strip()
-        if "remote_path" in data:
-            sync["remote_path"] = data["remote_path"].strip()
-        if "folders" in data and isinstance(data["folders"], list):
-            sync["folders"] = data["folders"]
-        import tomli_w
-        with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
-            tomli_w.dump(cfg, w.stream)
-        return {"ok": True, "message": "Sync settings saved"}
-    except Exception as e:
-        return {"ok": False, "message": str(e)}
-
-
 def get_schema():
     """Get record schema definition.
     
