@@ -184,15 +184,20 @@ def run_sync(force_resync=False, force_danger=False):
             "rclone", "bisync",
             base_dir,
             f"{remote_name}:{remote_path}",
+            "--exclude", "/**",
+        ]
+        for folder in folders:
+            cmd.extend(["--include", f"/{folder}/**"])
+        cmd.extend([
+            "--include", "/.sync*",
             "--exclude", "backups/**",
             "--exclude", "exports/**",
             "--exclude", "*.bak",
             "--exclude", "*.tmp",
-            "--exclude", ".sync*",
             "--conflict-resolve", "none",
             "--log-file", os.path.join(base_dir, ".sync.log"),
             "--log-level", "INFO",
-        ]
+        ])
         if not cfg.get("resynced", False) or force_resync:
             cmd.append("--resync")
 
