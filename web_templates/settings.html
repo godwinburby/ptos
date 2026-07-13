@@ -252,7 +252,7 @@
         var outputDiv = document.getElementById("sync-output");
         var outputMsg = document.getElementById("sync-output-msg");
         if (outputDiv) {
-          if ((data.status === "error" || data.status === "danger") && data.output) {
+          if ((data.status === "ok" || data.status === "error" || data.status === "danger" || data.status === "conflict") && data.output) {
             outputDiv.style.display = "block";
             outputMsg.textContent = data.output;
           } else {
@@ -274,12 +274,18 @@
   refreshSyncStatus();
   
   window.runSyncNow = function() {
+    var outputDiv = document.getElementById("sync-output");
+    var outputMsg = document.getElementById("sync-output-msg");
+    if (outputDiv) { outputDiv.style.display = "block"; outputMsg.textContent = "Starting sync...\n"; }
     fetch("/sync/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({})})
       .then(function() { refreshSyncStatus(); });
   };
   
   window.runSyncResync = function() {
     if (!confirm("Force resync will re-upload everything. Continue?")) return;
+    var outputDiv = document.getElementById("sync-output");
+    var outputMsg = document.getElementById("sync-output-msg");
+    if (outputDiv) { outputDiv.style.display = "block"; outputMsg.textContent = "Starting resync...\n"; }
     fetch("/sync/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({force_resync: true})})
       .then(function() { refreshSyncStatus(); });
   };
