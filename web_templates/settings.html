@@ -6,6 +6,19 @@
 <div id="save-msg" style="display:none;margin-bottom:14px;"></div>
 
 <div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Data Folder</div>
+  <div style="display:flex;gap:8px;align-items:center;">
+    <input type="text" id="base-dir" value="{{ base_dir }}" readonly
+           style="flex:1;font-family:monospace;font-size:0.85em;background:var(--bg-secondary,#f5f5f5);cursor:default;">
+    <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('base-dir').value)"
+            style="padding:4px 10px;font-size:0.8em;cursor:pointer;">Copy</button>
+  </div>
+  <div style="font-size:0.8em;color:var(--text-secondary,#888);margin-top:6px;">
+    To change: <code>python ptos.py --set-home /new/path</code>
+  </div>
+</div>
+
+<div class="card" style="margin-bottom:14px;">
   <div class="card-title">Profile</div>
   <div class="field-group">
     <label>User Name</label>

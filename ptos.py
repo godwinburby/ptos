@@ -3770,6 +3770,43 @@ def init_ptos():
     print("Version tracked.")
 
 
+def set_home(path):
+    """Point PTOS at a different data folder.
+
+    - Expands ~ in the path
+    - Creates target dir if missing
+    - Copies existing data (config/, records/, etc.) to target if absent there
+    - Writes path to .ptos_home bootstrap file
+    """
+    import shutil
+
+    path = os.path.expanduser(path)
+    target = os.path.abspath(path)
+
+    if target == os.path.abspath(BASE_DIR):
+        print(f"  Already pointing at {target}")
+        return
+
+    os.makedirs(target, exist_ok=True)
+
+    migrated = []
+    for folder in ["config", "records", "journal", "templates", "todo", "exports"]:
+        src = os.path.join(BASE_DIR, folder)
+        dst = os.path.join(target, folder)
+        if os.path.isdir(src) and not os.path.isdir(dst):
+            shutil.copytree(src, dst)
+            migrated.append(folder)
+
+    bootstrap = os.path.join(SCRIPT_DIR, ".ptos_home")
+    with open(bootstrap, "w", encoding="utf-8") as f:
+        f.write(target + "\n")
+
+    print(f"\n  .ptos_home  ->  {target}")
+    if migrated:
+        print(f"  migrated    ->  {', '.join(migrated)}")
+    print(f"\n  Restart the server to use the new data folder.\n")
+
+
 def set_user_name(name):
     """Set the user name in config.toml using tomli-w."""
     try:

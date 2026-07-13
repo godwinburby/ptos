@@ -45,7 +45,7 @@ from ptos import (
     save_as_preset, delete_preset, save_query,
     # Misc
     resolve_time, resolve_date, parse_date, today,
-    edit_target, init_ptos, set_user_name, set_date_format,
+    edit_target, init_ptos, set_home, set_user_name, set_date_format,
     restore_data, restore_config,
     backup_data, backup_config, list_backups,
     doctor_check, print_doctor_results,
@@ -202,6 +202,9 @@ def build_parser(cycles):
     utl.add_argument("--doctor", action="store_true", help="Check PTOS installation health")
     utl.add_argument("--doctor-fix", dest="doctor_fix", action="store_true", help="With --doctor: fix any issues found")
     utl.add_argument("--check-schema", action="store_true", help="Validate schema.toml structure and report issues")
+    utl.add_argument("--set-home", dest="set_home", metavar="PATH",
+                     help="Point PTOS at a data folder  (writes .ptos_home)\n"
+                          "  Migrates existing data to the new location")
 
     return p
 
@@ -839,6 +842,10 @@ def main():
     # ---- early exits (no data needed) ----
     if args.init:
         init_ptos()
+        return
+
+    if args.set_home:
+        set_home(args.set_home)
         return
 
     if args.set_name:

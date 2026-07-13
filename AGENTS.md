@@ -63,6 +63,7 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 - Config: TOML files
 - Schema: `schema.toml` defines record types, fields, validation
 - Queries: `queries.toml` defines saved queries, metrics, dashboards
+- Data folder: resolved by `PTOS_HOME` env var > `.ptos_home` file > SCRIPT_DIR; `--set-home PATH` writes `.ptos_home` and migrates existing data to the target
 
 ### Error handling
 - Engine functions raise `sys.exit()` on errors
