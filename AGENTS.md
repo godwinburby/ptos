@@ -69,6 +69,7 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 - `ptos_service.py` patches `sys.exit` to raise `PTOSError` instead (so web routes can handle errors gracefully)
 - Web routes catch `PTOSError` and return JSON error responses
 - CLI catches `PTOSError` and prints user-friendly messages
+- Web routes use `log = logging.getLogger("ptos_web")` — always `log.exception()` before fallback, never bare `except:`
 
 ### File safety
 - All writes use `.bak` + `.tmp` + atomic rename pattern
@@ -84,7 +85,7 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 
 ### Testing patterns
 - Tests in `tests/` mirror module names (`test_todo.py` → `ptos_todo.py`)
-- Use `tmpdir` pytest fixture for file-based tests
+- `tests/conftest.py` has an autouse fixture that patches all 16 path constants to `tmp_path` and copies starter configs — tests never touch real user data
 - Test classes group related tests (e.g. `TestParseTodoLine`, `TestArchiveDoneTodos`)
 - Always verify round-trip: parse → format → parse produces same result
 - Test edge cases: empty files, missing files, malformed input

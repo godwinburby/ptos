@@ -162,6 +162,11 @@
       <div style="font-size:13px;font-weight:600;color:var(--error);margin-bottom:4px;">Conflicts detected:</div>
       <ul id="sync-conflicts-list" style="font-size:12px;color:var(--sub);margin:0;padding-left:16px;"></ul>
     </div>
+    <div id="sync-danger" style="margin-top:10px;display:none;padding:10px;background:var(--error-lt);border:1px solid var(--error);border-radius:8px;">
+      <div style="font-size:13px;font-weight:600;color:var(--error);margin-bottom:4px;">Corruption detected</div>
+      <div id="sync-danger-msg" style="font-size:12px;color:var(--text);margin-bottom:8px;"></div>
+      <button onclick="runSyncDanger()" class="btn btn-sm" style="background:var(--error);color:#fff;">Sync Anyway (Risk Overwrite)</button>
+    </div>
     <div id="sync-rclone-hint" style="display:none;margin-top:10px;padding:10px;background:var(--bg2);border-radius:8px;font-size:12px;color:var(--sub);">
       <strong style="color:var(--text);">rclone not configured?</strong><br>
       Run <code>rclone config</code> in your terminal to set up a remote (requires OAuth login in your browser).<br>
@@ -216,7 +221,7 @@
         var conflictsDiv = document.getElementById("sync-conflicts");
         var conflictsList = document.getElementById("sync-conflicts-list");
         if (!dot || !txt) return;
-        var colors = {idle: "var(--sub)", running: "var(--accent)", ok: "var(--success)", conflict: "var(--error)", error: "var(--error)", skipped: "var(--sub)"};
+        var colors = {idle: "var(--sub)", running: "var(--accent)", ok: "var(--success)", conflict: "var(--error)", error: "var(--error)", skipped: "var(--sub)", danger: "var(--error)"};
         dot.style.background = colors[data.status] || "var(--sub)";
         txt.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
         if (data.timestamp && data.status !== "idle" && data.status !== "running") {
@@ -228,6 +233,16 @@
           conflictsList.innerHTML = data.conflicts.map(function(c) { return "<li>" + c + "</li>"; }).join("");
         } else {
           conflictsDiv.style.display = "none";
+        }
+        var dangerDiv = document.getElementById("sync-danger");
+        var dangerMsg = document.getElementById("sync-danger-msg");
+        if (dangerDiv) {
+          if (data.status === "danger") {
+            dangerDiv.style.display = "block";
+            dangerMsg.textContent = data.output || "Files appear corrupted.";
+          } else {
+            dangerDiv.style.display = "none";
+          }
         }
         var hint = document.getElementById("sync-rclone-hint");
         if (hint) {
@@ -251,6 +266,12 @@
   window.runSyncResync = function() {
     if (!confirm("Force resync will re-upload everything. Continue?")) return;
     fetch("/sync/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({force_resync: true})})
+      .then(function() { refreshSyncStatus(); });
+  };
+  
+  window.runSyncDanger = function() {
+    if (!confirm("These files look corrupted, not just changed. Sync anyway and risk overwriting your backup?")) return;
+    fetch("/sync/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({force_resync: true, force_danger: true})})
       .then(function() { refreshSyncStatus(); });
   };
   

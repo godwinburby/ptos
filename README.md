@@ -1539,6 +1539,37 @@ Journal files are stored at `journal/YYYY/YYYY-MM-DD.md`.
 
 ---
 
+## Development
+
+### Running tests
+
+```bash
+python -m pytest tests/ -v
+```
+
+The full suite runs in ~7s. There are 7 pre-existing failures in `test_config.py`
+and `test_dates.py` (a known `ptos_service.py` / `sys.exit` patching interaction) —
+all other tests should pass.
+
+### Test isolation
+
+`tests/conftest.py` has an autouse fixture (`_isolated_ptos_paths`) that patches
+all 16 path constants in `ptos.py` to an isolated `tmp_path`. Tests never touch
+real user data. The fixture also copies the starter config files into the temp
+directory so tests that call `get_schema()`, `get_queries()`, etc. work correctly.
+
+If your test needs a specific file layout, override individual paths after the
+fixture runs — the autouse fixture just guarantees a safe baseline.
+
+### Error handling convention
+
+Web routes in `ptos_web.py` use a logger (`log = logging.getLogger("ptos_web")`)
+and call `log.exception(...)` before any fallback — never bare `except:`. This
+ensures upstream errors (schema parse failures, missing files, TOML syntax errors)
+show up in the server console instead of silently rendering a blank page.
+
+---
+
 ## Server deployment
 
 PTOS web can be deployed to a server (e.g. PythonAnywhere) for access from any

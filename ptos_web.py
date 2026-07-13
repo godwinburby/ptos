@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time
+import sys, os, re, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
@@ -22,6 +22,8 @@ app = Flask(__name__,
 app.secret_key = "ptos-local-only"
 app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config["DEBUG"] = False
+
+log = logging.getLogger("ptos_web")
 
 @app.context_processor
 def _inject_globals():
@@ -64,7 +66,7 @@ def _check_auth(username, password):
         if not auth.get("enabled", True):
             return True
         return username == auth.get("username", "") and password == auth.get("password", "")
-    except:
+    except Exception:
         return False
 
 @app.before_request
@@ -411,7 +413,8 @@ def home():
     try:
         schema = svc.get_schema()
         field_types = _build_field_types(schema)
-    except:
+    except Exception:
+        log.exception("Failed to load schema for home page")
         schema = {}
         field_types = {}
     presets = {k: v for k, v in svc.get_presets().items()
@@ -455,7 +458,8 @@ def home():
                 name = k[4:]
                 if name not in due_configs:
                     due_configs[name] = v
-    except:
+    except Exception:
+        log.exception("Failed to load queries for due configs on home page")
         queries = {}
     
     # Get due data for selected config
@@ -512,13 +516,14 @@ def home():
                     stat["query_url"] = f"/queries?run={raw_name}"
                 stats.append(stat)
     except Exception:
-        pass
+        log.exception("Failed to load dashboard stats for home page")
     recent_rows = []
     try:
         data = svc.get_records([], "td")
         recent_rows = data["records"][-8:]
         recent_cols = data["columns"]
     except Exception:
+        log.exception("Failed to load recent records for home page")
         recent_cols = []
     
     cfg = svc.get_config()
@@ -575,8 +580,8 @@ def due_page():
                 due_configs[k[4:]] = v
             elif k.startswith("due_"):
                 due_configs[k[4:]] = v
-    except:
-        pass
+    except Exception:
+        log.exception("Failed to load queries for due page")
     
     try:
         data = svc.get_due(config_name=due_name if due_name and due_name != "default" else None, days_override=days_int)
@@ -945,7 +950,7 @@ def journal_get():
     today_d  = dt.date.today()
     date_str = request.args.get("date", today_d.isoformat())
     try:   date = min(dt.date.fromisoformat(date_str), today_d)
-    except: date = today_d
+    except Exception: date = today_d
     date_str  = date.isoformat()
     prev_date = (date - dt.timedelta(days=1)).isoformat()
     next_date = (date + dt.timedelta(days=1)).isoformat()
@@ -1175,8 +1180,9 @@ def sync_run():
     try:
         data = request.get_json(silent=True) or {}
         force = bool(data.get("force_resync"))
+        force_danger = bool(data.get("force_danger"))
         import ptos_sync
-        threading.Thread(target=_sync_and_broadcast, args=(force,), daemon=True).start()
+        threading.Thread(target=_sync_and_broadcast, args=(force, force_danger), daemon=True).start()
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -1192,10 +1198,10 @@ def sync_status():
         return jsonify(ok=False, error=str(e))
 
 
-def _sync_and_broadcast(force_resync=False):
+def _sync_and_broadcast(force_resync=False, force_danger=False):
     import ptos_sync
     import dataclasses
-    result = ptos_sync.run_sync(force_resync=force_resync)
+    result = ptos_sync.run_sync(force_resync=force_resync, force_danger=force_danger)
     _sse_broadcast("sync-status", dataclasses.asdict(result))
 
 
@@ -1703,7 +1709,8 @@ def queries_get():
         all_q = svc.get_queries()
         schema = svc.get_schema()
         field_types = _build_field_types(schema)
-    except:
+    except Exception:
+        log.exception("Failed to load schema/queries for queries page")
         all_q = {}
         field_types = {}
     named = [k for k in all_q
@@ -2205,7 +2212,7 @@ def api_records_edit():
     lineno   = data.get("lineno", None)
     if lineno is not None:
         try: lineno = int(lineno)
-        except: lineno = None
+        except Exception: lineno = None
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
     if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
@@ -2228,7 +2235,7 @@ def api_records_delete():
     lineno   = data.get("lineno", None)
     if lineno is not None:
         try: lineno = int(lineno)
-        except: lineno = None
+        except Exception: lineno = None
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
     if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
