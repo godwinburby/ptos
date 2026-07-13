@@ -3807,6 +3807,42 @@ def set_home(path):
     print(f"\n  Restart the server to use the new data folder.\n")
 
 
+def run_sync(command, resync=False):
+    """Run rclone sync or bisync against configured remote.
+
+    Reads [sync] section from config.toml for remote_name and remote_path.
+    """
+    import subprocess
+
+    cfg = get_config()
+    sync_cfg = cfg.get("sync", {})
+    remote_name = sync_cfg.get("remote_name", "")
+    remote_path = sync_cfg.get("remote_path", "")
+
+    if not remote_name or not remote_path:
+        sys.exit(
+            "Error: [sync] not configured in config.toml.\n"
+            "Add:\n"
+            "  [sync]\n"
+            f'  remote_name = "onedrive"\n'
+            f'  remote_path = "personal/ptos-data"'
+        )
+
+    remote = f"{remote_name}:{remote_path}"
+    local = BASE_DIR
+
+    cmd = ["rclone", command, local, remote]
+    if resync and command == "bisync":
+        cmd.append("--resync")
+    cmd.append("--verbose")
+
+    print(f"\n  Running: {' '.join(cmd)}\n")
+
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        sys.exit(f"rclone exited with code {result.returncode}")
+
+
 def set_user_name(name):
     """Set the user name in config.toml using tomli-w."""
     try:
