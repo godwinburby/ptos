@@ -3,6 +3,15 @@ __pycache__/
 *.pyc
 *.pyo
 
+# PTOS data (created by --init)
+config/
+records/
+journal/
+todo/
+exports/
+backups/
+templates/
+
 # PTOS runtime
 ptos_error.log
 *.tmp
