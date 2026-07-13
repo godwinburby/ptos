@@ -209,8 +209,12 @@ def build_parser(cycles):
                      help="Bidirectional sync with remote (rclone bisync)\n"
                           "  Reads [sync] config from config.toml")
     utl.add_argument("--sync", action="store_true",
-                     help="One-way push to remote (rclone sync)\n"
-                          "  Reads [sync] config from config.toml")
+                     help="One-way push to remote (rclone sync) — DELETES\n"
+                          "  anything on remote not present locally.\n"
+                          "  Requires --confirm-delete")
+    utl.add_argument("--confirm-delete", action="store_true",
+                     help="Required alongside --sync to acknowledge it can\n"
+                          "  delete remote files")
     utl.add_argument("--resync", action="store_true",
                      help="With --bisync: initialize bisync relationship\n"
                           "  (first-time setup or reset)")
@@ -858,6 +862,13 @@ def main():
         return
 
     if args.bisync or args.sync:
+        if args.sync and not args.confirm_delete:
+            sys.exit(
+                "--sync deletes anything on the remote that isn't present\n"
+                "locally. If you're sure, re-run with --confirm-delete.\n"
+                "If you just want to push local changes without risking\n"
+                "remote deletions, use --bisync instead."
+            )
         cmd = "bisync" if args.bisync else "sync"
         run_sync(cmd, resync=args.resync)
         return

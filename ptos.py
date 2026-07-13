@@ -3775,7 +3775,7 @@ def set_home(path):
 
     - Expands ~ in the path
     - Creates target dir if missing
-    - Copies existing data (config/, records/, etc.) to target if absent there
+    - Copies existing data to target, warns if target already has content
     - Writes path to .ptos_home bootstrap file
     """
     import shutil
@@ -3790,27 +3790,82 @@ def set_home(path):
     os.makedirs(target, exist_ok=True)
 
     migrated = []
-    for folder in ["config", "records", "journal", "templates", "todo", "exports"]:
+    skipped = []
+    FOLDERS = ["config", "records", "journal", "templates", "todo",
+               "exports", "backups", "notes", "scripts"]
+    for folder in FOLDERS:
         src = os.path.join(BASE_DIR, folder)
         dst = os.path.join(target, folder)
-        if os.path.isdir(src) and not os.path.isdir(dst):
+        if not os.path.isdir(src):
+            continue
+        if os.path.isdir(dst):
+            if os.listdir(dst):
+                skipped.append(f"{folder} (destination not empty, left as-is)")
+            else:
+                shutil.copytree(src, dst, dirs_exist_ok=True)
+                migrated.append(folder)
+        else:
             shutil.copytree(src, dst)
             migrated.append(folder)
 
     bootstrap = os.path.join(SCRIPT_DIR, ".ptos_home")
-    with open(bootstrap, "w", encoding="utf-8") as f:
-        f.write(target + "\n")
 
     print(f"\n  .ptos_home  ->  {target}")
     if migrated:
         print(f"  migrated    ->  {', '.join(migrated)}")
+    if skipped:
+        print(f"  SKIPPED     ->  {', '.join(skipped)}")
+        print(f"  WARNING: some folders were not migrated. Review")
+        print(f"  {target} manually before restarting the server,")
+        print(f"  or your app may start with missing data.")
+        confirm = input("\n  Continue anyway and write .ptos_home? [y/N] ")
+        if confirm.strip().lower() != "y":
+            print("  Aborted. .ptos_home was not changed.")
+            return
+
+    with open(bootstrap, "w", encoding="utf-8") as f:
+        f.write(target + "\n")
     print(f"\n  Restart the server to use the new data folder.\n")
+
+
+def _detect_corruption(base_dir, state_file):
+    """Compare current file sizes against sizes recorded after last sync.
+    Returns list of files that went from non-zero to zero bytes."""
+    import json
+    if not os.path.isfile(state_file):
+        return []
+    with open(state_file, encoding="utf-8") as f:
+        last_sizes = json.load(f)
+    concerning = []
+    for rel_path, prev_size in last_sizes.items():
+        full_path = os.path.join(base_dir, rel_path)
+        if prev_size > 0 and os.path.isfile(full_path) and os.path.getsize(full_path) == 0:
+            concerning.append(rel_path)
+    return concerning
+
+
+def _record_sizes(base_dir, state_file, folders):
+    """Record current file sizes for future corruption detection."""
+    import json
+    sizes = {}
+    for folder in folders:
+        folder_path = os.path.join(base_dir, folder)
+        if not os.path.isdir(folder_path):
+            continue
+        for root, _, files in os.walk(folder_path):
+            for fname in files:
+                fpath = os.path.join(root, fname)
+                rel = os.path.relpath(fpath, base_dir)
+                sizes[rel] = os.path.getsize(fpath)
+    with open(state_file, "w", encoding="utf-8") as f:
+        json.dump(sizes, f)
 
 
 def run_sync(command, resync=False):
     """Run rclone sync or bisync against configured remote.
 
-    Reads [sync] section from config.toml for remote_name and remote_path.
+    Reads [sync] section from config.toml for remote_name, remote_path, folders.
+    Runs corruption pre-flight check before sync, records file sizes after success.
     """
     import subprocess
 
@@ -3818,6 +3873,7 @@ def run_sync(command, resync=False):
     sync_cfg = cfg.get("sync", {})
     remote_name = sync_cfg.get("remote_name", "")
     remote_path = sync_cfg.get("remote_path", "")
+    folders = sync_cfg.get("folders", ["config", "records", "journal", "todo"])
 
     if not remote_name or not remote_path:
         sys.exit(
@@ -3826,6 +3882,20 @@ def run_sync(command, resync=False):
             "  [sync]\n"
             f'  remote_name = "onedrive"\n'
             f'  remote_path = "personal/ptos-data"'
+        )
+
+    state_file = os.path.join(BASE_DIR, ".ptos_sync_state")
+    concerning = _detect_corruption(BASE_DIR, state_file)
+    if concerning:
+        sys.exit(
+            f"Refusing to sync: {len(concerning)} file(s) had content "
+            f"before and are now 0 bytes:\n  " +
+            "\n  ".join(concerning[:10]) +
+            (f"\n  ...and {len(concerning)-10} more" if len(concerning) > 10 else "") +
+            "\n\nThis usually means something went wrong locally, not that "
+            "you intended to empty these files. Investigate before syncing "
+            "— syncing now risks overwriting your remote backup with this "
+            "corrupted state."
         )
 
     remote = f"{remote_name}:{remote_path}"
@@ -3841,6 +3911,8 @@ def run_sync(command, resync=False):
     result = subprocess.run(cmd)
     if result.returncode != 0:
         sys.exit(f"rclone exited with code {result.returncode}")
+
+    _record_sizes(BASE_DIR, state_file, folders)
 
 
 def set_user_name(name):

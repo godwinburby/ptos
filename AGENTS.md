@@ -64,7 +64,7 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 - Schema: `schema.toml` defines record types, fields, validation
 - Queries: `queries.toml` defines saved queries, metrics, dashboards
 - Data folder: resolved by `PTOS_HOME` env var > `.ptos_home` file > SCRIPT_DIR; `--set-home PATH` writes `.ptos_home` and migrates existing data to the target
-- Multi-device sync: `--bisync` runs `rclone bisync`, `--sync` runs `rclone sync`; reads `[sync]` section from config.toml for remote_name and remote_path
+- Multi-device sync: `--bisync` runs `rclone bisync`, `--sync --confirm-delete` runs `rclone sync`; reads `[sync]` section from config.toml for remote_name, remote_path, folders; corruption pre-flight check detects zero-byte files before sync
 
 ### Error handling
 - Engine functions raise `sys.exit()` on errors
