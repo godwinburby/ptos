@@ -18,7 +18,7 @@
   <div style="display:flex;gap:16px;flex-wrap:wrap;">
     <div class="field-group" style="flex:1;min-width:120px;">
       <label>Currency Symbol</label>
-      <input type="text" id="currency" value="{{ currency }}" placeholder="₹" maxlength="5" style="width:80px;">
+      <input type="text" id="currency" value="{{ currency }}" placeholder="$" maxlength="5" style="width:80px;">
     </div>
     <div class="field-group" style="flex:1;min-width:160px;">
       <label>Date Format</label>
@@ -124,6 +124,48 @@
   </div>
 </div>
 
+{% if sync_platform != "windows" %}
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Sync (rclone bisync)</div>
+  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Bidirectional sync with your remote storage. Requires <a href="https://rclone.org" target="_blank" style="color:var(--accent);">rclone</a> to be installed.
+  </p>
+  <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;margin-bottom:14px;">
+    <input type="checkbox" id="sync-enabled" style="width:18px;height:18px;" {{ 'checked' if sync_cfg.get('enabled') else '' }}>
+    Enable sync
+  </label>
+  <div style="display:flex;gap:16px;flex-wrap:wrap;">
+    <div class="field-group" style="flex:1;min-width:140px;">
+      <label>Remote Name</label>
+      <input type="text" id="sync-remote-name" value="{{ sync_cfg.get('remote_name', 'onedrive') }}" placeholder="onedrive" style="width:100%;">
+    </div>
+    <div class="field-group" style="flex:1;min-width:140px;">
+      <label>Remote Path</label>
+      <input type="text" id="sync-remote-path" value="{{ sync_cfg.get('remote_path', 'PTOS') }}" placeholder="PTOS" style="width:100%;">
+    </div>
+  </div>
+  <div style="margin-top:12px;">
+    <label style="font-size:13px;color:var(--sub);margin-bottom:6px;display:block;">Folders to sync</label>
+    <div id="sync-folders-list" style="display:flex;flex-direction:column;gap:6px;"></div>
+  </div>
+  <div style="margin-top:14px;padding-top:14px;border-top:1px solid var(--border);">
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+      <span id="sync-status-dot" style="width:10px;height:10px;border-radius:50%;display:inline-block;background:var(--sub);"></span>
+      <span id="sync-status-text" style="font-size:13px;color:var(--sub);">Idle</span>
+    </div>
+    <div id="sync-last-run" style="font-size:12px;color:var(--sub);margin-bottom:10px;"></div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button onclick="runSyncNow()" class="btn btn-sm btn-ghost">Sync Now</button>
+      <button onclick="runSyncResync()" class="btn btn-sm btn-ghost" style="color:var(--error);">Force Resync (--resync)</button>
+    </div>
+    <div id="sync-conflicts" style="margin-top:10px;display:none;">
+      <div style="font-size:13px;font-weight:600;color:var(--error);margin-bottom:4px;">Conflicts detected:</div>
+      <ul id="sync-conflicts-list" style="font-size:12px;color:var(--sub);margin:0;padding-left:16px;"></ul>
+    </div>
+  </div>
+</div>
+{% endif %}
+
 <div style="display:flex;gap:10px;margin-top:20px;">
   <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
 </div>
@@ -133,6 +175,8 @@
   var cycles = {{ cycles | tojson }};
   var coreFolders = ["records", "config", "templates", "journal"];
   var backupFolders = {{ backup_folders | tojson }};
+  var syncFolders = {{ sync_cfg.get('folders', ['records', 'config', 'templates', 'journal', 'todo', 'exports', 'notes']) | tojson }};
+  var allSyncFolders = ["records", "config", "templates", "journal", "todo", "exports", "notes"];
   
   document.getElementById("auth-enabled").checked = {{ 'true' if auth_enabled else 'false' }};
   document.getElementById("auto-backup-startup").checked = {{ 'true' if backup.get('auto_backup_on_startup', true) else 'false' }};
@@ -140,6 +184,62 @@
   document.getElementById("backup-if-changed").checked = {{ 'true' if backup.get('backup_if_files_changed', true) else 'false' }};
   document.getElementById("max-full-backups").value = {{ backup.get('max_full_backups', 10) }};
   document.getElementById("max-config-backups").value = {{ backup.get('max_config_backups', 10) }};
+  
+  // ── Sync folder checkboxes ──
+  function renderSyncFolders() {
+    var list = document.getElementById("sync-folders-list");
+    if (!list) return;
+    list.innerHTML = "";
+    allSyncFolders.forEach(function(folder) {
+      var checked = syncFolders.indexOf(folder) !== -1;
+      var label = document.createElement("label");
+      label.style.cssText = "display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;";
+      label.innerHTML = '<input type="checkbox" class="sync-folder-cb" value="' + folder + '" style="width:16px;height:16px;"' + (checked ? ' checked' : '') + '> ' + folder;
+      list.appendChild(label);
+    });
+  }
+  renderSyncFolders();
+  
+  // ── Sync status ──
+  function refreshSyncStatus() {
+    fetch("/sync/status")
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (!data.ok) return;
+        var dot = document.getElementById("sync-status-dot");
+        var txt = document.getElementById("sync-status-text");
+        var lastRun = document.getElementById("sync-last-run");
+        var conflictsDiv = document.getElementById("sync-conflicts");
+        var conflictsList = document.getElementById("sync-conflicts-list");
+        if (!dot || !txt) return;
+        var colors = {idle: "var(--sub)", running: "var(--accent)", ok: "var(--success)", conflict: "var(--error)", error: "var(--error)", skipped: "var(--sub)"};
+        dot.style.background = colors[data.status] || "var(--sub)";
+        txt.textContent = data.status.charAt(0).toUpperCase() + data.status.slice(1);
+        if (data.timestamp && data.status !== "idle" && data.status !== "running") {
+          var d = new Date(parseFloat(data.timestamp) * 1000);
+          lastRun.textContent = "Last sync: " + d.toLocaleString();
+        }
+        if (data.conflicts && data.conflicts.length) {
+          conflictsDiv.style.display = "block";
+          conflictsList.innerHTML = data.conflicts.map(function(c) { return "<li>" + c + "</li>"; }).join("");
+        } else {
+          conflictsDiv.style.display = "none";
+        }
+      })
+      .catch(function() {});
+  }
+  refreshSyncStatus();
+  
+  window.runSyncNow = function() {
+    fetch("/sync/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({})})
+      .then(function() { refreshSyncStatus(); });
+  };
+  
+  window.runSyncResync = function() {
+    if (!confirm("Force resync will re-upload everything. Continue?")) return;
+    fetch("/sync/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({force_resync: true})})
+      .then(function() { refreshSyncStatus(); });
+  };
   
   function renderBackupFolders() {
     var list = document.getElementById("backup-folders-list");
@@ -216,6 +316,10 @@
     var validCycles = cycles.filter(function(c) { return c.name && c.day; })
       .map(function(c) { return {name: c.name.toLowerCase().replace(/[^a-z0-9-]/g, "-"), day: c.day}; });
     
+    var syncCbs = document.querySelectorAll(".sync-folder-cb");
+    var syncFolderList = [];
+    syncCbs.forEach(function(cb) { if (cb.checked) syncFolderList.push(cb.value); });
+    
     fetch("/settings/save", {
       method: "POST",
       headers: {"Content-Type": "application/json"},
@@ -233,7 +337,11 @@
         backup_folders: backupFolders,
         auth_enabled: document.getElementById("auth-enabled").checked,
         auth_username: document.getElementById("auth-username").value.trim(),
-        auth_password: document.getElementById("auth-password").value
+        auth_password: document.getElementById("auth-password").value,
+        sync_enabled: document.getElementById("sync-enabled") ? document.getElementById("sync-enabled").checked : false,
+        sync_remote_name: document.getElementById("sync-remote-name") ? document.getElementById("sync-remote-name").value.trim() : "onedrive",
+        sync_remote_path: document.getElementById("sync-remote-path") ? document.getElementById("sync-remote-path").value.trim() : "PTOS",
+        sync_folders: syncFolderList
       })
     })
     .then(function(r) { return r.json(); })
@@ -262,5 +370,4 @@
   renderBackupFolders();
 })();
 </script>
-
 {% endblock %}

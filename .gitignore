@@ -20,6 +20,8 @@ ptos_error.log
 # Bootstrap
 .version
 .ptos_home
+.sync_state
+.sync.log
 
 # Syncthing
 .stfolder/

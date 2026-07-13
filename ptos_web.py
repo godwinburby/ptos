@@ -1080,6 +1080,12 @@ def settings_page():
     
     dashboards = list(svc.get_dashboard_names()) if hasattr(svc, 'get_dashboard_names') else []
     
+    # Sync config
+    sync_cfg = svc.get_sync_config()
+    sync_platform = svc.get_sync_platform()
+    sync_result = svc.get_sync_last_result()
+    import dataclasses
+    
     return render_template("settings.html",
         tab="settings", title="Settings", now=_now_str(),
         user_name=user.get("name", ""),
@@ -1093,7 +1099,10 @@ def settings_page():
         default_dashboard=dashboard.get("default", ""),
         auth_enabled=auth.get("enabled", False),
         auth_username=auth.get("username", ""),
-        auth_password=auth.get("password", ""))
+        auth_password=auth.get("password", ""),
+        sync_cfg=sync_cfg,
+        sync_platform=sync_platform,
+        sync_result=sync_result)
 
 
 @app.route("/settings/save", methods=["POST"])
@@ -1141,12 +1150,53 @@ def settings_save():
                 return jsonify(ok=False, error="Username and password required when auth is enabled")
             cfg["auth"] = {"enabled": enabled, "username": username, "password": password}
         
+        if "sync_enabled" in data or "sync_remote_name" in data:
+            sdata = {
+                "enabled": data.get("sync_enabled", False),
+                "remote_name": data.get("sync_remote_name", "onedrive"),
+                "remote_path": data.get("sync_remote_path", "PTOS"),
+                "folders": data.get("sync_folders", []),
+            }
+            svc.save_sync_config(sdata)
+        
         result = svc.save_config(cfg)
         if result.get("ok"):
             return jsonify(ok=True)
         return jsonify(ok=False, error=result.get("message", "Save failed"))
     except Exception as e:
         return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Sync
+
+@app.route("/sync/run", methods=["POST"])
+def sync_run():
+    try:
+        data = request.get_json(silent=True) or {}
+        force = bool(data.get("force_resync"))
+        import ptos_sync
+        threading.Thread(target=_sync_and_broadcast, args=(force,), daemon=True).start()
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/sync/status")
+def sync_status():
+    try:
+        result = svc.get_sync_last_result()
+        import dataclasses
+        return jsonify(ok=True, **dataclasses.asdict(result))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+def _sync_and_broadcast(force_resync=False):
+    import ptos_sync
+    import dataclasses
+    result = ptos_sync.run_sync(force_resync=force_resync)
+    _sse_broadcast("sync-status", dataclasses.asdict(result))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2476,12 +2526,14 @@ def _system_notify(title, body):
     except Exception:
         pass
 
-def _todo_notify_loop(interval_minutes=5):
-    """Background thread: check for due todos periodically and broadcast via SSE."""
+def _housekeeping_loop(interval_minutes=5):
+    """Background thread: check due todos + run sync periodically, broadcast via SSE."""
     import ptos_todo as _todo_mod
-    notified = set()  # {(line_no, due_str, due_time)} to avoid re-notifying
+    notified = set()
+    _sync_tick = 0
     while True:
         time.sleep(interval_minutes * 60)
+        # ── todo notifications ──
         try:
             todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
             due = _todo_mod.get_due_todos(todos, lookahead_days=1)
@@ -2502,6 +2554,19 @@ def _todo_notify_loop(interval_minutes=5):
             notified = current
         except Exception:
             pass
+        # ── sync piggyback (every ~6th tick) ──
+        _sync_tick += 1
+        if _sync_tick >= 6:
+            _sync_tick = 0
+            try:
+                sync_cfg = svc.get_sync_config()
+                if sync_cfg.get("enabled"):
+                    import ptos_sync
+                    result = ptos_sync.run_sync()
+                    import dataclasses
+                    _sse_broadcast("sync-status", dataclasses.asdict(result))
+            except Exception:
+                pass
 
 # ── Shutdown ──────────────────────────────────────────────────────────────────
 
@@ -2617,15 +2682,25 @@ if __name__ == "__main__":
     print("\nPTOS Web UI")
     print("Open: http://localhost:5000\n")
 
-    # Start todo notification background thread
+    # Start housekeeping background thread
     try:
         todo_cfg = svc.get_config().get("todo", {})
         notify_min = todo_cfg.get("notify_interval", 5)
         archive_mo = todo_cfg.get("archive_months", 6)
         if notify_min > 0:
-            _t = threading.Thread(target=_todo_notify_loop, args=(notify_min,), daemon=True)
+            _t = threading.Thread(target=_housekeeping_loop, args=(notify_min,), daemon=True)
             _t.start()
             print(f"Todo notifications enabled (every {notify_min} min) [{_notify_platform or 'browser-only'}]")
+    except Exception:
+        pass
+
+    # One-shot startup sync (async — safe so it never blocks launch)
+    try:
+        sync_cfg = svc.get_sync_config()
+        if sync_cfg.get("enabled"):
+            import ptos_sync
+            ptos_sync.init(svc.BASE_DIR)
+            threading.Thread(target=_sync_and_broadcast, daemon=True).start()
     except Exception:
         pass
 
