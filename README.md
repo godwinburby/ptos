@@ -132,11 +132,15 @@ bash setup_ptos_android.sh
 ### What the setup script does
 
 1. Checks Python version (3.11+ required)
-2. Clones PTOS from GitHub via `git clone` (Windows requires git; Linux/Android falls back to `curl` if git is unavailable)
+2. Clones PTOS from GitHub via `git clone` (auto-installs git if missing)
 3. Installs Flask and tomli-w via pip
 4. Runs `ptos --init` to create `config/`, `records/`, `journal/` and starter config files
 5. Asks for your name and sets it in `config.toml`
 6. Starts the web server and opens the browser
+
+On Android, setup installs code to `~/ptos` (Termux's native home, git-friendly)
+and data to shared storage (`~/storage/shared/ptos-data`) — keeping them separate
+for reliable git updates and Syncthing visibility.
 
 Safe to re-run — setup skips steps that are already done.
 
