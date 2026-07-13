@@ -87,7 +87,7 @@ def get_backup_folders():
 def get_backup_max_backups():
     """Get maximum full backups to keep from config."""
     config = get_backup_config()
-    return config.get("max_backups", MAX_BACKUPS)
+    return config.get("max_full_backups", MAX_BACKUPS)
 
 
 def get_backup_max_config_backups():

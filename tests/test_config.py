@@ -25,7 +25,7 @@ date_format = "us"
 
 [backup]
 folders = ["records", "config"]
-max_backups = 5
+max_full_backups = 5
 max_config_backups = 3
 backup_if_files_changed = true
 """)
@@ -135,7 +135,7 @@ class TestBackupConfig:
     def test_backup_config(self, cfg):
         bc = ptos.get_backup_config()
         assert bc["folders"] == ["records", "config"]
-        assert bc["max_backups"] == 5
+        assert bc["max_full_backups"] == 5
         assert bc["max_config_backups"] == 3
 
     def test_backup_folders(self, cfg):
