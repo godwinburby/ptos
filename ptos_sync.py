@@ -184,16 +184,16 @@ def run_sync(force_resync=False, force_danger=False):
             "rclone", "bisync",
             base_dir,
             f"{remote_name}:{remote_path}",
-            "--exclude", "/**",
         ]
         for folder in folders:
-            cmd.extend(["--include", f"/{folder}/**"])
+            cmd.extend(["--filter", f"+ /{folder}/**"])
         cmd.extend([
-            "--include", "/.sync*",
-            "--exclude", "backups/**",
-            "--exclude", "exports/**",
-            "--exclude", "*.bak",
-            "--exclude", "*.tmp",
+            "--filter", "+ /.sync*",
+            "--filter", "- backups/**",
+            "--filter", "- exports/**",
+            "--filter", "- *.bak",
+            "--filter", "- *.tmp",
+            "--filter", "- **",
             "--conflict-resolve", "none",
             "--log-file", os.path.join(base_dir, ".sync.log"),
             "--log-level", "INFO",

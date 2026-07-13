@@ -1746,7 +1746,6 @@ def find_records_with_location(filters, search=None, start=None, end=None):
     if start is None: start = dt.date.min
     if end   is None: end   = dt.date.max
     matches = []
-    os.makedirs(RECORDS_DIR, exist_ok=True)
     fnames = get_log_files()
     for fname in fnames:
         if fname[:4].isdigit():
@@ -1991,7 +1990,6 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
     """
     results = []
     total   = 0
-    os.makedirs(RECORDS_DIR, exist_ok=True)
     if from_file:
         # validate — no path separators, must exist in records/
         if any(c in from_file for c in ("/", "\\", " ")):
