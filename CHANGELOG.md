@@ -5,6 +5,17 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-07-13
+
+### Path separation — `.ptos_home` bootstrap
+
+- **`.ptos_home` bootstrap file** — new mechanism to persist `PTOS_HOME` without an env var. PTOS reads `{script_dir}/.ptos_home` on every launch; written automatically by `--init`. Priority: env var > `.ptos_home` > data next to code.
+- **`SCRIPT_DIR` constant** — `ptos.py` now tracks the script directory separately from `BASE_DIR`. Starters, `.version`, and `.git` are resolved relative to `SCRIPT_DIR`; data directories (`records/`, `config/`, `journal/`, `todo/`) relative to `BASE_DIR`. This enables clean code/data separation.
+- **`ptos_todo.py`** — no longer duplicates path resolution; imports `BASE_DIR`, `TODO_DIR`, `TODO_PATH`, `DONE_PATH` from `ptos.py`.
+- **Backup defaults** — `BACKUP_FOLDERS` now includes `journal` and `todo`.
+- **`.gitignore`** — cleaned up for code-only repo (removed data directory entries).
+- **Deleted** `scripts/` and `tasks/` directories (unused).
+
 ## 2026-03-28
 
 ### Robustness — crash fixes

@@ -12,21 +12,7 @@ import os, re, sys, calendar, datetime as dt, dataclasses
 from dataclasses import dataclass, field
 from typing import Optional, List
 
-# ── path constants ──────────────────────────────────────────────────────────
-
-_home = os.environ.get("PTOS_HOME")
-DESKTOP_MODE = os.environ.get("DESKTOP_MODE") == "1"
-
-if DESKTOP_MODE:
-    BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'ptos')
-elif _home:
-    BASE_DIR = _home
-else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-TODO_DIR  = os.path.join(BASE_DIR, "todo")
-TODO_PATH = os.path.join(TODO_DIR, "todo.txt")
-DONE_PATH = os.path.join(TODO_DIR, "done.txt")
+from ptos import BASE_DIR, TODO_DIR, TODO_PATH, DONE_PATH
 
 # ── errors ──────────────────────────────────────────────────────────────────
 

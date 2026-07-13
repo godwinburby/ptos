@@ -188,6 +188,7 @@ class TestVersion:
         ver_file = tmp_path / ".version"
         monkeypatch.setattr(ptos, "VERSION_FILE", str(ver_file))
         monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "SCRIPT_DIR", str(tmp_path))
         (tmp_path / ".git").mkdir()
         import subprocess
         orig = subprocess.run
@@ -205,6 +206,7 @@ class TestVersion:
         ver_file = tmp_path / ".version"
         monkeypatch.setattr(ptos, "VERSION_FILE", str(ver_file))
         monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "SCRIPT_DIR", str(tmp_path))
         class FakeResponse:
             def read(self): return b'{"sha": "fromapi"}'
             def __enter__(self): return self

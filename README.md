@@ -586,17 +586,28 @@ username = "yourname"
 password = "yourpassword"
 ```
 
-### PTOS_HOME environment variable
+### PTOS_HOME — separating code from data
 
-By default PTOS places all files next to `ptos.py`. Set `PTOS_HOME` to use a
-different location:
+By default PTOS keeps everything (code + data) in one folder. Use `PTOS_HOME` to
+point code to data in a different location — useful when code is git-synced and
+data lives in a cloud-synced folder.
+
+**One-time setup:**
 
 ```bash
-export PTOS_HOME=/data/ptos    # Linux / macOS / Termux
-set PTOS_HOME=C:\ptos          # Windows
+# Set the env var to your data directory
+export PTOS_HOME=/data/ptos       # Linux / macOS / Termux
+set PTOS_HOME=D:\Data\ptos-data   # Windows
+
+# Run init to create directory structure and persist the path
+python ptos.py --init
 ```
 
-Useful when the script is on `PATH` but data lives in a synced folder.
+After `--init`, PTOS writes a `.ptos_home` file next to `ptos.py` containing the
+resolved data path. The env var is no longer needed — PTOS reads `.ptos_home` on
+every launch.
+
+Priority: `PTOS_HOME` env var > `{script_dir}/.ptos_home` > data next to code.
 
 ---
 
@@ -863,7 +874,7 @@ Records are plain text — one line per entry, one file per year.
 
 - **Git** — commit `records/` after each session. Full history, diff-friendly.
 - **Syncthing / Dropbox / iCloud** — sync the whole `ptos/` folder.
-- **Termux** — run the same script on Android. Set `PTOS_HOME` to your synced folder.
+- **Termux** — run the same script on Android. Set `PTOS_HOME` to your synced folder (or run `--init` once to persist it via `.ptos_home`).
 
 Multiple devices can safely append to the same log file as long as writes don't overlap.
 
@@ -1506,5 +1517,7 @@ from ptos_web import app as application
 7. Hit **Reload**
 
 The `PTOS_HOME` environment variable tells PTOS where its data lives regardless
-of where the WSGI process runs from. Free tier requires a manual renewal click
-every 3 months — PythonAnywhere sends an email reminder.
+of where the WSGI process runs from. You can also skip the env var by running
+`--init` once — it creates a `.ptos_home` bootstrap file next to `ptos.py`.
+Free tier requires a manual renewal click every 3 months — PythonAnywhere sends
+an email reminder.

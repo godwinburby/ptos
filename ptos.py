@@ -19,18 +19,27 @@ if sys.stdout:
 
 _home = os.environ.get("PTOS_HOME")
 DESKTOP_MODE = os.environ.get("DESKTOP_MODE") == "1"
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
+if not _home and not DESKTOP_MODE:
+    bootstrap = os.path.join(SCRIPT_DIR, ".ptos_home")
+    if os.path.isfile(bootstrap):
+        with open(bootstrap, encoding="utf-8") as f:
+            path = f.readline().strip()
+        if path and os.path.isdir(path):
+            _home = path
 
 if DESKTOP_MODE:
     BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'ptos')
 elif _home:
     BASE_DIR = _home
 else:
-    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    BASE_DIR = SCRIPT_DIR
 
 if getattr(sys, 'frozen', False) and hasattr(sys, '_MEIPASS'):
     STARTER_DIR = os.path.join(sys._MEIPASS, 'starters')
 else:
-    STARTER_DIR = os.path.join(BASE_DIR, 'starters')
+    STARTER_DIR = os.path.join(SCRIPT_DIR, 'starters')
 
 CONFIG_DIR   = os.path.join(BASE_DIR, "config")
 RECORDS_DIR  = os.path.join(BASE_DIR, "records")
@@ -41,10 +50,10 @@ BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
 TODO_DIR     = os.path.join(BASE_DIR, "todo")
 TODO_PATH    = os.path.join(TODO_DIR, "todo.txt")
 DONE_PATH    = os.path.join(TODO_DIR, "done.txt")
-BACKUP_FOLDERS = ["records", "config", "templates"]
+BACKUP_FOLDERS = ["records", "config", "templates", "journal", "todo"]
 MAX_BACKUPS = 10  # Keep last 10 backups
 
-VERSION_FILE = os.path.join(BASE_DIR, ".version")
+VERSION_FILE = os.path.join(SCRIPT_DIR, ".version")
 GITHUB_REPO = "godwinburby/ptos"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
 
@@ -348,11 +357,11 @@ def init_version():
     sha = None
     
     # Try git first
-    if os.path.exists(os.path.join(BASE_DIR, ".git")):
+    if os.path.exists(os.path.join(SCRIPT_DIR, ".git")):
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "HEAD"],
-                cwd=BASE_DIR,
+                cwd=SCRIPT_DIR,
                 capture_output=True,
                 text=True,
                 timeout=5
@@ -3733,6 +3742,13 @@ def init_ptos():
         print(f"  created  records/{today().year}.log")
     else:
         print(f"  exists   records/{today().year}.log")
+
+    # Write .ptos_home bootstrap file so PTOS_HOME env var is no longer needed
+    if not DESKTOP_MODE:
+        bootstrap = os.path.join(SCRIPT_DIR, ".ptos_home")
+        with open(bootstrap, "w", encoding="utf-8") as f:
+            f.write(BASE_DIR + "\n")
+        print(f"  created  {bootstrap}")
 
     print("\nDone. Edit config/schema.toml to define your record types.\n")
     
