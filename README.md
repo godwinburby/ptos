@@ -92,24 +92,20 @@ PTOS from GitHub, install dependencies, and create all config files automaticall
 
 ### Windows
 
-Download two files into the same folder:
+Single file — download and double-click:
 
-- [`setup_ptos_windows.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat)
-- [`setup_ptos_windows.ps1`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.ps1)
+[`setup_ptos_windows.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat)
 
-Then double-click `setup_ptos_windows.bat` to run.
+The `.bat` downloads `setup_ptos_windows.ps1` automatically on first run,
+then hands off to it. The `.ps1` does all the real work — Python/Git detection
+and auto-install via `winget`, repo clone, Flask install, init, and server
+launch. PowerShell ships by default on Windows 7+ — no extra install needed.
 
-Or from PowerShell (downloads both automatically):
+Or from PowerShell:
 ```powershell
 curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat
-curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.ps1
 setup_ptos_windows.bat
 ```
-
-The `.bat` file is a 3-line launcher that hands off to the `.ps1` PowerShell
-script, which does all the real work — Python/Git detection and auto-install
-via `winget`, repo clone, Flask install, init, and server launch. PowerShell
-ships by default on Windows 7+ — no extra install needed.
 
 ### Linux / macOS
 
