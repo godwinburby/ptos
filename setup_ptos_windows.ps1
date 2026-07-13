@@ -68,6 +68,24 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     }
 }
 
+# -- 2b. Rclone detection + auto-install --
+if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) {
+    if (Get-Command winget -ErrorAction SilentlyContinue) {
+        Write-Host "rclone not found. Installing via winget..."
+        winget install -e --id Rclone.Rclone --silent `
+            --accept-package-agreements --accept-source-agreements
+        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
+                    [System.Environment]::GetEnvironmentVariable("Path","User")
+    }
+    if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) {
+        Write-Host ""
+        Write-Host "rclone not found. Install from: https://rclone.org/downloads"
+        Write-Host "Or run: winget install Rclone.Rclone"
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+}
+
 # -- 3. Locate or clone PTOS --
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (Test-Path "$scriptDir\ptos.py") {

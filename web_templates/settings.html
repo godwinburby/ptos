@@ -124,11 +124,11 @@
   </div>
 </div>
 
-{% if sync_platform != "windows" %}
 <div class="card" style="margin-bottom:14px;">
   <div class="card-title">Sync (rclone bisync)</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
     Bidirectional sync with your remote storage. Requires <a href="https://rclone.org" target="_blank" style="color:var(--accent);">rclone</a> to be installed.
+    {% if sync_platform == "windows" %}Sync is available on all platforms.{% endif %}
   </p>
   <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;margin-bottom:14px;">
     <input type="checkbox" id="sync-enabled" style="width:18px;height:18px;" {{ 'checked' if sync_cfg.get('enabled') else '' }}>
@@ -162,9 +162,13 @@
       <div style="font-size:13px;font-weight:600;color:var(--error);margin-bottom:4px;">Conflicts detected:</div>
       <ul id="sync-conflicts-list" style="font-size:12px;color:var(--sub);margin:0;padding-left:16px;"></ul>
     </div>
+    <div id="sync-rclone-hint" style="display:none;margin-top:10px;padding:10px;background:var(--bg2);border-radius:8px;font-size:12px;color:var(--sub);">
+      <strong style="color:var(--text);">rclone not configured?</strong><br>
+      Run <code>rclone config</code> in your terminal to set up a remote (requires OAuth login in your browser).<br>
+      Then come back, enable sync, and click Sync Now.
+    </div>
   </div>
 </div>
-{% endif %}
 
 <div style="display:flex;gap:10px;margin-top:20px;">
   <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
@@ -224,6 +228,15 @@
           conflictsList.innerHTML = data.conflicts.map(function(c) { return "<li>" + c + "</li>"; }).join("");
         } else {
           conflictsDiv.style.display = "none";
+        }
+        var hint = document.getElementById("sync-rclone-hint");
+        if (hint) {
+          var isRcloneError = data.status === "error" && data.output && (
+            data.output.indexOf("section in the config file") !== -1 ||
+            data.output.indexOf("not found") !== -1 ||
+            data.output.indexOf("rclone not found") !== -1
+          );
+          hint.style.display = isRcloneError ? "block" : "none";
         }
       })
       .catch(function() {});

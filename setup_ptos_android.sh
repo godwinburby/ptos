@@ -37,6 +37,12 @@ if ! command -v git &>/dev/null; then
     pkg install -y git
 fi
 
+# ── Install rclone if missing ─────────────────────────────────────────────────
+if ! command -v rclone &>/dev/null; then
+    echo "Installing rclone..."
+    pkg install -y rclone
+fi
+
 # ── Check Flask installed ────────────────────────────────────────────────────
 echo "Checking dependencies..."
 if ! python -c "import flask" 2>/dev/null; then
