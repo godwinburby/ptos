@@ -997,6 +997,9 @@ function _showTodoToast(tasks) {
             }
           }
         }
+        if (msg.type === "sync-pull" && typeof window._pullSseHandler === "function") {
+          window._pullSseHandler(msg);
+        }
       } catch(ex) {}
     };
   } catch(ex) {}

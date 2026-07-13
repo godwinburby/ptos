@@ -1208,10 +1208,11 @@ def _sync_and_broadcast(force_resync=False, force_danger=False):
 @app.route("/sync/pull", methods=["POST"])
 def sync_pull():
     try:
+        data = request.get_json(silent=True) or {}
         sync_cfg = svc.get_sync_config()
-        remote_name = sync_cfg.get("remote_name", "onedrive")
-        remote_path = sync_cfg.get("remote_path", "personal/ptos-data")
-        folders = sync_cfg.get("folders", ["records", "config", "templates", "journal", "todo"])
+        remote_name = data.get("remote_name") or sync_cfg.get("remote_name", "onedrive")
+        remote_path = data.get("remote_path") or sync_cfg.get("remote_path", "personal/ptos-data")
+        folders = data.get("folders") or sync_cfg.get("folders", ["records", "config", "templates", "journal", "todo"])
         base_dir = ptos.BASE_DIR
 
         if not folders:
@@ -1221,6 +1222,7 @@ def sync_pull():
             pulled = []
             errors = []
             for folder in folders:
+                _sse_broadcast("sync-pull", {"folder": folder, "status": "pulling"})
                 local = os.path.join(base_dir, folder)
                 remote = f"{remote_name}:{remote_path}/{folder}"
                 r = subprocess.run(
@@ -1228,16 +1230,15 @@ def sync_pull():
                     capture_output=True, text=True, timeout=120)
                 if r.returncode == 0:
                     pulled.append(folder)
+                    _sse_broadcast("sync-pull", {"folder": folder, "status": "ok"})
                 else:
-                    errors.append(f"{folder}: {r.stderr.strip()}")
-            return {"pulled": pulled, "errors": errors}
+                    err = r.stderr.strip()
+                    errors.append(f"{folder}: {err}")
+                    _sse_broadcast("sync-pull", {"folder": folder, "status": "error", "error": err})
+            _sse_broadcast("sync-pull", {"folder": None, "status": "done", "pulled": pulled, "errors": errors})
 
         import threading
-        def _pull_and_broadcast():
-            result = _do_pull()
-            _sse_broadcast("sync-pull", result)
-
-        threading.Thread(target=_pull_and_broadcast, daemon=True).start()
+        threading.Thread(target=_do_pull, daemon=True).start()
         return jsonify(ok=True, message="Pull started")
     except Exception as e:
         log.exception("Failed to start pull")
