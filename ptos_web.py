@@ -1098,7 +1098,8 @@ def settings_page():
         default_dashboard=dashboard.get("default", ""),
         auth_enabled=auth.get("enabled", False),
         auth_username=auth.get("username", ""),
-        auth_password=auth.get("password", ""))
+        auth_password=auth.get("password", ""),
+        base_dir=ptos.BASE_DIR)
 
 
 @app.route("/settings/save", methods=["POST"])

@@ -13,6 +13,7 @@ date_format = "us"
 # Example: billing = 15  means cycle runs 15th → 14th next month.
 # Usage:   ptos -t billing      (current cycle)
 #          ptos -t billing-1    (previous cycle)
+clinic = 26
 
 [dashboard]
 default = "default"

@@ -1114,6 +1114,7 @@ ptos -y test -t td --delete --all
 | `--journal` | `-j` | Open today's journal (creates from template if new) |
 | `--edit [TARGET]` | `-e` | Edit a workspace file (see targets below) |
 | `--init` | | Initialise workspace (safe to re-run — will not overwrite existing files) |
+| `--set-home PATH` | | Point PTOS at a data folder (writes `.ptos_home`, migrates existing data) |
 | `--backup-full` | | Create full backup (records/, config/, templates/, backups/) |
 | `--backup-config` | | Create config-only backup (schema, queries, presets, config) |
 | `--restore-full [PATH]` | | Restore from full backup. Shows interactive list if no path given |
