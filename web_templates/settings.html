@@ -168,6 +168,10 @@
       <div id="sync-danger-msg" style="font-size:12px;color:var(--text);margin-bottom:8px;"></div>
       <button onclick="runSyncDanger()" class="btn btn-sm" style="background:var(--error);color:#fff;">Sync Anyway (Risk Overwrite)</button>
     </div>
+    <div id="sync-output" style="margin-top:10px;display:none;padding:8px 10px;background:var(--surface);border:1px solid var(--border);border-radius:8px;">
+      <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:4px;">rclone output:</div>
+      <pre id="sync-output-msg" style="font-size:12px;color:var(--text);margin:0;white-space:pre-wrap;word-break:break-all;"></pre>
+    </div>
     <div id="sync-rclone-hint" style="display:none;margin-top:10px;padding:10px;background:var(--bg2);border-radius:8px;font-size:12px;color:var(--sub);">
       <strong style="color:var(--text);">rclone not configured?</strong><br>
       Run <code>rclone config</code> in your terminal to set up a remote (requires OAuth login in your browser).<br>
@@ -243,6 +247,16 @@
             dangerMsg.textContent = data.output || "Files appear corrupted.";
           } else {
             dangerDiv.style.display = "none";
+          }
+        }
+        var outputDiv = document.getElementById("sync-output");
+        var outputMsg = document.getElementById("sync-output-msg");
+        if (outputDiv) {
+          if ((data.status === "error" || data.status === "danger") && data.output) {
+            outputDiv.style.display = "block";
+            outputMsg.textContent = data.output;
+          } else {
+            outputDiv.style.display = "none";
           }
         }
         var hint = document.getElementById("sync-rclone-hint");
