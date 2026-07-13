@@ -1222,7 +1222,6 @@ def sync_pull():
             errors = []
             for folder in folders:
                 local = os.path.join(base_dir, folder)
-                os.makedirs(local, exist_ok=True)
                 remote = f"{remote_name}:{remote_path}/{folder}"
                 r = subprocess.run(
                     ["rclone", "copy", "--update", remote, local],
