@@ -37,6 +37,9 @@ No database. No cloud. You own the data completely.
 - [Atomic Operations](#atomic-operations)
 - [Doctor Command](#doctor-command)
 - [Sharing and sync](#sharing-and-sync)
+  - [Built-in OneDrive sync (rclone bisync)](#built-in-onedrive-sync-rclone-bisync)
+  - [Git](#git)
+  - [Syncthing / Dropbox / iCloud](#syncthing--dropbox--icloud)
 - [Ignore patterns](#ignore-patterns)
 
 ### Advanced — CLI Reference
@@ -174,38 +177,48 @@ ptos/
 ├── ptos_service.py         # Service layer (shared by web UI and CLI)
 ├── ptos_sync.py            # OneDrive sync (rclone bisync)
 ├── ptos_web.py             # Web UI (Flask)
+├── ptos_todo.py            # Todo module (todo.txt CRUD)
+├── desktop_app.py          # Standalone desktop app runner (PyInstaller)
+├── notify_todo.py          # Standalone todo notification script
 ├── ptos.bat                # Windows wrapper
+├── ptos.spec               # PyInstaller spec for desktop builds
 ├── ptw.bat                 # Windows test wrapper
+├── build.bat               # Windows build script
+├── icon.ico                # Desktop app icon
 ├── .version                # Current version SHA (used by update checks)
+├── .ptos_home              # Points code to data directory (overrides PTOS_HOME env)
+├── .gitignore
+├── AGENTS.md               # Development guide for AI agents
+├── CHANGELOG.md            # Release history
+├── README_START_HERE.md    # Plain-English overview for new users
 ├── setup_ptos_linux.sh     # Linux/macOS setup (single file)
-├── setup_ptos_android.sh   # Android/Termux setup (single file)
-├── setup_ptos_windows.bat  # Windows setup — thin launcher (calls .ps1)
-├── setup_ptos_windows.ps1  # Windows setup — PowerShell script with winget auto-install
-├── start_ptos_linux.sh     # Linux start script (checks for updates, starts server)
+├── setup_ptos_android.sh   # Android/Termux setup (git clone, code/data split)
+├── setup_ptos_windows.bat  # Windows setup — self-fetches .ps1, then runs it
+├── setup_ptos_windows.ps1  # Windows setup — Python/Git auto-install via winget
+├── start_ptos_linux.sh     # Linux start script (git pull, starts server)
 ├── start_ptos_windows.bat  # Windows start script (checks for updates, starts server)
-├── start_ptos_android.sh   # Android/Termux start script (checks for updates, starts server)
+├── start_ptos_android.sh   # Android/Termux start script (git pull, starts server)
 ├── starters/               # Default configs shipped with the project
 │   ├── starter_config.toml # Default settings (used by --init)
 │   ├── starter_schema.toml # Default record types (used by --init)
 │   ├── starter_queries.toml# Example queries (used by --init)
-│   └── starter_presets.toml# Example presets (used by --init)
-├── config/
-│   ├── config.toml      # Editor, currency, cycles, dashboard
+│   ├── starter_presets.toml# Example presets (used by --init)
+│   └── starter_journal.md  # Default journal template
+├── config/                 # User config (created by --init, gitignored)
+│   ├── config.toml      # Editor, currency, cycles, dashboard, auth, sync, backup
 │   ├── schema.toml      # Record types, fields, validation
 │   ├── queries.toml     # Saved queries, metrics, dashboards, due
 │   └── presets.toml     # Quick-add shortcuts
-├── records/
-│   └── 2026.log         # One file per year
-├── exports/             # CSV exports land here (created on demand)
-├── backups/             # ZIP backups land here (created on demand)
-├── web_templates/       # HTML templates for web UI
-├── web_static/          # CSS, JS, icons for web UI
-├── images/              # Screenshots for README
-├── journal/
-│   └── 2026/
-│       └── 2026-03-10.md
-└── templates/
-    └── daily.md         # Journal template (optional override)
+├── records/               # Log files (YYYY.log)
+├── exports/               # CSV exports land here (created on demand)
+├── backups/               # ZIP backups land here (created on demand)
+├── todo/                  # Todo files (todo.txt, done.txt, done.YYYY.txt)
+├── journal/               # Markdown journal entries (YYYY/YYYY-MM-DD.md)
+├── templates/             # Journal template override (daily.md)
+├── tests/                 # pytest test suite (27 test files)
+├── images/                # Screenshots for README
+├── web_templates/         # Jinja2 HTML templates for web UI
+└── web_static/            # CSS, JS, icons, PWA manifest, service worker
 ```
 
 ---
@@ -423,7 +436,7 @@ Configure user profile and app preferences. Sections:
 - **Custom Cycles**: CRUD for billing cycles (day 1-31)
 - **Backup Folders**: core folders locked, custom folders editable
 - **Backup Settings**: auto backup on startup/shutdown triggers
-- **Sync (rclone bisync)**: OneDrive bidirectional sync via rclone (Linux/Termux only — Windows uses native OneDrive app). Enable/disable toggle, remote name/path, folder selection, status indicator, Sync Now and Force Resync buttons
+- **Sync**: OneDrive bidirectional sync via rclone bisync. See [Sync section](#sharing-and-sync) for full details.
 
 Settings are stored in `config.toml` and editable via the UI.
 
@@ -872,14 +885,64 @@ writable.
 
 ## Sharing and sync
 
-Records are plain text — one line per entry, one file per year.
+Records are plain text — one line per entry, one file per year. Multiple
+devices can safely append to the same log file as long as writes don't overlap.
 
-- **Git** — commit `records/` after each session. Full history, diff-friendly.
-- **Syncthing / Dropbox / iCloud** — sync the whole `ptos/` folder.
-- **Termux / Linux** — PTOS has built-in OneDrive sync via [rclone bisync](https://rclone.org/). Enable it in Settings → Sync. Requires rclone to be installed and configured with a remote. Detects platform automatically — no-op on Windows (native OneDrive app).
-- **Termux** — run the same script on Android. Set `PTOS_HOME` to your synced folder (or run `--init` once to persist it via `.ptos_home`).
+### Built-in OneDrive sync (rclone bisync)
 
-Multiple devices can safely append to the same log file as long as writes don't overlap.
+PTOS has built-in bidirectional sync with OneDrive using
+[rclone bisync](https://rclone.org/). Enable it in **Settings → Sync**.
+
+**Platform support:**
+- **Linux / Termux**: Full support. Requires rclone installed and configured
+  with a OneDrive remote.
+- **Windows**: Automatically disabled — native OneDrive app handles sync.
+
+**Web UI controls:**
+- **Enable/disable toggle** — turns periodic sync on and off
+- **Remote name and path** — rclone remote name (e.g. `onedrive`) and remote
+  folder path
+- **Folder checkboxes** — select which data folders to sync (e.g. `records/`,
+  `config/`, `journal/`, `todo/`)
+- **Sync Now** — trigger an immediate sync
+- **Force Resync** — discard rclone's sync history and start fresh (for
+  fixing sync conflicts or state corruption)
+
+**Status indicator:** The sidebar shows a colored dot reflecting sync state:
+- Gray: idle
+- Blue with pulse animation: running
+- Green: OK (last sync succeeded)
+- Orange: conflict detected
+- Red: error
+
+**SSE events:** The web UI receives `sync-status` events in real time,
+broadcasting the latest sync result (ok, conflict, or error).
+
+**Change detection (mtime-gate):** Periodic sync (every ~30 minutes) only
+runs when files have actually changed since the last successful sync. File
+modification times are tracked in a `.sync_state` file. If nothing changed,
+rclone is not called — saving network and battery.
+
+**Concurrency:** A `threading.Lock` prevents overlapping sync runs. If a
+sync is already in progress, a new request is silently skipped.
+
+**Configuration in `config.toml`:**
+```toml
+[sync]
+enabled = false          # enable/disable sync
+remote = "onedrive"      # rclone remote name
+remote_path = "ptos"     # remote folder path
+folders = ["records", "config", "journal", "todo"]
+```
+
+### Git
+
+Commit `records/` after each session. Full history, diff-friendly.
+
+### Syncthing / Dropbox / iCloud
+
+Sync the whole `ptos-data/` folder. On Android, data lives in
+`$HOME/storage/shared/ptos-data` — visible to Syncthing and file managers.
 
 ---
 
