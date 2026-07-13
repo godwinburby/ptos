@@ -179,6 +179,7 @@ def save_config(config_dict):
     """
     try:
         import tomli_w
+        os.makedirs(os.path.dirname(ptos.CONFIG_PATH), exist_ok=True)
         with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
             tomli_w.dump(config_dict, w.stream)
         return {"ok": True, "message": "Settings saved"}

@@ -141,7 +141,7 @@
     </div>
     <div class="field-group" style="flex:1;min-width:140px;">
       <label>Remote Path</label>
-      <input type="text" id="sync-remote-path" value="{{ sync_cfg.get('remote_path', 'PTOS') }}" placeholder="PTOS" style="width:100%;">
+      <input type="text" id="sync-remote-path" value="{{ sync_cfg.get('remote_path', 'personal/ptos-data') }}" placeholder="personal/ptos-data" style="width:100%;">
     </div>
   </div>
   <div style="margin-top:12px;">
@@ -155,6 +155,7 @@
     </div>
     <div id="sync-last-run" style="font-size:12px;color:var(--sub);margin-bottom:10px;"></div>
     <div style="display:flex;gap:10px;flex-wrap:wrap;">
+      <button onclick="runSyncPull()" class="btn btn-sm btn-ghost" style="color:var(--accent);">Pull from Cloud</button>
       <button onclick="runSyncNow()" class="btn btn-sm btn-ghost">Sync Now</button>
       <button onclick="runSyncResync()" class="btn btn-sm btn-ghost" style="color:var(--error);">Force Resync (--resync)</button>
     </div>
@@ -274,6 +275,29 @@
     fetch("/sync/run", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({force_resync: true, force_danger: true})})
       .then(function() { refreshSyncStatus(); });
   };
+
+  window.runSyncPull = function() {
+    if (!confirm("Pull data from cloud to this device? Existing local files won't be overwritten.")) return;
+    var dot = document.getElementById("sync-status-dot");
+    var txt = document.getElementById("sync-status-text");
+    if (dot) dot.style.background = "var(--accent)";
+    if (txt) txt.textContent = "Pulling...";
+    fetch("/sync/pull", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({})})
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        if (data.ok) {
+          if (txt) txt.textContent = "Pull started — check server console for progress";
+          setTimeout(function() { location.reload(); }, 3000);
+        } else {
+          if (dot) dot.style.background = "var(--error)";
+          if (txt) txt.textContent = "Pull failed: " + (data.error || "unknown error");
+        }
+      })
+      .catch(function() {
+        if (dot) dot.style.background = "var(--error)";
+        if (txt) txt.textContent = "Pull request failed";
+      });
+  };
   
   function renderBackupFolders() {
     var list = document.getElementById("backup-folders-list");
@@ -374,7 +398,7 @@
         auth_password: document.getElementById("auth-password").value,
         sync_enabled: document.getElementById("sync-enabled") ? document.getElementById("sync-enabled").checked : false,
         sync_remote_name: document.getElementById("sync-remote-name") ? document.getElementById("sync-remote-name").value.trim() : "onedrive",
-        sync_remote_path: document.getElementById("sync-remote-path") ? document.getElementById("sync-remote-path").value.trim() : "PTOS",
+        sync_remote_path: document.getElementById("sync-remote-path") ? document.getElementById("sync-remote-path").value.trim() : "personal/ptos-data",
         sync_folders: syncFolderList
       })
     })
