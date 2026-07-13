@@ -2562,9 +2562,12 @@ def _housekeeping_loop(interval_minutes=5):
                 sync_cfg = svc.get_sync_config()
                 if sync_cfg.get("enabled"):
                     import ptos_sync
-                    result = ptos_sync.run_sync()
-                    import dataclasses
-                    _sse_broadcast("sync-status", dataclasses.asdict(result))
+                    if ptos_sync.folders_changed_since_last_sync(
+                        sync_cfg.get("folders", []), ptos.BASE_DIR
+                    ):
+                        result = ptos_sync.run_sync()
+                        import dataclasses
+                        _sse_broadcast("sync-status", dataclasses.asdict(result))
             except Exception:
                 pass
 
