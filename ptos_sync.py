@@ -9,14 +9,14 @@ Three triggers: startup, periodic (piggybacks on todo-notify loop),
 and manual (POST /sync/run).
 """
 
-import os, time, threading, subprocess, dataclasses
+import os, time, threading, subprocess, dataclasses, json
 from dataclasses import dataclass, field
 from typing import Optional, Literal
 
 
 @dataclass
 class SyncResult:
-    status: Literal["idle", "running", "ok", "conflict", "error", "skipped"] = "idle"
+    status: Literal["idle", "running", "ok", "conflict", "error", "skipped", "danger"] = "idle"
     output: str = ""
     conflicts: list = field(default_factory=list)
     timestamp: str = ""
@@ -55,12 +55,9 @@ def get_sync_config():
 
 
 def folders_changed_since_last_sync(folders, base_dir):
-    if not _state_file or not os.path.isfile(_state_file):
-        return True
-    try:
-        with open(_state_file, encoding="utf-8") as f:
-            last_mtime = float(f.read().strip() or "0")
-    except Exception:
+    state = _load_state()
+    last_mtime = state.get("timestamp", 0)
+    if not last_mtime:
         return True
     for folder in folders:
         folder_path = os.path.join(base_dir, folder)
@@ -80,17 +77,75 @@ def folders_changed_since_last_sync(folders, base_dir):
     return False
 
 
-def _save_state():
+def _load_state():
+    if not _state_file or not os.path.isfile(_state_file):
+        return {"timestamp": 0, "file_sizes": {}}
+    try:
+        with open(_state_file, encoding="utf-8") as f:
+            data = json.load(f)
+        if "timestamp" not in data:
+            data = {"timestamp": float(data.get("timestamp", 0)), "file_sizes": data.get("file_sizes", {})}
+        return data
+    except Exception:
+        return {"timestamp": 0, "file_sizes": {}}
+
+
+def _save_state(state):
     if _state_file:
         try:
             os.makedirs(os.path.dirname(_state_file), exist_ok=True)
             with open(_state_file, "w", encoding="utf-8") as f:
-                f.write(str(time.time()))
+                json.dump(state, f)
         except Exception:
             pass
 
 
-def run_sync(force_resync=False):
+def _detect_corruption(folders, base_dir, state):
+    """Compare current file sizes against last known-good sizes.
+    Returns a list of files that went from non-zero to zero bytes."""
+    last_sizes = state.get("file_sizes", {})
+    concerning = []
+    for folder in folders:
+        folder_path = os.path.join(base_dir, folder)
+        if not os.path.isdir(folder_path):
+            continue
+        for root, _, files in os.walk(folder_path):
+            for fname in files:
+                if fname.endswith(".bak") or fname.endswith(".tmp") or fname.startswith("."):
+                    continue
+                fpath = os.path.join(root, fname)
+                rel = os.path.relpath(fpath, base_dir)
+                try:
+                    current_size = os.path.getsize(fpath)
+                except OSError:
+                    continue
+                previous_size = last_sizes.get(rel)
+                if previous_size and previous_size > 0 and current_size == 0:
+                    concerning.append(rel)
+    return concerning
+
+
+def _update_size_tracking(state, folders, base_dir):
+    """Record current file sizes for next sync's corruption check."""
+    sizes = {}
+    for folder in folders:
+        folder_path = os.path.join(base_dir, folder)
+        if not os.path.isdir(folder_path):
+            continue
+        for root, _, files in os.walk(folder_path):
+            for fname in files:
+                if fname.endswith(".bak") or fname.endswith(".tmp") or fname.startswith("."):
+                    continue
+                fpath = os.path.join(root, fname)
+                rel = os.path.relpath(fpath, base_dir)
+                try:
+                    sizes[rel] = os.path.getsize(fpath)
+                except OSError:
+                    continue
+    state["file_sizes"] = sizes
+
+
+def run_sync(force_resync=False, force_danger=False):
     global _last_result
     if not _sync_lock.acquire(blocking=False):
         return SyncResult(status="running", output="Sync already in progress")
@@ -111,6 +166,19 @@ def run_sync(force_resync=False):
         remote_name = cfg.get("remote_name", "onedrive")
         remote_path = cfg.get("remote_path", "PTOS")
         base_dir = ptos.BASE_DIR
+        folders = cfg.get("folders", ["records", "config", "templates", "journal", "todo"])
+
+        state = _load_state()
+        concerning = _detect_corruption(folders, base_dir, state)
+        if concerning and not force_danger:
+            msg = (f"Refusing to sync: {len(concerning)} file(s) appear "
+                   f"corrupted (previously had content, now 0 bytes): "
+                   f"{', '.join(concerning[:5])}"
+                   + (f" and {len(concerning)-5} more" if len(concerning) > 5 else ""))
+            _last_result = SyncResult(
+                status="danger", output=msg,
+                timestamp=str(time.time()))
+            return _last_result
 
         cmd = [
             "rclone", "bisync",
@@ -146,7 +214,9 @@ def run_sync(force_resync=False):
         _last_result = SyncResult(
             status=status, output=output, conflicts=conflicts,
             timestamp=str(time.time()), duration_seconds=elapsed)
-        _save_state()
+        state["timestamp"] = time.time()
+        _update_size_tracking(state, folders, base_dir)
+        _save_state(state)
         return _last_result
 
     except subprocess.TimeoutExpired:

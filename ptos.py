@@ -3745,10 +3745,21 @@ def init_ptos():
 
     # Write .ptos_home bootstrap file so PTOS_HOME env var is no longer needed
     if not DESKTOP_MODE:
+        import tempfile
+        tmp_root = os.path.realpath(tempfile.gettempdir())
+        real_base = os.path.realpath(BASE_DIR)
+        real_script = os.path.realpath(SCRIPT_DIR)
+        in_temp_base = real_base.startswith(tmp_root) or "pytest-of-" in real_base
+        in_temp_script = real_script.startswith(tmp_root) or "pytest-of-" in real_script
+        if in_temp_base and not in_temp_script:
+            print(f"REFUSING to set .ptos_home to a temp directory: {BASE_DIR}")
+            print("This looks like a test or debug session, not a real install.")
+            print("If this is intentional, set PTOS_HOME manually instead of --init.")
+            sys.exit(1)
         bootstrap = os.path.join(SCRIPT_DIR, ".ptos_home")
         with open(bootstrap, "w", encoding="utf-8") as f:
             f.write(BASE_DIR + "\n")
-        print(f"  created  {bootstrap}")
+        print(f"  created  {bootstrap}  ->  {BASE_DIR}")
 
     print("\nDone. Edit config/schema.toml to define your record types.\n")
     
