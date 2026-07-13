@@ -59,6 +59,12 @@ elif command -v zypper &>/dev/null; then
     sudo zypper install -y python3-pip 2>/dev/null || true
 fi
 
+# ── Install rclone if missing ───────────────────────────────────────────────
+if ! command -v rclone &>/dev/null; then
+    echo "Installing rclone..."
+    curl -fsSL https://rclone.org/install.sh | sudo bash
+fi
+
 # ── Install/verify Flask and tomli-w ────────────────────────────────────────────────
 echo ""
 echo "--- Checking Flask and tomli-w ---"

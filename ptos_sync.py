@@ -46,8 +46,7 @@ def get_sync_config():
         import ptos
         cfg = ptos.get_config()
         sync_cfg = dict(cfg.get("sync", {}))
-        platform = get_sync_platform()
-        if platform != "windows" and sync_cfg.get("enabled"):
+        if sync_cfg.get("enabled"):
             if not _which("rclone"):
                 sync_cfg["enabled"] = False
         return sync_cfg
@@ -100,11 +99,6 @@ def run_sync(force_resync=False):
         if _state_file is None:
             import ptos as _ptos
             init(_ptos.BASE_DIR)
-
-        platform = get_sync_platform()
-        if platform == "windows":
-            _last_result = SyncResult(status="ok", timestamp=str(time.time()))
-            return _last_result
 
         if not _which("rclone"):
             _last_result = SyncResult(
