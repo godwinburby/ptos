@@ -2645,7 +2645,7 @@ def _exit_backup():
     """Run backup on exit if configured."""
     try:
         backup_config = svc.get_backup_config()
-        if backup_config.get("backup_on_exit", True):
+        if backup_config.get("auto_backup_on_shutdown", True):
             created, backup_path = svc.backup_if_needed()
             if created:
                 print(f"Exit backup created: {os.path.basename(backup_path)}")
@@ -2660,7 +2660,7 @@ if __name__ == "__main__":
     # Smart backup on startup if configured
     try:
         backup_config = svc.get_backup_config()
-        if backup_config.get("backup_on_startup", True):
+        if backup_config.get("auto_backup_on_startup", True):
             created, backup_path = svc.backup_if_needed()
             if created:
                 print(f"Startup backup created: {os.path.basename(backup_path)}")

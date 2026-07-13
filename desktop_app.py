@@ -82,7 +82,7 @@ class _Api:
         _stopping = True
         try:
             import ptos_service as svc
-            if svc.get_backup_config().get("backup_on_startup", True):
+            if svc.get_backup_config().get("auto_backup_on_startup", True):
                 svc.backup_if_needed()
         except Exception:
             pass
@@ -249,7 +249,7 @@ if __name__ == "__main__":
 
     import ptos_service as svc
     try:
-        if svc.get_backup_config().get("backup_on_startup", True):
+        if svc.get_backup_config().get("auto_backup_on_startup", True):
             created, _ = svc.backup_if_needed()
             if created:
                 print("Startup backup created")

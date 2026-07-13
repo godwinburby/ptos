@@ -1059,7 +1059,7 @@ ptos -y test -t td --delete --all
 | `--delete-preset NAME` | | Delete a preset by name from `presets.toml` |
 | `--set-name NAME` | | Set user name in `config.toml` |
 | `--set-date-format FORMAT` | | Set date display format: `indian` `us` `eu` `readable` `iso` or custom strftime |
-| `--todo [text]` | | Add a todo. Preprocesses pri:/due:/sched: shortcuts |
+| `--todo-add [text]` | | Add a todo. Preprocesses pri:/due:/sched: shortcuts |
 | `--todo-list` | | List open todos with bucket grouping |
 | `--todo-done N` | | Mark todo at line N complete |
 | `--todo-edit N key=value` | | Edit a field on a todo |
