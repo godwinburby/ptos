@@ -188,11 +188,11 @@ def run_sync(force_resync=False, force_danger=False):
         for folder in folders:
             cmd.extend(["--filter", f"+ /{folder}/**"])
         cmd.extend([
-            "--filter", "+ /.sync*",
             "--filter", "- backups/**",
             "--filter", "- exports/**",
             "--filter", "- *.bak",
             "--filter", "- *.tmp",
+            "--filter", "- .sync*",
             "--filter", "- **",
             "--conflict-resolve", "none",
             "--log-file", os.path.join(base_dir, ".sync.log"),
