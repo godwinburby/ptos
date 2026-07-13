@@ -1115,6 +1115,9 @@ ptos -y test -t td --delete --all
 | `--edit [TARGET]` | `-e` | Edit a workspace file (see targets below) |
 | `--init` | | Initialise workspace (safe to re-run — will not overwrite existing files) |
 | `--set-home PATH` | | Point PTOS at a data folder (writes `.ptos_home`, migrates existing data) |
+| `--bisync` | | Bidirectional sync with remote (reads `[sync]` from config.toml) |
+| `--sync` | | One-way push to remote (reads `[sync]` from config.toml) |
+| `--resync` | | With `--bisync`: initialize bisync relationship (first-time setup) |
 | `--backup-full` | | Create full backup (records/, config/, templates/, backups/) |
 | `--backup-config` | | Create config-only backup (schema, queries, presets, config) |
 | `--restore-full [PATH]` | | Restore from full backup. Shows interactive list if no path given |

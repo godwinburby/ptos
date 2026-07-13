@@ -49,7 +49,7 @@ from ptos import (
     restore_data, restore_config,
     backup_data, backup_config, list_backups,
     doctor_check, print_doctor_results,
-    get_log_files, atomic_write,
+    get_log_files, atomic_write, run_sync,
     # Output / rendering helpers
     group_results, pivot_results, detect_value_field,
     fmt_avg, render_group, render_pivot,
@@ -205,6 +205,15 @@ def build_parser(cycles):
     utl.add_argument("--set-home", dest="set_home", metavar="PATH",
                      help="Point PTOS at a data folder  (writes .ptos_home)\n"
                           "  Migrates existing data to the new location")
+    utl.add_argument("--bisync", action="store_true",
+                     help="Bidirectional sync with remote (rclone bisync)\n"
+                          "  Reads [sync] config from config.toml")
+    utl.add_argument("--sync", action="store_true",
+                     help="One-way push to remote (rclone sync)\n"
+                          "  Reads [sync] config from config.toml")
+    utl.add_argument("--resync", action="store_true",
+                     help="With --bisync: initialize bisync relationship\n"
+                          "  (first-time setup or reset)")
 
     return p
 
@@ -846,6 +855,11 @@ def main():
 
     if args.set_home:
         set_home(args.set_home)
+        return
+
+    if args.bisync or args.sync:
+        cmd = "bisync" if args.bisync else "sync"
+        run_sync(cmd, resync=args.resync)
         return
 
     if args.set_name:
