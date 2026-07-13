@@ -1016,7 +1016,7 @@ def _load(key, path):
 def get_config():  return _load("config",  CONFIG_PATH)  if os.path.exists(CONFIG_PATH)  else {}
 def get_schema():
     if not os.path.exists(SCHEMA_PATH):
-        sys.exit("schema.toml not found. Run: ptos --init")
+        return {}
     return _load("schema", SCHEMA_PATH)
 
 def get_global_fields(schema=None):
@@ -1028,7 +1028,7 @@ def get_global_fields(schema=None):
 
 def get_queries():
     if not os.path.exists(QUERIES_PATH):
-        sys.exit("queries.toml not found. Run: ptos --init")
+        return {}
     return _load("queries", QUERIES_PATH)
 def get_presets(): return _load("presets", PRESETS_PATH).get("presets", {}) if os.path.exists(PRESETS_PATH) else {}
 
