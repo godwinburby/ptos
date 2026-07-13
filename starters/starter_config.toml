@@ -23,6 +23,17 @@ enabled = false
 username = ""
 password = ""
 
+[sync]
+# OneDrive sync via rclone bisync (Linux only — Windows uses native OneDrive app)
+enabled = false
+remote_name = "onedrive"
+remote_path = "PTOS"
+# Folders under PTOS_HOME to sync
+folders = ["records", "config", "templates", "journal", "todo", "exports", "notes"]
+# --- Do not edit below this line ---
+# resynced is set to true after first successful --resync run
+resynced = false
+
 [backup]
 # Folders to include in full backup
 folders = ["records", "config", "templates", "journal", "todo", "exports", "notes", "scripts"]

@@ -172,6 +172,7 @@ ptos/
 ├── ptos.py                 # Core engine
 ├── ptos_cli.py             # CLI argument parser and entry point
 ├── ptos_service.py         # Service layer (shared by web UI and CLI)
+├── ptos_sync.py            # OneDrive sync (rclone bisync)
 ├── ptos_web.py             # Web UI (Flask)
 ├── ptos.bat                # Windows wrapper
 ├── ptw.bat                 # Windows test wrapper
@@ -422,6 +423,7 @@ Configure user profile and app preferences. Sections:
 - **Custom Cycles**: CRUD for billing cycles (day 1-31)
 - **Backup Folders**: core folders locked, custom folders editable
 - **Backup Settings**: auto backup on startup/shutdown triggers
+- **Sync (rclone bisync)**: OneDrive bidirectional sync via rclone (Linux/Termux only — Windows uses native OneDrive app). Enable/disable toggle, remote name/path, folder selection, status indicator, Sync Now and Force Resync buttons
 
 Settings are stored in `config.toml` and editable via the UI.
 
@@ -874,6 +876,7 @@ Records are plain text — one line per entry, one file per year.
 
 - **Git** — commit `records/` after each session. Full history, diff-friendly.
 - **Syncthing / Dropbox / iCloud** — sync the whole `ptos/` folder.
+- **Termux / Linux** — PTOS has built-in OneDrive sync via [rclone bisync](https://rclone.org/). Enable it in Settings → Sync. Requires rclone to be installed and configured with a remote. Detects platform automatically — no-op on Windows (native OneDrive app).
 - **Termux** — run the same script on Android. Set `PTOS_HOME` to your synced folder (or run `--init` once to persist it via `.ptos_home`).
 
 Multiple devices can safely append to the same log file as long as writes don't overlap.
