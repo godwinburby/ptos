@@ -18,6 +18,8 @@ if sys.stdout:
 # --------------------------------------------------
 
 _home = os.environ.get("PTOS_HOME")
+if _home:
+    _home = os.path.expanduser(_home)
 DESKTOP_MODE = os.environ.get("DESKTOP_MODE") == "1"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -26,8 +28,10 @@ if not _home and not DESKTOP_MODE:
     if os.path.isfile(bootstrap):
         with open(bootstrap, encoding="utf-8") as f:
             path = f.readline().strip()
-        if path and os.path.isdir(path):
-            _home = path
+        if path:
+            path = os.path.expanduser(path)
+            if os.path.isdir(path):
+                _home = path
 
 if DESKTOP_MODE:
     BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'ptos')
