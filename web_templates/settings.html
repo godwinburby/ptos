@@ -296,21 +296,53 @@
     var txt = document.getElementById("sync-status-text");
     if (dot) dot.style.background = "var(--accent)";
     if (txt) txt.textContent = "Pulling...";
-    fetch("/sync/pull", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({})})
+    var syncFolders = [];
+    document.querySelectorAll(".sync-folder-cb:checked").forEach(function(cb) { syncFolders.push(cb.value); });
+    var body = {
+      remote_name: document.getElementById("sync-remote-name") ? document.getElementById("sync-remote-name").value.trim() : "onedrive",
+      remote_path: document.getElementById("sync-remote-path") ? document.getElementById("sync-remote-path").value.trim() : "personal/ptos-data",
+      folders: syncFolders
+    };
+    var outputDiv = document.getElementById("sync-output");
+    var outputMsg = document.getElementById("sync-output-msg");
+    if (outputDiv) { outputDiv.style.display = "block"; outputMsg.textContent = ""; }
+    fetch("/sync/pull", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)})
       .then(function(r) { return r.json(); })
       .then(function(data) {
-        if (data.ok) {
-          if (txt) txt.textContent = "Pull started — check server console for progress";
-          setTimeout(function() { location.reload(); }, 3000);
-        } else {
+        if (!data.ok) {
           if (dot) dot.style.background = "var(--error)";
           if (txt) txt.textContent = "Pull failed: " + (data.error || "unknown error");
+          if (outputMsg) outputMsg.textContent = data.error || "Pull request failed";
         }
       })
       .catch(function() {
         if (dot) dot.style.background = "var(--error)";
         if (txt) txt.textContent = "Pull request failed";
       });
+  };
+
+  window._pullSseHandler = function(msg) {
+    var dot = document.getElementById("sync-status-dot");
+    var txt = document.getElementById("sync-status-text");
+    var outputMsg = document.getElementById("sync-output-msg");
+    var d = msg.data;
+    if (d.status === "pulling") {
+      if (txt) txt.textContent = "Pulling " + d.folder + "...";
+      if (outputMsg) outputMsg.textContent += "Pulling " + d.folder + "/ ...\n";
+      if (outputMsg) outputMsg.scrollTop = outputMsg.scrollHeight;
+    } else if (d.status === "ok") {
+      if (outputMsg) outputMsg.textContent += d.folder + "/ done\n";
+      if (outputMsg) outputMsg.scrollTop = outputMsg.scrollHeight;
+    } else if (d.status === "error") {
+      if (outputMsg) outputMsg.textContent += d.folder + "/ error: " + (d.error || "failed") + "\n";
+      if (outputMsg) outputMsg.scrollTop = outputMsg.scrollHeight;
+    } else if (d.status === "done") {
+      if (dot) dot.style.background = d.errors && d.errors.length ? "var(--error)" : "var(--success)";
+      if (txt) txt.textContent = d.errors && d.errors.length ? "Pull completed with errors" : "Pull complete";
+      if (outputMsg) outputMsg.textContent += "\nDone. Pulled: " + (d.pulled || []).join(", ");
+      if (d.errors && d.errors.length) outputMsg.textContent += "\nErrors: " + d.errors.join(", ");
+      if (outputMsg) outputMsg.scrollTop = outputMsg.scrollHeight;
+    }
   };
   
   function renderBackupFolders() {
