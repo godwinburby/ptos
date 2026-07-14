@@ -702,6 +702,19 @@ def todo_complete():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/todo/undo", methods=["POST"])
+def todo_undo():
+    data = request.get_json(silent=True) or {}
+    line_no = data.get("line_no")
+    if not line_no:
+        return jsonify(ok=False, error="No line_no provided")
+    try:
+        svc.undo_todo_by_line(int(line_no))
+        return jsonify(ok=True)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
 @app.route("/todo/delete", methods=["POST"])
 def todo_delete():
     data = request.get_json(silent=True) or {}
