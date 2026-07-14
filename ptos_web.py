@@ -1251,6 +1251,8 @@ def settings_save():
             cfg.setdefault("backup", {})["max_config_backups"] = max(1, min(100, int(data["max_config_backups"])))
         if "notify_interval" in data:
             cfg.setdefault("todo", {})["notify_interval"] = max(1, min(120, int(data["notify_interval"])))
+        if "archive_months" in data:
+            cfg.setdefault("todo", {})["archive_months"] = max(1, min(24, int(data["archive_months"])))
         
         if "default_dashboard" in data:
             db_val = data["default_dashboard"]
