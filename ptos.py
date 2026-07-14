@@ -3899,12 +3899,15 @@ def _detect_corruption(base_dir, state_file):
     """Compare current file sizes against sizes recorded after last sync.
     Returns list of files that went from non-zero to zero bytes."""
     import json
+    _EXCLUDE = {"todo/done.txt"}
     if not os.path.isfile(state_file):
         return []
     with open(state_file, encoding="utf-8") as f:
         last_sizes = json.load(f)
     concerning = []
     for rel_path, prev_size in last_sizes.items():
+        if rel_path in _EXCLUDE:
+            continue
         full_path = os.path.join(base_dir, rel_path)
         if prev_size > 0 and os.path.isfile(full_path) and os.path.getsize(full_path) == 0:
             concerning.append(rel_path)
