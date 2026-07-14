@@ -62,7 +62,7 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 - Schema: `schema.toml` defines record types, fields, validation
 - Queries: `queries.toml` defines saved queries, metrics, dashboards
 - Data folder: resolved by `PTOS_HOME` env var > `.ptos_home` file > SCRIPT_DIR; `--set-home PATH` writes `.ptos_home` and migrates existing data to the target
-- Multi-device sync: `--bisync` runs `rclone bisync`, `--sync --confirm-delete` runs `rclone sync`; reads `[sync]` section from config.toml for remote_name, remote_path, folders; corruption pre-flight check detects zero-byte files before sync (excludes `todo/done.txt` since empty is expected after archiving or undoing); web UI: Settings → Sync card with bisync/sync/resync buttons; `_invalidate_all()` called after sync to refresh cached TOML config; `run_sync()` returns `{"ok", "output", "error", "returncode"}` dict (no `sys.exit()`); PID-based file lock (`.sync.lock`) prevents concurrent syncs across processes (web + CLI/cron)
+- Multi-device sync: `--bisync` runs `rclone bisync`, `--sync --confirm-delete` runs `rclone sync`; reads `[sync]` section from config.toml for remote_name, remote_path, folders; corruption pre-flight check detects zero-byte files before sync (excludes `todo/done.txt` since empty is expected after archiving or undoing); web UI: Settings → Sync card with bisync/sync/resync buttons; `_invalidate_all()` called after sync to refresh cached TOML config; `run_sync()` returns `{"ok", "output", "error", "returncode"}` dict (no `sys.exit()`); PID-based file lock (`.sync.lock`) prevents concurrent syncs across processes (web + CLI/cron); rclone flags: `--stats-one-line --log-level INFO` for clean captured output
 - **Glob wildcard search**: `_glob_match(pattern, text)` in `ptos.py` — plain text uses `in` for substring match; patterns with `*` or `?` use `fnmatch.translate()` for glob matching. Used by all search paths: universal search, browse, todo page, query builder
 
 ### Error handling
@@ -110,8 +110,8 @@ x 2026-07-12 2026-07-10 Completed task
 - `archive_done_todos(path, months)` — moves old done items to `done.YYYY.txt`
 
 ### Web UI features
-- **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `sched:`, `(`)
-- **Quick pick chips** (collapsible) — Due shortcuts, Priority (A-D), Projects, Contexts, Scheduled (last) as toggle chips; on mobile, groups stack vertically instead of scrolling horizontally
+- **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `sched:`, `(`); always visible at top of todo page (no collapsible)
+- **Quick pick chips** (collapsible) — Due shortcuts, Priority (A-D), Projects, Contexts, Scheduled (last) as toggle chips; open on input focus, close on blur (with 200ms delay to allow chip clicks); on mobile, groups stack vertically instead of scrolling horizontally
 - **Filter chips** (collapsible) — Priority (A-D), Due Range (overdue/today/upcoming/someday/none), Context — all toggle on click; on mobile, groups stack vertically
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; filters todos by description; preserves other active filters
 - **Form modal** (shared add+edit) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
@@ -120,6 +120,8 @@ x 2026-07-12 2026-07-10 Completed task
 - **Overdue/Today/Upcoming/Someday** bucket view with collapsible Done section
 - **Today progress** counter (done/total)
 - **Help card** — todo.txt format reference
+- **Inline field popups** — click due/sched badges for date picker, priority badge for priority picker; popups use `position:fixed` and live in `base.html` (outside `<main>` to avoid overflow clipping)
+- **Floating add button** (`.floating-add`) — `floatingAddAction()` defined in `base.html` before `{% block scripts %}` so child templates can override; defaults to `/add` page; todo page does NOT override (add area is always visible)
 - **System notifications** — native OS notifications via `_system_notify()` in background thread; detects platform (Linux: `notify-send`, macOS: `osascript`, Windows: PowerShell toast, Android: `termux-notification`); runs alongside browser SSE notifications
 
 ### Autocomplete system

@@ -4011,7 +4011,9 @@ def run_sync(command, resync=False):
                "--exclude", ".ptos_sync_state",
                "--exclude", ".bisync.*",
                "--exclude", ".sync.lock",
-               "--exclude", ".sync_scheduled.log"]
+               "--exclude", ".sync_scheduled.log",
+               "--stats-one-line",
+               "--log-level", "INFO"]
         if command == "bisync":
             cmd.append("--conflict-resolve")
             cmd.append("none")
