@@ -669,11 +669,16 @@ def todo_page():
         total_today = 0
         done_recent = []
 
+    # collect all unique priorities across all todos
+    all_todos_flat = buckets["overdue"] + buckets["today"] + buckets["upcoming"] + buckets["someday"]
+    all_priorities = sorted(set(t.priority for t in all_todos_flat if t.priority))
+
     return render_template("todo.html", tab="todo", title="Todo",
         now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
         error=error, selected_project=project, selected_context=context,
         selected_priority=pri, selected_due=due_filter, selected_search=search,
-        done_today=done_today, total_today=total_today, done_recent=done_recent)
+        done_today=done_today, total_today=total_today, done_recent=done_recent,
+        all_priorities=all_priorities)
 
 
 @app.route("/todo/add", methods=["POST"])

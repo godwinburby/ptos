@@ -10,12 +10,13 @@
         <div class="todo-meta">
           {% if t.due %}<span class="todo-due-badge {{ badge_class }}" onclick="popupEditDate({{ t.line_no }}, 'due', '{{ t.due.isoformat() }}', this)" title="Change due date">{{ t.due.strftime('%d %b') }}{% if t.due_time %} {{ t.due_time }}{% endif %}</span>{% endif %}
           {% if t.sched %}<span class="todo-context" onclick="popupEditDate({{ t.line_no }}, 'sched', '{{ t.sched.isoformat() }}', this)" title="Change scheduled date">sched {{ t.sched.strftime('%d %b') }}{% if t.sched_time %} {{ t.sched_time }}{% endif %}</span>{% endif %}
+          {% if t.rec %}<span class="todo-context" onclick="popupEditRec({{ t.line_no }}, '{{ t.rec }}', this)" title="Change recurrence">rec:{{ t.rec }}</span>{% endif %}
           {% for p in t.projects %}<a class="todo-project{% if selected_project==p %} active{% endif %}" href="/todo?{% if selected_project != p %}project={{ p|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}">{{ p }}</a>{% endfor %}
           {% for c in t.contexts %}<a class="todo-context{% if selected_context==c %} active{% endif %}" href="/todo?{% if selected_context != c %}context={{ c|urlencode }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}">{{ c }}</a>{% endfor %}
         </div>
       </div>
       <div class="todo-actions">
-        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.sched.isoformat() if t.sched else '' }}', '{{ t.sched_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}')" title="Edit">✎</button>
+        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.sched.isoformat() if t.sched else '' }}', '{{ t.sched_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}')" title="Edit">✎</button>
         <button onclick="deleteTodo({{ t.line_no }})" title="Delete">✕</button>
       </div>
     </div>
@@ -470,6 +471,15 @@
       <button class="add-chip" data-token="sched:next_month " onclick="toggleAddChip(this,'sched')">next month</button>
     </div>
   </div>
+  <div class="chip-group-card">
+    <div class="chip-group-label">Repeat</div>
+    <div class="chip-row" id="add-chips-rec">
+      <button class="add-chip" data-token="rec:1d " onclick="toggleAddChip(this,'rec')">daily</button>
+      <button class="add-chip" data-token="rec:1w " onclick="toggleAddChip(this,'rec')">weekly</button>
+      <button class="add-chip" data-token="rec:1m " onclick="toggleAddChip(this,'rec')">monthly</button>
+      <button class="add-chip" data-token="rec:1y " onclick="toggleAddChip(this,'rec')">yearly</button>
+    </div>
+  </div>
 </div>
 </div><!-- /todo-add-area -->
 
@@ -560,7 +570,7 @@
   <div class="chip-group-card">
     <div class="chip-group-label">Priority</div>
     <div class="chip-row">
-      {% for p in ["A","B","C","D"] %}
+      {% for p in all_priorities %}
       <a href="/todo?{% if selected_priority != p %}priority={{ p }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}"
          class="todo-chip {% if selected_priority==p %}active{% endif %}">({{ p }})</a>
       {% endfor %}
@@ -691,10 +701,9 @@
         <label>Priority</label>
         <select id="modal-pri">
           <option value="">None</option>
-          <option value="A">A</option>
-          <option value="B">B</option>
-          <option value="C">C</option>
-          <option value="D">D</option>
+          {% for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" %}
+          <option value="{{ letter }}">{{ letter }}</option>
+          {% endfor %}
         </select>
       </div>
       <div class="modal-field">
@@ -715,6 +724,23 @@
         <label>Sched Time</label>
         <input type="time" id="modal-sched-time">
       </div>
+    </div>
+    <div class="modal-row">
+      <div class="modal-field">
+        <label>Recurrence</label>
+        <select id="modal-rec">
+          <option value="">None</option>
+          <option value="1d">Daily</option>
+          <option value="1w">Weekly</option>
+          <option value="2w">Biweekly</option>
+          <option value="1m">Monthly</option>
+          <option value="2m">Bimonthly</option>
+          <option value="3m">Quarterly</option>
+          <option value="1y">Yearly</option>
+          <option value="+1m">Strict Monthly</option>
+          <option value="+1w">Strict Weekly</option>
+          <option value="+1y">Strict Yearly</option>
+        </select>
     </div>
     <div class="modal-field">
       <label>Projects</label>
@@ -843,7 +869,7 @@ function deleteTodo(lineNo) {
   });
 }
 
-function openTodoModal(mode, lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts) {
+function openTodoModal(mode, lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts, rec) {
   const el = document.getElementById('todo-modal');
   document.getElementById('todo-modal-title').textContent = mode === 'edit' ? 'Edit Task' : 'New Task';
   document.getElementById('todo-modal-save').textContent = mode === 'edit' ? 'Save' : 'Add';
@@ -854,6 +880,7 @@ function openTodoModal(mode, lineNo, desc, pri, due, dueTime, sched, schedTime, 
   document.getElementById('modal-due-time').value = dueTime || '';
   document.getElementById('modal-sched').value = sched || '';
   document.getElementById('modal-sched-time').value = schedTime || '';
+  document.getElementById('modal-rec').value = rec || '';
 
   var projList = (projects || '').split(/\s+/).filter(Boolean);
   document.querySelectorAll('#modal-project-chips .modal-chip:not(.modal-chip-other)').forEach(function(c) {
@@ -875,8 +902,8 @@ function openTodoModal(mode, lineNo, desc, pri, due, dueTime, sched, schedTime, 
 
 function openAdd() { openTodoModal('add'); }
 
-function openEdit(lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts) {
-  openTodoModal('edit', lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts);
+function openEdit(lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts, rec) {
+  openTodoModal('edit', lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts, rec);
 }
 
 function closeTodoModal() {
@@ -935,6 +962,7 @@ function saveTodoModal() {
   var ctxs = _collectChips('modal-context-chips');
   if (otherProj) projs.push(otherProj);
   if (otherCtx) ctxs.push(otherCtx);
+  var rec = document.getElementById('modal-rec').value;
 
   if (!desc) { alert('Description is required'); return; }
 
@@ -944,6 +972,7 @@ function saveTodoModal() {
       priority: pri || null,
       due: due ? (dueTime ? due + 'T' + dueTime : due) : null,
       sched: sched ? (schedTime ? sched + 'T' + schedTime : sched) : null,
+      rec: rec || null,
       projects: projs.map(function(p) { return '+' + p.replace(/^\+/, ''); }),
       contexts: ctxs.map(function(c) { return '@' + c.replace(/^@/, ''); })
     };
@@ -1022,6 +1051,9 @@ function toggleAddChip(chip, group) {
     var prefix = group + ':';
     text = text.replace(new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*', 'gi'), '');
     text = text.trimEnd() + ' ' + token;
+  } else if (group === 'rec') {
+    text = text.replace(/rec:\S+\s*/gi, '');
+    text = text.trimEnd() + ' ' + token;
   } else if (text.indexOf(bare) !== -1) {
     text = text.replace(new RegExp(bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '');
   } else {
@@ -1034,7 +1066,7 @@ function toggleAddChip(chip, group) {
 }
 
 function reorderTodoText(text) {
-  var pri = '', desc = [], proj = [], ctx = [], due = '', sched = '';
+  var pri = '', desc = [], proj = [], ctx = [], due = '', sched = '', rec = '';
   var priMatch = text.match(/\(([A-Z])\)\s*/);
   if (priMatch) {
     pri = priMatch[0].trim();
@@ -1045,9 +1077,10 @@ function reorderTodoText(text) {
     else if (t.startsWith('@')) ctx.push(t);
     else if (t.toLowerCase().startsWith('due:')) due = t;
     else if (t.toLowerCase().startsWith('sched:')) sched = t;
+    else if (t.toLowerCase().startsWith('rec:')) rec = t;
     else if (t) desc.push(t);
   });
-  return [pri, desc.join(' '), proj.join(' '), ctx.join(' '), due, sched].filter(Boolean).join(' ');
+  return [pri, desc.join(' '), proj.join(' '), ctx.join(' '), due, sched, rec].filter(Boolean).join(' ');
 }
 
 function toggleChipSection(id, bar) {
@@ -1083,6 +1116,17 @@ var _acData = {
     {l:'this month', v:'sched:this_month '},
     {l:'next month', v:'sched:next_month '},
     {l:'Pick date...', v:'__PICKER__:sched:'}
+  ],
+  'rec:': [
+    {l:'1 day', v:'rec:1d '},
+    {l:'1 week', v:'rec:1w '},
+    {l:'1 month', v:'rec:1m '},
+    {l:'1 year', v:'rec:1y '},
+    {l:'2 weeks', v:'rec:2w '},
+    {l:'2 months', v:'rec:2m '},
+    {l:'Strict +1 month', v:'rec:+1m '},
+    {l:'Strict +1 week', v:'rec:+1w '},
+    {l:'Clear', v:'__CLEARREC__'}
   ],
   'pri:': [
     {l:'A — Urgent', v:'(A) '},
@@ -1151,6 +1195,14 @@ function pickAC(idx) {
 
   if (val === '__CLEARPRI__') {
     input.value = input.value.replace(/\([A-Z]\)\s*/, '');
+    input.focus();
+    document.getElementById('todo-ac-list').classList.remove('open');
+    syncAddChips();
+    return;
+  }
+
+  if (val === '__CLEARREC__') {
+    input.value = input.value.replace(/rec:\S+\s*/gi, '');
     input.focus();
     document.getElementById('todo-ac-list').classList.remove('open');
     syncAddChips();
@@ -1300,6 +1352,36 @@ function pickFieldPriority(value) {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({line_no: _fpLineNo, updates: {priority: value}})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
+  .catch(function() { window.location.reload(); });
+}
+
+function popupEditRec(lineNo, currentRec, el) {
+  _fpLineNo = lineNo;
+  _fpField = 'rec';
+  var popup = document.getElementById('field-popup');
+  var opts = ['1d','1w','2w','1m','2m','3m','1y','+1m','+1w','+1y'];
+  var labels = ['Daily','Weekly','Biweekly','Monthly','Bimonthly','Quarterly','Yearly','Strict Monthly','Strict Weekly','Strict Yearly'];
+  var html = '<div class="fp-label">Recurrence</div><div class="fp-row">';
+  for (var i = 0; i < opts.length; i++) {
+    var cls = 'fp-chip';
+    if (opts[i] === currentRec) cls += ' active';
+    html += '<div class="' + cls + '" onclick="pickFieldRec(\'' + opts[i] + '\')">' + labels[i] + '</div>';
+  }
+  html += '<div class="fp-chip clear" onclick="pickFieldRec(\'\')">Clear</div>';
+  html += '</div>';
+  popup.innerHTML = html;
+  positionPopup(popup, el);
+}
+
+function pickFieldRec(value) {
+  closeFieldPopup();
+  fetch('/todo/edit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: _fpLineNo, updates: {rec: value}})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
