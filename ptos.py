@@ -3931,73 +3931,118 @@ def _record_sizes(base_dir, state_file, folders):
         json.dump(sizes, f)
 
 
+def _pid_is_running(pid):
+    import errno
+    try:
+        os.kill(pid, 0)
+        return True
+    except OSError as e:
+        return e.errno == errno.EPERM
+
+
+def _acquire_sync_lock():
+    lock_path = os.path.join(BASE_DIR, ".sync.lock")
+    if os.path.isfile(lock_path):
+        with open(lock_path, encoding="utf-8") as f:
+            try:
+                existing_pid = int(f.read().strip())
+            except ValueError:
+                existing_pid = None
+        if existing_pid and _pid_is_running(existing_pid):
+            return False
+    with open(lock_path, "w", encoding="utf-8") as f:
+        f.write(str(os.getpid()))
+    return True
+
+
+def _release_sync_lock():
+    lock_path = os.path.join(BASE_DIR, ".sync.lock")
+    try:
+        os.remove(lock_path)
+    except FileNotFoundError:
+        pass
+
+
 def run_sync(command, resync=False):
     """Run rclone sync or bisync against configured remote.
 
     Returns {"ok": bool, "output": str, "error": str, "returncode": int}.
     Reads [sync] section from config.toml for remote_name, remote_path, folders.
     Runs corruption pre-flight check before sync, records file sizes after success.
+    Uses a PID-based file lock to prevent concurrent syncs across processes.
     """
     import subprocess
 
-    cfg = get_config()
-    sync_cfg = cfg.get("sync", {})
-    remote_name = sync_cfg.get("remote_name", "")
-    remote_path = sync_cfg.get("remote_path", "")
-    folders = sync_cfg.get("folders", ["config", "records", "journal", "todo"])
-
-    if not remote_name or not remote_path:
+    if not _acquire_sync_lock():
         return {"ok": False, "output": "", "error":
-                "[sync] not configured in config.toml. "
-                "Add: [sync] remote_name = \"onedrive\" remote_path = \"personal/ptos-data\"",
+                "Another sync is already running (lock held by "
+                "a different process). Try again shortly.",
                 "returncode": 1}
-
-    state_file = os.path.join(BASE_DIR, ".ptos_sync_state")
-    concerning = _detect_corruption(BASE_DIR, state_file)
-    if concerning:
-        return {"ok": False, "output": "", "error":
-                f"Refusing to sync: {len(concerning)} file(s) had content "
-                f"before and are now 0 bytes: " +
-                ", ".join(concerning[:10]) +
-                (f" and {len(concerning)-10} more" if len(concerning) > 10 else "") +
-                ". Investigate before syncing — syncing now risks overwriting "
-                "your remote backup with this corrupted state.",
-                "returncode": 1}
-
-    remote = f"{remote_name}:{remote_path}"
-    local = BASE_DIR
-
-    cmd = ["rclone", command, local, remote,
-           "--exclude", ".ptos_sync_state",
-           "--exclude", ".bisync.*"]
-    if command == "bisync":
-        cmd.append("--conflict-resolve")
-        cmd.append("none")
-    if resync and command == "bisync":
-        cmd.append("--resync")
 
     try:
-        result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    except FileNotFoundError:
-        return {"ok": False, "output": "", "error":
-                "rclone not found. Install from https://rclone.org",
-                "returncode": 1}
-    except subprocess.TimeoutExpired:
-        return {"ok": False, "output": "", "error":
-                "Sync timed out after 5 minutes",
-                "returncode": 1}
+        cfg = get_config()
+        sync_cfg = cfg.get("sync", {})
+        remote_name = sync_cfg.get("remote_name", "")
+        remote_path = sync_cfg.get("remote_path", "")
+        folders = sync_cfg.get("folders", ["config", "records", "journal", "todo"])
 
-    output = (result.stdout or "") + (result.stderr or "")
+        if not remote_name or not remote_path:
+            return {"ok": False, "output": "", "error":
+                    "[sync] not configured in config.toml. "
+                    "Add: [sync] remote_name = \"onedrive\" remote_path = \"personal/ptos-data\"",
+                    "returncode": 1}
 
-    if result.returncode != 0:
-        return {"ok": False, "output": output,
-                "error": f"rclone exited with code {result.returncode}",
-                "returncode": result.returncode}
+        state_file = os.path.join(BASE_DIR, ".ptos_sync_state")
+        concerning = _detect_corruption(BASE_DIR, state_file)
+        if concerning:
+            return {"ok": False, "output": "", "error":
+                    f"Refusing to sync: {len(concerning)} file(s) had content "
+                    f"before and are now 0 bytes: " +
+                    ", ".join(concerning[:10]) +
+                    (f" and {len(concerning)-10} more" if len(concerning) > 10 else "") +
+                    ". Investigate before syncing — syncing now risks overwriting "
+                    "your remote backup with this corrupted state.",
+                    "returncode": 1}
 
-    _record_sizes(BASE_DIR, state_file, folders)
-    _invalidate_all()
+        remote = f"{remote_name}:{remote_path}"
+        local = BASE_DIR
 
-    return {"ok": True, "output": output, "error": "", "returncode": 0}
+        cmd = ["rclone", command, local, remote,
+               "--exclude", ".ptos_sync_state",
+               "--exclude", ".bisync.*",
+               "--exclude", ".sync.lock",
+               "--exclude", ".sync_scheduled.log"]
+        if command == "bisync":
+            cmd.append("--conflict-resolve")
+            cmd.append("none")
+        if resync and command == "bisync":
+            cmd.append("--resync")
+
+        try:
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        except FileNotFoundError:
+            return {"ok": False, "output": "", "error":
+                    "rclone not found. Install from https://rclone.org",
+                    "returncode": 1}
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "output": "", "error":
+                    "Sync timed out after 5 minutes",
+                    "returncode": 1}
+
+        output = (result.stdout or "") + (result.stderr or "")
+
+        if result.returncode != 0:
+            return {"ok": False, "output": output,
+                    "error": f"rclone exited with code {result.returncode}",
+                    "returncode": result.returncode}
+
+        _record_sizes(BASE_DIR, state_file, folders)
+        _invalidate_all()
+
+        return {"ok": True, "output": output, "error": "", "returncode": 0}
+
+    finally:
+        _release_sync_lock()
 
 
 def set_user_name(name):
