@@ -4,12 +4,12 @@
 {% macro todo_row(t, badge_class) %}
     <div class="todo-row" data-line="{{ t.line_no }}">
       <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
-      <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}"><a href="/todo?{% if not selected_priority or selected_priority!=t.priority %}priority={{ (t.priority or '')|urlencode }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}">{{ t.priority or '—' }}</a></div>
+      <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}" onclick="popupEditPriority({{ t.line_no }}, '{{ t.priority or '' }}', this)" title="Change priority">{{ t.priority or '—' }}</div>
       <div class="todo-body">
         <div class="todo-desc">{{ t.description }}</div>
         <div class="todo-meta">
-          {% if t.due %}<span class="todo-due-badge {{ badge_class }}">{{ t.due.strftime('%d %b') }}{% if t.due_time %} {{ t.due_time }}{% endif %}</span>{% endif %}
-          {% if t.sched %}<span class="todo-context">sched {{ t.sched.strftime('%d %b') }}{% if t.sched_time %} {{ t.sched_time }}{% endif %}</span>{% endif %}
+          {% if t.due %}<span class="todo-due-badge {{ badge_class }}" onclick="popupEditDate({{ t.line_no }}, 'due', '{{ t.due.isoformat() }}', this)" title="Change due date">{{ t.due.strftime('%d %b') }}{% if t.due_time %} {{ t.due_time }}{% endif %}</span>{% endif %}
+          {% if t.sched %}<span class="todo-context" onclick="popupEditDate({{ t.line_no }}, 'sched', '{{ t.sched.isoformat() }}', this)" title="Change scheduled date">sched {{ t.sched.strftime('%d %b') }}{% if t.sched_time %} {{ t.sched_time }}{% endif %}</span>{% endif %}
           {% for p in t.projects %}<a class="todo-project{% if selected_project==p %} active{% endif %}" href="/todo?{% if selected_project != p %}project={{ p|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}">{{ p }}</a>{% endfor %}
           {% for c in t.contexts %}<a class="todo-context{% if selected_context==c %} active{% endif %}" href="/todo?{% if selected_context != c %}context={{ c|urlencode }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}">{{ c }}</a>{% endfor %}
         </div>
@@ -72,13 +72,13 @@
   .todo-pri {
     min-width:28px; height:24px; border-radius:6px; flex-shrink:0;
     font-size:12px; font-weight:700; text-align:center; line-height:24px;
+    cursor:pointer;
   }
   .todo-pri.A { background:var(--error-lt); color:var(--error); }
   .todo-pri.B { background:#FEF3E7; color:var(--warn); }
   .todo-pri.C, .todo-pri.none { background:var(--accent-lt); color:var(--accent); }
   .todo-pri.D { background:#E8EAED; color:#6c757d; }
   .todo-pri.active { font-weight:700; box-shadow:0 0 0 2px currentColor; }
-  .todo-pri a { color:inherit; text-decoration:none; display:block; }
   .todo-body { flex:1; min-width:0; }
   .todo-desc { font-size:15px; color:var(--text); line-height:1.4; }
   .todo-meta {
@@ -87,7 +87,7 @@
   }
   .todo-due-badge {
     font-size:12px; padding:2px 7px; border-radius:4px;
-    font-weight:600;
+    font-weight:600; cursor:pointer;
   }
   .todo-due-badge.overdue { background:var(--error-lt); color:var(--error); }
   .todo-due-badge.today { background:#FEF3E7; color:var(--warn); }
@@ -366,6 +366,23 @@
     .ac-extra { display:none; }
     .ac-more.expanded { display:none; }
   }
+  .field-popup {
+    position:absolute; z-index:200; background:var(--card); border:1px solid var(--border);
+    border-radius:10px; padding:8px; box-shadow:0 4px 16px rgba(0,0,0,0.12);
+    display:none; min-width:200px;
+  }
+  .field-popup.open { display:block; }
+  .field-popup .fp-row { display:flex; flex-wrap:wrap; gap:4px; }
+  .field-popup .fp-chip {
+    padding:5px 10px; border-radius:6px; font-size:12px; font-weight:600;
+    cursor:pointer; border:1px solid var(--border); background:var(--bg); color:var(--text);
+    transition:background 0.12s;
+  }
+  .field-popup .fp-chip:hover { background:var(--accent-lt); color:var(--accent); }
+  .field-popup .fp-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .field-popup .fp-chip.clear { color:var(--error); border-color:var(--error-lt); }
+  .field-popup .fp-chip.pick-date { color:var(--accent); border-style:dashed; }
+  .field-popup .fp-label { font-size:11px; color:var(--sub); margin-bottom:4px; font-weight:600; }
 </style>
 
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
@@ -726,6 +743,10 @@
   </div>
 </div>
 
+<!-- Inline field edit popup -->
+<div class="field-popup" id="field-popup"></div>
+<input type="date" id="field-popup-picker" style="display:none;" onchange="onFieldPopupPick(this)">
+
 <script>
 function toggleAddArea() {
   var area = document.getElementById('todo-add-area');
@@ -985,16 +1006,6 @@ function expandChipGroup(btn) {
   btn.classList.add('expanded');
 }
 
-function _insertInZone(text, token, zone) {
-  var later = {proj: /(?:^|\s)(?:@\S+|due:\S+|sched:\S+)/, ctx: /(?:^|\s)(?:due:\S+|sched:\S+)/, due: /(?:^|\s)sched:\S+/};
-  var pat = later[zone];
-  if (pat) {
-    var m = text.match(pat);
-    if (m) return (text.substring(0, m.index) + token + text.substring(m.index)).replace(/\s+/g, ' ').trim();
-  }
-  return text.trimEnd() + ' ' + token;
-}
-
 function toggleAddChip(chip, group) {
   var input = document.getElementById('todo-input');
   var text = input.value;
@@ -1010,11 +1021,11 @@ function toggleAddChip(chip, group) {
   } else if (group === 'due' || group === 'sched') {
     var prefix = group + ':';
     text = text.replace(new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*', 'gi'), '');
-    if (text.indexOf(bare) === -1) text = _insertInZone(text, token, group);
+    text = text.trimEnd() + ' ' + token;
   } else if (text.indexOf(bare) !== -1) {
     text = text.replace(new RegExp(bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '');
   } else {
-    text = _insertInZone(text, token, group);
+    text = text.trimEnd() + ' ' + token;
   }
 
   input.value = text.replace(/^\s+/, '');
@@ -1072,6 +1083,13 @@ var _acData = {
     {l:'this month', v:'sched:this_month '},
     {l:'next month', v:'sched:next_month '},
     {l:'Pick date...', v:'__PICKER__:sched:'}
+  ],
+  'pri:': [
+    {l:'A — Urgent', v:'(A) '},
+    {l:'B — Important', v:'(B) '},
+    {l:'C — Moderate', v:'(C) '},
+    {l:'D — Low', v:'(D) '},
+    {l:'Clear priority', v:'__CLEARPRI__'}
   ],
   '(': [
     {l:'(A)', v:'(A) '},
@@ -1131,8 +1149,21 @@ function pickAC(idx) {
     return;
   }
 
+  if (val === '__CLEARPRI__') {
+    input.value = input.value.replace(/\([A-Z]\)\s*/, '');
+    input.focus();
+    document.getElementById('todo-ac-list').classList.remove('open');
+    syncAddChips();
+    return;
+  }
+
   var before = input.value.substring(0, tok.start);
   var after = input.value.substring(tok.start + tok.fullToken.length);
+
+  if (tok.prefix === 'pri:') {
+    before = before.replace(/\([A-Z]\)\s*/, '');
+  }
+
   input.value = before + val + after;
   input.focus();
   document.getElementById('todo-ac-list').classList.remove('open');
@@ -1145,7 +1176,7 @@ function onDatePickerPick(el) {
   var text = input.value;
   text = text.replace(new RegExp(_pickerPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*'), '');
   var token = _pickerPrefix + el.value + ' ';
-  text = _insertInZone(text, token, _pickerPrefix === 'due:' ? 'due' : 'sched');
+  text = text.trimEnd() + ' ' + token;
   input.value = text.replace(/^\s+/, '');
   input.focus();
   syncAddChips();
@@ -1188,6 +1219,98 @@ function _highlightAC(items) {
 
 document.getElementById('todo-input').addEventListener('blur', function() {
   setTimeout(function() { document.getElementById('todo-ac-list').classList.remove('open'); }, 150);
+});
+
+var _fpLineNo = null, _fpField = '';
+
+function popupEditDate(lineNo, field, currentValue, el) {
+  _fpLineNo = lineNo;
+  _fpField = field;
+  var popup = document.getElementById('field-popup');
+  var opts = ['today','tomorrow','this_week','next_week','this_month','next_month'];
+  var labels = ['Today','Tomorrow','This week','Next week','This month','Next month'];
+  var html = '<div class="fp-label">' + (field === 'due' ? 'Due date' : 'Scheduled date') + '</div><div class="fp-row">';
+  for (var i = 0; i < opts.length; i++) {
+    html += '<div class="fp-chip" onclick="pickFieldDate(\'' + opts[i] + '\')">' + labels[i] + '</div>';
+  }
+  html += '<div class="fp-chip pick-date" onclick="pickFieldCustomDate()">Pick date...</div>';
+  html += '<div class="fp-chip clear" onclick="pickFieldDate(\'\')">Clear</div>';
+  html += '</div>';
+  popup.innerHTML = html;
+  positionPopup(popup, el);
+}
+
+function popupEditPriority(lineNo, currentPri, el) {
+  _fpLineNo = lineNo;
+  _fpField = 'priority';
+  var popup = document.getElementById('field-popup');
+  var opts = ['A','B','C','D',''];
+  var labels = ['A — Urgent','B — Important','C — Moderate','D — Low','None'];
+  var html = '<div class="fp-label">Priority</div><div class="fp-row">';
+  for (var i = 0; i < opts.length; i++) {
+    var cls = 'fp-chip';
+    if (opts[i] === currentPri) cls += ' active';
+    html += '<div class="' + cls + '" onclick="pickFieldPriority(\'' + opts[i] + '\')">' + labels[i] + '</div>';
+  }
+  html += '</div>';
+  popup.innerHTML = html;
+  positionPopup(popup, el);
+}
+
+function positionPopup(popup, el) {
+  popup.classList.remove('open');
+  var rect = el.getBoundingClientRect();
+  popup.style.top = (rect.bottom + window.scrollY + 4) + 'px';
+  popup.style.left = Math.min(rect.left + window.scrollX, window.innerWidth - 220) + 'px';
+  popup.classList.add('open');
+}
+
+function closeFieldPopup() {
+  document.getElementById('field-popup').classList.remove('open');
+}
+
+function pickFieldDate(value) {
+  closeFieldPopup();
+  var updates = {};
+  updates[_fpField] = value;
+  fetch('/todo/edit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: _fpLineNo, updates: updates})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
+  .catch(function() { window.location.reload(); });
+}
+
+function pickFieldCustomDate() {
+  var picker = document.getElementById('field-popup-picker');
+  picker.value = '';
+  picker.showPicker();
+}
+
+function onFieldPopupPick(el) {
+  if (!el.value) return;
+  pickFieldDate(el.value);
+}
+
+function pickFieldPriority(value) {
+  closeFieldPopup();
+  fetch('/todo/edit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: _fpLineNo, updates: {priority: value}})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
+  .catch(function() { window.location.reload(); });
+}
+
+document.addEventListener('click', function(e) {
+  var popup = document.getElementById('field-popup');
+  if (popup.classList.contains('open') && !popup.contains(e.target) && !e.target.closest('.todo-due-badge, .todo-context, .todo-pri')) {
+    closeFieldPopup();
+  }
 });
 </script>
 {% endblock %}
