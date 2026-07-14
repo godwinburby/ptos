@@ -1,26 +1,33 @@
 #!/bin/bash
 # PTOS Setup Script for Android (Termux)
-# Installs PTOS via git clone, separating code and data directories.
-
-CODE_DIR="$HOME/ptos"
-DATA_DIR="$HOME/storage/shared/ptos-data"
+# Clones the repo, installs deps, and starts the web server.
 
 echo "=========================================="
 echo "  PTOS Setup for Android"
 echo "=========================================="
 echo ""
 
-# ── Storage permission ────────────────────────────────────────────────────────
+# ── Locate PTOS directory ─────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ ! -f "$SCRIPT_DIR/ptos.py" ]; then
+    echo "ptos.py not found here — cloning from GitHub..."
+    git clone https://github.com/godwinburby/ptos.git "$SCRIPT_DIR/ptos"
+    cd "$SCRIPT_DIR/ptos"
+else
+    cd "$SCRIPT_DIR"
+fi
+PTOS_DIR="$(pwd)"
+
+# ── Storage permission (optional) ──────────────────────────────────────────────
 if [ ! -d "$HOME/storage/shared" ]; then
-    echo "Requesting storage permission..."
+    echo "Requesting storage permission (optional — needed only for --set-home)..."
     termux-setup-storage
     sleep 3
-    if [ ! -d "$HOME/storage/shared" ]; then
-        echo ""
-        echo "Storage permission not granted (or dialog still pending)."
-        echo "Grant the permission when prompted, then re-run this script."
-        echo "If no dialog appeared, run:  termux-setup-storage"
-        exit 1
+    if [ -d "$HOME/storage/shared" ]; then
+        echo "Storage permission granted."
+    else
+        echo "Storage permission not granted (you can grant it later if needed)."
     fi
 fi
 
@@ -52,30 +59,30 @@ else
     echo "Flask already installed."
 fi
 
-# ── Clone or update code ─────────────────────────────────────────────────────
-if [ -d "$CODE_DIR/.git" ]; then
-    echo "PTOS code already present at $CODE_DIR"
+# ── Check if already initialised ─────────────────────────────────────────────
+if [ -d "$PTOS_DIR/config" ]; then
+    echo "Already initialised (config/ exists). Skipping first-time setup."
+    INIT_NEEDED=false
 else
-    echo "Cloning PTOS from GitHub..."
-    git clone https://github.com/godwinburby/ptos.git "$CODE_DIR"
+    INIT_NEEDED=true
 fi
 
-mkdir -p "$DATA_DIR"
-echo "$DATA_DIR" > "$CODE_DIR/.ptos_home"
+# ── Initialise PTOS (only if first time) ─────────────────────────────────────
+if [ "$INIT_NEEDED" = true ]; then
+    echo ""
+    echo "--- Initialising PTOS ---"
+    python ptos.py --init
 
-cd "$CODE_DIR"
+    echo ""
+    echo "--- Your Name ---"
+    echo "Enter your name (leave blank for 'User'):"
+    read -r USER_NAME
+    if [ -n "$USER_NAME" ]; then
+        python ptos.py --set-name "$USER_NAME"
+    fi
 
-echo ""
-echo "--- Initialising PTOS ---"
-python ptos.py --init
-
-# ── Set user name ─────────────────────────────────────────────────────────────
-echo ""
-echo "--- Your Name ---"
-echo "Enter your name (leave blank for 'User'):"
-read -r USER_NAME
-if [ -n "$USER_NAME" ]; then
-    python ptos.py --set-name "$USER_NAME"
+    echo ""
+    echo "PTOS initialised."
 fi
 
 # ── Download Android scripts to $HOME ────────────────────────────────────────
@@ -108,5 +115,4 @@ echo ""
 am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 &
 
 # Start server in foreground
-cd "$CODE_DIR"
 python ptos_web.py

@@ -870,7 +870,9 @@ def main():
                 "remote deletions, use --bisync instead."
             )
         cmd = "bisync" if args.bisync else "sync"
-        run_sync(cmd, resync=args.resync)
+        result = run_sync(cmd, resync=args.resync)
+        if not result["ok"]:
+            sys.exit(result["error"])
         return
 
     if args.set_name:

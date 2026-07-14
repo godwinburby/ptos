@@ -1188,6 +1188,7 @@ def settings_page():
     todo = cfg.get("todo", {})
     dashboard = cfg.get("dashboard", {})
     auth = cfg.get("auth", {})
+    sync = cfg.get("sync", {})
     
     cycles = [{"name": k, "day": v} for k, v in cycles_raw.items()]
     
@@ -1222,6 +1223,7 @@ def settings_page():
         auth_username=auth.get("username", ""),
         auth_password=auth.get("password", ""),
         todo=todo,
+        sync=sync,
         base_dir=ptos.BASE_DIR)
 
 
@@ -1458,6 +1460,59 @@ def backup_config_restore_from_list(name):
         return jsonify(ok=True, message=result.get("message", "Config restored"))
     except Exception as e:
         return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Sync (rclone)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_sync_busy = False
+_sync_result = None
+
+
+@app.route("/sync/run", methods=["POST"])
+def sync_run():
+    global _sync_busy, _sync_result
+    if _sync_busy:
+        return jsonify(ok=False, error="Sync already in progress"), 409
+
+    data = request.get_json(silent=True) or {}
+    command = data.get("command", "")
+    if command not in ("bisync", "sync", "resync"):
+        return jsonify(ok=False, error="Invalid command. Use bisync, sync, or resync")
+
+    cfg = svc.get_config()
+    sync_cfg = cfg.get("sync", {})
+    if not sync_cfg.get("remote_name") or not sync_cfg.get("remote_path"):
+        return jsonify(ok=False, error="[sync] not configured in config.toml")
+
+    _sync_busy = True
+    _sync_result = None
+
+    def _run():
+        global _sync_busy, _sync_result
+        try:
+            actual_cmd = "bisync"
+            resync = False
+            if command == "sync":
+                actual_cmd = "sync"
+            elif command == "resync":
+                actual_cmd = "bisync"
+                resync = True
+            _sync_result = ptos.run_sync(actual_cmd, resync=resync)
+        except Exception as e:
+            _sync_result = {"ok": False, "output": "", "error": str(e), "returncode": 1}
+        finally:
+            _sync_busy = False
+            _sse_broadcast("sync-done", _sync_result)
+
+    threading.Thread(target=_run, daemon=True).start()
+    return jsonify(ok=True, message="Sync started")
+
+
+@app.route("/sync/status")
+def sync_status():
+    return jsonify(running=_sync_busy, result=_sync_result)
 
 
 def _toml_val(v):
