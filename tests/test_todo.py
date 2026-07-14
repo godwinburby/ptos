@@ -786,3 +786,149 @@ class TestArchiveDoneTodos:
         assert archived == 1
         archived_todos, _ = load_todos(archive_path)
         assert len(archived_todos) == 2
+
+
+# ── pri:X key:value format ─────────────────────────────────────────────────
+
+class TestPriXFormat:
+    def test_pri_x_sets_priority(self):
+        t = parse_todo_line("pri:A Buy milk +Food @home")
+        assert t.priority == "A"
+        assert t.description == "Buy milk"
+        assert t.projects == ["+Food"]
+        assert t.contexts == ["@home"]
+
+    def test_pri_x_lower_case(self):
+        t = parse_todo_line("pri:b File taxes @office")
+        assert t.priority == "B"
+        assert t.description == "File taxes"
+
+    def test_pri_x_with_parens_priority_ignored(self):
+        t = parse_todo_line("(A) pri:B Buy milk")
+        assert t.priority == "A"
+        assert "pri:B" in t.description
+
+    def test_pri_x_not_in_description(self):
+        t = parse_todo_line("pri:C Ship feature +Work @desk")
+        assert t.description == "Ship feature"
+        assert all(tok != "pri:C" for tok in t.description.split())
+
+    def test_pri_x_round_trip(self):
+        t = parse_todo_line("pri:A Buy milk +Food")
+        line = format_line(t)
+        t2 = parse_todo_line(line)
+        assert t2.priority == "A"
+        assert t2.description == "Buy milk"
+
+
+# ── rec: recurrence ────────────────────────────────────────────────────────
+
+class TestRecurrence:
+    def test_parse_rec_daily(self):
+        t = parse_todo_line("Water plants due:2026-07-20 rec:1d")
+        assert t.rec == "1d"
+        assert t.due == dt.date(2026, 7, 20)
+
+    def test_parse_rec_weekly(self):
+        t = parse_todo_line("Clean house due:2026-07-20 rec:1w")
+        assert t.rec == "1w"
+
+    def test_parse_rec_strict(self):
+        t = parse_todo_line("Pay rent due:2026-08-01 rec:+1m")
+        assert t.rec == "+1m"
+
+    def test_parse_rec_no_rec(self):
+        t = parse_todo_line("Buy milk due:2026-07-20")
+        assert t.rec is None
+
+    def test_format_rec(self):
+        t = Todo(description="Water plants", due=dt.date(2026, 7, 20), rec="1w")
+        line = format_line(t)
+        assert "rec:1w" in line
+
+    def test_rec_round_trip(self):
+        t = parse_todo_line("Water plants due:2026-07-20 rec:1w")
+        line = format_line(t)
+        t2 = parse_todo_line(line)
+        assert t2.rec == "1w"
+        assert t2.due == dt.date(2026, 7, 20)
+
+    def test_complete_creates_recurrence(self):
+        t = parse_todo_line("Water plants due:2026-07-20 rec:1w")
+        t.line_no = 1
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            todo_path = os.path.join(tmpdir, "todo.txt")
+            done_path = os.path.join(tmpdir, "done.txt")
+            save_todos(todo_path, [t])
+            save_todos(done_path, [])
+            complete_todo(t, completion_date=dt.date(2026, 7, 15), todo_path=todo_path, done_path=done_path)
+            remaining, _ = load_todos(todo_path)
+            done, _ = load_todos(done_path)
+            assert len(done) == 1
+            assert done[0].done is True
+            assert len(remaining) == 1
+            assert remaining[0].description == "Water plants"
+            assert remaining[0].due == dt.date(2026, 7, 22)
+            assert remaining[0].rec == "1w"
+
+    def test_complete_strict_recurrence(self):
+        t = parse_todo_line("Pay rent due:2026-08-01 rec:+1m")
+        t.line_no = 1
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            todo_path = os.path.join(tmpdir, "todo.txt")
+            done_path = os.path.join(tmpdir, "done.txt")
+            save_todos(todo_path, [t])
+            save_todos(done_path, [])
+            complete_todo(t, completion_date=dt.date(2026, 7, 31), todo_path=todo_path, done_path=done_path)
+            remaining, _ = load_todos(todo_path)
+            assert len(remaining) == 1
+            assert remaining[0].due == dt.date(2026, 9, 1)
+
+    def test_complete_no_rec_no_new_task(self):
+        t = parse_todo_line("Buy milk due:2026-07-20")
+        t.line_no = 1
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            todo_path = os.path.join(tmpdir, "todo.txt")
+            done_path = os.path.join(tmpdir, "done.txt")
+            save_todos(todo_path, [t])
+            save_todos(done_path, [])
+            complete_todo(t, todo_path=todo_path, done_path=done_path)
+            remaining, _ = load_todos(todo_path)
+            assert len(remaining) == 0
+
+    def test_complete_rec_without_due_no_new_task(self):
+        t = parse_todo_line("Exercise rec:1w")
+        t.line_no = 1
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            todo_path = os.path.join(tmpdir, "todo.txt")
+            done_path = os.path.join(tmpdir, "done.txt")
+            save_todos(todo_path, [t])
+            save_todos(done_path, [])
+            complete_todo(t, todo_path=todo_path, done_path=done_path)
+            remaining, _ = load_todos(todo_path)
+            assert len(remaining) == 0
+
+    def test_preprocess_rec_weekly(self):
+        result = preprocess_todo_text("Water plants due:tomorrow rec:weekly")
+        assert "rec:1w" in result
+
+    def test_preprocess_rec_daily(self):
+        result = preprocess_todo_text("Exercise rec:daily")
+        assert "rec:1d" in result
+
+    def test_rec_month_end_clamp(self):
+        t = parse_todo_line("Pay rent due:2026-01-31 rec:1m")
+        t.line_no = 1
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            todo_path = os.path.join(tmpdir, "todo.txt")
+            done_path = os.path.join(tmpdir, "done.txt")
+            save_todos(todo_path, [t])
+            save_todos(done_path, [])
+            complete_todo(t, completion_date=dt.date(2026, 1, 31), todo_path=todo_path, done_path=done_path)
+            remaining, _ = load_todos(todo_path)
+            assert remaining[0].due == dt.date(2026, 2, 28)

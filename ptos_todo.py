@@ -36,6 +36,7 @@ class Todo:
     due_time: Optional[str] = None          # "14:30" or None
     sched: Optional[dt.date] = None
     sched_time: Optional[str] = None        # "09:00" or None
+    rec: Optional[str] = None               # "1w", "+1m", "3d", etc.
     line_no: int = 0
 
 # ── date resolution ─────────────────────────────────────────────────────────
@@ -201,13 +202,14 @@ def parse_todo_line(line, line_no=0):
     # remaining = description + metadata tokens
     remaining = line.strip()
 
-    # extract projects, contexts, due, sched from description
+    # extract projects, contexts, due, sched, rec, pri:X from description
     projects = []
     contexts = []
     due = None
     due_time = None
     sched = None
     sched_time = None
+    rec = None
     desc_parts = []
 
     for token in remaining.split():
@@ -227,6 +229,10 @@ def parse_todo_line(line, line_no=0):
                 sched, sched_time = resolve_todo_date(val)
             except TodoParseError:
                 desc_parts.append(token)
+        elif token.lower().startswith("rec:") and rec is None:
+            rec = token[4:] if len(token) > 4 else None
+        elif token.lower().startswith("pri:") and len(token) == 5 and token[4].isalpha() and priority is None:
+            priority = token[4].upper()
         else:
             desc_parts.append(token)
 
@@ -245,6 +251,7 @@ def parse_todo_line(line, line_no=0):
         due_time=due_time,
         sched=sched,
         sched_time=sched_time,
+        rec=rec,
         line_no=line_no,
     )
 
@@ -307,6 +314,9 @@ def format_line(todo):
             parts.append(f"sched:{todo.sched.isoformat()}T{todo.sched_time}")
         else:
             parts.append(f"sched:{todo.sched.isoformat()}")
+
+    if todo.rec:
+        parts.append(f"rec:{todo.rec}")
 
     return " ".join(parts)
 
@@ -415,6 +425,31 @@ def _atomic_append_text(filepath, content):
         raise
 
 
+def _parse_rec_interval(rec):
+    """Parse rec string like '1w', '+1m', '3d' into (strict: bool, amount: int, unit: str)."""
+    if not rec:
+        return None
+    strict = rec.startswith("+")
+    val = rec.lstrip("+")
+    m = re.match(r'^(\d+)([dwmy])$', val)
+    if not m:
+        return None
+    return strict, int(m.group(1)), m.group(2)
+
+
+def _advance_date(d, amount, unit):
+    """Advance date d by amount in the given unit."""
+    if unit == "d":
+        return d + dt.timedelta(days=amount)
+    elif unit == "w":
+        return d + dt.timedelta(weeks=amount)
+    elif unit == "m":
+        return _add_months(d, amount)
+    elif unit == "y":
+        return _add_months(d, amount * 12)
+    return d
+
+
 def complete_todo(todo, completion_date=None, todo_path=None, done_path=None):
     """Move a todo from todo.txt to done.txt with completion marker."""
     todo_path = todo_path or TODO_PATH
@@ -436,6 +471,32 @@ def complete_todo(todo, completion_date=None, todo_path=None, done_path=None):
             t.completed_date = completion_date
             done.append(t)
             found = True
+
+            # handle recurrence: create new task if rec: + due:
+            if t.rec and t.due:
+                parsed = _parse_rec_interval(t.rec)
+                if parsed:
+                    strict, amount, unit = parsed
+                    base = t.due if strict else completion_date
+                    new_due = _advance_date(base, amount, unit)
+                    new_sched = None
+                    if t.sched:
+                        sched_base = t.sched if strict else completion_date
+                        new_sched = _advance_date(sched_base, amount, unit)
+                    new_todo = Todo(
+                        done=False,
+                        priority=t.priority,
+                        created_date=completion_date,
+                        description=t.description,
+                        projects=list(t.projects),
+                        contexts=list(t.contexts),
+                        due=new_due,
+                        due_time=t.due_time,
+                        sched=new_sched,
+                        sched_time=t.sched_time,
+                        rec=t.rec,
+                    )
+                    new_todos.append(new_todo)
         else:
             new_todos.append(t)
 
@@ -574,6 +635,8 @@ def edit_todo(todo_path, line_no, updates):
                     t.projects = val if isinstance(val, list) else [val]
                 elif key == "contexts":
                     t.contexts = val if isinstance(val, list) else [val]
+                elif key == "rec":
+                    t.rec = val if val else None
                 elif key == "done":
                     t.done = bool(val)
             break
@@ -718,6 +781,17 @@ def preprocess_todo_text(text):
                 return f"sched:{d.isoformat()}", False
             except TodoParseError:
                 return tok, False
+        elif low.startswith("rec:"):
+            val = tok[4:]
+            _REC_WORDS = {
+                "daily": "1d", "weekly": "1w", "monthly": "1m", "yearly": "1y",
+                "day": "1d", "week": "1w", "month": "1m", "year": "1y",
+                "biweekly": "2w", "bimonthly": "2m", "quarterly": "3m",
+            }
+            mapped = _REC_WORDS.get(val.lower())
+            if mapped:
+                return f"rec:{mapped}", False
+            return tok, False
         return tok, False
 
     tokens = text.split()
