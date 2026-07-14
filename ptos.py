@@ -3968,7 +3968,9 @@ def run_sync(command, resync=False):
     remote = f"{remote_name}:{remote_path}"
     local = BASE_DIR
 
-    cmd = ["rclone", command, local, remote]
+    cmd = ["rclone", command, local, remote,
+           "--exclude", ".ptos_sync_state",
+           "--exclude", ".bisync.*"]
     if resync and command == "bisync":
         cmd.append("--resync")
     cmd.append("--progress")
