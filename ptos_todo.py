@@ -449,6 +449,34 @@ def complete_todo(todo, completion_date=None, todo_path=None, done_path=None):
     return todo
 
 
+def undo_todo(line_no, todo_path=None, done_path=None):
+    """Move a todo from done.txt back to todo.txt (undo completion)."""
+    todo_path = todo_path or TODO_PATH
+    done_path = done_path or DONE_PATH
+
+    todos, _ = load_todos(todo_path)
+    done, _ = load_todos(done_path)
+
+    found = False
+    new_done = []
+    for t in done:
+        if t.line_no == line_no and not found:
+            t.done = False
+            t.completed_date = None
+            todos.append(t)
+            found = True
+        else:
+            new_done.append(t)
+
+    if not found:
+        raise TodoParseError(f"Done todo at line {line_no} not found")
+
+    save_todos(todo_path, todos)
+    save_todos(done_path, new_done)
+
+    return True
+
+
 def delete_todo(todo_path, line_no):
     """Delete a todo by line number."""
     todos, _ = load_todos(todo_path)

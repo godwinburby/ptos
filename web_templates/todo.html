@@ -125,7 +125,7 @@
     display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px;
   }
   .todo-chip {
-    font-size:12px; padding:4px 10px; border-radius:6px;
+    font-size:14px; padding:5px 12px; border-radius:6px;
     border:1px solid var(--border); background:var(--card);
     color:var(--sub); cursor:pointer; text-decoration:none;
     transition: all 0.15s;
@@ -138,7 +138,7 @@
   }
   .todo-project-rail::-webkit-scrollbar { display:none; }
   .todo-proj-chip {
-    font-size:12px; padding:5px 12px; border-radius:8px;
+    font-size:14px; padding:6px 14px; border-radius:8px;
     border:1px solid var(--border); background:var(--card);
     color:var(--sub); cursor:pointer; text-decoration:none;
     white-space:nowrap; transition: all 0.15s;
@@ -156,7 +156,7 @@
     padding:10px 12px; margin-bottom:8px;
   }
   .chip-group-label {
-    font-size:10px; font-weight:700; text-transform:uppercase;
+    font-size:12px; font-weight:700; text-transform:uppercase;
     letter-spacing:0.5px; color:var(--sub); margin-bottom:6px;
   }
   .chip-row { display:flex; gap:5px; flex-wrap:wrap; }
@@ -164,7 +164,7 @@
   /* Collapsible chip sections */
   .chip-toggle-bar {
     display:flex; align-items:center; gap:6px;
-    font-size:12px; color:var(--sub); cursor:pointer; user-select:none;
+    font-size:14px; color:var(--sub); cursor:pointer; user-select:none;
     padding:4px 0; margin-bottom:2px;
   }
   .chip-toggle-bar:hover { color:var(--text); }
@@ -180,7 +180,7 @@
   .filter-chips.open { display:grid; grid-template-columns:1fr 1fr; }
   .add-chip {
     display:inline-flex; align-items:center; gap:4px;
-    padding:5px 11px; border-radius:14px; font-size:12px; font-weight:600;
+    padding:6px 14px; border-radius:14px; font-size:14px; font-weight:600;
     background:var(--bg); border:1.5px solid var(--border);
     color:var(--sub); cursor:pointer; user-select:none;
     transition: all 0.15s; -webkit-tap-highlight-color:transparent;
@@ -251,6 +251,24 @@
     color:var(--text); box-sizing:border-box;
   }
   .modal-field select:focus { outline:none; border-color:var(--accent); }
+
+  /* ── Mobile FAB and collapsible add area ─────────────────────────────── */
+  .todo-fab {
+    display:none; position:fixed; bottom:calc(var(--nav-h) + var(--safe-b) + 16px);
+    right:16px; width:56px; height:56px; border-radius:50%;
+    background:var(--accent); color:#fff; border:none;
+    font-size:28px; font-weight:700; cursor:pointer;
+    box-shadow:0 4px 16px rgba(79,107,237,0.4);
+    z-index:150; align-items:center; justify-content:center;
+    transition:transform 0.2s;
+  }
+  .todo-fab:active { transform:scale(0.92); }
+  @media (max-width:767px) {
+    .todo-fab { display:flex; }
+    .todo-add-area { display:none; }
+    .todo-add-area.open { display:block; }
+  }
+
   .todo-help-card {
     display:none; margin-top:8px; padding:14px 16px;
     background:var(--card); border:1px solid var(--border); border-radius:10px;
@@ -292,10 +310,10 @@
   .active-filter-bar.has-filters { display:flex; }
   .af-chip {
     display:inline-flex; align-items:center; gap:4px;
-    font-size:11px; padding:3px 8px; border-radius:10px; font-weight:600;
+    font-size:13px; padding:3px 8px; border-radius:10px; font-weight:600;
     background:var(--accent-lt); color:var(--accent);
   }
-  .af-chip a { color:var(--error); text-decoration:none; font-weight:700; font-size:12px; }
+  .af-chip a { color:var(--error); text-decoration:none; font-weight:700; font-size:14px; }
 
   /* ── Mobile compact chip layout ─────────────────────────────────────────── */
   @media (max-width: 767px) {
@@ -313,7 +331,7 @@
       background:none;
     }
     .add-chips .chip-group-card .chip-group-label {
-      font-size:10px;
+      font-size:12px;
       margin-bottom:4px;
     }
     .add-chips .chip-group-card.full-width {
@@ -334,7 +352,7 @@
       background:none;
     }
     .filter-chips .chip-group-card .chip-group-label {
-      font-size:10px;
+      font-size:12px;
       margin-bottom:4px;
     }
     .filter-chips .chip-group-card[style*="grid-column"] {
@@ -358,6 +376,9 @@
 <div class="msg msg-error">{{ error }}</div>
 {% endif %}
 
+<!-- Add area (collapsible on mobile) -->
+<div class="todo-add-area" id="todo-add-area">
+
 <!-- Quick Add -->
 <div class="todo-quick-add">
   <div class="todo-ac-wrap">
@@ -366,6 +387,7 @@
     <div class="todo-ac-list" id="todo-ac-list"></div>
   </div>
   <button onclick="addTodo()">Add</button>
+  <input type="date" id="todo-date-picker" style="display:none;" onchange="onDatePickerPick(this)">
   <button onclick="openAdd()" style="background:var(--bg);color:var(--sub);font-size:16px;width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;" title="Form add (n)">+</button>
 </div>
 
@@ -432,6 +454,10 @@
     </div>
   </div>
 </div>
+</div><!-- /todo-add-area -->
+
+<!-- Mobile FAB -->
+<button class="todo-fab" id="todo-fab" onclick="toggleAddArea()">+</button>
 
 <div style="margin-bottom:16px;">
   <a onclick="document.getElementById('todo-help').classList.toggle('open');this.textContent=this.textContent==='Hide help'?'? Help':'Hide help'" style="font-size:12px;color:var(--sub);cursor:pointer;user-select:none;">? Help</a>
@@ -616,8 +642,8 @@
   </div>
   <div id="sec-done" style="display:none;">
     {% for t in done_recent %}
-    <div class="todo-row" style="opacity:0.5;">
-      <div class="todo-check checked"></div>
+    <div class="todo-row" data-line="{{ t.line_no }}">
+      <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
       <div class="todo-pri {{ t.priority or 'none' }}" style="opacity:0.5;"><a href="/todo?priority={{ (t.priority or '')|urlencode }}">{{ t.priority or '—' }}</a></div>
       <div class="todo-body">
         <div class="todo-desc" style="text-decoration:line-through;">{{ t.description }}</div>
@@ -701,6 +727,18 @@
 </div>
 
 <script>
+function toggleAddArea() {
+  var area = document.getElementById('todo-add-area');
+  var fab = document.getElementById('todo-fab');
+  var isOpen = area.classList.toggle('open');
+  fab.textContent = isOpen ? '\u2715' : '+';
+  if (isOpen) {
+    var bar = document.querySelector('[onclick*="add-chips"]');
+    if (bar && !bar.classList.contains('open')) toggleChipSection('add-chips', bar);
+    document.getElementById('todo-input').focus();
+  }
+}
+
 function goSearch() {
   var q = document.getElementById("todo-search-input").value.trim();
   var params = new URLSearchParams();
@@ -749,6 +787,22 @@ function completeTodo(lineNo, el) {
   .then(r => r.json())
   .then(d => {
     if (d.ok) { setTimeout(() => window.location.reload(), 500); }
+    else { alert(d.error || 'Failed'); window.location.reload(); }
+  })
+  .catch(() => window.location.reload());
+}
+
+function undoTodo(lineNo, el) {
+  const row = el.closest('.todo-row');
+  row.style.opacity = '0';
+  fetch('/todo/undo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: lineNo})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) { setTimeout(() => window.location.reload(), 300); }
     else { alert(d.error || 'Failed'); window.location.reload(); }
   })
   .catch(() => window.location.reload());
@@ -953,6 +1007,10 @@ function toggleAddChip(chip, group) {
       text = text.replace(new RegExp('\\(' + t + '\\)\\s*'), '');
     });
     if (text.indexOf(bare) === -1) text = token + text;
+  } else if (group === 'due' || group === 'sched') {
+    var prefix = group + ':';
+    text = text.replace(new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*', 'gi'), '');
+    if (text.indexOf(bare) === -1) text = _insertInZone(text, token, group);
   } else if (text.indexOf(bare) !== -1) {
     text = text.replace(new RegExp(bare.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\s*'), '');
   } else {
@@ -962,10 +1020,6 @@ function toggleAddChip(chip, group) {
   input.value = text.replace(/^\s+/, '');
   input.focus();
   syncAddChips();
-  if (window.innerWidth < 768) {
-    var bar = document.querySelector('[onclick*="add-chips"]');
-    if (bar && bar.classList.contains('open')) toggleChipSection('add-chips', bar);
-  }
 }
 
 function reorderTodoText(text) {
@@ -1007,7 +1061,8 @@ var _acData = {
     {l:'this week', v:'due:this_week '},
     {l:'next week', v:'due:next_week '},
     {l:'this month', v:'due:this_month '},
-    {l:'next month', v:'due:next_month '}
+    {l:'next month', v:'due:next_month '},
+    {l:'Pick date...', v:'__PICKER__:due:'}
   ],
   'sched:': [
     {l:'today', v:'sched:today '},
@@ -1015,7 +1070,8 @@ var _acData = {
     {l:'this week', v:'sched:this_week '},
     {l:'next week', v:'sched:next_week '},
     {l:'this month', v:'sched:this_month '},
-    {l:'next month', v:'sched:next_month '}
+    {l:'next month', v:'sched:next_month '},
+    {l:'Pick date...', v:'__PICKER__:sched:'}
   ],
   '(': [
     {l:'(A)', v:'(A) '},
@@ -1058,17 +1114,42 @@ function onTodoInput() {
   list.classList.add('open');
 }
 
+var _pickerPrefix = '';
+
 function pickAC(idx) {
   var tok = _getCurrentToken();
   if (!tok || !_acItems[idx]) return;
+  var val = _acItems[idx].v;
   var input = document.getElementById('todo-input');
-  var val = input.value;
-  var before = val.substring(0, tok.start);
-  var after = val.substring(tok.start + tok.fullToken.length);
-  input.value = before + _acItems[idx].v + after;
+
+  if (val.indexOf('__PICKER__:') === 0) {
+    _pickerPrefix = val.split(':')[1] + ':';
+    var picker = document.getElementById('todo-date-picker');
+    picker.value = '';
+    picker.showPicker();
+    document.getElementById('todo-ac-list').classList.remove('open');
+    return;
+  }
+
+  var before = input.value.substring(0, tok.start);
+  var after = input.value.substring(tok.start + tok.fullToken.length);
+  input.value = before + val + after;
   input.focus();
   document.getElementById('todo-ac-list').classList.remove('open');
   syncAddChips();
+}
+
+function onDatePickerPick(el) {
+  if (!el.value || !_pickerPrefix) return;
+  var input = document.getElementById('todo-input');
+  var text = input.value;
+  text = text.replace(new RegExp(_pickerPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*'), '');
+  var token = _pickerPrefix + el.value + ' ';
+  text = _insertInZone(text, token, _pickerPrefix === 'due:' ? 'due' : 'sched');
+  input.value = text.replace(/^\s+/, '');
+  input.focus();
+  syncAddChips();
+  _pickerPrefix = '';
 }
 
 function handleInputKey(e) {

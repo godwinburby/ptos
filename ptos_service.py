@@ -2333,6 +2333,17 @@ def complete_todo_by_line(line_no):
         raise PTOSError(str(e))
 
 
+def undo_todo_by_line(line_no):
+    """Undo a completed todo (move from done.txt back to todo.txt)."""
+    try:
+        ptos_todo.undo_todo(line_no)
+        return {"ok": True}
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
 def delete_todo_by_line(line_no):
     """Delete a todo by line number."""
     try:
