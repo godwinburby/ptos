@@ -253,19 +253,8 @@
   }
   .modal-field select:focus { outline:none; border-color:var(--accent); }
 
-  /* ── Mobile FAB and collapsible add area ─────────────────────────────── */
-  .todo-fab {
-    display:none; position:fixed; bottom:calc(var(--nav-h) + var(--safe-b) + 16px);
-    right:16px; width:56px; height:56px; border-radius:50%;
-    background:var(--accent); color:#fff; border:none;
-    font-size:28px; font-weight:700; cursor:pointer;
-    box-shadow:0 4px 16px rgba(79,107,237,0.4);
-    z-index:150; align-items:center; justify-content:center;
-    transition:transform 0.2s;
-  }
-  .todo-fab:active { transform:scale(0.92); }
+  /* ── Mobile collapsible add area ─────────────────────────────────────── */
   @media (max-width:767px) {
-    .todo-fab { display:flex; }
     .todo-add-area { display:none; }
     .todo-add-area.open { display:block; }
   }
@@ -482,9 +471,6 @@
   </div>
 </div>
 </div><!-- /todo-add-area -->
-
-<!-- Mobile FAB -->
-<button class="todo-fab" id="todo-fab" onclick="toggleAddArea()">+</button>
 
 <div style="margin-bottom:16px;">
   <a onclick="document.getElementById('todo-help').classList.toggle('open');this.textContent=this.textContent==='Hide help'?'? Help':'Hide help'" style="font-size:12px;color:var(--sub);cursor:pointer;user-select:none;">? Help</a>
@@ -774,11 +760,15 @@
 <input type="date" id="field-popup-picker" style="display:none;" onchange="onFieldPopupPick(this)">
 
 <script>
+floatingAddAction = toggleAddArea;
+
 function toggleAddArea() {
   var area = document.getElementById('todo-add-area');
-  var fab = document.getElementById('todo-fab');
+  var fab = document.querySelector('.floating-add');
   var isOpen = area.classList.toggle('open');
-  fab.textContent = isOpen ? '\u2715' : '+';
+  fab.innerHTML = isOpen
+    ? '<span style="font-size:22px;color:#fff;">\u2715</span>'
+    : '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
   if (isOpen) {
     var bar = document.querySelector('[onclick*="add-chips"]');
     if (bar && !bar.classList.contains('open')) toggleChipSection('add-chips', bar);
@@ -1392,6 +1382,11 @@ document.addEventListener('click', function(e) {
   var popup = document.getElementById('field-popup');
   if (popup.classList.contains('open') && !popup.contains(e.target) && !e.target.closest('.todo-due-badge, .todo-context, .todo-pri')) {
     closeFieldPopup();
+  }
+  var area = document.getElementById('todo-add-area');
+  var fab = document.querySelector('.floating-add');
+  if (area.classList.contains('open') && !area.contains(e.target) && !(fab && fab.contains(e.target))) {
+    toggleAddArea();
   }
 });
 </script>
