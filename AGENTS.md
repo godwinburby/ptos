@@ -111,8 +111,8 @@ x 2026-07-12 2026-07-10 Completed task
 
 ### Web UI features
 - **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `sched:`, `(`)
-- **Quick pick chips** (collapsible) — Priority (A-D), Due shortcuts (today/tomorrow/this_week/next_week/this_month/next_month), Scheduled shortcuts, Projects, Contexts as toggle chips
-- **Filter chips** (collapsible) — Context, Priority (A-D), Due Range (overdue/today/upcoming/someday/none) — all toggle on click
+- **Quick pick chips** (collapsible) — Due shortcuts, Priority (A-D), Projects, Contexts, Scheduled (last) as toggle chips; on mobile, groups stack vertically instead of scrolling horizontally
+- **Filter chips** (collapsible) — Priority (A-D), Due Range (overdue/today/upcoming/someday/none), Context — all toggle on click; on mobile, groups stack vertically
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; filters todos by description; preserves other active filters
 - **Form modal** (shared add+edit) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
 - **Clickable todo chips** — project, context, and priority chips on each todo row link to filtered view; clicking an active filter chip removes that filter
