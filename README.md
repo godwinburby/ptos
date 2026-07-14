@@ -376,8 +376,8 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - Priority badges (A=red, B=orange, C=blue, D=gray), due date badges, project/context chips
 - Quick-add text input with todo.txt syntax (`(A) Task +Project @context due:tomorrow`)
 - **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `sched:t` for `sched:today`, `(a` for `(A)`. Arrow keys + Enter to select.
-- **Quick pick chips** (collapsible) — click Priority, Due, Scheduled, Projects, or Context chips to insert into input. Due/Scheduled include `this_week`, `next_week`, `this_month`, `next_month` shortcuts
-- **Filter chips** (collapsible) — filter by Context, Priority (A-D), and Due Range (overdue/today/upcoming/someday/none). Click a chip to toggle filter on/off
+- **Quick pick chips** (collapsible) — click Due, Priority, Projects, Contexts, or Scheduled chips to insert into input. Due/Scheduled include `this_week`, `next_week`, `this_month`, `next_month` shortcuts. On mobile, groups stack vertically instead of scrolling
+- **Filter chips** (collapsible) — filter by Priority (A-D), Due Range (overdue/today/upcoming/someday/none), and Context. Click a chip to toggle filter on/off. On mobile, groups stack vertically
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; type a term and press Search or Enter to filter todos by description
 - **Clickable todo chips** — click project, context, or priority chips on any todo row to filter the list; click again to remove filter
 - **Form modal** (press `n` or click `+`) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
