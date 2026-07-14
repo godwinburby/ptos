@@ -153,6 +153,45 @@
   </div>
 </div>
 
+{% if sync.get('remote_name') and sync.get('remote_path') %}
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Sync</div>
+  <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">
+    Remote: <code>{{ sync.remote_name }}:{{ sync.remote_path }}</code>
+  </div>
+
+  <div style="display:flex;flex-direction:column;gap:14px;">
+    <div>
+      <button id="sync-bisync-btn" onclick="runSync('bisync')" class="btn btn-primary" style="margin-right:8px;">Bisync</button>
+      <span style="font-size:13px;color:var(--sub);">Bidirectional — recommended, safe for both sides</span>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:12px;">
+      <button id="sync-push-btn" onclick="runSync('sync')" disabled class="btn btn-ghost" style="margin-right:8px;">Sync (push)</button>
+      <span style="font-size:13px;color:var(--sub);">One-way push — <b style="color:var(--error);">deletes</b> remote files not present locally</span>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+        <span style="font-size:12px;color:var(--sub);">Type DELETE to confirm:</span>
+        <input type="text" id="sync-delete-confirm" placeholder="DELETE" style="width:100px;font-size:13px;padding:4px 8px;" oninput="checkSyncConfirm()">
+      </div>
+    </div>
+
+    <div style="border-top:1px solid var(--border);padding-top:12px;">
+      <button id="sync-resync-btn" onclick="runSync('resync')" disabled class="btn btn-ghost" style="margin-right:8px;">Resync</button>
+      <span style="font-size:13px;color:var(--sub);">Initialize bisync relationship — for new machines or after conflicts</span>
+      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+        <span style="font-size:12px;color:var(--sub);">Type RESYNC to confirm:</span>
+        <input type="text" id="sync-resync-confirm" placeholder="RESYNC" style="width:100px;font-size:13px;padding:4px 8px;" oninput="checkSyncConfirm()">
+      </div>
+    </div>
+  </div>
+
+  <div id="sync-output-wrap" style="display:none;margin-top:14px;">
+    <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:6px;">Output</div>
+    <pre id="sync-output" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0;"></pre>
+  </div>
+</div>
+{% endif %}
+
 <div style="display:flex;gap:10px;margin-top:20px;">
   <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
 </div>
@@ -293,5 +332,69 @@
   renderCycles();
   renderBackupFolders();
 })();
+
+function checkSyncConfirm() {
+  var del = document.getElementById("sync-delete-confirm");
+  var res = document.getElementById("sync-resync-confirm");
+  if (del) document.getElementById("sync-push-btn").disabled = del.value !== "DELETE";
+  if (res) document.getElementById("sync-resync-btn").disabled = res.value !== "RESYNC";
+}
+
+function runSync(command) {
+  var btnId = command === "bisync" ? "sync-bisync-btn" : command === "sync" ? "sync-push-btn" : "sync-resync-btn";
+  var btn = document.getElementById(btnId);
+  var wrap = document.getElementById("sync-output-wrap");
+  var out = document.getElementById("sync-output");
+  if (!btn) return;
+
+  btn.disabled = true;
+  btn.textContent = "Running...";
+  wrap.style.display = "block";
+  out.textContent = "> Starting " + command + "...\n";
+
+  fetch("/sync/run", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({command: command})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (!data.ok) {
+      out.textContent += "Error: " + data.error + "\n";
+      btn.disabled = false;
+      btn.textContent = command === "bisync" ? "Bisync" : command === "sync" ? "Sync (push)" : "Resync";
+      checkSyncConfirm();
+    }
+  })
+  .catch(function(err) {
+    out.textContent += "Error: " + err.message + "\n";
+    btn.disabled = false;
+    btn.textContent = command === "bisync" ? "Bisync" : command === "sync" ? "Sync (push)" : "Resync";
+    checkSyncConfirm();
+  });
+}
+
+function onSyncDone(result) {
+  var btns = ["sync-bisync-btn", "sync-push-btn", "sync-resync-btn"];
+  var labels = ["Bisync", "Sync (push)", "Resync"];
+  btns.forEach(function(id, i) {
+    var btn = document.getElementById(id);
+    if (btn) { btn.disabled = false; btn.textContent = labels[i]; }
+  });
+  checkSyncConfirm();
+
+  var wrap = document.getElementById("sync-output-wrap");
+  var out = document.getElementById("sync-output");
+  if (!wrap || !out) return;
+  wrap.style.display = "block";
+
+  if (result && result.ok) {
+    out.textContent = (result.output || "(no output)") + "\n\nDone.";
+    out.style.borderColor = "var(--accent)";
+  } else {
+    out.textContent = (result ? result.error || result.output || "Unknown error" : "No result") + "\n\nFailed.";
+    out.style.borderColor = "var(--error)";
+  }
+}
 </script>
 {% endblock %}

@@ -998,6 +998,9 @@ function _showTodoToast(tasks) {
           }
           _showTodoToast(tasks);
         }
+        if (msg.type === "sync-done") {
+          if (typeof onSyncDone === "function") onSyncDone(msg.data);
+        }
       } catch(ex) {}
     };
   } catch(ex) {}
