@@ -920,6 +920,8 @@ def main():
             fix=args.doctor_fix
         )
         print_doctor_results(errors, warnings, messages, fixes, verbose=True, fix=args.doctor_fix)
+        if errors:
+            sys.exit(1)
         return
 
     if args.check_schema:

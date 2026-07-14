@@ -39,8 +39,6 @@ python -m pytest tests/test_todo.py -v  # todo tests only
 python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 ```
 
-**Known pre-existing failures (7):** `tests/test_config.py` and `tests/test_dates.py` fail during full suite runs because `ptos_service.py` patches `sys.exit` globally. These tests expect `SystemExit` but get `PTOSError`. Not related to any feature work — ignore them.
-
 ## Code conventions
 
 ### Python style
@@ -68,7 +66,7 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 
 ### Error handling
 - Engine functions raise `sys.exit()` on errors
-- `ptos_service.py` patches `sys.exit` to raise `PTOSError` instead (so web routes can handle errors gracefully)
+- `ptos_service.py` defines `PTOSError` and `_safe_exit`; the Flask layer installs it per-request via `before_request`/`teardown_request` so web routes can handle errors gracefully without affecting tests
 - Web routes catch `PTOSError` and return JSON error responses
 - CLI catches `PTOSError` and prints user-friendly messages
 - Web routes use `log = logging.getLogger("ptos_web")` — always `log.exception()` before fallback, never bare `except:`
@@ -152,4 +150,16 @@ x 2026-07-12 2026-07-10 Completed task
 - Write concise commit messages matching repo style
 - Only commit when explicitly asked
 - Stage only intended files, never commit secrets
-- Run `python -m pytest tests/ -v` before committing (accept 7 pre-existing failures)
+- Run `python -m pytest tests/ -v` before committing
+
+## Pre-commit hook
+
+A git pre-commit hook runs the test suite and blocks commits on failure.
+
+```bash
+cp scripts/pre-commit .git/hooks/pre-commit
+chmod +x .git/hooks/pre-commit
+```
+
+Use `git commit --no-verify` to bypass (only for genuinely unrelated
+pre-existing failures).

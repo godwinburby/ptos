@@ -9,6 +9,7 @@ import shutil
 import subprocess
 import uuid
 import zipfile
+import tempfile
 
 if sys.stdout:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -646,6 +647,63 @@ def doctor_check(verbose=False, fix=False, json_output=False):
             fixes_applied.append("Created templates/daily.md")
     else:
         messages.append(("templates/daily.md", "Exists"))
+    
+    # ── Spec checks: TOML validity, config shape, .ptos_home, data sanity ──
+    
+    # TOML syntax validity
+    for label, path in [("schema.toml", SCHEMA_PATH), ("queries.toml", QUERIES_PATH),
+                         ("presets.toml", PRESETS_PATH), ("config.toml", CONFIG_PATH)]:
+        if os.path.isfile(path):
+            try:
+                with open(path, "rb") as f:
+                    tomllib.load(f)
+                messages.append((f"TOML {label}", "Valid syntax"))
+            except tomllib.TOMLDecodeError as e:
+                errors.append(f"{label}: invalid TOML — {e}")
+    
+    # Config shape sanity — check for numeric fields in schema
+    if os.path.isfile(SCHEMA_PATH):
+        try:
+            schema = get_schema()
+            int_fields = [f for f, m in schema.get("fields", {}).items()
+                          if isinstance(m, dict) and m.get("type") == "int"]
+            if not int_fields:
+                warnings.append("schema.toml: no fields declared type=\"int\" — "
+                                "min/max/sum metrics will silently show \"no data\"")
+            else:
+                messages.append(("schema.toml numeric fields", f"{len(int_fields)} declared"))
+        except (SystemExit, Exception):
+            pass
+    
+    # .ptos_home sanity check
+    bootstrap = os.path.join(SCRIPT_DIR, ".ptos_home")
+    if os.path.isfile(bootstrap):
+        with open(bootstrap, encoding="utf-8") as f:
+            home_path = f.read().strip()
+        tmp_root = os.path.realpath(tempfile.gettempdir())
+        if os.path.realpath(home_path).startswith(tmp_root) or "pytest-of-" in home_path:
+            if os.path.realpath(home_path) != os.path.realpath(BASE_DIR):
+                errors.append(f".ptos_home points at a temp path: {home_path}")
+            else:
+                messages.append((".ptos_home", f"-> {home_path}"))
+        elif not os.path.isdir(home_path):
+            errors.append(f".ptos_home points at a nonexistent path: {home_path}")
+        else:
+            messages.append((".ptos_home", f"-> {home_path}"))
+    
+    # Data sanity — empty-when-shouldn't-be checks
+    current_year_log = os.path.join(RECORDS_DIR, f"{dt.date.today().year}.log")
+    if os.path.isfile(current_year_log):
+        size = os.path.getsize(current_year_log)
+        if size == 0:
+            warnings.append(f"records/{dt.date.today().year}.log is 0 bytes — "
+                            "check for data loss before assuming fresh install")
+        else:
+            messages.append((f"records/{dt.date.today().year}.log", f"{size} bytes"))
+    
+    for folder, path in [("config", CONFIG_DIR), ("todo", TODO_DIR)]:
+        if os.path.isdir(path) and not os.listdir(path):
+            warnings.append(f"{folder}/ exists but is empty")
     
     # Output results
     if json_output:
