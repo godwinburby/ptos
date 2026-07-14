@@ -63,6 +63,7 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 - Queries: `queries.toml` defines saved queries, metrics, dashboards
 - Data folder: resolved by `PTOS_HOME` env var > `.ptos_home` file > SCRIPT_DIR; `--set-home PATH` writes `.ptos_home` and migrates existing data to the target
 - Multi-device sync: `--bisync` runs `rclone bisync`, `--sync --confirm-delete` runs `rclone sync`; reads `[sync]` section from config.toml for remote_name, remote_path, folders; corruption pre-flight check detects zero-byte files before sync
+- **Glob wildcard search**: `_glob_match(pattern, text)` in `ptos.py` — plain text uses `in` for substring match; patterns with `*` or `?` use `fnmatch.translate()` for glob matching. Used by all search paths: universal search, browse, todo page, query builder
 
 ### Error handling
 - Engine functions raise `sys.exit()` on errors
@@ -112,6 +113,7 @@ x 2026-07-12 2026-07-10 Completed task
 - **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `sched:`, `(`)
 - **Quick pick chips** (collapsible) — Priority (A-D), Due shortcuts (today/tomorrow/this_week/next_week/this_month/next_month), Scheduled shortcuts, Projects, Contexts as toggle chips
 - **Filter chips** (collapsible) — Context, Priority (A-D), Due Range (overdue/today/upcoming/someday/none) — all toggle on click
+- **Search** (always visible) — text input with glob wildcard `*`/`?` support; filters todos by description; preserves other active filters
 - **Form modal** (shared add+edit) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
 - **Clickable todo chips** — project, context, and priority chips on each todo row link to filtered view; clicking an active filter chip removes that filter
 - **Project rail** — horizontal scroll filter with toggle behavior
