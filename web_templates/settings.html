@@ -137,6 +137,15 @@
   </div>
 </div>
 
+<div class="card" style="margin-bottom:14px;">
+  <div class="card-title">Todo</div>
+  <div class="field-group">
+    <label>Reminder check interval (minutes)</label>
+    <input type="number" id="notify-interval" min="1" max="120" style="width:80px;">
+    <div class="hint">How often PTOS checks for due todos. Lower = more timely reminders, higher = less battery/CPU use on Termux. Takes effect after restarting PTOS.</div>
+  </div>
+</div>
+
 <div style="display:flex;gap:10px;margin-top:20px;">
   <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
 </div>
@@ -152,6 +161,7 @@
   document.getElementById("backup-if-changed").checked = {{ 'true' if backup.get('backup_if_files_changed', true) else 'false' }};
   document.getElementById("max-full-backups").value = {{ backup.get('max_full_backups', 10) }};
   document.getElementById("max-config-backups").value = {{ backup.get('max_config_backups', 10) }};
+  document.getElementById("notify-interval").value = {{ todo.get('notify_interval', 5) }};
   
   function renderBackupFolders() {
     var list = document.getElementById("backup-folders-list");
@@ -241,6 +251,7 @@
         backup_if_files_changed: document.getElementById("backup-if-changed").checked,
         max_full_backups: parseInt(document.getElementById("max-full-backups").value) || 10,
         max_config_backups: parseInt(document.getElementById("max-config-backups").value) || 10,
+        notify_interval: parseInt(document.getElementById("notify-interval").value) || 5,
         default_dashboard: defaultDashboard,
         backup_folders: backupFolders,
         auth_enabled: document.getElementById("auth-enabled").checked,

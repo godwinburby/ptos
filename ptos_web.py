@@ -4,11 +4,12 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging
+import sys, os, re, fnmatch, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
 import ptos
+from ptos import _glob_match
 from ptos_service import PTOSError
 
 from flask import (Flask, render_template, request, redirect,
@@ -615,6 +616,7 @@ def todo_page():
     context = request.args.get("context", None)
     pri = request.args.get("priority", None)
     due_filter = request.args.get("due", None)
+    search = request.args.get("search", None)
 
     try:
         buckets = svc.get_todos_bucketed()
@@ -636,6 +638,8 @@ def todo_page():
             result = [t for t in result if context in t.contexts]
         if pri:
             result = [t for t in result if t.priority == pri.upper()]
+        if search:
+            result = [t for t in result if _glob_match(search, t.description)]
         return result
 
     for key in ("overdue", "today", "upcoming", "someday"):
@@ -668,8 +672,8 @@ def todo_page():
     return render_template("todo.html", tab="todo", title="Todo",
         now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
         error=error, selected_project=project, selected_context=context,
-        selected_priority=pri, selected_due=due_filter, done_today=done_today,
-        total_today=total_today, done_recent=done_recent)
+        selected_priority=pri, selected_due=due_filter, selected_search=search,
+        done_today=done_today, total_today=total_today, done_recent=done_recent)
 
 
 @app.route("/todo/add", methods=["POST"])
@@ -990,6 +994,95 @@ def journal_save():
         return jsonify(ok=False, error=str(e))
 
 
+def _extract_snippet(text, query, context_chars=80):
+    if '*' in query or '?' in query:
+        regex = fnmatch.translate(query.lower()).replace(r'\Z', '')
+        m = re.search(regex, text.lower())
+        if m:
+            idx = m.start()
+        else:
+            return text[:160] + ("…" if len(text) > 160 else "")
+    else:
+        idx = text.lower().find(query.lower())
+        if idx == -1:
+            return text[:160] + ("…" if len(text) > 160 else "")
+    start = max(0, idx - context_chars)
+    end = min(len(text), idx + len(query) + context_chars)
+    snippet = text[start:end]
+    if start > 0:
+        snippet = "…" + snippet
+    if end < len(text):
+        snippet = snippet + "…"
+    return snippet
+
+
+@app.route("/search")
+def search_page():
+    q = request.args.get("q", "").strip()
+    if not q:
+        return render_template("search.html",
+            tab="search", title="Search", now=_now_str(), query="",
+            records=[], journal=[], todo=[])
+    records = []
+    for fname in ptos.get_log_files():
+        path = os.path.join(svc.RECORDS_DIR, fname)
+        try:
+            with open(path, encoding="utf-8") as f:
+                for i, line in enumerate(f, 1):
+                    if _glob_match(q, line):
+                        records.append({"file": fname, "line": i, "text": line.rstrip()})
+        except Exception:
+            pass
+    journal = []
+    year_dirs = []
+    try:
+        for entry in os.listdir(svc.JOURNAL_DIR):
+            yd = os.path.join(svc.JOURNAL_DIR, entry)
+            if os.path.isdir(yd):
+                year_dirs.append(yd)
+    except Exception:
+        pass
+    for yd in sorted(year_dirs):
+        try:
+            for fname in os.listdir(yd):
+                if not fname.endswith(".md"):
+                    continue
+                path = os.path.join(yd, fname)
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        content = f.read()
+                    if _glob_match(q, content):
+                        snippet = _extract_snippet(content, q)
+                        journal.append({"file": fname, "snippet": snippet})
+                except Exception:
+                    pass
+        except Exception:
+            pass
+    todo = []
+    for tpath_name in ["todo.txt", "done.txt"]:
+        tpath = os.path.join(svc.TODO_DIR, tpath_name)
+        try:
+            with open(tpath, encoding="utf-8") as f:
+                for i, line in enumerate(f, 1):
+                    if _glob_match(q, line):
+                        todo.append({"file": tpath_name, "line": i, "text": line.rstrip()})
+        except Exception:
+            pass
+    import glob as _glob
+    for dpath in sorted(_glob.glob(os.path.join(svc.TODO_DIR, "done.*.txt"))):
+        base = os.path.basename(dpath)
+        try:
+            with open(dpath, encoding="utf-8") as f:
+                for i, line in enumerate(f, 1):
+                    if _glob_match(q, line):
+                        todo.append({"file": base, "line": i, "text": line.rstrip()})
+        except Exception:
+            pass
+    return render_template("search.html",
+        tab="search", title="Search", now=_now_str(), query=q,
+        records=records, journal=journal, todo=todo)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Schema builder
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1074,6 +1167,7 @@ def settings_page():
     display = cfg.get("display", {})
     cycles_raw = cfg.get("cycles", {})
     backup = cfg.get("backup", {})
+    todo = cfg.get("todo", {})
     dashboard = cfg.get("dashboard", {})
     auth = cfg.get("auth", {})
     
@@ -1109,6 +1203,7 @@ def settings_page():
         auth_enabled=auth.get("enabled", False),
         auth_username=auth.get("username", ""),
         auth_password=auth.get("password", ""),
+        todo=todo,
         base_dir=ptos.BASE_DIR)
 
 
@@ -1136,6 +1231,8 @@ def settings_save():
             cfg.setdefault("backup", {})["max_full_backups"] = max(1, min(100, int(data["max_full_backups"])))
         if "max_config_backups" in data:
             cfg.setdefault("backup", {})["max_config_backups"] = max(1, min(100, int(data["max_config_backups"])))
+        if "notify_interval" in data:
+            cfg.setdefault("todo", {})["notify_interval"] = max(1, min(120, int(data["notify_interval"])))
         
         if "default_dashboard" in data:
             db_val = data["default_dashboard"]

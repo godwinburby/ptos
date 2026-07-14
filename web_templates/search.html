@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-title">Search</div>
+
+<div class="card" style="margin-bottom:16px;">
+  <form action="/search" method="GET" style="display:flex;gap:8px;align-items:center;">
+    <input type="text" name="q" value="{{ query }}" placeholder="Search records, journal, and todos…"
+           style="flex:1;margin:0;" autofocus>
+    <button type="submit" class="btn btn-primary btn-sm">Search</button>
+  </form>
+</div>
+
+{% if query %}
+  {% set total = records|length + journal|length + todo|length %}
+  {% if total == 0 %}
+    <div class="card" style="text-align:center;padding:32px;color:var(--sub);">
+      <div style="font-size:13px;">No matches found for "<strong>{{ query }}</strong>"</div>
+    </div>
+  {% endif %}
+
+  {% if records %}
+  <div class="card" style="margin-bottom:12px;">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Records <span style="font-weight:400;color:var(--sub);font-size:13px;">({{ records|length }} match{{ 'es' if records|length != 1 }})</span></div>
+    {% for r in records %}
+    <div style="margin-bottom:6px;">
+      <a href="/browse?file={{ r.file }}&search={{ query }}" style="font-size:13px;color:var(--accent);">{{ r.file }}:{{ r.line }}</a>
+      <div style="font-size:13px;color:var(--text);font-family:monospace;white-space:pre-wrap;word-break:break-all;margin-top:2px;">{{ r.text }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if journal %}
+  <div class="card" style="margin-bottom:12px;">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Journal <span style="font-weight:400;color:var(--sub);font-size:13px;">({{ journal|length }} match{{ 'es' if journal|length != 1 }})</span></div>
+    {% for j in journal %}
+    <div style="margin-bottom:8px;">
+      <a href="/journal?date={{ j.file[:-3] }}" style="font-size:13px;color:var(--accent);font-weight:600;">{{ j.file }}</a>
+      <div style="font-size:13px;color:var(--sub);margin-top:2px;">{{ j.snippet }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if todo %}
+  <div class="card" style="margin-bottom:12px;">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Todo <span style="font-weight:400;color:var(--sub);font-size:13px;">({{ todo|length }} match{{ 'es' if todo|length != 1 }})</span></div>
+    {% for t in todo %}
+    <div style="margin-bottom:6px;">
+      <a href="/todo?search={{ query }}" style="font-size:13px;color:var(--accent);">{{ t.file }}:{{ t.line }}</a>
+      <div style="font-size:13px;color:var(--text);font-family:monospace;white-space:pre-wrap;word-break:break-all;margin-top:2px;">{{ t.text }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+{% endif %}
+
+{% endblock %}

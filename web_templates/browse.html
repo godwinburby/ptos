@@ -152,13 +152,26 @@ var tp;
     var params = new URLSearchParams(window.location.search);
     var run = params.get("run");
     var time = params.get("time");
+    var file = params.get("file");
+    var search = params.get("search");
     if (time === "range") {
       tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
     } else if (time) {
       tp.setTime(time, params.get("custom_time"));
+    } else if (file) {
+      var year = file.replace(".log", "");
+      if (/^\d{4}$/.test(year)) {
+        tp.setTime("year", year);
+      }
+    }
+    if (search) {
+      document.getElementById("b-search").value = search;
     }
     if (run && run.startsWith("q:")) {
       // Load from query - for now just show chip builder
+    }
+    if (search) {
+      setTimeout(function() { runBrowse(); }, 100);
     }
   })();
 })();

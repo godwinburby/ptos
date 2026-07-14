@@ -50,6 +50,13 @@
       .btn-sm     { font-size: 14px; padding: 9px 15px; }
       .due-name   { font-size: 15px; }
       .due-meta   { font-size: 13px; }
+      h1          { font-size: 22px; }
+      h2          { font-size: 18px; }
+      h3          { font-size: 16px; }
+      .dashboard-header h2 { font-size: 20px; }
+      .settings-header h1  { font-size: 22px; }
+      .browse-header h1    { font-size: 22px; }
+      .browse-subtitle     { font-size: 14px; }
     }
 
     /* ── Mobile topbar ── */
@@ -389,6 +396,11 @@
 
 <div class="topbar">
   <div><span class="brand">PTOS</span><span class="brand-tag">Plain Text OS</span></div>
+  <form action="/search" method="GET" style="display:flex;gap:6px;align-items:center;flex:1;max-width:320px;margin-left:12px;">
+    <input type="text" name="q" placeholder="Search…"
+           style="flex:1;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);margin:0;">
+    <button type="submit" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;color:var(--text);font-size:13px;">Search</button>
+  </form>
   <div class="topbar-date">{{ now }}</div>
 </div>
 
@@ -404,6 +416,7 @@
     <a href="/todo"    class="{% if tab=='todo'    %}active{% endif %}">{% include 'icons/todo.html'    ignore missing %} Todo</a>
     <a href="/queries" class="{% if tab=='queries' %}active{% endif %}">{% include 'icons/query.html'   ignore missing %} Queries</a>
     <a href="/browse"  class="{% if tab=='browse'  %}active{% endif %}">{% include 'icons/browse.html'  ignore missing %} Browse</a>
+    <a href="/search"  class="{% if tab=='search'  %}active{% endif %}">{% include 'icons/search.html'  ignore missing %} Search</a>
     <a href="/journal" class="{% if tab=='journal' %}active{% endif %}">{% include 'icons/journal.html' ignore missing %} Journal</a>
     <a href="/editor"  class="{% if tab=='editor'  %}active{% endif %}">{% include 'icons/editor.html'  ignore missing %} Log Editor</a>
     <a href="/lint"    class="{% if tab=='lint'    %}active{% endif %}">{% include 'icons/lint.html'    ignore missing %} Lint</a>

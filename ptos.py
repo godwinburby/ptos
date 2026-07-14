@@ -10,6 +10,7 @@ import subprocess
 import uuid
 import zipfile
 import tempfile
+import fnmatch
 
 if sys.stdout:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -61,6 +62,14 @@ MAX_BACKUPS = 10  # Keep last 10 backups
 VERSION_FILE = os.path.join(SCRIPT_DIR, ".version")
 GITHUB_REPO = "godwinburby/ptos"
 GITHUB_API_URL = f"https://api.github.com/repos/{GITHUB_REPO}/commits/main"
+
+
+def _glob_match(pattern, text):
+    if '*' not in pattern and '?' not in pattern:
+        return pattern.lower() in text.lower()
+    regex = fnmatch.translate(pattern.lower())
+    regex = regex.replace(r'\Z', '')
+    return re.search(regex, text.lower())
 
 
 def get_log_files():
@@ -2075,7 +2084,7 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
                     continue  # skip malformed lines silently
                 if not (start <= d <= end):
                     continue
-                if search and search.lower() not in line.lower():
+                if search and not _glob_match(search, line):
                     continue
                 # inject date for derived field date arithmetic
                 kv_with_date = dict(kv)
@@ -3962,7 +3971,7 @@ def run_sync(command, resync=False):
     cmd = ["rclone", command, local, remote]
     if resync and command == "bisync":
         cmd.append("--resync")
-    cmd.append("--verbose")
+    cmd.append("--progress")
 
     print(f"\n  Running: {' '.join(cmd)}\n")
 

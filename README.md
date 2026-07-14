@@ -24,6 +24,7 @@ No database. No cloud. You own the data completely.
 - [Schema Builder](#schema-builder)
 - [Query Builder](#query-builder)
 - [Settings](#settings)
+- [Search](#search)
 - [Backup & Restore](#backup--restore)
 
 ### Configuration
@@ -325,7 +326,7 @@ Filter, search, and group records. Features:
 - Type selector and time window (presets + specific year/month/date/range)
 - **Chip-based filter builder** with active filter display
 - Free-text expression filter (full boolean syntax: `AND`, `OR`, `NOT`, parentheses)
-- Free-text search with debounced auto-search
+- Free-text search with debounced auto-search (supports glob wildcards: `*` and `?`)
 - Group by field
 - Sort by field
 - Specific log file selection
@@ -357,6 +358,14 @@ dates; forward navigation is blocked past today. Creates a new entry from templa
 for dates with no file. Autosaves after 2.5 seconds of inactivity. Saves with a
 `.bak` backup automatically.
 
+### Search
+
+Universal search across records, journal entries, and todos. Type a query in the
+topbar search field and press Enter or click the magnifying glass. Results are
+grouped by category — click any result to jump directly to it. Supports glob
+wildcards (`*` and `?`) for pattern matching. Searches record values, journal
+file names, and todo descriptions.
+
 ### Todo
 
 Plain-text task manager using the [todo.txt](http://todotxt.org/) format. Tasks live
@@ -369,6 +378,7 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `sched:t` for `sched:today`, `(a` for `(A)`. Arrow keys + Enter to select.
 - **Quick pick chips** (collapsible) — click Priority, Due, Scheduled, Projects, or Context chips to insert into input. Due/Scheduled include `this_week`, `next_week`, `this_month`, `next_month` shortcuts
 - **Filter chips** (collapsible) — filter by Context, Priority (A-D), and Due Range (overdue/today/upcoming/someday/none). Click a chip to toggle filter on/off
+- **Search** (always visible) — text input with glob wildcard `*`/`?` support; type a term and press Search or Enter to filter todos by description
 - **Clickable todo chips** — click project, context, or priority chips on any todo row to filter the list; click again to remove filter
 - **Form modal** (press `n` or click `+`) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
 - Inline edit (pencil icon on hover) and delete
@@ -436,6 +446,7 @@ Configure user profile and app preferences. Sections:
 - **Custom Cycles**: CRUD for billing cycles (day 1-31)
 - **Backup Folders**: core folders locked, custom folders editable
 - **Backup Settings**: auto backup on startup/shutdown triggers
+- **Todo**: reminder check interval (minutes) — how often PTOS checks for due todos; takes effect after restart
 - **Sync**: OneDrive bidirectional sync via rclone bisync. See [Sync section](#sharing-and-sync) for full details.
 
 Settings are stored in `config.toml` and editable via the UI.
@@ -459,6 +470,7 @@ Press `?` from any page to view all shortcuts. Navigation uses a two-key chord: 
 | `G` `S` | [Settings](#settings) |
 | `G` `C` | [Schema Builder](#schema-builder) |
 | `G` `K` | [Backup](#backup--restore) |
+| `G` `F` | [Search](#search) |
 
 **Actions:**
 | Shortcut | Action |
@@ -466,6 +478,7 @@ Press `?` from any page to view all shortcuts. Navigation uses a two-key chord: 
 | `?` | Show help overlay |
 | `Esc` | Close overlay / cancel |
 | `/` | Focus search/filter (Browse page) |
+| `Ctrl+K` | Focus topbar search (any page) |
 | `N` | New record (same as `G` `A`) |
 
 ### Lint
