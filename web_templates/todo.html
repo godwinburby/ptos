@@ -284,6 +284,79 @@
   .todo-ac-prefix {
     font-size:11px; font-weight:700; color:var(--sub); min-width:48px;
   }
+
+  /* ── Active filter summary bar ─────────────────────────────────────────── */
+  .active-filter-bar {
+    display:none; gap:6px; flex-wrap:wrap; margin-bottom:8px;
+  }
+  .active-filter-bar.has-filters { display:flex; }
+  .af-chip {
+    display:inline-flex; align-items:center; gap:4px;
+    font-size:11px; padding:3px 8px; border-radius:10px; font-weight:600;
+    background:var(--accent-lt); color:var(--accent);
+  }
+  .af-chip a { color:var(--error); text-decoration:none; font-weight:700; font-size:12px; }
+
+  /* ── Mobile compact chip layout ─────────────────────────────────────────── */
+  @media (max-width: 767px) {
+    .add-chips.open {
+      display:flex !important;
+      flex-wrap:nowrap;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      gap:8px;
+      padding:6px 0 8px;
+      margin-bottom:10px;
+      scrollbar-width:none;
+    }
+    .add-chips.open::-webkit-scrollbar { display:none; }
+    .add-chips .chip-group-card {
+      flex:0 0 auto;
+      min-width:max-content;
+      border:none;
+      padding:0;
+      margin:0;
+      background:none;
+    }
+    .add-chips .chip-group-card .chip-group-label {
+      font-size:9px;
+      margin-bottom:3px;
+    }
+    .add-chips .chip-group-card.full-width {
+      grid-column:auto;
+    }
+
+    .filter-chips.open {
+      display:flex !important;
+      flex-wrap:nowrap;
+      overflow-x:auto;
+      -webkit-overflow-scrolling:touch;
+      gap:8px;
+      padding:6px 0 8px;
+      margin-bottom:10px;
+      scrollbar-width:none;
+    }
+    .filter-chips.open::-webkit-scrollbar { display:none; }
+    .filter-chips .chip-group-card {
+      flex:0 0 auto;
+      min-width:max-content;
+      border:none;
+      padding:0;
+      margin:0;
+      background:none;
+    }
+    .filter-chips .chip-group-card .chip-group-label {
+      font-size:9px;
+      margin-bottom:3px;
+    }
+    .filter-chips .chip-group-card[style*="grid-column"] {
+      grid-column:auto;
+    }
+
+    .chip-toggle-bar {
+      padding:6px 0;
+    }
+  }
 </style>
 
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
@@ -395,11 +468,8 @@
 {% endif %}
 
 <!-- Search — always visible -->
-<div class="chip-toggle-bar" onclick="toggleChipSection('search-chips', this)">
-  <span class="chip-toggle-arrow">&#9654;</span> Search
-</div>
-<div id="search-chips" class="filter-chips" style="display:block;">
-  <div class="chip-group-card" style="grid-column:1 / -1;">
+<div style="margin-bottom:10px;">
+  <div class="chip-group-card" style="margin:0;">
     <div class="chip-row" style="align-items:center;">
       <form onsubmit="event.preventDefault(); goSearch();" style="display:flex;gap:6px;align-items:center;flex:1;">
         <input type="text" id="todo-search-input" placeholder="Search todos... (use * for wildcard)"
@@ -414,8 +484,34 @@
   </div>
 </div>
 
-<!-- Context/Priority/Due Filters -->
+<!-- Active filter summary (always visible) -->
 {% set has_filter = selected_context or selected_priority or selected_due or selected_search %}
+{% if has_filter %}
+<div class="active-filter-bar has-filters">
+  {% if selected_priority %}
+  <span class="af-chip">({{ selected_priority }})
+    <a href="/todo?{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}" title="Clear">&#x2715;</a>
+  </span>
+  {% endif %}
+  {% if selected_due %}
+  <span class="af-chip">{{ selected_due }}
+    <a href="/todo?{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}" title="Clear">&#x2715;</a>
+  </span>
+  {% endif %}
+  {% if selected_context %}
+  <span class="af-chip">{{ selected_context }}
+    <a href="/todo?{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}" title="Clear">&#x2715;</a>
+  </span>
+  {% endif %}
+  {% if selected_search %}
+  <span class="af-chip">"{{ selected_search }}"
+    <a href="/todo?{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}" title="Clear">&#x2715;</a>
+  </span>
+  {% endif %}
+</div>
+{% endif %}
+
+<!-- Context/Priority/Due Filters -->
 {% if has_filter or contexts %}
 <div class="chip-toggle-bar" onclick="toggleChipSection('filter-chips', this)">
   <span class="chip-toggle-arrow">&#9654;</span> Filters
@@ -863,6 +959,10 @@ function toggleAddChip(chip, group) {
   input.value = text.replace(/^\s+/, '');
   input.focus();
   syncAddChips();
+  if (window.innerWidth < 768) {
+    var bar = document.querySelector('[onclick*="add-chips"]');
+    if (bar && bar.classList.contains('open')) toggleChipSection('add-chips', bar);
+  }
 }
 
 function reorderTodoText(text) {
