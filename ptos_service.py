@@ -40,7 +40,7 @@ def _disp(s):
 def _safe_exit(msg=""):
     raise PTOSError(str(msg))
 
-sys.exit = _safe_exit
+# _safe_exit is installed per-request in ptos_web.py via before_request/teardown_request
 # ─────────────────────────────────────────────────────────────────────────────
 
 import ptos

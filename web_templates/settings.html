@@ -100,7 +100,7 @@
 <div class="card" style="margin-bottom:14px;">
   <div class="card-title">Backup Folders</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    Folders to include in full backup. Core folders (records, config, templates, journal) are always included and cannot be removed.
+    Folders to include in full backup. Core folders (records, config, templates, journal, todo) are always included and cannot be removed.
   </p>
   <div id="backup-folders-list" style="display:flex;flex-direction:column;gap:8px;"></div>
   <div style="display:flex;gap:10px;margin-top:12px;">
@@ -144,7 +144,7 @@
 <script>
 (function() {
   var cycles = {{ cycles | tojson }};
-  var coreFolders = ["records", "config", "templates", "journal"];
+  var coreFolders = ["records", "config", "templates", "journal", "todo"];
   var backupFolders = {{ backup_folders | tojson }};
   document.getElementById("auth-enabled").checked = {{ 'true' if auth_enabled else 'false' }};
   document.getElementById("auto-backup-startup").checked = {{ 'true' if backup.get('auto_backup_on_startup', true) else 'false' }};

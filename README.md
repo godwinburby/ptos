@@ -877,9 +877,15 @@ ptos --doctor           # Check for issues
 ptos --doctor --fix     # Auto-fix issues where possible
 ```
 
-Checks performed: Python version, Flask installed, required folders exist, config
-files are valid TOML, schema is valid, templates folder exists, backups folder is
-writable.
+Health checks after every AI-assisted session, before trusting the result:
+
+1. **TOML syntax** — parses schema, queries, presets, config files
+2. **Config shape** — warns if schema has no `type="int"` fields (metrics
+   will silently show "no data")
+3. **`.ptos_home` sanity** — catches temp-path or missing-path corruption
+4. **Data sanity** — flags 0-byte log files (possible data loss) and empty
+   config/todo directories
+5. **Install completeness** — Python version, Flask, required folders/files
 
 ---
 
@@ -1552,9 +1558,7 @@ Journal files are stored at `journal/YYYY/YYYY-MM-DD.md`.
 python -m pytest tests/ -v
 ```
 
-The full suite runs in ~7s. There are 7 pre-existing failures in `test_config.py`
-and `test_dates.py` (a known `ptos_service.py` / `sys.exit` patching interaction) —
-all other tests should pass.
+The full suite runs in ~7s. All tests should pass.
 
 ### Test isolation
 

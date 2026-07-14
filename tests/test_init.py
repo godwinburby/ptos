@@ -85,7 +85,7 @@ class TestDoctorCheck:
     def test_json_after_init(self, ptos_home):
         ptos.init_ptos()
         result = ptos.doctor_check(json_output=True)
-        assert result["status"] == "ok"
+        assert result["status"] in ("ok", "warnings")
 
 
 class TestGetTodayJournal:
