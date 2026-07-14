@@ -155,7 +155,7 @@
 
 {% if sync.get('remote_name') and sync.get('remote_path') %}
 <div class="card" style="margin-bottom:14px;">
-  <div class="card-title">Sync</div>
+  <div class="card-title">Sync <span id="sync-dot-card" class="sync-dot"></span></div>
   <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">
     Remote: <code>{{ sync.remote_name }}:{{ sync.remote_path }}</code>
   </div>
@@ -333,6 +333,12 @@
   renderBackupFolders();
 })();
 
+var cachedSync = sessionStorage.getItem("sync-result");
+if (cachedSync) {
+  sessionStorage.removeItem("sync-result");
+  onSyncDone(JSON.parse(cachedSync));
+}
+
 function checkSyncConfirm() {
   var del = document.getElementById("sync-delete-confirm");
   var res = document.getElementById("sync-resync-confirm");
@@ -351,6 +357,7 @@ function runSync(command) {
   btn.textContent = "Running...";
   wrap.style.display = "block";
   out.textContent = "> Starting " + command + "...\n";
+  updateSyncDot("running");
 
   fetch("/sync/run", {
     method: "POST",
@@ -382,6 +389,8 @@ function onSyncDone(result) {
     if (btn) { btn.disabled = false; btn.textContent = labels[i]; }
   });
   checkSyncConfirm();
+  updateSyncDot(result && result.ok ? "ok" : "error");
+  setTimeout(function() { updateSyncDot(""); }, 10000);
 
   var wrap = document.getElementById("sync-output-wrap");
   var out = document.getElementById("sync-output");

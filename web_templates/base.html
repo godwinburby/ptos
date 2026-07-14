@@ -190,6 +190,12 @@
     }
     .floating-add:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
     .floating-add:active { transform: scale(.95); }
+
+    .sync-dot { display:none; width:8px; height:8px; border-radius:50%; margin-left:6px; vertical-align:middle; }
+    .sync-dot.sync-running { display:inline-block; background:#22c55e; animation: pulse 1s ease-in-out infinite; }
+    .sync-dot.sync-ok { display:inline-block; background:#22c55e; }
+    .sync-dot.sync-error { display:inline-block; background:var(--error); }
+    @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
     .card-title { font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
 
@@ -423,7 +429,7 @@
     <a href="/schema-builder" class="{% if tab=='schema_builder' %}active{% endif %}">{% include 'icons/schema_builder.html' ignore missing %} Schema Builder</a>
     <a href="/query-builder" class="{% if tab=='query_builder' %}active{% endif %}">{% include 'icons/query_builder.html' ignore missing %} Query Builder</a>
     <a href="/backup" class="{% if tab=='backup' %}active{% endif %}">{% include 'icons/backup.html' ignore missing %} Backup</a>
-    <a href="/settings" class="{% if tab=='settings' %}active{% endif %}">{% include 'icons/settings.html' ignore missing %} Settings</a>
+    <a href="/settings" class="{% if tab=='settings' %}active{% endif %}">{% include 'icons/settings.html' ignore missing %} Settings <span id="sync-dot-sidebar" class="sync-dot"></span></a>
   </nav>
   <div class="sidebar-footer">
     <a href="https://github.com/godwinburby/ptos" target="_blank">⭐ github.com/godwinburby/ptos</a>
@@ -437,6 +443,10 @@
 <main class="main">
   {% block content %}{% endblock %}
 </main>
+
+<!-- Global field-edit popup (used by todo page) -->
+<div class="field-popup" id="field-popup"></div>
+<input type="date" id="field-popup-picker" style="display:none;" onchange="onFieldPopupPick(this)">
 
 <nav class="bottom-nav">
   <a href="/"        class="nav-item {% if tab=='home'    %}active{% endif %}">
@@ -969,6 +979,14 @@ function _showTodoToast(tasks) {
   document.body.appendChild(d);
   setTimeout(function() { if (d.parentNode) d.remove(); }, 15000);
 }
+function updateSyncDot(state) {
+  document.querySelectorAll('.sync-dot').forEach(function(d) {
+    d.className = 'sync-dot';
+    if (state === 'running') d.classList.add('sync-running');
+    else if (state === 'ok') d.classList.add('sync-ok');
+    else if (state === 'error') d.classList.add('sync-error');
+  });
+}
 (function(){
   try {
     var es = new EventSource("/api/events");
@@ -999,17 +1017,26 @@ function _showTodoToast(tasks) {
           _showTodoToast(tasks);
         }
         if (msg.type === "sync-done") {
+          sessionStorage.setItem("sync-result", JSON.stringify(msg.data));
+          updateSyncDot(msg.data && msg.data.ok ? "ok" : "error");
+          setTimeout(function() { updateSyncDot(""); }, 10000);
           if (typeof onSyncDone === "function") onSyncDone(msg.data);
         }
       } catch(ex) {}
     };
   } catch(ex) {}
 })();
+var cachedSync = sessionStorage.getItem("sync-result");
+if (cachedSync) {
+  var r = JSON.parse(cachedSync);
+  updateSyncDot(r && r.ok ? "ok" : "error");
+  setTimeout(function() { updateSyncDot(""); }, 10000);
+}
 </script>
 {% endif %}
 
+<script>function floatingAddAction(){ location.href='/add'; }</script>
 {% block scripts %}{% endblock %}
 <script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/static/sw.js')}</script>
-<script>function floatingAddAction(){ location.href='/add'; }</script>
 </body>
 </html>

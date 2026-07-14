@@ -873,6 +873,8 @@ def main():
         result = run_sync(cmd, resync=args.resync)
         if not result["ok"]:
             sys.exit(result["error"])
+        if result["output"]:
+            print(result["output"])
         return
 
     if args.set_name:
