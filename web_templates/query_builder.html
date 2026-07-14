@@ -1155,7 +1155,7 @@ function triggerLivePreview() {
     area.innerHTML = '<div style="color:var(--sub);padding:16px;">Loading…</div>';
     fetch("/browse/run", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({where:_buildChipFilters(q), expr:q._exprManual||"", time:time, group:group, sort:sort, from_date:from_date, to_date:to_date})
+      body: JSON.stringify({where:_buildChipFilters(q), expr:q._exprManual||"", search:q.search||"", time:time, group:group, sort:sort, from_date:from_date, to_date:to_date})
     })
     .then(function(r){ return r.json(); })
     .then(function(d) {
