@@ -456,7 +456,7 @@
     <span>Browse</span>
   </a>
   <a href="#" id="more-btn" class="nav-item" onclick="toggleMoreMenu(event)">
-    {% include 'icons/due.html' ignore missing %}
+    {% include 'icons/more.html' ignore missing %}
     <span>More</span>
   </a>
 </nav>
@@ -471,6 +471,10 @@
   <div class="more-menu-overlay" onclick="toggleMoreMenu(event)"></div>
   <div class="more-menu-content">
     <div class="more-menu-header">More</div>
+    <a href="/search" class="more-menu-item {% if tab=='search' %}active{% endif %}">
+      {% include 'icons/search.html' ignore missing %}
+      Search
+    </a>
     <a href="/due" class="more-menu-item {% if tab=='due' %}active{% endif %}">
       {% include 'icons/due.html' ignore missing %}
       Due List
