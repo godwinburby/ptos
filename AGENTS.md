@@ -124,6 +124,7 @@ x 2026-07-12 2026-07-10 Completed task
 - **Floating add button** (`.floating-add`) — `floatingAddAction()` defined in `base.html` before `{% block scripts %}` so child templates can override; defaults to `/add` page; todo page does NOT override (add area is always visible)
 - **PTOS brand** — clickable `<a href="/">` in both mobile topbar and desktop sidebar, links to home page
 - **System notifications** — native OS notifications via `_system_notify()` in background thread; detects platform (Linux: `notify-send`, macOS: `osascript`, Windows: PowerShell toast, Android: `termux-notification`); runs alongside browser SSE notifications
+- **Service worker** (`web_static/sw.js`) — caches only GET requests for static assets; POST requests always pass through to network (fixes Android modal save)
 
 ### Autocomplete system
 - `_acData` object holds suggestions per prefix (`+`, `@`, `due:`, `(`)
@@ -149,6 +150,10 @@ x 2026-07-12 2026-07-10 Completed task
 | CLI flags | `ptos_cli.py`, `ptos.py` |
 | Config | `config/config.toml`, `starters/starter_config.toml` |
 | Tests | `tests/test_*.py` |
+| Start scripts | `start_ptos_linux.sh`, `start_ptos_android.sh`, `start_ptos_windows.bat` |
+
+### Start scripts
+All three scripts follow the same pattern: start server in background → health check loop (wait up to 15s for port 5000) → open browser → wait for server to exit. Linux uses `curl -s`, Android uses bash `/dev/tcp`, Windows uses `curl -s`. The health check just verifies the port is open (doesn't check HTTP status) so it works through auth (401).
 
 ## Commits
 
