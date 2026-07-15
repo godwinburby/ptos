@@ -1271,6 +1271,14 @@ def settings_save():
             cfg.setdefault("todo", {})["notify_interval"] = max(1, min(120, int(data["notify_interval"])))
         if "archive_months" in data:
             cfg.setdefault("todo", {})["archive_months"] = max(1, min(24, int(data["archive_months"])))
+        if "remote_name" in data:
+            val = data["remote_name"].strip().rstrip(":").replace(":", "")
+            cfg.setdefault("sync", {})["remote_name"] = val
+        if "remote_path" in data:
+            val = data["remote_path"].strip()
+            if val and not val.endswith("/"):
+                val += "/"
+            cfg.setdefault("sync", {})["remote_path"] = val
         if "auto_sync_on_startup" in data or "auto_sync_on_shutdown" in data:
             cfg.setdefault("sync", {})["auto_sync_on_startup"] = bool(data.get("auto_sync_on_startup"))
             cfg.setdefault("sync", {})["auto_sync_on_shutdown"] = bool(data.get("auto_sync_on_shutdown"))
@@ -1282,7 +1290,7 @@ def settings_save():
             cfg["dashboard"] = {"default": db_val} if db_val else {}
         
         if "backup_folders" in data and isinstance(data["backup_folders"], list):
-            core_folders = ["records", "config", "templates", "journal", "todo"]
+            core_folders = ["records", "config", "templates", "journal", "todo", "notes"]
             valid_folders = list(data["backup_folders"])
             for cf in core_folders:
                 if cf not in valid_folders:

@@ -128,7 +128,7 @@
 <div class="card" id="sec-backup-folders" style="margin-bottom:14px;">
   <div class="card-title">Backup Folders</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    Folders to include in full backup. Core folders (records, config, templates, journal, todo) are always included and cannot be removed.
+    Folders to include in full backup. Core folders (records, config, templates, journal, todo, notes) are always included and cannot be removed.
   </p>
   <div id="backup-folders-list" style="display:flex;flex-direction:column;gap:8px;"></div>
   <div style="display:flex;gap:10px;margin-top:12px;">
@@ -181,32 +181,34 @@
   </div>
 </div>
 
-{% if sync.get('remote_name') and sync.get('remote_path') %}
-  {% if not rclone_available %}
 <div class="card" id="sec-sync" style="margin-bottom:14px;">
-  <div class="card-title">Sync</div>
-  <div style="font-size:13px;color:var(--sub);line-height:1.6;">
+  <div class="card-title">Sync <span id="sync-dot-card" class="sync-dot"></span></div>
+
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+    <div class="field-group" style="flex:1;min-width:120px;">
+      <label>Remote name</label>
+      <input type="text" id="sync-remote-name" value="{{ sync.get('remote_name', '') }}" placeholder="gdrive" style="width:100%;font-size:14px;">
+    </div>
+    <div class="field-group" style="flex:1;min-width:120px;">
+      <label>Remote path</label>
+      <input type="text" id="sync-remote-path" value="{{ sync.get('remote_path', '') }}" placeholder="ptos/" style="width:100%;font-size:14px;">
+    </div>
+  </div>
+
+  {% if sync.get('remote_name') and sync.get('remote_path') %}
+    {% if not rclone_available %}
+  <div style="font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:12px;">
     rclone not found on this system.<br>
     Install from <a href="https://rclone.org/install/" target="_blank" style="color:var(--accent);">rclone.org</a>,
     configure a remote with <code>rclone config</code>, then restart PTOS.
   </div>
-</div>
-  {% elif not remote_exists %}
-<div class="card" id="sec-sync" style="margin-bottom:14px;">
-  <div class="card-title">Sync</div>
-  <div style="font-size:13px;color:var(--sub);line-height:1.6;">
+    {% elif not remote_exists %}
+  <div style="font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:12px;">
     Remote <code>{{ sync.remote_name }}:</code> not found in rclone config.<br>
     Run <code>rclone config</code> to set up this remote, then restart PTOS.
   </div>
-</div>
-  {% else %}
-<div class="card" id="sec-sync" style="margin-bottom:14px;">
-  <div class="card-title">Sync <span id="sync-dot-card" class="sync-dot"></span></div>
-  <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">
-    Remote: <code>{{ sync.remote_name }}:{{ sync.remote_path }}</code>
-  </div>
-
-  <div style="display:flex;flex-direction:column;gap:14px;">
+    {% else %}
+  <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:12px;">
     <div>
       <button id="sync-bisync-btn" onclick="runSync('bisync')" class="btn btn-primary" style="margin-right:8px;">Bisync</button>
       <span style="font-size:13px;color:var(--sub);">Bidirectional — recommended, safe for both sides</span>
@@ -230,8 +232,14 @@
       </div>
     </div>
   </div>
+    {% endif %}
+  {% else %}
+  <div style="font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:12px;">
+    Configure an rclone remote with <code>rclone config</code>, then enter the remote name and path above.
+  </div>
+  {% endif %}
 
-  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:14px;display:flex;gap:20px;flex-wrap:wrap;">
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;display:flex;gap:20px;flex-wrap:wrap;">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
       <input type="checkbox" id="auto-sync-startup" style="width:16px;height:16px;">
       Auto-sync on startup
@@ -255,8 +263,6 @@
     <pre id="sync-output" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0;"></pre>
   </div>
 </div>
-  {% endif %}
-{% endif %}
 
 <div style="display:flex;gap:10px;margin-top:20px;">
   <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
@@ -265,7 +271,7 @@
 <script>
 (function() {
   var cycles = {{ cycles | tojson }};
-  var coreFolders = ["records", "config", "templates", "journal", "todo"];
+  var coreFolders = ["records", "config", "templates", "journal", "todo", "notes"];
   var backupFolders = {{ backup_folders | tojson }};
   document.getElementById("auth-enabled").checked = {{ 'true' if auth_enabled else 'false' }};
   document.getElementById("auto-backup-startup").checked = {{ 'true' if backup.get('auto_backup_on_startup', true) else 'false' }};
@@ -281,6 +287,9 @@
   if (syncIntEl) syncIntEl.value = {{ sync_interval }};
   
   function renderBackupFolders() {
+    coreFolders.forEach(function(cf) {
+      if (backupFolders.indexOf(cf) === -1) backupFolders.push(cf);
+    });
     var list = document.getElementById("backup-folders-list");
     list.innerHTML = "";
     backupFolders.forEach(function(folder) {
@@ -375,6 +384,8 @@
         auth_enabled: document.getElementById("auth-enabled").checked,
         auth_username: document.getElementById("auth-username").value.trim(),
         auth_password: document.getElementById("auth-password").value,
+        remote_name: (document.getElementById("sync-remote-name") || {}).value || "",
+        remote_path: (document.getElementById("sync-remote-path") || {}).value || "",
         auto_sync_on_startup: !!(document.getElementById("auto-sync-startup") || {}).checked,
         auto_sync_on_shutdown: !!(document.getElementById("auto-sync-shutdown") || {}).checked,
         sync_interval_minutes: parseInt((document.getElementById("sync-interval") || {}).value) || 0
@@ -386,10 +397,13 @@
       if (data.ok) {
         msg.className = "msg msg-success";
         msg.textContent = "Settings saved successfully";
-      } else {
-        msg.className = "msg msg-error";
-        msg.textContent = "Error: " + (data.error || "Save failed");
+        msg.style.display = "block";
+        msg.scrollIntoView({behavior: "smooth"});
+        setTimeout(function() { location.reload(); }, 500);
+        return;
       }
+      msg.className = "msg msg-error";
+      msg.textContent = "Error: " + (data.error || "Save failed");
       msg.style.display = "block";
       msg.scrollIntoView({behavior: "smooth"});
       setTimeout(function() { msg.style.display = "none"; }, 3000);
