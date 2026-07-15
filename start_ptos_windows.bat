@@ -57,14 +57,27 @@ for /f "tokens=5" %%a in ('netstat -ano 2^>nul ^| findstr ":5000 " ^| findstr LI
     taskkill /F /PID %%a >nul 2>&1
 )
 
-:: Start Flask
+:: Start Flask in background
 echo.
 echo Starting PTOS...
 echo Open in browser: http://localhost:5000
 echo Press Ctrl+C to stop.
 echo.
 
-:: Start Flask in foreground - shows output, Ctrl+C to stop
-timeout /t 2 /nobreak >nul
+start /b %PYTHON% ptos_web.py
+
+:: Wait for server to be ready (up to 15s)
+echo Waiting for server...
+for /l %%i in (1,1,15) do (
+    curl -s http://localhost:5000 >nul 2>&1 && goto :ready
+    timeout /t 1 /nobreak >nul
+)
+:ready
+
 start http://localhost:5000
-%PYTHON% ptos_web.py
+
+:: Wait until server stops
+:waitloop
+timeout /t 5 /nobreak >nul
+curl -s http://localhost:5000 >nul 2>&1
+if not errorlevel 1 goto waitloop
