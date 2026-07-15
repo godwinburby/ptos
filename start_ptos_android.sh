@@ -67,8 +67,19 @@ echo "Starting PTOS Web Server..."
 echo "Open in browser: http://localhost:5000"
 echo ""
 
-# Open browser (non-blocking, ignore failure)
-am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 &
+# Start server in background
+"$PYTHON" ptos_web.py &
+FLASK_PID=$!
 
-# Start server in foreground
-"$PYTHON" ptos_web.py
+# Wait for server to be ready (up to 15s)
+echo "Waiting for server..."
+for i in $(seq 1 15); do
+    if wget -q -O /dev/null http://localhost:5000 2>/dev/null; then
+        break
+    fi
+    sleep 1
+done
+
+# Open browser
+am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
+wait $FLASK_PID
