@@ -111,13 +111,14 @@ x 2026-07-12 2026-07-10 Completed task
 
 ### Web UI features
 - **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `sched:`, `(`); always visible at top of todo page (no collapsible)
-- **Quick pick chips** (collapsible) — Priority (A-D), Projects, Contexts, Due shortcuts (with "pick date..." chip), Scheduled (with "pick date..." chip), Repeat as toggle chips; open on input focus, close on blur (with 200ms delay to allow chip clicks); on mobile, groups stack vertically instead of scrolling horizontally
+- **Quick pick chips** (collapsible) — Due shortcuts (with "pick date & time..." chip), Priority (A-D), Projects, Contexts, Scheduled (with "pick date & time..." chip + "Now" chip), Repeat as toggle chips; open on input focus, close on blur (with 200ms delay to allow chip clicks); on mobile, groups stack vertically instead of scrolling horizontally
 - **Filter chips** (collapsible) — Priority (A-D), Due Range (overdue/today/tomorrow/upcoming/someday/none), Context — all toggle on click; on mobile, groups stack vertically
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; filters todos by description; preserves other active filters
 - **Form modal** (shared add+edit) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
 - **Clickable todo chips** — project, context, and priority chips on each todo row link to filtered view; clicking an active filter chip removes that filter
 - **Project rail** — horizontal scroll filter with toggle behavior
 - **Overdue/Tomorrow/Today/Upcoming/Someday** bucket view with collapsible Done section; overdue collapsed by default
+- **Scheduled todos** — Todos with `sched > today` are hidden until their scheduled date arrives (standard todo.txt behavior: `sched` means "don't show until")
 - **Today progress** counter (done/total)
 - **Help card** — color-coded annotated todo.txt example with priority, project, context, due, scheduled, recurrence
 - **Inline field popups** — click due/sched badges for date picker, priority badge for priority picker; popups use `position:fixed` and live in `base.html` (outside `<main>` to avoid overflow clipping)

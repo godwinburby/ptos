@@ -698,12 +698,14 @@ def bucket_todos(todos):
     - tomorrow: due == today+1
     - upcoming: due > today+1 and <= today+7
     - someday: due is None or > today+7
+
+    Todos with sched > today are hidden until their scheduled date arrives.
     """
     today = dt.date.today()
     tomorrow = today + dt.timedelta(days=1)
     week_end = today + dt.timedelta(days=7)
 
-    open_todos = [t for t in todos if not t.done]
+    open_todos = [t for t in todos if not t.done and (t.sched is None or t.sched <= today)]
 
     b_overdue = []
     b_today = []
