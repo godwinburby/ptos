@@ -70,6 +70,7 @@ for ($i = 0; $i -lt 15; $i++) {
         $serverReady = $true
         break
     } catch {
+        if ($_.Exception.Response) { $serverReady = $true; break }
         Write-Host "." -NoNewline
         Start-Sleep -Seconds 1
     }
@@ -89,6 +90,7 @@ if ($serverReady) {
             Start-Process "http://localhost:5000"
             break
         } catch {
+            if ($_.Exception.Response) { Start-Process "http://localhost:5000"; break }
             Start-Sleep -Seconds 1
         }
     }

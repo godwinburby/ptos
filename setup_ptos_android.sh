@@ -85,21 +85,18 @@ if [ "$INIT_NEEDED" = true ]; then
     echo "PTOS initialised."
 fi
 
-# ── Download Android scripts to $HOME ────────────────────────────────────────
+# ── Download setup script to $HOME (for easy re-run) ──────────────────────────
 echo ""
-echo "Downloading scripts..."
-for script in start_ptos_android.sh setup_ptos_android.sh; do
-    curl -fsSL "https://raw.githubusercontent.com/godwinburby/ptos/main/$script" \
-         -o "$HOME/$script" 2>/dev/null || true
-    chmod +x "$HOME/$script" 2>/dev/null || true
-done
+echo "Downloading setup script..."
+cp "$PTOS_DIR/setup_ptos_android.sh" "$HOME/setup_ptos_android.sh" 2>/dev/null || true
+chmod +x "$HOME/setup_ptos_android.sh" 2>/dev/null || true
 
 # ── Refresh widget shortcuts ────────────────────────────────────────────────────
 echo ""
 echo "Creating widget shortcuts..."
 mkdir -p "$HOME/.shortcuts"
 rm -f "$HOME/.shortcuts"/*.sh
-ln -s "$HOME/start_ptos_android.sh" "$HOME/.shortcuts/Start_PTOS.sh" 2>/dev/null || true
+ln -s "$PTOS_DIR/start_ptos_android.sh" "$HOME/.shortcuts/Start_PTOS.sh" 2>/dev/null || true
 echo "Shortcuts created."
 
 echo ""
@@ -108,14 +105,14 @@ echo "Open in browser: http://localhost:5000"
 echo ""
 
 # Start server in background
-"$PYTHON" ptos_web.py &
+python ptos_web.py &
 FLASK_PID=$!
 
 # Wait for server to be ready (up to 15s)
 echo "Waiting for server..."
 SERVER_READY=0
 for i in $(seq 1 15); do
-    if curl -sf http://localhost:5000 >/dev/null 2>&1; then
+    if curl -s http://localhost:5000 >/dev/null 2>&1; then
         SERVER_READY=1
         break
     fi
@@ -130,7 +127,7 @@ else
     echo "still be running — check the messages above)."
     echo "Waiting for server to become available..."
     for i in $(seq 1 120); do
-        if curl -sf http://localhost:5000 >/dev/null 2>&1; then
+        if curl -s http://localhost:5000 >/dev/null 2>&1; then
             am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
             break
         fi
