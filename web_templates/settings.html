@@ -1,11 +1,39 @@
 {% extends "base.html" %}
 {% block content %}
 
+<style>
+.settings-toc {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px;
+  position: sticky; top: 0; z-index: 50;
+  background: var(--bg); padding: 10px 0;
+}
+.settings-toc a {
+  padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
+  background: var(--card); color: var(--sub); border: 1px solid var(--border);
+  text-decoration: none; white-space: nowrap; transition: all .15s;
+}
+.settings-toc a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+[id^="sec-"] { scroll-margin-top: 50px; }
+</style>
+
 <div class="page-title">Settings</div>
 
 <div id="save-msg" style="display:none;margin-bottom:14px;"></div>
 
-<div class="card" style="margin-bottom:14px;">
+<nav class="settings-toc">
+  <a href="#sec-data">Data</a>
+  <a href="#sec-profile">Profile</a>
+  <a href="#sec-display">Display</a>
+  <a href="#sec-dashboard">Dashboard</a>
+  <a href="#sec-auth">Auth</a>
+  <a href="#sec-cycles">Cycles</a>
+  <a href="#sec-backup-folders">Folders</a>
+  <a href="#sec-backup-settings">Backup</a>
+  <a href="#sec-todo">Todo</a>
+  <a href="#sec-sync">Sync</a>
+</nav>
+
+<div class="card" id="sec-data" style="margin-bottom:14px;">
   <div class="card-title">Data Folder</div>
   <div style="display:flex;gap:8px;align-items:center;">
     <input type="text" id="base-dir" value="{{ base_dir }}" readonly
@@ -18,7 +46,7 @@
   </div>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card" id="sec-profile" style="margin-bottom:14px;">
   <div class="card-title">Profile</div>
   <div class="field-group">
     <label>User Name</label>
@@ -26,7 +54,7 @@
   </div>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card" id="sec-display" style="margin-bottom:14px;">
   <div class="card-title">Display</div>
   <div style="display:flex;gap:16px;flex-wrap:wrap;">
     <div class="field-group" style="flex:1;min-width:120px;">
@@ -44,7 +72,7 @@
   </div>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card" id="sec-dashboard" style="margin-bottom:14px;">
   <div class="card-title">Dashboard</div>
   <div class="field-group" style="flex:1;min-width:160px;">
     <label>Default Dashboard</label>
@@ -57,7 +85,7 @@
   </div>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card" id="sec-auth" style="margin-bottom:14px;">
   <div class="card-title">Authentication</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
     Enable password protection for the web UI. Changing credentials takes effect immediately.
@@ -78,7 +106,7 @@
   </div>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card" id="sec-cycles" style="margin-bottom:14px;">
   <div class="card-title">Custom Cycles</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
     Define billing/reporting cycles as day-of-month they start. Usage: <code>-t clinic</code> (current) or <code>-t clinic-1</code> (previous)
@@ -97,7 +125,7 @@
   <button onclick="addCycle()" class="btn btn-ghost btn-sm" style="margin-top:12px;">+ Add Cycle</button>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card" id="sec-backup-folders" style="margin-bottom:14px;">
   <div class="card-title">Backup Folders</div>
   <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
     Folders to include in full backup. Core folders (records, config, templates, journal, todo) are always included and cannot be removed.
@@ -109,7 +137,7 @@
   </div>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card" id="sec-backup-settings" style="margin-bottom:14px;">
   <div class="card-title">Backup Settings</div>
   <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
     <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;">
@@ -137,7 +165,7 @@
   </div>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card" id="sec-todo" style="margin-bottom:14px;">
   <div class="card-title">Todo</div>
   <div style="display:flex;gap:14px;flex-wrap:wrap;">
     <div class="field-group" style="flex:1;min-width:120px;">
@@ -154,7 +182,25 @@
 </div>
 
 {% if sync.get('remote_name') and sync.get('remote_path') %}
-<div class="card" style="margin-bottom:14px;">
+  {% if not rclone_available %}
+<div class="card" id="sec-sync" style="margin-bottom:14px;">
+  <div class="card-title">Sync</div>
+  <div style="font-size:13px;color:var(--sub);line-height:1.6;">
+    rclone not found on this system.<br>
+    Install from <a href="https://rclone.org/install/" target="_blank" style="color:var(--accent);">rclone.org</a>,
+    configure a remote with <code>rclone config</code>, then restart PTOS.
+  </div>
+</div>
+  {% elif not remote_exists %}
+<div class="card" id="sec-sync" style="margin-bottom:14px;">
+  <div class="card-title">Sync</div>
+  <div style="font-size:13px;color:var(--sub);line-height:1.6;">
+    Remote <code>{{ sync.remote_name }}:</code> not found in rclone config.<br>
+    Run <code>rclone config</code> to set up this remote, then restart PTOS.
+  </div>
+</div>
+  {% else %}
+<div class="card" id="sec-sync" style="margin-bottom:14px;">
   <div class="card-title">Sync <span id="sync-dot-card" class="sync-dot"></span></div>
   <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">
     Remote: <code>{{ sync.remote_name }}:{{ sync.remote_path }}</code>
@@ -185,11 +231,31 @@
     </div>
   </div>
 
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:14px;display:flex;gap:20px;flex-wrap:wrap;">
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+      <input type="checkbox" id="auto-sync-startup" style="width:16px;height:16px;">
+      Auto-sync on startup
+    </label>
+    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
+      <input type="checkbox" id="auto-sync-shutdown" style="width:16px;height:16px;">
+      Auto-sync on shutdown
+    </label>
+  </div>
+
+  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:14px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <label style="margin:0;font-size:13px;white-space:nowrap;">Periodic sync interval (min)</label>
+      <input type="number" id="sync-interval" min="0" max="120" style="width:70px;">
+    </div>
+    <div class="hint">Background bisync every N minutes. 0 = disabled. Requires restart.</div>
+  </div>
+
   <div id="sync-output-wrap" style="display:none;margin-top:14px;">
     <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:6px;">Output</div>
     <pre id="sync-output" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0;"></pre>
   </div>
 </div>
+  {% endif %}
 {% endif %}
 
 <div style="display:flex;gap:10px;margin-top:20px;">
@@ -209,6 +275,10 @@
   document.getElementById("max-config-backups").value = {{ backup.get('max_config_backups', 10) }};
   document.getElementById("notify-interval").value = {{ todo.get('notify_interval', 5) }};
   document.getElementById("archive-months").value = {{ todo.get('archive_months', 6) }};
+  document.getElementById("auto-sync-startup").checked = {{ 'true' if sync_auto_on_startup else 'false' }};
+  document.getElementById("auto-sync-shutdown").checked = {{ 'true' if sync_auto_on_shutdown else 'false' }};
+  var syncIntEl = document.getElementById("sync-interval");
+  if (syncIntEl) syncIntEl.value = {{ sync_interval }};
   
   function renderBackupFolders() {
     var list = document.getElementById("backup-folders-list");
@@ -304,7 +374,10 @@
         backup_folders: backupFolders,
         auth_enabled: document.getElementById("auth-enabled").checked,
         auth_username: document.getElementById("auth-username").value.trim(),
-        auth_password: document.getElementById("auth-password").value
+        auth_password: document.getElementById("auth-password").value,
+        auto_sync_on_startup: !!(document.getElementById("auto-sync-startup") || {}).checked,
+        auto_sync_on_shutdown: !!(document.getElementById("auto-sync-shutdown") || {}).checked,
+        sync_interval_minutes: parseInt((document.getElementById("sync-interval") || {}).value) || 0
       })
     })
     .then(function(r) { return r.json(); })
