@@ -957,7 +957,8 @@ function saveTodoModal() {
     .then(function(d) {
       if (d.ok) { window.location.reload(); }
       else { alert(d.error || 'Failed to save'); }
-    });
+    })
+    .catch(function() { alert('Network error'); });
   } else {
     var line = desc;
     if (pri) line = '(' + pri + ') ' + line;
@@ -974,7 +975,8 @@ function saveTodoModal() {
     .then(function(d) {
       if (d.ok) { window.location.reload(); }
       else { alert(d.error || 'Failed to add todo'); }
-    });
+    })
+    .catch(function() { alert('Network error'); });
   }
 }
 

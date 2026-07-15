@@ -74,7 +74,7 @@ FLASK_PID=$!
 # Wait for server to be ready (up to 15s)
 echo "Waiting for server..."
 for i in $(seq 1 15); do
-    if wget -q -O /dev/null http://localhost:5000 2>/dev/null; then
+    if (echo >/dev/tcp/localhost/5000) 2>/dev/null; then
         break
     fi
     sleep 1
