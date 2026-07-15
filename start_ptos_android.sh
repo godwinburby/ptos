@@ -73,13 +73,28 @@ FLASK_PID=$!
 
 # Wait for server to be ready (up to 15s)
 echo "Waiting for server..."
+SERVER_READY=0
 for i in $(seq 1 15); do
     if (echo >/dev/tcp/localhost/5000) 2>/dev/null; then
+        SERVER_READY=1
         break
     fi
     sleep 1
 done
 
-# Open browser
-am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
+if [ "$SERVER_READY" = "1" ]; then
+    am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
+else
+    echo ""
+    echo "Server is taking longer than usual to start (startup sync may"
+    echo "still be running — check the messages above)."
+    echo "Waiting for server to become available..."
+    for i in $(seq 1 120); do
+        if (echo >/dev/tcp/localhost/5000) 2>/dev/null; then
+            am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
+            break
+        fi
+        sleep 1
+    done
+fi
 wait $FLASK_PID

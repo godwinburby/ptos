@@ -150,10 +150,10 @@ x 2026-07-12 2026-07-10 Completed task
 | CLI flags | `ptos_cli.py`, `ptos.py` |
 | Config | `config/config.toml`, `starters/starter_config.toml` |
 | Tests | `tests/test_*.py` |
-| Start scripts | `start_ptos_linux.sh`, `start_ptos_android.sh`, `start_ptos_windows.bat` |
+| Start scripts | `start_ptos_linux.sh`, `start_ptos_android.sh`, `start_ptos_windows.bat` + `start_ptos_windows.ps1` |
 
 ### Start scripts
-All three scripts follow the same pattern: start server in background → health check loop (wait up to 15s for port 5000) → open browser → wait for server to exit. Linux uses `curl -s`, Android uses bash `/dev/tcp`, Windows uses `curl -s`. The health check just verifies the port is open (doesn't check HTTP status) so it works through auth (401).
+All three scripts follow the same pattern: start server in background → health check loop (wait up to 15s for port 5000) → conditional browser open → wait for server to exit. `SERVER_READY` flag tracks whether the health check succeeded; browser only opens on confirmed readiness, otherwise prints "Server is taking longer than usual" and keeps polling (up to 2 min) — browser opens automatically once the server becomes available. Linux uses `curl -s`, Android uses bash `/dev/tcp`, Windows uses `Invoke-WebRequest`. The health check just verifies the port is open (doesn't check HTTP status) so it works through auth (401). Windows uses `.bat`-stub-plus-`.ps1` pattern (same as `setup_ptos_windows.bat`): the `.bat` is a 3-line launcher, `start_ptos_windows.ps1` has full logic with `Start-Process -PassThru` + `try/finally { Wait-Process; Stop-Process }` to guarantee clean shutdown on Ctrl+C.
 
 ## Commits
 
