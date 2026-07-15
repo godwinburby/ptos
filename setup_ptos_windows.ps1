@@ -170,10 +170,12 @@ Write-Host ""
 $proc = Start-Process -FilePath $python -ArgumentList "ptos_web.py" `
     -PassThru -NoNewWindow
 
-Write-Host "Waiting for server" -NoNewline
+Write-Host "Waiting for server..." -NoNewline
+$serverReady = $false
 for ($i = 0; $i -lt 15; $i++) {
     try {
         Invoke-WebRequest -Uri "http://localhost:5000" -TimeoutSec 1 -UseBasicParsing | Out-Null
+        $serverReady = $true
         break
     } catch {
         Write-Host "." -NoNewline
@@ -181,10 +183,29 @@ for ($i = 0; $i -lt 15; $i++) {
     }
 }
 Write-Host ""
-Start-Process "http://localhost:5000"
+
+if ($serverReady) {
+    Start-Process "http://localhost:5000"
+} else {
+    Write-Host ""
+    Write-Host "Server is taking longer than usual to start (startup sync may"
+    Write-Host "still be running - check the messages above)."
+    Write-Host "Waiting for server to become available..."
+    for ($i = 0; $i -lt 120; $i++) {
+        try {
+            Invoke-WebRequest -Uri "http://localhost:5000" -TimeoutSec 1 -UseBasicParsing | Out-Null
+            Start-Process "http://localhost:5000"
+            break
+        } catch {
+            Start-Sleep -Seconds 1
+        }
+    }
+}
 
 try {
     Wait-Process -Id $proc.Id
-} catch {
-    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+} finally {
+    if (-not $proc.HasExited) {
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
 }

@@ -624,7 +624,7 @@ def todo_page():
         contexts = svc.get_todo_contexts()
         error = None
     except PTOSError as e:
-        buckets = {"overdue": [], "today": [], "upcoming": [], "someday": [], "total_open": 0}
+        buckets = {"overdue": [], "today": [], "tomorrow": [], "upcoming": [], "someday": [], "total_open": 0}
         projects = []
         contexts = []
         error = str(e)
@@ -642,7 +642,7 @@ def todo_page():
             result = [t for t in result if _glob_match(search, t.description)]
         return result
 
-    for key in ("overdue", "today", "upcoming", "someday"):
+    for key in ("overdue", "today", "tomorrow", "upcoming", "someday"):
         buckets[key] = _filter_list(buckets[key])
 
     # apply due range filter
@@ -654,6 +654,7 @@ def todo_page():
         elif due_filter == "none":
             buckets["overdue"] = []
             buckets["today"] = []
+            buckets["tomorrow"] = []
             buckets["upcoming"] = []
 
     # today progress: count completed today vs total added today
