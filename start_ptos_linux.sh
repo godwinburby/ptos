@@ -83,7 +83,7 @@ FLASK_PID=$!
 echo "Waiting for server..."
 SERVER_READY=0
 for i in $(seq 1 15); do
-    if curl -sf http://localhost:5000 >/dev/null 2>&1; then
+    if curl -s http://localhost:5000 >/dev/null 2>&1; then
         SERVER_READY=1
         break
     fi
@@ -98,7 +98,7 @@ else
     echo "still be running — check the messages above)."
     echo "Waiting for server to become available..."
     for i in $(seq 1 120); do
-        if curl -sf http://localhost:5000 >/dev/null 2>&1; then
+        if curl -s http://localhost:5000 >/dev/null 2>&1; then
             xdg-open http://localhost:5000 2>/dev/null || true
             break
         fi
