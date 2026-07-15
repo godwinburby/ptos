@@ -691,30 +691,35 @@ def get_contexts(todos):
 # ── bucketing ───────────────────────────────────────────────────────────────
 
 def bucket_todos(todos):
-    """Group open todos into today / upcoming / someday buckets.
+    """Group open todos into overdue / today / tomorrow / upcoming / someday buckets.
 
-    - today: due <= today (including overdue)
-    - upcoming: due is set and > today and <= today+7
+    - overdue: due < today
+    - today: due == today
+    - tomorrow: due == today+1
+    - upcoming: due > today+1 and <= today+7
     - someday: due is None or > today+7
     """
     today = dt.date.today()
+    tomorrow = today + dt.timedelta(days=1)
     week_end = today + dt.timedelta(days=7)
 
     open_todos = [t for t in todos if not t.done]
 
     b_overdue = []
     b_today = []
+    b_tomorrow = []
     b_upcoming = []
     b_someday = []
 
     for t in open_todos:
         if t.due is None:
             b_someday.append(t)
-        elif t.due <= today:
-            if t.due < today:
-                b_overdue.append(t)
-            else:
-                b_today.append(t)
+        elif t.due < today:
+            b_overdue.append(t)
+        elif t.due == today:
+            b_today.append(t)
+        elif t.due == tomorrow:
+            b_tomorrow.append(t)
         elif t.due <= week_end:
             b_upcoming.append(t)
         else:
@@ -723,12 +728,14 @@ def bucket_todos(todos):
     # sort overdue most overdue first, upcoming by due date
     b_overdue.sort(key=lambda t: t.due)
     b_today.sort(key=lambda t: (t.priority or "Z", t.description))
+    b_tomorrow.sort(key=lambda t: (t.priority or "Z", t.description))
     b_upcoming.sort(key=lambda t: t.due)
     b_someday.sort(key=lambda t: (t.priority or "Z", t.description))
 
     return {
         "overdue": b_overdue,
         "today": b_today,
+        "tomorrow": b_tomorrow,
         "upcoming": b_upcoming,
         "someday": b_someday,
         "total_open": len(open_todos),

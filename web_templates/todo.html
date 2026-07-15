@@ -391,7 +391,7 @@
     <div class="todo-ac-list" id="todo-ac-list"></div>
   </div>
   <button onclick="addTodo()">Add</button>
-  <input type="date" id="todo-date-picker" style="display:none;" onchange="onDatePickerPick(this)">
+  <input type="datetime-local" id="todo-date-picker" style="display:none;" onchange="onDatePickerPick(this)">
   <button onclick="openAdd()" style="background:var(--bg);color:var(--sub);font-size:16px;width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;" title="Form add (n)">+</button>
 </div>
 
@@ -400,17 +400,6 @@
   <span class="chip-toggle-arrow">&#9654;</span> Quick pick
 </div>
 <div class="add-chips" id="add-chips">
-  <div class="chip-group-card">
-    <div class="chip-group-label">Due</div>
-    <div class="chip-row" id="add-chips-due">
-      <button class="add-chip" data-token="due:today " onclick="toggleAddChip(this,'due')">today</button>
-      <button class="add-chip" data-token="due:tomorrow " onclick="toggleAddChip(this,'due')">tomorrow</button>
-      <button class="add-chip" data-token="due:this_week " onclick="toggleAddChip(this,'due')">this week</button>
-      <button class="add-chip" data-token="due:next_week " onclick="toggleAddChip(this,'due')">next week</button>
-      <button class="add-chip" data-token="due:this_month " onclick="toggleAddChip(this,'due')">this month</button>
-      <button class="add-chip" data-token="due:next_month " onclick="toggleAddChip(this,'due')">next month</button>
-    </div>
-  </div>
   <div class="chip-group-card">
     <div class="chip-group-label">Priority</div>
     <div class="chip-row" id="add-chips-pri">
@@ -447,6 +436,18 @@
   </div>
   {% endif %}
   <div class="chip-group-card">
+    <div class="chip-group-label">Due</div>
+    <div class="chip-row" id="add-chips-due">
+      <button class="add-chip" data-token="due:today " onclick="toggleAddChip(this,'due')">today</button>
+      <button class="add-chip" data-token="due:tomorrow " onclick="toggleAddChip(this,'due')">tomorrow</button>
+      <button class="add-chip" data-token="due:this_week " onclick="toggleAddChip(this,'due')">this week</button>
+      <button class="add-chip" data-token="due:next_week " onclick="toggleAddChip(this,'due')">next week</button>
+      <button class="add-chip" data-token="due:this_month " onclick="toggleAddChip(this,'due')">this month</button>
+      <button class="add-chip" data-token="due:next_month " onclick="toggleAddChip(this,'due')">next month</button>
+      <button class="add-chip" data-token="__PICKER__:due:" onclick="pickAddDate('due')">pick date...</button>
+    </div>
+  </div>
+  <div class="chip-group-card">
     <div class="chip-group-label">Scheduled</div>
     <div class="chip-row" id="add-chips-sched">
       <button class="add-chip" data-token="sched:today " onclick="toggleAddChip(this,'sched')">today</button>
@@ -455,6 +456,7 @@
       <button class="add-chip" data-token="sched:next_week " onclick="toggleAddChip(this,'sched')">next week</button>
       <button class="add-chip" data-token="sched:this_month " onclick="toggleAddChip(this,'sched')">this month</button>
       <button class="add-chip" data-token="sched:next_month " onclick="toggleAddChip(this,'sched')">next month</button>
+      <button class="add-chip" data-token="__PICKER__:sched:" onclick="pickAddDate('sched')">pick date...</button>
     </div>
   </div>
   <div class="chip-group-card">
@@ -473,14 +475,17 @@
   <a onclick="document.getElementById('todo-help').classList.toggle('open');this.textContent=this.textContent==='Hide help'?'? Help':'Hide help'" style="font-size:12px;color:var(--sub);cursor:pointer;user-select:none;">? Help</a>
   <div id="todo-help" class="todo-help-card">
     <div class="todo-help-title">Todo format reference</div>
-    <div class="todo-help-row"><code>(A) Call supplier +HearSpeechPro @phone due:tomorrow 3pm</code></div>
+    <div class="todo-help-row" style="font-size:13px;line-height:1.8;">
+      <code><span style="color:var(--error);">(A)</span> Call supplier <span style="color:var(--accent);">+HearSpeechPro</span> <span style="color:var(--green);">@phone</span> <span style="color:#f0ad4e;">due:tomorrow 3pm</span> <span style="color:var(--sub);">rec:1w</span></code>
+    </div>
     <table class="todo-help-table">
-      <tr><td><code>(A)</code></td><td>Priority (A-Z). Or type <code>pri:a</code></td></tr>
-      <tr><td><code>+Project</code></td><td>Project tag. E.g. <code>+Home</code> <code>+HearSpeechPro</code></td></tr>
-      <tr><td><code>@context</code></td><td>Context tag. E.g. <code>@phone</code> <code>@errand</code></td></tr>
-      <tr><td><code>due:date</code></td><td>Due date. <code>today</code> <code>tomorrow</code> <code>fri</code> <code>due:this_week</code> <code>due:next_month</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
-      <tr><td><code>sched:date</code></td><td>Scheduled date (surfaces when it arrives)</td></tr>
-      <tr><td><code>due:date time</code></td><td>With time: <code>due:tomorrow 3pm</code> <code>due:2026-07-12T14:30</code></td></tr>
+      <tr><td><code style="color:var(--error);">(A)</code></td><td>Priority <code>(A)</code>–<code>(Z)</code>. Or type <code>pri:a</code></td></tr>
+      <tr><td><code style="color:var(--accent);">+Project</code></td><td>Project tag, e.g. <code>+Home</code></td></tr>
+      <tr><td><code style="color:var(--green);">@context</code></td><td>Context tag, e.g. <code>@phone</code></td></tr>
+      <tr><td><code style="color:#f0ad4e;">due:date</code></td><td>Due date — <code>today</code> <code>tomorrow</code> <code>fri</code> <code>this_week</code> <code>next_month</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
+      <tr><td><code style="color:#f0ad4e;">due:date time</code></td><td>With time — <code>due:tomorrow 3pm</code> <code>due:2026-07-12T14:30</code></td></tr>
+      <tr><td><code>sched:date</code></td><td>Scheduled date — surfaces when it arrives</td></tr>
+      <tr><td><code style="color:var(--sub);">rec:interval</code></td><td>Recurrence — <code>rec:1d</code> <code>rec:1w</code> <code>rec:1m</code> <code>rec:1y</code></td></tr>
     </table>
   </div>
 </div>
@@ -562,7 +567,7 @@
   <div class="chip-group-card" style="grid-column:1 / -1;">
     <div class="chip-group-label">Due Range</div>
     <div class="chip-row">
-      {% for d in ["overdue","today","upcoming","someday","none"] %}
+      {% for d in ["overdue","today","tomorrow","upcoming","someday","none"] %}
       <a href="/todo?{% if selected_due != d %}due={{ d }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}"
          class="todo-chip {% if selected_due==d %}active{% endif %}">{{ d }}</a>
       {% endfor %}
@@ -602,7 +607,7 @@
     <div class="todo-section-title" style="color:var(--error);">Overdue</div>
     <div class="todo-section-count">{{ buckets.overdue|length }}</div>
   </div>
-  <div id="sec-overdue">
+  <div id="sec-overdue" style="display:none;">
     {% for t in buckets.overdue %}{{ todo_row(t, 'overdue') }}{% endfor %}
   </div>
 </div>
@@ -616,6 +621,18 @@
   </div>
   <div id="sec-today">
     {% for t in buckets.today %}{{ todo_row(t, 'today') }}{% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% if buckets.tomorrow %}
+<div class="todo-section">
+  <div class="todo-section-header" onclick="toggleSection('tomorrow')">
+    <div class="todo-section-title" style="color:var(--accent);">Tomorrow</div>
+    <div class="todo-section-count">{{ buckets.tomorrow|length }}</div>
+  </div>
+  <div id="sec-tomorrow">
+    {% for t in buckets.tomorrow %}{{ todo_row(t, 'today') }}{% endfor %}
   </div>
 </div>
 {% endif %}
@@ -1196,12 +1213,20 @@ function pickAC(idx) {
   syncAddChips();
 }
 
+function pickAddDate(prefix) {
+  _pickerPrefix = prefix + ':';
+  var picker = document.getElementById('todo-date-picker');
+  picker.value = '';
+  picker.showPicker();
+}
+
 function onDatePickerPick(el) {
   if (!el.value || !_pickerPrefix) return;
   var input = document.getElementById('todo-input');
   var text = input.value;
   text = text.replace(new RegExp(_pickerPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*'), '');
-  var token = _pickerPrefix + el.value + ' ';
+  var dtVal = el.value;
+  var token = _pickerPrefix + dtVal + ' ';
   text = text.trimEnd() + ' ' + token;
   input.value = text.replace(/^\s+/, '');
   input.focus();

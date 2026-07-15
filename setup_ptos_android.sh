@@ -103,16 +103,38 @@ ln -s "$HOME/start_ptos_android.sh" "$HOME/.shortcuts/Start_PTOS.sh" 2>/dev/null
 echo "Shortcuts created."
 
 echo ""
-echo "=========================================="
-echo "  Setup Complete!"
-echo "=========================================="
-echo ""
 echo "Starting PTOS..."
 echo "Open in browser: http://localhost:5000"
 echo ""
 
-# Open browser (non-blocking)
-am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 &
+# Start server in background
+"$PYTHON" ptos_web.py &
+FLASK_PID=$!
 
-# Start server in foreground
-python ptos_web.py
+# Wait for server to be ready (up to 15s)
+echo "Waiting for server..."
+SERVER_READY=0
+for i in $(seq 1 15); do
+    if curl -sf http://localhost:5000 >/dev/null 2>&1; then
+        SERVER_READY=1
+        break
+    fi
+    sleep 1
+done
+
+if [ "$SERVER_READY" = "1" ]; then
+    am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
+else
+    echo ""
+    echo "Server is taking longer than usual to start (startup sync may"
+    echo "still be running — check the messages above)."
+    echo "Waiting for server to become available..."
+    for i in $(seq 1 120); do
+        if curl -sf http://localhost:5000 >/dev/null 2>&1; then
+            am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
+            break
+        fi
+        sleep 1
+    done
+fi
+wait $FLASK_PID
