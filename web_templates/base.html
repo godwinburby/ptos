@@ -401,7 +401,7 @@
 <body>
 
 <div class="topbar">
-  <div><span class="brand">PTOS</span><span class="brand-tag">Plain Text OS</span></div>
+  <div><a href="/" style="text-decoration:none"><span class="brand">PTOS</span></a><span class="brand-tag">Plain Text OS</span></div>
   <form action="/search" method="GET" style="display:flex;gap:6px;align-items:center;flex:1;max-width:320px;margin-left:12px;">
     <input type="text" name="q" placeholder="Search…"
            style="flex:1;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);margin:0;">
@@ -412,7 +412,7 @@
 
 <aside class="sidebar">
   <div class="sidebar-brand">
-    <span class="brand">PTOS</span>
+    <a href="/" style="text-decoration:none"><span class="brand">PTOS</span></a>
     <span class="brand-tag">Plain Text Operating System</span>
   </div>
   <nav class="sidebar-nav">
@@ -1016,6 +1016,9 @@ function updateSyncDot(state) {
           }
           _showTodoToast(tasks);
         }
+        if (msg.type === "sync-start") {
+          updateSyncDot("running");
+        }
         if (msg.type === "sync-done") {
           sessionStorage.setItem("sync-result", JSON.stringify(msg.data));
           updateSyncDot(msg.data && msg.data.ok ? "ok" : "error");
@@ -1032,6 +1035,13 @@ if (cachedSync) {
   updateSyncDot(r && r.ok ? "ok" : "error");
   setTimeout(function() { updateSyncDot(""); }, 10000);
 }
+fetch("/sync/status").then(function(r){ return r.json(); }).then(function(d){
+  if (d.running) updateSyncDot("running");
+  else if (d.result) {
+    updateSyncDot(d.result.ok ? "ok" : "error");
+    setTimeout(function(){ updateSyncDot(""); }, 10000);
+  }
+}).catch(function(){});
 </script>
 {% endif %}
 

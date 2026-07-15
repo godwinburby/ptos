@@ -82,7 +82,7 @@ FLASK_PID=$!
 # Wait for Flask to be ready (up to 15s)
 echo "Waiting for server..."
 for i in $(seq 1 15); do
-    if curl -sf http://localhost:5000 >/dev/null 2>&1; then
+    if curl -s http://localhost:5000 >/dev/null 2>&1; then
         break
     fi
     sleep 1
