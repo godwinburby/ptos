@@ -401,6 +401,18 @@
 </div>
 <div class="add-chips" id="add-chips">
   <div class="chip-group-card">
+    <div class="chip-group-label">Due</div>
+    <div class="chip-row" id="add-chips-due">
+      <button class="add-chip" data-token="due:today " onclick="toggleAddChip(this,'due')">today</button>
+      <button class="add-chip" data-token="due:tomorrow " onclick="toggleAddChip(this,'due')">tomorrow</button>
+      <button class="add-chip" data-token="due:this_week " onclick="toggleAddChip(this,'due')">this week</button>
+      <button class="add-chip" data-token="due:next_week " onclick="toggleAddChip(this,'due')">next week</button>
+      <button class="add-chip" data-token="due:this_month " onclick="toggleAddChip(this,'due')">this month</button>
+      <button class="add-chip" data-token="due:next_month " onclick="toggleAddChip(this,'due')">next month</button>
+      <button class="add-chip" data-token="__PICKER__:due:" onclick="pickAddDate('due')">pick date...</button>
+    </div>
+  </div>
+  <div class="chip-group-card">
     <div class="chip-group-label">Priority</div>
     <div class="chip-row" id="add-chips-pri">
       <button class="add-chip pri-chip pri-A" data-token="(A) " onclick="toggleAddChip(this,'pri')">(A)</button>
@@ -435,18 +447,6 @@
     </div>
   </div>
   {% endif %}
-  <div class="chip-group-card">
-    <div class="chip-group-label">Due</div>
-    <div class="chip-row" id="add-chips-due">
-      <button class="add-chip" data-token="due:today " onclick="toggleAddChip(this,'due')">today</button>
-      <button class="add-chip" data-token="due:tomorrow " onclick="toggleAddChip(this,'due')">tomorrow</button>
-      <button class="add-chip" data-token="due:this_week " onclick="toggleAddChip(this,'due')">this week</button>
-      <button class="add-chip" data-token="due:next_week " onclick="toggleAddChip(this,'due')">next week</button>
-      <button class="add-chip" data-token="due:this_month " onclick="toggleAddChip(this,'due')">this month</button>
-      <button class="add-chip" data-token="due:next_month " onclick="toggleAddChip(this,'due')">next month</button>
-      <button class="add-chip" data-token="__PICKER__:due:" onclick="pickAddDate('due')">pick date...</button>
-    </div>
-  </div>
   <div class="chip-group-card">
     <div class="chip-group-label">Scheduled</div>
     <div class="chip-row" id="add-chips-sched">
@@ -1284,7 +1284,10 @@ function popupEditDate(lineNo, field, currentValue, el) {
   for (var i = 0; i < opts.length; i++) {
     html += '<div class="fp-chip" onclick="pickFieldDate(\'' + opts[i] + '\')">' + labels[i] + '</div>';
   }
-  html += '<div class="fp-chip pick-date" onclick="pickFieldCustomDate()">Pick date...</div>';
+  if (field === 'sched') {
+    html += '<div class="fp-chip" onclick="pickFieldSchedNow()">Now</div>';
+  }
+  html += '<div class="fp-chip pick-date" onclick="pickFieldCustomDate()">Pick date & time...</div>';
   html += '<div class="fp-chip clear" onclick="pickFieldDate(\'\')">Clear</div>';
   html += '</div>';
   popup.innerHTML = html;
@@ -1328,6 +1331,20 @@ function pickFieldDate(value) {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({line_no: _fpLineNo, updates: updates})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
+  .catch(function() { window.location.reload(); });
+}
+
+function pickFieldSchedNow() {
+  closeFieldPopup();
+  var now = new Date();
+  var val = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + 'T' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  fetch('/todo/edit', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: _fpLineNo, updates: {sched: val}})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
