@@ -9,14 +9,14 @@
         <div class="todo-desc">{{ t.description }}</div>
         <div class="todo-meta">
           {% if t.due %}<span class="todo-due-badge {{ badge_class }}" onclick="popupEditDate({{ t.line_no }}, 'due', '{{ t.due.isoformat() }}', this)" title="Change due date">{{ t.due.strftime('%d %b') }}{% if t.due_time %} {{ t.due_time }}{% endif %}</span>{% endif %}
-          {% if t.sched %}<span class="todo-context" onclick="popupEditDate({{ t.line_no }}, 'sched', '{{ t.sched.isoformat() }}', this)" title="Change scheduled date">sched {{ t.sched.strftime('%d %b') }}{% if t.sched_time %} {{ t.sched_time }}{% endif %}</span>{% endif %}
+          {% if t.threshold %}<span class="todo-context" onclick="popupEditDate({{ t.line_no }}, 'threshold', '{{ t.threshold.isoformat() }}', this)" title="Change threshold date">threshold {{ t.threshold.strftime('%d %b') }}{% if t.threshold_time %} {{ t.threshold_time }}{% endif %}</span>{% endif %}
           {% if t.rec %}<span class="todo-context" onclick="popupEditRec({{ t.line_no }}, '{{ t.rec }}', this)" title="Change recurrence">rec:{{ t.rec }}</span>{% endif %}
           {% for p in t.projects %}<a class="todo-project{% if selected_project==p %} active{% endif %}" href="/todo?{% if selected_project != p %}project={{ p|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}">{{ p }}</a>{% endfor %}
           {% for c in t.contexts %}<a class="todo-context{% if selected_context==c %} active{% endif %}" href="/todo?{% if selected_context != c %}context={{ c|urlencode }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}">{{ c }}</a>{% endfor %}
         </div>
       </div>
       <div class="todo-actions">
-        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.sched.isoformat() if t.sched else '' }}', '{{ t.sched_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}')" title="Edit">✎</button>
+        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}')" title="Edit">✎</button>
         <button onclick="deleteTodo({{ t.line_no }})" title="Delete">✕</button>
       </div>
     </div>
@@ -392,6 +392,7 @@
   </div>
   <button onclick="addTodo()">Add</button>
   <input type="datetime-local" id="todo-date-picker" style="display:none;" onchange="onDatePickerPick(this)">
+  <input type="date" id="todo-date-only-picker" style="display:none;" onchange="onDateOnlyPickerPick(this)">
   <button onclick="openAdd()" style="background:var(--bg);color:var(--sub);font-size:16px;width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;" title="Form add (n)">+</button>
 </div>
 
@@ -409,7 +410,8 @@
       <button class="add-chip" data-token="due:next_week " onclick="toggleAddChip(this,'due')">next week</button>
       <button class="add-chip" data-token="due:this_month " onclick="toggleAddChip(this,'due')">this month</button>
       <button class="add-chip" data-token="due:next_month " onclick="toggleAddChip(this,'due')">next month</button>
-      <button class="add-chip" data-token="__PICKER__:due:" onclick="pickAddDate('due')">pick date...</button>
+      <button class="add-chip" data-token="__PICKER_DATE__:due:" onclick="pickAddDateOnly('due')">pick date...</button>
+      <button class="add-chip" data-token="__PICKER__:due:" onclick="pickAddDate('due')">pick date & time...</button>
     </div>
   </div>
   <div class="chip-group-card">
@@ -448,15 +450,16 @@
   </div>
   {% endif %}
   <div class="chip-group-card">
-    <div class="chip-group-label">Scheduled</div>
-    <div class="chip-row" id="add-chips-sched">
-      <button class="add-chip" data-token="sched:today " onclick="toggleAddChip(this,'sched')">today</button>
-      <button class="add-chip" data-token="sched:tomorrow " onclick="toggleAddChip(this,'sched')">tomorrow</button>
-      <button class="add-chip" data-token="sched:this_week " onclick="toggleAddChip(this,'sched')">this week</button>
-      <button class="add-chip" data-token="sched:next_week " onclick="toggleAddChip(this,'sched')">next week</button>
-      <button class="add-chip" data-token="sched:this_month " onclick="toggleAddChip(this,'sched')">this month</button>
-      <button class="add-chip" data-token="sched:next_month " onclick="toggleAddChip(this,'sched')">next month</button>
-      <button class="add-chip" data-token="__PICKER__:sched:" onclick="pickAddDate('sched')">pick date...</button>
+    <div class="chip-group-label">Threshold</div>
+    <div class="chip-row" id="add-chips-threshold">
+      <button class="add-chip" data-token="t:today " onclick="toggleAddChip(this,'threshold')">today</button>
+      <button class="add-chip" data-token="t:tomorrow " onclick="toggleAddChip(this,'threshold')">tomorrow</button>
+      <button class="add-chip" data-token="t:this_week " onclick="toggleAddChip(this,'threshold')">this week</button>
+      <button class="add-chip" data-token="t:next_week " onclick="toggleAddChip(this,'threshold')">next week</button>
+      <button class="add-chip" data-token="t:this_month " onclick="toggleAddChip(this,'threshold')">this month</button>
+      <button class="add-chip" data-token="t:next_month " onclick="toggleAddChip(this,'threshold')">next month</button>
+      <button class="add-chip" data-token="__PICKER_DATE__:t:" onclick="pickAddDateOnly('t')">pick date...</button>
+      <button class="add-chip" data-token="__PICKER__:t:" onclick="pickAddDate('t')">pick date & time...</button>
     </div>
   </div>
   <div class="chip-group-card">
@@ -476,7 +479,7 @@
   <div id="todo-help" class="todo-help-card">
     <div class="todo-help-title">Todo format reference</div>
     <div class="todo-help-row" style="font-size:13px;line-height:1.8;">
-      <code><span style="color:var(--error);">(A)</span> Call supplier <span style="color:var(--accent);">+HearSpeechPro</span> <span style="color:var(--green);">@phone</span> <span style="color:#f0ad4e;">due:tomorrow 3pm</span> <span style="color:var(--sub);">rec:1w</span></code>
+      <code><span style="color:var(--error);">(A)</span> Review proposal <span style="color:var(--accent);">+Work</span> <span style="color:var(--green);">@office</span> <span style="color:#f0ad4e;">due:tomorrow 3pm</span> <span style="color:var(--sub);">rec:1w</span></code>
     </div>
     <table class="todo-help-table">
       <tr><td><code style="color:var(--error);">(A)</code></td><td>Priority <code>(A)</code>–<code>(Z)</code>. Or type <code>pri:a</code></td></tr>
@@ -484,7 +487,7 @@
       <tr><td><code style="color:var(--green);">@context</code></td><td>Context tag, e.g. <code>@phone</code></td></tr>
       <tr><td><code style="color:#f0ad4e;">due:date</code></td><td>Due date — <code>today</code> <code>tomorrow</code> <code>fri</code> <code>this_week</code> <code>next_month</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
       <tr><td><code style="color:#f0ad4e;">due:date time</code></td><td>With time — <code>due:tomorrow 3pm</code> <code>due:2026-07-12T14:30</code></td></tr>
-      <tr><td><code>sched:date</code></td><td>Scheduled date — surfaces when it arrives</td></tr>
+      <tr><td><code>t:date</code></td><td>Threshold date — surfaces when it arrives</td></tr>
       <tr><td><code style="color:var(--sub);">rec:interval</code></td><td>Recurrence — <code>rec:1d</code> <code>rec:1w</code> <code>rec:1m</code> <code>rec:1y</code></td></tr>
     </table>
   </div>
@@ -616,7 +619,7 @@
 {% if buckets.today %}
 <div class="todo-section">
   <div class="todo-section-header" onclick="toggleSection('today')">
-    <div class="todo-section-title">Today</div>
+    <div class="todo-section-title" style="color:var(--accent);">Today</div>
     <div class="todo-section-count">{{ buckets.today|length }}</div>
   </div>
   <div id="sec-today">
@@ -628,7 +631,7 @@
 {% if buckets.tomorrow %}
 <div class="todo-section">
   <div class="todo-section-header" onclick="toggleSection('tomorrow')">
-    <div class="todo-section-title" style="color:var(--accent);">Tomorrow</div>
+    <div class="todo-section-title" style="color:var(--green);">Tomorrow</div>
     <div class="todo-section-count">{{ buckets.tomorrow|length }}</div>
   </div>
   <div id="sec-tomorrow">
@@ -640,7 +643,7 @@
 {% if buckets.upcoming %}
 <div class="todo-section">
   <div class="todo-section-header" onclick="toggleSection('upcoming')">
-    <div class="todo-section-title">Upcoming</div>
+    <div class="todo-section-title" style="color:#f0ad4e;">Upcoming</div>
     <div class="todo-section-count">{{ buckets.upcoming|length }}</div>
   </div>
   <div id="sec-upcoming">
@@ -652,7 +655,7 @@
 {% if buckets.someday %}
 <div class="todo-section">
   <div class="todo-section-header" onclick="toggleSection('someday')">
-    <div class="todo-section-title">Someday</div>
+    <div class="todo-section-title" style="color:var(--sub);">Someday</div>
     <div class="todo-section-count">{{ buckets.someday|length }}</div>
   </div>
   <div id="sec-someday">
@@ -717,12 +720,12 @@
     </div>
     <div class="modal-row">
       <div class="modal-field">
-        <label>Scheduled</label>
-        <input type="date" id="modal-sched">
+        <label>Threshold</label>
+        <input type="date" id="modal-threshold">
       </div>
       <div class="modal-field">
-        <label>Sched Time</label>
-        <input type="time" id="modal-sched-time">
+        <label>Threshold Time</label>
+        <input type="time" id="modal-threshold-time">
       </div>
     </div>
     <div class="modal-row">
@@ -858,7 +861,7 @@ function deleteTodo(lineNo) {
   });
 }
 
-function openTodoModal(mode, lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts, rec) {
+function openTodoModal(mode, lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec) {
   const el = document.getElementById('todo-modal');
   document.getElementById('todo-modal-title').textContent = mode === 'edit' ? 'Edit Task' : 'New Task';
   document.getElementById('todo-modal-save').textContent = mode === 'edit' ? 'Save' : 'Add';
@@ -867,8 +870,8 @@ function openTodoModal(mode, lineNo, desc, pri, due, dueTime, sched, schedTime, 
   document.getElementById('modal-pri').value = pri || '';
   document.getElementById('modal-due').value = due || '';
   document.getElementById('modal-due-time').value = dueTime || '';
-  document.getElementById('modal-sched').value = sched || '';
-  document.getElementById('modal-sched-time').value = schedTime || '';
+  document.getElementById('modal-threshold').value = threshold || '';
+  document.getElementById('modal-threshold-time').value = thresholdTime || '';
   document.getElementById('modal-rec').value = rec || '';
 
   var projList = (projects || '').split(/\s+/).filter(Boolean);
@@ -891,8 +894,8 @@ function openTodoModal(mode, lineNo, desc, pri, due, dueTime, sched, schedTime, 
 
 function openAdd() { openTodoModal('add'); }
 
-function openEdit(lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts, rec) {
-  openTodoModal('edit', lineNo, desc, pri, due, dueTime, sched, schedTime, projects, contexts, rec);
+function openEdit(lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec) {
+  openTodoModal('edit', lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec);
 }
 
 function closeTodoModal() {
@@ -942,8 +945,8 @@ function saveTodoModal() {
   var pri = document.getElementById('modal-pri').value.trim().toUpperCase();
   var due = document.getElementById('modal-due').value;
   var dueTime = document.getElementById('modal-due-time').value;
-  var sched = document.getElementById('modal-sched').value;
-  var schedTime = document.getElementById('modal-sched-time').value;
+  var threshold = document.getElementById('modal-threshold').value;
+  var thresholdTime = document.getElementById('modal-threshold-time').value;
 
   var otherProj = document.getElementById('modal-project-other').value.trim();
   var otherCtx = document.getElementById('modal-context-other').value.trim();
@@ -960,7 +963,7 @@ function saveTodoModal() {
       description: desc,
       priority: pri || null,
       due: due ? (dueTime ? due + 'T' + dueTime : due) : null,
-      sched: sched ? (schedTime ? sched + 'T' + schedTime : sched) : null,
+      threshold: threshold ? (thresholdTime ? threshold + 'T' + thresholdTime : threshold) : null,
       rec: rec || null,
       projects: projs.map(function(p) { return '+' + p.replace(/^\+/, ''); }),
       contexts: ctxs.map(function(c) { return '@' + c.replace(/^@/, ''); })
@@ -982,7 +985,7 @@ function saveTodoModal() {
     projs.forEach(function(p) { line += ' +' + p.replace(/^\+/, ''); });
     ctxs.forEach(function(c) { line += ' @' + c.replace(/^@/, ''); });
     if (due) line += ' due:' + due + (dueTime ? 'T' + dueTime : '');
-    if (sched) line += ' sched:' + sched + (schedTime ? 'T' + schedTime : '');
+    if (threshold) line += ' t:' + threshold + (thresholdTime ? 'T' + thresholdTime : '');
     fetch('/todo/add', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -1038,8 +1041,8 @@ function toggleAddChip(chip, group) {
       text = text.replace(new RegExp('\\(' + t + '\\)\\s*'), '');
     });
     if (text.indexOf(bare) === -1) text = token + text;
-  } else if (group === 'due' || group === 'sched') {
-    var prefix = group + ':';
+  } else if (group === 'due' || group === 'threshold') {
+    var prefix = group === 'threshold' ? 't:' : group + ':';
     text = text.replace(new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*', 'gi'), '');
     text = text.trimEnd() + ' ' + token;
   } else if (group === 'rec') {
@@ -1057,7 +1060,7 @@ function toggleAddChip(chip, group) {
 }
 
 function reorderTodoText(text) {
-  var pri = '', desc = [], proj = [], ctx = [], due = '', sched = '', rec = '';
+  var pri = '', desc = [], proj = [], ctx = [], due = '', threshold = '', rec = '';
   var priMatch = text.match(/\(([A-Z])\)\s*/);
   if (priMatch) {
     pri = priMatch[0].trim();
@@ -1067,11 +1070,11 @@ function reorderTodoText(text) {
     if (t.startsWith('+')) proj.push(t);
     else if (t.startsWith('@')) ctx.push(t);
     else if (t.toLowerCase().startsWith('due:')) due = t;
-    else if (t.toLowerCase().startsWith('sched:')) sched = t;
+    else if (t.toLowerCase().startsWith('t:')) threshold = t;
     else if (t.toLowerCase().startsWith('rec:')) rec = t;
     else if (t) desc.push(t);
   });
-  return [pri, desc.join(' '), proj.join(' '), ctx.join(' '), due, sched, rec].filter(Boolean).join(' ');
+  return [pri, desc.join(' '), proj.join(' '), ctx.join(' '), due, threshold, rec].filter(Boolean).join(' ');
 }
 
 function toggleChipSection(id, bar) {
@@ -1097,16 +1100,18 @@ var _acData = {
     {l:'next week', v:'due:next_week '},
     {l:'this month', v:'due:this_month '},
     {l:'next month', v:'due:next_month '},
-    {l:'Pick date...', v:'__PICKER__:due:'}
+    {l:'Pick date...', v:'__PICKER_DATE__:due:'},
+    {l:'Pick date & time...', v:'__PICKER__:due:'}
   ],
-  'sched:': [
-    {l:'today', v:'sched:today '},
-    {l:'tomorrow', v:'sched:tomorrow '},
-    {l:'this week', v:'sched:this_week '},
-    {l:'next week', v:'sched:next_week '},
-    {l:'this month', v:'sched:this_month '},
-    {l:'next month', v:'sched:next_month '},
-    {l:'Pick date...', v:'__PICKER__:sched:'}
+  't:': [
+    {l:'today', v:'t:today '},
+    {l:'tomorrow', v:'t:tomorrow '},
+    {l:'this week', v:'t:this_week '},
+    {l:'next week', v:'t:next_week '},
+    {l:'this month', v:'t:this_month '},
+    {l:'next month', v:'t:next_month '},
+    {l:'Pick date...', v:'__PICKER_DATE__:t:'},
+    {l:'Pick date & time...', v:'__PICKER__:t:'}
   ],
   'rec:': [
     {l:'1 day', v:'rec:1d '},
@@ -1184,6 +1189,15 @@ function pickAC(idx) {
     return;
   }
 
+  if (val.indexOf('__PICKER_DATE__:') === 0) {
+    _pickerPrefix = val.split(':')[1] + ':';
+    var picker = document.getElementById('todo-date-only-picker');
+    picker.value = '';
+    picker.showPicker();
+    document.getElementById('todo-ac-list').classList.remove('open');
+    return;
+  }
+
   if (val === '__CLEARPRI__') {
     input.value = input.value.replace(/\([A-Z]\)\s*/, '');
     input.focus();
@@ -1220,7 +1234,28 @@ function pickAddDate(prefix) {
   picker.showPicker();
 }
 
+function pickAddDateOnly(prefix) {
+  _pickerPrefix = prefix + ':';
+  var picker = document.getElementById('todo-date-only-picker');
+  picker.value = '';
+  picker.showPicker();
+}
+
 function onDatePickerPick(el) {
+  if (!el.value || !_pickerPrefix) return;
+  var input = document.getElementById('todo-input');
+  var text = input.value;
+  text = text.replace(new RegExp(_pickerPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*'), '');
+  var dtVal = el.value;
+  var token = _pickerPrefix + dtVal + ' ';
+  text = text.trimEnd() + ' ' + token;
+  input.value = text.replace(/^\s+/, '');
+  input.focus();
+  syncAddChips();
+  _pickerPrefix = '';
+}
+
+function onDateOnlyPickerPick(el) {
   if (!el.value || !_pickerPrefix) return;
   var input = document.getElementById('todo-input');
   var text = input.value;
@@ -1280,14 +1315,15 @@ function popupEditDate(lineNo, field, currentValue, el) {
   var popup = document.getElementById('field-popup');
   var opts = ['today','tomorrow','this_week','next_week','this_month','next_month'];
   var labels = ['Today','Tomorrow','This week','Next week','This month','Next month'];
-  var html = '<div class="fp-label">' + (field === 'due' ? 'Due date' : 'Scheduled date') + '</div><div class="fp-row">';
+  var html = '<div class="fp-label">' + (field === 'due' ? 'Due date' : 'Threshold date') + '</div><div class="fp-row">';
   for (var i = 0; i < opts.length; i++) {
     html += '<div class="fp-chip" onclick="pickFieldDate(\'' + opts[i] + '\')">' + labels[i] + '</div>';
   }
-  if (field === 'sched') {
-    html += '<div class="fp-chip" onclick="pickFieldSchedNow()">Now</div>';
+  if (field === 'threshold') {
+    html += '<div class="fp-chip" onclick="pickFieldThresholdNow()">Now</div>';
   }
-  html += '<div class="fp-chip pick-date" onclick="pickFieldCustomDate()">Pick date & time...</div>';
+  html += '<div class="fp-chip pick-date" onclick="pickFieldCustomDateOnly()">Pick date...</div>';
+  html += '<div class="fp-chip pick-date" onclick="pickFieldCustomDateTime()">Pick date & time...</div>';
   html += '<div class="fp-chip clear" onclick="pickFieldDate(\'\')">Clear</div>';
   html += '</div>';
   popup.innerHTML = html;
@@ -1337,22 +1373,28 @@ function pickFieldDate(value) {
   .catch(function() { window.location.reload(); });
 }
 
-function pickFieldSchedNow() {
+function pickFieldThresholdNow() {
   closeFieldPopup();
   var now = new Date();
   var val = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0') + 'T' + String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
   fetch('/todo/edit', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: _fpLineNo, updates: {sched: val}})
+    body: JSON.stringify({line_no: _fpLineNo, updates: {threshold: val}})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
   .catch(function() { window.location.reload(); });
 }
 
-function pickFieldCustomDate() {
+function pickFieldCustomDateTime() {
   var picker = document.getElementById('field-popup-picker');
+  picker.value = '';
+  picker.showPicker();
+}
+
+function pickFieldCustomDateOnly() {
+  var picker = document.getElementById('field-popup-date-picker');
   picker.value = '';
   picker.showPicker();
 }

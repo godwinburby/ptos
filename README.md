@@ -375,8 +375,8 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - Overdue / Today / Upcoming / Someday sections with collapsible Done section
 - Priority badges (A=red, B=orange, C=blue, D=gray), due date badges, project/context chips
 - Quick-add text input with todo.txt syntax (`(A) Task +Project @context due:tomorrow`)
-- **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `sched:t` for `sched:today`, `(a` for `(A)`. Arrow keys + Enter to select.
-- **Quick pick chips** (collapsible) — click Due, Priority, Projects, Contexts, or Scheduled chips to insert into input. Due/Scheduled include `this_week`, `next_week`, `this_month`, `next_month` shortcuts. On mobile, groups stack vertically instead of scrolling
+- **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `t:t` for `t:today`, `(a` for `(A)`. Arrow keys + Enter to select.
+- **Quick pick chips** (collapsible) — click Due, Priority, Projects, Contexts, or Threshold chips to insert into input. Due/Threshold include `this_week`, `next_week`, `this_month`, `next_month` shortcuts. On mobile, groups stack vertically instead of scrolling
 - **Filter chips** (collapsible) — filter by Priority (A-D), Due Range (overdue/today/upcoming/someday/none), and Context. Click a chip to toggle filter on/off. On mobile, groups stack vertically
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; type a term and press Search or Enter to filter todos by description
 - **Clickable todo chips** — click project, context, or priority chips on any todo row to filter the list; click again to remove filter
@@ -397,7 +397,7 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 | `+Project` | Project tag (e.g. `+Home`, `+HearSpeechPro`) |
 | `@context` | Context tag (e.g. `@phone`, `@errand`) |
 | `due:date` | Due date — `today`, `tomorrow`, `fri`, `due:this_week`, `due:next_month`, `+3d`, `2026-07-12` |
-| `sched:date` | Scheduled date (surfaces when it arrives) |
+| `t:date` | Threshold date (surfaces when it arrives) |
 | `due:date time` | With time — `due:tomorrow 3pm`, `due:2026-07-12T14:30` |
 
 **Keyboard shortcuts:**
@@ -1146,7 +1146,7 @@ ptos -y test -t td --delete --all
 | `--delete-preset NAME` | | Delete a preset by name from `presets.toml` |
 | `--set-name NAME` | | Set user name in `config.toml` |
 | `--set-date-format FORMAT` | | Set date display format: `indian` `us` `eu` `readable` `iso` or custom strftime |
-| `--todo-add [text]` | | Add a todo. Preprocesses pri:/due:/sched: shortcuts |
+| `--todo-add [text]` | | Add a todo. Preprocesses pri:/due:/t: shortcuts |
 | `--todo-list` | | List open todos with bucket grouping |
 | `--todo-done N` | | Mark todo at line N complete |
 | `--todo-edit N key=value` | | Edit a field on a todo |

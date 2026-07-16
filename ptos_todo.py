@@ -34,8 +34,8 @@ class Todo:
     contexts: List[str] = field(default_factory=list)   # ["@context", ...]
     due: Optional[dt.date] = None
     due_time: Optional[str] = None          # "14:30" or None
-    sched: Optional[dt.date] = None
-    sched_time: Optional[str] = None        # "09:00" or None
+    threshold: Optional[dt.date] = None
+    threshold_time: Optional[str] = None    # "09:00" or None
     rec: Optional[str] = None               # "1w", "+1m", "3d", etc.
     line_no: int = 0
 
@@ -202,13 +202,13 @@ def parse_todo_line(line, line_no=0):
     # remaining = description + metadata tokens
     remaining = line.strip()
 
-    # extract projects, contexts, due, sched, rec, pri:X from description
+    # extract projects, contexts, due, threshold, rec, pri:X from description
     projects = []
     contexts = []
     due = None
     due_time = None
-    sched = None
-    sched_time = None
+    threshold = None
+    threshold_time = None
     rec = None
     desc_parts = []
 
@@ -223,10 +223,10 @@ def parse_todo_line(line, line_no=0):
                 due, due_time = resolve_todo_date(val)
             except TodoParseError:
                 desc_parts.append(token)
-        elif token.lower().startswith("sched:"):
-            val = token[6:]
+        elif token.lower().startswith("t:"):
+            val = token[2:]
             try:
-                sched, sched_time = resolve_todo_date(val)
+                threshold, threshold_time = resolve_todo_date(val)
             except TodoParseError:
                 desc_parts.append(token)
         elif token.lower().startswith("rec:") and rec is None:
@@ -249,8 +249,8 @@ def parse_todo_line(line, line_no=0):
         contexts=contexts,
         due=due,
         due_time=due_time,
-        sched=sched,
-        sched_time=sched_time,
+        threshold=threshold,
+        threshold_time=threshold_time,
         rec=rec,
         line_no=line_no,
     )
@@ -309,11 +309,11 @@ def format_line(todo):
         else:
             parts.append(f"due:{todo.due.isoformat()}")
 
-    if todo.sched:
-        if todo.sched_time:
-            parts.append(f"sched:{todo.sched.isoformat()}T{todo.sched_time}")
+    if todo.threshold:
+        if todo.threshold_time:
+            parts.append(f"t:{todo.threshold.isoformat()}T{todo.threshold_time}")
         else:
-            parts.append(f"sched:{todo.sched.isoformat()}")
+            parts.append(f"t:{todo.threshold.isoformat()}")
 
     if todo.rec:
         parts.append(f"rec:{todo.rec}")
@@ -377,7 +377,7 @@ def _atomic_write_text(filepath, content):
 
 def add_todo(path, line_text, line_no=0):
     """Append a raw todo.txt line. Returns the parsed Todo.
-    Preprocesses pri:/due:/sched: shortcuts automatically."""
+    Preprocesses pri:/due:/t: shortcuts automatically."""
     line_text = preprocess_todo_text(line_text)
     t = parse_todo_line(line_text, line_no)
     if t is None:
@@ -479,10 +479,10 @@ def complete_todo(todo, completion_date=None, todo_path=None, done_path=None):
                     strict, amount, unit = parsed
                     base = t.due if strict else completion_date
                     new_due = _advance_date(base, amount, unit)
-                    new_sched = None
-                    if t.sched:
-                        sched_base = t.sched if strict else completion_date
-                        new_sched = _advance_date(sched_base, amount, unit)
+                    new_threshold = None
+                    if t.threshold:
+                        threshold_base = t.threshold if strict else completion_date
+                        new_threshold = _advance_date(threshold_base, amount, unit)
                     new_todo = Todo(
                         done=False,
                         priority=t.priority,
@@ -492,8 +492,8 @@ def complete_todo(todo, completion_date=None, todo_path=None, done_path=None):
                         contexts=list(t.contexts),
                         due=new_due,
                         due_time=t.due_time,
-                        sched=new_sched,
-                        sched_time=t.sched_time,
+                        threshold=new_threshold,
+                        threshold_time=t.threshold_time,
                         rec=t.rec,
                     )
                     new_todos.append(new_todo)
@@ -623,14 +623,14 @@ def edit_todo(todo_path, line_no, updates):
                     else:
                         t.due = None
                         t.due_time = None
-                elif key == "sched":
+                elif key == "threshold":
                     if val:
                         d, tm = resolve_todo_date(val)
-                        t.sched = d
-                        t.sched_time = tm
+                        t.threshold = d
+                        t.threshold_time = tm
                     else:
-                        t.sched = None
-                        t.sched_time = None
+                        t.threshold = None
+                        t.threshold_time = None
                 elif key == "projects":
                     t.projects = val if isinstance(val, list) else [val]
                 elif key == "contexts":
@@ -650,7 +650,7 @@ def edit_todo(todo_path, line_no, updates):
 # ── filtering ───────────────────────────────────────────────────────────────
 
 def filter_todos(todos, project=None, context=None, priority=None,
-                 due_before=None, sched_before=None, include_done=False):
+                 due_before=None, threshold_before=None, include_done=False):
     """Filter a list of Todo objects by various criteria."""
     result = []
     for t in todos:
@@ -664,7 +664,7 @@ def filter_todos(todos, project=None, context=None, priority=None,
             continue
         if due_before and (t.due is None or t.due > due_before):
             continue
-        if sched_before and (t.sched is not None and t.sched > sched_before):
+        if threshold_before and (t.threshold is not None and t.threshold > threshold_before):
             continue
         result.append(t)
     return result
@@ -699,13 +699,13 @@ def bucket_todos(todos):
     - upcoming: due > today+1 and <= today+7
     - someday: due is None or > today+7
 
-    Todos with sched > today are hidden until their scheduled date arrives.
+    Todos with threshold > today are hidden until their threshold date arrives.
     """
     today = dt.date.today()
     tomorrow = today + dt.timedelta(days=1)
     week_end = today + dt.timedelta(days=7)
 
-    open_todos = [t for t in todos if not t.done and (t.sched is None or t.sched <= today)]
+    open_todos = [t for t in todos if not t.done and (t.threshold is None or t.threshold <= today)]
 
     b_overdue = []
     b_today = []
@@ -748,7 +748,7 @@ def bucket_todos(todos):
 def preprocess_todo_text(text):
     """Preprocess a raw todo.txt input string.
 
-    Converts pri:x → (X) and resolves natural-language dates in due:/sched:.
+    Converts pri:x → (X) and resolves natural-language dates in due:/t:.
     Handles two-token patterns like ``due:tomorrow 3pm`` by combining them.
     """
     text = text.strip()
@@ -758,7 +758,7 @@ def preprocess_todo_text(text):
     if m:
         text = f"({m.group(1).upper()}) {text[m.end():]}"
 
-    # resolve due: and sched: dates
+    # resolve due: and t: dates
     _TIME_RE = re.compile(
         r'^(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?|\d{1,2}\s*[AaPp][Mm])$'
     )
@@ -778,16 +778,16 @@ def preprocess_todo_text(text):
                 return f"due:{d.isoformat()}", False
             except TodoParseError:
                 return tok, False
-        elif low.startswith("sched:"):
-            val = tok[6:]
+        elif low.startswith("t:"):
+            val = tok[2:]
             combined = val
             if next_tok and _TIME_RE.match(next_tok):
                 combined = f"{val} {next_tok}"
             try:
                 d, tm = resolve_todo_date(combined)
                 if tm:
-                    return f"sched:{d.isoformat()}T{tm}", True
-                return f"sched:{d.isoformat()}", False
+                    return f"t:{d.isoformat()}T{tm}", True
+                return f"t:{d.isoformat()}", False
             except TodoParseError:
                 return tok, False
         elif low.startswith("rec:"):
@@ -818,13 +818,13 @@ def preprocess_todo_text(text):
 # ── notify helper ───────────────────────────────────────────────────────────
 
 def get_due_todos(todos, lookahead_days=1):
-    """Return todos that are due today or earlier, respecting sched.
+    """Return todos that are due today or earlier, respecting threshold.
 
     When due_time is set, compares against datetime.now() for precision.
     When no time is set, uses date-only comparison (due <= today + lookahead).
     A todo surfaces if:
       - due is set and due <= today + lookahead (with time precision when set)
-      - sched is None or sched+time <= now
+      - threshold is None or threshold+time <= now
       - done is False
     """
     now = dt.datetime.now()
@@ -844,12 +844,12 @@ def get_due_todos(todos, lookahead_days=1):
         else:
             if t.due > cutoff_date:
                 continue
-        if t.sched is not None:
-            if t.sched_time:
-                sched_dt = dt.datetime.combine(t.sched, dt.time.fromisoformat(t.sched_time))
+        if t.threshold is not None:
+            if t.threshold_time:
+                threshold_dt = dt.datetime.combine(t.threshold, dt.time.fromisoformat(t.threshold_time))
             else:
-                sched_dt = dt.datetime.combine(t.sched, dt.time.min)
-            if sched_dt > now:
+                threshold_dt = dt.datetime.combine(t.threshold, dt.time.min)
+            if threshold_dt > now:
                 continue
         result.append(t)
     result.sort(key=lambda t: (t.due, t.due_time or "99:99"))
