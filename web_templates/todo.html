@@ -193,6 +193,7 @@
   .add-chip.pri-chip.pri-B.selected { background:var(--warn); border-color:var(--warn); }
   .add-chip.pri-chip.pri-C.selected { background:var(--accent); border-color:var(--accent); }
   .add-chip.pri-chip.pri-D.selected { background:#6c757d; border-color:#6c757d; }
+  .ac-more { display:none; }
 
   /* Edit modal */
   .modal-overlay {
@@ -351,6 +352,7 @@
     }
 
     .ac-extra { display:none; }
+    .ac-more { display:inline-flex; }
     .ac-more.expanded { display:none; }
   }
   .field-popup {
@@ -391,8 +393,6 @@
     <div class="todo-ac-list" id="todo-ac-list"></div>
   </div>
   <button onclick="addTodo()">Add</button>
-  <input type="datetime-local" id="todo-date-picker" style="display:none;" onchange="onDatePickerPick(this)">
-  <input type="date" id="todo-date-only-picker" style="display:none;" onchange="onDateOnlyPickerPick(this)">
   <button onclick="openAdd()" style="background:var(--bg);color:var(--sub);font-size:16px;width:34px;height:34px;padding:0;display:flex;align-items:center;justify-content:center;" title="Form add (n)">+</button>
 </div>
 
@@ -410,8 +410,7 @@
       <button class="add-chip" data-token="due:next_week " onclick="toggleAddChip(this,'due')">next week</button>
       <button class="add-chip" data-token="due:this_month " onclick="toggleAddChip(this,'due')">this month</button>
       <button class="add-chip" data-token="due:next_month " onclick="toggleAddChip(this,'due')">next month</button>
-      <button class="add-chip" data-token="__PICKER_DATE__:due:" onclick="pickAddDateOnly('due')">pick date...</button>
-      <button class="add-chip" data-token="__PICKER__:due:" onclick="pickAddDate('due')">pick date & time...</button>
+      <button class="add-chip" data-token="__PICKER__:due:" onclick="pickAddDate('due')">pick date...</button>
     </div>
   </div>
   <div class="chip-group-card">
@@ -458,8 +457,7 @@
       <button class="add-chip" data-token="t:next_week " onclick="toggleAddChip(this,'threshold')">next week</button>
       <button class="add-chip" data-token="t:this_month " onclick="toggleAddChip(this,'threshold')">this month</button>
       <button class="add-chip" data-token="t:next_month " onclick="toggleAddChip(this,'threshold')">next month</button>
-      <button class="add-chip" data-token="__PICKER_DATE__:t:" onclick="pickAddDateOnly('t')">pick date...</button>
-      <button class="add-chip" data-token="__PICKER__:t:" onclick="pickAddDate('t')">pick date & time...</button>
+      <button class="add-chip" data-token="__PICKER__:t:" onclick="pickAddDate('t')">pick date...</button>
     </div>
   </div>
   <div class="chip-group-card">
@@ -1025,7 +1023,7 @@ function syncAddChips() {
 
 function expandChipGroup(btn) {
   var row = btn.closest('.chip-row');
-  row.querySelectorAll('.ac-extra').forEach(function(c) { c.style.display = ''; });
+  row.querySelectorAll('.ac-extra').forEach(function(c) { c.style.display = 'inline-flex'; });
   btn.classList.add('expanded');
 }
 
@@ -1100,8 +1098,7 @@ var _acData = {
     {l:'next week', v:'due:next_week '},
     {l:'this month', v:'due:this_month '},
     {l:'next month', v:'due:next_month '},
-    {l:'Pick date...', v:'__PICKER_DATE__:due:'},
-    {l:'Pick date & time...', v:'__PICKER__:due:'}
+    {l:'Pick date...', v:'__PICKER__:due:'}
   ],
   't:': [
     {l:'today', v:'t:today '},
@@ -1110,8 +1107,7 @@ var _acData = {
     {l:'next week', v:'t:next_week '},
     {l:'this month', v:'t:this_month '},
     {l:'next month', v:'t:next_month '},
-    {l:'Pick date...', v:'__PICKER_DATE__:t:'},
-    {l:'Pick date & time...', v:'__PICKER__:t:'}
+    {l:'Pick date...', v:'__PICKER__:t:'}
   ],
   'rec:': [
     {l:'1 day', v:'rec:1d '},
@@ -1182,19 +1178,17 @@ function pickAC(idx) {
 
   if (val.indexOf('__PICKER__:') === 0) {
     _pickerPrefix = val.split(':')[1] + ':';
-    var picker = document.getElementById('todo-date-picker');
-    picker.value = '';
-    picker.showPicker();
     document.getElementById('todo-ac-list').classList.remove('open');
-    return;
-  }
-
-  if (val.indexOf('__PICKER_DATE__:') === 0) {
-    _pickerPrefix = val.split(':')[1] + ':';
-    var picker = document.getElementById('todo-date-only-picker');
-    picker.value = '';
-    picker.showPicker();
-    document.getElementById('todo-ac-list').classList.remove('open');
+    openDTPicker({callback:function(iso){
+      if (!_pickerPrefix) return;
+      var text = input.value;
+      text = text.replace(new RegExp(_pickerPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*'), '');
+      text = text.trimEnd() + ' ' + _pickerPrefix + iso + ' ';
+      input.value = text.replace(/^\s+/, '');
+      input.focus();
+      _pickerPrefix = '';
+      syncAddChips();
+    }});
     return;
   }
 
@@ -1229,44 +1223,17 @@ function pickAC(idx) {
 
 function pickAddDate(prefix) {
   _pickerPrefix = prefix + ':';
-  var picker = document.getElementById('todo-date-picker');
-  picker.value = '';
-  picker.showPicker();
-}
-
-function pickAddDateOnly(prefix) {
-  _pickerPrefix = prefix + ':';
-  var picker = document.getElementById('todo-date-only-picker');
-  picker.value = '';
-  picker.showPicker();
-}
-
-function onDatePickerPick(el) {
-  if (!el.value || !_pickerPrefix) return;
   var input = document.getElementById('todo-input');
-  var text = input.value;
-  text = text.replace(new RegExp(_pickerPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*'), '');
-  var dtVal = el.value;
-  var token = _pickerPrefix + dtVal + ' ';
-  text = text.trimEnd() + ' ' + token;
-  input.value = text.replace(/^\s+/, '');
-  input.focus();
-  syncAddChips();
-  _pickerPrefix = '';
-}
-
-function onDateOnlyPickerPick(el) {
-  if (!el.value || !_pickerPrefix) return;
-  var input = document.getElementById('todo-input');
-  var text = input.value;
-  text = text.replace(new RegExp(_pickerPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*'), '');
-  var dtVal = el.value;
-  var token = _pickerPrefix + dtVal + ' ';
-  text = text.trimEnd() + ' ' + token;
-  input.value = text.replace(/^\s+/, '');
-  input.focus();
-  syncAddChips();
-  _pickerPrefix = '';
+  openDTPicker({callback:function(iso){
+    if (!_pickerPrefix) return;
+    var text = input.value;
+    text = text.replace(new RegExp(_pickerPrefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\S*\\s*'), '');
+    text = text.trimEnd() + ' ' + _pickerPrefix + iso + ' ';
+    input.value = text.replace(/^\s+/, '');
+    input.focus();
+    _pickerPrefix = '';
+    syncAddChips();
+  }});
 }
 
 function handleInputKey(e) {
@@ -1322,8 +1289,7 @@ function popupEditDate(lineNo, field, currentValue, el) {
   if (field === 'threshold') {
     html += '<div class="fp-chip" onclick="pickFieldThresholdNow()">Now</div>';
   }
-  html += '<div class="fp-chip pick-date" onclick="pickFieldCustomDateOnly()">Pick date...</div>';
-  html += '<div class="fp-chip pick-date" onclick="pickFieldCustomDateTime()">Pick date & time...</div>';
+  html += '<div class="fp-chip pick-date" onclick="pickFieldCustomDateTime()">Pick date...</div>';
   html += '<div class="fp-chip clear" onclick="pickFieldDate(\'\')">Clear</div>';
   html += '</div>';
   popup.innerHTML = html;
@@ -1388,20 +1354,17 @@ function pickFieldThresholdNow() {
 }
 
 function pickFieldCustomDateTime() {
-  var picker = document.getElementById('field-popup-picker');
-  picker.value = '';
-  picker.showPicker();
+  closeFieldPopup();
+  openDTPicker({callback:function(iso){
+    pickFieldDate(iso);
+  }});
 }
 
 function pickFieldCustomDateOnly() {
-  var picker = document.getElementById('field-popup-date-picker');
-  picker.value = '';
-  picker.showPicker();
-}
-
-function onFieldPopupPick(el) {
-  if (!el.value) return;
-  pickFieldDate(el.value);
+  closeFieldPopup();
+  openDTPicker({callback:function(iso){
+    pickFieldDate(iso);
+  }});
 }
 
 function pickFieldPriority(value) {

@@ -423,7 +423,7 @@
     <span class="brand-tag">Plain Text Operating System</span>
   </div>
   <form action="/search" method="GET" class="sidebar-search">
-    <input type="text" name="q" placeholder="Search records… (/)">
+    <input type="text" name="q" id="sidebar-search" placeholder="Search records… (/)">
   </form>
   <nav class="sidebar-nav">
     <a href="/"        class="{% if tab=='home'    %}active{% endif %}">{% include 'icons/home.html'    ignore missing %} Home</a>
@@ -456,8 +456,342 @@
 
 <!-- Global field-edit popup (used by todo page) -->
 <div class="field-popup" id="field-popup"></div>
-<input type="datetime-local" id="field-popup-picker" style="display:none;" onchange="onFieldPopupPick(this)">
-<input type="date" id="field-popup-date-picker" style="display:none;" onchange="onFieldPopupPick(this)">
+
+<!-- Custom date+time picker (shared across all pages) -->
+<style>
+  #dt-picker-overlay {
+    display:none; position:fixed; inset:0; z-index:9999;
+    background:rgba(0,0,0,.35);
+  }
+  #dt-picker-overlay.open { display:block; }
+  #dt-picker {
+    position:fixed; z-index:10000;
+    background:var(--card); border-radius:12px; padding:14px 16px;
+    width:310px; border:1px solid var(--border);
+    box-shadow:0 8px 30px rgba(0,0,0,.25); user-select:none;
+  }
+  #dt-picker .dtp-header {
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
+  }
+  #dt-picker .dtp-header .dtp-title { font-size:14px; font-weight:700; color:var(--text); }
+  #dt-picker .dtp-header button {
+    background:none; border:none; font-size:18px; cursor:pointer;
+    color:var(--sub); padding:2px 6px; border-radius:6px;
+  }
+  #dt-picker .dtp-header button:hover { background:var(--bg); color:var(--text); }
+  #dt-picker .dtp-weekdays {
+    display:grid; grid-template-columns:repeat(7,1fr); text-align:center;
+    font-size:10px; font-weight:700; color:var(--sub); margin-bottom:2px;
+  }
+  #dt-picker .dtp-days {
+    display:grid; grid-template-columns:repeat(7,1fr); gap:1px; margin-bottom:10px;
+  }
+  #dt-picker .dtp-day {
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:600; border-radius:6px; cursor:pointer;
+    color:var(--text); border:none; background:none;
+  }
+  #dt-picker .dtp-day:hover { background:var(--bg); }
+  #dt-picker .dtp-day.today { border:1.5px solid var(--accent); }
+  #dt-picker .dtp-day.selected { background:var(--accent); color:#fff; }
+  #dt-picker .dtp-day.empty { cursor:default; }
+  #dt-picker .dtp-day.empty:hover { background:none; }
+  #dt-picker .dtp-time-section {
+    border-top:1px solid var(--border); padding-top:8px; margin-bottom:8px;
+  }
+  #dt-picker .dtp-time-toggle {
+    display:flex; align-items:center; gap:8px; margin-bottom:6px;
+  }
+  #dt-picker .dtp-time-toggle label {
+    font-size:11px; font-weight:600; color:var(--sub); cursor:pointer;
+  }
+  #dt-picker .dtp-time-toggle input[type="checkbox"] {
+    accent-color:var(--accent); cursor:pointer;
+  }
+  #dt-picker .dtp-scroll-wrap {
+    display:none; gap:6px; justify-content:center;
+  }
+  #dt-picker .dtp-scroll-wrap.open { display:flex; }
+  #dt-picker .dtp-scroll-col {
+    width:76px; height:105px; overflow-y:scroll; position:relative;
+    border:1px solid var(--border); border-radius:8px; background:var(--bg);
+    scroll-snap-type:y mandatory;
+  }
+  #dt-picker .dtp-scroll-col::-webkit-scrollbar { display:none; }
+  #dt-picker .dtp-scroll-col { -ms-overflow-style:none; scrollbar-width:none; }
+  #dt-picker .dtp-scroll-item {
+    height:35px; display:flex; align-items:center; justify-content:center;
+    font-size:13px; font-weight:600; color:var(--text); scroll-snap-align:center;
+    cursor:pointer; border:none; background:none; width:100%;
+  }
+  #dt-picker .dtp-scroll-item:hover { background:var(--bg); }
+  #dt-picker .dtp-scroll-item.selected { color:var(--accent); font-weight:700; }
+  #dt-picker .dtp-scroll-item.pad { visibility:hidden; }
+  #dt-picker .dtp-scroll-indicator {
+    position:absolute; top:50%; left:0; right:0; height:35px; transform:translateY(-50%);
+    border-top:2px solid var(--accent); border-bottom:2px solid var(--accent);
+    pointer-events:none; border-radius:4px; z-index:1;
+  }
+  #dt-picker .dtp-footer {
+    display:flex; gap:8px; justify-content:flex-end; padding-top:8px;
+    border-top:1px solid var(--border);
+  }
+  #dt-picker .dtp-footer button {
+    padding:6px 16px; border-radius:8px; font-size:12px; font-weight:600;
+    border:none; cursor:pointer;
+  }
+  #dt-picker .dtp-btn-cancel { background:var(--bg); color:var(--sub); }
+  #dt-picker .dtp-btn-ok { background:var(--accent); color:#fff; }
+  #dt-picker .dtp-btn-ok:disabled { opacity:.4; cursor:default; }
+  @media (max-width:400px) {
+    #dt-picker { width:280px; padding:12px 12px; }
+    #dt-picker .dtp-day { font-size:11px; border-radius:5px; }
+    #dt-picker .dtp-scroll-col { width:66px; height:95px; }
+    #dt-picker .dtp-scroll-item { height:32px; font-size:12px; }
+    #dt-picker .dtp-scroll-indicator { height:32px; }
+  }
+</style>
+<div id="dt-picker-overlay" onclick="if(event.target===this)closeDTPicker()">
+  <div id="dt-picker">
+    <div class="dtp-header">
+      <button onclick="dtpNavMonth(-1)">&#8249;</button>
+      <span class="dtp-title" id="dt-picker-title"></span>
+      <button onclick="dtpNavMonth(1)">&#8250;</button>
+    </div>
+    <div class="dtp-weekdays"><span>Mo</span><span>Tu</span><span>We</span><span>Th</span><span>Fr</span><span>Sa</span><span>Su</span></div>
+    <div class="dtp-days" id="dt-picker-days"></div>
+    <div class="dtp-time-section">
+      <div class="dtp-time-toggle">
+        <input type="checkbox" id="dtp-has-time" onchange="dtpToggleTime()">
+        <label for="dtp-has-time">Add time</label>
+      </div>
+      <div class="dtp-scroll-wrap" id="dtp-time-cols">
+        <div class="dtp-scroll-col" id="dtp-hours-col"></div>
+        <div class="dtp-scroll-col" id="dtp-mins-col"></div>
+        <div class="dtp-scroll-col" id="dtp-ampm-col"></div>
+      </div>
+    </div>
+    <div class="dtp-footer">
+      <button class="dtp-btn-cancel" onclick="closeDTPicker()">Cancel</button>
+      <button class="dtp-btn-ok" id="dt-picker-ok" disabled onclick="confirmDTPicker()">OK</button>
+    </div>
+  </div>
+</div>
+<script>
+(function(){
+  var _dtpYear, _dtpMonth, _dtpDate, _dtpTime, _dtpCallback;
+  var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  var PADS = 3;
+
+  function itemH() {
+    return window.innerWidth <= 400 ? 32 : 35;
+  }
+  function colH() {
+    return itemH() * 3;
+  }
+
+  function scrollToRi(col, ri) {
+    var h = itemH();
+    var ch = colH();
+    var target = (ri + PADS) * h - (ch - h) / 2;
+    col.scrollTop = Math.max(0, target);
+  }
+
+  function readRi(col) {
+    var h = itemH();
+    var ch = colH();
+    var center = col.scrollTop + ch / 2;
+    var allIdx = Math.round((center - h / 2) / h);
+    var ri = allIdx - PADS;
+    var count = col.querySelectorAll('.dtp-scroll-item:not(.pad)').length;
+    return Math.max(0, Math.min(count - 1, ri));
+  }
+
+  function buildScrollCol(id, items, selectedVal) {
+    var col = document.getElementById(id);
+    var html = '';
+    for (var p = 0; p < PADS; p++) html += '<div class="dtp-scroll-item pad"></div>';
+    items.forEach(function(it){
+      var cls = 'dtp-scroll-item';
+      if (selectedVal !== null && it.v === selectedVal) cls += ' selected';
+      html += '<div class="'+cls+'" data-val="'+it.v+'">'+it.l+'</div>';
+    });
+    for (var p = 0; p < PADS; p++) html += '<div class="dtp-scroll-item pad"></div>';
+    col.innerHTML = html + '<div class="dtp-scroll-indicator"></div>';
+
+    var realItems = col.querySelectorAll('.dtp-scroll-item:not(.pad)');
+    realItems.forEach(function(el){
+      el.addEventListener('click', function(){
+        var ri = Array.prototype.indexOf.call(realItems, el);
+        scrollToRi(col, ri);
+      });
+    });
+
+    col.onscroll = function(){
+      var ri = readRi(col);
+      realItems.forEach(function(el, i){
+        el.classList.toggle('selected', i === ri);
+      });
+    };
+
+    if (selectedVal !== null) {
+      var target = col.querySelector('.dtp-scroll-item[data-val="'+selectedVal+'"]');
+      if (target) {
+        var ri = Array.prototype.indexOf.call(realItems, target);
+        col.style.overflow = 'hidden';
+        scrollToRi(col, ri);
+        requestAnimationFrame(function(){ col.style.overflow = ''; });
+      }
+    } else {
+      scrollToRi(col, 0);
+    }
+  }
+
+  function getScrollVal(colId) {
+    var col = document.getElementById(colId);
+    if (!col) return null;
+    var sel = col.querySelector('.dtp-scroll-item.selected');
+    return sel ? sel.getAttribute('data-val') : null;
+  }
+
+  function to24(h12, ampm) {
+    var h = parseInt(h12, 10);
+    if (ampm === 'AM') return h === 12 ? '00' : String(h).padStart(2, '0');
+    return h === 12 ? '12' : String(h + 12).padStart(2, '0');
+  }
+
+  function from24(hh) {
+    var h = parseInt(hh, 10);
+    if (h === 0) return {h12: '12', ap: 'AM'};
+    if (h < 12) return {h12: String(h), ap: 'AM'};
+    if (h === 12) return {h12: '12', ap: 'PM'};
+    return {h12: String(h - 12), ap: 'PM'};
+  }
+
+  function updateOK() {
+    document.getElementById('dt-picker-ok').disabled = !_dtpDate;
+  }
+
+  window.dtpNavMonth = function(dir) {
+    _dtpMonth += dir;
+    if (_dtpMonth > 11) { _dtpMonth = 0; _dtpYear++; }
+    if (_dtpMonth < 0) { _dtpMonth = 11; _dtpYear--; }
+    renderCalendar();
+  };
+
+  window.selectDTPDay = function(d) {
+    _dtpDate = {y:_dtpYear, m:_dtpMonth, d:d};
+    renderCalendar();
+    updateOK();
+  };
+
+  window.dtpToggleTime = function() {
+    var on = document.getElementById('dtp-has-time').checked;
+    var cols = document.getElementById('dtp-time-cols');
+    if (on) {
+      cols.classList.add('open');
+      buildScrollCol('dtp-hours-col', _hoursData, getScrollVal('dtp-hours-col') || '9');
+      buildScrollCol('dtp-mins-col', _minsData, getScrollVal('dtp-mins-col') || '00');
+      buildScrollCol('dtp-ampm-col', _ampmData, getScrollVal('dtp-ampm-col') || 'AM');
+    } else {
+      cols.classList.remove('open');
+    }
+  };
+
+  function renderCalendar() {
+    var title = document.getElementById('dt-picker-title');
+    title.textContent = MONTHS[_dtpMonth] + ' ' + _dtpYear;
+    var el = document.getElementById('dt-picker-days');
+    var first = new Date(_dtpYear, _dtpMonth, 1);
+    var startDay = (first.getDay() + 6) % 7;
+    var daysInMonth = new Date(_dtpYear, _dtpMonth + 1, 0).getDate();
+    var today = new Date();
+    var html = '';
+    for (var i = 0; i < startDay; i++) html += '<div class="dtp-day empty"></div>';
+    for (var d = 1; d <= daysInMonth; d++) {
+      var cls = 'dtp-day';
+      if (_dtpDate && _dtpYear === _dtpDate.y && _dtpMonth === _dtpDate.m && d === _dtpDate.d) cls += ' selected';
+      if (today.getFullYear() === _dtpYear && today.getMonth() === _dtpMonth && today.getDate() === d) cls += ' today';
+      html += '<div class="'+cls+'" onclick="selectDTPDay('+d+')">'+d+'</div>';
+    }
+    el.innerHTML = html;
+  }
+
+  var _hoursData = [], _minsData = [], _ampmData = [];
+
+  function buildTimeData() {
+    _hoursData = [];
+    for (var h = 1; h <= 12; h++) _hoursData.push({v:String(h), l:String(h)});
+    _minsData = [];
+    for (var m = 0; m < 60; m += 5) _minsData.push({v:String(m).padStart(2,'0'), l:':'+String(m).padStart(2,'0')});
+    _ampmData = [{v:'AM', l:'AM'}, {v:'PM', l:'PM'}];
+  }
+
+  window.openDTPicker = function(opts) {
+    _dtpCallback = opts.callback;
+    var now = new Date();
+    var hasTime = false;
+    var h12 = '9', mm = '00', ap = 'AM';
+    if (opts.value) {
+      var parts = opts.value.split('T');
+      var dp = parts[0].split('-');
+      _dtpDate = {y:+dp[0], m:+dp[1]-1, d:+dp[2]};
+      if (parts[1]) {
+        var tp = parts[1].split(':');
+        var f = from24(tp[0]);
+        h12 = f.h12; ap = f.ap; mm = tp[1] || '00';
+        hasTime = true;
+      }
+    } else {
+      _dtpDate = {y:now.getFullYear(), m:now.getMonth(), d:now.getDate()};
+    }
+    _dtpYear = _dtpDate.y;
+    _dtpMonth = _dtpDate.m;
+    renderCalendar();
+    buildTimeData();
+
+    var selH = hasTime ? h12 : null;
+    var selM = hasTime ? mm : null;
+    var selA = hasTime ? ap : null;
+    buildScrollCol('dtp-hours-col', _hoursData, selH);
+    buildScrollCol('dtp-mins-col', _minsData, selM);
+    buildScrollCol('dtp-ampm-col', _ampmData, selA);
+
+    var cb = document.getElementById('dtp-has-time');
+    cb.checked = hasTime;
+    var cols = document.getElementById('dtp-time-cols');
+    if (hasTime) cols.classList.add('open');
+    else cols.classList.remove('open');
+
+    updateOK();
+    var picker = document.getElementById('dt-picker');
+    picker.style.top = '50%';
+    picker.style.left = '50%';
+    picker.style.transform = 'translate(-50%, -50%)';
+    document.getElementById('dt-picker-overlay').classList.add('open');
+  };
+
+  window.closeDTPicker = function() {
+    document.getElementById('dt-picker-overlay').classList.remove('open');
+    _dtpCallback = null;
+  };
+
+  window.confirmDTPicker = function() {
+    if (!_dtpDate) return;
+    var dateStr = _dtpDate.y + '-' + String(_dtpDate.m+1).padStart(2,'0') + '-' + String(_dtpDate.d).padStart(2,'0');
+    var result = dateStr;
+    if (document.getElementById('dtp-has-time').checked) {
+      var h = getScrollVal('dtp-hours-col') || '9';
+      var m = getScrollVal('dtp-mins-col') || '00';
+      var a = getScrollVal('dtp-ampm-col') || 'AM';
+      result = dateStr + 'T' + to24(h, a) + ':' + m;
+    }
+    var cb = _dtpCallback;
+    closeDTPicker();
+    if (cb) cb(result);
+  };
+})();
+</script>
 
 <nav class="bottom-nav">
   <a href="/"        class="nav-item {% if tab=='home'    %}active{% endif %}">
@@ -951,7 +1285,7 @@ function toggleMoreMenu(e) {
     // / — focus search input if present on page
     if (key === "/") {
       var search = document.querySelector(
-        "input[name='q'], input[placeholder*='search' i], input[placeholder*='filter' i], #browse-search, #q"
+        "#sidebar-search, input[name='q'], input[placeholder*='search' i], input[placeholder*='filter' i], #browse-search, #q"
       );
       if (search) {
         e.preventDefault();
