@@ -172,6 +172,13 @@
         font-size: 11px; color: var(--sub);
       }
       .sidebar-footer a { color: var(--accent); text-decoration: none; }
+      .sidebar-search { padding: 10px 16px; border-bottom: 1px solid var(--border); }
+      .sidebar-search input {
+        width: 100%; padding: 8px 12px; font-size: 13px;
+        border-radius: 8px; border: 1.5px solid var(--border);
+        background: var(--bg); color: var(--text); outline: none;
+      }
+      .sidebar-search input:focus { border-color: var(--accent); }
       .main { padding: 28px 32px; }
       .floating-add { bottom: 20px; right: 20px; }
     }
@@ -415,6 +422,9 @@
     <a href="/" style="text-decoration:none"><span class="brand">PTOS</span></a>
     <span class="brand-tag">Plain Text Operating System</span>
   </div>
+  <form action="/search" method="GET" class="sidebar-search">
+    <input type="text" name="q" placeholder="Search records… (/)">
+  </form>
   <nav class="sidebar-nav">
     <a href="/"        class="{% if tab=='home'    %}active{% endif %}">{% include 'icons/home.html'    ignore missing %} Home</a>
     <a href="/add"     class="{% if tab=='add'     %}active{% endif %}">{% include 'icons/add.html'     ignore missing %} Add Record</a>
@@ -828,6 +838,9 @@ function toggleMoreMenu(e) {
           <tr><td><kbd>Esc</kbd></td><td>Close overlay / cancel</td></tr>
           <tr><td><kbd>/</kbd></td><td>Focus search / filter (Browse)</td></tr>
           <tr><td><kbd>N</kbd></td><td>New record (same as G A)</td></tr>
+          <tr><td><kbd>E</kbd></td><td>New expense</td></tr>
+          <tr><td><kbd>I</kbd></td><td>New income</td></tr>
+          <tr><td><kbd>T</kbd></td><td>New investment</td></tr>
         </tbody>
       </table>
 
@@ -911,6 +924,27 @@ function toggleMoreMenu(e) {
     if (key === "n" && !_g) {
       e.preventDefault();
       window.location = "/add";
+      return;
+    }
+
+    // E — go to add expense
+    if (key === "e" && !_g) {
+      e.preventDefault();
+      window.location = "/add?type=expense";
+      return;
+    }
+
+    // I — go to add income
+    if (key === "i" && !_g) {
+      e.preventDefault();
+      window.location = "/add?type=income";
+      return;
+    }
+
+    // T — go to add investment
+    if (key === "t" && !_g) {
+      e.preventDefault();
+      window.location = "/add?type=investment";
       return;
     }
 

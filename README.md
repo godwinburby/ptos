@@ -477,9 +477,12 @@ Press `?` from any page to view all shortcuts. Navigation uses a two-key chord: 
 |----------|--------|
 | `?` | Show help overlay |
 | `Esc` | Close overlay / cancel |
-| `/` | Focus search/filter (Browse page) |
+| `/` | Focus search/filter (Browse page, sidebar search) |
 | `Ctrl+K` | Focus topbar search (any page) |
 | `N` | New record (same as `G` `A`) |
+| `E` | New expense |
+| `I` | New income |
+| `T` | New investment |
 
 ### Lint
 
@@ -937,10 +940,13 @@ PTOS has built-in bidirectional sync with OneDrive using
 **SSE events:** The web UI receives `sync-status` events in real time,
 broadcasting the latest sync result (ok, conflict, or error).
 
-**Change detection (mtime-gate):** Periodic sync (every ~30 minutes) only
-runs when files have actually changed since the last successful sync. File
-modification times are tracked in a `.sync_state` file. If nothing changed,
-rclone is not called — saving network and battery.
+**Change detection (smart skip):** Periodic sync checks local file mtimes
+and sizes against `.ptos_sync_state` before calling rclone. If no local files
+changed since the last successful sync, rclone is skipped entirely — saving
+network, CPU, and battery. Manual sync (UI button), startup, and shutdown
+syncs always run regardless. If another device pushes changes while your
+local side is quiet, those changes are pulled the next time you make a
+local edit and sync.
 
 **Concurrency:** A `threading.Lock` prevents overlapping sync runs. If a
 sync is already in progress, a new request is silently skipped.
