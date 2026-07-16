@@ -21,7 +21,7 @@ PTOS_DIR="$(pwd)"
 
 # ── Storage permission (optional) ──────────────────────────────────────────────
 if [ ! -d "$HOME/storage/shared" ]; then
-    echo "Requesting storage permission (optional — needed only for --set-home)..."
+    echo "Requesting storage permission (optional — needed for data folder)..."
     termux-setup-storage
     sleep 3
     if [ -d "$HOME/storage/shared" ]; then
@@ -29,6 +29,32 @@ if [ ! -d "$HOME/storage/shared" ]; then
     else
         echo "Storage permission not granted (you can grant it later if needed)."
     fi
+fi
+
+# ── Create data folder in shared storage ──────────────────────────────────────
+# Android separates code ($HOME/ptos) from data (~/storage/shared/ptos-data)
+# so Syncthing/file managers can access the data folder directly.
+DATA_DIR="$HOME/storage/shared/ptos-data"
+if [ -d "$HOME/storage/shared" ]; then
+    if [ ! -d "$DATA_DIR" ]; then
+        echo "Creating data folder: $DATA_DIR"
+        mkdir -p "$DATA_DIR"
+    else
+        echo "Data folder exists: $DATA_DIR"
+    fi
+    # Write .ptos_home so PTOS uses the shared data folder
+    BOOTSTRAP="$PTOS_DIR/.ptos_home"
+    CURRENT_HOME=""
+    if [ -f "$BOOTSTRAP" ]; then
+        CURRENT_HOME="$(cat "$BOOTSTRAP")"
+    fi
+    if [ "$CURRENT_HOME" != "$DATA_DIR" ]; then
+        echo "$DATA_DIR" > "$BOOTSTRAP"
+        echo "Wrote .ptos_home -> $DATA_DIR"
+    fi
+else
+    echo "Shared storage not available — data will stay in code folder."
+    echo "Run 'termux-setup-storage' and re-run setup to separate data from code."
 fi
 
 # ── Check Python version ──────────────────────────────────────────────────────
@@ -60,8 +86,13 @@ else
 fi
 
 # ── Check if already initialised ─────────────────────────────────────────────
-if [ -d "$PTOS_DIR/config" ]; then
-    echo "Already initialised (config/ exists). Skipping first-time setup."
+# Check the data folder (ptos-data), not the code folder.
+INIT_DIR="$PTOS_DIR"
+if [ -f "$PTOS_DIR/.ptos_home" ]; then
+    INIT_DIR="$(cat "$PTOS_DIR/.ptos_home")"
+fi
+if [ -d "$INIT_DIR/config" ]; then
+    echo "Already initialised (config/ exists in data folder). Skipping first-time setup."
     INIT_NEEDED=false
 else
     INIT_NEEDED=true
