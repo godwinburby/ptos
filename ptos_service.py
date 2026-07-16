@@ -2309,7 +2309,7 @@ def get_todos_bucketed():
 
 
 def add_todo_line(text):
-    """Add a raw todo.txt line. Preprocesses pri:/due:/sched: shortcuts."""
+    """Add a raw todo.txt line. Preprocesses pri:/due:/t: shortcuts."""
     try:
         text = ptos_todo.preprocess_todo_text(text)
         t = ptos_todo.add_todo(TODO_PATH, text)

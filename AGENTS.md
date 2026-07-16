@@ -100,7 +100,7 @@ x 2026-07-12 2026-07-10 Completed task
 ```
 
 ### Dataclass fields
-`raw_line`, `done`, `priority`, `completed_date`, `created_date`, `description`, `projects`, `contexts`, `due`, `due_time`, `sched`, `sched_time`, `line_no`
+`raw_line`, `done`, `priority`, `completed_date`, `created_date`, `description`, `projects`, `contexts`, `due`, `due_time`, `threshold`, `threshold_time`, `line_no`
 
 ### Key functions
 - `parse_todo_line(line)` — parses one line into Todo object
@@ -110,7 +110,7 @@ x 2026-07-12 2026-07-10 Completed task
 - `archive_done_todos(path, months)` — moves old done items to `done.YYYY.txt`
 
 ### Web UI features
-- **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `sched:`, `(`); always visible at top of todo page (no collapsible)
+- **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `t:`, `(`); always visible at top of todo page (no collapsible)
 - **Quick pick chips** (collapsible) — Due shortcuts (with "pick date & time..." chip), Priority (A-D), Projects, Contexts, Scheduled (with "pick date & time..." chip + "Now" chip), Repeat as toggle chips; open on input focus, close on blur (with 200ms delay to allow chip clicks); on mobile, groups stack vertically instead of scrolling horizontally
 - **Filter chips** (collapsible) — Priority (A-D), Due Range (overdue/today/tomorrow/upcoming/someday/none), Context — all toggle on click; on mobile, groups stack vertically
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; filters todos by description; preserves other active filters
@@ -118,17 +118,17 @@ x 2026-07-12 2026-07-10 Completed task
 - **Clickable todo chips** — project, context, and priority chips on each todo row link to filtered view; clicking an active filter chip removes that filter
 - **Project rail** — horizontal scroll filter with toggle behavior
 - **Overdue/Tomorrow/Today/Upcoming/Someday** bucket view with collapsible Done section; overdue collapsed by default
-- **Scheduled todos** — Todos with `sched > today` are hidden until their scheduled date arrives (standard todo.txt behavior: `sched` means "don't show until")
+- **Threshold todos** — Todos with `t > today` are hidden until their threshold date arrives (standard todo.txt behavior: `t` means "don't show until")
 - **Today progress** counter (done/total)
-- **Help card** — color-coded annotated todo.txt example with priority, project, context, due, scheduled, recurrence
-- **Inline field popups** — click due/sched badges for date picker, priority badge for priority picker; popups use `position:fixed` and live in `base.html` (outside `<main>` to avoid overflow clipping)
+- **Help card** — color-coded annotated todo.txt example with priority, project, context, due, threshold, recurrence
+- **Inline field popups** — click due/threshold badges for date picker, priority badge for priority picker; popups use `position:fixed` and live in `base.html` (outside `<main>` to avoid overflow clipping)
 - **Floating add button** (`.floating-add`) — `floatingAddAction()` defined in `base.html` before `{% block scripts %}` so child templates can override; defaults to `/add` page; todo page does NOT override (add area is always visible)
 - **PTOS brand** — clickable `<a href="/">` in both mobile topbar and desktop sidebar, links to home page
 - **System notifications** — native OS notifications via `_system_notify()` in background thread; detects platform (Linux: `notify-send`, macOS: `osascript`, Windows: PowerShell toast, Android: `termux-notification`); runs alongside browser SSE notifications
 - **Service worker** (`web_static/sw.js`) — caches only GET requests for static assets; POST requests always pass through to network (fixes Android modal save)
 
 ### Autocomplete system
-- `_acData` object holds suggestions per prefix (`+`, `@`, `due:`, `sched:`, `(`)
+- `_acData` object holds suggestions per prefix (`+`, `@`, `due:`, `t:`, `(`)
 - `_getCurrentToken()` parses the word being typed and detects its prefix
 - `onTodoInput()` filters `_acData` by typed text and shows dropdown
 - `handleInputKey()` handles ArrowUp/Down/Enter/Escape navigation

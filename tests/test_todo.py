@@ -79,11 +79,11 @@ class TestParseTodoLine:
         assert t.projects == ["+Home"]
         assert t.contexts == ["@office"]
 
-    def test_with_sched(self):
-        t = parse_todo_line("(C) Deploy app due:2026-07-20 sched:2026-07-15 +DevOps @work")
+    def test_with_threshold(self):
+        t = parse_todo_line("(C) Deploy app due:2026-07-20 t:2026-07-15 +DevOps @work")
         assert t.priority == "C"
         assert t.due == dt.date(2026, 7, 20)
-        assert t.sched == dt.date(2026, 7, 15)
+        assert t.threshold == dt.date(2026, 7, 15)
         assert t.projects == ["+DevOps"]
         assert t.contexts == ["@work"]
 
@@ -121,10 +121,10 @@ class TestParseTodoLine:
         assert t.due == dt.date(2026, 7, 12)
         assert t.due_time == "14:30"
 
-    def test_sched_with_time(self):
-        t = parse_todo_line("Task sched:2026-07-15T09:00 due:2026-07-20T17:00")
-        assert t.sched == dt.date(2026, 7, 15)
-        assert t.sched_time == "09:00"
+    def test_threshold_with_time(self):
+        t = parse_todo_line("Task t:2026-07-15T09:00 due:2026-07-20T17:00")
+        assert t.threshold == dt.date(2026, 7, 15)
+        assert t.threshold_time == "09:00"
         assert t.due == dt.date(2026, 7, 20)
         assert t.due_time == "17:00"
 
@@ -169,8 +169,8 @@ class TestFormatLine:
         formatted = format_line(t)
         assert formatted == raw
 
-    def test_round_trip_with_sched(self):
-        raw = "(C) Deploy app due:2026-07-20 sched:2026-07-15 +DevOps @work"
+    def test_round_trip_with_threshold(self):
+        raw = "(C) Deploy app due:2026-07-20 t:2026-07-15 +DevOps @work"
         t = parse_todo_line(raw)
         formatted = format_line(t)
         # format_line normalises token order; verify parsed fields survive
@@ -178,7 +178,7 @@ class TestFormatLine:
         assert t2.priority == "C"
         assert t2.description == "Deploy app"
         assert t2.due == dt.date(2026, 7, 20)
-        assert t2.sched == dt.date(2026, 7, 15)
+        assert t2.threshold == dt.date(2026, 7, 15)
         assert t2.projects == ["+DevOps"]
         assert t2.contexts == ["@work"]
 
@@ -197,10 +197,10 @@ class TestFormatLine:
         formatted = format_line(t)
         assert "due:2026-07-12T14:30" in formatted
 
-    def test_format_sched_with_time(self):
-        t = Todo(description="Task", sched=dt.date(2026, 7, 15), sched_time="09:00")
+    def test_format_threshold_with_time(self):
+        t = Todo(description="Task", threshold=dt.date(2026, 7, 15), threshold_time="09:00")
         formatted = format_line(t)
-        assert "sched:2026-07-15T09:00" in formatted
+        assert "t:2026-07-15T09:00" in formatted
 
     def test_format_without_time(self):
         t = Todo(description="Task", due=dt.date(2026, 7, 12))
@@ -209,14 +209,14 @@ class TestFormatLine:
         assert "T" not in formatted.split("due:")[1].split()[0]
 
     def test_round_trip_with_time(self):
-        raw = "Task due:2026-07-12T14:30 sched:2026-07-15T09:00"
+        raw = "Task due:2026-07-12T14:30 t:2026-07-15T09:00"
         t = parse_todo_line(raw)
         formatted = format_line(t)
         t2 = parse_todo_line(formatted)
         assert t2.due == dt.date(2026, 7, 12)
         assert t2.due_time == "14:30"
-        assert t2.sched == dt.date(2026, 7, 15)
-        assert t2.sched_time == "09:00"
+        assert t2.threshold == dt.date(2026, 7, 15)
+        assert t2.threshold_time == "09:00"
 
 
 # ── load / save ─────────────────────────────────────────────────────────────
@@ -576,10 +576,10 @@ class TestPreprocessTodoText:
         tomorrow = (dt.date.today() + dt.timedelta(days=1)).isoformat()
         assert f"due:{tomorrow}" in result
 
-    def test_sched_today(self):
-        result = preprocess_todo_text("Deploy sched:today")
+    def test_threshold_today(self):
+        result = preprocess_todo_text("Deploy t:today")
         today = dt.date.today().isoformat()
-        assert f"sched:{today}" in result
+        assert f"t:{today}" in result
 
     def test_passthrough_iso(self):
         line = "(A) Task due:2026-12-25"
@@ -627,11 +627,11 @@ class TestGetDueTodos:
         result = get_due_todos(todos)
         assert len(result) == 0
 
-    def test_sched_in_future_excluded(self):
+    def test_threshold_in_future_excluded(self):
         today = dt.date.today()
         tomorrow = today + dt.timedelta(days=1)
         todos = [
-            Todo(description="Scheduled future", due=today, sched=tomorrow, line_no=1),
+            Todo(description="Threshold future", due=today, threshold=tomorrow, line_no=1),
         ]
         result = get_due_todos(todos)
         assert len(result) == 0
@@ -651,15 +651,15 @@ class TestGetDueTodos:
         result = get_due_todos(todos)
         assert len(result) == 1
 
-    def test_sched_with_time_in_future(self):
-        """Task scheduled for later today should not surface yet."""
+    def test_threshold_with_time_in_future(self):
+        """Task thresholded for later today should not surface yet."""
         today = dt.date.today()
         now = dt.datetime.now()
-        # set sched to 1 hour from now
+        # set threshold to 1 hour from now
         future_time = (now + dt.timedelta(hours=1)).strftime("%H:%M")
         todos = [
-            Todo(description="Scheduled later", due=today, sched=today,
-                 sched_time=future_time, line_no=1),
+            Todo(description="Threshold later", due=today, threshold=today,
+                 threshold_time=future_time, line_no=1),
         ]
         result = get_due_todos(todos)
         assert len(result) == 0
