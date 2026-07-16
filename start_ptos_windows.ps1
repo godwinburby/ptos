@@ -61,19 +61,24 @@ Write-Host ""
 
 $proc = Start-Process -FilePath $python -ArgumentList "ptos_web.py" -PassThru -NoNewWindow
 
-# Wait for server to be ready (up to 15s)
+# Kill Flask when PowerShell exits (even if batch file forces termination)
+Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
+    if ($proc -and -not $proc.HasExited) {
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Wait for server to be ready (up to 30s)
+# Use curl -s like Linux/Android — any response means server is up
 Write-Host "Waiting for server..." -NoNewline
 $serverReady = $false
-for ($i = 0; $i -lt 15; $i++) {
-    try {
-        Invoke-WebRequest -Uri "http://localhost:5000" -TimeoutSec 1 -UseBasicParsing | Out-Null
+for ($i = 0; $i -lt 30; $i++) {
+    if (curl.exe -s http://localhost:5000 2>$null) {
         $serverReady = $true
         break
-    } catch {
-        if ($_.Exception.Response) { $serverReady = $true; break }
-        Write-Host "." -NoNewline
-        Start-Sleep -Seconds 1
     }
+    Write-Host "." -NoNewline
+    Start-Sleep -Seconds 1
 }
 Write-Host ""
 
@@ -85,19 +90,16 @@ if ($serverReady) {
     Write-Host "still be running - check the messages above)."
     Write-Host "Waiting for server to become available..."
     for ($i = 0; $i -lt 120; $i++) {
-        try {
-            Invoke-WebRequest -Uri "http://localhost:5000" -TimeoutSec 1 -UseBasicParsing | Out-Null
+        if (curl.exe -s http://localhost:5000 2>$null) {
             Start-Process "http://localhost:5000"
             break
-        } catch {
-            if ($_.Exception.Response) { Start-Process "http://localhost:5000"; break }
-            Start-Sleep -Seconds 1
         }
+        Start-Sleep -Seconds 1
     }
 }
 
 try {
-    Wait-Process -Id $proc.Id
+    Wait-Process -Id $proc.Id -ErrorAction SilentlyContinue
 } finally {
     if (-not $proc.HasExited) {
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
