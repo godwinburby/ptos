@@ -4,7 +4,6 @@
   "description": "Personal time tracking and journaling",
   "start_url": "/",
   "display": "standalone",
-  "orientation": "any",
   "theme_color": "#4F6BED",
   "background_color": "#1a1a1a",
   "icons": [

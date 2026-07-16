@@ -3903,11 +3903,14 @@ def _detect_corruption(base_dir, state_file):
     if not os.path.isfile(state_file):
         return []
     with open(state_file, encoding="utf-8") as f:
-        last_sizes = json.load(f)
+        last_state = json.load(f)
     concerning = []
-    for rel_path, prev_size in last_sizes.items():
+    for rel_path, prev in last_state.items():
+        if rel_path.startswith("_"):
+            continue
         if rel_path in _EXCLUDE:
             continue
+        prev_size = prev["size"] if isinstance(prev, dict) else prev
         full_path = os.path.join(base_dir, rel_path)
         if prev_size > 0 and os.path.isfile(full_path) and os.path.getsize(full_path) == 0:
             concerning.append(rel_path)
@@ -3915,9 +3918,9 @@ def _detect_corruption(base_dir, state_file):
 
 
 def _record_sizes(base_dir, state_file, folders):
-    """Record current file sizes for future corruption detection."""
+    """Record current file mtimes and sizes for change detection and corruption detection."""
     import json
-    sizes = {}
+    state = {}
     for folder in folders:
         folder_path = os.path.join(base_dir, folder)
         if not os.path.isdir(folder_path):
@@ -3926,9 +3929,41 @@ def _record_sizes(base_dir, state_file, folders):
             for fname in files:
                 fpath = os.path.join(root, fname)
                 rel = os.path.relpath(fpath, base_dir)
-                sizes[rel] = os.path.getsize(fpath)
+                try:
+                    st = os.stat(fpath)
+                    state[rel] = {"size": st.st_size, "mtime": st.st_mtime}
+                except OSError:
+                    pass
+    state["_last_sync"] = time.time()
     with open(state_file, "w", encoding="utf-8") as f:
-        json.dump(sizes, f)
+        json.dump(state, f)
+
+
+def _local_changed(state_file, folders):
+    """Return True if any synced file changed since last recorded state."""
+    import json
+    if not os.path.isfile(state_file):
+        return True
+    with open(state_file, encoding="utf-8") as f:
+        state = json.load(f)
+    if "_last_sync" not in state:
+        return True
+    for folder in folders:
+        folder_path = os.path.join(BASE_DIR, folder)
+        if not os.path.isdir(folder_path):
+            continue
+        for root, _, files in os.walk(folder_path):
+            for fname in files:
+                fpath = os.path.join(root, fname)
+                rel = os.path.relpath(fpath, BASE_DIR)
+                try:
+                    st = os.stat(fpath)
+                    prev = state.get(rel)
+                    if not prev or prev["size"] != st.st_size or prev["mtime"] != st.st_mtime:
+                        return True
+                except OSError:
+                    return True
+    return False
 
 
 def _pid_is_running(pid):
@@ -3963,13 +3998,14 @@ def _release_sync_lock():
         pass
 
 
-def run_sync(command, resync=False):
+def run_sync(command, resync=False, skip_if_clean=False):
     """Run rclone sync or bisync against configured remote.
 
     Returns {"ok": bool, "output": str, "error": str, "returncode": int}.
     Reads [sync] section from config.toml for remote_name, remote_path, folders.
     Runs corruption pre-flight check before sync, records file sizes after success.
     Uses a PID-based file lock to prevent concurrent syncs across processes.
+    When skip_if_clean=True, skips rclone if no local files changed since last sync.
     """
     import subprocess
 
@@ -3993,6 +4029,13 @@ def run_sync(command, resync=False):
                     "returncode": 1}
 
         state_file = os.path.join(BASE_DIR, ".ptos_sync_state")
+
+        if skip_if_clean and not resync:
+            if not _local_changed(state_file, folders):
+                _invalidate_all()
+                return {"ok": True, "output": "Sync skipped: no local changes",
+                        "error": "", "returncode": 0}
+
         concerning = _detect_corruption(BASE_DIR, state_file)
         if concerning:
             return {"ok": False, "output": "", "error":
