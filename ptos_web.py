@@ -1539,7 +1539,8 @@ def sync_run():
                 actual_cmd = "bisync"
                 resync = True
             _sync_result = ptos.run_sync(actual_cmd, resync=resync,
-                                         remote_name=remote_name, remote_path=remote_path)
+                                         remote_name=remote_name, remote_path=remote_path,
+                                         on_line=lambda line: _sse_broadcast("sync-log", line.rstrip("\r\n")))
         except Exception as e:
             _sync_result = {"ok": False, "output": "", "error": str(e), "returncode": 1}
         finally:
@@ -2710,7 +2711,6 @@ def _housekeeping_loop(interval_minutes=5):
     import ptos_todo as _todo_mod
     notified = set()
     while True:
-        time.sleep(interval_minutes * 60)
         # ── todo notifications ──
         try:
             todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
@@ -2732,6 +2732,7 @@ def _housekeeping_loop(interval_minutes=5):
             notified = current
         except Exception:
             pass
+        time.sleep(interval_minutes * 60)
 
 
 def _sync_loop(interval_minutes=30):

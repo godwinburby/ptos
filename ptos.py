@@ -4022,7 +4022,7 @@ def _release_sync_lock():
         pass
 
 
-def run_sync(command, resync=False, skip_if_clean=False, remote_name=None, remote_path=None):
+def run_sync(command, resync=False, skip_if_clean=False, remote_name=None, remote_path=None, on_line=None):
     """Run rclone sync or bisync against configured remote.
 
     Returns {"ok": bool, "output": str, "error": str, "returncode": int}.
@@ -4111,22 +4111,38 @@ def run_sync(command, resync=False, skip_if_clean=False, remote_name=None, remot
             _clear_rclone_bisync_locks()
 
         try:
-            result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                    stderr=subprocess.STDOUT, text=True)
         except FileNotFoundError:
             return {"ok": False, "output": "", "error":
                     "rclone not found. Install from https://rclone.org",
                     "returncode": 1}
-        except subprocess.TimeoutExpired:
-            return {"ok": False, "output": "", "error":
-                    "Sync timed out after 5 minutes",
-                    "returncode": 1}
 
-        output = (result.stdout or "") + (result.stderr or "")
+        output_lines = []
+        deadline = time.time() + 300
+        try:
+            for line in proc.stdout:
+                output_lines.append(line)
+                if on_line:
+                    on_line(line)
+                if time.time() > deadline:
+                    proc.kill()
+                    proc.wait()
+                    return {"ok": False, "output": "".join(output_lines),
+                            "error": "Sync timed out after 5 minutes",
+                            "returncode": 1}
+        except Exception:
+            proc.kill()
+            proc.wait()
+            raise
+        proc.wait()
 
-        if result.returncode != 0:
+        output = "".join(output_lines)
+
+        if proc.returncode != 0:
             return {"ok": False, "output": output,
-                    "error": f"rclone exited with code {result.returncode}",
-                    "returncode": result.returncode}
+                    "error": f"rclone exited with code {proc.returncode}",
+                    "returncode": proc.returncode}
 
         _record_sizes(BASE_DIR, state_file, folders)
         _invalidate_all()

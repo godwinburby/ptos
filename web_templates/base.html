@@ -1336,6 +1336,10 @@ function updateSyncDot(state) {
           setTimeout(function() { updateSyncDot(""); }, 10000);
           if (typeof onSyncDone === "function") onSyncDone(msg.data);
         }
+        if (msg.type === "sync-log") {
+          var out = document.getElementById("sync-output");
+          if (out) { out.textContent += msg.data + "\n"; out.scrollTop = out.scrollHeight; }
+        }
       } catch(ex) {}
     };
   } catch(ex) {}
