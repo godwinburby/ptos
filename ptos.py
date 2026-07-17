@@ -4060,6 +4060,10 @@ def run_sync(command, resync=False, skip_if_clean=False):
         if command == "bisync":
             cmd.append("--conflict-resolve")
             cmd.append("none")
+        if command == "bisync" and not resync:
+            import glob as _glob
+            if not _glob.glob(os.path.join(BASE_DIR, ".bisync.*")):
+                resync = True
         if resync and command == "bisync":
             cmd.append("--resync")
 
