@@ -501,12 +501,17 @@ function onSyncDone(result) {
   wrap.style.display = "block";
 
   if (result && result.ok) {
-    out.textContent = (result.output || "(no output)") + "\n\nDone.";
+    if (!out.textContent.trim()) out.textContent = result.output || "(no output)";
+    out.textContent += "\n\nDone.";
     out.style.borderColor = "var(--accent)";
   } else {
-    var msg = result ? result.error || "Unknown error" : "No result";
-    if (result && result.output) msg += "\n\n" + result.output;
-    out.textContent = msg + "\n\nFailed.";
+    if (!out.textContent.trim()) {
+      out.textContent = (result ? result.error || "Unknown error" : "No result");
+      if (result && result.output) out.textContent += "\n\n" + result.output;
+    } else {
+      out.textContent += "\n\n" + (result ? result.error || "Failed" : "No result");
+    }
+    out.textContent += "\n\nFailed.";
     out.style.borderColor = "var(--error)";
   }
 }
