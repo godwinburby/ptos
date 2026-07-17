@@ -142,6 +142,10 @@ On Android, setup installs code to `~/ptos` (Termux's native home, git-friendly)
 and data to shared storage (`~/storage/shared/ptos-data`) — keeping them separate
 for reliable git updates and Syncthing visibility.
 
+On Windows and Linux, setup creates `ptos-data` as a sibling to the repo directory
+(e.g. `~/ptos-data` next to `~/ptos`), keeping data outside the code repo and
+away from OneDrive sync.
+
 Safe to re-run — setup skips steps that are already done.
 
 ### Starting PTOS after setup
@@ -167,60 +171,46 @@ python ptos_web.py        # start the web server
 
 `--init` is safe to re-run — it will never overwrite existing config files.
 
+To move data out of the repo (recommended for sync), use:
+
+```bash
+python ptos.py --set-home ~/ptos-data
+```
+
 ---
 
 ## Folder structure after init
 
 ```
-ptos/
-├── ptos.py                 # Core engine
-├── ptos_cli.py             # CLI argument parser and entry point
-├── ptos_service.py         # Service layer (shared by web UI and CLI)
-├── ptos_sync.py            # OneDrive sync (rclone bisync)
-├── ptos_web.py             # Web UI (Flask)
-├── ptos_todo.py            # Todo module (todo.txt CRUD)
-├── desktop_app.py          # Standalone desktop app runner (PyInstaller)
-├── notify_todo.py          # Standalone todo notification script
-├── ptos.bat                # Windows wrapper
-├── ptos.spec               # PyInstaller spec for desktop builds
-├── ptw.bat                 # Windows test wrapper
-├── build.bat               # Windows build script
-├── icon.ico                # Desktop app icon
-├── .version                # Current version SHA (used by update checks)
-├── .ptos_home              # Points code to data directory (overrides PTOS_HOME env)
-├── .gitignore
-├── AGENTS.md               # Development guide for AI agents
-├── CHANGELOG.md            # Release history
-├── README_START_HERE.md    # Plain-English overview for new users
-├── setup_ptos_linux.sh     # Linux/macOS setup (single file)
-├── setup_ptos_android.sh   # Android/Termux setup (git clone, code/data split)
-├── setup_ptos_windows.bat  # Windows setup — self-fetches .ps1, then runs it
-├── setup_ptos_windows.ps1  # Windows setup — Python/Git auto-install via winget
-├── start_ptos_linux.sh     # Linux start script (git pull, starts server)
-├── start_ptos_windows.bat  # Windows start script (checks for updates, starts server)
-├── start_ptos_android.sh   # Android/Termux start script (git pull, starts server)
-├── starters/               # Default configs shipped with the project
-│   ├── starter_config.toml # Default settings (used by --init)
-│   ├── starter_schema.toml # Default record types (used by --init)
-│   ├── starter_queries.toml# Example queries (used by --init)
-│   ├── starter_presets.toml# Example presets (used by --init)
-│   └── starter_journal.md  # Default journal template
-├── config/                 # User config (created by --init, gitignored)
-│   ├── config.toml      # Editor, currency, cycles, dashboard, auth, sync, backup
-│   ├── schema.toml      # Record types, fields, validation
-│   ├── queries.toml     # Saved queries, metrics, dashboards, due
-│   └── presets.toml     # Quick-add shortcuts
-├── records/               # Log files (YYYY.log)
-├── exports/               # CSV exports land here (created on demand)
-├── backups/               # ZIP backups land here (created on demand)
-├── todo/                  # Todo files (todo.txt, done.txt, done.YYYY.txt)
-├── journal/               # Markdown journal entries (YYYY/YYYY-MM-DD.md)
-├── templates/             # Journal template override (daily.md)
-├── tests/                 # pytest test suite (27 test files)
-├── images/                # Screenshots for README
-├── web_templates/         # Jinja2 HTML templates for web UI
-└── web_static/            # CSS, JS, icons, PWA manifest, service worker
+~/                                    # (or C:\Users\you)
+├── ptos/                            # Code (git repo)
+│   ├── ptos.py                      # Core engine
+│   ├── ptos_cli.py                  # CLI argument parser
+│   ├── ptos_service.py              # Service layer (web UI + CLI)
+│   ├── ptos_sync.py                 # rclone sync engine
+│   ├── ptos_web.py                  # Web UI (Flask)
+│   ├── ptos_todo.py                 # Todo module
+│   ├── .ptos_home                   # Points to ../ptos-data
+│   ├── starters/                    # Default configs shipped with project
+│   ├── tests/                       # pytest test suite
+│   ├── web_templates/               # Jinja2 HTML templates
+│   └── web_static/                  # CSS, JS, icons, PWA manifest
+│
+└── ptos-data/                       # Data (synced via rclone, outside OneDrive)
+    ├── config/                      # User config (created by --init)
+    │   ├── config.toml
+    │   ├── schema.toml
+    │   ├── queries.toml
+    │   └── presets.toml
+    ├── records/                     # Log files (YYYY.log)
+    ├── exports/                     # CSV exports (created on demand)
+    ├── backups/                     # ZIP backups (created on demand)
+    ├── todo/                        # Todo files (todo.txt, done.txt, done.YYYY.txt)
+    ├── journal/                     # Markdown journal entries
+    └── .ptos_sync_state             # Smart sync skip state
 ```
+
+On Android, data lives in `~/storage/shared/ptos-data` instead.
 
 ---
 
@@ -640,6 +630,9 @@ every launch.
 
 Priority: `PTOS_HOME` env var > `{script_dir}/.ptos_home` > data next to code.
 
+The setup scripts handle this automatically: they create `ptos-data/` as a sibling
+to the repo directory and write `.ptos_home` before running `--init`.
+
 ---
 
 ## Adding a new record type
@@ -916,9 +909,8 @@ PTOS has built-in bidirectional sync with OneDrive using
 [rclone bisync](https://rclone.org/). Enable it in **Settings → Sync**.
 
 **Platform support:**
-- **Linux / Termux**: Full support. Requires rclone installed and configured
-  with a OneDrive remote.
-- **Windows**: Automatically disabled — native OneDrive app handles sync.
+- **Linux / macOS / Termux / Windows**: Full support. Requires rclone installed and configured
+  with a remote.
 
 **Web UI controls:**
 - **Enable/disable toggle** — turns periodic sync on and off

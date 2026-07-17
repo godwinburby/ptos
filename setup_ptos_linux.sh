@@ -20,6 +20,20 @@ else
 fi
 PTOS_DIR="$(pwd)"
 
+# ── Create data directory (sibling to repo) ──────────────────────────────────
+PARENT_DIR="$(dirname "$PTOS_DIR")"
+DATA_DIR="$PARENT_DIR/ptos-data"
+if [ ! -d "$DATA_DIR" ]; then
+    echo ""
+    echo "--- Creating data directory ---"
+    mkdir -p "$DATA_DIR"
+    echo "Data directory created at: $DATA_DIR"
+else
+    echo "Data directory exists: $DATA_DIR"
+fi
+echo "$DATA_DIR" > "$PTOS_DIR/.ptos_home"
+echo "Configured .ptos_home -> $DATA_DIR"
+
 # ── Find Python 3.11+ ─────────────────────────────────────────────────────────
 PYTHON=""
 for cmd in python3.13 python3.12 python3.11 python3 python; do
@@ -40,7 +54,7 @@ fi
 echo "Using $PYTHON ($($PYTHON --version))"
 
 # ── Check if already initialised ─────────────────────────────────────────────
-if [ -d "$PTOS_DIR/config" ]; then
+if [ -d "$DATA_DIR/config" ]; then
     echo "Already initialised (config/ exists). Skipping first-time setup."
     INIT_NEEDED=false
 else

@@ -117,12 +117,12 @@ class TestParseTodoLine:
         assert t.description == "Call supplier about stock"
 
     def test_due_with_time(self):
-        t = parse_todo_line("Task due:2026-07-12T14:30")
+        t = parse_todo_line("Task due:2026-07-12 due_time:14:30")
         assert t.due == dt.date(2026, 7, 12)
         assert t.due_time == "14:30"
 
     def test_threshold_with_time(self):
-        t = parse_todo_line("Task t:2026-07-15T09:00 due:2026-07-20T17:00")
+        t = parse_todo_line("Task t:2026-07-15 t_time:09:00 due:2026-07-20 due_time:17:00")
         assert t.threshold == dt.date(2026, 7, 15)
         assert t.threshold_time == "09:00"
         assert t.due == dt.date(2026, 7, 20)
@@ -195,21 +195,23 @@ class TestFormatLine:
     def test_format_with_time(self):
         t = Todo(description="Task", due=dt.date(2026, 7, 12), due_time="14:30")
         formatted = format_line(t)
-        assert "due:2026-07-12T14:30" in formatted
+        assert "due:2026-07-12" in formatted
+        assert "due_time:14:30" in formatted
 
     def test_format_threshold_with_time(self):
         t = Todo(description="Task", threshold=dt.date(2026, 7, 15), threshold_time="09:00")
         formatted = format_line(t)
-        assert "t:2026-07-15T09:00" in formatted
+        assert "t:2026-07-15" in formatted
+        assert "t_time:09:00" in formatted
 
     def test_format_without_time(self):
         t = Todo(description="Task", due=dt.date(2026, 7, 12))
         formatted = format_line(t)
         assert "due:2026-07-12" in formatted
-        assert "T" not in formatted.split("due:")[1].split()[0]
+        assert "due_time" not in formatted
 
     def test_round_trip_with_time(self):
-        raw = "Task due:2026-07-12T14:30 t:2026-07-15T09:00"
+        raw = "Task due:2026-07-12 due_time:14:30 t:2026-07-15 t_time:09:00"
         t = parse_todo_line(raw)
         formatted = format_line(t)
         t2 = parse_todo_line(formatted)
@@ -217,6 +219,14 @@ class TestFormatLine:
         assert t2.due_time == "14:30"
         assert t2.threshold == dt.date(2026, 7, 15)
         assert t2.threshold_time == "09:00"
+
+    def test_format_split_tokens_no_combined(self):
+        t = Todo(description="Task", due=dt.date(2026, 7, 12), due_time="14:30",
+                 threshold=dt.date(2026, 7, 15), threshold_time="09:00")
+        formatted = format_line(t)
+        assert formatted.count(":") >= 4
+        assert "due:2026-07-12T" not in formatted
+        assert "t:2026-07-15T" not in formatted
 
 
 # ── load / save ─────────────────────────────────────────────────────────────
@@ -594,11 +604,11 @@ class TestPreprocessTodoText:
     def test_due_tomorrow_with_time(self):
         result = preprocess_todo_text("Buy milk due:tomorrow 3pm")
         tomorrow = (dt.date.today() + dt.timedelta(days=1)).isoformat()
-        assert f"due:{tomorrow}T15:00" in result
+        assert f"due:{tomorrow} due_time:15:00" in result
 
     def test_due_iso_with_time(self):
         result = preprocess_todo_text("Task due:2026-07-12T14:30")
-        assert "due:2026-07-12T14:30" in result
+        assert "due:2026-07-12 due_time:14:30" in result
 
 
 # ── notify ──────────────────────────────────────────────────────────────────

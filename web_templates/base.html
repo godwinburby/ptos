@@ -508,29 +508,16 @@
   #dt-picker .dtp-time-toggle input[type="checkbox"] {
     accent-color:var(--accent); cursor:pointer;
   }
-  #dt-picker .dtp-scroll-wrap {
-    display:none; gap:6px; justify-content:center;
+  #dt-picker .dtp-time-selects {
+    display:none; gap:6px; align-items:center; justify-content:center;
   }
-  #dt-picker .dtp-scroll-wrap.open { display:flex; }
-  #dt-picker .dtp-scroll-col {
-    width:76px; height:105px; overflow-y:scroll; position:relative;
-    border:1px solid var(--border); border-radius:8px; background:var(--bg);
-    scroll-snap-type:y mandatory;
+  #dt-picker .dtp-time-selects.open { display:flex; }
+  #dt-picker .dtp-time-selects select {
+    font-size:15px; padding:6px 8px; border-radius:8px;
+    border:1px solid var(--border); background:var(--bg); color:var(--text);
   }
-  #dt-picker .dtp-scroll-col::-webkit-scrollbar { display:none; }
-  #dt-picker .dtp-scroll-col { -ms-overflow-style:none; scrollbar-width:none; }
-  #dt-picker .dtp-scroll-item {
-    height:35px; display:flex; align-items:center; justify-content:center;
-    font-size:13px; font-weight:600; color:var(--text); scroll-snap-align:center;
-    cursor:pointer; border:none; background:none; width:100%;
-  }
-  #dt-picker .dtp-scroll-item:hover { background:var(--bg); }
-  #dt-picker .dtp-scroll-item.selected { color:var(--accent); font-weight:700; }
-  #dt-picker .dtp-scroll-item.pad { visibility:hidden; }
-  #dt-picker .dtp-scroll-indicator {
-    position:absolute; top:50%; left:0; right:0; height:35px; transform:translateY(-50%);
-    border-top:2px solid var(--accent); border-bottom:2px solid var(--accent);
-    pointer-events:none; border-radius:4px; z-index:1;
+  #dt-picker .dtp-time-selects .dtp-time-sep {
+    font-size:16px; font-weight:700; color:var(--sub);
   }
   #dt-picker .dtp-footer {
     display:flex; gap:8px; justify-content:flex-end; padding-top:8px;
@@ -543,12 +530,12 @@
   #dt-picker .dtp-btn-cancel { background:var(--bg); color:var(--sub); }
   #dt-picker .dtp-btn-ok { background:var(--accent); color:#fff; }
   #dt-picker .dtp-btn-ok:disabled { opacity:.4; cursor:default; }
-  @media (max-width:400px) {
-    #dt-picker { width:280px; padding:12px 12px; }
-    #dt-picker .dtp-day { font-size:11px; border-radius:5px; }
-    #dt-picker .dtp-scroll-col { width:66px; height:95px; }
-    #dt-picker .dtp-scroll-item { height:32px; font-size:12px; }
-    #dt-picker .dtp-scroll-indicator { height:32px; }
+  @media (max-width:767px) {
+    #dt-picker { width: calc(100vw - 32px); max-width:360px; }
+    #dt-picker .dtp-weekdays { font-size:12px; }
+    #dt-picker .dtp-day { font-size:15px; border-radius:6px; }
+    #dt-picker .dtp-time-toggle label { font-size:13px; }
+    #dt-picker .dtp-header .dtp-title { font-size:16px; }
   }
 </style>
 <div id="dt-picker-overlay" onclick="if(event.target===this)closeDTPicker()">
@@ -565,10 +552,14 @@
         <input type="checkbox" id="dtp-has-time" onchange="dtpToggleTime()">
         <label for="dtp-has-time">Add time</label>
       </div>
-      <div class="dtp-scroll-wrap" id="dtp-time-cols">
-        <div class="dtp-scroll-col" id="dtp-hours-col"></div>
-        <div class="dtp-scroll-col" id="dtp-mins-col"></div>
-        <div class="dtp-scroll-col" id="dtp-ampm-col"></div>
+      <div class="dtp-time-selects" id="dtp-time-selects">
+        <select id="dtp-hour-select"></select>
+        <span class="dtp-time-sep">:</span>
+        <select id="dtp-min-select"></select>
+        <select id="dtp-ampm-select">
+          <option value="AM">AM</option>
+          <option value="PM">PM</option>
+        </select>
       </div>
     </div>
     <div class="dtp-footer">
@@ -579,80 +570,9 @@
 </div>
 <script>
 (function(){
-  var _dtpYear, _dtpMonth, _dtpDate, _dtpTime, _dtpCallback;
+  var _dtpYear, _dtpMonth, _dtpDate, _dtpCallback;
   var MONTHS = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-  var PADS = 3;
-
-  function itemH() {
-    return window.innerWidth <= 400 ? 32 : 35;
-  }
-  function colH() {
-    return itemH() * 3;
-  }
-
-  function scrollToRi(col, ri) {
-    var h = itemH();
-    var ch = colH();
-    var target = (ri + PADS) * h - (ch - h) / 2;
-    col.scrollTop = Math.max(0, target);
-  }
-
-  function readRi(col) {
-    var h = itemH();
-    var ch = colH();
-    var center = col.scrollTop + ch / 2;
-    var allIdx = Math.round((center - h / 2) / h);
-    var ri = allIdx - PADS;
-    var count = col.querySelectorAll('.dtp-scroll-item:not(.pad)').length;
-    return Math.max(0, Math.min(count - 1, ri));
-  }
-
-  function buildScrollCol(id, items, selectedVal) {
-    var col = document.getElementById(id);
-    var html = '';
-    for (var p = 0; p < PADS; p++) html += '<div class="dtp-scroll-item pad"></div>';
-    items.forEach(function(it){
-      var cls = 'dtp-scroll-item';
-      if (selectedVal !== null && it.v === selectedVal) cls += ' selected';
-      html += '<div class="'+cls+'" data-val="'+it.v+'">'+it.l+'</div>';
-    });
-    for (var p = 0; p < PADS; p++) html += '<div class="dtp-scroll-item pad"></div>';
-    col.innerHTML = html + '<div class="dtp-scroll-indicator"></div>';
-
-    var realItems = col.querySelectorAll('.dtp-scroll-item:not(.pad)');
-    realItems.forEach(function(el){
-      el.addEventListener('click', function(){
-        var ri = Array.prototype.indexOf.call(realItems, el);
-        scrollToRi(col, ri);
-      });
-    });
-
-    col.onscroll = function(){
-      var ri = readRi(col);
-      realItems.forEach(function(el, i){
-        el.classList.toggle('selected', i === ri);
-      });
-    };
-
-    if (selectedVal !== null) {
-      var target = col.querySelector('.dtp-scroll-item[data-val="'+selectedVal+'"]');
-      if (target) {
-        var ri = Array.prototype.indexOf.call(realItems, target);
-        col.style.overflow = 'hidden';
-        scrollToRi(col, ri);
-        requestAnimationFrame(function(){ col.style.overflow = ''; });
-      }
-    } else {
-      scrollToRi(col, 0);
-    }
-  }
-
-  function getScrollVal(colId) {
-    var col = document.getElementById(colId);
-    if (!col) return null;
-    var sel = col.querySelector('.dtp-scroll-item.selected');
-    return sel ? sel.getAttribute('data-val') : null;
-  }
+  var MINUTE_STEP = 5;
 
   function to24(h12, ampm) {
     var h = parseInt(h12, 10);
@@ -668,35 +588,40 @@
     return {h12: String(h - 12), ap: 'PM'};
   }
 
+  function populateTimeSelects(hour12, minute, ampm) {
+    var hourSel = document.getElementById('dtp-hour-select');
+    var minSel = document.getElementById('dtp-min-select');
+    var ampmSel = document.getElementById('dtp-ampm-select');
+    hourSel.innerHTML = '';
+    for (var h = 1; h <= 12; h++) {
+      hourSel.innerHTML += '<option value="'+h+'">'+h+'</option>';
+    }
+    minSel.innerHTML = '';
+    var minuteOnGrid = false;
+    for (var m = 0; m < 60; m += MINUTE_STEP) {
+      var mv = String(m).padStart(2, '0');
+      if (mv === minute) minuteOnGrid = true;
+      minSel.innerHTML += '<option value="'+mv+'">'+mv+'</option>';
+    }
+    if (minute && !minuteOnGrid) {
+      minSel.innerHTML += '<option value="'+minute+'">'+minute+'</option>';
+    }
+    hourSel.value = hour12;
+    minSel.value = minute;
+    ampmSel.value = ampm;
+  }
+
+  function getTimeValue() {
+    if (!document.getElementById('dtp-has-time').checked) return null;
+    var h = document.getElementById('dtp-hour-select').value;
+    var m = document.getElementById('dtp-min-select').value;
+    var ap = document.getElementById('dtp-ampm-select').value;
+    return to24(h, ap) + ':' + m;
+  }
+
   function updateOK() {
     document.getElementById('dt-picker-ok').disabled = !_dtpDate;
   }
-
-  window.dtpNavMonth = function(dir) {
-    _dtpMonth += dir;
-    if (_dtpMonth > 11) { _dtpMonth = 0; _dtpYear++; }
-    if (_dtpMonth < 0) { _dtpMonth = 11; _dtpYear--; }
-    renderCalendar();
-  };
-
-  window.selectDTPDay = function(d) {
-    _dtpDate = {y:_dtpYear, m:_dtpMonth, d:d};
-    renderCalendar();
-    updateOK();
-  };
-
-  window.dtpToggleTime = function() {
-    var on = document.getElementById('dtp-has-time').checked;
-    var cols = document.getElementById('dtp-time-cols');
-    if (on) {
-      cols.classList.add('open');
-      buildScrollCol('dtp-hours-col', _hoursData, getScrollVal('dtp-hours-col') || '9');
-      buildScrollCol('dtp-mins-col', _minsData, getScrollVal('dtp-mins-col') || '00');
-      buildScrollCol('dtp-ampm-col', _ampmData, getScrollVal('dtp-ampm-col') || 'AM');
-    } else {
-      cols.classList.remove('open');
-    }
-  };
 
   function renderCalendar() {
     var title = document.getElementById('dt-picker-title');
@@ -717,15 +642,33 @@
     el.innerHTML = html;
   }
 
-  var _hoursData = [], _minsData = [], _ampmData = [];
+  window.dtpNavMonth = function(dir) {
+    _dtpMonth += dir;
+    if (_dtpMonth > 11) { _dtpMonth = 0; _dtpYear++; }
+    if (_dtpMonth < 0) { _dtpMonth = 11; _dtpYear--; }
+    renderCalendar();
+  };
 
-  function buildTimeData() {
-    _hoursData = [];
-    for (var h = 1; h <= 12; h++) _hoursData.push({v:String(h), l:String(h)});
-    _minsData = [];
-    for (var m = 0; m < 60; m += 5) _minsData.push({v:String(m).padStart(2,'0'), l:':'+String(m).padStart(2,'0')});
-    _ampmData = [{v:'AM', l:'AM'}, {v:'PM', l:'PM'}];
-  }
+  window.selectDTPDay = function(d) {
+    _dtpDate = {y:_dtpYear, m:_dtpMonth, d:d};
+    renderCalendar();
+    updateOK();
+  };
+
+  window.dtpToggleTime = function() {
+    var on = document.getElementById('dtp-has-time').checked;
+    var wrap = document.getElementById('dtp-time-selects');
+    if (on) {
+      wrap.classList.add('open');
+      populateTimeSelects(
+        document.getElementById('dtp-hour-select').value || '9',
+        document.getElementById('dtp-min-select').value || '00',
+        document.getElementById('dtp-ampm-select').value || 'AM'
+      );
+    } else {
+      wrap.classList.remove('open');
+    }
+  };
 
   window.openDTPicker = function(opts) {
     _dtpCallback = opts.callback;
@@ -748,20 +691,23 @@
     _dtpYear = _dtpDate.y;
     _dtpMonth = _dtpDate.m;
     renderCalendar();
-    buildTimeData();
 
-    var selH = hasTime ? h12 : null;
-    var selM = hasTime ? mm : null;
-    var selA = hasTime ? ap : null;
-    buildScrollCol('dtp-hours-col', _hoursData, selH);
-    buildScrollCol('dtp-mins-col', _minsData, selM);
-    buildScrollCol('dtp-ampm-col', _ampmData, selA);
+    var hourSel = document.getElementById('dtp-hour-select');
+    var minSel = document.getElementById('dtp-min-select');
+    hourSel.innerHTML = '';
+    for (var h = 1; h <= 12; h++) hourSel.innerHTML += '<option value="'+h+'">'+h+'</option>';
+    minSel.innerHTML = '';
+    for (var m = 0; m < 60; m += MINUTE_STEP) {
+      var mv = String(m).padStart(2,'0');
+      minSel.innerHTML += '<option value="'+mv+'">'+mv+'</option>';
+    }
 
+    populateTimeSelects(hasTime ? h12 : '9', hasTime ? mm : '00', hasTime ? ap : 'AM');
     var cb = document.getElementById('dtp-has-time');
     cb.checked = hasTime;
-    var cols = document.getElementById('dtp-time-cols');
-    if (hasTime) cols.classList.add('open');
-    else cols.classList.remove('open');
+    var wrap = document.getElementById('dtp-time-selects');
+    if (hasTime) wrap.classList.add('open');
+    else wrap.classList.remove('open');
 
     updateOK();
     var picker = document.getElementById('dt-picker');
@@ -780,12 +726,8 @@
     if (!_dtpDate) return;
     var dateStr = _dtpDate.y + '-' + String(_dtpDate.m+1).padStart(2,'0') + '-' + String(_dtpDate.d).padStart(2,'0');
     var result = dateStr;
-    if (document.getElementById('dtp-has-time').checked) {
-      var h = getScrollVal('dtp-hours-col') || '9';
-      var m = getScrollVal('dtp-mins-col') || '00';
-      var a = getScrollVal('dtp-ampm-col') || 'AM';
-      result = dateStr + 'T' + to24(h, a) + ':' + m;
-    }
+    var timeVal = getTimeValue();
+    if (timeVal) result = dateStr + 'T' + timeVal;
     var cb = _dtpCallback;
     closeDTPicker();
     if (cb) cb(result);
