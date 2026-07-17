@@ -1193,7 +1193,11 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
                 item_end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
                 item_time = "range"
             else:
-                item_start, item_end = _resolve_time(item_time)
+                try:
+                    item_start, item_end = _resolve_time(item_time)
+                except Exception:
+                    item_time = "tm"
+                    item_start, item_end = _resolve_time("tm")
         item_period = f"{item_start} to {item_end}"
         
         if item_name in metrics:

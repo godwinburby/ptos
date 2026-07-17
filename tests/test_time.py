@@ -118,10 +118,11 @@ class TestResolveTime:
         assert start == dt.date(2026, 3, 26)
         assert end == dt.date(2026, 4, 25)
 
-    def test_unknown_keyword(self, monkeypatch):
+    def test_unknown_keyword_falls_back_to_this_month(self, monkeypatch):
         monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 5, 16))
-        with pytest.raises(ValueError, match="Unknown time keyword"):
-            ptos.resolve_time("bogus", {})
+        start, end = ptos.resolve_time("bogus", {})
+        assert start == dt.date(2026, 5, 1)
+        assert end == dt.date(2026, 5, 31)
 
     def test_week_with_monday(self, monkeypatch):
         monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 5, 11))

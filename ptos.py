@@ -1535,7 +1535,7 @@ def resolve_time(keyword, cycles):
     if keyword == "last-year": return dt.date(now.year - 1, 1, 1), dt.date(now.year - 1, 12, 31)
     if keyword == "all":       return dt.date.min, dt.date.max
 
-    raise ValueError(f"Unknown time keyword: {keyword}")
+    return month_range(now.year, now.month)
 
 # --------------------------------------------------
 # Record parsing
@@ -3998,14 +3998,15 @@ def _release_sync_lock():
         pass
 
 
-def run_sync(command, resync=False, skip_if_clean=False):
+def run_sync(command, resync=False, skip_if_clean=False, remote_name=None, remote_path=None):
     """Run rclone sync or bisync against configured remote.
 
     Returns {"ok": bool, "output": str, "error": str, "returncode": int}.
     Reads [sync] section from config.toml for remote_name, remote_path, folders.
     Runs corruption pre-flight check before sync, records file sizes after success.
-    Uses a PID-based file lock to prevent concurrent syncs across processes.
+    Uses a PID-based file lock (`.sync.lock`) to prevent concurrent syncs across processes.
     When skip_if_clean=True, skips rclone if no local files changed since last sync.
+    remote_name/remote_path override config values (used by web UI to sync without saving config).
     """
     import subprocess
 
@@ -4018,8 +4019,10 @@ def run_sync(command, resync=False, skip_if_clean=False):
     try:
         cfg = get_config()
         sync_cfg = cfg.get("sync", {})
-        remote_name = sync_cfg.get("remote_name", "")
-        remote_path = sync_cfg.get("remote_path", "")
+        if not remote_name:
+            remote_name = sync_cfg.get("remote_name", "")
+        if not remote_path:
+            remote_path = sync_cfg.get("remote_path", "")
         folders = sync_cfg.get("folders", ["config", "records", "journal", "todo"])
 
         if not remote_name or not remote_path:
