@@ -39,6 +39,13 @@ if ! $PYTHON -c "import flask" 2>/dev/null; then
     $PYTHON -m pip install flask tomli-w pytest --quiet
 fi
 
+# ── Warn if termux-api missing ────────────────────────────────────────────────
+if ! command -v termux-notification &>/dev/null; then
+    echo "WARNING: termux-api not installed — notifications won't work."
+    echo "Install with: pkg install termux-api"
+    echo "Also install Termux:API app from F-Droid or Play Store."
+fi
+
 # ── Check for updates via git ─────────────────────────────────────────────────
 echo "Checking for updates..."
 if [ -d ".git" ]; then
@@ -72,29 +79,36 @@ echo ""
 FLASK_PID=$!
 
 # Wait for server to be ready (up to 15s)
-echo "Waiting for server..."
+echo -n "Waiting for server "
 SERVER_READY=0
 for i in $(seq 1 15); do
     if curl -s http://localhost:5000 >/dev/null 2>&1; then
         SERVER_READY=1
+        echo ""
         break
     fi
+    echo -n "."
     sleep 1
 done
 
 if [ "$SERVER_READY" = "1" ]; then
+    echo "Server ready!"
     am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
 else
     echo ""
     echo "Server is taking longer than usual to start (startup sync may"
     echo "still be running — check the messages above)."
-    echo "Waiting for server to become available..."
+    echo -n "Waiting "
     for i in $(seq 1 120); do
         if curl -s http://localhost:5000 >/dev/null 2>&1; then
+            echo ""
+            echo "Server ready!"
             am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
             break
         fi
+        echo -n "."
         sleep 1
     done
+    echo ""
 fi
 wait $FLASK_PID

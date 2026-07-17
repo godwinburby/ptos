@@ -374,7 +374,7 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - Inline edit (pencil icon on hover) and delete
 - Project rail for filtering by `+Project` with toggle behavior
 - Collapsible `? Help` reference card
-- **System notifications** — native OS desktop notifications (Linux: `notify-send`, macOS: Notification Center, Windows: toast, Android: `termux-notification`) alongside browser notifications
+- **System notifications** — native OS desktop notifications (Linux: `notify-send`, macOS: Notification Center, Windows: toast, Android: `termux-notification`) alongside browser notifications; works in PWA mode (service worker excludes SSE endpoint)
 - Automatic archiving: done items older than 6 months move to `done.YYYY.txt` on startup
 
 **Todo.txt format reference:**

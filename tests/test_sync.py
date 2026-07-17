@@ -60,8 +60,19 @@ class TestRunSyncLock:
         monkeypatch.setattr(ptos, "_detect_corruption", lambda *a: [])
         monkeypatch.setattr(ptos, "_record_sizes", lambda *a: None)
         monkeypatch.setattr(ptos, "_invalidate_all", lambda: None)
-        monkeypatch.setattr(subprocess, "run", lambda *a, **kw: subprocess.CompletedProcess(
-            args=[], returncode=0, stdout="", stderr=""))
+        monkeypatch.setattr(ptos, "_clear_rclone_bisync_locks", lambda: None)
+        def capture_run(cmd, **kw):
+            if "listremotes" in cmd:
+                return subprocess.CompletedProcess(
+                    args=cmd, returncode=0, stdout="test:\n", stderr="")
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="", stderr="")
+        monkeypatch.setattr(subprocess, "run", capture_run)
+        def fake_popen(cmd, **kw):
+            proc = subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
+            proc.stdout = iter([])
+            return proc
+        monkeypatch.setattr(subprocess, "Popen", fake_popen)
         ptos.run_sync("bisync")
         assert not os.path.isfile(os.path.join(ptos.BASE_DIR, ".sync.lock"))
 
@@ -80,9 +91,17 @@ class TestRunSyncLock:
             "sync": {"remote_name": "test", "remote_path": "data"}
         })
         monkeypatch.setattr(ptos, "_detect_corruption", lambda *a: [])
+        monkeypatch.setattr(ptos, "_clear_rclone_bisync_locks", lambda: None)
+        def capture_run(cmd, **kw):
+            if "listremotes" in cmd:
+                return subprocess.CompletedProcess(
+                    args=cmd, returncode=0, stdout="test:\n", stderr="")
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="", stderr="")
+        monkeypatch.setattr(subprocess, "run", capture_run)
         def boom(*a, **kw):
             raise RuntimeError("rclone crashed")
-        monkeypatch.setattr(subprocess, "run", boom)
+        monkeypatch.setattr(subprocess, "Popen", boom)
         try:
             ptos.run_sync("bisync")
         except RuntimeError:
@@ -92,15 +111,26 @@ class TestRunSyncLock:
     def test_run_sync_exclude_list_includes_lock_files(self, monkeypatch):
         captured_cmd = []
         def capture_run(cmd, **kw):
+            if "listremotes" in cmd:
+                return subprocess.CompletedProcess(
+                    args=cmd, returncode=0, stdout="test:\n", stderr="")
+            return subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="", stderr="")
+        def capture_popen(cmd, **kw):
             captured_cmd.extend(cmd)
-            return subprocess.CompletedProcess(args=[], returncode=0, stdout="", stderr="")
+            proc = subprocess.CompletedProcess(
+                args=cmd, returncode=0, stdout="", stderr="")
+            proc.stdout = iter([])
+            return proc
         monkeypatch.setattr(ptos, "get_config", lambda: {
             "sync": {"remote_name": "test", "remote_path": "data"}
         })
         monkeypatch.setattr(ptos, "_detect_corruption", lambda *a: [])
         monkeypatch.setattr(ptos, "_record_sizes", lambda *a: None)
         monkeypatch.setattr(ptos, "_invalidate_all", lambda: None)
+        monkeypatch.setattr(ptos, "_clear_rclone_bisync_locks", lambda: None)
         monkeypatch.setattr(subprocess, "run", capture_run)
+        monkeypatch.setattr(subprocess, "Popen", capture_popen)
         ptos.run_sync("bisync")
         assert ".sync.lock" in captured_cmd
         assert ".sync_scheduled.log" in captured_cmd

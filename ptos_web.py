@@ -662,7 +662,7 @@ def todo_page():
         all_done, _ = svc.ptos_todo.load_todos(svc.DONE_PATH)
         today_str = dt.date.today().isoformat()
         done_today = len([t for t in all_done if t.completed_date and t.completed_date.isoformat() == today_str])
-        total_today = len(buckets["overdue"]) + len(buckets["today"])
+        total_today = len(buckets["overdue"]) + len(buckets["today"]) + done_today
         # most recent 50 done tasks, newest first
         done_recent = sorted(all_done, key=lambda t: t.completed_date or dt.date.min, reverse=True)[:50]
     except Exception:
@@ -2635,6 +2635,7 @@ def api_preset_delete():
 # ── SSE (Server-Sent Events) ──────────────────────────────────────────────────
 _sse_clients = []
 _sse_lock = threading.Lock()
+_pending_notifications = []
 
 def _sse_broadcast(event_type, data=""):
     payload = json.dumps({"type": event_type, "data": data})
@@ -2653,6 +2654,12 @@ def api_events():
             _sse_clients.append(q)
         try:
             yield "data: connected\n\n"
+            with _sse_lock:
+                pending = list(_pending_notifications)
+                _pending_notifications.clear()
+            for tasks in pending:
+                payload = json.dumps({"type": "todo-due", "data": tasks})
+                q.put_nowait(payload)
             while True:
                 msg = q.get()
                 if msg is None:
@@ -2694,17 +2701,38 @@ def _system_notify(title, body):
             subprocess.run(["osascript", "-e", script],
                           timeout=5, capture_output=True)
         elif _notify_platform == "windows":
+            import html as _html
+            safe_title = _html.escape(title)
+            safe_body = _html.escape(body)
             ps = (
-                '[void][System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms");'
-                '$n=New-Object System.Windows.Forms.NotifyIcon;'
-                '$n.Icon=[System.Drawing.SystemIcons]::Information;'
-                '$n.Visible=$true;'
-                f'$n.ShowBalloonTip(5000,"{title}","{body}",[System.Windows.Forms.ToolTipIcon]::Info)'
+                "[Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, "
+                "ContentType = WindowsRuntime] | Out-Null;"
+                "[Windows.Data.Xml.Dom.XmlDocument, Windows.Data.Xml.Dom, "
+                "ContentType = WindowsRuntime] | Out-Null;"
+                "$x = New-Object Windows.Data.Xml.Dom.XmlDocument;"
+                "$x.LoadXml('<toast><visual><binding template=\"ToastText02\">"
+                "<text id=\"1\">" + safe_title + "</text>"
+                "<text id=\"2\">" + safe_body + "</text>"
+                "</binding></visual></toast>');"
+                "$n = [Windows.UI.Notifications.ToastNotificationManager]"
+                "::CreateToastNotifier('PTOS');"
+                "$n.Show([Windows.UI.Notifications.ToastNotification]::new($x))"
             )
-            subprocess.run(["powershell", "-Command", ps],
-                          timeout=5, capture_output=True)
+            result = subprocess.run(["powershell", "-Command", ps],
+                                    timeout=5, capture_output=True)
+            if result.returncode != 0:
+                ps_legacy = (
+                    '[void][System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms");'
+                    '$n=New-Object System.Windows.Forms.NotifyIcon;'
+                    '$n.Icon=[System.Drawing.SystemIcons]::Information;'
+                    '$n.Visible=$true;'
+                    f'$n.ShowBalloonTip(5000,"{safe_title}","{safe_body}",'
+                    '[System.Windows.Forms.ToolTipIcon]::Info)'
+                )
+                subprocess.run(["powershell", "-Command", ps_legacy],
+                              timeout=5, capture_output=True)
     except Exception:
-        pass
+        log.exception("_system_notify failed")
 
 def _housekeeping_loop(interval_minutes=5):
     """Background thread: check due todos, broadcast via SSE."""
@@ -2721,6 +2749,9 @@ def _housekeeping_loop(interval_minutes=5):
                 tasks = [{"line_no": t.line_no, "description": t.description,
                           "priority": t.priority, "due": str(t.due),
                           "due_time": t.due_time} for t in new]
+                with _sse_lock:
+                    _pending_notifications.clear()
+                    _pending_notifications.append(tasks)
                 _sse_broadcast("todo-due", tasks)
                 if len(new) == 1:
                     t = new[0]
@@ -2905,6 +2936,18 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Archive skipped: {e}")
     
+    # ── Check requirements ─────────────────────────────────────────────────────
+    missing = []
+    if not shutil.which("rclone"):
+        missing.append("rclone — run setup script or install from https://rclone.org/install/")
+    if _notify_platform == "termux" and not shutil.which("termux-notification"):
+        missing.append("termux-api — run: pkg install termux-api  (also install Termux:API app from F-Droid/Play Store)")
+    if missing:
+        print("WARNING: missing requirements:")
+        for m in missing:
+            print(f"  - {m}")
+        print()
+
     print("\nPTOS Web UI")
     print("Open: http://localhost:5000\n")
 

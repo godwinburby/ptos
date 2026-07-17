@@ -87,7 +87,7 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 - Service functions call `ptos_*` module functions (engine)
 - Templates use `{{ variable }}` and `{% if %}` / `{% for %}`
 - Forms POST JSON, routes return JSON (`jsonify(ok=True/False, ...)`)
-- SSE: daemon thread polls data, broadcasts events, browser handles notifications; `sync-log` event streams rclone output line-by-line to Settings page
+- SSE: daemon thread polls data, broadcasts events, browser handles notifications; `sync-log` event streams rclone output line-by-line to Settings page; **pending notification cache** (`_pending_notifications`) stores due-todo tasks and replays to newly connected SSE clients (fixes startup race condition where notifications fire before browser connects)
 
 ### Testing patterns
 - Tests in `tests/` mirror module names (`test_todo.py` → `ptos_todo.py`)
@@ -129,8 +129,8 @@ x 2026-07-12 2026-07-10 Completed task
 - **Inline field popups** — click due/threshold badges for date picker, priority badge for priority picker; popups use `position:fixed` and live in `base.html` (outside `<main>` to avoid overflow clipping)
 - **Floating add button** (`.floating-add`) — `floatingAddAction()` defined in `base.html` before `{% block scripts %}` so child templates can override; defaults to `/add` page; todo page does NOT override (add area is always visible)
 - **PTOS brand** — clickable `<a href="/">` in both mobile topbar and desktop sidebar, links to home page
-- **System notifications** — native OS notifications via `_system_notify()` in background thread; detects platform (Linux: `notify-send`, macOS: `osascript`, Windows: PowerShell toast, Android: `termux-notification`); runs alongside browser SSE notifications; notification check runs immediately on server startup, then repeats every `notify_interval` minutes (default 5)
-- **Service worker** (`web_static/sw.js`) — caches only GET requests for static assets; POST requests always pass through to network (fixes Android modal save)
+- **System notifications** — native OS notifications via `_system_notify()` in background thread; detects platform (Linux: `notify-send`, macOS: `osascript`, Windows: WinRT Toast via PowerShell with legacy `ShowBalloonTip` fallback, Android: `termux-notification`); runs alongside browser SSE notifications; notification check runs immediately on server startup, then repeats every `notify_interval` minutes (default 5); **Android requires**: `pkg install termux-api` in Termux + Termux:API app from F-Droid/Play Store + notification permission in Android Settings; **Windows uses** `[Windows.UI.Notifications.ToastNotificationManager]` for native Win10/11 toast notifications
+- **Service worker** (`web_static/sw.js`) — caches GET requests for static assets; excludes `/api/events` (SSE) so real-time notifications work in PWA mode; POST requests always pass through to network
 
 ### Autocomplete system
 - `_acData` object holds suggestions per prefix (`+`, `@`, `due:`, `t:`, `(`)
@@ -160,7 +160,7 @@ x 2026-07-12 2026-07-10 Completed task
 | Start scripts | `start_ptos_linux.sh`, `start_ptos_android.sh`, `start_ptos_windows.bat` + `start_ptos_windows.ps1` |
 
 ### Start scripts
-All three scripts follow the same pattern: start server in background → health check loop (wait up to 15s for port 5000) → conditional browser open → wait for server to exit. `SERVER_READY` flag tracks whether the health check succeeded; browser only opens on confirmed readiness, otherwise prints "Server is taking longer than usual" and keeps polling (up to 2 min) — browser opens automatically once the server becomes available. Linux/Android use `curl -s` (no `-f` flag — works through auth 401); Windows uses `curl.exe -s` (PowerShell's `curl` is an alias for `Invoke-WebRequest`, not the real curl binary). The health check just verifies the server is responding (any HTTP status). Windows uses `.bat`-stub-plus-`.ps1` pattern (same as `setup_ptos_windows.bat`): the `.bat` is a 3-line launcher, `start_ptos_windows.ps1` has full logic with `Start-Process -PassThru` + `Register-EngineEvent PowerShell.Exiting` to kill Flask on exit + `try/finally { Wait-Process; Stop-Process }` as fallback. Ctrl+C via `.bat` shows "Terminate batch job (Y/N)?" (cmd.exe limitation); running `.ps1` directly avoids this. Android widget symlinks to repo's start script (not a stale `$HOME/` copy).
+All three scripts follow the same pattern: start server in background → health check loop with animated dots (wait up to 15s for port 5000) → conditional browser open → wait for server to exit. `SERVER_READY` flag tracks whether the health check succeeded; browser only opens on confirmed readiness, otherwise prints "Server is taking longer than usual" and keeps polling (up to 2 min) — browser opens automatically once the server becomes available. Linux/Android use `curl -s` (no `-f` flag — works through auth 401); Windows uses `curl.exe -s` (PowerShell's `curl` is an alias for `Invoke-WebRequest`, not the real curl binary). The health check just verifies the server is responding (any HTTP status). Windows uses `.bat`-stub-plus-`.ps1` pattern (same as `setup_ptos_windows.bat`): the `.bat` is a 3-line launcher, `start_ptos_windows.ps1` has full logic with `Start-Process -PassThru` + `Register-EngineEvent PowerShell.Exiting` to kill Flask on exit + `try/finally { Wait-Process; Stop-Process }` as fallback. Ctrl+C via `.bat` shows "Terminate batch job (Y/N)?" (cmd.exe limitation); running `.ps1` directly avoids this. Android widget symlinks to repo's start script (not a stale `$HOME/` copy).
 
 ## Commits
 
