@@ -76,6 +76,12 @@ if ! command -v rclone &>/dev/null; then
     pkg install -y rclone
 fi
 
+# ── Install termux-api for notifications ──────────────────────────────────────
+if ! command -v termux-notification &>/dev/null; then
+    echo "Installing termux-api for notifications..."
+    pkg install -y termux-api
+fi
+
 # ── Check Flask installed ────────────────────────────────────────────────────
 echo "Checking dependencies..."
 if ! python -c "import flask" 2>/dev/null; then
