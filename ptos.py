@@ -3966,6 +3966,30 @@ def _local_changed(state_file, folders):
     return False
 
 
+def _clear_rclone_bisync_locks():
+    import subprocess
+    import glob as _glob
+    cache_dir = None
+    try:
+        result = subprocess.run(["rclone", "config", "paths"],
+                                capture_output=True, text=True, timeout=10)
+        for line in result.stdout.splitlines():
+            if "Cache" in line and ":" in line:
+                cache_dir = line.split(":", 1)[1].strip()
+                break
+    except Exception:
+        pass
+    if not cache_dir:
+        cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "rclone")
+    bisync_dir = os.path.join(cache_dir, "bisync")
+    if os.path.isdir(bisync_dir):
+        for f in _glob.glob(os.path.join(bisync_dir, "*.lck")):
+            try:
+                os.remove(f)
+            except OSError:
+                pass
+
+
 def _pid_is_running(pid):
     import errno
     try:
@@ -4082,6 +4106,9 @@ def run_sync(command, resync=False, skip_if_clean=False, remote_name=None, remot
             cmd.append("none")
         if resync and command == "bisync":
             cmd.append("--resync")
+
+        if command == "bisync":
+            _clear_rclone_bisync_locks()
 
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
