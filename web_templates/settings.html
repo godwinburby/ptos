@@ -207,37 +207,35 @@
     Remote <code>{{ sync.remote_name }}:</code> not found in rclone config.<br>
     Run <code>rclone config</code> to set up this remote, then restart PTOS.
   </div>
-    {% else %}
-  <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:12px;">
-    <div>
-      <button id="sync-bisync-btn" onclick="runSync('bisync')" class="btn btn-primary" style="margin-right:8px;">Bisync</button>
-      <span style="font-size:13px;color:var(--sub);">Bidirectional — recommended, safe for both sides</span>
-    </div>
-
-    <div style="border-top:1px solid var(--border);padding-top:12px;">
-      <button id="sync-push-btn" onclick="runSync('sync')" disabled class="btn btn-ghost" style="margin-right:8px;">Sync (push)</button>
-      <span style="font-size:13px;color:var(--sub);">One-way push — <b style="color:var(--error);">deletes</b> remote files not present locally</span>
-      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-        <span style="font-size:12px;color:var(--sub);">Type DELETE to confirm:</span>
-        <input type="text" id="sync-delete-confirm" placeholder="DELETE" style="width:100px;font-size:13px;padding:4px 8px;" oninput="checkSyncConfirm()">
-      </div>
-    </div>
-
-    <div style="border-top:1px solid var(--border);padding-top:12px;">
-      <button id="sync-resync-btn" onclick="runSync('resync')" disabled class="btn btn-ghost" style="margin-right:8px;">Resync</button>
-      <span style="font-size:13px;color:var(--sub);">Initialize bisync relationship — for new machines or after conflicts</span>
-      <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-        <span style="font-size:12px;color:var(--sub);">Type RESYNC to confirm:</span>
-        <input type="text" id="sync-resync-confirm" placeholder="RESYNC" style="width:100px;font-size:13px;padding:4px 8px;" oninput="checkSyncConfirm()">
-      </div>
-    </div>
-  </div>
     {% endif %}
-  {% else %}
-  <div style="font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:12px;">
-    Configure an rclone remote with <code>rclone config</code>, then enter the remote name and path above.
-  </div>
   {% endif %}
+
+  <div id="sync-actions" style="display:none;margin-bottom:12px;">
+    <div style="display:flex;flex-direction:column;gap:14px;">
+      <div>
+        <button id="sync-bisync-btn" onclick="runSync('bisync')" class="btn btn-primary" style="margin-right:8px;">Bisync</button>
+        <span style="font-size:13px;color:var(--sub);">Bidirectional — recommended, safe for both sides</span>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:12px;">
+        <button id="sync-push-btn" onclick="runSync('sync')" disabled class="btn btn-ghost" style="margin-right:8px;">Sync (push)</button>
+        <span style="font-size:13px;color:var(--sub);">One-way push — <b style="color:var(--error);">deletes</b> remote files not present locally</span>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <span style="font-size:12px;color:var(--sub);">Type DELETE to confirm:</span>
+          <input type="text" id="sync-delete-confirm" placeholder="DELETE" style="width:100px;font-size:13px;padding:4px 8px;" oninput="checkSyncConfirm()">
+        </div>
+      </div>
+
+      <div style="border-top:1px solid var(--border);padding-top:12px;">
+        <button id="sync-resync-btn" onclick="runSync('resync')" disabled class="btn btn-ghost" style="margin-right:8px;">Resync</button>
+        <span style="font-size:13px;color:var(--sub);">Initialize bisync relationship — for new machines or after conflicts</span>
+        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
+          <span style="font-size:12px;color:var(--sub);">Type RESYNC to confirm:</span>
+          <input type="text" id="sync-resync-confirm" placeholder="RESYNC" style="width:100px;font-size:13px;padding:4px 8px;" oninput="checkSyncConfirm()">
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;display:flex;gap:20px;flex-wrap:wrap;">
     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
@@ -433,12 +431,30 @@ function checkSyncConfirm() {
   if (res) document.getElementById("sync-resync-btn").disabled = res.value !== "RESYNC";
 }
 
+function checkSyncReady() {
+  var name = (document.getElementById("sync-remote-name") || {}).value || "";
+  var path = (document.getElementById("sync-remote-path") || {}).value || "";
+  var actions = document.getElementById("sync-actions");
+  if (actions) actions.style.display = (name.trim() && path.trim()) ? "block" : "none";
+}
+
+(function() {
+  var rn = document.getElementById("sync-remote-name");
+  var rp = document.getElementById("sync-remote-path");
+  if (rn) rn.addEventListener("input", checkSyncReady);
+  if (rp) rp.addEventListener("input", checkSyncReady);
+  checkSyncReady();
+})();
+
 function runSync(command) {
   var btnId = command === "bisync" ? "sync-bisync-btn" : command === "sync" ? "sync-push-btn" : "sync-resync-btn";
   var btn = document.getElementById(btnId);
   var wrap = document.getElementById("sync-output-wrap");
   var out = document.getElementById("sync-output");
   if (!btn) return;
+
+  var remoteName = (document.getElementById("sync-remote-name") || {}).value || "";
+  var remotePath = (document.getElementById("sync-remote-path") || {}).value || "";
 
   btn.disabled = true;
   btn.textContent = "Running...";
@@ -449,7 +465,7 @@ function runSync(command) {
   fetch("/sync/run", {
     method: "POST",
     headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({command: command})
+    body: JSON.stringify({command: command, remote_name: remoteName, remote_path: remotePath})
   })
   .then(function(r) { return r.json(); })
   .then(function(data) {

@@ -1514,10 +1514,15 @@ def sync_run():
     if command not in ("bisync", "sync", "resync"):
         return jsonify(ok=False, error="Invalid command. Use bisync, sync, or resync")
 
+    payload_name = data.get("remote_name", "").strip().rstrip(":").replace(":", "")
+    payload_path = data.get("remote_path", "").strip()
+
     cfg = svc.get_config()
     sync_cfg = cfg.get("sync", {})
-    if not sync_cfg.get("remote_name") or not sync_cfg.get("remote_path"):
-        return jsonify(ok=False, error="[sync] not configured in config.toml")
+    remote_name = payload_name or sync_cfg.get("remote_name", "")
+    remote_path = payload_path or sync_cfg.get("remote_path", "")
+    if not remote_name or not remote_path:
+        return jsonify(ok=False, error="[sync] not configured. Enter remote name and path above.")
 
     _sync_busy = True
     _sync_result = None
@@ -1533,7 +1538,8 @@ def sync_run():
             elif command == "resync":
                 actual_cmd = "bisync"
                 resync = True
-            _sync_result = ptos.run_sync(actual_cmd, resync=resync)
+            _sync_result = ptos.run_sync(actual_cmd, resync=resync,
+                                         remote_name=remote_name, remote_path=remote_path)
         except Exception as e:
             _sync_result = {"ok": False, "output": "", "error": str(e), "returncode": 1}
         finally:
