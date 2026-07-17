@@ -4031,6 +4031,19 @@ def run_sync(command, resync=False, skip_if_clean=False, remote_name=None, remot
                     "Add: [sync] remote_name = \"onedrive\" remote_path = \"personal/ptos-data\"",
                     "returncode": 1}
 
+        try:
+            result = subprocess.run(["rclone", "listremotes"],
+                                    capture_output=True, text=True, timeout=10)
+            remote_names = result.stdout.strip().splitlines()
+            if not any(r.strip().rstrip(":") == remote_name for r in remote_names):
+                return {"ok": False, "output": "", "error":
+                        f"Remote '{remote_name}' not found in rclone config. "
+                        f"Available: {', '.join(r.strip() for r in remote_names) or '(none)'}.\n"
+                        f"Run 'rclone config' to set it up.",
+                        "returncode": 1}
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            pass
+
         state_file = os.path.join(BASE_DIR, ".ptos_sync_state")
 
         if skip_if_clean and not resync:
