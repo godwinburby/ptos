@@ -220,15 +220,19 @@ def parse_todo_line(line, line_no=0):
         elif token.lower().startswith("due:"):
             val = token[4:]
             try:
-                due, due_time = resolve_todo_date(val)
+                due, _ = resolve_todo_date(val)
             except TodoParseError:
                 desc_parts.append(token)
+        elif token.lower().startswith("due_time:"):
+            due_time = _normalise_time(token[9:]) or due_time
         elif token.lower().startswith("t:"):
             val = token[2:]
             try:
-                threshold, threshold_time = resolve_todo_date(val)
+                threshold, _ = resolve_todo_date(val)
             except TodoParseError:
                 desc_parts.append(token)
+        elif token.lower().startswith("t_time:"):
+            threshold_time = _normalise_time(token[7:]) or threshold_time
         elif token.lower().startswith("rec:") and rec is None:
             rec = token[4:] if len(token) > 4 else None
         elif token.lower().startswith("pri:") and len(token) == 5 and token[4].isalpha() and priority is None:
@@ -304,16 +308,14 @@ def format_line(todo):
         parts.append(c)
 
     if todo.due:
+        parts.append(f"due:{todo.due.isoformat()}")
         if todo.due_time:
-            parts.append(f"due:{todo.due.isoformat()}T{todo.due_time}")
-        else:
-            parts.append(f"due:{todo.due.isoformat()}")
+            parts.append(f"due_time:{todo.due_time}")
 
     if todo.threshold:
+        parts.append(f"t:{todo.threshold.isoformat()}")
         if todo.threshold_time:
-            parts.append(f"t:{todo.threshold.isoformat()}T{todo.threshold_time}")
-        else:
-            parts.append(f"t:{todo.threshold.isoformat()}")
+            parts.append(f"t_time:{todo.threshold_time}")
 
     if todo.rec:
         parts.append(f"rec:{todo.rec}")
@@ -767,17 +769,16 @@ def preprocess_todo_text(text):
         low = tok.lower()
         if low.startswith("due:"):
             val = tok[4:]
-            # if next token looks like a time suffix, append it
             combined = val
             if next_tok and _TIME_RE.match(next_tok):
                 combined = f"{val} {next_tok}"
             try:
                 d, tm = resolve_todo_date(combined)
                 if tm:
-                    return f"due:{d.isoformat()}T{tm}", True
-                return f"due:{d.isoformat()}", False
+                    return [f"due:{d.isoformat()}", f"due_time:{tm}"], True
+                return [f"due:{d.isoformat()}"], False
             except TodoParseError:
-                return tok, False
+                return [tok], False
         elif low.startswith("t:"):
             val = tok[2:]
             combined = val
@@ -786,10 +787,10 @@ def preprocess_todo_text(text):
             try:
                 d, tm = resolve_todo_date(combined)
                 if tm:
-                    return f"t:{d.isoformat()}T{tm}", True
-                return f"t:{d.isoformat()}", False
+                    return [f"t:{d.isoformat()}", f"t_time:{tm}"], True
+                return [f"t:{d.isoformat()}"], False
             except TodoParseError:
-                return tok, False
+                return [tok], False
         elif low.startswith("rec:"):
             val = tok[4:]
             _REC_WORDS = {
@@ -799,16 +800,16 @@ def preprocess_todo_text(text):
             }
             mapped = _REC_WORDS.get(val.lower())
             if mapped:
-                return f"rec:{mapped}", False
-            return tok, False
-        return tok, False
+                return [f"rec:{mapped}"], False
+            return [tok], False
+        return [tok], False
 
     tokens = text.split()
     resolved = []
     i = 0
     while i < len(tokens):
         result, consumed = _resolve_token(tokens[i], tokens[i+1] if i+1 < len(tokens) else None)
-        resolved.append(result)
+        resolved.extend(result)
         if consumed:
             i += 2
         else:
@@ -864,7 +865,7 @@ def _cli_main():
         open_t = [t for t in todos if not t.done]
         for t in open_t:
             pri = f"({t.priority}) " if t.priority else ""
-            due = f" due:{t.due.isoformat()}T{t.due_time}" if t.due and t.due_time else (f" due:{t.due.isoformat()}" if t.due else "")
+            due = f" due:{t.due.isoformat()} due_time:{t.due_time}" if t.due and t.due_time else (f" due:{t.due.isoformat()}" if t.due else "")
             proj = " ".join(t.projects)
             ctx = " ".join(t.contexts)
             meta = " ".join(filter(None, [proj, ctx, due]))
@@ -896,7 +897,7 @@ def _cli_main():
         open_t = [t for t in todos if not t.done]
         for t in open_t:
             pri = f"({t.priority}) " if t.priority else ""
-            due = f" due:{t.due.isoformat()}T{t.due_time}" if t.due and t.due_time else (f" due:{t.due.isoformat()}" if t.due else "")
+            due = f" due:{t.due.isoformat()} due_time:{t.due_time}" if t.due and t.due_time else (f" due:{t.due.isoformat()}" if t.due else "")
             print(f"  {t.line_no:>3}. {pri}{t.description}{due}")
         print(f"\n  {len(open_t)} open, {len(done)} done")
 

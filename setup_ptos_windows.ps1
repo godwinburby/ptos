@@ -105,6 +105,19 @@ if (Test-Path "$scriptDir\ptos.py") {
 Set-Location $ptosDir
 Write-Host "PTOS found at: $ptosDir"
 
+# -- 3b. Create data directory (sibling to repo, outside OneDrive) --
+$parentDir = Split-Path -Parent $ptosDir
+$dataDir = Join-Path $parentDir "ptos-data"
+if (-not (Test-Path $dataDir)) {
+    Write-Step "Creating data directory"
+    New-Item -ItemType Directory -Path $dataDir | Out-Null
+    Write-Host "Data directory created at: $dataDir"
+} else {
+    Write-Host "Data directory exists: $dataDir"
+}
+"$dataDir" | Out-File -Encoding utf8 (Join-Path $ptosDir ".ptos_home")
+Write-Host "Configured .ptos_home -> $dataDir"
+
 # -- 4. Install Flask --
 Write-Step "Installing Flask"
 & $python -m pip install flask tomli-w --quiet
@@ -121,7 +134,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 # -- 5. Initialise PTOS (first run only) --
-$configDir = Join-Path $ptosDir "config"
+$configDir = Join-Path $dataDir "config"
 if (-not (Test-Path $configDir)) {
     Write-Step "Initialising PTOS"
     & $python ptos.py --init
