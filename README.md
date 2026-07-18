@@ -378,6 +378,8 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - **System notifications** — native OS desktop notifications (Linux: `notify-send`, macOS: Notification Center, Windows: toast, Android: `termux-notification`) alongside browser notifications; works in PWA mode (service worker excludes SSE endpoint)
 - Automatic archiving: done items older than 6 months move to `done.YYYY.txt` on startup
 
+<img src="images/ptos_todo.png" width="260" alt="Todo screen showing task list with priority badges, due dates, and quick-add">
+
 **Todo.txt format reference:**
 ```
 (A) Call supplier +HearSpeechPro @phone due:tomorrow 3pm
