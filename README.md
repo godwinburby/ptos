@@ -204,10 +204,11 @@ python ptos.py --set-home ~/ptos-data
     │   └── presets.toml
     ├── records/                     # Log files (YYYY.log)
     ├── exports/                     # CSV exports (created on demand)
-    ├── backups/                     # ZIP backups (created on demand)
     ├── todo/                        # Todo files (todo.txt, done.txt, done.YYYY.txt)
     ├── journal/                     # Markdown journal entries
     └── .ptos_sync_state             # Smart sync skip state
+
+ptos-backups/                        # ZIP backups (sibling to ptos-data, outside sync scope)
 ```
 
 On Android, data lives in `~/storage/shared/ptos-data` instead.
@@ -534,7 +535,7 @@ Access the **Backup** tab:
 ### CLI
 
 ```bash
-ptos --backup-full    # Full backup: records/, templates/, config/, backups/
+ptos --backup-full    # Full backup: records/, templates/, config/, journal/
 ptos --backup-config  # Config-only backup: schema, queries, presets, config
 ```
 
@@ -546,7 +547,7 @@ ptos --backup-config  # Config-only backup: schema, queries, presets, config
 
 ### Backup files
 
-Stored in `backups/` with timestamped names:
+Stored in `ptos-backups/` (sibling to `ptos-data`, outside sync scope) with timestamped names:
 - Full: `ptos-backup-full-YYYYMMDD_HHMMSS.zip`
 - Config: `ptos-backup-config-YYYYMMDD_HHMMSS.zip`
 
@@ -1136,11 +1137,11 @@ ptos -y test -t td --delete --all
 | `--sync` | | One-way push to remote (DELETES remote files not present locally — requires `--confirm-delete`) |
 | `--confirm-delete` | | Required alongside `--sync` to acknowledge remote file deletions |
 | `--resync` | | With `--bisync`: initialize bisync relationship (first-time setup) |
-| `--backup-full` | | Create full backup (records/, config/, templates/, backups/) |
+| `--backup-full` | | Create full backup (records/, config/, templates/, journal/) |
 | `--backup-config` | | Create config-only backup (schema, queries, presets, config) |
 | `--restore-full [PATH]` | | Restore from full backup. Shows interactive list if no path given |
 | `--restore-config [PATH]` | | Restore from config-only backup. Shows interactive list if no path given |
-| `--list-backups` | | List all available backups in `backups/` |
+| `--list-backups` | | List all available backups in `ptos-backups/` |
 | `--delete-preset NAME` | | Delete a preset by name from `presets.toml` |
 | `--set-name NAME` | | Set user name in `config.toml` |
 | `--set-date-format FORMAT` | | Set date display format: `indian` `us` `eu` `readable` `iso` or custom strftime |
@@ -1191,7 +1192,7 @@ ptos --backup-full                         # create full backup
 ptos --backup-config                       # create config-only backup
 ptos --list-backups                        # list all backups
 ptos --restore-full                        # interactive list to pick from
-ptos --restore-full backups/ptos-backup-full-20260602_100000.zip
+ptos --restore-full ptos-backups/ptos-backup-full-20260602_100000.zip
 ptos --restore-config                      # interactive list to pick from
 ```
 

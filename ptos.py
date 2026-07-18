@@ -52,7 +52,9 @@ RECORDS_DIR  = os.path.join(BASE_DIR, "records")
 JOURNAL_DIR  = os.path.join(BASE_DIR, "journal")
 TEMPLATE_DIR = os.path.join(BASE_DIR, "templates")
 EXPORTS_DIR  = os.path.join(BASE_DIR, "exports")
-BACKUP_DIR   = os.path.join(BASE_DIR, "backups")
+_default_backup_dir = os.path.join(
+    os.path.dirname(os.path.normpath(BASE_DIR)), "ptos-backups")
+BACKUP_DIR   = os.environ.get("PTOS_BACKUP_DIR", _default_backup_dir)
 TODO_DIR     = os.path.join(BASE_DIR, "todo")
 TODO_PATH    = os.path.join(TODO_DIR, "todo.txt")
 DONE_PATH    = os.path.join(TODO_DIR, "done.txt")
@@ -1016,6 +1018,18 @@ def _cleanup_old_backups():
             backup_path = os.path.join(BACKUP_DIR, name)
             if os.path.exists(backup_path):
                 os.remove(backup_path)
+
+def migrate_backup_dir():
+    """One-time migration: move backups/ from inside BASE_DIR to sibling ptos-backups/."""
+    old_path = os.path.join(BASE_DIR, "backups")
+    if os.path.isdir(old_path) and old_path != BACKUP_DIR and not os.path.isdir(BACKUP_DIR):
+        try:
+            print(f"Moving backups from {old_path} to {BACKUP_DIR}...")
+            os.makedirs(os.path.dirname(BACKUP_DIR), exist_ok=True)
+            shutil.move(old_path, BACKUP_DIR)
+            print("Backups moved. Old location no longer used.")
+        except Exception as e:
+            print(f"Warning: could not migrate backups: {e}")
 
 def check_backup_folders():
     """Check if all required backup folders exist.

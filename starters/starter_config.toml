@@ -41,6 +41,7 @@ max_config_backups = 10
 # rclone remote for multi-device sync (configure in Settings after installing rclone)
 # Usage:  ptos --bisync    (bidirectional)
 #         ptos --sync --confirm-delete  (one-way push, deletes remote)
+enabled = true
 remote_name = ""
 remote_path = ""
 # Folders to include in sync corruption check
