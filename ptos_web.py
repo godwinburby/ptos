@@ -2755,6 +2755,7 @@ def _housekeeping_loop(interval_minutes=5):
             due = [t for t in due if t.due == today]
             current = {(t.line_no, str(t.due), t.due_time) for t in due}
             new = [t for t in due if (t.line_no, str(t.due), t.due_time) not in notified]
+
             if new:
                 now = _dt.datetime.now()
                 tasks = []
@@ -2787,7 +2788,7 @@ def _housekeeping_loop(interval_minutes=5):
                 _system_notify("Todo due", body)
             notified = current
         except Exception:
-            pass
+            log.exception("housekeeping error")
         time.sleep(interval_minutes * 60)
 
 
