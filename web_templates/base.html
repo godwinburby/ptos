@@ -1280,7 +1280,16 @@ function _showTodoToast(tasks) {
   var old = document.getElementById("todo-toast");
   if (old) old.remove();
   var n = tasks.length;
-  var label = n === 1 ? tasks[0].description : n + " tasks due";
+  var arrivedTask = tasks.find(function(t){ return t.arrived; });
+  var label;
+  if (n === 1) {
+    label = tasks[0].description;
+  } else if (arrivedTask) {
+    var extra = n - 1;
+    label = arrivedTask.description + (extra ? " — plus " + extra + " more due today" : "");
+  } else {
+    label = n + " tasks due";
+  }
   var d = document.createElement("div");
   d.id = "todo-toast";
   d.style.cssText = "position:fixed;top:12px;right:12px;z-index:9998;background:var(--error);color:#fff;padding:12px 18px;border-radius:10px;font-size:14px;cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.2);max-width:320px;";
