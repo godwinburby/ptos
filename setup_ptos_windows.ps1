@@ -78,11 +78,8 @@ if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) {
                     [System.Environment]::GetEnvironmentVariable("Path","User")
     }
     if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) {
-        Write-Host ""
-        Write-Host "rclone not found. Install from: https://rclone.org/downloads"
-        Write-Host "Or run: winget install Rclone.Rclone"
-        Read-Host "Press Enter to exit"
-        exit 1
+        Write-Host "rclone not available - sync feature will be disabled."
+        Write-Host "Install later from https://rclone.org/downloads if you want cloud sync."
     }
 }
 

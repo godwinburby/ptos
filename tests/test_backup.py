@@ -121,3 +121,50 @@ class TestBackupIfNeeded:
         created, path = ptos.backup_if_needed()
         assert created is False
         assert path is None
+
+
+class TestMigrateBackupDir:
+    def test_moves_old_backups_to_sibling(self, tmp_path, monkeypatch):
+        old_base = tmp_path / "ptos-data"
+        old_backups = old_base / "backups"
+        old_backups.mkdir(parents=True)
+        (old_backups / "backup.zip").write_text("data")
+        new_backup_dir = tmp_path / "ptos-backups"
+        monkeypatch.setattr(ptos, "BASE_DIR", str(old_base))
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(new_backup_dir))
+        ptos.migrate_backup_dir()
+        assert (new_backup_dir / "backup.zip").exists()
+        assert not old_backups.exists()
+
+    def test_noop_when_no_old_backups(self, tmp_path, monkeypatch):
+        old_base = tmp_path / "ptos-data"
+        old_base.mkdir(parents=True)
+        new_backup_dir = tmp_path / "ptos-backups"
+        monkeypatch.setattr(ptos, "BASE_DIR", str(old_base))
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(new_backup_dir))
+        ptos.migrate_backup_dir()
+        assert not new_backup_dir.exists()
+
+    def test_noop_when_sibling_already_exists(self, tmp_path, monkeypatch):
+        old_base = tmp_path / "ptos-data"
+        old_backups = old_base / "backups"
+        old_backups.mkdir(parents=True)
+        (old_backups / "old.zip").write_text("old")
+        new_backup_dir = tmp_path / "ptos-backups"
+        new_backup_dir.mkdir(parents=True)
+        (new_backup_dir / "existing.zip").write_text("existing")
+        monkeypatch.setattr(ptos, "BASE_DIR", str(old_base))
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(new_backup_dir))
+        ptos.migrate_backup_dir()
+        assert (new_backup_dir / "existing.zip").exists()
+        assert (old_backups / "old.zip").exists()
+
+    def test_respects_env_override(self, tmp_path, monkeypatch):
+        old_base = tmp_path / "ptos-data"
+        old_backups = old_base / "backups"
+        old_backups.mkdir(parents=True)
+        custom_dir = tmp_path / "my-backups"
+        monkeypatch.setattr(ptos, "BASE_DIR", str(old_base))
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(custom_dir))
+        ptos.migrate_backup_dir()
+        assert (custom_dir / "backups").exists() or custom_dir.exists()

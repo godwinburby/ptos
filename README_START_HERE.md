@@ -55,6 +55,19 @@ The form even suggests your most-used values from history.
 
 ---
 
+### Keep track of what's next
+
+The **Todo** tab is a full todo list, following the todo.txt standard —
+your tasks stay in a plain text file just like everything else in PTOS.
+Add a task in plain language ("call the clinic tomorrow 3pm"), set a
+priority, project, or due date, and PTOS reminds you when it's due.
+Recurring tasks, quick filters by project or priority, and a proper
+date/time picker are all built in.
+
+<!-- TODO: add images/ptos_todo.png screenshot — phone screenshot matching existing style (width="260") -->
+
+---
+
 ### Run a saved report in one click
 
 The **Queries** tab runs your saved reports. Pick a query, override the time
@@ -77,8 +90,8 @@ run before you execute it.
 
 ### Everything else is one tap away
 
-Tap **More** at the bottom right to reach Journal, Due List, Schema Builder,
-Backup, Log Editor, and Lint — without cluttering the main navigation.
+Tap **More** at the bottom right to reach Search, Due List, Journal, Schema Builder,
+Query Builder, Backup, Settings, Log Editor, and Lint — without cluttering the main navigation.
 
 <img src="images/ptos_more_menu.png" width="260" alt="More menu showing Journal, Due List, Schema Builder, Backup, Log Editor, Lint">
 
@@ -97,13 +110,13 @@ overdue items that need attention, and quick-add buttons for your saved presets.
 Adjust the time window (presets or specific year/month/date/range) to see
 metrics for any period.
 
-**+ Add Record** — the form you use every day. Pick a record type and the right
-fields appear automatically. Use a preset to pre-fill common entries with one tap.
-The form remembers your past choices and suggests your most-used values.
-
 **Queries** — run saved reports in one click. Pick a report, choose a time window
 (this month, last month, a specific month / year / date / range, etc.), and results appear instantly.
 No typing, no commands.
+
+**Todo** — your task list. Add tasks in plain language ("call the clinic tomorrow 3pm"),
+set priorities, projects, and due dates. Quick filters by project or priority,
+and a date/time picker built in.
 
 **Browse** — filter and explore records. Pick a type, choose a time window
 (presets or specific year/month/date/range), set filters, group or sort the
@@ -112,7 +125,8 @@ row to open the edit form for that record.
 
 **More** — everything else in one place:
 
-- **Due** — items that haven't been followed up on, sorted by how long they have been waiting
+- **Search** — universal search across records, todos, and journal
+- **Due List** — overdue items sorted by how long they have been waiting
 - **Journal** — daily journal, one entry per day, navigate with Prev / Next or pick a date. Press **Save** when done — it does not save automatically
 - **Schema Builder** — add or change record types without touching any files
 - **Query Builder** — create custom queries, metrics, and reports with a visual builder
@@ -121,7 +135,7 @@ row to open the edit form for that record.
 - **Lint** — check records for errors and list any issues
 - **Log Editor** — view and edit the raw log file directly, only needed for corrections that cannot be made through Browse
 
-For day-to-day use you only need **Home**, **Add Record**, and **Journal**.
+For day-to-day use you only need **Home**, **Queries**, **Todo**, and **Browse**.
 
 ---
 
@@ -209,10 +223,12 @@ The Settings tab in the app lets you change most of these without opening the fi
 Download only the setup file(s) for your platform — the setup script downloads
 PTOS from GitHub and creates all folders and config files automatically.
 
-**Windows** — download both files into the same folder, then double-click
-`setup_ptos_windows.bat`:
-- `setup_ptos_windows.bat`
-- `setup_ptos_windows.py`
+**Windows** — download and double-click:
+
+[`setup_ptos_windows.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat)
+
+That's the only file you need — it downloads its own companion script
+and handles everything else automatically.
 
 **Linux / macOS:**
 ```

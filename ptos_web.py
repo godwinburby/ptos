@@ -1239,6 +1239,7 @@ def settings_page():
         sync_auto_on_startup=sync.get("auto_sync_on_startup", False),
         sync_auto_on_shutdown=sync.get("auto_sync_on_shutdown", False),
         sync_interval=sync.get("sync_interval_minutes", 0),
+        sync_enabled=sync.get("enabled", True),
         rclone_available=rclone_available,
         remote_exists=remote_exists,
         base_dir=ptos.BASE_DIR)
@@ -1283,6 +1284,8 @@ def settings_save():
         if "auto_sync_on_startup" in data or "auto_sync_on_shutdown" in data:
             cfg.setdefault("sync", {})["auto_sync_on_startup"] = bool(data.get("auto_sync_on_startup"))
             cfg.setdefault("sync", {})["auto_sync_on_shutdown"] = bool(data.get("auto_sync_on_shutdown"))
+        if "sync_enabled" in data:
+            cfg.setdefault("sync", {})["enabled"] = bool(data.get("sync_enabled"))
         if "sync_interval_minutes" in data:
             cfg.setdefault("sync", {})["sync_interval_minutes"] = max(0, min(120, int(data["sync_interval_minutes"])))
         
@@ -1508,6 +1511,10 @@ def sync_run():
 
     if not shutil.which("rclone"):
         return jsonify(ok=False, error="rclone not found. Install from https://rclone.org")
+
+    sync_cfg = svc.get_config().get("sync", {})
+    if not sync_cfg.get("enabled", True):
+        return jsonify(ok=False, error="Sync is disabled. Enable it in Settings.")
 
     data = request.get_json(silent=True) or {}
     command = data.get("command", "")
@@ -2774,6 +2781,8 @@ def _sync_loop(interval_minutes=30):
             continue
         try:
             sync_cfg = svc.get_config().get("sync", {})
+            if not sync_cfg.get("enabled", True):
+                continue
             if not sync_cfg.get("remote_name") or not sync_cfg.get("remote_path"):
                 continue
             if not shutil.which("rclone"):
@@ -2877,6 +2886,9 @@ def _exit_sync():
     """Run sync on exit if configured."""
     try:
         sync_cfg = svc.get_config().get("sync", {})
+        if not sync_cfg.get("enabled", True):
+            print("Shutdown sync skipped: sync disabled")
+            return
         if sync_cfg.get("auto_sync_on_shutdown") and sync_cfg.get("remote_name") and sync_cfg.get("remote_path"):
             if not shutil.which("rclone"):
                 print("Shutdown sync skipped: rclone not found")
@@ -2893,6 +2905,12 @@ def _exit_sync():
 atexit.register(_exit_sync)
 
 if __name__ == "__main__":
+    # One-time backup dir migration (ptos-data/backups → ptos-backups)
+    try:
+        ptos.migrate_backup_dir()
+    except Exception:
+        pass
+
     # Smart backup on startup if configured
     try:
         backup_config = svc.get_backup_config()
@@ -2912,7 +2930,9 @@ if __name__ == "__main__":
     # Auto sync on startup if configured
     try:
         sync_cfg = svc.get_config().get("sync", {})
-        if sync_cfg.get("auto_sync_on_startup") and sync_cfg.get("remote_name") and sync_cfg.get("remote_path"):
+        if not sync_cfg.get("enabled", True):
+            print("Startup sync skipped: sync disabled")
+        elif sync_cfg.get("auto_sync_on_startup") and sync_cfg.get("remote_name") and sync_cfg.get("remote_path"):
             if not shutil.which("rclone"):
                 print("Startup sync skipped: rclone not found")
             else:
@@ -2966,7 +2986,7 @@ if __name__ == "__main__":
     try:
         sync_cfg = svc.get_config().get("sync", {})
         sync_min = sync_cfg.get("sync_interval_minutes", 0)
-        if sync_min > 0:
+        if sync_min > 0 and sync_cfg.get("enabled", True):
             _t = threading.Thread(target=_sync_loop, args=(sync_min,), daemon=True)
             _t.start()
             print(f"Periodic sync enabled (every {sync_min} min)")

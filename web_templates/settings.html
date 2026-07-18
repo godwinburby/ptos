@@ -184,6 +184,12 @@
 <div class="card" id="sec-sync" style="margin-bottom:14px;">
   <div class="card-title">Sync <span id="sync-dot-card" class="sync-dot"></span></div>
 
+  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:12px;">
+    <input type="checkbox" id="sync-enabled" style="width:16px;height:16px;" onchange="toggleSyncEnabled()">
+    Enable rclone sync
+  </label>
+
+  <div id="sync-card-body">
   <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
     <div class="field-group" style="flex:1;min-width:120px;">
       <label>Remote name</label>
@@ -260,6 +266,7 @@
     <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:6px;">Output</div>
     <pre id="sync-output" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0;"></pre>
   </div>
+  </div><!-- /sync-card-body -->
 </div>
 
 <div style="display:flex;gap:10px;margin-top:20px;">
@@ -283,6 +290,16 @@
   document.getElementById("auto-sync-shutdown").checked = {{ 'true' if sync_auto_on_shutdown else 'false' }};
   var syncIntEl = document.getElementById("sync-interval");
   if (syncIntEl) syncIntEl.value = {{ sync_interval }};
+  document.getElementById("sync-enabled").checked = {{ 'true' if sync_enabled else 'false' }};
+  toggleSyncEnabled();
+
+  function toggleSyncEnabled() {
+    var on = document.getElementById("sync-enabled").checked;
+    var body = document.getElementById("sync-card-body");
+    if (body) body.style.opacity = on ? "1" : "0.4";
+    var inputs = body ? body.querySelectorAll("input, button, select") : [];
+    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = !on;
+  }
   
   function renderBackupFolders() {
     coreFolders.forEach(function(cf) {
@@ -386,7 +403,8 @@
         remote_path: (document.getElementById("sync-remote-path") || {}).value || "",
         auto_sync_on_startup: !!(document.getElementById("auto-sync-startup") || {}).checked,
         auto_sync_on_shutdown: !!(document.getElementById("auto-sync-shutdown") || {}).checked,
-        sync_interval_minutes: parseInt((document.getElementById("sync-interval") || {}).value) || 0
+        sync_interval_minutes: parseInt((document.getElementById("sync-interval") || {}).value) || 0,
+        sync_enabled: !!(document.getElementById("sync-enabled") || {}).checked
       })
     })
     .then(function(r) { return r.json(); })
