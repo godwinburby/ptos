@@ -252,3 +252,99 @@ class TestSystemNotify:
         ptos_web._system_notify("title", "body")
         assert len(calls) >= 1
         assert calls[0][0] == "powershell"
+
+
+class TestArrivedField:
+    def _write_todo(self, line):
+        todo_dir = os.path.dirname(ptos.TODO_PATH)
+        os.makedirs(todo_dir, exist_ok=True)
+        with open(ptos.TODO_PATH, "w") as f:
+            f.write(line + "\n")
+        return ptos.TODO_PATH
+
+    def test_arrived_true_for_past_due_time(self):
+        self._write_todo("past task due:2026-07-18 due_time:09:00")
+        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
+        due = todo_mod.get_due_todos(todos, lookahead_days=1)
+        assert len(due) == 1
+        t = due[0]
+        assert t.due_time is not None
+        import datetime as _dt
+        due_dt = _dt.datetime.combine(t.due, _dt.time.fromisoformat(t.due_time))
+        arrived = due_dt <= _dt.datetime.now()
+        assert arrived is True
+
+    def test_arrived_false_for_future_due_time(self):
+        self._write_todo("future task due:2099-12-31 due_time:23:59")
+        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
+        due = todo_mod.get_due_todos(todos, lookahead_days=36500)
+        assert len(due) == 1
+        t = due[0]
+        assert t.due_time is not None
+        import datetime as _dt
+        due_dt = _dt.datetime.combine(t.due, _dt.time.fromisoformat(t.due_time))
+        arrived = due_dt <= _dt.datetime.now()
+        assert arrived is False
+
+    def test_arrived_false_for_no_due_time(self):
+        self._write_todo("date-only task due:2026-07-18")
+        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
+        due = todo_mod.get_due_todos(todos, lookahead_days=1)
+        assert len(due) == 1
+        t = due[0]
+        assert t.due_time is None
+
+    def test_arrived_field_in_sse_payload(self):
+        import datetime as _dt
+        today = _dt.date.today()
+        tasks = [{"line_no": 1, "description": "task", "priority": "A",
+                  "due": str(today), "due_time": "09:00", "arrived": True}]
+        assert tasks[0]["arrived"] is True
+        assert tasks[0]["due_time"] == "09:00"
+
+
+class TestTodayOnlyFilter:
+    def _write_todo(self, line):
+        todo_dir = os.path.dirname(ptos.TODO_PATH)
+        os.makedirs(todo_dir, exist_ok=True)
+        with open(ptos.TODO_PATH, "w") as f:
+            f.write(line + "\n")
+        return ptos.TODO_PATH
+
+    def test_tomorrow_excluded(self):
+        import datetime as _dt
+        tomorrow = _dt.date.today() + _dt.timedelta(days=1)
+        self._write_todo(f"tomorrow task due:{tomorrow.isoformat()}")
+        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
+        due = todo_mod.get_due_todos(todos, lookahead_days=1)
+        today = _dt.date.today()
+        due_today = [t for t in due if t.due == today]
+        assert len(due_today) == 0
+
+    def test_today_included(self):
+        self._write_todo("today task due:2026-07-18")
+        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
+        due = todo_mod.get_due_todos(todos, lookahead_days=1)
+        import datetime as _dt
+        today = _dt.date.today()
+        due_today = [t for t in due if t.due == today]
+        assert len(due_today) == 1
+
+    def test_time_based_today_still_surfaces(self):
+        self._write_todo("timed task due:2026-07-18 15:00")
+        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
+        due = todo_mod.get_due_todos(todos, lookahead_days=1)
+        import datetime as _dt
+        today = _dt.date.today()
+        due_today = [t for t in due if t.due == today]
+        assert len(due_today) == 1
+
+    def test_nothing_today_only_tomorrow(self):
+        import datetime as _dt
+        tomorrow = _dt.date.today() + _dt.timedelta(days=1)
+        self._write_todo(f"only tomorrow due:{tomorrow.isoformat()}")
+        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
+        due = todo_mod.get_due_todos(todos, lookahead_days=1)
+        today = _dt.date.today()
+        due_today = [t for t in due if t.due == today]
+        assert len(due_today) == 0

@@ -2743,6 +2743,7 @@ def _system_notify(title, body):
 
 def _housekeeping_loop(interval_minutes=5):
     """Background thread: check due todos, broadcast via SSE."""
+    import datetime as _dt
     import ptos_todo as _todo_mod
     notified = set()
     while True:
@@ -2750,20 +2751,37 @@ def _housekeeping_loop(interval_minutes=5):
         try:
             todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
             due = _todo_mod.get_due_todos(todos, lookahead_days=1)
+            today = _dt.date.today()
+            due = [t for t in due if t.due == today]
             current = {(t.line_no, str(t.due), t.due_time) for t in due}
             new = [t for t in due if (t.line_no, str(t.due), t.due_time) not in notified]
             if new:
-                tasks = [{"line_no": t.line_no, "description": t.description,
-                          "priority": t.priority, "due": str(t.due),
-                          "due_time": t.due_time} for t in new]
+                now = _dt.datetime.now()
+                tasks = []
+                for t in new:
+                    arrived = False
+                    if t.due_time and t.due:
+                        due_dt = _dt.datetime.combine(t.due, _dt.time.fromisoformat(t.due_time))
+                        arrived = due_dt <= now
+                    tasks.append({"line_no": t.line_no, "description": t.description,
+                                  "priority": t.priority, "due": str(t.due),
+                                  "due_time": t.due_time, "arrived": arrived})
                 with _sse_lock:
                     _pending_notifications.clear()
                     _pending_notifications.append(tasks)
                 _sse_broadcast("todo-due", tasks)
+                arrived_tasks = [t for t in tasks if t["arrived"]]
                 if len(new) == 1:
                     t = new[0]
                     p = f"({t.priority}) " if t.priority else ""
                     body = f"{p}{t.description} (due {t.due})"
+                elif arrived_tasks:
+                    t = arrived_tasks[0]
+                    p = f"({t['priority']}) " if t["priority"] else ""
+                    extra = len(new) - 1
+                    body = f"{p}{t['description']} (due now)"
+                    if extra:
+                        body += f" — plus {extra} more due today"
                 else:
                     body = f"{len(new)} tasks due today/tomorrow"
                 _system_notify("Todo due", body)
