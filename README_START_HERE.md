@@ -64,7 +64,7 @@ priority, project, or due date, and PTOS reminds you when it's due.
 Recurring tasks, quick filters by project or priority, and a proper
 date/time picker are all built in.
 
-<!-- TODO: add images/ptos_todo.png screenshot — phone screenshot matching existing style (width="260") -->
+<img src="images/ptos_todo.png" width="260" alt="Todo screen showing task list with priority badges, due dates, and quick-add">
 
 ---
 
