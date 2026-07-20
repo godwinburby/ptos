@@ -255,6 +255,100 @@ required = ["amount"]
         bundle = ptos.export_schema_bundle(["expense"])
         assert "global_fields" not in bundle["schema"]
 
+    def test_shared_skipped_when_unused(self):
+        _write(ptos.CONFIG_DIR, "schema.toml", """
+[types]
+allowed = ["expense"]
+
+[shared.source]
+type = "string"
+options = ["salary", "freelance"]
+
+[type.expense]
+required = ["amount"]
+
+[type.expense.fields.amount]
+""")
+        _write(ptos.CONFIG_DIR, "queries.toml", "")
+        _write(ptos.CONFIG_DIR, "presets.toml", "")
+        _write(ptos.CONFIG_DIR, "config.toml", "")
+
+        bundle = ptos.export_schema_bundle(["expense"])
+        assert "shared" not in bundle["schema"]
+
+    def test_shared_included_when_referenced(self):
+        _write(ptos.CONFIG_DIR, "schema.toml", """
+[types]
+allowed = ["expense"]
+
+[shared.source]
+type = "string"
+options = ["salary", "freelance"]
+
+[shared.payment_method]
+type = "string"
+options = ["cash", "card"]
+
+[type.expense]
+required = ["amount", "source"]
+
+[type.expense.fields.amount]
+
+[type.expense.fields.source]
+use = "shared.source"
+""")
+        _write(ptos.CONFIG_DIR, "queries.toml", "")
+        _write(ptos.CONFIG_DIR, "presets.toml", "")
+        _write(ptos.CONFIG_DIR, "config.toml", "")
+
+        bundle = ptos.export_schema_bundle(["expense"])
+        assert "shared" in bundle["schema"]
+        assert "source" in bundle["schema"]["shared"]
+        assert "payment_method" not in bundle["schema"]["shared"]
+
+    def test_shared_partial_inclusion(self):
+        _write(ptos.CONFIG_DIR, "schema.toml", """
+[types]
+allowed = ["expense", "income"]
+
+[shared.source]
+type = "string"
+options = ["salary", "freelance"]
+
+[shared.payment_method]
+type = "string"
+options = ["cash", "card"]
+
+[type.expense]
+required = ["amount", "payment_method"]
+
+[type.expense.fields.amount]
+
+[type.expense.fields.payment_method]
+use = "shared.payment_method"
+
+[type.income]
+required = ["amount", "source"]
+
+[type.income.fields.amount]
+
+[type.income.fields.source]
+use = "shared.source"
+""")
+        _write(ptos.CONFIG_DIR, "queries.toml", "")
+        _write(ptos.CONFIG_DIR, "presets.toml", "")
+        _write(ptos.CONFIG_DIR, "config.toml", "")
+
+        bundle = ptos.export_schema_bundle(["expense"])
+        assert "shared" in bundle["schema"]
+        assert "payment_method" in bundle["schema"]["shared"]
+        assert "source" not in bundle["schema"]["shared"]
+
+        bundle2 = ptos.export_schema_bundle(["income"])
+        assert "shared" in bundle2["schema"]
+        assert "source" in bundle2["schema"]["shared"]
+        assert "payment_method" not in bundle2["schema"]["shared"]
+
     def test_config_always_full(self):
         _write(ptos.CONFIG_DIR, "schema.toml", """
 [types]
