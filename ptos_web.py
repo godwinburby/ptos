@@ -748,6 +748,33 @@ def todo_edit():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/todo/delete-done", methods=["POST"])
+def todo_delete_done():
+    data = request.get_json(silent=True) or {}
+    line_no = data.get("line_no")
+    if not line_no:
+        return jsonify(ok=False, error="No line_no provided")
+    try:
+        svc.delete_done_todo_by_line(int(line_no))
+        return jsonify(ok=True)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/todo/edit-done", methods=["POST"])
+def todo_edit_done():
+    data = request.get_json(silent=True) or {}
+    line_no = data.get("line_no")
+    updates = data.get("updates", {})
+    if not line_no:
+        return jsonify(ok=False, error="No line_no provided")
+    try:
+        result = svc.edit_done_todo_by_line(int(line_no), updates)
+        return jsonify(ok=True, todo=result["todo"])
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Add Record
 # ══════════════════════════════════════════════════════════════════════════════

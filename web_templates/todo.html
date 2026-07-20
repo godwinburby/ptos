@@ -608,7 +608,7 @@
     <div class="todo-section-title" style="color:var(--error);">Overdue</div>
     <div class="todo-section-count">{{ buckets.overdue|length }}</div>
   </div>
-  <div id="sec-overdue" style="display:none;">
+  <div id="sec-overdue">
     {% for t in buckets.overdue %}{{ todo_row(t, 'overdue') }}{% endfor %}
   </div>
 </div>
@@ -682,6 +682,10 @@
           {% for c in t.contexts %}<a class="todo-context" href="/todo?context={{ c|urlencode }}">{{ c }}</a>{% endfor %}
         </div>
       </div>
+      <div class="todo-actions">
+        <button onclick="openEditDone({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}')" title="Edit">✎</button>
+        <button onclick="deleteDoneTodo({{ t.line_no }})" title="Delete">✕</button>
+      </div>
     </div>
     {% endfor %}
   </div>
@@ -693,6 +697,7 @@
   <div class="modal-box">
     <h3 id="todo-modal-title">New Task</h3>
     <input type="hidden" id="modal-line-no" value="">
+    <input type="hidden" id="modal-target" value="">
     <div class="modal-field">
       <label>Description</label>
       <input type="text" id="modal-desc" placeholder="What needs to be done?">
@@ -859,11 +864,26 @@ function deleteTodo(lineNo) {
   });
 }
 
+function deleteDoneTodo(lineNo) {
+  if (!confirm('Permanently delete this done task?')) return;
+  fetch('/todo/delete-done', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: lineNo})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) { window.location.reload(); }
+    else { alert(d.error || 'Failed'); }
+  });
+}
+
 function openTodoModal(mode, lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec) {
   const el = document.getElementById('todo-modal');
   document.getElementById('todo-modal-title').textContent = mode === 'edit' ? 'Edit Task' : 'New Task';
   document.getElementById('todo-modal-save').textContent = mode === 'edit' ? 'Save' : 'Add';
   document.getElementById('modal-line-no').value = mode === 'edit' ? lineNo : '';
+  document.getElementById('modal-target').value = 'todo';
   document.getElementById('modal-desc').value = desc || '';
   document.getElementById('modal-pri').value = pri || '';
   document.getElementById('modal-due').value = due || '';
@@ -894,6 +914,12 @@ function openAdd() { openTodoModal('add'); }
 
 function openEdit(lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec) {
   openTodoModal('edit', lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec);
+}
+
+function openEditDone(lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec) {
+  openTodoModal('edit', lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec);
+  document.getElementById('modal-target').value = 'done';
+  document.getElementById('todo-modal-title').textContent = 'Edit Done Task';
 }
 
 function closeTodoModal() {
@@ -966,7 +992,9 @@ function saveTodoModal() {
       projects: projs.map(function(p) { return '+' + p.replace(/^\+/, ''); }),
       contexts: ctxs.map(function(c) { return '@' + c.replace(/^@/, ''); })
     };
-    fetch('/todo/edit', {
+    var target = document.getElementById('modal-target').value || 'todo';
+    var editUrl = target === 'done' ? '/todo/edit-done' : '/todo/edit';
+    fetch(editUrl, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({line_no: parseInt(lineNo), updates: updates})
