@@ -2852,9 +2852,9 @@ def _sync_loop(interval_minutes=30):
                 continue
             if not shutil.which("rclone"):
                 continue
-            result = ptos.run_sync("bisync")
-            if result.get("ok"):
-                _sse_broadcast("sync-done", result)
+            _sse_broadcast("sync-start")
+            result = ptos.run_sync("bisync", skip_if_clean=True)
+            _sse_broadcast("sync-done", result)
         except Exception:
             pass
 
