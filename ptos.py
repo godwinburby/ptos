@@ -1113,6 +1113,171 @@ def get_queries():
     return _load("queries", QUERIES_PATH)
 def get_presets(): return _load("presets", PRESETS_PATH).get("presets", {}) if os.path.exists(PRESETS_PATH) else {}
 
+
+def _query_refs_type(query, selected):
+    """Check if a base query's where clause references any of the selected types."""
+    where = query.get("where", "")
+    if not where:
+        return False
+    found = re.findall(r'type\s*=\s*(\w+)', where)
+    return bool(set(found) & set(selected))
+
+
+def export_schema_bundle(selected_types):
+    """Build 4 filtered TOML dicts for sharing.
+
+    Always includes: [global_fields], [shared], config.toml.
+    Filters schema types, fields metadata, queries, and presets
+    to only those relevant to selected_types.
+
+    Returns dict with keys: schema, queries, presets, config.
+    """
+    import tomli_w
+    import io
+
+    schema = get_schema()
+    queries = get_queries()
+    presets_raw = get_presets()
+    config = get_config()
+
+    selected = set(selected_types)
+
+    # ── schema.toml ──
+    out_schema = {}
+
+    # [types] — always include, filtered
+    all_types = schema.get("types", {}).get("allowed", [])
+    out_schema["types"] = {"allowed": sorted(selected & set(all_types))}
+
+    # [global_fields] — always include
+    gf = schema.get("global_fields")
+    if gf:
+        out_schema["global_fields"] = gf
+
+    # [shared] — always include
+    shared = schema.get("shared")
+    if shared:
+        out_schema["shared"] = shared
+
+    # [fields] — only fields used by selected types
+    out_fields = {}
+    for t in selected:
+        tdef = schema.get("type", {}).get(t, {})
+        for fname in tdef.get("fields", {}):
+            if fname in schema.get("fields", {}):
+                out_fields[fname] = schema["fields"][fname]
+    if out_fields:
+        out_schema["fields"] = out_fields
+
+    # [type.X] — only selected types
+    out_types = {}
+    for t in selected:
+        tdef = schema.get("type", {}).get(t)
+        if tdef:
+            out_types[t] = tdef
+    if out_types:
+        out_schema["type"] = out_types
+
+    # ── queries.toml ──
+    out_queries = {}
+
+    # Step 1: find which base queries reference selected types
+    included_queries = set()
+    for key, val in queries.items():
+        if isinstance(val, dict) and "where" in val:
+            if _query_refs_type(val, selected):
+                included_queries.add(key)
+
+    # Step 2: include base queries
+    for key in included_queries:
+        out_queries[key] = queries[key]
+
+    # Step 3: include metrics that reference included queries
+    metrics = queries.get("metrics", {})
+    included_metrics = set()
+    for mname, mdef in metrics.items():
+        refs = set()
+        if isinstance(mdef, dict):
+            if "derived" in mdef:
+                # extract query names from expression
+                refs = set(re.findall(r'[a-z_]+', mdef["derived"])) & included_queries
+            elif "ratio" in mdef:
+                refs = set(mdef["ratio"]) & included_queries
+            elif "avg" in mdef:
+                refs = {mdef["avg"]} & included_queries
+            elif "sum" in mdef:
+                refs = {mdef["sum"]} & included_queries
+            elif "max" in mdef:
+                refs = {mdef["max"]} & included_queries
+            elif "min" in mdef:
+                refs = {mdef["min"]} & included_queries
+        if refs:
+            included_metrics.add(mname)
+    if included_metrics:
+        out_queries["metrics"] = {m: metrics[m] for m in sorted(included_metrics)}
+
+    # Step 4: include dashboards referencing included queries/metrics
+    dashboards = queries.get("dashboards", {})
+    included_names = included_queries | included_metrics
+    included_dashboards = {}
+    for dname, ddef in dashboards.items():
+        if isinstance(ddef, dict) and "metrics" in ddef:
+            refs = [m for m in ddef["metrics"] if m in included_names]
+            if refs:
+                included_dashboards[dname] = {"metrics": refs}
+    if included_dashboards:
+        out_queries["dashboards"] = included_dashboards
+
+    # Step 5: include aliases pointing to included queries
+    aliases = queries.get("aliases", {})
+    included_aliases = {}
+    for aname, aval in aliases.items():
+        if isinstance(aval, dict) and aval.get("alias") in included_names:
+            included_aliases[aname] = aval
+        elif isinstance(aval, str) and aval in included_names:
+            included_aliases[aname] = {"alias": aval}
+    if included_aliases:
+        out_queries["aliases"] = included_aliases
+
+    # Step 6: always include due config
+    due = queries.get("due")
+    if due:
+        out_queries["due"] = due
+
+    # ── presets.toml ──
+    out_presets = {}
+    for name, pdef in presets_raw.items():
+        if isinstance(pdef, dict) and pdef.get("type") in selected:
+            out_presets[name] = pdef
+    out_presets_wrap = {"presets": out_presets} if out_presets else {}
+
+    return {
+        "schema": out_schema,
+        "queries": out_queries,
+        "presets": out_presets_wrap,
+        "config": config,
+    }
+
+
+def build_schema_bundle_zip(selected_types):
+    """Return (bytes, filename) for a schema share ZIP."""
+    import io
+    import tomli_w
+
+    bundle = export_schema_bundle(selected_types)
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+        for name in ("schema", "queries", "presets", "config"):
+            data = bundle[name]
+            if not data:
+                continue
+            stream = io.BytesIO()
+            tomli_w.dump(data, stream)
+            zf.writestr(f"config/{name}.toml", stream.getvalue())
+
+    ts = dt.datetime.now().strftime("%Y%m%d")
+    return buf.getvalue(), f"ptos-schema-share-{ts}.zip"
+
 # --------------------------------------------------
 # Display helpers  (currency from config)
 # --------------------------------------------------

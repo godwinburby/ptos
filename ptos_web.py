@@ -1269,7 +1269,8 @@ def settings_page():
         sync_enabled=sync.get("enabled", True),
         rclone_available=rclone_available,
         remote_exists=remote_exists,
-        base_dir=ptos.BASE_DIR)
+        base_dir=ptos.BASE_DIR,
+        schema_types=svc.get_schema().get("types", {}).get("allowed", []))
 
 
 @app.route("/settings/save", methods=["POST"])
@@ -1518,6 +1519,24 @@ def backup_config_restore_from_list(name):
     try:
         result = svc.restore_config(backup_path)
         return jsonify(ok=True, message=result.get("message", "Config restored"))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/settings/share-schema", methods=["POST"])
+def share_schema():
+    """Export filtered schema bundle as a ZIP download."""
+    data = request.get_json(silent=True) or {}
+    types = data.get("types", [])
+    if not types:
+        return jsonify(ok=False, error="No types selected")
+    try:
+        zip_bytes, filename = ptos.build_schema_bundle_zip(types)
+        return Response(
+            zip_bytes,
+            mimetype="application/zip",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'}
+        )
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
