@@ -1126,9 +1126,10 @@ def _query_refs_type(query, selected):
 def export_schema_bundle(selected_types):
     """Build 4 filtered TOML dicts for sharing.
 
-    Always includes: [global_fields], [shared], config.toml.
-    Filters schema types, fields metadata, queries, and presets
-    to only those relevant to selected_types.
+    Always includes config.toml. [global_fields] included if defined.
+    [shared] included only if referenced by selected types via use = "shared.X".
+    [fields] filtered to only those used by selected types.
+    Queries, metrics, dashboards, and presets filtered to selected_types.
 
     Returns dict with keys: schema, queries, presets, config.
     """
@@ -1154,10 +1155,18 @@ def export_schema_bundle(selected_types):
     if gf:
         out_schema["global_fields"] = gf
 
-    # [shared] — always include
-    shared = schema.get("shared")
-    if shared:
-        out_schema["shared"] = shared
+    # [shared] — only shared defs referenced by selected types
+    shared = schema.get("shared", {})
+    used_shared = set()
+    for t in selected:
+        tdef = schema.get("type", {}).get(t, {})
+        for fdef in tdef.get("fields", {}).values():
+            if isinstance(fdef, dict):
+                ref = fdef.get("use", "")
+                if ref.startswith("shared."):
+                    used_shared.add(ref.split(".", 1)[1])
+    if shared and used_shared:
+        out_schema["shared"] = {k: v for k, v in shared.items() if k in used_shared}
 
     # [fields] — only fields used by selected types
     out_fields = {}
@@ -1275,7 +1284,7 @@ def build_schema_bundle_zip(selected_types):
             tomli_w.dump(data, stream)
             zf.writestr(f"config/{name}.toml", stream.getvalue())
 
-    ts = dt.datetime.now().strftime("%Y%m%d")
+    ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     return buf.getvalue(), f"ptos-schema-share-{ts}.zip"
 
 # --------------------------------------------------

@@ -1269,8 +1269,7 @@ def settings_page():
         sync_enabled=sync.get("enabled", True),
         rclone_available=rclone_available,
         remote_exists=remote_exists,
-        base_dir=ptos.BASE_DIR,
-        schema_types=svc.get_schema().get("types", {}).get("allowed", []))
+        base_dir=ptos.BASE_DIR)
 
 
 @app.route("/settings/save", methods=["POST"])
@@ -1357,7 +1356,8 @@ def backup_page():
                for name, created, btype in backups_raw]
     return render_template("backup.html",
         tab="backup", title="Backup & Restore", now=_now_str(),
-        backups=backups)
+        backups=backups,
+        schema_types=svc.get_schema().get("types", {}).get("allowed", []))
 
 
 @app.route("/backup/create", methods=["POST"])
@@ -1523,7 +1523,7 @@ def backup_config_restore_from_list(name):
         return jsonify(ok=False, error=str(e))
 
 
-@app.route("/settings/share-schema", methods=["POST"])
+@app.route("/backup/share-schema", methods=["POST"])
 def share_schema():
     """Export filtered schema bundle as a ZIP download."""
     data = request.get_json(silent=True) or {}
