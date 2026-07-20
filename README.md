@@ -187,7 +187,6 @@ python ptos.py --set-home ~/ptos-data
 │   ├── ptos.py                      # Core engine
 │   ├── ptos_cli.py                  # CLI argument parser
 │   ├── ptos_service.py              # Service layer (web UI + CLI)
-│   ├── ptos_sync.py                 # rclone sync engine
 │   ├── ptos_web.py                  # Web UI (Flask)
 │   ├── ptos_todo.py                 # Todo module
 │   ├── .ptos_home                   # Points to ../ptos-data
@@ -372,7 +371,7 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; type a term and press Search or Enter to filter todos by description
 - **Clickable todo chips** — click project, context, or priority chips on any todo row to filter the list; click again to remove filter
 - **Form modal** (press `n` or click `+`) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
-- Inline edit (pencil icon on hover) and delete
+- Inline edit (pencil icon on hover) and delete for open and done tasks; done tasks also support undo (checkmark) to move back to todo.txt
 - Project rail for filtering by `+Project` with toggle behavior
 - Collapsible `? Help` reference card
 - **System notifications** — native OS desktop notifications (Linux: `notify-send`, macOS: Notification Center, Windows: toast, Android: `termux-notification`) alongside browser notifications; works in PWA mode (service worker excludes SSE endpoint)
@@ -414,7 +413,8 @@ types, and conditions. See [Adding a new record type](#adding-a-new-record-type)
 ### Backup
 
 Create full or config-only backups, download existing backups, restore from a local
-backup or uploaded ZIP file, and delete old backups. See [Backup & Restore](#backup--restore).
+backup or uploaded ZIP file, delete old backups, and export a filtered schema bundle
+for sharing. See [Backup & Restore](#backup--restore).
 
 ### Query Builder
 
@@ -533,6 +533,7 @@ Access the **Backup** tab:
 - Download any backup
 - Restore from a local backup or uploaded ZIP file
 - Delete old backups
+- **Share Schema** — export a filtered bundle of schema, queries, presets, and config as a ZIP. Select which record types to include; queries, metrics, dashboards, and presets are filtered automatically. Downloaded as `ptos-schema-share-YYYYMMDD_HHMMSS.zip`
 
 ### CLI
 
@@ -545,7 +546,8 @@ ptos --backup-config  # Config-only backup: schema, queries, presets, config
 
 - **Full backups:** Keeps the last **10 backups** automatically. Older ones are
   deleted after each new backup.
-- **Config backups:** Never automatically deleted — kept indefinitely.
+- **Config backups:** Keeps the last **10 backups** by default (configurable via
+  `max_config_backups` in `config.toml`).
 
 ### Backup files
 
@@ -599,9 +601,22 @@ default = "monthly"          # default dashboard shown on web UI home page
 auto_backup_on_startup  = true   # auto backup when web server starts
 auto_backup_on_shutdown = true   # auto backup when web server stops
 backup_if_files_changed = true   # skip backup if files unchanged since last backup
-max_backups             = 10     # keep last N full backups
+max_full_backups        = 10     # keep last N full backups
 max_config_backups      = 10     # keep last N config-only backups
 folders = ["records", "config", "templates", "journal", "notes"]
+
+[sync]
+enabled                 = true   # enable/disable all sync paths
+remote_name             = ""     # rclone remote name (configure in Settings)
+remote_path             = ""     # remote folder path
+folders                 = ["config", "records", "journal", "todo"]
+auto_sync_on_startup    = false
+auto_sync_on_shutdown   = false
+sync_interval_minutes   = 0      # periodic sync interval (0 = disabled)
+
+[todo]
+notify_interval         = 5      # background due-todo check interval (minutes)
+archive_months          = 6      # months before done items are archived
 
 # Optional — HTTP Basic Auth for server deployments (e.g. PythonAnywhere)
 # Without this anyone who knows the URL can access your data.
@@ -932,8 +947,12 @@ PTOS has built-in bidirectional sync with OneDrive using
 - Orange: conflict detected
 - Red: error
 
-**SSE events:** The web UI receives `sync-status` events in real time,
-broadcasting the latest sync result (ok, conflict, or error).
+**SSE events:** The web UI receives `sync-start` and `sync-done` SSE events
+in real time. `sync-start` triggers the dot pulse animation; `sync-done`
+updates the dot color (green for success, red for error) and clears after 10s.
+Periodic syncs also broadcast these events so the browser reflects background
+sync activity. Manual UI syncs additionally stream rclone output line-by-line
+via `sync-log` events to the Settings output panel.
 
 **Change detection (smart skip):** Periodic sync checks local file mtimes
 and sizes against `.ptos_sync_state` before calling rclone. If no local files
@@ -943,16 +962,20 @@ syncs always run regardless. If another device pushes changes while your
 local side is quiet, those changes are pulled the next time you make a
 local edit and sync.
 
-**Concurrency:** A `threading.Lock` prevents overlapping sync runs. If a
-sync is already in progress, a new request is silently skipped.
+**Concurrency:** A PID-based file lock (`.sync.lock`) prevents overlapping
+sync runs across processes (web + CLI + cron). If a sync is already in
+progress, new requests are rejected with a clear error.
 
 **Configuration in `config.toml`:**
 ```toml
 [sync]
-enabled = false          # enable/disable sync
-remote = "onedrive"      # rclone remote name
+enabled = true           # enable/disable all sync paths
+remote_name = "onedrive" # rclone remote name
 remote_path = "ptos"     # remote folder path
-folders = ["records", "config", "journal", "todo"]
+folders = ["config", "records", "journal", "todo"]
+auto_sync_on_startup = false
+auto_sync_on_shutdown = false
+sync_interval_minutes = 0   # periodic sync (0 = disabled)
 ```
 
 ### Git
