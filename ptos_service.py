@@ -2366,6 +2366,24 @@ def edit_todo_by_line(line_no, updates):
         raise PTOSError(str(e))
 
 
+def delete_done_todo_by_line(line_no):
+    """Delete a done todo by line number."""
+    try:
+        ptos_todo.delete_todo(DONE_PATH, line_no)
+        return {"ok": True}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def edit_done_todo_by_line(line_no, updates):
+    """Edit fields on a done todo by line number."""
+    try:
+        t = ptos_todo.edit_todo(DONE_PATH, line_no, updates)
+        return {"ok": True, "todo": dataclasses.asdict(t)}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
 def get_todo_projects():
     """Get all unique +Project tokens from open todos."""
     try:

@@ -124,7 +124,8 @@ x 2026-07-12 2026-07-10 Completed task
 - **Form modal** (shared add+edit) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
 - **Clickable todo chips** — project, context, and priority chips on each todo row link to filtered view; clicking an active filter chip removes that filter
 - **Project rail** — horizontal scroll filter with toggle behavior
-- **Overdue/Tomorrow/Today/Upcoming/Someday** bucket view with collapsible Done section; overdue collapsed by default
+- **Overdue/Tomorrow/Today/Upcoming/Someday** bucket view with collapsible Done section; overdue visible by default, collapsible by clicking header
+- **Done tasks** — edit and delete buttons on each done row; edit opens the shared modal targeting `done.txt` (`/todo/edit-done`), delete removes permanently from `done.txt` (`/todo/delete-done`); undo (checkmark click) moves back to `todo.txt`
 - **Threshold todos** — Todos with `t > today` are hidden until their threshold date arrives (standard todo.txt behavior: `t` means "don't show until")
 - **Today progress** counter (done/total)
 - **Help card** — color-coded annotated todo.txt example with priority, project, context, due, threshold, recurrence

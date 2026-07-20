@@ -381,6 +381,43 @@ class TestEditTodo:
             edit_todo(path, 999, {"priority": "A"})
 
 
+class TestDeleteDoneTodo:
+    def test_delete_removes_line_from_done(self, tmpdir):
+        path = _write_todo(tmpdir, lines=SAMPLE_DONE_LINES, filename="done.txt")
+        todos, _ = load_todos(path)
+        line_no = todos[0].line_no
+        delete_todo(path, line_no)
+        remaining, _ = load_todos(path)
+        assert len(remaining) == 1
+        assert remaining[0].description != "Fix printer"
+
+    def test_delete_nonexistent_done_raises(self, tmpdir):
+        path = _write_todo(tmpdir, lines=SAMPLE_DONE_LINES, filename="done.txt")
+        with pytest.raises(TodoParseError):
+            delete_todo(path, 999)
+
+
+class TestEditDoneTodo:
+    def test_edit_done_priority(self, tmpdir):
+        path = _write_todo(tmpdir, lines=SAMPLE_DONE_LINES, filename="done.txt")
+        todos, _ = load_todos(path)
+        line_no = todos[0].line_no
+        t = edit_todo(path, line_no, {"priority": "A"})
+        assert t.priority == "A"
+
+    def test_edit_done_description(self, tmpdir):
+        path = _write_todo(tmpdir, lines=SAMPLE_DONE_LINES, filename="done.txt")
+        todos, _ = load_todos(path)
+        line_no = todos[1].line_no
+        t = edit_todo(path, line_no, {"description": "Buy oat milk"})
+        assert t.description == "Buy oat milk"
+
+    def test_edit_nonexistent_done_raises(self, tmpdir):
+        path = _write_todo(tmpdir, lines=SAMPLE_DONE_LINES, filename="done.txt")
+        with pytest.raises(TodoParseError):
+            edit_todo(path, 999, {"priority": "A"})
+
+
 # ── filtering ───────────────────────────────────────────────────────────────
 
 class TestFilterTodos:
