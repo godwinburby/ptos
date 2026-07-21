@@ -3911,11 +3911,11 @@ def get_note_template(category, context=None):
 
 def get_today_journal():
     """Return the path to today's journal file, creating it from
-    template if it doesn't exist. Creates year subdirectory as needed."""
+    template if it doesn't exist. Creates year/month subdirectory as needed."""
     today_str = today().isoformat()
-    year_dir  = os.path.join(JOURNAL_DIR, today_str[:4])
-    os.makedirs(year_dir, exist_ok=True)
-    path = os.path.join(year_dir, f"{today_str}.md")
+    month_dir = os.path.join(JOURNAL_DIR, today_str[:4], today_str[5:7])
+    os.makedirs(month_dir, exist_ok=True)
+    path = os.path.join(month_dir, f"{today_str}.md")
     if not os.path.exists(path):
         content = get_note_template("daily", {"date": today_str})
         with open(path, "w", encoding="utf-8") as f:
@@ -3926,6 +3926,25 @@ def get_today_journal():
 def get_journal_template_content(date_str):
     """Return template content for a journal date without writing to disk."""
     return get_note_template("daily", {"date": date_str})
+
+
+def _journal_path(date_str):
+    """Return the file path for a journal date."""
+    return os.path.join(JOURNAL_DIR, date_str[:4], date_str[5:7], f"{date_str}.md")
+
+
+def delete_journal(date_str):
+    """Delete a journal file. Cleans empty year/month dirs."""
+    path = _journal_path(date_str)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Journal not found: {date_str}")
+    os.remove(path)
+    month_dir = os.path.dirname(path)
+    if os.path.isdir(month_dir) and not os.listdir(month_dir):
+        os.rmdir(month_dir)
+        year_dir = os.path.dirname(month_dir)
+        if os.path.isdir(year_dir) and not os.listdir(year_dir):
+            os.rmdir(year_dir)
 
 # --------------------------------------------------
 # Notes

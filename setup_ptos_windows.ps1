@@ -156,7 +156,19 @@ if (-not (Test-Path $configDir)) {
     Write-Host "PTOS already initialised (config/ exists)."
 }
 
-# -- 6. Kill anything on port 5000 --
+# -- 6b. Create Start_PTOS shortcut in parent directory --
+$parentDir = Split-Path -Parent $ptosDir
+$shortcutPath = Join-Path $parentDir "Start_PTOS.bat"
+if (-not (Test-Path $shortcutPath)) {
+    $startBat = Join-Path $ptosDir "start_ptos_windows.bat"
+    $batContent = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0ptos\start_ptos_windows.ps1`""
+    $batContent | Out-File -Encoding ascii $shortcutPath
+    Write-Host "Created shortcut: $shortcutPath"
+} else {
+    Write-Host "Shortcut already exists: $shortcutPath"
+}
+
+# -- 7. Kill anything on port 5000 --
 Write-Step "Checking port 5000"
 $conn = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
 if ($conn) {

@@ -93,8 +93,8 @@ class TestGetTodayJournal:
         ptos.init_ptos()
         monkeypatch.setattr(ptos, "today", lambda: __import__("datetime").date(2026, 5, 16))
         path = ptos.get_today_journal()
-        assert path == str(ptos_home / "journal" / "2026" / "2026-05-16.md")
-        content = (ptos_home / "journal" / "2026" / "2026-05-16.md").read_text()
+        assert path == str(ptos_home / "journal" / "2026" / "05" / "2026-05-16.md")
+        content = (ptos_home / "journal" / "2026" / "05" / "2026-05-16.md").read_text()
         assert "2026-05-16" in content
 
     def test_returns_existing_path(self, ptos_home, monkeypatch):
@@ -108,4 +108,4 @@ class TestGetTodayJournal:
         monkeypatch.setattr(ptos, "today", lambda: __import__("datetime").date(2026, 5, 16))
         (ptos_home / "journal").mkdir(parents=True)
         path = ptos.get_today_journal()
-        assert (ptos_home / "journal" / "2026" / "2026-05-16.md").exists()
+        assert (ptos_home / "journal" / "2026" / "05" / "2026-05-16.md").exists()

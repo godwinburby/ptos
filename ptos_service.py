@@ -2195,9 +2195,14 @@ def get_today_journal():
 
 def save_journal(date_str, content):
     """Save journal content for a given date."""
-    year_dir = os.path.join(JOURNAL_DIR, date_str[:4])
-    os.makedirs(year_dir, exist_ok=True)
-    write_file(os.path.join(year_dir, f"{date_str}.md"), content)
+    month_dir = os.path.join(JOURNAL_DIR, date_str[:4], date_str[5:7])
+    os.makedirs(month_dir, exist_ok=True)
+    write_file(os.path.join(month_dir, f"{date_str}.md"), content)
+
+
+def delete_journal(date_str):
+    """Delete a journal file. Cleans empty year/month dirs."""
+    return ptos.delete_journal(date_str)
 
 
 def list_note_categories():
