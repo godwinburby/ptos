@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
+  <a href="/notes" style="color:var(--accent);text-decoration:none;font-size:14px;">Notes</a>
+  <span style="color:var(--sub);">/</span>
+  <a href="/notes/{{ category }}" style="color:var(--accent);text-decoration:none;font-size:14px;">{{ category }}</a>
+  <span style="color:var(--sub);">/</span>
+  <span style="font-size:17px;font-weight:800;color:var(--text);">{{ slug }}</span>
+</div>
+
+{% include "_markdown_editor.html" with context %}
+
+<div style="margin-top:10px;display:flex;gap:8px;">
+  <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success" style="flex:1;">
+    Save Note
+  </button>
+  <button onclick="deleteNote()" class="btn btn-ghost" style="color:var(--danger,#e55);border:1px solid var(--danger,#e55);">
+    Delete
+  </button>
+</div>
+
+<script>
+window._mdSaveFn = function(silent) {
+  var content = document.getElementById("md-editor").value;
+  if (silent && !content.trim()) return;
+  fetch("/notes/save", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({category: "{{ category }}", slug: "{{ slug }}", content: content})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (!silent) {
+      var btn = document.querySelector(".btn-success");
+      if (btn) {
+        btn.textContent = d.ok ? "✔ Saved" : "Error — retry";
+        setTimeout(function() { btn.textContent = "Save Note"; }, d.ok ? 2000 : 3000);
+      }
+    }
+  });
+};
+
+function deleteNote() {
+  if (!confirm("Delete this note permanently?")) return;
+  fetch("/notes/delete", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({category: "{{ category }}", slug: "{{ slug }}"})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) window.location.href = "/notes/{{ category }}";
+    else alert(d.error || "Failed to delete");
+  });
+}
+</script>
+{% endblock %}

@@ -8,7 +8,7 @@ import ptos
 _PATCHED_ATTRS = [
     "BASE_DIR", "SCRIPT_DIR", "CONFIG_DIR", "RECORDS_DIR", "JOURNAL_DIR",
     "TEMPLATE_DIR", "EXPORTS_DIR", "BACKUP_DIR", "TODO_DIR",
-    "TODO_PATH", "DONE_PATH", "VERSION_FILE",
+    "TODO_PATH", "DONE_PATH", "NOTES_DIR", "VERSION_FILE",
     "SCHEMA_PATH", "QUERIES_PATH", "CONFIG_PATH", "PRESETS_PATH",
 ]
 
@@ -40,6 +40,7 @@ def _isolated_ptos_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(ptos, "TODO_DIR", str(base / "todo"))
     monkeypatch.setattr(ptos, "TODO_PATH", str(base / "todo" / "todo.txt"))
     monkeypatch.setattr(ptos, "DONE_PATH", str(base / "todo" / "done.txt"))
+    monkeypatch.setattr(ptos, "NOTES_DIR", str(base / "notes"))
     monkeypatch.setattr(ptos, "VERSION_FILE", str(base / ".version"))
     (base / "config").mkdir(exist_ok=True)
     (base / "records").mkdir(exist_ok=True)
@@ -48,6 +49,7 @@ def _isolated_ptos_paths(tmp_path, monkeypatch):
     (base / "templates").mkdir(exist_ok=True)
     (base / "exports").mkdir(exist_ok=True)
     (base / "backups").mkdir(exist_ok=True)
+    (base / "notes").mkdir(exist_ok=True)
     for dest, src in _STARTER_FILES.items():
         src_path = os.path.join(_STARTER_DIR, src)
         if os.path.exists(src_path):

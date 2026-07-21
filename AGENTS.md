@@ -25,6 +25,7 @@ config/          → User config (created by --init, gitignored)
 records/         → Log files (YYYY.log)
 journal/         → Markdown journal entries
 todo/            → Todo files (todo.txt, done.txt, done.YYYY.txt)
+notes/           → Markdown notes organized by category (notes/{category}/{slug}.md)
 
 ptos-backups/    → ZIP backups (sibling to ptos-data, outside sync scope)
 ```
@@ -175,6 +176,42 @@ x 2026-07-12 2026-07-10 Completed task
 - Items older than 6 months move from `done.txt` to `done.YYYY.txt`
 - Archive files are plain text backup, never loaded by web UI
 
+## Notes module specifics
+
+### Storage
+- Notes live in `notes/{category}/{slug}.md` (e.g. `notes/meeting/2026-07-21-standup.md`)
+- Slug format: `YYYY-MM-DD-title-slug` (auto-generated, collision-safe)
+- Category folders created on demand
+
+### Template fallback chain
+- `get_note_template(category, context)` checks in order:
+  1. `templates/{category}.md` — category-specific template (user-editable)
+  2. `templates/note.md` — generic note default (created by `--init` from `starters/starter_note.md`)
+  3. `starters/starter_note.md` — ships with PTOS
+  4. Hardcoded stub: `# {{title}}\n\n_Created: {{date}}_\n`
+- Placeholders: `{{title}}`, `{{date}}` — substituted at creation time
+
+### Key functions (in `ptos.py`)
+- `list_note_categories()` — sorted list of category folder names
+- `list_notes(category)` — list of `{slug, title, date, file}` dicts, newest first
+- `read_note(category, slug)` — returns file content or `None`
+- `create_note(category, title, content=None)` — creates file, returns `{category, slug, path}`
+- `save_note(category, slug, content)` — overwrites file content
+- `delete_note(category, slug)` — deletes file, raises `FileNotFoundError` if missing
+- `get_note_template(category, context)` — returns template string with placeholders substituted
+
+### Web routes
+- `GET /notes` — category browser with create form
+- `GET /notes/<category>` — note list in a category
+- `GET /notes/<category>/<slug>` — view/edit note (uses shared `_markdown_editor.html`)
+- `POST /notes/save` — save note content (JSON: `{category, slug, content}`)
+- `POST /notes/create` — create new note (JSON: `{category, title}`)
+- `POST /notes/delete` — delete note (JSON: `{category, slug}`)
+
+### Search integration
+- Universal search (`/search`) scans note content using `_glob_match`
+- Results show `category/title` with snippet, link to note view
+
 ## Key files to check before making changes
 
 | Change type | Files to read first |
@@ -182,6 +219,7 @@ x 2026-07-12 2026-07-10 Completed task
 | Record CRUD | `ptos.py` (engine), `ptos_service.py` (service), `ptos_web.py` (routes) |
 | Todo features | `ptos_todo.py`, `ptos_service.py`, `ptos_web.py`, `web_templates/todo.html` |
 | Todo CLI | `ptos_cli.py` (argparse + handlers), `ptos_todo.py` (engine) |
+| Notes | `ptos.py` (CRUD + template), `ptos_service.py`, `ptos_web.py`, `web_templates/notes*.html` |
 | Schema/validation | `ptos.py`, `schema.toml` |
 | Web UI patterns | `web_templates/base.html`, neighboring templates |
 | CLI flags | `ptos_cli.py`, `ptos.py` |

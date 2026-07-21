@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+  <div class="page-title" style="margin:0;">Notes</div>
+</div>
+
+<div class="card" style="margin-bottom:16px;">
+  <div style="font-weight:700;font-size:15px;margin-bottom:10px;">New Note</div>
+  <form id="create-form" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+    <select id="cat-select" style="padding:8px 12px;border-radius:8px;border:1px solid var(--border);
+            background:var(--card);color:var(--text);font-size:14px;">
+      {% for c in categories %}
+      <option value="{{ c.name }}">{{ c.name }} ({{ c.count }})</option>
+      {% endfor %}
+      <option value="__new__">+ New category…</option>
+    </select>
+    <input type="text" id="new-cat-input" placeholder="New category name"
+           style="display:none;padding:8px 12px;border-radius:8px;border:1px solid var(--border);
+                  background:var(--card);color:var(--text);font-size:14px;width:180px;">
+    <input type="text" id="title-input" placeholder="Note title"
+           style="flex:1;min-width:150px;padding:8px 12px;border-radius:8px;border:1px solid var(--border);
+                  background:var(--card);color:var(--text);font-size:14px;">
+    <button type="submit" class="btn btn-primary btn-sm">Create</button>
+  </form>
+</div>
+
+{% if categories %}
+  {% for c in categories %}
+  <a href="/notes/{{ c.name }}" class="card"
+     style="display:flex;align-items:center;justify-content:space-between;
+            margin-bottom:10px;text-decoration:none;cursor:pointer;">
+    <div>
+      <div style="font-weight:700;font-size:15px;color:var(--text);">{{ c.name }}</div>
+      <div style="font-size:13px;color:var(--sub);">{{ c.count }} note{{ 's' if c.count != 1 }}</div>
+    </div>
+    <div style="color:var(--sub);font-size:18px;">›</div>
+  </a>
+  {% endfor %}
+{% else %}
+  <div class="card" style="text-align:center;padding:32px;color:var(--sub);">
+    <div style="font-size:13px;">No notes yet. Create your first note above.</div>
+  </div>
+{% endif %}
+
+<script>
+document.getElementById("cat-select").addEventListener("change", function() {
+  var newInput = document.getElementById("new-cat-input");
+  newInput.style.display = this.value === "__new__" ? "block" : "none";
+  if (this.value === "__new__") newInput.focus();
+});
+
+document.getElementById("create-form").addEventListener("submit", function(e) {
+  e.preventDefault();
+  var sel = document.getElementById("cat-select");
+  var category = sel.value === "__new__"
+    ? document.getElementById("new-cat-input").value.trim()
+    : sel.value;
+  var title = document.getElementById("title-input").value.trim();
+  if (!category || !title) return;
+  fetch("/notes/create", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({category: category, title: title})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) window.location.href = "/notes/" + category + "/" + d.slug;
+    else alert(d.error || "Failed to create note");
+  });
+});
+</script>
+{% endblock %}

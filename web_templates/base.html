@@ -423,7 +423,7 @@
     <span class="brand-tag">Plain Text Operating System</span>
   </div>
   <form action="/search" method="GET" class="sidebar-search">
-    <input type="text" name="q" id="sidebar-search" placeholder="Search records… (/)">
+    <input type="text" name="q" id="sidebar-search" placeholder="Search records, journal, todos, notes… (/)">
   </form>
   <nav class="sidebar-nav">
     <a href="/"        class="{% if tab=='home'    %}active{% endif %}">{% include 'icons/home.html'    ignore missing %} Home</a>
@@ -434,6 +434,7 @@
     <a href="/browse"  class="{% if tab=='browse'  %}active{% endif %}">{% include 'icons/browse.html'  ignore missing %} Browse</a>
     <a href="/search"  class="{% if tab=='search'  %}active{% endif %}">{% include 'icons/search.html'  ignore missing %} Search</a>
     <a href="/journal" class="{% if tab=='journal' %}active{% endif %}">{% include 'icons/journal.html' ignore missing %} Journal</a>
+    <a href="/notes" class="{% if tab=='notes' %}active{% endif %}">{% include 'icons/notes.html' ignore missing %} Notes</a>
     <a href="/editor"  class="{% if tab=='editor'  %}active{% endif %}">{% include 'icons/editor.html'  ignore missing %} Log Editor</a>
     <a href="/lint"    class="{% if tab=='lint'    %}active{% endif %}">{% include 'icons/lint.html'    ignore missing %} Lint</a>
     <a href="/schema-builder" class="{% if tab=='schema_builder' %}active{% endif %}">{% include 'icons/schema_builder.html' ignore missing %} Schema Builder</a>
@@ -780,6 +781,10 @@
       {% include 'icons/journal.html' ignore missing %}
       Journal
     </a>
+    <a href="/notes" class="more-menu-item {% if tab=='notes' %}active{% endif %}">
+      {% include 'icons/notes.html' ignore missing %}
+      Notes
+    </a>
     <a href="/schema-builder" class="more-menu-item {% if tab=='schema_builder' %}active{% endif %}">
       {% include 'icons/schema_builder.html' ignore missing %}
       Schema Builder
@@ -1060,6 +1065,7 @@ function toggleMoreMenu(e) {
     "g b": "/browse",
     "g q": "/queries",
     "g j": "/journal",
+    "g n": "/notes",
     "g d": "/due",
     "g t": "/todo",
     "g e": "/editor",
@@ -1096,6 +1102,7 @@ function toggleMoreMenu(e) {
           <tr><td><kbd>G</kbd> <kbd>Q</kbd></td><td>Queries</td></tr>
           <tr><td><kbd>G</kbd> <kbd>U</kbd></td><td>Query Builder</td></tr>
           <tr><td><kbd>G</kbd> <kbd>J</kbd></td><td>Journal</td></tr>
+          <tr><td><kbd>G</kbd> <kbd>N</kbd></td><td>Notes</td></tr>
           <tr><td><kbd>G</kbd> <kbd>D</kbd></td><td>Due List</td></tr>
           <tr><td><kbd>G</kbd> <kbd>E</kbd></td><td>Log Editor</td></tr>
           <tr><td><kbd>G</kbd> <kbd>L</kbd></td><td>Lint</td></tr>
