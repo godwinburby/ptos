@@ -92,7 +92,9 @@ if (Test-Path "$scriptDir\ptos.py") {
 } else {
     $ptosDir = "$scriptDir\ptos"
     Write-Step "Cloning PTOS from GitHub"
+    $env:GIT_SSL_NO_VERIFY = "1"
     git clone https://github.com/godwinburby/ptos.git $ptosDir
+    $env:GIT_SSL_NO_VERIFY = $null
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: git clone failed."
         Read-Host "Press Enter to exit"
@@ -196,14 +198,13 @@ Write-Host "Waiting for server..." -NoNewline
 $serverReady = $false
 for ($i = 0; $i -lt 15; $i++) {
     try {
-        Invoke-WebRequest -Uri "http://localhost:5000" -TimeoutSec 1 -UseBasicParsing | Out-Null
-        $serverReady = $true
-        break
-    } catch {
-        if ($_.Exception.Response) { $serverReady = $true; break }
-        Write-Host "." -NoNewline
-        Start-Sleep -Seconds 1
-    }
+        $tcp = [System.Net.Sockets.TcpClient]::new()
+        $result = $tcp.ConnectAsync("127.0.0.1", 5000).Wait(1000)
+        if ($result) { $serverReady = $true; $tcp.Close(); break }
+        $tcp.Close()
+    } catch {}
+    Write-Host "." -NoNewline
+    Start-Sleep -Seconds 1
 }
 Write-Host ""
 
@@ -216,13 +217,12 @@ if ($serverReady) {
     Write-Host "Waiting for server to become available..."
     for ($i = 0; $i -lt 120; $i++) {
         try {
-            Invoke-WebRequest -Uri "http://localhost:5000" -TimeoutSec 1 -UseBasicParsing | Out-Null
-            Start-Process "http://localhost:5000"
-            break
-        } catch {
-            if ($_.Exception.Response) { Start-Process "http://localhost:5000"; break }
-            Start-Sleep -Seconds 1
-        }
+            $tcp = [System.Net.Sockets.TcpClient]::new()
+            $result = $tcp.ConnectAsync("127.0.0.1", 5000).Wait(1000)
+            if ($result) { $tcp.Close(); Start-Process "http://localhost:5000"; break }
+            $tcp.Close()
+        } catch {}
+        Start-Sleep -Seconds 1
     }
 }
 

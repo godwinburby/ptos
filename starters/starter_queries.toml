@@ -109,9 +109,6 @@ time  = "this-month"
 # METRICS
 # ══════════════════════════════════════════════════════════════════════════════
 
-[metrics.savings_rate]
-derived = "balance / income_this_month * 100"
-
 [metrics.food_ratio]
 ratio = ["food_this_month", "expenses_this_month"]
 
@@ -136,7 +133,6 @@ metrics = [
     "income_this_month",
     "expenses_this_month",
     "balance",
-    "savings_rate",
     "total_income",
     "total_expenses",
 ]

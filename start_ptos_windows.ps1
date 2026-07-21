@@ -3,6 +3,8 @@ Write-Host "  PTOS Web Server"
 Write-Host "=========================================="
 Write-Host ""
 
+Set-Location -Path (Split-Path -Parent $MyInvocation.MyCommand.Path)
+
 if (-not (Test-Path "ptos_web.py")) {
     Write-Host "ERROR: ptos_web.py not found."
     Write-Host "Run this script from the ptos folder."
@@ -31,7 +33,9 @@ if (-not $python) {
 # Check for updates
 if (Test-Path ".git") {
     Write-Host "Checking for updates..."
+    $env:GIT_SSL_NO_VERIFY = "1"
     git pull 2>&1 | Out-Null
+    $env:GIT_SSL_NO_VERIFY = $null
     if ($LASTEXITCODE -eq 0) { Write-Host "Updated from GitHub." }
     else { Write-Host "Could not reach GitHub - continuing with local version." }
 } else {
@@ -69,14 +73,15 @@ Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
 }
 
 # Wait for server to be ready (up to 30s)
-# Use curl -s like Linux/Android — any response means server is up
 Write-Host "Waiting for server..." -NoNewline
 $serverReady = $false
 for ($i = 0; $i -lt 30; $i++) {
-    if (curl.exe -s http://localhost:5000 2>$null) {
-        $serverReady = $true
-        break
-    }
+    try {
+        $tcp = [System.Net.Sockets.TcpClient]::new()
+        $result = $tcp.ConnectAsync("127.0.0.1", 5000).Wait(1000)
+        if ($result) { $serverReady = $true; $tcp.Close(); break }
+        $tcp.Close()
+    } catch {}
     Write-Host "." -NoNewline
     Start-Sleep -Seconds 1
 }
@@ -90,10 +95,12 @@ if ($serverReady) {
     Write-Host "still be running - check the messages above)."
     Write-Host "Waiting for server to become available..."
     for ($i = 0; $i -lt 120; $i++) {
-        if (curl.exe -s http://localhost:5000 2>$null) {
-            Start-Process "http://localhost:5000"
-            break
-        }
+        try {
+            $tcp = [System.Net.Sockets.TcpClient]::new()
+            $result = $tcp.ConnectAsync("127.0.0.1", 5000).Wait(1000)
+            if ($result) { $tcp.Close(); Start-Process "http://localhost:5000"; break }
+            $tcp.Close()
+        } catch {}
         Start-Sleep -Seconds 1
     }
 }
