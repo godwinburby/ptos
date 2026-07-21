@@ -1014,12 +1014,14 @@ def journal_get():
     date_str  = date.isoformat()
     prev_date = (date - dt.timedelta(days=1)).isoformat()
     next_date = (date + dt.timedelta(days=1)).isoformat()
-    # Build path without doing os.makedirs in the web layer
     year_dir = os.path.join(svc.JOURNAL_DIR, date_str[:4])
     path = os.path.join(year_dir, f"{date_str}.md")
-    if not os.path.exists(path) and date == today_d:
-        path = svc.get_today_journal()
-    content = open(path, encoding="utf-8").read() if os.path.exists(path) else ""
+    if os.path.exists(path):
+        content = open(path, encoding="utf-8").read()
+    elif date == today_d:
+        content = ptos.get_journal_template_content(date_str)
+    else:
+        content = ""
     return render_template("journal.html",
         tab="journal", title="Journal", now=_now_str(),
         date=date_str, today=today_d.isoformat(),

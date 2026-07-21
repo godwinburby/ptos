@@ -1,35 +1,85 @@
+---
+date: {{date}}
+mood: ""
+energy: ""
+word: ""
+---
+
 # {{date}}
 
 ## ARRIVE
 
-- **Reality check:** What is true right now that I might normally resist?
-- **Body:** How am I feeling physically?
-- **Mood:** How am I feeling emotionally?
-- **A word or verse:**
-- **Intention for today:**
-- **Prayer / gratitude:**
+### Reality
+(facts — what is actually on your plate today)
+
+### Body
+(energy, pain, rest — what needs attention)
+
+### Mood
+(name it clearly — calm, anxious, heavy, etc.)
+
+### Word
+(verse or line to anchor your mind)
+
+### Intention
+(one outcome that makes today meaningful)
+
+### Prayer
+(simple, honest — ask for help to see, love, act)
+
+---
 
 ## ENGAGE
 
-- **Top 3 tasks:**
-  1.
-  2.
-  3.
-- **Home:**
-- **One person to love well:**
-- **Habits:**
+### Top 3
+(must move forward today — define clearly)
+- [ ]
+- [ ]
+- [ ]
 
-### Drift checks
+### Work Drivers
+(pipeline — protect future income)
+- Follow-up —
+- MGM (referral) —
+- Outreach —
 
-| Time | Where am I? | Am I present? |
-|------|-------------|---------------|
-| 11am |             |               |
-| 2pm  |             |               |
-| 5pm  |             |               |
+### Growth
+(future — don't skip)
+- [ ]
+
+### Home / Personal
+(life beyond clinic matters)
+- [ ]
+
+### One person to love well
+(be intentional, not reactive)
+
+### Habits
+(keep the base strong)
+- [ ] Prayer
+- [ ] Move
+- [ ] Connect
+- [ ] Learn
+
+### Drift Checks
+(pause — realign, don't drift unconsciously)
+11:
+2:
+5:
+
+---
 
 ## RELEASE
+(end of day — truth, not story)
 
-- **Wins:**
-- **Where I drifted:**
-- **Gratitude:**
-- **One thing to carry forward:**
+### Wins
+(what actually moved — even small)
+
+### Drifted
+(where did I avoid / distract / delay?)
+
+### Gratitude
+(what is already good — name it)
+
+### Tomorrow
+(one clear carry-forward)

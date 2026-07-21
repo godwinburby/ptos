@@ -3903,7 +3903,7 @@ def get_note_template(category, context=None):
                 content = f.read()
             break
     else:
-        content = _load_starter("note")
+        content = _load_starter(category) or _load_starter("note")
     for key, val in context.items():
         content = content.replace(f"{{{{{key}}}}}", str(val))
     return content
@@ -3921,6 +3921,11 @@ def get_today_journal():
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
     return path
+
+
+def get_journal_template_content(date_str):
+    """Return template content for a journal date without writing to disk."""
+    return get_note_template("daily", {"date": date_str})
 
 # --------------------------------------------------
 # Notes
@@ -4066,7 +4071,8 @@ def _load_starter(name):
     """Load starter content from starters/ folder.
     Falls back to a minimal stub if the file is missing."""
     base = STARTER_DIR
-    fname = f"starter_{name}.toml" if name not in ("journal", "note") else f"starter_{name}.md"
+    md_names = {"journal", "note", "book", "audiobook", "youtube"}
+    fname = f"starter_{name}.md" if name in md_names else f"starter_{name}.toml"
     path = os.path.join(base, fname)
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
@@ -4076,8 +4082,11 @@ def _load_starter(name):
         "schema":  "[types]\nallowed = []\n",
         "queries": "# no starter queries\n",
         "presets": "# no starter presets\n",
-        "journal": "# {{date}}\n\n## Today\n\n## End of Day\n",
-        "note":    "# {{title}}\n\n_Created: {{date}}_\n\n",
+        "journal": "---\ndate: {{date}}\nmood: \"\"\nenergy: \"\"\nword: \"\"\n---\n\n# {{date}}\n\n## ARRIVE\n\n### Reality\n\n### Body\n\n### Mood\n\n### Word\n\n### Intention\n\n### Prayer\n\n---\n\n## ENGAGE\n\n### Top 3\n- [ ]\n- [ ]\n- [ ]\n\n### Habits\n- [ ] Prayer\n- [ ] Move\n- [ ] Connect\n- [ ] Learn\n\n---\n\n## RELEASE\n\n### Wins\n\n### Drifted\n\n### Gratitude\n\n### Tomorrow\n",
+        "note":    "---\ntitle: {{title}}\ndate: {{date}}\n---\n\n# {{title}}\n\n_Created: {{date}}_\n",
+        "book":    "---\ntitle: {{title}}\ndate: {{date}}\nauthor: \"\"\nrating: \"\"\ntags: \"\"\n---\n\n# {{title}}\n\n## Key Takeaways\n\n-\n\n## Favorite Quotes\n\n>\n\n## Would Recommend?\n\n## What I'll Apply\n",
+        "audiobook": "---\ntitle: {{title}}\ndate: {{date}}\nauthor: \"\"\nnarrator: \"\"\nrating: \"\"\nduration: \"\"\nspeed: \"1x\"\ntags: \"\"\n---\n\n# {{title}}\n\n## Key Takeaways\n\n-\n\n## Favorite Quotes\n\n>\n\n## Would Recommend?\n\n## What I'll Apply\n",
+        "youtube": "---\ntitle: {{title}}\ndate: {{date}}\nchannel: \"\"\nurl: \"\"\nduration: \"\"\ntags: \"\"\n---\n\n# {{title}}\n\n## Key Takeaways\n\n-\n\n## Key Timestamps\n\n- 00:00 —\n\n## Would Rewatch?\n",
     }
     return stubs.get(name, "")
 
@@ -4114,6 +4123,12 @@ def init_ptos():
         _load_starter("note"),
         "templates/note.md"
     )
+    for cat in ["book", "audiobook", "youtube"]:
+        _write_if_missing(
+            os.path.join(TEMPLATE_DIR, f"{cat}.md"),
+            _load_starter(cat),
+            f"templates/{cat}.md"
+        )
 
     year_log = os.path.join(RECORDS_DIR, f"{today().year}.log")
     if not os.path.exists(year_log):

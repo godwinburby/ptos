@@ -165,6 +165,32 @@ class TestGetNoteTemplate:
         content = ptos.get_note_template("nonexistent", {"title": "Test"})
         assert content == "# Generic: Test\n"
 
+    def test_falls_back_to_starter_category(self):
+        os.makedirs(os.path.join(ptos.TEMPLATE_DIR), exist_ok=True)
+        note_path = os.path.join(ptos.TEMPLATE_DIR, "note.md")
+        if os.path.exists(note_path):
+            os.remove(note_path)
+        content = ptos.get_note_template("book", {"title": "My Book"})
+        assert "My Book" in content
+
+    def test_falls_back_to_starter_note(self):
+        os.makedirs(os.path.join(ptos.TEMPLATE_DIR), exist_ok=True)
+        for f in ["note.md", "book.md"]:
+            p = os.path.join(ptos.TEMPLATE_DIR, f)
+            if os.path.exists(p):
+                os.remove(p)
+        content = ptos.get_note_template("unknown", {"title": "X"})
+        assert "X" in content
+
+
+class TestGetJournalTemplateContent:
+    def test_returns_template_without_writing(self):
+        content = ptos.get_journal_template_content("2026-07-21")
+        assert "2026-07-21" in content
+        year_dir = os.path.join(ptos.JOURNAL_DIR, "2026")
+        path = os.path.join(year_dir, "2026-07-21.md")
+        assert not os.path.exists(path)
+
 
 class TestSlugify:
     def test_basic(self):
