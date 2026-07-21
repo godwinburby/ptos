@@ -58,7 +58,8 @@ BACKUP_DIR   = os.environ.get("PTOS_BACKUP_DIR", _default_backup_dir)
 TODO_DIR     = os.path.join(BASE_DIR, "todo")
 TODO_PATH    = os.path.join(TODO_DIR, "todo.txt")
 DONE_PATH    = os.path.join(TODO_DIR, "done.txt")
-BACKUP_FOLDERS = ["records", "config", "templates", "journal", "todo"]
+NOTES_DIR    = os.path.join(BASE_DIR, "notes")
+BACKUP_FOLDERS = ["records", "config", "templates", "journal", "todo", "notes"]
 MAX_BACKUPS = 10  # Keep last 10 backups
 
 VERSION_FILE = os.path.join(SCRIPT_DIR, ".version")
@@ -3882,6 +3883,32 @@ def quick_add(args):
 # Journal
 # --------------------------------------------------
 
+def slugify(text):
+    """Convert text to a filename-safe slug. 'Hello World!' -> 'hello-world'"""
+    text = text.lower().strip()
+    text = re.sub(r'[^\w\s-]', '', text)
+    text = re.sub(r'[-\s]+', '-', text)
+    return text.strip('-') or "untitled"
+
+
+def get_note_template(category, context=None):
+    """Return template content for a note category, with placeholders
+    substituted. Falls back to a minimal default if no template exists
+    for this category."""
+    context = context or {}
+    for name in [category, "note"]:
+        template_path = os.path.join(TEMPLATE_DIR, f"{name}.md")
+        if os.path.exists(template_path):
+            with open(template_path, "r", encoding="utf-8") as f:
+                content = f.read()
+            break
+    else:
+        content = _load_starter("note")
+    for key, val in context.items():
+        content = content.replace(f"{{{{{key}}}}}", str(val))
+    return content
+
+
 def get_today_journal():
     """Return the path to today's journal file, creating it from
     template if it doesn't exist. Creates year subdirectory as needed."""
@@ -3890,17 +3917,106 @@ def get_today_journal():
     os.makedirs(year_dir, exist_ok=True)
     path = os.path.join(year_dir, f"{today_str}.md")
     if not os.path.exists(path):
-        template_path = os.path.join(TEMPLATE_DIR, "daily.md")
-        if os.path.exists(template_path):
-            with open(template_path, "r", encoding="utf-8") as f:
-                content = f.read().replace("{{date}}", today_str)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
-        else:
-            content = _load_starter("journal").replace("{{date}}", today_str)
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(content)
+        content = get_note_template("daily", {"date": today_str})
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(content)
     return path
+
+# --------------------------------------------------
+# Notes
+# --------------------------------------------------
+
+def _ensure_notes_dir():
+    os.makedirs(NOTES_DIR, exist_ok=True)
+
+
+def list_note_categories():
+    """Return sorted list of note category names."""
+    _ensure_notes_dir()
+    return sorted(
+        d for d in os.listdir(NOTES_DIR)
+        if os.path.isdir(os.path.join(NOTES_DIR, d))
+    )
+
+
+def list_notes(category):
+    """Return list of dicts for notes in a category, newest first."""
+    cat_dir = os.path.join(NOTES_DIR, category)
+    if not os.path.isdir(cat_dir):
+        return []
+    notes = []
+    for fname in sorted(os.listdir(cat_dir), reverse=True):
+        if not fname.endswith(".md"):
+            continue
+        path = os.path.join(cat_dir, fname)
+        slug = fname[:-3]
+        date_part = slug[:10] if len(slug) >= 10 and slug[4] == "-" else ""
+        title = slug[11:].replace("-", " ").title() if date_part else slug.replace("-", " ").title()
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                first_line = f.readline().strip()
+            if first_line.startswith("# "):
+                title = first_line[2:]
+        except Exception:
+            pass
+        notes.append({"slug": slug, "title": title, "date": date_part, "file": fname})
+    return notes
+
+
+def get_note_path(category, slug):
+    """Return full path for a note."""
+    return os.path.join(NOTES_DIR, category, f"{slug}.md")
+
+
+def read_note(category, slug):
+    """Read note content. Returns None if not found."""
+    path = get_note_path(category, slug)
+    if not os.path.isfile(path):
+        return None
+    with open(path, "r", encoding="utf-8") as f:
+        return f.read()
+
+
+def create_note(category, title, content=None):
+    """Create a new note. Returns {category, slug, path}.
+    Auto-creates category folder. Handles slug collisions."""
+    _ensure_notes_dir()
+    cat_dir = os.path.join(NOTES_DIR, category)
+    os.makedirs(cat_dir, exist_ok=True)
+
+    today_str = today().isoformat()
+    base_slug = f"{today_str}-{slugify(title)}"
+    slug = base_slug
+
+    counter = 2
+    while os.path.exists(get_note_path(category, slug)):
+        slug = f"{base_slug}-{counter}"
+        counter += 1
+
+    if content is None:
+        content = get_note_template(category, {"title": title, "date": today_str})
+
+    path = get_note_path(category, slug)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+    return {"category": category, "slug": slug, "path": path}
+
+
+def save_note(category, slug, content):
+    """Save content to an existing note."""
+    path = get_note_path(category, slug)
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def delete_note(category, slug):
+    """Delete a note. Raises FileNotFoundError if not found."""
+    path = get_note_path(category, slug)
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"Note not found: {category}/{slug}")
+    os.remove(path)
 
 # --------------------------------------------------
 # Editor
@@ -3950,7 +4066,7 @@ def _load_starter(name):
     """Load starter content from starters/ folder.
     Falls back to a minimal stub if the file is missing."""
     base = STARTER_DIR
-    fname = f"starter_{name}.toml" if name != "journal" else "starter_journal.md"
+    fname = f"starter_{name}.toml" if name not in ("journal", "note") else f"starter_{name}.md"
     path = os.path.join(base, fname)
     if os.path.exists(path):
         with open(path, encoding="utf-8") as f:
@@ -3961,6 +4077,7 @@ def _load_starter(name):
         "queries": "# no starter queries\n",
         "presets": "# no starter presets\n",
         "journal": "# {{date}}\n\n## Today\n\n## End of Day\n",
+        "note":    "# {{title}}\n\n_Created: {{date}}_\n\n",
     }
     return stubs.get(name, "")
 
@@ -3991,6 +4108,11 @@ def init_ptos():
         os.path.join(TEMPLATE_DIR, "daily.md"),
         _load_starter("journal"),
         "templates/daily.md"
+    )
+    _write_if_missing(
+        os.path.join(TEMPLATE_DIR, "note.md"),
+        _load_starter("note"),
+        "templates/note.md"
     )
 
     year_log = os.path.join(RECORDS_DIR, f"{today().year}.log")

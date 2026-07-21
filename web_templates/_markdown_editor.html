@@ -1,0 +1,172 @@
+{# _markdown_editor.html — Shared markdown editor partial
+   Parameters:
+     editor_id   — DOM id for textarea (default: "md-editor")
+     content     — initial textarea content
+     placeholder — textarea placeholder (default: "Start writing…")
+     height      — textarea min-height (default: "65vh")
+
+   Parent template must define: window._mdSaveFn(silent) — called on save/autosave.
+#}
+
+{% set _eid = editor_id | default("md-editor") %}
+{% set _ph  = placeholder | default("Start writing\u2026") %}
+{% set _h   = height | default("65vh") %}
+
+<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+  <button id="btn-edit"    onclick="setMode('edit')"    class="btn btn-sm btn-primary">✎ Edit</button>
+  <button id="btn-preview" onclick="setMode('preview')" class="btn btn-sm btn-ghost">👁 Preview</button>
+  <button id="btn-split"   onclick="setMode('split')"   class="btn btn-sm btn-ghost"
+          style="display:none;">⬛ Split</button>
+</div>
+
+<div id="editor-wrap" style="display:flex;gap:12px;">
+  <div id="editor-pane" style="flex:1;min-width:0;">
+    <textarea id="{{ _eid }}"
+      style="width:100%;min-height:{{ _h }};padding:16px;
+             font-family:'Consolas','Courier New',monospace;
+             font-size:16px;line-height:1.85;
+             background:var(--card);color:var(--text);
+             border:1.5px solid var(--border);border-radius:10px;
+             resize:vertical;outline:none;"
+      placeholder="{{ _ph }}"
+      oninput="onEditorInput()">{{ content }}</textarea>
+  </div>
+  <div id="preview-pane"
+       style="display:none;flex:1;min-width:0;padding:18px;
+              background:var(--card);border:1px solid var(--border);
+              border-radius:10px;min-height:{{ _h }};overflow-y:auto;
+              font-size:16px;line-height:1.85;">
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+
+<style>
+  #preview-pane h1,#preview-pane h2,#preview-pane h3,#preview-pane h4 {
+    font-weight:800;margin:18px 0 8px;color:var(--text);line-height:1.3;
+  }
+  #preview-pane h1 { font-size:22px;border-bottom:2px solid var(--border);padding-bottom:6px; }
+  #preview-pane h2 { font-size:18px;color:var(--accent); }
+  #preview-pane h3 { font-size:16px; }
+  #preview-pane h4 { font-size:15px;color:var(--sub); }
+  #preview-pane p  { margin:8px 0; }
+  #preview-pane ul,#preview-pane ol { margin:8px 0 8px 22px; }
+  #preview-pane li { margin:4px 0; }
+  #preview-pane li input[type=checkbox] {
+    margin-right:7px;accent-color:var(--accent);
+    width:16px;height:16px;vertical-align:middle;
+  }
+  #preview-pane code {
+    font-family:'Consolas','Courier New',monospace;font-size:14px;
+    background:var(--bg);padding:2px 6px;border-radius:4px;color:var(--accent);
+  }
+  #preview-pane pre {
+    background:var(--bg);padding:14px;border-radius:8px;overflow-x:auto;margin:12px 0;
+  }
+  #preview-pane pre code { background:none;padding:0;color:var(--text);font-size:14px; }
+  #preview-pane blockquote {
+    border-left:3px solid var(--accent);padding:8px 16px;margin:12px 0;
+    color:var(--sub);font-style:italic;background:var(--accent-lt);
+    border-radius:0 8px 8px 0;
+  }
+  #preview-pane hr  { border:none;border-top:2px solid var(--border);margin:18px 0; }
+  #preview-pane strong { font-weight:700; }
+  #preview-pane em     { font-style:italic;color:var(--sub); }
+  #preview-pane a      { color:var(--accent);text-decoration:none; }
+  #preview-pane table  { width:100%;border-collapse:collapse;font-size:14px;margin:12px 0; }
+  #preview-pane th,#preview-pane td {
+    padding:8px 10px;border:1px solid var(--border);text-align:left;
+  }
+  #preview-pane th { background:var(--bg);font-weight:700; }
+  @media (min-width:768px) { #btn-split { display:inline-flex !important; } }
+  @media (max-width:767px) {
+    #editor-wrap.stacked { flex-direction:column; }
+    #editor-wrap.stacked #editor-pane,
+    #editor-wrap.stacked #preview-pane { display:block;width:100%; }
+  }
+</style>
+
+<script>
+(function() {
+  if (typeof marked !== "undefined") {
+    marked.setOptions({ gfm:true, breaks:true });
+    var _r = new marked.Renderer();
+    var _origLI = _r.listitem.bind(_r);
+    _r.listitem = function(text, task, checked) {
+      if (task)
+        return '<li style="list-style:none;margin-left:-22px;"><input type="checkbox" ' +
+               (checked?"checked":"") + ' disabled> ' + text + '</li>';
+      return _origLI(text, task, checked);
+    };
+    marked.use({ renderer: _r });
+  }
+
+  var _eid = "{{ _eid }}";
+  var _mode = window.innerWidth < 768 ? "stacked" : "edit";
+  var _saveTimer = null, _dirty = false;
+
+  window.renderPreview = function() {
+    var src = document.getElementById(_eid).value;
+    var pane = document.getElementById("preview-pane");
+    pane.innerHTML = typeof marked !== "undefined"
+      ? marked.parse(src)
+      : "<pre style='white-space:pre-wrap'>" +
+          src.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>";
+  };
+
+  window.setMode = function(m) {
+    _mode = m;
+    ["edit","preview","split"].forEach(function(id) {
+      var btn = document.getElementById("btn-"+id);
+      if (btn) btn.className = "btn btn-sm " + (m===id ? "btn-primary" : "btn-ghost");
+    });
+    var wrap = document.getElementById("editor-wrap");
+    var ep = document.getElementById("editor-pane");
+    var pp = document.getElementById("preview-pane");
+    if (m === "stacked") {
+      wrap.className = "stacked";
+      renderPreview();
+      ep.style.display="block"; pp.style.display="block";
+    } else if (m === "edit") {
+      wrap.className = "";
+      ep.style.display="block"; pp.style.display="none";
+    } else if (m === "preview") {
+      wrap.className = "";
+      renderPreview();
+      ep.style.display="none"; pp.style.display="block";
+    } else {
+      wrap.className = "";
+      renderPreview();
+      ep.style.display="block"; pp.style.display="block";
+    }
+  };
+
+  function _doSave(silent) {
+    clearTimeout(_saveTimer); _dirty = false;
+    if (window._mdSaveFn) window._mdSaveFn(silent);
+  }
+
+  window.onEditorInput = function() {
+    _dirty = true;
+    if (_mode !== "edit") renderPreview();
+    clearTimeout(_saveTimer);
+    _saveTimer = setTimeout(function() { _doSave(true); }, 2500);
+  };
+
+  window._mdEditorGetDirty = function() { return _dirty; };
+  window._mdEditorClearDirty = function() { _dirty = false; };
+  window._mdEditorTriggerSave = function(silent) { _doSave(silent); };
+
+  setMode(_mode);
+
+  document.addEventListener("keydown", function(e) {
+    if ((e.ctrlKey||e.metaKey) && e.key==="s") {
+      e.preventDefault();
+      _doSave(false);
+    }
+  });
+  window.addEventListener("beforeunload", function(e) {
+    if (_dirty) { e.preventDefault(); e.returnValue=""; }
+  });
+})();
+</script>

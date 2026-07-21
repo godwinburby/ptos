@@ -12,7 +12,7 @@
 </div>
 
 {% if query %}
-  {% set total = records|length + journal|length + todo|length %}
+  {% set total = records|length + journal|length + todo|length + notes|length %}
   {% if total == 0 %}
     <div class="card" style="text-align:center;padding:32px;color:var(--sub);">
       <div style="font-size:13px;">No matches found for "<strong>{{ query }}</strong>"</div>
@@ -50,6 +50,18 @@
     <div style="margin-bottom:6px;">
       <a href="/todo?search={{ query }}" style="font-size:13px;color:var(--accent);">{{ t.file }}:{{ t.line }}</a>
       <div style="font-size:13px;color:var(--text);font-family:monospace;white-space:pre-wrap;word-break:break-all;margin-top:2px;">{{ t.text }}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if notes %}
+  <div class="card" style="margin-bottom:12px;">
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Notes <span style="font-weight:400;color:var(--sub);font-size:13px;">({{ notes|length }} match{{ 'es' if notes|length != 1 }})</span></div>
+    {% for n in notes %}
+    <div style="margin-bottom:8px;">
+      <a href="/notes/{{ n.category }}/{{ n.slug }}" style="font-size:13px;color:var(--accent);font-weight:600;">{{ n.category }}/{{ n.title }}</a>
+      <div style="font-size:13px;color:var(--sub);margin-top:2px;">{{ n.snippet }}</div>
     </div>
     {% endfor %}
   </div>

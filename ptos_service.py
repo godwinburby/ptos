@@ -2200,6 +2200,30 @@ def save_journal(date_str, content):
     write_file(os.path.join(year_dir, f"{date_str}.md"), content)
 
 
+def list_note_categories():
+    return ptos.list_note_categories()
+
+
+def list_notes(category):
+    return ptos.list_notes(category)
+
+
+def read_note(category, slug):
+    return ptos.read_note(category, slug)
+
+
+def create_note(category, title, content=None):
+    return ptos.create_note(category, title, content)
+
+
+def save_note(category, slug, content):
+    return ptos.save_note(category, slug, content)
+
+
+def delete_note(category, slug):
+    return ptos.delete_note(category, slug)
+
+
 def save_as_preset(name, record, note=None):
     """Save a record as a preset."""
     try:

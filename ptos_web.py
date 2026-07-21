@@ -1040,6 +1040,71 @@ def journal_save():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/notes")
+def notes_list():
+    categories = svc.list_note_categories()
+    cats = []
+    for c in categories:
+        notes = svc.list_notes(c)
+        cats.append({"name": c, "count": len(notes)})
+    return render_template("notes_list.html", categories=cats)
+
+
+@app.route("/notes/<category>")
+def notes_category(category):
+    notes = svc.list_notes(category)
+    return render_template("notes_category.html", category=category, notes=notes)
+
+
+@app.route("/notes/<category>/<slug>")
+def notes_view(category, slug):
+    content = svc.read_note(category, slug)
+    if content is None:
+        return "Note not found", 404
+    return render_template("notes.html", category=category, slug=slug, content=content)
+
+
+@app.route("/notes/save", methods=["POST"])
+def notes_save():
+    data = request.get_json(silent=True) or {}
+    category = data.get("category", "")
+    slug = data.get("slug", "")
+    content = data.get("content", "")
+    try:
+        svc.save_note(category, slug, content)
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/notes/create", methods=["POST"])
+def notes_create():
+    data = request.get_json(silent=True) or {}
+    category = data.get("category", "").strip()
+    title = data.get("title", "").strip()
+    if not category or not title:
+        return jsonify(ok=False, error="Category and title are required")
+    try:
+        result = svc.create_note(category, title)
+        return jsonify(ok=True, slug=result["slug"])
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/notes/delete", methods=["POST"])
+def notes_delete():
+    data = request.get_json(silent=True) or {}
+    category = data.get("category", "")
+    slug = data.get("slug", "")
+    try:
+        svc.delete_note(category, slug)
+        return jsonify(ok=True)
+    except FileNotFoundError:
+        return jsonify(ok=False, error="Note not found")
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
 def _extract_snippet(text, query, context_chars=80):
     if '*' in query or '?' in query:
         regex = fnmatch.translate(query.lower()).replace(r'\Z', '')
@@ -1124,9 +1189,16 @@ def search_page():
                         todo.append({"file": base, "line": i, "text": line.rstrip()})
         except Exception:
             pass
+    notes = []
+    for cat in svc.list_note_categories():
+        for note in svc.list_notes(cat):
+            content = svc.read_note(cat, note["slug"])
+            if content and _glob_match(q, content):
+                snippet = _extract_snippet(content, q)
+                notes.append({"category": cat, "slug": note["slug"], "title": note["title"], "snippet": snippet})
     return render_template("search.html",
         tab="search", title="Search", now=_now_str(), query=q,
-        records=records, journal=journal, todo=todo)
+        records=records, journal=journal, todo=todo, notes=notes)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
