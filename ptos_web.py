@@ -1014,14 +1014,11 @@ def journal_get():
     date_str  = date.isoformat()
     prev_date = (date - dt.timedelta(days=1)).isoformat()
     next_date = (date + dt.timedelta(days=1)).isoformat()
-    year_dir = os.path.join(svc.JOURNAL_DIR, date_str[:4])
-    path = os.path.join(year_dir, f"{date_str}.md")
+    path = ptos._journal_path(date_str)
     if os.path.exists(path):
         content = open(path, encoding="utf-8").read()
-    elif date == today_d:
-        content = ptos.get_journal_template_content(date_str)
     else:
-        content = ""
+        content = ptos.get_journal_template_content(date_str)
     return render_template("journal.html",
         tab="journal", title="Journal", now=_now_str(),
         date=date_str, today=today_d.isoformat(),
@@ -1038,6 +1035,18 @@ def journal_save():
         return jsonify(ok=True)
     except svc.PTOSError as e:
         return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+@app.route("/journal/delete", methods=["POST"])
+def journal_delete():
+    data = request.get_json(silent=True) or {}
+    date = data.get("date", "")
+    try:
+        svc.delete_journal(date)
+        return jsonify(ok=True)
+    except FileNotFoundError:
+        return jsonify(ok=False, error="Journal not found")
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 

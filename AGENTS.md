@@ -23,7 +23,7 @@ Data lives in a separate `ptos-data/` directory (sibling to repo):
 ptos-data/
 config/          → User config (created by --init, gitignored)
 records/         → Log files (YYYY.log)
-journal/         → Markdown journal entries
+journal/         → Markdown journal entries (YYYY/MM/YYYY-MM-DD.md)
 todo/            → Todo files (todo.txt, done.txt, done.YYYY.txt)
 notes/           → Markdown notes organized by category (notes/{category}/{slug}.md)
 
@@ -231,6 +231,8 @@ x 2026-07-12 2026-07-10 Completed task
 
 ### Start scripts
 All three scripts follow the same pattern: start server in background → health check loop with animated dots (wait up to 15s for port 5000) → conditional browser open → wait for server to exit. `SERVER_READY` flag tracks whether the health check succeeded; browser only opens on confirmed readiness, otherwise prints "Server is taking longer than usual" and keeps polling (up to 2 min) — browser opens automatically once the server becomes available. Linux/Android use `curl -s` (no `-f` flag — works through auth 401); Windows uses `curl.exe -s` (PowerShell's `curl` is an alias for `Invoke-WebRequest`, not the real curl binary). The health check just verifies the server is responding (any HTTP status). Windows uses `.bat`-stub-plus-`.ps1` pattern (same as `setup_ptos_windows.bat`): the `.bat` is a 3-line launcher, `start_ptos_windows.ps1` has full logic with `Start-Process -PassThru` + `Register-EngineEvent PowerShell.Exiting` to kill Flask on exit + `try/finally { Wait-Process; Stop-Process }` as fallback. Ctrl+C via `.bat` shows "Terminate batch job (Y/N)?" (cmd.exe limitation); running `.ps1` directly avoids this. Android widget symlinks to repo's start script (not a stale `$HOME/` copy).
+
+All three setup scripts create a `Start_PTOS` shortcut in the parent directory (where `ptos-data` lives): Linux/Android use a symlink to the platform start script; Windows creates a `.bat` wrapper (symlinks need admin). This gives users a single entry point regardless of platform.
 
 ## Commits
 

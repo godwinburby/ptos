@@ -113,6 +113,19 @@ for script in start_ptos_linux.sh; do
     [ -f "$PTOS_DIR/$script" ] && chmod +x "$PTOS_DIR/$script" && echo "Marked executable: $script"
 done
 
+# ── Create Start_PTOS shortcut in parent directory ──────────────────────────
+PARENT_DIR="$(dirname "$PTOS_DIR")"
+SHORTCUT="$PARENT_DIR/Start_PTOS"
+if [ ! -L "$SHORTCUT" ] && [ ! -f "$SHORTCUT" ]; then
+    ln -s "$PTOS_DIR/start_ptos_linux.sh" "$SHORTCUT"
+    chmod +x "$SHORTCUT"
+    echo "Created shortcut: $SHORTCUT -> start_ptos_linux.sh"
+elif [ -L "$SHORTCUT" ]; then
+    echo "Shortcut already exists: $SHORTCUT"
+else
+    echo "Shortcut already exists: $SHORTCUT"
+fi
+
 # ── Kill anything on port 5000 ────────────────────────────────────────────────
 echo ""
 echo "Checking port 5000..."

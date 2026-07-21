@@ -33,9 +33,12 @@
 
 {% include "_markdown_editor.html" with context %}
 
-<div style="margin-top:10px;">
-  <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success btn-full" id="save-btn-2">
+<div style="margin-top:10px;display:flex;gap:8px;">
+  <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success" style="flex:1;" id="save-btn-2">
     Save Journal
+  </button>
+  <button onclick="deleteJournal()" class="btn btn-ghost" style="color:var(--danger,#e55);border:1px solid var(--danger,#e55);">
+    Delete
   </button>
 </div>
 
@@ -61,5 +64,18 @@ window._mdSaveFn = function(silent) {
     if (!silent && btn) { btn.disabled=false; btn.textContent="Save Journal"; }
   });
 };
+function deleteJournal() {
+  if (!confirm("Delete this journal entry?")) return;
+  fetch("/journal/delete", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({date:"{{ date }}"})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d){
+    if (d.ok) window.location.href = "/journal?date={{ today }}";
+    else alert(d.error || "Delete failed");
+  })
+  .catch(function(){ alert("Delete failed"); });
+}
 </script>
 {% endblock %}

@@ -136,6 +136,19 @@ rm -f "$HOME/.shortcuts"/*.sh
 ln -s "$PTOS_DIR/start_ptos_android.sh" "$HOME/.shortcuts/Start_PTOS.sh" 2>/dev/null || true
 echo "Shortcuts created."
 
+# ── Create Start_PTOS shortcut in parent directory ──────────────────────────
+PARENT_DIR="$(dirname "$PTOS_DIR")"
+SHORTCUT="$PARENT_DIR/Start_PTOS"
+if [ ! -L "$SHORTCUT" ] && [ ! -f "$SHORTCUT" ]; then
+    ln -s "$PTOS_DIR/start_ptos_android.sh" "$SHORTCUT"
+    chmod +x "$SHORTCUT"
+    echo "Created shortcut: $SHORTCUT -> start_ptos_android.sh"
+elif [ -L "$SHORTCUT" ]; then
+    echo "Shortcut already exists: $SHORTCUT"
+else
+    echo "Shortcut already exists: $SHORTCUT"
+fi
+
 echo ""
 echo "Starting PTOS..."
 echo "Open in browser: http://localhost:5000"
