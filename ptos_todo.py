@@ -653,17 +653,27 @@ def edit_todo(todo_path, line_no, updates):
 
 def filter_todos(todos, project=None, context=None, priority=None,
                  due_before=None, threshold_before=None, include_done=False):
-    """Filter a list of Todo objects by various criteria."""
+    """Filter a list of Todo objects by various criteria.
+
+    project, context, priority can be a single value or a list.
+    Matching is OR within a group, AND across groups.
+    """
     result = []
     for t in todos:
         if not include_done and t.done:
             continue
-        if project and project not in t.projects:
-            continue
-        if context and context not in t.contexts:
-            continue
-        if priority and t.priority != priority:
-            continue
+        if project:
+            proj_list = project if isinstance(project, list) else [project]
+            if not any(p in t.projects for p in proj_list):
+                continue
+        if context:
+            ctx_list = context if isinstance(context, list) else [context]
+            if not any(c in t.contexts for c in ctx_list):
+                continue
+        if priority:
+            pri_list = priority if isinstance(priority, list) else [priority]
+            if t.priority not in pri_list:
+                continue
         if due_before and (t.due is None or t.due > due_before):
             continue
         if threshold_before and (t.threshold is not None and t.threshold > threshold_before):
