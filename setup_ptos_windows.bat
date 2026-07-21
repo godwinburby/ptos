@@ -5,7 +5,7 @@ set PS1_URL=https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_w
 
 if not exist "%PS1_PATH%" (
     echo Downloading setup script...
-    powershell -NoProfile -Command "[Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12; (New-Object Net.WebClient).DownloadFile('%PS1_URL%','%PS1_PATH%')"
+    curl.exe -sL --ssl-no-revoke -o "%PS1_PATH%" "%PS1_URL%"
     if errorlevel 1 (
         echo ERROR: Could not download setup script. Check your internet connection.
         pause
