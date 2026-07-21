@@ -187,9 +187,11 @@ x 2026-07-12 2026-07-10 Completed task
 - `get_note_template(category, context)` checks in order:
   1. `templates/{category}.md` — category-specific template (user-editable)
   2. `templates/note.md` — generic note default (created by `--init` from `starters/starter_note.md`)
-  3. `starters/starter_note.md` — ships with PTOS
-  4. Hardcoded stub: `# {{title}}\n\n_Created: {{date}}_\n`
+  3. `_load_starter(category)` — ships with PTOS (e.g. `starters/starter_book.md`)
+  4. `_load_starter("note")` — ships with PTOS (final fallback)
+  5. Hardcoded stub: `# {{title}}\n\n_Created: {{date}}_\n`
 - Placeholders: `{{title}}`, `{{date}}` — substituted at creation time
+- Metadata: Key-value lines at top of template (e.g. `Author:`, `Rating:`, `Tags:`) are plain markdown, parseable for future search
 
 ### Key functions (in `ptos.py`)
 - `list_note_categories()` — sorted list of category folder names
