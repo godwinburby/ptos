@@ -2,14 +2,15 @@
 tests/test_todo.py  —  Tests for ptos_todo.py (todo.txt module)
 """
 
-import os, datetime as dt, pytest
+import os, datetime as dt, pytest, argparse
+import ptos
 import ptos_todo
 from ptos_todo import (
     Todo, parse_todo_line, safe_parse_todo_line, format_line,
     load_todos, save_todos, add_todo, complete_todo, delete_todo, edit_todo,
     filter_todos, get_projects, get_contexts, bucket_todos,
     resolve_todo_date, preprocess_todo_text, get_due_todos,
-    archive_done_todos,
+    archive_done_todos, undo_todo,
     TodoParseError,
 )
 
@@ -979,3 +980,255 @@ class TestRecurrence:
             complete_todo(t, completion_date=dt.date(2026, 1, 31), todo_path=todo_path, done_path=done_path)
             remaining, _ = load_todos(todo_path)
             assert remaining[0].due == dt.date(2026, 2, 28)
+
+
+# ── filter_todos with lists ──────────────────────────────────────────────────
+
+class TestFilterTodosLists:
+    def test_filter_by_project_list(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_todo(os.path.join(tmpdir, "todo.txt"), [
+                "(A) Task one +Home @errand",
+                "(B) Task two +Work @office",
+                "(C) Task three +Home @home",
+            ])
+            todos, _ = load_todos(path)
+            result = filter_todos(todos, project=["+Home", "+Work"])
+            assert len(result) == 3
+
+    def test_filter_by_project_list_or_logic(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_todo(os.path.join(tmpdir, "todo.txt"), [
+                "(A) Task one +Home @errand",
+                "(B) Task two +Work @office",
+                "(C) Task three +Learning @home",
+            ])
+            todos, _ = load_todos(path)
+            result = filter_todos(todos, project=["+Home", "+Work"])
+            assert len(result) == 2
+
+    def test_filter_by_context_list(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_todo(os.path.join(tmpdir, "todo.txt"), [
+                "(A) Task one +Home @errand",
+                "(B) Task two +Work @office",
+                "(C) Task three +Home @errand",
+            ])
+            todos, _ = load_todos(path)
+            result = filter_todos(todos, context=["@errand", "@office"])
+            assert len(result) == 3
+
+    def test_filter_by_priority_list(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_todo(os.path.join(tmpdir, "todo.txt"), [
+                "(A) Task one +Home @errand",
+                "(B) Task two +Work @office",
+                "(C) Task three +Home @home",
+            ])
+            todos, _ = load_todos(path)
+            result = filter_todos(todos, priority=["A", "B"])
+            assert len(result) == 2
+
+    def test_filter_across_groups_and_logic(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_todo(os.path.join(tmpdir, "todo.txt"), [
+                "(A) Task one +Home @errand",
+                "(B) Task two +Work @office",
+                "(C) Task three +Home @office",
+            ])
+            todos, _ = load_todos(path)
+            result = filter_todos(todos, project=["+Home"], context=["@office"])
+            assert len(result) == 1
+            assert result[0].description == "Task three"
+
+
+# ── undo todo ────────────────────────────────────────────────────────────────
+
+class TestUndoTodo:
+    def test_undo_moves_back(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            todo_path = os.path.join(tmpdir, "todo.txt")
+            done_path = os.path.join(tmpdir, "done.txt")
+            t = parse_todo_line("(A) Buy milk +Home @errand")
+            t.line_no = 1
+            save_todos(todo_path, [])
+            save_todos(done_path, [t])
+            undo_todo(1, todo_path=todo_path, done_path=done_path)
+            todos, _ = load_todos(todo_path)
+            done, _ = load_todos(done_path)
+            assert len(todos) == 1
+            assert len(done) == 0
+            assert todos[0].description == "Buy milk"
+            assert todos[0].done is False
+
+    def test_undo_nonexistent_raises(self):
+        import tempfile, os
+        with tempfile.TemporaryDirectory() as tmpdir:
+            todo_path = os.path.join(tmpdir, "todo.txt")
+            done_path = os.path.join(tmpdir, "done.txt")
+            save_todos(todo_path, [])
+            save_todos(done_path, [])
+            with pytest.raises(Exception):
+                undo_todo(999, todo_path=todo_path, done_path=done_path)
+
+
+# ── CLI handler tests ────────────────────────────────────────────────────────
+
+class TestCliTodoProjects:
+    def test_projects_counts(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [
+            parse_todo_line("(A) Task one +Home @errand"),
+            parse_todo_line("(B) Task two +Work @office"),
+            parse_todo_line("(C) Task three +Home @home"),
+        ])
+        save_todos(str(tmp_path / "done.txt"), [
+            parse_todo_line("x 2026-07-11 2026-07-09 Fix +Home @office"),
+        ])
+        ptos_cli._handle_todo_projects()
+
+
+class TestCliTodoContexts:
+    def test_contexts_counts(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [
+            parse_todo_line("(A) Task one +Home @errand"),
+            parse_todo_line("(B) Task two +Work @office"),
+        ])
+        save_todos(str(tmp_path / "done.txt"), [])
+        ptos_cli._handle_todo_contexts()
+
+
+class TestCliTodoDue:
+    def test_due_default(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        today = dt.date.today()
+        save_todos(str(tmp_path / "todo.txt"), [
+            parse_todo_line(f"(A) Overdue task +Home @errand due:2026-07-01"),
+            parse_todo_line(f"(B) Future task +Work @office due:2099-12-31"),
+            parse_todo_line(f"(C) No due +Home @home"),
+        ])
+        save_todos(str(tmp_path / "done.txt"), [])
+        ptos_cli._handle_todo_due(1)
+
+
+class TestCliTodoUndo:
+    def test_undo(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [])
+        t = parse_todo_line("(A) Buy milk +Home @errand")
+        t.line_no = 1
+        save_todos(str(tmp_path / "done.txt"), [t])
+        ptos_cli._handle_todo_undo("1")
+        todos, _ = load_todos(str(tmp_path / "todo.txt"))
+        assert len(todos) == 1
+
+
+class TestCliTodoEditMulti:
+    def test_multi_field_edit(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [
+            parse_todo_line("(A) Task one +Home @errand due:2026-07-20"),
+        ])
+        save_todos(str(tmp_path / "done.txt"), [])
+        ptos_cli._handle_todo_edit("1", ["priority=B", "due:tomorrow"])
+        todos, _ = load_todos(str(tmp_path / "todo.txt"))
+        assert todos[0].priority == "B"
+
+    def test_add_project_via_edit(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [
+            parse_todo_line("(A) Task one +Home @errand"),
+        ])
+        save_todos(str(tmp_path / "done.txt"), [])
+        ptos_cli._handle_todo_edit("1", ["+Work"])
+        todos, _ = load_todos(str(tmp_path / "todo.txt"))
+        assert "+Work" in todos[0].projects
+
+    def test_remove_project_via_edit(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [
+            parse_todo_line("(A) Task one +Home +Work @errand"),
+        ])
+        save_todos(str(tmp_path / "done.txt"), [])
+        ptos_cli._handle_todo_edit("1", ["-+Home"])
+        todos, _ = load_todos(str(tmp_path / "todo.txt"))
+        assert "+Home" not in todos[0].projects
+        assert "+Work" in todos[0].projects
+
+    def test_remove_context_via_edit(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [
+            parse_todo_line("(A) Task one +Home @errand @office"),
+        ])
+        save_todos(str(tmp_path / "done.txt"), [])
+        ptos_cli._handle_todo_edit("1", ["-@errand"])
+        todos, _ = load_todos(str(tmp_path / "todo.txt"))
+        assert "@errand" not in todos[0].contexts
+        assert "@office" in todos[0].contexts
+
+
+class TestCliTodoDoneList:
+    def test_done_list(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [])
+        save_todos(str(tmp_path / "done.txt"), [
+            parse_todo_line("x 2026-07-11 2026-07-09 Fix +Home @office"),
+        ])
+        args = argparse.Namespace(all=False, project=None, context=None,
+                                   priority=None, todo_search=None,
+                                   count=False, table=False)
+        ptos_cli._handle_todo_done_list(args)
+
+
+class TestCliTodoDoneDelete:
+    def test_done_delete(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [])
+        t = parse_todo_line("x 2026-07-11 2026-07-09 Fix +Home @office")
+        t.line_no = 1
+        save_todos(str(tmp_path / "done.txt"), [t])
+        ptos_cli._handle_todo_done_delete("1")
+        done, _ = load_todos(str(tmp_path / "done.txt"))
+        assert len(done) == 0
+
+
+class TestCliTodoArchive:
+    def test_archive(self, tmp_path, monkeypatch):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [])
+        old = parse_todo_line("x 2025-01-01 2024-12-01 Old task +Home @office")
+        old.done = True
+        old.completed_date = dt.date(2025, 1, 1)
+        save_todos(str(tmp_path / "done.txt"), [old])
+        ptos_cli._handle_todo_archive()

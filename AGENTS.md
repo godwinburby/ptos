@@ -114,7 +114,32 @@ x 2026-07-12 2026-07-10 Completed task
 - `format_line(todo)` — formats Todo back to todo.txt line
 - `preprocess_todo_text(text)` — converts `pri:a`, resolves NL dates, handles two-token time patterns
 - `resolve_todo_date(s)` — returns `(date, time_str|None)` tuple; supports `today`, `tomorrow`, `yesterday`, weekdays, `this_week`, `next_week`, `this_month`, `next_month`, `+Nd`, `+Nw`, `+Nm`, `YYYY-MM-DD`
+- `filter_todos(todos, project, context, priority, ...)` — filters by criteria; project/context/priority accept single value or list (OR within group, AND across groups)
 - `archive_done_todos(path, months)` — moves old done items to `done.YYYY.txt`
+
+### CLI commands
+- `--todo-add TEXT` — add a todo (interactive if no args)
+- `--todo-list` — list open todos (with `--all`: include done)
+- `--todo-done N` — mark complete
+- `--todo-edit N key=value ...` — edit fields (supports multiple key=value pairs, `+Project`, `-+Project`, `@Context`, `-@Context`)
+- `--todo-delete N` — delete
+- `--todo-undo N` — undo completion (done.txt → todo.txt)
+- `--todo-done-list` — list completed todos
+- `--todo-done-delete N` — permanently delete from done.txt
+- `--todo-done-edit N key=value ...` — edit a completed todo
+- `--todo-projects` — list all projects with counts
+- `--todo-contexts` — list all contexts with counts
+- `--todo-due [DAYS]` — show due/overdue todos (default: today+overdue, optional lookahead)
+- `--todo-archive` — archive old done items to done.YYYY.txt
+
+### Filter flags (use with --todo-list)
+- `--project NAME` — filter by +Project (repeatable)
+- `--context NAME` — filter by @context (repeatable)
+- `--priority P` — filter by priority A-D (repeatable)
+- `--due-range` — overdue/today/tomorrow/upcoming/someday/none
+- `--todo-search TEXT` — glob search on description
+- `--table` — table output format
+- `--count` — show count only
 
 ### Web UI features
 - **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `t:`, `(`); always visible at top of todo page (no collapsible)
@@ -156,6 +181,7 @@ x 2026-07-12 2026-07-10 Completed task
 |-------------|-------------------|
 | Record CRUD | `ptos.py` (engine), `ptos_service.py` (service), `ptos_web.py` (routes) |
 | Todo features | `ptos_todo.py`, `ptos_service.py`, `ptos_web.py`, `web_templates/todo.html` |
+| Todo CLI | `ptos_cli.py` (argparse + handlers), `ptos_todo.py` (engine) |
 | Schema/validation | `ptos.py`, `schema.toml` |
 | Web UI patterns | `web_templates/base.html`, neighboring templates |
 | CLI flags | `ptos_cli.py`, `ptos.py` |

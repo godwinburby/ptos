@@ -104,6 +104,26 @@ def build_parser(cycles):
             "  ptos --restore-config\n"
             "  ptos --list-backups\n"
             "\n"
+            "Todo:\n"
+            "  ptos --todo-add \"(A) Call supplier @phone due:tomorrow\"\n"
+            "  ptos --todo-list\n"
+            "  ptos --todo-list --project Home --context phone\n"
+            "  ptos --todo-list --due-range overdue --table\n"
+            "  ptos --todo-list --all\n"
+            "  ptos --todo-done 3\n"
+            "  ptos --todo-edit 3 priority=B due:tomorrow +Urgent\n"
+            "  ptos --todo-edit 3 -+Home -@errand\n"
+            "  ptos --todo-delete 5\n"
+            "  ptos --todo-undo 5\n"
+            "  ptos --todo-done-list\n"
+            "  ptos --todo-done-edit 3 priority=C\n"
+            "  ptos --todo-done-delete 5\n"
+            "  ptos --todo-due\n"
+            "  ptos --todo-due 7\n"
+            "  ptos --todo-projects\n"
+            "  ptos --todo-contexts\n"
+            "  ptos --todo-archive\n"
+            "\n"
             "Time windows (full form / short):\n"
             "  today              td\n"
             "  yesterday          yd\n"
@@ -163,13 +183,44 @@ def build_parser(cycles):
                      help="Add a todo (todo.txt format — pri:a +Project @context due:tomorrow)\n"
                           "  No args = interactive prompt")
     todo.add_argument("--todo-list", action="store_true",
-                     help="List open todos")
+                     help="List open todos (with --all: include done)")
     todo.add_argument("--todo-done", metavar="N",
                      help="Mark todo at line N complete")
-    todo.add_argument("--todo-edit", nargs=2, metavar=("N", "KEY=VALUE"),
-                     help="Edit a field on todo at line N  (e.g. --todo-edit 3 due:2026-07-25)")
+    todo.add_argument("--todo-edit", nargs="+", metavar=("N", "KEY=VALUE"),
+                     help="Edit fields on todo at line N  (e.g. --todo-edit 3 due:2026-07-25 priority=B)\n"
+                          "  +Project add project, -+Project remove, @context add, -@context remove")
     todo.add_argument("--todo-delete", metavar="N",
                      help="Delete todo at line N")
+    todo.add_argument("--todo-undo", metavar="N",
+                     help="Undo completion — move todo from done.txt back to todo.txt")
+    todo.add_argument("--todo-done-list", action="store_true",
+                     help="List completed todos")
+    todo.add_argument("--todo-done-delete", metavar="N",
+                     help="Permanently delete a completed todo from done.txt")
+    todo.add_argument("--todo-done-edit", nargs="+", metavar=("N", "KEY=VALUE"),
+                     help="Edit a completed todo (e.g. --todo-done-edit 3 priority=C)")
+    todo.add_argument("--todo-projects", action="store_true",
+                     help="List all projects with task counts")
+    todo.add_argument("--todo-contexts", action="store_true",
+                     help="List all contexts with task counts")
+    todo.add_argument("--todo-due", nargs="?", const=1, type=int, default=None, metavar="DAYS",
+                     help="Show due/overdue todos (default: today+overdue)\n"
+                          "  Optional: lookahead DAYS (e.g. --todo-due 7)")
+    todo.add_argument("--todo-archive", action="store_true",
+                     help="Archive old done items to done.YYYY.txt")
+
+    tod_f = p.add_argument_group("Todo filters (use with --todo-list)")
+    tod_f.add_argument("--project", action="append", metavar="NAME",
+                       help="Filter by +Project (repeatable)")
+    tod_f.add_argument("--context", action="append", metavar="NAME",
+                       help="Filter by @context (repeatable)")
+    tod_f.add_argument("--priority", action="append", metavar="P",
+                       help="Filter by priority A-D (repeatable)")
+    tod_f.add_argument("--due-range", dest="due_range",
+                       choices=["overdue", "today", "tomorrow", "upcoming", "someday", "none"],
+                       help="Filter by due range")
+    tod_f.add_argument("--todo-search", metavar="TEXT",
+                       help="Search todo description (glob wildcards supported)")
 
     utl = p.add_argument_group("Utilities")
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
@@ -754,31 +805,93 @@ def _handle_todo_add(args):
         print(f"Error: {e}")
 
 
-def _handle_todo_list():
-    """Handle --todo-list command."""
+def _handle_todo_list(args):
+    """Handle --todo-list command with optional filters, table, count."""
     import ptos_todo
     todos, errors = ptos_todo.load_todos(ptos.TODO_PATH)
     done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
 
-    open_t = [t for t in todos if not t.done]
-    if not open_t:
-        print("No open todos.")
+    if getattr(args, "all", False):
+        open_t = [t for t in todos if not t.done]
+        display = open_t + [t for t in done]
+    else:
+        open_t = [t for t in todos if not t.done]
+        display = list(open_t)
+
+    if getattr(args, "project", None):
+        proj = [("+" + p if not p.startswith("+") else p) for p in args.project]
+        display = ptos_todo.filter_todos(display, project=proj,
+                                          include_done=getattr(args, "all", False))
+    if getattr(args, "context", None):
+        ctx = [("@" + c if not c.startswith("@") else c) for c in args.context]
+        display = ptos_todo.filter_todos(display, context=ctx,
+                                          include_done=getattr(args, "all", False))
+    if getattr(args, "priority", None):
+        pri = [p.upper() for p in args.priority]
+        display = ptos_todo.filter_todos(display, priority=pri,
+                                          include_done=getattr(args, "all", False))
+
+    due_range = getattr(args, "due_range", None)
+    if due_range:
+        today = dt.date.today()
+        tomorrow = today + dt.timedelta(days=1)
+        upcoming_end = today + dt.timedelta(days=7)
+        if due_range == "overdue":
+            display = [t for t in display if t.due and t.due < today and not t.done]
+        elif due_range == "today":
+            display = [t for t in display if t.due == today and not t.done]
+        elif due_range == "tomorrow":
+            display = [t for t in display if t.due == tomorrow and not t.done]
+        elif due_range == "upcoming":
+            display = [t for t in display if t.due and today < t.due <= upcoming_end and not t.done]
+        elif due_range == "someday":
+            display = [t for t in display if (t.due is None or t.due > upcoming_end) and not t.done]
+        elif due_range == "none":
+            display = [t for t in display if t.due is None and not t.done]
+
+    search = getattr(args, "todo_search", None)
+    if search:
+        display = [t for t in display if ptos_todo._glob_match(search, t.description)]
+
+    if getattr(args, "count", False) and not getattr(args, "table", False):
+        open_count = len([t for t in display if not t.done])
+        done_count = len([t for t in display if t.done])
+        parts = []
+        if open_count:
+            parts.append(f"{open_count} open")
+        if done_count:
+            parts.append(f"{done_count} done")
+        print(", ".join(parts) if parts else "No todos.")
         return
 
-    for t in open_t:
-        pri = f"({t.priority}) " if t.priority else ""
-        due = f" due:{t.due.isoformat()}" if t.due else ""
-        proj = " ".join(t.projects)
-        ctx = " ".join(t.contexts)
-        meta = " ".join(filter(None, [proj, ctx]))
-        line = f"  {t.line_no:>3}. {pri}{t.description}"
-        if meta:
-            line += f" {meta}"
-        if due:
-            line += due
-        print(line)
+    if not display:
+        print("No todos.")
+        return
 
-    print(f"\n  {len(open_t)} open, {len(done)} done")
+    if getattr(args, "table", False):
+        _print_todo_table(display)
+    else:
+        for t in display:
+            pri = f"({t.priority}) " if t.priority else ""
+            due = f" due:{t.due.isoformat()}" if t.due else ""
+            proj = " ".join(t.projects)
+            ctx = " ".join(t.contexts)
+            meta = " ".join(filter(None, [proj, ctx]))
+            line = f"  {t.line_no:>3}. {pri}{t.description}"
+            if meta:
+                line += f" {meta}"
+            if due:
+                line += due
+            print(line)
+
+    open_count = len([t for t in display if not t.done])
+    done_count = len([t for t in display if t.done])
+    parts = []
+    if open_count:
+        parts.append(f"{open_count} open")
+    if done_count:
+        parts.append(f"{done_count} done")
+    print(f"\n  {', '.join(parts)}")
 
 
 def _handle_todo_done(n):
@@ -803,8 +916,36 @@ def _handle_todo_done(n):
         print(f"Error: {e}")
 
 
-def _handle_todo_edit(n, kv_str):
-    """Handle --todo-edit command."""
+def _parse_todo_updates(kv_strs):
+    """Parse key=value strings into an updates dict.
+
+    Handles +Project, -Project, @Context, -@Context syntax.
+    Returns (updates_dict, projects_to_add, projects_to_remove, contexts_to_add, contexts_to_remove).
+    """
+    updates = {}
+    projects_to_add = []
+    projects_to_remove = []
+    contexts_to_add = []
+    contexts_to_remove = []
+    for kv in kv_strs:
+        if kv.startswith("-+") and "=" not in kv:
+            projects_to_remove.append(kv[1:])
+        elif kv.startswith("-@") and "=" not in kv:
+            contexts_to_remove.append(kv[1:])
+        elif kv.startswith("+") and "=" not in kv:
+            projects_to_add.append(kv)
+        elif kv.startswith("@") and "=" not in kv:
+            contexts_to_add.append(kv)
+        elif "=" in kv:
+            key, val = kv.split("=", 1)
+            updates[key.strip()] = val.strip()
+        else:
+            updates[kv] = ""
+    return updates, projects_to_add, projects_to_remove, contexts_to_add, contexts_to_remove
+
+
+def _handle_todo_edit(n, kv_strs):
+    """Handle --todo-edit command with multiple key=value pairs."""
     import ptos_todo
     try:
         line_no = int(n)
@@ -812,13 +953,37 @@ def _handle_todo_edit(n, kv_str):
         print(f"Invalid line number: {n}")
         return
 
-    # parse key=value
-    if "=" not in kv_str:
-        print(f"Invalid format: {kv_str} (expected key=value)")
+    if not kv_strs:
+        print("No edits specified. Use: --todo-edit N key=value ...")
         return
 
-    key, val = kv_str.split("=", 1)
-    updates = {key.strip(): val.strip()}
+    updates, projects_add, projects_rm, contexts_add, contexts_rm = _parse_todo_updates(kv_strs)
+
+    if projects_add or projects_rm or contexts_add or contexts_rm:
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+        target = [t for t in todos if t.line_no == line_no]
+        if not target:
+            print(f"Line {line_no} not found in todo.txt")
+            return
+        t = target[0]
+        if projects_add:
+            for p in projects_add:
+                if p not in t.projects:
+                    t.projects.append(p)
+        if projects_rm:
+            for p in projects_rm:
+                if p in t.projects:
+                    t.projects.remove(p)
+        if contexts_add:
+            for c in contexts_add:
+                if c not in t.contexts:
+                    t.contexts.append(c)
+        if contexts_rm:
+            for c in contexts_rm:
+                if c in t.contexts:
+                    t.contexts.remove(c)
+        updates["projects"] = t.projects
+        updates["contexts"] = t.contexts
 
     try:
         t = ptos_todo.edit_todo(ptos.TODO_PATH, line_no, updates)
@@ -841,6 +1006,256 @@ def _handle_todo_delete(n):
         print(f"Deleted line {line_no}")
     except Exception as e:
         print(f"Error: {e}")
+
+
+def _handle_todo_undo(n):
+    """Handle --todo-undo command."""
+    import ptos_todo
+    try:
+        line_no = int(n)
+    except ValueError:
+        print(f"Invalid line number: {n}")
+        return
+
+    try:
+        ptos_todo.undo_todo(line_no)
+        print(f"Undone: todo at line {line_no} moved back to todo.txt")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def _handle_todo_done_list(args):
+    """Handle --todo-done-list command."""
+    import ptos_todo
+    done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+
+    if not done:
+        print("No completed todos.")
+        return
+
+    display = list(done)
+
+    if getattr(args, "project", None):
+        proj = [("+" + p if not p.startswith("+") else p) for p in args.project]
+        display = ptos_todo.filter_todos(display, project=proj, include_done=True)
+    if getattr(args, "context", None):
+        ctx = [("@" + c if not c.startswith("@") else c) for c in args.context]
+        display = ptos_todo.filter_todos(display, context=ctx, include_done=True)
+    if getattr(args, "priority", None):
+        pri = [p.upper() for p in args.priority]
+        display = ptos_todo.filter_todos(display, priority=pri, include_done=True)
+
+    search = getattr(args, "todo_search", None)
+    if search:
+        display = [t for t in display if ptos_todo._glob_match(search, t.description)]
+
+    if getattr(args, "count", False) and not getattr(args, "table", False):
+        print(f"{len(display)} done")
+        return
+
+    if not display:
+        print("No completed todos.")
+        return
+
+    if getattr(args, "table", False):
+        _print_todo_table(display)
+    else:
+        for t in display:
+            pri = f"({t.priority}) " if t.priority else ""
+            completed = f" x:{t.completed_date.isoformat()}" if t.completed_date else ""
+            proj = " ".join(t.projects)
+            ctx = " ".join(t.contexts)
+            meta = " ".join(filter(None, [proj, ctx]))
+            line = f"  {t.line_no:>3}. {pri}{t.description}"
+            if meta:
+                line += f" {meta}"
+            if completed:
+                line += completed
+            print(line)
+
+    print(f"\n  {len(display)} done")
+
+
+def _handle_todo_done_delete(n):
+    """Handle --todo-done-delete command."""
+    import ptos_todo
+    try:
+        line_no = int(n)
+    except ValueError:
+        print(f"Invalid line number: {n}")
+        return
+
+    try:
+        ptos_todo.delete_todo(ptos.DONE_PATH, line_no)
+        print(f"Deleted line {line_no} from done.txt")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def _handle_todo_done_edit(n, kv_strs):
+    """Handle --todo-done-edit command with multiple key=value pairs."""
+    import ptos_todo
+    try:
+        line_no = int(n)
+    except ValueError:
+        print(f"Invalid line number: {n}")
+        return
+
+    if not kv_strs:
+        print("No edits specified. Use: --todo-done-edit N key=value ...")
+        return
+
+    updates, projects_add, projects_rm, contexts_add, contexts_rm = _parse_todo_updates(kv_strs)
+
+    if projects_add or projects_rm or contexts_add or contexts_rm:
+        done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+        target = [t for t in done if t.line_no == line_no]
+        if not target:
+            print(f"Line {line_no} not found in done.txt")
+            return
+        t = target[0]
+        if projects_add:
+            for p in projects_add:
+                if p not in t.projects:
+                    t.projects.append(p)
+        if projects_rm:
+            for p in projects_rm:
+                if p in t.projects:
+                    t.projects.remove(p)
+        if contexts_add:
+            for c in contexts_add:
+                if c not in t.contexts:
+                    t.contexts.append(c)
+        if contexts_rm:
+            for c in contexts_rm:
+                if c in t.contexts:
+                    t.contexts.remove(c)
+        updates["projects"] = t.projects
+        updates["contexts"] = t.contexts
+
+    try:
+        t = ptos_todo.edit_todo(ptos.DONE_PATH, line_no, updates)
+        print(f"Updated: {ptos_todo.format_line(t)}")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
+def _handle_todo_projects():
+    """Handle --todo-projects command."""
+    import ptos_todo
+    todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+    done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+    all_todos = todos + done
+
+    projects = {}
+    for t in all_todos:
+        for p in t.projects:
+            projects[p] = projects.get(p, 0) + 1
+
+    if not projects:
+        print("No projects found.")
+        return
+
+    max_name = max(len(p) for p in projects)
+    for name in sorted(projects):
+        count = projects[name]
+        label = "task" if count == 1 else "tasks"
+        print(f"  {name:<{max_name}}   {count} {label}")
+
+
+def _handle_todo_contexts():
+    """Handle --todo-contexts command."""
+    import ptos_todo
+    todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+    done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+    all_todos = todos + done
+
+    contexts = {}
+    for t in all_todos:
+        for c in t.contexts:
+            contexts[c] = contexts.get(c, 0) + 1
+
+    if not contexts:
+        print("No contexts found.")
+        return
+
+    max_name = max(len(c) for c in contexts)
+    for name in sorted(contexts):
+        count = contexts[name]
+        label = "task" if count == 1 else "tasks"
+        print(f"  {name:<{max_name}}   {count} {label}")
+
+
+def _handle_todo_due(days):
+    """Handle --todo-due command."""
+    import ptos_todo
+    todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+
+    due = ptos_todo.get_due_todos(todos, lookahead_days=days)
+    if not due:
+        print("No due/overdue todos.")
+        return
+
+    pri_order = {"A": 0, "B": 1, "C": 2, "D": 3}
+    due.sort(key=lambda t: (pri_order.get(t.priority or "", 9), t.due or dt.date.max))
+
+    today = dt.date.today()
+    for t in due:
+        pri = f"({t.priority}) " if t.priority else ""
+        proj = " ".join(t.projects)
+        ctx = " ".join(t.contexts)
+        meta = " ".join(filter(None, [proj, ctx]))
+        status = "OVERDUE" if t.due < today else "today" if t.due == today else t.due.isoformat()
+        line = f"  {t.line_no:>3}. {pri}{t.description}"
+        if meta:
+            line += f" {meta}"
+        line += f"  [{status}]"
+        print(line)
+
+    print(f"\n  {len(due)} due")
+
+
+def _handle_todo_archive():
+    """Handle --todo-archive command."""
+    import ptos_todo
+    count = ptos_todo.archive_done_todos(ptos.DONE_PATH)
+    if count:
+        print(f"Archived {count} old done item(s) to done.{dt.date.today().year}.txt")
+    else:
+        print("Nothing to archive.")
+
+
+def _print_todo_table(todos):
+    """Print todos in a formatted table."""
+    if not todos:
+        return
+
+    def col(text, width):
+        return f"{text:<{width}}"
+
+    rows = []
+    for t in todos:
+        pri = f"({t.priority})" if t.priority else "  -  "
+        desc = t.description
+        proj = " ".join(t.projects)
+        ctx = " ".join(t.contexts)
+        due = t.due.isoformat() if t.due else ""
+        rows.append((str(t.line_no), pri, desc, proj, ctx, due))
+
+    widths = [0, 0, 0, 0, 0, 0]
+    for row in rows:
+        for i, val in enumerate(row):
+            widths[i] = max(widths[i], len(val))
+    widths = [max(w, 4) for w in widths]
+    widths[2] = max(widths[2], 20)
+
+    header = f"  {'#':<{widths[0]}}  {'Pri':<{widths[1]}}  {'Description':<{widths[2]}}  {'Project':<{widths[3]}}  {'Context':<{widths[4]}}  {'Due':<{widths[5]}}"
+    print(header)
+    print("  " + "  ".join("-" * w for w in widths))
+
+    for row in rows:
+        line = f"  {col(row[0], widths[0])}  {col(row[1], widths[1])}  {col(row[2], widths[2])}  {col(row[3], widths[3])}  {col(row[4], widths[4])}  {col(row[5], widths[5])}"
+        print(line)
 
 
 # --------------------------------------------------
@@ -893,16 +1308,40 @@ def main():
         _handle_todo_add(args)
         return
     if args.todo_list:
-        _handle_todo_list()
+        _handle_todo_list(args)
         return
     if args.todo_done:
         _handle_todo_done(args.todo_done)
         return
     if args.todo_edit:
-        _handle_todo_edit(args.todo_edit[0], args.todo_edit[1])
+        _handle_todo_edit(args.todo_edit[0], args.todo_edit[1:])
         return
     if args.todo_delete:
         _handle_todo_delete(args.todo_delete)
+        return
+    if args.todo_undo:
+        _handle_todo_undo(args.todo_undo)
+        return
+    if args.todo_done_list:
+        _handle_todo_done_list(args)
+        return
+    if args.todo_done_delete:
+        _handle_todo_done_delete(args.todo_done_delete)
+        return
+    if args.todo_done_edit:
+        _handle_todo_done_edit(args.todo_done_edit[0], args.todo_done_edit[1:])
+        return
+    if args.todo_projects:
+        _handle_todo_projects()
+        return
+    if args.todo_contexts:
+        _handle_todo_contexts()
+        return
+    if args.todo_due is not None:
+        _handle_todo_due(args.todo_due)
+        return
+    if args.todo_archive:
+        _handle_todo_archive()
         return
 
     if args.delete_preset:
