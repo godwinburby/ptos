@@ -98,17 +98,17 @@ PTOS from GitHub, install dependencies, and create all config files automaticall
 
 Single file — download and double-click:
 
-[`setup_ptos_windows.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat)
+[`run_ptos.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos.bat)
 
-The `.bat` downloads `setup_ptos_windows.ps1` automatically on first run,
+The `.bat` downloads `run_ptos.ps1` automatically on first run,
 then hands off to it. The `.ps1` does all the real work — Python/Git detection
 and auto-install via `winget`, repo clone, Flask install, init, and server
 launch. PowerShell ships by default on Windows 7+ — no extra install needed.
 
 Or from PowerShell:
 ```powershell
-curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat
-setup_ptos_windows.bat
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos.bat
+run_ptos.bat
 ```
 
 ### Linux / macOS
@@ -131,12 +131,16 @@ bash setup_ptos_android.sh
 
 ### What the setup script does
 
-1. Checks Python version (3.11+ required)
-2. Clones PTOS from GitHub via `git clone` (auto-installs git if missing)
-3. Installs Flask and tomli-w via pip
-4. Runs `ptos --init` to create `config/`, `records/`, `journal/` and starter config files
-5. Asks for your name and sets it in `config.toml`
-6. Starts the web server and opens the browser
+On first run, the script performs full setup:
+
+1. Checks Python version (3.11+ required, auto-installs via `winget`)
+2. Installs Git and rclone if missing (via `winget`)
+3. Clones PTOS from GitHub via `git clone`
+4. Installs Flask and tomli-w via pip
+5. Runs `ptos --init` to create `config/`, `records/`, `journal/` and starter config files
+6. Asks for your name and sets it in `config.toml`
+
+On subsequent runs, it checks for updates (`git pull`) and starts the server.
 
 On Android, setup installs code to `~/ptos` (Termux's native home, git-friendly)
 and data to shared storage (`~/storage/shared/ptos-data`) — keeping them separate
@@ -148,13 +152,13 @@ away from OneDrive sync.
 
 Safe to re-run — setup skips steps that are already done.
 
-### Starting PTOS after setup
+### Starting PTOS
 
 Use the start script — it checks for updates on every launch:
 
-| Platform | Start command |
-|----------|--------------|
-| Windows | `start_ptos_windows.bat` |
+| Platform | Command |
+|----------|---------|
+| Windows | `run_ptos.bat` |
 | Linux / macOS | `bash start_ptos_linux.sh` |
 | Android/Termux | `bash start_ptos_android.sh` |
 
