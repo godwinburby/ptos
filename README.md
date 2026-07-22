@@ -116,8 +116,8 @@ run_ptos.bat
 Single file — one script handles everything:
 
 ```bash
-curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_linux.sh
-bash setup_ptos_linux.sh
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos_linux.sh
+bash run_ptos_linux.sh
 ```
 
 ### Android / Termux
@@ -125,8 +125,8 @@ bash setup_ptos_linux.sh
 Single file — one script handles everything:
 
 ```bash
-curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_android.sh
-bash setup_ptos_android.sh
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos_android.sh
+bash run_ptos_android.sh
 ```
 
 ### What the setup script does
@@ -159,8 +159,8 @@ Use the start script — it checks for updates on every launch:
 | Platform | Command |
 |----------|---------|
 | Windows | `run_ptos.bat` |
-| Linux / macOS | `bash start_ptos_linux.sh` |
-| Android/Termux | `bash start_ptos_android.sh` |
+| Linux / macOS | `bash run_ptos_linux.sh` |
+| Android/Termux | `bash run_ptos_android.sh` |
 
 ### Alternative — git clone directly
 
