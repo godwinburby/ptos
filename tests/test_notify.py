@@ -158,10 +158,13 @@ class TestHousekeepingLogic:
         assert len(due) == 0
 
     def test_multiple_due_todos_detected(self):
+        import datetime as _dt
+        today = _dt.date.today()
+        future = today + _dt.timedelta(days=2)
         self._write_todo(
-            "task A due:2026-07-17\n"
-            "task B due:2026-07-17\n"
-            "task C due:2026-07-20"
+            f"task A due:{today}\n"
+            f"task B due:{today}\n"
+            f"task C due:{future}"
         )
         todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
         due = todo_mod.get_due_todos(todos, lookahead_days=1)
@@ -322,20 +325,20 @@ class TestTodayOnlyFilter:
         assert len(due_today) == 0
 
     def test_today_included(self):
-        self._write_todo("today task due:2026-07-18")
-        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
-        due = todo_mod.get_due_todos(todos, lookahead_days=1)
         import datetime as _dt
         today = _dt.date.today()
+        self._write_todo(f"today task due:{today}")
+        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
+        due = todo_mod.get_due_todos(todos, lookahead_days=1)
         due_today = [t for t in due if t.due == today]
         assert len(due_today) == 1
 
     def test_time_based_today_still_surfaces(self):
-        self._write_todo("timed task due:2026-07-18 15:00")
-        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
-        due = todo_mod.get_due_todos(todos, lookahead_days=1)
         import datetime as _dt
         today = _dt.date.today()
+        self._write_todo(f"timed task due:{today} 15:00")
+        todos, _ = todo_mod.load_todos(ptos.TODO_PATH)
+        due = todo_mod.get_due_todos(todos, lookahead_days=1)
         due_today = [t for t in due if t.due == today]
         assert len(due_today) == 1
 

@@ -75,7 +75,8 @@ class TestCreateNote:
     def test_creates_category_and_file(self):
         result = ptos.create_note("project", "My Project")
         assert result["category"] == "project"
-        assert result["slug"].startswith("2026-07-21-")
+        import datetime as _dt
+        assert result["slug"].startswith(f"{_dt.date.today().isoformat()}-")
         assert os.path.isdir(os.path.join(ptos.NOTES_DIR, "project"))
         assert os.path.isfile(result["path"])
         with open(result["path"], encoding="utf-8") as f:
@@ -206,3 +207,43 @@ class TestSlugify:
 
     def test_strip_edges(self):
         assert ptos.slugify(" hello ") == "hello"
+
+
+class TestExtractTitle:
+    def test_heading_title(self, tmp_path):
+        from ptos_web import _extract_title
+        p = tmp_path / "note.md"
+        p.write_text("# My Note Title\n\nContent here\n")
+        assert _extract_title(str(p)) == "My Note Title"
+
+    def test_no_heading_falls_back_to_slug(self, tmp_path):
+        from ptos_web import _extract_title
+        p = tmp_path / "my-project-note.md"
+        p.write_text("Just some text\n")
+        assert _extract_title(str(p)) == "My Project Note"
+
+    def test_missing_file_falls_back_to_slug(self, tmp_path):
+        from ptos_web import _extract_title
+        p = tmp_path / "missing-file.md"
+        assert _extract_title(str(p)) == "Missing File"
+
+
+class TestLinkCandidates:
+    def test_notes_appear_in_candidates(self, tmp_path, monkeypatch):
+        import ptos
+        monkeypatch.setattr(ptos, "NOTES_DIR", str(tmp_path / "notes"))
+        notes_dir = tmp_path / "notes" / "project"
+        notes_dir.mkdir(parents=True)
+        (notes_dir / "2026-07-21-atomic-habits.md").write_text("# Atomic Habits\n\nContent")
+        from ptos_web import _extract_title
+        assert _extract_title(str(notes_dir / "2026-07-21-atomic-habits.md")) == "Atomic Habits"
+
+    def test_journal_dates_appear_in_candidates(self, tmp_path, monkeypatch):
+        import ptos, glob, os
+        monkeypatch.setattr(ptos, "JOURNAL_DIR", str(tmp_path / "journal"))
+        journal_dir = tmp_path / "journal" / "2026" / "07"
+        journal_dir.mkdir(parents=True)
+        (journal_dir / "2026-07-21.md").write_text("# Journal")
+        paths = glob.glob(os.path.join(ptos.JOURNAL_DIR, "*", "*", "*.md"))
+        dates = [os.path.basename(p).replace(".md", "") for p in paths]
+        assert "2026-07-21" in dates
