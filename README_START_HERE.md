@@ -232,14 +232,14 @@ and handles everything else automatically.
 
 **Linux / macOS:**
 ```
-curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_linux.sh
-bash setup_ptos_linux.sh
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos_linux.sh
+bash run_ptos_linux.sh
 ```
 
 **Android (Termux):**
 ```
-curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_android.sh
-bash setup_ptos_android.sh
+curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos_android.sh
+bash run_ptos_android.sh
 ```
 
 After setup, use the same script to launch the web app (it checks for updates automatically):
@@ -247,8 +247,8 @@ After setup, use the same script to launch the web app (it checks for updates au
 | Platform | Run this |
 |----------|----------|
 | Windows | `run_ptos.bat` |
-| Linux / macOS | `bash start_ptos_linux.sh` |
-| Android (Termux) | `bash start_ptos_android.sh` |
+| Linux / macOS | `bash run_ptos_linux.sh` |
+| Android (Termux) | `bash run_ptos_android.sh` |
 
 Then open `http://localhost:5000` in your browser. On Android (Termux) the script
 opens the browser automatically.
