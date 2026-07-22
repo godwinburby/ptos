@@ -109,7 +109,7 @@
     var src = document.getElementById(_eid).value;
     var pane = document.getElementById("preview-pane");
     pane.innerHTML = typeof marked !== "undefined"
-      ? marked.parse(src)
+      ? marked.parse(typeof preprocessLinks === "function" ? preprocessLinks(src) : src)
       : "<pre style='white-space:pre-wrap'>" +
           src.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>";
   };

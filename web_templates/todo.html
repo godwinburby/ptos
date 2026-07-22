@@ -1182,6 +1182,54 @@ function _getCurrentToken() {
 
 function onTodoInput() {
   syncAddChips();
+  var input = document.getElementById('todo-input');
+  var bTok = _getBracketToken(input);
+  var bList = document.getElementById('todo-bracket-ac');
+  if (bTok) {
+    if (!bList) {
+      bList = document.createElement('div');
+      bList.id = 'todo-bracket-ac';
+      bList.className = 'bracket-ac-list';
+      input.parentNode.style.position = 'relative';
+      input.parentNode.appendChild(bList);
+    }
+    fetch('/api/link-candidates?q=' + encodeURIComponent(bTok.query))
+      .then(function(r) { return r.json(); })
+      .then(function(items) {
+        if (!items.length) { bList.classList.remove('open'); return; }
+        bList.innerHTML = items.map(function(it, i) {
+          return '<div class="bracket-ac-item" data-idx="'+i+'">'+it+'</div>';
+        }).join('');
+        bList.classList.add('open');
+        var _bi = -1;
+        function _pickBI(idx) {
+          if (!items[idx]) return;
+          var before = input.value.substring(0, bTok.start);
+          var after = input.value.substring(bTok.start + bTok.fullToken.length);
+          input.value = before + '[[' + items[idx] + ']]' + after;
+          bList.classList.remove('open');
+          var newPos = bTok.start + items[idx].length + 4;
+          input.setSelectionRange(newPos, newPos);
+          input.focus();
+        }
+        bList.querySelectorAll('.bracket-ac-item').forEach(function(el) {
+          el.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            _pickBI(parseInt(el.dataset.idx));
+          });
+        });
+        input.onkeydown = function(e) {
+          if (!bList.classList.contains('open')) return;
+          if (e.key === 'ArrowDown') { e.preventDefault(); _bi = Math.min(_bi+1, items.length-1); bList.querySelectorAll('.bracket-ac-item').forEach(function(el,i){el.classList.toggle('active',i===_bi);}); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); _bi = Math.max(_bi-1, 0); bList.querySelectorAll('.bracket-ac-item').forEach(function(el,i){el.classList.toggle('active',i===_bi);}); }
+          else if (e.key === 'Enter' && _bi >= 0) { e.preventDefault(); _pickBI(_bi); }
+          else if (e.key === 'Escape') { bList.classList.remove('open'); }
+        };
+      });
+    document.getElementById('todo-ac-list').classList.remove('open');
+    return;
+  }
+  if (bList) bList.classList.remove('open');
   var tok = _getCurrentToken();
   var list = document.getElementById('todo-ac-list');
   if (!tok) { list.classList.remove('open'); return; }

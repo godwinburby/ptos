@@ -2981,6 +2981,40 @@ def shutdown_server():
     return r
 
 
+@app.route("/api/link-candidates")
+def api_link_candidates():
+    q = request.args.get("q", "").lower()
+    results = []
+    for path in glob.glob(os.path.join(ptos.NOTES_DIR, "*", "*.md")):
+        title = _extract_title(path)
+        if q in title.lower():
+            results.append(title)
+    for path in glob.glob(os.path.join(ptos.JOURNAL_DIR, "*", "*", "*.md")):
+        date_str = os.path.basename(path).replace(".md", "")
+        if q in date_str:
+            results.append(date_str)
+    try:
+        import ptos_todo as _todo_mod
+        todos, _ = _todo_mod.load_todos(ptos.TODO_PATH)
+        done, _ = _todo_mod.load_todos(ptos.DONE_PATH)
+        results.extend(p for p in _todo_mod.get_projects(todos + done) if q in p.lower())
+    except Exception:
+        pass
+    return jsonify(sorted(set(results))[:20])
+
+
+def _extract_title(path):
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            first = f.readline().strip()
+        if first.startswith("# "):
+            return first[2:]
+    except Exception:
+        pass
+    slug = os.path.splitext(os.path.basename(path))[0]
+    return slug.replace("-", " ").title()
+
+
 @app.route("/api/save_query", methods=["POST"])
 def api_save_query():
     data    = request.get_json(silent=True) or {}
