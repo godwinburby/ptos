@@ -118,13 +118,16 @@ if (-not (Test-Path $dataDir)) {
     Write-Host "Data directory: $dataDir"
 }
 
-# -- 5. Write .ptos_home if missing --
+# -- 5. Write .ptos_home if missing (no BOM — Python can't read BOM-prefixed paths) --
 if (-not (Test-Path "$ptosDir\.ptos_home")) {
-    "$dataDir" | Out-File -Encoding utf8 "$ptosDir\.ptos_home"
+    [System.IO.File]::WriteAllText("$ptosDir\.ptos_home", "$dataDir`n")
     Write-Host "Configured .ptos_home -> $dataDir"
 }
 
-# -- 6. Install Flask + tomli-w --
+# -- 6. Set PTOS_HOME for this session (bypasses .ptos_home, immediate effect) --
+$env:PTOS_HOME = $dataDir
+
+# -- 7. Install Flask + tomli-w --
 & $python -c "import flask" 2>$null
 if ($LASTEXITCODE -ne 0) {
     Write-Step "Installing Flask and tomli-w"
@@ -142,7 +145,7 @@ if ($LASTEXITCODE -ne 0) {
     }
 }
 
-# -- 7. First-time init (only if config/ doesn't exist) --
+# -- 8. First-time init (only if config/ doesn't exist) --
 $configDir = Join-Path $dataDir "config"
 if (-not (Test-Path $configDir)) {
     Write-Step "Initialising PTOS"
@@ -180,13 +183,7 @@ if (Test-Path ".git") {
     Write-Host "Not a git repo - skipping update check."
 }
 
-# -- 9. Create/update Start_PTOS shortcut in parent directory --
-$shortcutPath = Join-Path $parentDir "Start_PTOS.bat"
-$batContent = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0ptos\run_ptos.ps1`""
-$batContent | Out-File -Encoding ascii $shortcutPath
-Write-Host "Shortcut: $shortcutPath"
-
-# -- 10. Kill anything on port 5000 --
+# -- 9. Kill anything on port 5000 --
 Write-Step "Checking port 5000"
 $conn = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
 if ($conn) {
@@ -198,7 +195,7 @@ if ($conn) {
 }
 Write-Host "Port 5000 ready."
 
-# -- 11. Start Flask and open browser --
+# -- 10. Start Flask and open browser --
 Write-Banner "Starting PTOS Web Server"
 Write-Host "Open in browser: http://localhost:5000"
 Write-Host "Press Ctrl+C in this window to stop the server."
@@ -247,7 +244,7 @@ if ($serverReady) {
     }
 }
 
-# -- 12. Wait for Flask, then clean up --
+# -- 11. Wait for Flask, then clean up --
 try {
     Wait-Process -Id $proc.Id -ErrorAction SilentlyContinue
 } finally {
