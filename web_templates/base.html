@@ -425,6 +425,14 @@
   <form action="/search" method="GET" class="sidebar-search">
     <input type="text" name="q" id="sidebar-search" placeholder="Search records, journal, todos, notes… (/)">
   </form>
+  <script>
+    (function() {
+      var el = document.getElementById("sidebar-search");
+      if (el && typeof attachBracketAutocomplete === "function") {
+        attachBracketAutocomplete(el);
+      }
+    })();
+  </script>
   <nav class="sidebar-nav">
     <a href="/"        class="{% if tab=='home'    %}active{% endif %}">{% include 'icons/home.html'    ignore missing %} Home</a>
     <a href="/add"     class="{% if tab=='add'     %}active{% endif %}">{% include 'icons/add.html'     ignore missing %} Add Record</a>

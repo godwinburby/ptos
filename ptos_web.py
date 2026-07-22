@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, fnmatch, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil
+import sys, os, re, glob, fnmatch, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
@@ -1156,20 +1156,12 @@ def search_page():
         except Exception:
             pass
     journal = []
-    year_dirs = []
     try:
-        for entry in os.listdir(svc.JOURNAL_DIR):
-            yd = os.path.join(svc.JOURNAL_DIR, entry)
-            if os.path.isdir(yd):
-                year_dirs.append(yd)
-    except Exception:
-        pass
-    for yd in sorted(year_dirs):
-        try:
-            for fname in os.listdir(yd):
+        for dirpath, _, fnames in os.walk(svc.JOURNAL_DIR):
+            for fname in sorted(fnames):
                 if not fname.endswith(".md"):
                     continue
-                path = os.path.join(yd, fname)
+                path = os.path.join(dirpath, fname)
                 try:
                     with open(path, encoding="utf-8") as f:
                         content = f.read()
@@ -1178,8 +1170,8 @@ def search_page():
                         journal.append({"file": fname, "snippet": snippet})
                 except Exception:
                     pass
-        except Exception:
-            pass
+    except Exception:
+        pass
     todo = []
     for tpath_name in ["todo.txt", "done.txt"]:
         tpath = os.path.join(svc.TODO_DIR, tpath_name)
@@ -1190,8 +1182,7 @@ def search_page():
                         todo.append({"file": tpath_name, "line": i, "text": line.rstrip()})
         except Exception:
             pass
-    import glob as _glob
-    for dpath in sorted(_glob.glob(os.path.join(svc.TODO_DIR, "done.*.txt"))):
+    for dpath in sorted(glob.glob(os.path.join(svc.TODO_DIR, "done.*.txt"))):
         base = os.path.basename(dpath)
         try:
             with open(dpath, encoding="utf-8") as f:
@@ -2985,22 +2976,45 @@ def shutdown_server():
 def api_link_candidates():
     q = request.args.get("q", "").lower()
     results = []
+    seen = set()
+    _word_re = re.compile(r'\b[a-zA-Z]\w{2,}\b')
+    def _add(val, is_date=False):
+        v = val.strip()
+        if not v or v.lower() in seen or q not in v.lower():
+            return
+        if not is_date and re.match(r'^[\d\-/:.\s]+$', v):
+            return
+        seen.add(v.lower())
+        results.append(v)
     for path in glob.glob(os.path.join(ptos.NOTES_DIR, "*", "*.md")):
         title = _extract_title(path)
-        if q in title.lower():
-            results.append(title)
+        _add(title)
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            for word in set(_word_re.findall(content)):
+                _add(word)
+        except Exception:
+            pass
     for path in glob.glob(os.path.join(ptos.JOURNAL_DIR, "*", "*", "*.md")):
         date_str = os.path.basename(path).replace(".md", "")
-        if q in date_str:
-            results.append(date_str)
+        _add(date_str, is_date=True)
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            for word in set(_word_re.findall(content)):
+                _add(word)
+        except Exception:
+            pass
     try:
         import ptos_todo as _todo_mod
         todos, _ = _todo_mod.load_todos(ptos.TODO_PATH)
         done, _ = _todo_mod.load_todos(ptos.DONE_PATH)
-        results.extend(p for p in _todo_mod.get_projects(todos + done) if q in p.lower())
+        for p in _todo_mod.get_projects(todos + done):
+            _add(p.lstrip("+"))
     except Exception:
         pass
-    return jsonify(sorted(set(results))[:20])
+    return jsonify(sorted(results)[:20])
 
 
 def _extract_title(path):

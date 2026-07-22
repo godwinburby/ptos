@@ -159,6 +159,13 @@
 
   setMode(_mode);
 
+  setTimeout(function() {
+    var _mdEl = document.getElementById(_eid);
+    if (_mdEl && typeof attachBracketAutocomplete === "function") {
+      attachBracketAutocomplete(_mdEl);
+    }
+  }, 0);
+
   document.addEventListener("keydown", function(e) {
     if ((e.ctrlKey||e.metaKey) && e.key==="s") {
       e.preventDefault();

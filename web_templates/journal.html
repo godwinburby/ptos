@@ -44,7 +44,7 @@
 
 <script>
 window._mdSaveFn = function(silent) {
-  var content = document.getElementById("journal-editor").value;
+  var content = document.getElementById("md-editor").value;
   if (silent && !content.trim()) return;
   var btn = document.getElementById("save-btn-2");
   if (!silent && btn) { btn.disabled=true; btn.textContent="Saving…"; }

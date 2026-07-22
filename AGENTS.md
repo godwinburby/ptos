@@ -214,6 +214,45 @@ x 2026-07-12 2026-07-10 Completed task
 - Universal search (`/search`) scans note content using `_glob_match`
 - Results show `category/title` with snippet, link to note view
 
+## Bracket cross-linking (`[[Target]]`)
+
+### Overview
+Wiki-style `[[links]]` sit on top of existing project conventions — not a replacement for `project=value` (Records) or `+project` (Todo). A `[[link]]` in a note or journal entry is a real cross-reference; if it matches an existing project name, that's a bonus.
+
+### Backend — `/api/link-candidates`
+- `GET /api/link-candidates?q=...` — returns up to 20 sorted candidates
+- Scans three sources: note titles (`# heading`) + content words, journal dates + content words, todo project names (stripped of `+`)
+- Words must start with a letter (filters out pure numbers, dates, timestamps)
+- Journal dates (e.g. `2026-07-22`) are exempt from the number filter
+- `_extract_title(path)` — reads first `# heading` line, falls back to title-cased slug
+
+### Frontend — shared JS in `base.html`
+- `_getBracketToken(inputEl)` — scans backward for unclosed `[[`, returns `{query, start, fullToken}` or null
+- `attachBracketAutocomplete(inputEl)` — fetches from `/api/link-candidates`, renders dropdown, handles Arrow/Enter/Escape; used on all input fields that support bracket linking
+- `preprocessLinks(src)` — converts `[[Target]]` → `[Target](/search?q=Target)` markdown links for preview rendering
+
+### Where bracket autocomplete is attached
+| Location | Element |
+|---|---|
+| Todo quick-add | `#todo-input` (checked first in `onTodoInput()`, before `+`/`@`/`pri:`) |
+| Journal editor | `#md-editor` (via `_markdown_editor.html` partial) |
+| Notes editor | `#md-editor` (via `_markdown_editor.html` partial) |
+| Add Record note field | `input[name="note"]` in `add.html` |
+| Edit Record note field | `input[name="note"]` in `edit.html` |
+| Sidebar search | `#sidebar-search` in `base.html` |
+| Search page | `#search-input` in `search.html` |
+
+### Rendering in preview
+- `preprocessLinks()` runs in `_markdown_editor.html` before `marked.parse()`
+- `[[Fit]]` becomes a clickable link to `/search?q=Fit`
+- Only affects Journal and Notes preview — todo textarea shows raw `[[text]]`
+
+### Integration points
+- Todo: `_getBracketToken()` checked first in `onTodoInput()` — `[[` takes priority over `+`/`@`/`pri:`
+- Markdown editor: `_markdown_editor.html` calls `preprocessLinks()` before `marked.parse()` in `renderPreview()`
+- Records note fields: `add.html` and `edit.html` call `attachBracketAutocomplete()` on `DOMContentLoaded`
+- Search/sidebar: `attachBracketAutocomplete()` called on page load
+
 ## Key files to check before making changes
 
 | Change type | Files to read first |
@@ -222,6 +261,7 @@ x 2026-07-12 2026-07-10 Completed task
 | Todo features | `ptos_todo.py`, `ptos_service.py`, `ptos_web.py`, `web_templates/todo.html` |
 | Todo CLI | `ptos_cli.py` (argparse + handlers), `ptos_todo.py` (engine) |
 | Notes | `ptos.py` (CRUD + template), `ptos_service.py`, `ptos_web.py`, `web_templates/notes*.html` |
+| Bracket linking | `ptos_web.py` (`/api/link-candidates`, `_extract_title`), `web_templates/base.html` (shared JS), `_markdown_editor.html`, `todo.html`, `add.html`, `edit.html`, `search.html` |
 | Schema/validation | `ptos.py`, `schema.toml` |
 | Web UI patterns | `web_templates/base.html`, neighboring templates |
 | CLI flags | `ptos_cli.py`, `ptos.py` |

@@ -421,5 +421,13 @@ document.addEventListener("DOMContentLoaded", function() {
   });
 });
 </script>
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+  var noteInput = document.querySelector('input[name="note"]');
+  if (noteInput && typeof attachBracketAutocomplete === "function") {
+    attachBracketAutocomplete(noteInput);
+  }
+});
+</script>
 
 {% endblock %}
