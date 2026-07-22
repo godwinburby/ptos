@@ -1,5 +1,6 @@
-# PTOS Setup Script for Windows
-# Run via:  setup_ptos_windows.bat   (which launches this script)
+# PTOS Launcher for Windows
+# Handles both first-time setup and daily launch.
+# Usage:  run_ptos.bat (recommended) or  .\run_ptos.ps1
 
 $ErrorActionPreference = "Stop"
 
@@ -14,6 +15,10 @@ function Write-Banner($text) {
     Write-Host "  $text"
     Write-Host ("=" * 42)
 }
+
+# -- 0. Move to script directory --
+$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
+Set-Location $scriptDir
 
 # -- 1. Python detection + auto-install --
 function Get-PythonCmd {
@@ -41,7 +46,7 @@ if (-not $python) {
         Write-Host ""
         Write-Host "ERROR: Python 3.11+ is required."
         Write-Host "Install it from https://python.org/downloads (tick 'Add to PATH'),"
-        Write-Host "or close this window and re-run setup if you just installed it."
+        Write-Host "or close this window and re-run if you just installed it."
         Read-Host "Press Enter to exit"
         exit 1
     }
@@ -59,16 +64,15 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     }
     if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
         Write-Host ""
-        Write-Host "ERROR: Git is required for Windows setup."
+        Write-Host "ERROR: Git is required for PTOS."
         Write-Host "Install from: https://git-scm.com/download/win"
         Write-Host "Or run: winget install Git.Git"
-        Write-Host "(You may need to close this window and re-run after installing.)"
         Read-Host "Press Enter to exit"
         exit 1
     }
 }
 
-# -- 2b. Rclone detection + auto-install --
+# -- 2b. Rclone detection + auto-install (best effort) --
 if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-Host "rclone not found. Installing via winget..."
@@ -84,7 +88,6 @@ if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) {
 }
 
 # -- 3. Locate or clone PTOS --
-$scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 if (Test-Path "$scriptDir\ptos.py") {
     $ptosDir = $scriptDir
 } elseif (Test-Path "$scriptDir\ptos\ptos.py") {
@@ -104,7 +107,7 @@ if (Test-Path "$scriptDir\ptos.py") {
 Set-Location $ptosDir
 Write-Host "PTOS found at: $ptosDir"
 
-# -- 3b. Create data directory (sibling to repo, outside OneDrive) --
+# -- 4. Create data directory (sibling to repo) --
 $parentDir = Split-Path -Parent $ptosDir
 $dataDir = Join-Path $parentDir "ptos-data"
 if (-not (Test-Path $dataDir)) {
@@ -112,27 +115,34 @@ if (-not (Test-Path $dataDir)) {
     New-Item -ItemType Directory -Path $dataDir | Out-Null
     Write-Host "Data directory created at: $dataDir"
 } else {
-    Write-Host "Data directory exists: $dataDir"
+    Write-Host "Data directory: $dataDir"
 }
-"$dataDir" | Out-File -Encoding utf8 (Join-Path $ptosDir ".ptos_home")
-Write-Host "Configured .ptos_home -> $dataDir"
 
-# -- 4. Install Flask --
-Write-Step "Installing Flask"
-& $python -m pip install flask tomli-w --quiet
+# -- 5. Write .ptos_home if missing --
+if (-not (Test-Path "$ptosDir\.ptos_home")) {
+    "$dataDir" | Out-File -Encoding utf8 "$ptosDir\.ptos_home"
+    Write-Host "Configured .ptos_home -> $dataDir"
+}
+
+# -- 6. Install Flask + tomli-w --
+& $python -c "import flask" 2>$null
 if ($LASTEXITCODE -ne 0) {
-    & $python -m pip install flask tomli-w
+    Write-Step "Installing Flask and tomli-w"
+    & $python -m pip install flask tomli-w --quiet
     if ($LASTEXITCODE -ne 0) {
-        Write-Host "WARNING: Flask/tomli-w install may have failed."
-        Write-Host "You can try manually:  $python -m pip install flask tomli-w"
+        & $python -m pip install flask tomli-w
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "WARNING: Flask/tomli-w install may have failed."
+            Write-Host "You can try manually:  $python -m pip install flask tomli-w"
+        } else {
+            Write-Host "Flask installed."
+        }
     } else {
-        Write-Host "Flask installed."
+        Write-Host "Flask ready."
     }
-} else {
-    Write-Host "Flask ready."
 }
 
-# -- 5. Initialise PTOS (first run only) --
+# -- 7. First-time init (only if config/ doesn't exist) --
 $configDir = Join-Path $dataDir "config"
 if (-not (Test-Path $configDir)) {
     Write-Step "Initialising PTOS"
@@ -158,19 +168,25 @@ if (-not (Test-Path $configDir)) {
     Write-Host "PTOS already initialised (config/ exists)."
 }
 
-# -- 6b. Create Start_PTOS shortcut in parent directory --
-$parentDir = Split-Path -Parent $ptosDir
-$shortcutPath = Join-Path $parentDir "Start_PTOS.bat"
-if (-not (Test-Path $shortcutPath)) {
-    $startBat = Join-Path $ptosDir "start_ptos_windows.bat"
-    $batContent = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0ptos\start_ptos_windows.ps1`""
-    $batContent | Out-File -Encoding ascii $shortcutPath
-    Write-Host "Created shortcut: $shortcutPath"
+# -- 8. Git pull (if repo) --
+if (Test-Path ".git") {
+    Write-Host "Checking for updates..."
+    $env:GIT_SSL_NO_VERIFY = "1"
+    git pull 2>&1 | Out-Null
+    $env:GIT_SSL_NO_VERIFY = $null
+    if ($LASTEXITCODE -eq 0) { Write-Host "Updated from GitHub." }
+    else { Write-Host "Could not reach GitHub - continuing with local version." }
 } else {
-    Write-Host "Shortcut already exists: $shortcutPath"
+    Write-Host "Not a git repo - skipping update check."
 }
 
-# -- 7. Kill anything on port 5000 --
+# -- 9. Create/update Start_PTOS shortcut in parent directory --
+$shortcutPath = Join-Path $parentDir "Start_PTOS.bat"
+$batContent = "@echo off`r`npowershell -NoProfile -ExecutionPolicy Bypass -File `"%~dp0ptos\run_ptos.ps1`""
+$batContent | Out-File -Encoding ascii $shortcutPath
+Write-Host "Shortcut: $shortcutPath"
+
+# -- 10. Kill anything on port 5000 --
 Write-Step "Checking port 5000"
 $conn = Get-NetTCPConnection -LocalPort 5000 -State Listen -ErrorAction SilentlyContinue
 if ($conn) {
@@ -182,18 +198,23 @@ if ($conn) {
 }
 Write-Host "Port 5000 ready."
 
-# -- 7. Start Flask and open browser --
+# -- 11. Start Flask and open browser --
 Write-Banner "Starting PTOS Web Server"
 Write-Host "Open in browser: http://localhost:5000"
 Write-Host "Press Ctrl+C in this window to stop the server."
-Write-Host ""
-Write-Host "To start PTOS next time:  start_ptos_windows.bat"
-Write-Host "(Start script automatically updates PTOS if new version available)"
 Write-Host ""
 
 $proc = Start-Process -FilePath $python -ArgumentList "ptos_web.py" `
     -PassThru -NoNewWindow
 
+# Kill Flask when PowerShell exits
+Register-EngineEvent -SourceIdentifier PowerShell.Exiting -Action {
+    if ($proc -and -not $proc.HasExited) {
+        Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+    }
+}
+
+# Health check (up to 15s)
 Write-Host "Waiting for server..." -NoNewline
 $serverReady = $false
 for ($i = 0; $i -lt 15; $i++) {
@@ -226,8 +247,9 @@ if ($serverReady) {
     }
 }
 
+# -- 12. Wait for Flask, then clean up --
 try {
-    Wait-Process -Id $proc.Id
+    Wait-Process -Id $proc.Id -ErrorAction SilentlyContinue
 } finally {
     if (-not $proc.HasExited) {
         Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue

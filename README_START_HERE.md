@@ -220,14 +220,14 @@ The Settings tab in the app lets you change most of these without opening the fi
 
 ## First time setup
 
-Download only the setup file(s) for your platform — the setup script downloads
-PTOS from GitHub and creates all folders and config files automatically.
+Download the script for your platform — it handles everything automatically:
+installs dependencies, downloads PTOS from GitHub, and starts the web server.
 
 **Windows** — download and double-click:
 
-[`setup_ptos_windows.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_windows.bat)
+[`run_ptos.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos.bat)
 
-That's the only file you need — it downloads its own companion script
+That's the only file you need — it downloads its companion script
 and handles everything else automatically.
 
 **Linux / macOS:**
@@ -242,12 +242,12 @@ curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/setup_ptos_andro
 bash setup_ptos_android.sh
 ```
 
-After setup, use the start script to launch the web app:
+After setup, use the same script to launch the web app (it checks for updates automatically):
 
 | Platform | Run this |
 |----------|----------|
+| Windows | `run_ptos.bat` |
 | Linux / macOS | `bash start_ptos_linux.sh` |
-| Windows | `start_ptos_windows.bat` |
 | Android (Termux) | `bash start_ptos_android.sh` |
 
 Then open `http://localhost:5000` in your browser. On Android (Termux) the script
