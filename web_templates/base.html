@@ -1434,44 +1434,48 @@ function _getOrCreateBracketAcList(inputEl) {
 }
 
 function attachBracketAutocomplete(inputEl) {
+  var _acTimer = null;
   inputEl.addEventListener('input', function() {
     var tok = _getBracketToken(inputEl);
     var list = _getOrCreateBracketAcList(inputEl);
     if (!tok) { list.classList.remove('open'); return; }
-    fetch('/api/link-candidates?q=' + encodeURIComponent(tok.query))
-      .then(function(r) { return r.json(); })
-      .then(function(items) {
-        if (!items.length) { list.classList.remove('open'); return; }
-        list.innerHTML = items.map(function(it, i) {
-          return '<div class="bracket-ac-item" data-idx="'+i+'">'+it+'</div>';
-        }).join('');
-        list.classList.add('open');
-        var _bIdx = -1;
-        var _bItems = items;
-        function _pickBracket(idx) {
-          if (!_bItems[idx]) return;
-          var before = inputEl.value.substring(0, tok.start);
-          var after = inputEl.value.substring(tok.start + tok.fullToken.length);
-          inputEl.value = before + '[[' + _bItems[idx] + ']]' + after;
-          list.classList.remove('open');
-          inputEl.focus();
-          var newPos = tok.start + _bItems[idx].length + 4;
-          inputEl.setSelectionRange(newPos, newPos);
-        }
-        list.querySelectorAll('.bracket-ac-item').forEach(function(el) {
-          el.addEventListener('mousedown', function(e) {
-            e.preventDefault();
-            _pickBracket(parseInt(el.dataset.idx));
+    clearTimeout(_acTimer);
+    _acTimer = setTimeout(function() {
+      fetch('/api/link-candidates?q=' + encodeURIComponent(tok.query))
+        .then(function(r) { return r.json(); })
+        .then(function(items) {
+          if (!items.length) { list.classList.remove('open'); return; }
+          list.innerHTML = items.map(function(it, i) {
+            return '<div class="bracket-ac-item" data-idx="'+i+'">'+it+'</div>';
+          }).join('');
+          list.classList.add('open');
+          var _bIdx = -1;
+          var _bItems = items;
+          function _pickBracket(idx) {
+            if (!_bItems[idx]) return;
+            var before = inputEl.value.substring(0, tok.start);
+            var after = inputEl.value.substring(tok.start + tok.fullToken.length);
+            inputEl.value = before + '[[' + _bItems[idx] + ']]' + after;
+            list.classList.remove('open');
+            inputEl.focus();
+            var newPos = tok.start + _bItems[idx].length + 4;
+            inputEl.setSelectionRange(newPos, newPos);
+          }
+          list.querySelectorAll('.bracket-ac-item').forEach(function(el) {
+            el.addEventListener('mousedown', function(e) {
+              e.preventDefault();
+              _pickBracket(parseInt(el.dataset.idx));
+            });
           });
+          inputEl.onkeydown = function(e) {
+            if (!list.classList.contains('open')) return;
+            if (e.key === 'ArrowDown') { e.preventDefault(); _bIdx = Math.min(_bIdx+1, _bItems.length-1); list.querySelectorAll('.bracket-ac-item').forEach(function(el,i){el.classList.toggle('active',i===_bIdx);}); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); _bIdx = Math.max(_bIdx-1, 0); list.querySelectorAll('.bracket-ac-item').forEach(function(el,i){el.classList.toggle('active',i===_bIdx);}); }
+            else if (e.key === 'Enter' && _bIdx >= 0) { e.preventDefault(); _pickBracket(_bIdx); }
+            else if (e.key === 'Escape') { list.classList.remove('open'); }
+          };
         });
-        inputEl.onkeydown = function(e) {
-          if (!list.classList.contains('open')) return;
-          if (e.key === 'ArrowDown') { e.preventDefault(); _bIdx = Math.min(_bIdx+1, _bItems.length-1); list.querySelectorAll('.bracket-ac-item').forEach(function(el,i){el.classList.toggle('active',i===_bIdx);}); }
-          else if (e.key === 'ArrowUp') { e.preventDefault(); _bIdx = Math.max(_bIdx-1, 0); list.querySelectorAll('.bracket-ac-item').forEach(function(el,i){el.classList.toggle('active',i===_bIdx);}); }
-          else if (e.key === 'Enter' && _bIdx >= 0) { e.preventDefault(); _pickBracket(_bIdx); }
-          else if (e.key === 'Escape') { list.classList.remove('open'); }
-        };
-      });
+    }, 250);
   });
   inputEl.addEventListener('blur', function() {
     setTimeout(function() {
