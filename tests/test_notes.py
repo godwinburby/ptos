@@ -209,41 +209,122 @@ class TestSlugify:
         assert ptos.slugify(" hello ") == "hello"
 
 
-class TestExtractTitle:
-    def test_heading_title(self, tmp_path):
-        from ptos_web import _extract_title
-        p = tmp_path / "note.md"
-        p.write_text("# My Note Title\n\nContent here\n")
-        assert _extract_title(str(p)) == "My Note Title"
-
-    def test_no_heading_falls_back_to_slug(self, tmp_path):
-        from ptos_web import _extract_title
-        p = tmp_path / "my-project-note.md"
-        p.write_text("Just some text\n")
-        assert _extract_title(str(p)) == "My Project Note"
-
-    def test_missing_file_falls_back_to_slug(self, tmp_path):
-        from ptos_web import _extract_title
-        p = tmp_path / "missing-file.md"
-        assert _extract_title(str(p)) == "Missing File"
-
-
 class TestLinkCandidates:
-    def test_notes_appear_in_candidates(self, tmp_path, monkeypatch):
+    def test_bracket_links_in_notes(self, tmp_path, monkeypatch):
         import ptos
         monkeypatch.setattr(ptos, "NOTES_DIR", str(tmp_path / "notes"))
         notes_dir = tmp_path / "notes" / "project"
         notes_dir.mkdir(parents=True)
-        (notes_dir / "2026-07-21-atomic-habits.md").write_text("# Atomic Habits\n\nContent")
-        from ptos_web import _extract_title
-        assert _extract_title(str(notes_dir / "2026-07-21-atomic-habits.md")) == "Atomic Habits"
-
-    def test_journal_dates_appear_in_candidates(self, tmp_path, monkeypatch):
-        import ptos, glob, os
+        (notes_dir / "note.md").write_text("# Note\n\nRead [[Atomic Habits]] today\n")
+        from ptos_web import app
+        client = app.test_client()
         monkeypatch.setattr(ptos, "JOURNAL_DIR", str(tmp_path / "journal"))
+        monkeypatch.setattr(ptos, "TODO_DIR", str(tmp_path / "todo"))
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        tmp_path / "todo" / "todo.txt"
+        tmp_path / "todo" / "done.txt"
+        tmp_path / "records"
+        resp = client.get("/api/link-candidates?q=atomic")
+        data = resp.get_json()
+        assert "Atomic Habits" in data
+
+    def test_bracket_links_in_journal(self, tmp_path, monkeypatch):
+        import ptos
+        monkeypatch.setattr(ptos, "NOTES_DIR", str(tmp_path / "notes"))
+        monkeypatch.setattr(ptos, "JOURNAL_DIR", str(tmp_path / "journal"))
+        monkeypatch.setattr(ptos, "TODO_DIR", str(tmp_path / "todo"))
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        (tmp_path / "notes").mkdir()
         journal_dir = tmp_path / "journal" / "2026" / "07"
         journal_dir.mkdir(parents=True)
-        (journal_dir / "2026-07-21.md").write_text("# Journal")
-        paths = glob.glob(os.path.join(ptos.JOURNAL_DIR, "*", "*", "*.md"))
-        dates = [os.path.basename(p).replace(".md", "") for p in paths]
-        assert "2026-07-21" in dates
+        (journal_dir / "2026-07-22.md").write_text("Today I [[buy house]] plans\n")
+        (tmp_path / "todo").mkdir()
+        (tmp_path / "records").mkdir()
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/api/link-candidates?q=buy")
+        data = resp.get_json()
+        assert "buy house" in data
+
+    def test_multi_word_phrases(self, tmp_path, monkeypatch):
+        import ptos
+        monkeypatch.setattr(ptos, "NOTES_DIR", str(tmp_path / "notes"))
+        monkeypatch.setattr(ptos, "JOURNAL_DIR", str(tmp_path / "journal"))
+        monkeypatch.setattr(ptos, "TODO_DIR", str(tmp_path / "todo"))
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        (tmp_path / "notes").mkdir()
+        journal_dir = tmp_path / "journal" / "2026" / "07"
+        journal_dir.mkdir(parents=True)
+        (journal_dir / "2026-07-22.md").write_text("[[fitting]] session done\n")
+        (tmp_path / "todo").mkdir()
+        (tmp_path / "records").mkdir()
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/api/link-candidates?q=fitting")
+        data = resp.get_json()
+        assert "fitting" in data
+
+    def test_todo_projects_in_candidates(self, tmp_path, monkeypatch):
+        import ptos
+        monkeypatch.setattr(ptos, "NOTES_DIR", str(tmp_path / "notes"))
+        monkeypatch.setattr(ptos, "JOURNAL_DIR", str(tmp_path / "journal"))
+        todo_dir = tmp_path / "todo"
+        monkeypatch.setattr(ptos, "TODO_DIR", str(todo_dir))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_dir / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(todo_dir / "done.txt"))
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        (tmp_path / "notes").mkdir()
+        (tmp_path / "journal").mkdir()
+        (tmp_path / "records").mkdir()
+        todo_dir.mkdir()
+        (todo_dir / "todo.txt").write_text("Task +HearSpeechPro\n")
+        (todo_dir / "done.txt").write_text("")
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/api/link-candidates?q=hearspeechpro")
+        data = resp.get_json()
+        assert "HearSpeechPro" in data
+
+    def test_record_project_context(self, tmp_path, monkeypatch):
+        import ptos
+        monkeypatch.setattr(ptos, "NOTES_DIR", str(tmp_path / "notes"))
+        monkeypatch.setattr(ptos, "JOURNAL_DIR", str(tmp_path / "journal"))
+        monkeypatch.setattr(ptos, "TODO_DIR", str(tmp_path / "todo"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo" / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "todo" / "done.txt"))
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        (tmp_path / "notes").mkdir()
+        (tmp_path / "journal").mkdir()
+        (tmp_path / "todo").mkdir()
+        records_dir = tmp_path / "records"
+        records_dir.mkdir()
+        (records_dir / "2026.log").write_text(
+            "type=expense domain=self category=food amount=100 project=Fit context=work\n"
+            "type=expense domain=self category=food amount=200 project=Fit context=home\n"
+        )
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/api/link-candidates?q=fit")
+        data = resp.get_json()
+        assert "Fit" in data
+        resp2 = client.get("/api/link-candidates?q=work")
+        data2 = resp2.get_json()
+        assert "work" in data2
+
+    def test_no_noise_from_pure_numbers(self, tmp_path, monkeypatch):
+        import ptos
+        monkeypatch.setattr(ptos, "NOTES_DIR", str(tmp_path / "notes"))
+        monkeypatch.setattr(ptos, "JOURNAL_DIR", str(tmp_path / "journal"))
+        monkeypatch.setattr(ptos, "TODO_DIR", str(tmp_path / "todo"))
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        (tmp_path / "notes").mkdir()
+        journal_dir = tmp_path / "journal" / "2026" / "07"
+        journal_dir.mkdir(parents=True)
+        (journal_dir / "2026-07-22.md").write_text("Spent 11500 on [[buy house]]\n")
+        (tmp_path / "todo").mkdir()
+        (tmp_path / "records").mkdir()
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/api/link-candidates?q=115")
+        data = resp.get_json()
+        assert "11500" not in data

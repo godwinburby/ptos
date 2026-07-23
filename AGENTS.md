@@ -221,10 +221,9 @@ Wiki-style `[[links]]` sit on top of existing project conventions — not a repl
 
 ### Backend — `/api/link-candidates`
 - `GET /api/link-candidates?q=...` — returns up to 20 sorted candidates
-- Scans three sources: note titles (`# heading`) + content words, journal dates + content words, todo project names (stripped of `+`)
-- Words must start with a letter (filters out pure numbers, dates, timestamps)
-- Journal dates (e.g. `2026-07-22`) are exempt from the number filter
-- `_extract_title(path)` — reads first `# heading` line, falls back to title-cased slug
+- Scans `[[Target]]` brackets from journal, notes, and todo files — any text inside `[[ ]]` becomes a candidate (multi-word phrases like `[[buy house]]` work)
+- Scans `project=` and `context=` values from record `.log` files
+- Todo project names (stripped of `+`) from `get_projects()`
 
 ### Frontend — shared JS in `base.html`
 - `_getBracketToken(inputEl)` — scans backward for unclosed `[[`, returns `{query, start, fullToken}` or null
@@ -261,7 +260,7 @@ Wiki-style `[[links]]` sit on top of existing project conventions — not a repl
 | Todo features | `ptos_todo.py`, `ptos_service.py`, `ptos_web.py`, `web_templates/todo.html` |
 | Todo CLI | `ptos_cli.py` (argparse + handlers), `ptos_todo.py` (engine) |
 | Notes | `ptos.py` (CRUD + template), `ptos_service.py`, `ptos_web.py`, `web_templates/notes*.html` |
-| Bracket linking | `ptos_web.py` (`/api/link-candidates`, `_extract_title`), `web_templates/base.html` (shared JS), `_markdown_editor.html`, `todo.html`, `add.html`, `edit.html`, `search.html` |
+| Bracket linking | `ptos_web.py` (`/api/link-candidates`), `web_templates/base.html` (shared JS), `_markdown_editor.html`, `todo.html`, `add.html`, `edit.html`, `search.html` |
 | Schema/validation | `ptos.py`, `schema.toml` |
 | Web UI patterns | `web_templates/base.html`, neighboring templates |
 | CLI flags | `ptos_cli.py`, `ptos.py` |
