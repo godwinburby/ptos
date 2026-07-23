@@ -62,9 +62,16 @@ fi
 # ── Set PTOS_HOME for this session ─────────────────────────────────────────
 export PTOS_HOME="$DATA_DIR"
 
-# ── Check Python version ────────────────────────────────────────────────────
+# ── Install Python if missing ────────────────────────────────────────────────
+if ! command -v python &>/dev/null || ! python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+    echo "Python 3.11+ not found. Installing..."
+    pkg update -y
+    pkg install -y python
+fi
+
 if ! python -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
-    echo "ERROR: Python 3.11+ required. Run:  pkg install python"
+    echo "ERROR: Python 3.11+ could not be installed."
+    echo "Try manually:  pkg install python"
     exit 1
 fi
 

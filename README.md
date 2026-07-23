@@ -133,8 +133,8 @@ bash run_ptos_android.sh
 
 On first run, the script performs full setup:
 
-1. Checks Python version (3.11+ required, auto-installs via `winget`)
-2. Installs Git and rclone if missing (via `winget`)
+1. Checks Python version (3.11+ required, auto-installs on all platforms)
+2. Installs Git and rclone if missing (Windows: `winget`, Linux/macOS: package manager)
 3. Clones PTOS from GitHub via `git clone`
 4. Installs Flask and tomli-w via pip
 5. Runs `ptos --init` to create `config/`, `records/`, `journal/` and starter config files
