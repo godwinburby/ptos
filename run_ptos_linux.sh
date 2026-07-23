@@ -32,9 +32,31 @@ for cmd in python3.13 python3.12 python3.11 python3 python; do
 done
 
 if [ -z "$PYTHON" ]; then
+    echo "Python 3.11+ not found. Installing..."
+    if command -v apt &>/dev/null; then
+        sudo apt update -qq && sudo apt install -y python3.11 2>/dev/null || sudo apt install -y python3 2>/dev/null
+    elif command -v dnf &>/dev/null; then
+        sudo dnf install -y python3.11 2>/dev/null || sudo dnf install -y python3 2>/dev/null
+    elif command -v pacman &>/dev/null; then
+        sudo pacman -Sy --noconfirm python 2>/dev/null
+    elif command -v zypper &>/dev/null; then
+        sudo zypper install -y python311 2>/dev/null || sudo zypper install -y python3 2>/dev/null
+    fi
+
+    for cmd in python3.13 python3.12 python3.11 python3 python; do
+        if command -v "$cmd" &>/dev/null; then
+            if "$cmd" -c "import sys; sys.exit(0 if sys.version_info >= (3,11) else 1)" 2>/dev/null; then
+                PYTHON="$cmd"
+                break
+            fi
+        fi
+    done
+fi
+
+if [ -z "$PYTHON" ]; then
     echo ""
-    echo "ERROR: Python 3.11 or higher is required but not found."
-    echo "Install it, e.g.:  sudo apt install python3.11"
+    echo "ERROR: Python 3.11 or higher is required but could not be installed."
+    echo "Install it manually, e.g.:  sudo apt install python3.11"
     exit 1
 fi
 echo "Using $PYTHON ($($PYTHON --version))"

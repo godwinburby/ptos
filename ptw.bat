@@ -1,1 +1,1 @@
-start_ptos_windows.bat
+run_ptos.bat
