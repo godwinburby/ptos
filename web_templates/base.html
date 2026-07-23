@@ -423,15 +423,15 @@
     <span class="brand-tag">Plain Text Operating System</span>
   </div>
   <form action="/search" method="GET" class="sidebar-search">
-    <input type="text" name="q" id="sidebar-search" placeholder="Search records, journal, todos, notes… (/)">
+    <input type="text" name="q" id="sidebar-search" placeholder="Search records, journal, todos, notes… (/)" autocomplete="off">
   </form>
   <script>
-    (function() {
+    setTimeout(function() {
       var el = document.getElementById("sidebar-search");
       if (el && typeof attachBracketAutocomplete === "function") {
         attachBracketAutocomplete(el);
       }
-    })();
+    }, 0);
   </script>
   <nav class="sidebar-nav">
     <a href="/"        class="{% if tab=='home'    %}active{% endif %}">{% include 'icons/home.html'    ignore missing %} Home</a>
