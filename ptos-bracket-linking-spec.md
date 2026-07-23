@@ -67,20 +67,16 @@ Returns up to 20 sorted candidates matching the query prefix.
 **Sources scanned:**
 | Source | What's indexed |
 |---|---|
-| Notes | `# heading` title + all 3+ char words from content (starting with a letter) |
-| Journal | Date strings (e.g. `2026-07-22`) + all 3+ char words from content |
+| Journal, Notes, Todo files | All text inside `[[ ]]` brackets (multi-word phrases like `[[buy house]]` work) |
+| Record log files | `project=` and `context=` values from key=value lines |
 | Todo projects | Project names from `get_projects()`, stripped of `+` prefix |
 
-**Filtering:**
-- Words must start with a letter: regex `\b[a-zA-Z]\w{2,}\b` (skips pure numbers, timestamps)
-- Pure numeric/date/time strings filtered out via `_add()` safety check
-- Journal dates exempt from the number filter (passed with `is_date=True`)
-- Deduplication via `seen` set (case-insensitive)
-
-**`_extract_title(path)`:**
-Reads the first line of a note file. If it starts with `# `, returns
-the heading text. Otherwise falls back to the filename slug with
-dashes replaced by spaces and title-cased.
+**How it works:**
+- `\[\[([^\]]+)\]\]` regex extracts everything between `[[` and `]]` from all text files
+- `\b(project|context)=(\S+)` regex extracts project/context values from record `.log` files
+- `get_projects(todos + done)` provides todo project names (stripped of `+`)
+- Deduplication via `seen` set (case-insistent)
+- Results sorted alphabetically, capped at 20
 
 ## 4. Rendering — `[[link]]` becomes clickable in preview
 
@@ -116,6 +112,5 @@ date, or a project, and search already shows all of them grouped.
 
 ## 6. Tests
 
-- `TestExtractTitle` — heading extraction, no-heading fallback, missing file
-- `TestLinkCandidates` — notes and journal dates found via glob
+- `TestLinkCandidates` — bracket links in notes, journal, multi-word phrases, todo projects, record project/context, no noise from pure numbers
 - All in `tests/test_notes.py`

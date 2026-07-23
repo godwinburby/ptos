@@ -2977,35 +2977,40 @@ def api_link_candidates():
     q = request.args.get("q", "").lower()
     results = []
     seen = set()
-    _word_re = re.compile(r'\b[a-zA-Z]\w{2,}\b')
-    def _add(val, is_date=False):
+    _bracket_re = re.compile(r'\[\[([^\]]+)\]\]')
+    _kv_re = re.compile(r'\b(project|context)=(\S+)')
+    def _add(val):
         v = val.strip()
         if not v or v.lower() in seen or q not in v.lower():
             return
-        if not is_date and re.match(r'^[\d\-/:.\s]+$', v):
-            return
         seen.add(v.lower())
         results.append(v)
+    def _scan_file(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            for m in _bracket_re.finditer(content):
+                _add(m.group(1))
+        except Exception:
+            pass
     for path in glob.glob(os.path.join(ptos.NOTES_DIR, "*", "*.md")):
-        title = _extract_title(path)
-        _add(title)
-        try:
-            with open(path, encoding="utf-8") as f:
-                content = f.read()
-            for word in set(_word_re.findall(content)):
-                _add(word)
-        except Exception:
-            pass
+        _scan_file(path)
     for path in glob.glob(os.path.join(ptos.JOURNAL_DIR, "*", "*", "*.md")):
-        date_str = os.path.basename(path).replace(".md", "")
-        _add(date_str, is_date=True)
-        try:
-            with open(path, encoding="utf-8") as f:
-                content = f.read()
-            for word in set(_word_re.findall(content)):
-                _add(word)
-        except Exception:
-            pass
+        _scan_file(path)
+    for tpath_name in ["todo.txt", "done.txt"]:
+        _scan_file(os.path.join(ptos.TODO_DIR, tpath_name))
+    try:
+        for fname in ptos.get_log_files():
+            path = os.path.join(ptos.RECORDS_DIR, fname)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    for line in f:
+                        for m in _kv_re.finditer(line):
+                            _add(m.group(2))
+            except Exception:
+                pass
+    except Exception:
+        pass
     try:
         import ptos_todo as _todo_mod
         todos, _ = _todo_mod.load_todos(ptos.TODO_PATH)
@@ -3015,18 +3020,6 @@ def api_link_candidates():
     except Exception:
         pass
     return jsonify(sorted(results)[:20])
-
-
-def _extract_title(path):
-    try:
-        with open(path, "r", encoding="utf-8") as f:
-            first = f.readline().strip()
-        if first.startswith("# "):
-            return first[2:]
-    except Exception:
-        pass
-    slug = os.path.splitext(os.path.basename(path))[0]
-    return slug.replace("-", " ").title()
 
 
 @app.route("/api/save_query", methods=["POST"])
