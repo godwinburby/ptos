@@ -133,7 +133,7 @@ chmod +x "$HOME/run_ptos_android.sh" 2>/dev/null || true
 
 # ── Refresh widget shortcut ────────────────────────────────────────────────
 mkdir -p "$HOME/.shortcuts"
-rm -f "$HOME/.shortcuts"/*.sh
+rm -f "$HOME/.shortcuts/run_ptos.sh"
 cat > "$HOME/.shortcuts/run_ptos.sh" <<WRAPPER
 #!/bin/bash
 exec "$PTOS_DIR/run_ptos_android.sh" "\$@"
