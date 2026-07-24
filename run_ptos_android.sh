@@ -3,6 +3,12 @@
 # Handles both first-time setup and daily launch.
 # Usage:  bash run_ptos_android.sh
 
+# Strip CRLF if present (curl / git may deliver Windows line endings)
+if grep -q $'\r' "$0" 2>/dev/null; then
+    sed 's/\r$//' "$0" > "$0.tmp" && mv "$0.tmp" "$0"
+    exec bash "$0" "$@"
+fi
+
 echo "=========================================="
 echo "  PTOS"
 echo "=========================================="
@@ -193,8 +199,8 @@ if [ "$SERVER_READY" = "1" ]; then
     am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
 else
     echo ""
-    echo "Server is taking longer than usual to start (startup sync may"
-    echo "still be running — check the messages above)."
+    echo "Server is taking longer than usual to start"
+    echo "Startup sync may still be running -- check the messages above."
     echo -n "Waiting "
     for i in $(seq 1 120); do
         if curl -s http://localhost:5000 >/dev/null 2>&1; then
