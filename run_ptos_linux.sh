@@ -9,7 +9,13 @@ echo "=========================================="
 echo ""
 
 # ── Locate PTOS directory ─────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+_SOURCE="${BASH_SOURCE[0]}"
+while [ -L "$_SOURCE" ]; do
+    _DIR="$(cd -P "$(dirname "$_SOURCE")" && pwd)"
+    _SOURCE="$(readlink "$_SOURCE")"
+    [[ $_SOURCE != /* ]] && _SOURCE="$_DIR/$_SOURCE"
+done
+SCRIPT_DIR="$(cd -P "$(dirname "$_SOURCE")" && pwd)"
 
 if [ ! -f "$SCRIPT_DIR/ptos.py" ]; then
     echo "ptos.py not found here — cloning from GitHub..."
