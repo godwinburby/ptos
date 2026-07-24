@@ -9,12 +9,16 @@ echo "=========================================="
 echo ""
 
 # ── Locate PTOS directory ─────────────────────────────────────────────────────
-SCRIPT_DIR="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+if [ ! -f "$SCRIPT_DIR/ptos.py" ] && [ -f "$HOME/ptos/ptos.py" ]; then
+    SCRIPT_DIR="$HOME/ptos"
+fi
 
 if [ ! -f "$SCRIPT_DIR/ptos.py" ]; then
-    echo "ptos.py not found here — cloning from GitHub..."
-    git clone https://github.com/godwinburby/ptos.git "$SCRIPT_DIR/ptos"
-    cd "$SCRIPT_DIR/ptos"
+    echo "ptos.py not found — cloning from GitHub..."
+    git clone https://github.com/godwinburby/ptos.git "$HOME/ptos"
+    cd "$HOME/ptos"
 else
     cd "$SCRIPT_DIR"
 fi
@@ -134,10 +138,7 @@ chmod +x "$HOME/run_ptos_android.sh" 2>/dev/null || true
 # ── Refresh widget shortcut ────────────────────────────────────────────────
 mkdir -p "$HOME/.shortcuts"
 rm -f "$HOME/.shortcuts/run_ptos.sh"
-cat > "$HOME/.shortcuts/run_ptos.sh" <<WRAPPER
-#!/bin/bash
-exec "$PTOS_DIR/run_ptos_android.sh" "\$@"
-WRAPPER
+cp "$PTOS_DIR/run_ptos_android.sh" "$HOME/.shortcuts/run_ptos.sh" 2>/dev/null || true
 chmod +x "$HOME/.shortcuts/run_ptos.sh" 2>/dev/null || true
 echo "Widget shortcut: ~/.shortcuts/run_ptos.sh"
 
