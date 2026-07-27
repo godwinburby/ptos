@@ -24,6 +24,12 @@ enabled = false
 username = ""
 password = ""
 
+[server]
+# Web server bind address and port
+# Use 0.0.0.0 to expose via Tailscale or LAN (enable [auth] first!)
+host = "127.0.0.1"
+port = 5000
+
 [backup]
 # Folders to include in full backup
 folders = ["records", "config", "templates", "journal", "todo", "exports", "notes", "scripts"]
@@ -56,3 +62,5 @@ sync_interval_minutes = 0
 notify_interval = 5
 # Months before done items are archived to done.YYYY.txt
 archive_months = 6
+# Priority labels shown in the todo UI (not stored in todo.txt)
+priority_labels = { A = "Critical", B = "Important", C = "Moderate", D = "Low" }
