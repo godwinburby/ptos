@@ -674,12 +674,15 @@ def todo_page():
     all_todos_flat = buckets["overdue"] + buckets["today"] + buckets["upcoming"] + buckets["someday"]
     all_priorities = sorted(set(t.priority for t in all_todos_flat if t.priority))
 
+    todo_cfg = svc.get_config().get("todo", {})
+    priority_labels = todo_cfg.get("priority_labels", {})
+
     return render_template("todo.html", tab="todo", title="Todo",
         now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
         error=error, selected_project=project, selected_context=context,
         selected_priority=pri, selected_due=due_filter, selected_search=search,
         done_today=done_today, total_today=total_today, done_recent=done_recent,
-        all_priorities=all_priorities)
+        all_priorities=all_priorities, priority_labels=priority_labels)
 
 
 @app.route("/todo/add", methods=["POST"])
@@ -3157,8 +3160,22 @@ if __name__ == "__main__":
             print(f"  - {m}")
         print()
 
+    # Read server config
+    server_cfg = svc.get_config().get("server", {})
+    _host = server_cfg.get("host", "127.0.0.1")
+    _port = server_cfg.get("port", 5000)
+
+    # Warn if exposed without auth
+    if _host not in ("127.0.0.1", "localhost"):
+        auth_cfg = svc.get_config().get("auth", {})
+        if not auth_cfg.get("enabled", False):
+            print(f"WARNING: Server bound to {_host} (reachable from network).")
+            print("  No [auth] configured -- anyone on the network can access your data.")
+            print("  Enable auth in Settings or config.toml before exposing publicly.\n")
+
     print("\nPTOS Web UI")
-    print("Open: http://localhost:5000\n")
+    _display_host = "localhost" if _host in ("127.0.0.1", "localhost") else _host
+    print(f"Open: http://{_display_host}:{_port}\n")
 
     # Start housekeeping background thread
     try:
@@ -3182,4 +3199,4 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    app.run(host="127.0.0.1", port=5000)
+    app.run(host=_host, port=_port)

@@ -4,7 +4,7 @@
 {% macro todo_row(t, badge_class) %}
     <div class="todo-row" data-line="{{ t.line_no }}">
       <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
-      <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}" onclick="popupEditPriority({{ t.line_no }}, '{{ t.priority or '' }}', this)" title="Change priority">{{ t.priority or '—' }}</div>
+      <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}" onclick="popupEditPriority({{ t.line_no }}, '{{ t.priority or '' }}', this)" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %} — Change priority">{{ t.priority or '—' }}</div>
       <div class="todo-body">
         <div class="todo-desc">{{ t.description }}</div>
         <div class="todo-meta">
@@ -416,10 +416,10 @@
   <div class="chip-group-card">
     <div class="chip-group-label">Priority</div>
     <div class="chip-row" id="add-chips-pri">
-      <button class="add-chip pri-chip pri-A" data-token="(A) " onclick="toggleAddChip(this,'pri')">(A)</button>
-      <button class="add-chip pri-chip pri-B" data-token="(B) " onclick="toggleAddChip(this,'pri')">(B)</button>
-      <button class="add-chip pri-chip pri-C" data-token="(C) " onclick="toggleAddChip(this,'pri')">(C)</button>
-      <button class="add-chip pri-chip pri-D" data-token="(D) " onclick="toggleAddChip(this,'pri')">(D)</button>
+      <button class="add-chip pri-chip pri-A" data-token="(A) " onclick="toggleAddChip(this,'pri')">(A) {{ priority_labels.get('A', 'Critical') }}</button>
+      <button class="add-chip pri-chip pri-B" data-token="(B) " onclick="toggleAddChip(this,'pri')">(B) {{ priority_labels.get('B', 'Important') }}</button>
+      <button class="add-chip pri-chip pri-C" data-token="(C) " onclick="toggleAddChip(this,'pri')">(C) {{ priority_labels.get('C', 'Moderate') }}</button>
+      <button class="add-chip pri-chip pri-D" data-token="(D) " onclick="toggleAddChip(this,'pri')">(D) {{ priority_labels.get('D', 'Low') }}</button>
     </div>
   </div>
   {% if projects %}
@@ -480,7 +480,7 @@
       <code><span style="color:var(--error);">(A)</span> Review proposal <span style="color:var(--accent);">+Work</span> <span style="color:var(--green);">@office</span> <span style="color:#f0ad4e;">due:tomorrow 3pm</span> <span style="color:var(--sub);">rec:1w</span></code>
     </div>
     <table class="todo-help-table">
-      <tr><td><code style="color:var(--error);">(A)</code></td><td>Priority <code>(A)</code>–<code>(Z)</code>. Or type <code>pri:a</code></td></tr>
+      <tr><td><code style="color:var(--error);">(A)</code></td><td>Priority <code>(A)</code>–<code>(Z)</code>. Or type <code>pri:a</code>{% set _def = {'A':'Critical','B':'Important','C':'Moderate','D':'Low'} %}{% for p in ["A","B","C","D"] %}<br><code>({{ p }})</code> = {{ priority_labels.get(p, _def.get(p, p)) }}{% endfor %}</td></tr>
       <tr><td><code style="color:var(--accent);">+Project</code></td><td>Project tag, e.g. <code>+Home</code></td></tr>
       <tr><td><code style="color:var(--green);">@context</code></td><td>Context tag, e.g. <code>@phone</code></td></tr>
       <tr><td><code style="color:#f0ad4e;">due:date</code></td><td>Due date — <code>today</code> <code>tomorrow</code> <code>fri</code> <code>this_week</code> <code>next_month</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
@@ -528,7 +528,7 @@
 {% if has_filter %}
 <div class="active-filter-bar has-filters">
   {% if selected_priority %}
-  <span class="af-chip">({{ selected_priority }})
+  <span class="af-chip">({{ selected_priority }}) {{ priority_labels.get(selected_priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(selected_priority, '')) }}
     <a href="/todo?{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}" title="Clear">&#x2715;</a>
   </span>
   {% endif %}
@@ -561,7 +561,7 @@
     <div class="chip-row">
       {% for p in all_priorities %}
       <a href="/todo?{% if selected_priority != p %}priority={{ p }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}"
-         class="todo-chip {% if selected_priority==p %}active{% endif %}">({{ p }})</a>
+         class="todo-chip {% if selected_priority==p %}active{% endif %}">({{ p }}) {{ priority_labels.get(p, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(p, '')) }}</a>
       {% endfor %}
     </div>
   </div>
@@ -672,7 +672,7 @@
     {% for t in done_recent %}
     <div class="todo-row" data-line="{{ t.line_no }}">
       <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
-      <div class="todo-pri {{ t.priority or 'none' }}" style="opacity:0.5;"><a href="/todo?priority={{ (t.priority or '')|urlencode }}">{{ t.priority or '—' }}</a></div>
+      <div class="todo-pri {{ t.priority or 'none' }}" style="opacity:0.5;" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %}"><a href="/todo?priority={{ (t.priority or '')|urlencode }}">{{ t.priority or '—' }}</a></div>
       <div class="todo-body">
         <div class="todo-desc" style="text-decoration:line-through;">{{ t.description }}</div>
         <div class="todo-meta">
@@ -708,7 +708,7 @@
         <select id="modal-pri">
           <option value="">None</option>
           {% for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" %}
-          <option value="{{ letter }}">{{ letter }}</option>
+          <option value="{{ letter }}">{% set lbl = priority_labels.get(letter, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(letter, '')) %}{{ letter }}{% if lbl %} — {{ lbl }}{% endif %}</option>
           {% endfor %}
         </select>
       </div>
@@ -1112,6 +1112,7 @@ function toggleChipSection(id, bar) {
 }
 
 /* --- Autocomplete --- */
+var _priLabels = {{ priority_labels|tojson }};
 var _acData = {
   '+': [
     {% for p in projects %}{l:'{{ p }}', v:'{{ p }} '}{% if not loop.last %},{% endif %}{% endfor %}
@@ -1149,17 +1150,17 @@ var _acData = {
     {l:'Clear', v:'__CLEARREC__'}
   ],
   'pri:': [
-    {l:'A — Urgent', v:'(A) '},
-    {l:'B — Important', v:'(B) '},
-    {l:'C — Moderate', v:'(C) '},
-    {l:'D — Low', v:'(D) '},
+    {l:'A — ' + (_priLabels.A || 'Critical'), v:'(A) '},
+    {l:'B — ' + (_priLabels.B || 'Important'), v:'(B) '},
+    {l:'C — ' + (_priLabels.C || 'Moderate'), v:'(C) '},
+    {l:'D — ' + (_priLabels.D || 'Low'), v:'(D) '},
     {l:'Clear priority', v:'__CLEARPRI__'}
   ],
   '(': [
-    {l:'(A)', v:'(A) '},
-    {l:'(B)', v:'(B) '},
-    {l:'(C)', v:'(C) '},
-    {l:'(D)', v:'(D) '}
+    {l:'(A) ' + (_priLabels.A || 'Critical'), v:'(A) '},
+    {l:'(B) ' + (_priLabels.B || 'Important'), v:'(B) '},
+    {l:'(C) ' + (_priLabels.C || 'Moderate'), v:'(C) '},
+    {l:'(D) ' + (_priLabels.D || 'Low'), v:'(D) '}
   ]
 };
 var _acIdx = -1, _acItems = [];
@@ -1377,7 +1378,13 @@ function popupEditPriority(lineNo, currentPri, el) {
   _fpField = 'priority';
   var popup = document.getElementById('field-popup');
   var opts = ['A','B','C','D',''];
-  var labels = ['A — Urgent','B — Important','C — Moderate','D — Low','None'];
+  var defaultLabels = {'A':'Critical','B':'Important','C':'Moderate','D':'Low'};
+  var labels = [];
+  for (var i = 0; i < opts.length; i++) {
+    if (opts[i] === '') { labels.push('None'); continue; }
+    var lbl = _priLabels[opts[i]] || defaultLabels[opts[i]] || opts[i];
+    labels.push(opts[i] + ' — ' + lbl);
+  }
   var html = '<div class="fp-label">Priority</div><div class="fp-row">';
   for (var i = 0; i < opts.length; i++) {
     var cls = 'fp-chip';

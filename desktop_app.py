@@ -81,7 +81,8 @@ class _Api:
         global _stopping
         _stopping = True
         try:
-            import ptos_service as svc
+    import ptos_service as svc
+    port = svc.get_config().get("server", {}).get("port", 5000)
             if svc.get_backup_config().get("auto_backup_on_startup", True):
                 svc.backup_if_needed()
         except Exception:
@@ -230,8 +231,6 @@ if __name__ == "__main__":
     _log("=== PTOS desktop start ===")
     _log(f"_MEIPASS={getattr(sys, '_MEIPASS', 'none')} frozen={getattr(sys, 'frozen', False)}")
 
-    port = 5000
-
     if _is_already_running():
         _log("Another instance is already running")
         import ctypes
@@ -248,6 +247,7 @@ if __name__ == "__main__":
     _log("init_ptos done")
 
     import ptos_service as svc
+    port = svc.get_config().get("server", {}).get("port", 5000)
     try:
         if svc.get_backup_config().get("auto_backup_on_startup", True):
             created, _ = svc.backup_if_needed()
