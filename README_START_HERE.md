@@ -125,9 +125,10 @@ row to open the edit form for that record.
 
 **More** — everything else in one place:
 
-- **Search** — universal search across records, todos, and journal
+- **Search** — universal search across records, todos, journal, and notes
 - **Due List** — overdue items sorted by how long they have been waiting
 - **Journal** — daily journal, one entry per day, navigate with Prev / Next or pick a date. Press **Save** when done — it does not save automatically
+- **Notes** — organise notes by category (meetings, books, recipes, etc.) with live markdown preview
 - **Schema Builder** — add or change record types without touching any files
 - **Query Builder** — create custom queries, metrics, and reports with a visual builder
 - **Settings** — currency, date format, dashboard layout, billing cycles, and backup preferences
@@ -261,9 +262,15 @@ opens the browser automatically.
 ptos/
 ├── records/
 │   └── 2026.log          ← all your records for this year, one line per entry
+├── todo/
+│   ├── todo.txt          ← your active tasks
+│   └── done.txt          ← completed tasks
 ├── journal/
 │   └── 2026/
 │       └── 2026-03-19.md ← today's journal entry
+├── notes/
+│   └── meeting/
+│       └── 2026-03-19-standup.md ← a meeting note
 ├── config/
 │   ├── schema.toml       ← record types and field rules
 │   ├── queries.toml      ← saved reports and dashboards

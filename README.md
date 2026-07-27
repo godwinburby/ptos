@@ -120,6 +120,8 @@ curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos_linux.s
 bash run_ptos_linux.sh
 ```
 
+Auto-installs Python if missing (detects apt, dnf, pacman, or zypper).
+
 ### Android / Termux
 
 Single file — one script handles everything:
@@ -128,6 +130,8 @@ Single file — one script handles everything:
 curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos_android.sh
 bash run_ptos_android.sh
 ```
+
+Auto-installs Python via `pkg install -y python` if missing.
 
 ### What the setup script does
 
@@ -193,6 +197,7 @@ python ptos.py --set-home ~/ptos-data
 │   ├── ptos_service.py              # Service layer (web UI + CLI)
 │   ├── ptos_web.py                  # Web UI (Flask)
 │   ├── ptos_todo.py                 # Todo module
+│   ├── desktop_app.py               # Native desktop wrapper
 │   ├── .ptos_home                   # Points to ../ptos-data
 │   ├── starters/                    # Default configs shipped with project
 │   ├── tests/                       # pytest test suite
@@ -209,6 +214,7 @@ python ptos.py --set-home ~/ptos-data
     ├── exports/                     # CSV exports (created on demand)
     ├── todo/                        # Todo files (todo.txt, done.txt, done.YYYY.txt)
     ├── journal/                     # Markdown journal entries
+    ├── notes/                       # Markdown notes by category
     └── .ptos_sync_state             # Smart sync skip state
 
 ptos-backups/                        # ZIP backups (sibling to ptos-data, outside sync scope)
@@ -354,11 +360,43 @@ for dates with no file. Autosaves after 2.5 seconds of inactivity. Saves with a
 
 ### Search
 
-Universal search across records, journal entries, and todos. Type a query in the
+Universal search across records, journal entries, todos, and notes. Type a query in the
 topbar search field and press Enter or click the magnifying glass. Results are
 grouped by category — click any result to jump directly to it. Supports glob
 wildcards (`*` and `?`) for pattern matching. Searches record values, journal
-file names, and todo descriptions.
+file names, todo descriptions, and note content. Type `[[bracket]]` links anywhere
+to create cross-references — search picks them up automatically.
+
+### Notes
+
+Markdown notes organized by category. Create notes from the Notes page — each note
+lives in `notes/{category}/{slug}.md`. Notes support live preview with markdown
+rendering, and you can cross-link between notes, journal entries, and todos using
+`[[bracket]]` links (e.g. `[[Meeting Notes]]`). PTOS ships with starter templates
+for common categories; customise them in `templates/`.
+
+Features:
+- Create notes in any category (meeting, book, recipe, etc.)
+- Live markdown preview with `[[bracket]]` cross-linking
+- Edit and delete notes inline
+- Search integration — notes appear in universal search results
+- Template system — each category can have its own template
+
+### Bracket Cross-linking (`[[Target]]`)
+
+Wiki-style `[[links]]` connect notes, journal entries, and todos. Type `[[`
+in any text field (todo quick-add, journal editor, notes editor, record note
+fields) and autocomplete suggests existing targets — project names, context
+names, and anything you've previously linked. In journal and notes preview,
+`[[Target]]` becomes a clickable link to search for that term.
+
+Where bracket autocomplete works:
+- Todo quick-add input
+- Journal editor
+- Notes editor
+- Add/Edit record note fields
+- Sidebar search
+- Search page
 
 ### Todo
 
@@ -367,17 +405,17 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 
 **Features:**
 - Overdue / Today / Upcoming / Someday sections with collapsible Done section
-- Priority badges (A=red, B=orange, C=blue, D=gray), due date badges, project/context chips
+- Priority badges (A=red, B=orange, C=blue, D=gray) with configurable labels, due date badges, project/context chips
 - Quick-add text input with todo.txt syntax (`(A) Task +Project @context due:tomorrow`)
-- **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `t:t` for `t:today`, `(a` for `(A)`. Arrow keys + Enter to select.
-- **Quick pick chips** (collapsible) — click Due, Priority, Projects, Contexts, or Threshold chips to insert into input. Due/Threshold include `this_week`, `next_week`, `this_month`, `next_month` shortcuts. On mobile, groups stack vertically instead of scrolling
-- **Filter chips** (collapsible) — filter by Priority (A-D), Due Range (overdue/today/upcoming/someday/none), and Context. Click a chip to toggle filter on/off. On mobile, groups stack vertically
+- **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `t:t` for `t:today`, `(a` for `(A) Critical`. Arrow keys + Enter to select.
+- **Quick pick chips** (collapsible) — click Due, Priority (with labels from config, e.g. "(A) Critical"), Projects, Contexts, or Threshold chips to insert into input. Due/Threshold include `this_week`, `next_week`, `this_month`, `next_month` shortcuts. On mobile, groups stack vertically instead of scrolling
+- **Filter chips** (collapsible) — filter by Priority (A-D with labels), Due Range (overdue/today/upcoming/someday/none), and Context. Click a chip to toggle filter on/off. On mobile, groups stack vertically
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; type a term and press Search or Enter to filter todos by description
 - **Clickable todo chips** — click project, context, or priority chips on any todo row to filter the list; click again to remove filter
-- **Form modal** (press `n` or click `+`) — Priority as dropdown (None/A/B/C/D), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
+- **Form modal** (press `n` or click `+`) — Priority as dropdown (None/A/B/C/D with labels from config), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
 - Inline edit (pencil icon on hover) and delete for open and done tasks; done tasks also support undo (checkmark) to move back to todo.txt
 - Project rail for filtering by `+Project` with toggle behavior
-- Collapsible `? Help` reference card
+- Collapsible `? Help` reference card with priority labels
 - **System notifications** — native OS desktop notifications (Linux: `notify-send`, macOS: Notification Center, Windows: toast, Android: `termux-notification`) alongside browser notifications; works in PWA mode (service worker excludes SSE endpoint)
 - Automatic archiving: done items older than 6 months move to `done.YYYY.txt` on startup
 
@@ -445,6 +483,7 @@ Configure user profile and app preferences. Sections:
 - **Backup Settings**: auto backup on startup/shutdown triggers
 - **Todo**: reminder check interval (minutes) — how often PTOS checks for due todos; takes effect after restart
 - **Sync**: OneDrive bidirectional sync via rclone bisync. See [Sync section](#sharing-and-sync) for full details.
+- **Server** (config only): `[server]` section in `config.toml` with `host` and `port` — default `127.0.0.1:5000`. Set `host = "0.0.0.0"` to expose on LAN or Tailscale. Always set `[auth]` before exposing publicly.
 
 Settings are stored in `config.toml` and editable via the UI.
 
@@ -621,6 +660,13 @@ sync_interval_minutes   = 0      # periodic sync interval (0 = disabled)
 [todo]
 notify_interval         = 5      # background due-todo check interval (minutes)
 archive_months          = 6      # months before done items are archived
+priority_labels         = { A = "Critical", B = "Important", C = "Moderate", D = "Low" }
+
+# Optional — bind to a different host/port (e.g. for Tailscale or LAN access)
+# Default is 127.0.0.1:5000 (localhost only). Set auth before exposing publicly.
+# [server]
+# host = "0.0.0.0"
+# port = 5000
 
 # Optional — HTTP Basic Auth for server deployments (e.g. PythonAnywhere)
 # Without this anyone who knows the URL can access your data.
@@ -1177,8 +1223,16 @@ ptos -y test -t td --delete --all
 | `--todo-add [text]` | | Add a todo. Preprocesses pri:/due:/t: shortcuts |
 | `--todo-list` | | List open todos with bucket grouping |
 | `--todo-done N` | | Mark todo at line N complete |
-| `--todo-edit N key=value` | | Edit a field on a todo |
+| `--todo-edit N key=value` | | Edit a field on a todo (supports `+Project`, `-+Project`, `@Context`, `-@Context`) |
 | `--todo-delete N` | | Delete a todo by line number |
+| `--todo-undo N` | | Undo completion (done.txt → todo.txt) |
+| `--todo-done-list` | | List completed todos from done.txt |
+| `--todo-done-delete N` | | Permanently delete from done.txt |
+| `--todo-done-edit N key=value` | | Edit a completed todo |
+| `--todo-projects` | | List all projects with counts |
+| `--todo-contexts` | | List all contexts with counts |
+| `--todo-due [DAYS]` | | Show due/overdue todos (default: today+overdue, optional lookahead) |
+| `--todo-archive` | | Archive old done items to done.YYYY.txt |
 | `--doctor` | | Check PTOS installation health |
 | `--doctor --fix` | | Auto-fix issues found by --doctor |
 | `--check-schema` | | Validate schema.toml structure (missing types, bad refs, unknown field types) |
