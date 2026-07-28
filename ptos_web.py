@@ -619,6 +619,7 @@ def todo_page():
     pri = request.args.get("priority", None)
     due_filter = request.args.get("due", None)
     search = request.args.get("search", None)
+    groupby = request.args.get("groupby", "timeline")
 
     try:
         buckets = svc.get_todos_bucketed()
@@ -679,12 +680,66 @@ def todo_page():
     todo_cfg = svc.get_config().get("todo", {})
     priority_labels = todo_cfg.get("priority_labels", {})
 
+    # Build grouped sections for the selected groupby mode
+    _pri_order = {"A": 0, "B": 1, "C": 2, "D": 3}
+    _pri_colors = {"A": "var(--error)", "B": "var(--warn)", "C": "var(--accent)", "D": "var(--sub)"}
+    _pri_labels = {"A": "Critical", "B": "Important", "C": "Moderate", "D": "Low"}
+    all_open = buckets["overdue"] + buckets["today"] + buckets["tomorrow"] + buckets["upcoming"] + buckets["someday"]
+
+    if groupby == "priority":
+        _groups = {}
+        for t in all_open:
+            p = t.priority or ""
+            _groups.setdefault(p, []).append(t)
+        grouped = []
+        for p in ("A", "B", "C", "D"):
+            if p in _groups:
+                lbl = f"({p}) {priority_labels.get(p, _pri_labels.get(p, p))}"
+                grouped.append((f"pri-{p}", lbl, _pri_colors.get(p, "var(--sub)"), sorted(_groups[p], key=lambda t: (t.due or dt.date.max, t.description))))
+        if "" in _groups:
+            grouped.append(("pri-none", "No Priority", "var(--border)", sorted(_groups[""], key=lambda t: (t.due or dt.date.max, t.description))))
+    elif groupby == "project":
+        _groups = {}
+        for t in all_open:
+            projs = t.projects or [""]
+            for p in projs:
+                _groups.setdefault(p, []).append(t)
+        no_proj = _groups.pop("", None)
+        grouped = []
+        for p in sorted(_groups.keys()):
+            grouped.append(("proj-" + p.lower(), f"+{p}", "var(--accent)", sorted(_groups[p], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+        if no_proj:
+            grouped.append(("proj-none", "No Project", "var(--sub)", sorted(no_proj, key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+    elif groupby == "context":
+        _groups = {}
+        for t in all_open:
+            ctxs = t.contexts or [""]
+            for c in ctxs:
+                _groups.setdefault(c, []).append(t)
+        no_ctx = _groups.pop("", None)
+        grouped = []
+        for c in sorted(_groups.keys()):
+            grouped.append(("ctx-" + c.lower(), f"@{c}", "var(--accent)", sorted(_groups[c], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+        if no_ctx:
+            grouped.append(("ctx-none", "No Context", "var(--sub)", sorted(no_ctx, key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+    else:
+        # timeline (default) — reuse existing bucket order
+        _timeline = [
+            ("overdue", "Overdue", "var(--error)", buckets["overdue"]),
+            ("today", "Today", "var(--accent)", buckets["today"]),
+            ("tomorrow", "Tomorrow", "var(--success)", buckets["tomorrow"]),
+            ("upcoming", "Upcoming", "#f0ad4e", buckets["upcoming"]),
+            ("someday", "Someday", "var(--sub)", buckets["someday"]),
+        ]
+        grouped = [(k, l, c, t) for k, l, c, t in _timeline if t]
+
     return render_template("todo.html", tab="todo", title="Todo",
         now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
         error=error, selected_project=project, selected_context=context,
         selected_priority=pri, selected_due=due_filter, selected_search=search,
         done_today=done_today, total_today=total_today, done_recent=done_recent,
-        all_priorities=all_priorities, priority_labels=priority_labels)
+        all_priorities=all_priorities, priority_labels=priority_labels,
+        grouped=grouped, groupby=groupby)
 
 
 @app.route("/todo/add", methods=["POST"])

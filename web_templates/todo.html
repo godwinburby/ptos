@@ -51,6 +51,21 @@
     font-size:12px; color:var(--sub); background:var(--bg);
     padding:2px 8px; border-radius:10px;
   }
+
+  /* Group by toggle */
+  .groupby-bar {
+    display:flex; gap:4px; margin-bottom:14px;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    padding:4px;
+  }
+  .groupby-btn {
+    flex:1; padding:6px 10px; border-radius:7px; border:none;
+    background:transparent; color:var(--sub); font-size:12px;
+    font-weight:600; cursor:pointer; transition:all .15s;
+    font-family:inherit; white-space:nowrap;
+  }
+  .groupby-btn:hover { color:var(--text); background:var(--bg); }
+  .groupby-btn.active { background:var(--accent); color:#fff; }
   .todo-row {
     display:flex; align-items:flex-start; gap:12px;
     padding:10px 0; border-bottom:1px solid var(--border);
@@ -607,64 +622,27 @@
 </div>
 {% endif %}
 
-{% if buckets.overdue %}
-<div class="todo-section">
-  <div class="todo-section-header" onclick="toggleSection('overdue')">
-    <div class="todo-section-title" style="color:var(--error);">Overdue</div>
-    <div class="todo-section-count">{{ buckets.overdue|length }}</div>
-  </div>
-  <div id="sec-overdue">
-    {% for t in buckets.overdue %}{{ todo_row(t, 'overdue') }}{% endfor %}
-  </div>
+{% if total_open > 0 %}
+{% set _gbase = "/todo?" %}
+{% set _gparams = "" %}
+<div class="groupby-bar">
+  {% for mode, label in [("timeline","Timeline"),("priority","Priority"),("project","Project"),("context","Context")] %}
+  <a href="/todo?groupby={{ mode }}{% if selected_project %}&project={{ selected_project|urlencode }}{% endif %}{% if selected_context %}&context={{ selected_context|urlencode }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_due %}&due={{ selected_due }}{% endif %}{% if selected_search %}&search={{ selected_search|urlencode }}{% endif %}"
+     class="groupby-btn {% if groupby==mode %}active{% endif %}">{{ label }}</a>
+  {% endfor %}
 </div>
-{% endif %}
 
-{% if buckets.today %}
+{% for sec_key, sec_label, sec_color, sec_todos in grouped %}
 <div class="todo-section">
-  <div class="todo-section-header" onclick="toggleSection('today')">
-    <div class="todo-section-title" style="color:var(--accent);">Today</div>
-    <div class="todo-section-count">{{ buckets.today|length }}</div>
+  <div class="todo-section-header" onclick="toggleSection('{{ sec_key }}')">
+    <div class="todo-section-title" style="color:{{ sec_color }};">{{ sec_label }}</div>
+    <div class="todo-section-count">{{ sec_todos|length }}</div>
   </div>
-  <div id="sec-today">
-    {% for t in buckets.today %}{{ todo_row(t, 'today') }}{% endfor %}
+  <div id="sec-{{ sec_key }}">
+    {% for t in sec_todos %}{{ todo_row(t, sec_key) }}{% endfor %}
   </div>
 </div>
-{% endif %}
-
-{% if buckets.tomorrow %}
-<div class="todo-section">
-  <div class="todo-section-header" onclick="toggleSection('tomorrow')">
-    <div class="todo-section-title" style="color:var(--green);">Tomorrow</div>
-    <div class="todo-section-count">{{ buckets.tomorrow|length }}</div>
-  </div>
-  <div id="sec-tomorrow">
-    {% for t in buckets.tomorrow %}{{ todo_row(t, 'today') }}{% endfor %}
-  </div>
-</div>
-{% endif %}
-
-{% if buckets.upcoming %}
-<div class="todo-section">
-  <div class="todo-section-header" onclick="toggleSection('upcoming')">
-    <div class="todo-section-title" style="color:#f0ad4e;">Upcoming</div>
-    <div class="todo-section-count">{{ buckets.upcoming|length }}</div>
-  </div>
-  <div id="sec-upcoming">
-    {% for t in buckets.upcoming %}{{ todo_row(t, 'future') }}{% endfor %}
-  </div>
-</div>
-{% endif %}
-
-{% if buckets.someday %}
-<div class="todo-section">
-  <div class="todo-section-header" onclick="toggleSection('someday')">
-    <div class="todo-section-title" style="color:var(--sub);">Someday</div>
-    <div class="todo-section-count">{{ buckets.someday|length }}</div>
-  </div>
-  <div id="sec-someday">
-    {% for t in buckets.someday %}{{ todo_row(t, 'future') }}{% endfor %}
-  </div>
-</div>
+{% endfor %}
 {% endif %}
 
 {% if done_recent %}
