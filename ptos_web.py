@@ -28,9 +28,11 @@ log = logging.getLogger("ptos_web")
 
 @app.context_processor
 def _inject_globals():
+    cfg = svc.get_config()
     return {
         "frozen": bool(getattr(sys, "frozen", False)),
         "desktop_mode": os.environ.get("DESKTOP_MODE") == "1",
+        "pomo_minutes": cfg.get("pomodoro", {}).get("duration_minutes", 25),
     }
 
 def _wants_json():

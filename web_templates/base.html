@@ -403,6 +403,54 @@
     @media (min-width: 768px) {
       .field-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
     }
+
+    /* ── Pomodoro Timer ── */
+    .pomo-pill {
+      display:none; position:fixed; bottom:80px; left:16px; z-index:160;
+      background:var(--card); border:2px solid var(--accent); border-radius:14px;
+      box-shadow:0 4px 16px rgba(0,0,0,.15); padding:0; overflow:hidden;
+      transition:width .2s,box-shadow .2s; cursor:pointer; min-width:180px;
+    }
+    .pomo-pill.active { display:block; }
+    .pomo-pill.running { border-color:var(--success); box-shadow:0 4px 16px rgba(46,125,86,.25); }
+    .pomo-pill.paused { border-color:var(--warn); }
+    .pomo-pill.expanded { width:280px; }
+    .pomo-pill:hover { box-shadow:0 6px 20px rgba(0,0,0,.2); }
+    .pomo-row {
+      display:flex; align-items:center; gap:8px; padding:10px 14px;
+    }
+    .pomo-icon {
+      width:28px; height:28px; border-radius:50%; border:none;
+      background:var(--accent); color:#fff; font-size:12px;
+      display:flex; align-items:center; justify-content:center;
+      cursor:pointer; flex-shrink:0; transition:background .15s;
+    }
+    .pomo-pill.running .pomo-icon { background:var(--success); }
+    .pomo-pill.paused .pomo-icon { background:var(--warn); }
+    .pomo-info { flex:1; min-width:0; }
+    .pomo-task {
+      font-size:12px; font-weight:600; color:var(--text);
+      white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+    }
+    .pomo-time {
+      font-size:18px; font-weight:800; color:var(--text);
+      font-feature-settings:"tnum"; font-variant-numeric:tabular-nums;
+      letter-spacing:0.5px;
+    }
+    .pomo-controls {
+      display:none; padding:0 14px 10px; gap:6px; justify-content:flex-end;
+    }
+    .pomo-pill.expanded .pomo-controls { display:flex; }
+    .pomo-ctrl-btn {
+      padding:5px 12px; border-radius:6px; border:none; font-size:11px;
+      font-weight:600; cursor:pointer; transition:background .15s;
+    }
+    .pomo-ctrl-pause { background:var(--warn); color:#fff; }
+    .pomo-ctrl-resume { background:var(--success); color:#fff; }
+    .pomo-ctrl-stop { background:var(--error); color:#fff; }
+    @media (min-width:768px) {
+      .pomo-pill { bottom:20px; left:20px; }
+    }
   </style>
 </head>
 <body>
@@ -771,6 +819,20 @@
 <button class="floating-add" onclick="floatingAddAction()" title="Add Record">
   <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
 </button>
+
+<!-- Floating Pomodoro Timer Pill -->
+<div class="pomo-pill" id="pomo-pill" onclick="togglePomoExpand(event)">
+  <div class="pomo-row">
+    <button class="pomo-icon" id="pomo-icon-btn" onclick="pomoIconAction(event)">▶</button>
+    <div class="pomo-info">
+      <div class="pomo-task" id="pomo-task-name"></div>
+    </div>
+    <div class="pomo-time" id="pomo-time">25:00</div>
+  </div>
+  <div class="pomo-controls" id="pomo-controls">
+    <button class="pomo-ctrl-btn pomo-ctrl-stop" onclick="stopPomo()">Stop</button>
+  </div>
+</div>
 
 <!-- More menu dropdown -->
 <div id="more-menu" class="more-menu" style="display:none;">
@@ -1490,6 +1552,140 @@ function preprocessLinks(src) {
     return '[' + target + '](/search?q=' + encodeURIComponent(target) + ')';
   });
 }
+</script>
+
+<!-- Pomodoro Timer Engine -->
+<script>
+(function(){
+  var _pomoKey = 'ptos_pomodoro';
+  var _pomoInterval = null;
+  var _pomoExpanded = false;
+
+  function _pomoState() {
+    try { return JSON.parse(localStorage.getItem(_pomoKey)); } catch(e) { return null; }
+  }
+
+  function _savePomo(s) {
+    localStorage.setItem(_pomoKey, JSON.stringify(s));
+  }
+
+  function _clearPomo() {
+    localStorage.removeItem(_pomoKey);
+    if (_pomoInterval) { clearInterval(_pomoInterval); _pomoInterval = null; }
+  }
+
+  function _fmtPomo(sec) {
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return String(m).padStart(2,'0') + ':' + String(s).padStart(2,'0');
+  }
+
+  function _showPill(show) {
+    var pill = document.getElementById('pomo-pill');
+    if (pill) pill.classList.toggle('active', show);
+  }
+
+  function _updatePill() {
+    var s = _pomoState();
+    if (!s || s.done) { _showPill(false); return; }
+    var pill = document.getElementById('pomo-pill');
+    var taskEl = document.getElementById('pomo-task-name');
+    var timeEl = document.getElementById('pomo-time');
+    var iconBtn = document.getElementById('pomo-icon-btn');
+    if (!pill || !taskEl || !timeEl || !iconBtn) return;
+    taskEl.textContent = s.desc || 'Pomodoro';
+    if (s.paused) {
+      var remain = s.pausedRemain;
+      timeEl.textContent = _fmtPomo(Math.max(0, remain));
+      pill.className = 'pomo-pill active paused' + (_pomoExpanded ? ' expanded' : '');
+      iconBtn.textContent = '▶';
+    } else {
+      var remain = Math.round((s.endTime - Date.now()) / 1000);
+      if (remain <= 0) { _completePomo(); return; }
+      timeEl.textContent = _fmtPomo(remain);
+      pill.className = 'pomo-pill active running' + (_pomoExpanded ? ' expanded' : '');
+      iconBtn.textContent = '⏸';
+    }
+    _showPill(true);
+  }
+
+  function _tickPomo() {
+    var s = _pomoState();
+    if (!s || s.paused || s.done) return;
+    var remain = Math.round((s.endTime - Date.now()) / 1000);
+    if (remain <= 0) { _completePomo(); }
+    else { _updatePill(); }
+  }
+
+  function _completePomo() {
+    var s = _pomoState();
+    var desc = s ? s.desc : 'Pomodoro';
+    _clearPomo();
+    _updatePill();
+    if ("Notification" in window && Notification.permission === "default") {
+      Notification.requestPermission();
+    }
+    if ("Notification" in window && Notification.permission === "granted") {
+      new Notification("Pomodoro complete!", {body: desc, icon: "/static/icon-192.png"});
+    }
+    _showTodoToast([{description: "\u23F0 " + desc + " \u2014 pomodoro complete!", due: "now", arrived: true}]);
+  }
+
+  window.startPomo = function(lineNo, desc, minutes) {
+    var dur = (minutes || {{ pomo_minutes|default(25) }}) * 60 * 1000;
+    var s = {lineNo: lineNo, desc: desc, endTime: Date.now() + dur, paused: false, pausedRemain: 0, done: false};
+    _savePomo(s);
+    if (_pomoInterval) clearInterval(_pomoInterval);
+    _pomoInterval = setInterval(_tickPomo, 1000);
+    _updatePill();
+  };
+
+  window.startPomodoro = function(lineNo, desc) {
+    startPomo(lineNo, desc);
+  };
+
+  window.pomoIconAction = function(e) {
+    e.stopPropagation();
+    var s = _pomoState();
+    if (!s || s.done) return;
+    if (s.paused) {
+      s.endTime = Date.now() + s.pausedRemain * 1000;
+      s.paused = false;
+      _savePomo(s);
+      if (!_pomoInterval) _pomoInterval = setInterval(_tickPomo, 1000);
+    } else {
+      s.pausedRemain = Math.round((s.endTime - Date.now()) / 1000);
+      s.paused = true;
+      _savePomo(s);
+    }
+    _updatePill();
+  };
+
+  window.stopPomo = function() {
+    _clearPomo();
+    _updatePill();
+  };
+
+  window.togglePomoExpand = function(e) {
+    if (e.target.closest('.pomo-ctrl-btn') || e.target.closest('.pomo-icon')) return;
+    _pomoExpanded = !_pomoExpanded;
+    var pill = document.getElementById('pomo-pill');
+    if (pill) pill.classList.toggle('expanded', _pomoExpanded);
+  };
+
+  // Resume on page load
+  (function(){
+    var s = _pomoState();
+    if (s && !s.done) {
+      if (!s.paused) {
+        var remain = Math.round((s.endTime - Date.now()) / 1000);
+        if (remain <= 0) { _completePomo(); return; }
+        _pomoInterval = setInterval(_tickPomo, 1000);
+      }
+      _updatePill();
+    }
+  })();
+})();
 </script>
 
 {% block scripts %}{% endblock %}
