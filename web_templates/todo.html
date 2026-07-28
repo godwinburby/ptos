@@ -66,6 +66,18 @@
   }
   .groupby-btn:hover { color:var(--text); background:var(--bg); }
   .groupby-btn.active { background:var(--accent); color:#fff; }
+
+  .sec-header-left {
+    display:flex; align-items:center; justify-content:space-between;
+    flex:1; cursor:pointer; user-select:none;
+  }
+  .sec-sort-btn {
+    background:none; border:none; cursor:pointer; padding:2px 6px;
+    font-size:14px; color:var(--sub); border-radius:4px; transition:color .15s;
+    flex-shrink:0;
+  }
+  .sec-sort-btn:hover { color:var(--text); }
+  .sec-sort-btn.desc { color:var(--accent); }
   .todo-row {
     display:flex; align-items:flex-start; gap:12px;
     padding:10px 0; border-bottom:1px solid var(--border);
@@ -634,9 +646,12 @@
 
 {% for sec_key, sec_label, sec_color, sec_todos in grouped %}
 <div class="todo-section">
-  <div class="todo-section-header" onclick="toggleSection('{{ sec_key }}')">
-    <div class="todo-section-title" style="color:{{ sec_color }};">{{ sec_label }}</div>
-    <div class="todo-section-count">{{ sec_todos|length }}</div>
+  <div class="todo-section-header">
+    <div class="sec-header-left" onclick="toggleSection('{{ sec_key }}')">
+      <div class="todo-section-title" style="color:{{ sec_color }};">{{ sec_label }}</div>
+      <div class="todo-section-count">{{ sec_todos|length }}</div>
+    </div>
+    <button class="sec-sort-btn" onclick="event.stopPropagation();toggleSectionSort('sec-{{ sec_key }}')" title="Reverse sort">↕</button>
   </div>
   <div id="sec-{{ sec_key }}">
     {% for t in sec_todos %}{{ todo_row(t, sec_key) }}{% endfor %}
@@ -781,6 +796,15 @@ function goSearch() {
 function toggleSection(name) {
   const el = document.getElementById('sec-' + name);
   if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
+}
+
+function toggleSectionSort(secId) {
+  var el = document.getElementById(secId);
+  if (!el) return;
+  var rows = Array.from(el.querySelectorAll('.todo-row'));
+  rows.reverse().forEach(function(row) { el.appendChild(row); });
+  var btn = el.parentNode.querySelector('.sec-sort-btn');
+  if (btn) btn.classList.toggle('desc');
 }
 
 function addTodo() {
