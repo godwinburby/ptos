@@ -115,8 +115,9 @@ metrics for any period.
 No typing, no commands.
 
 **Todo** — your task list. Add tasks in plain language ("call the clinic tomorrow 3pm"),
-set priorities, projects, and due dates. Quick filters by project or priority,
-and a date/time picker built in.
+set priorities, projects, and due dates. Group tasks by Timeline, Priority, Project,
+or Context with the toggle bar, and sort sections by name or task count.
+Quick filters by project or priority, and a date/time picker built in.
 
 **Browse** — filter and explore records. Pick a type, choose a time window
 (presets or specific year/month/date/range), set filters, group or sort the

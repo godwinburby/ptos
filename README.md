@@ -405,6 +405,8 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 
 **Features:**
 - Overdue / Today / Upcoming / Someday sections with collapsible Done section
+- **Group by** toggle bar — switch between Timeline, Priority, Project, and Context grouping
+- **Section sort** — click ↕ to cycle through sort modes: default, reverse name, most tasks, fewest tasks (remembers per groupby mode)
 - Priority badges (A=red, B=orange, C=blue, D=gray) with configurable labels, due date badges, project/context chips
 - Quick-add text input with todo.txt syntax (`(A) Task +Project @context due:tomorrow`)
 - **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `t:t` for `t:today`, `(a` for `(A) Critical`. Arrow keys + Enter to select.

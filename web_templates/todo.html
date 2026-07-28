@@ -66,18 +66,13 @@
   }
   .groupby-btn:hover { color:var(--text); background:var(--bg); }
   .groupby-btn.active { background:var(--accent); color:#fff; }
-
-  .sec-header-left {
-    display:flex; align-items:center; justify-content:space-between;
-    flex:1; cursor:pointer; user-select:none;
+  .groupby-sort {
+    padding:6px 10px; border-radius:7px; border:none;
+    background:transparent; color:var(--sub); font-size:13px;
+    cursor:pointer; transition:all .15s; font-family:inherit;
+    flex-shrink:0; border-left:1px solid var(--border);
   }
-  .sec-sort-btn {
-    background:none; border:none; cursor:pointer; padding:2px 6px;
-    font-size:14px; color:var(--sub); border-radius:4px; transition:color .15s;
-    flex-shrink:0;
-  }
-  .sec-sort-btn:hover { color:var(--text); }
-  .sec-sort-btn.desc { color:var(--accent); }
+  .groupby-sort:hover { color:var(--text); background:var(--bg); }
   .todo-row {
     display:flex; align-items:flex-start; gap:12px;
     padding:10px 0; border-bottom:1px solid var(--border);
@@ -642,16 +637,14 @@
   <a href="/todo?groupby={{ mode }}{% if selected_project %}&project={{ selected_project|urlencode }}{% endif %}{% if selected_context %}&context={{ selected_context|urlencode }}{% endif %}{% if selected_priority %}&priority={{ selected_priority }}{% endif %}{% if selected_due %}&due={{ selected_due }}{% endif %}{% if selected_search %}&search={{ selected_search|urlencode }}{% endif %}"
      class="groupby-btn {% if groupby==mode %}active{% endif %}">{{ label }}</a>
   {% endfor %}
+  <button class="groupby-sort" onclick="toggleSectionSort()" title="Toggle sort order">↕</button>
 </div>
 
 {% for sec_key, sec_label, sec_color, sec_todos in grouped %}
 <div class="todo-section">
-  <div class="todo-section-header">
-    <div class="sec-header-left" onclick="toggleSection('{{ sec_key }}')">
-      <div class="todo-section-title" style="color:{{ sec_color }};">{{ sec_label }}</div>
-      <div class="todo-section-count">{{ sec_todos|length }}</div>
-    </div>
-    <button class="sec-sort-btn" onclick="event.stopPropagation();toggleSectionSort('sec-{{ sec_key }}')" title="Reverse sort">↕</button>
+  <div class="todo-section-header" onclick="toggleSection('{{ sec_key }}')">
+    <div class="todo-section-title" style="color:{{ sec_color }};">{{ sec_label }}</div>
+    <div class="todo-section-count">{{ sec_todos|length }}</div>
   </div>
   <div id="sec-{{ sec_key }}">
     {% for t in sec_todos %}{{ todo_row(t, sec_key) }}{% endfor %}
@@ -798,14 +791,57 @@ function toggleSection(name) {
   if (el) el.style.display = el.style.display === 'none' ? '' : 'none';
 }
 
-function toggleSectionSort(secId) {
-  var el = document.getElementById(secId);
-  if (!el) return;
-  var rows = Array.from(el.querySelectorAll('.todo-row'));
-  rows.reverse().forEach(function(row) { el.appendChild(row); });
-  var btn = el.parentNode.querySelector('.sec-sort-btn');
-  if (btn) btn.classList.toggle('desc');
+var _sectionSortModes = ['default','reverse','most','fewest'];
+var _sectionSortLabels = {'default':'↕','reverse':'↕↓','most':'↕9','fewest':'↕1'};
+
+function _getGroupbyMode() {
+  var active = document.querySelector('.groupby-btn.active');
+  return active ? active.textContent.trim().toLowerCase() : 'timeline';
 }
+
+function toggleSectionSort() {
+  var mode = _getGroupbyMode();
+  var key = 'ptos_todo_sort_' + mode;
+  var cur = localStorage.getItem(key) || 'default';
+  var nextIdx = (_sectionSortModes.indexOf(cur) + 1) % _sectionSortModes.length;
+  var next = _sectionSortModes[nextIdx];
+  localStorage.setItem(key, next);
+  _applySectionSort(next);
+  document.querySelector('.groupby-sort').textContent = _sectionSortLabels[next];
+}
+
+function _applySectionSort(mode) {
+  var container = document.querySelector('.groupby-bar').parentNode;
+  var sections = Array.from(container.querySelectorAll('.todo-section'));
+  var grouped = sections.filter(function(s) { return !s.querySelector('#sec-done'); });
+  var doneSection = sections.filter(function(s) { return s.querySelector('#sec-done'); });
+  if (grouped.length <= 1) return;
+
+  var original = grouped.map(function(s, i) { return {_el: s, _i: i}; });
+
+  if (mode === 'default') {
+    original.sort(function(a, b) { return a._i - b._i; });
+  } else if (mode === 'reverse') {
+    original.sort(function(a, b) { return b._i - a._i; });
+  } else if (mode === 'most' || mode === 'fewest') {
+    original.sort(function(a, b) {
+      var ca = a._el.querySelector('.todo-section-count');
+      var cb = b._el.querySelector('.todo-section-count');
+      var na = ca ? parseInt(ca.textContent) || 0 : 0;
+      var nb = cb ? parseInt(cb.textContent) || 0 : 0;
+      return mode === 'most' ? nb - na : na - nb;
+    });
+  }
+
+  original.forEach(function(item) { container.insertBefore(item._el, doneSection[0] || null); });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+  var mode = _getGroupbyMode();
+  var saved = localStorage.getItem('ptos_todo_sort_' + mode) || 'default';
+  if (saved !== 'default') _applySectionSort(saved);
+  document.querySelector('.groupby-sort').textContent = _sectionSortLabels[saved];
+});
 
 function addTodo() {
   const input = document.getElementById('todo-input');
