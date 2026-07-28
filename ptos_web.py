@@ -707,7 +707,8 @@ def todo_page():
         no_proj = _groups.pop("", None)
         grouped = []
         for p in sorted(_groups.keys()):
-            grouped.append(("proj-" + p.lower(), f"+{p}", "var(--accent)", sorted(_groups[p], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+            lbl = p if p.startswith("+") else f"+{p}"
+            grouped.append(("proj-" + p.lower().lstrip("+"), lbl, "var(--accent)", sorted(_groups[p], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
         if no_proj:
             grouped.append(("proj-none", "No Project", "var(--sub)", sorted(no_proj, key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
     elif groupby == "context":
@@ -719,7 +720,8 @@ def todo_page():
         no_ctx = _groups.pop("", None)
         grouped = []
         for c in sorted(_groups.keys()):
-            grouped.append(("ctx-" + c.lower(), f"@{c}", "var(--accent)", sorted(_groups[c], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+            lbl = c if c.startswith("@") else f"@{c}"
+            grouped.append(("ctx-" + c.lower().lstrip("@"), lbl, "var(--accent)", sorted(_groups[c], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
         if no_ctx:
             grouped.append(("ctx-none", "No Context", "var(--sub)", sorted(no_ctx, key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
     else:
