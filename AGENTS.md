@@ -74,6 +74,7 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 - **Glob wildcard search**: `_glob_match(pattern, text)` in `ptos.py` — plain text uses `in` for substring match; patterns with `*` or `?` use `fnmatch.translate()` for glob matching. Used by all search paths: universal search, browse, todo page, query builder
 - **Server config**: `[server]` section with `host` (default `127.0.0.1`) and `port` (default `5000`); `ptos_web.py` reads from config and warns on startup if `host != 127.0.0.1` and `[auth]` is disabled; `desktop_app.py` always binds `127.0.0.1`, reads port from config
 - **Priority labels**: `[todo] priority_labels` config key (e.g. `{ A = "Critical", B = "Important", C = "Moderate", D = "Low" }`); labels are UI-only (not stored in todo.txt); used in quick pick chips, priority picker popup, form modal dropdown, todo list badge tooltips, filter chips, active filter bar, autocomplete dropdown (`pri:` and `(` prefixes), and help card; `ptos_web.py` passes labels to `todo.html` template as `priority_labels`; JS uses `_priLabels` object with fallback defaults
+- **Pomodoro config**: `[pomodoro] duration_minutes` config key (default 25); read by `ptos_web.py` context processor as `pomo_minutes`, passed to `base.html` for JS timer engine
 
 ### Error handling
 - Engine functions raise `sys.exit()` on errors
@@ -148,7 +149,7 @@ x 2026-07-12 2026-07-10 Completed task
 - **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `t:`, `(`); always visible at top of todo page (no collapsible)
 - **Quick pick chips** (collapsible) — Due shortcuts (with "pick date & time..." chip), Priority (A-D with labels from config), Projects, Contexts, Scheduled (with "pick date & time..." chip + "Now" chip), Repeat as toggle chips; open on input focus, close on blur (with 200ms delay to allow chip clicks); on mobile, groups stack vertically instead of scrolling horizontally
 - **Filter chips** (collapsible) — Priority (A-D with labels), Due Range (overdue/today/tomorrow/upcoming/someday/none), Context — all toggle on click; on mobile, groups stack vertically
-- **Search** (always visible) — text input with glob wildcard `*`/`?` support; filters todos by description; preserves other active filters; desktop sidebar has persistent search bar
+- **Search** (always visible) — text input with glob wildcard `*`/`?` support and prefix autocomplete (same `+`/`@`/`pri:`/`(` prefixes as quick-add); filters todos by description; preserves other active filters; desktop sidebar has persistent search bar
 - **Form modal** (shared add+edit) — Priority as dropdown (None/A/B/C/D with labels from config), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
 - **Clickable todo chips** — project, context, and priority chips on each todo row link to filtered view; clicking an active filter chip removes that filter
 - **Project rail** — horizontal scroll filter with toggle behavior
@@ -163,15 +164,17 @@ x 2026-07-12 2026-07-10 Completed task
 - **System notifications** — native OS notifications via `_system_notify()` in background thread; detects platform (Linux: `notify-send`, macOS: `osascript`, Windows: WinRT Toast via PowerShell with legacy `ShowBalloonTip` fallback, Android: `termux-notification`); runs alongside browser SSE notifications; notification check runs immediately on server startup, then repeats every `notify_interval` minutes (default 5); **Android requires**: `pkg install termux-api` in Termux + Termux:API app from F-Droid/Play Store + notification permission in Android Settings; **Windows uses** `[Windows.UI.Notifications.ToastNotificationManager]` for native Win10/11 toast notifications; **housekeeping** filters to today-only (no tomorrow), computes `arrived` boolean per task (due_time <= now), notification body prioritizes arrived tasks ("due now"), `_showTodoToast` shows arrived task description first
 - **Service worker** (`web_static/sw.js`) — caches GET requests for static assets; excludes `/api/events` (SSE) so real-time notifications work in PWA mode; POST requests always pass through to network
 - **Share Schema** (Backup page) — select record types to export a filtered bundle of schema, queries, presets, and config as a ZIP; `[global_fields]` included if defined; `[shared]` included only if referenced by selected types via `use = "shared.X"`; `[fields]` filtered to those used by selected types; queries/metrics/dashboards filtered to selected types; config.toml copied in full; route: `POST /backup/share-schema`, engine: `export_schema_bundle()` + `build_schema_bundle_zip()` in ptos.py
+- **Pomodoro timer** — per-todo play button (▶) in `.todo-actions` starts a configurable countdown; floating pill (`.pomo-pill`) persists across all pages via `localStorage`; engine lives in `base.html` (global, runs on every page); `startPomodoro(lineNo, desc)` defined on `window` so todo page can call it; pill shows task name + MM:SS countdown; click pill to expand (stop button); icon button toggles pause/resume; timer resumes on page load from `localStorage`; on completion: browser notification + `_showTodoToast`; duration from `[pomodoro] duration_minutes` config (default 25); pill positioned bottom-left (fixed), z-index 160
 
 ### Autocomplete system
 - `_acData` object holds suggestions per prefix (`+`, `@`, `due:`, `t:`, `(`)
-- `_getCurrentToken()` parses the word being typed and detects its prefix
-- `onTodoInput()` filters `_acData` by typed text and shows dropdown
-- `handleInputKey()` handles ArrowUp/Down/Enter/Escape navigation
+- `_getCurrentToken(inputEl)` parses the word being typed and detects its prefix (accepts any input element)
+- `onTodoInput()` filters `_acData` by typed text and shows dropdown for quick-add
+- `handleInputKey()` handles ArrowUp/Down/Enter/Escape navigation for quick-add
 - `pickAC()` inserts selected suggestion with trailing space; handles `__PICKER__:` values to open datetime-local picker
 - `pickAddDate(prefix)` opens the hidden datetime-local picker from quick pick chips
 - Input clears on successful add (`input.value = ''` then reload)
+- **Search autocomplete** — `onSearchInput()` / `handleSearchKey()` / `pickSearchAC()` — same prefix system as quick-add, renders into `#search-ac-list`; also supports `[[` bracket autocomplete via `attachBracketAutocomplete()`; `goSearch()` extracts `due:VALUE` tokens → `?due=` URL param and `pri:X` tokens → `?priority=` param (not sent as text search)
 
 ### Archiving
 - Runs on web server startup

@@ -16,6 +16,7 @@
         </div>
       </div>
       <div class="todo-actions">
+        <button onclick="startPomodoro({{ t.line_no }}, '{{ t.description|e }}')" title="Start pomodoro">▶</button>
         <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}')" title="Edit">✎</button>
         <button onclick="deleteTodo({{ t.line_no }})" title="Delete">✕</button>
       </div>
@@ -511,8 +512,12 @@
   <div class="chip-group-card" style="margin:0;">
     <div class="chip-row" style="align-items:center;">
       <form onsubmit="event.preventDefault(); goSearch();" style="display:flex;gap:6px;align-items:center;flex:1;">
-        <input type="text" id="todo-search-input" placeholder="Search todos... (use * for wildcard)"
-               value="{{ selected_search or '' }}" style="flex:1;margin:0;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">
+        <div class="todo-ac-wrap">
+          <input type="text" id="todo-search-input" placeholder="Search todos... (use * for wildcard)"
+                 value="{{ selected_search or '' }}" oninput="onSearchInput()" onkeydown="handleSearchKey(event)"
+                 style="width:100%;margin:0;padding:8px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">
+          <div class="todo-ac-list" id="search-ac-list"></div>
+        </div>
         <button type="submit" class="btn btn-sm btn-primary">Search</button>
         {% if selected_search %}
         <a href="/todo?{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}"
@@ -782,13 +787,16 @@
 
 
 function goSearch() {
-  var q = document.getElementById("todo-search-input").value.trim();
+  var raw = document.getElementById("todo-search-input").value.trim();
   var params = new URLSearchParams();
   {% if selected_project %}params.set("project", "{{ selected_project }}");{% endif %}
   {% if selected_context %}params.set("context", "{{ selected_context }}");{% endif %}
   {% if selected_priority %}params.set("priority", "{{ selected_priority }}");{% endif %}
   {% if selected_due %}params.set("due", "{{ selected_due }}");{% endif %}
-  if (q) params.set("search", q);
+  var search = raw.replace(/\bdue:(\S+)/gi, function(_, v) { params.set("due", v); return ''; })
+                  .replace(/\bpri:([A-Da-d])/gi, function(_, v) { params.set("priority", v.toUpperCase()); return ''; })
+                  .trim();
+  if (search) params.set("search", search);
   window.location.href = "/todo?" + params.toString();
 }
 
@@ -1165,8 +1173,8 @@ var _acData = {
 };
 var _acIdx = -1, _acItems = [];
 
-function _getCurrentToken() {
-  var input = document.getElementById('todo-input');
+function _getCurrentToken(inputEl) {
+  var input = inputEl || document.getElementById('todo-input');
   var val = input.value;
   var pos = input.selectionStart;
   var before = val.substring(0, pos);
@@ -1231,7 +1239,7 @@ function onTodoInput() {
     return;
   }
   if (bList) bList.classList.remove('open');
-  var tok = _getCurrentToken();
+  var tok = _getCurrentToken(input);
   var list = document.getElementById('todo-ac-list');
   if (!tok) { list.classList.remove('open'); return; }
   var items = _acData[tok.prefix] || [];
@@ -1248,7 +1256,8 @@ function onTodoInput() {
 var _pickerPrefix = '';
 
 function pickAC(idx) {
-  var tok = _getCurrentToken();
+  var input = document.getElementById('todo-input');
+  var tok = _getCurrentToken(input);
   if (!tok || !_acItems[idx]) return;
   var val = _acItems[idx].v;
   var input = document.getElementById('todo-input');
@@ -1349,6 +1358,130 @@ function _highlightAC(items) {
 
 document.getElementById('todo-input').addEventListener('blur', function() {
   setTimeout(function() { document.getElementById('todo-ac-list').classList.remove('open'); }, 150);
+});
+
+/* --- Search Autocomplete --- */
+var _sacIdx = -1, _sacItems = [];
+
+function onSearchInput() {
+  var input = document.getElementById('todo-search-input');
+  var bTok = _getBracketToken(input);
+  var bList = document.getElementById('todo-search-bracket-ac');
+  if (bTok) {
+    if (!bList) {
+      bList = document.createElement('div');
+      bList.id = 'todo-search-bracket-ac';
+      bList.className = 'bracket-ac-list';
+      input.parentNode.style.position = 'relative';
+      input.parentNode.appendChild(bList);
+    }
+    fetch('/api/link-candidates?q=' + encodeURIComponent(bTok.query))
+      .then(function(r) { return r.json(); })
+      .then(function(items) {
+        if (!items.length) { bList.classList.remove('open'); return; }
+        bList.innerHTML = items.map(function(it, i) {
+          return '<div class="bracket-ac-item" data-idx="'+i+'">'+it+'</div>';
+        }).join('');
+        bList.classList.add('open');
+        var _bi = -1;
+        function _pickBI(idx) {
+          if (!items[idx]) return;
+          var before = input.value.substring(0, bTok.start);
+          var after = input.value.substring(bTok.start + bTok.fullToken.length);
+          input.value = before + '[[' + items[idx] + ']]' + after;
+          bList.classList.remove('open');
+          var newPos = bTok.start + items[idx].length + 4;
+          input.setSelectionRange(newPos, newPos);
+          input.focus();
+        }
+        bList.querySelectorAll('.bracket-ac-item').forEach(function(el) {
+          el.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            _pickBI(parseInt(el.dataset.idx));
+          });
+        });
+        input.onkeydown = function(e) {
+          if (!bList.classList.contains('open')) return;
+          if (e.key === 'ArrowDown') { e.preventDefault(); _bi = Math.min(_bi+1, items.length-1); bList.querySelectorAll('.bracket-ac-item').forEach(function(el,i){el.classList.toggle('active',i===_bi);}); }
+          else if (e.key === 'ArrowUp') { e.preventDefault(); _bi = Math.max(_bi-1, 0); bList.querySelectorAll('.bracket-ac-item').forEach(function(el,i){el.classList.toggle('active',i===_bi);}); }
+          else if (e.key === 'Enter' && _bi >= 0) { e.preventDefault(); _pickBI(_bi); }
+          else if (e.key === 'Escape') { bList.classList.remove('open'); }
+        };
+      });
+    document.getElementById('search-ac-list').classList.remove('open');
+    return;
+  }
+  if (bList) bList.classList.remove('open');
+  var tok = _getCurrentToken(input);
+  var list = document.getElementById('search-ac-list');
+  if (!tok) { list.classList.remove('open'); return; }
+  var items = _acData[tok.prefix] || [];
+  var q = tok.query.toLowerCase();
+  _sacItems = items.filter(function(it) { return q === '' || it.l.toLowerCase().indexOf(q) !== -1; });
+  if (!_sacItems.length) { list.classList.remove('open'); return; }
+  _sacIdx = -1;
+  list.innerHTML = _sacItems.map(function(it, i) {
+    return '<div class="todo-ac-item" data-idx="'+i+'" onmousedown="pickSearchAC('+i+')">'+it.l+'</div>';
+  }).join('');
+  list.classList.add('open');
+}
+
+function pickSearchAC(idx) {
+  var input = document.getElementById('todo-search-input');
+  var tok = _getCurrentToken(input);
+  if (!tok || !_sacItems[idx]) return;
+  var val = _sacItems[idx].v;
+  if (val.indexOf('__PICKER__:') === 0) {
+    document.getElementById('search-ac-list').classList.remove('open');
+    return;
+  }
+  if (val === '__CLEARPRI__' || val === '__CLEARREC__') {
+    document.getElementById('search-ac-list').classList.remove('open');
+    return;
+  }
+  var before = input.value.substring(0, tok.start);
+  var after = input.value.substring(tok.start + tok.fullToken.length);
+  input.value = before + val + after;
+  input.focus();
+  document.getElementById('search-ac-list').classList.remove('open');
+}
+
+function handleSearchKey(e) {
+  var list = document.getElementById('search-ac-list');
+  var open = list.classList.contains('open');
+  if (e.key === 'Enter' && open && _sacIdx >= 0) {
+    e.preventDefault();
+    pickSearchAC(_sacIdx);
+    return;
+  }
+  if (e.key === 'Enter' && !open) {
+    goSearch();
+    return;
+  }
+  if (!open) return;
+  var items = list.querySelectorAll('.todo-ac-item');
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    _sacIdx = Math.min(_sacIdx + 1, items.length - 1);
+    _highlightSAC(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    _sacIdx = Math.max(_sacIdx - 1, 0);
+    _highlightSAC(items);
+  } else if (e.key === 'Escape') {
+    list.classList.remove('open');
+  }
+}
+
+function _highlightSAC(items) {
+  for (var i = 0; i < items.length; i++) {
+    items[i].classList.toggle('active', i === _sacIdx);
+  }
+  if (_sacIdx >= 0 && items[_sacIdx]) items[_sacIdx].scrollIntoView({block:'nearest'});
+}
+
+document.getElementById('todo-search-input').addEventListener('blur', function() {
+  setTimeout(function() { document.getElementById('search-ac-list').classList.remove('open'); }, 150);
 });
 
 var _fpLineNo = null, _fpField = '';

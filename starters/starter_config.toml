@@ -64,3 +64,7 @@ notify_interval = 5
 archive_months = 6
 # Priority labels shown in the todo UI (not stored in todo.txt)
 priority_labels = { A = "Critical", B = "Important", C = "Moderate", D = "Low" }
+
+[pomodoro]
+# Pomodoro timer duration in minutes (default: 25)
+duration_minutes = 25
