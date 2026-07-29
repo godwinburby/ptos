@@ -448,6 +448,9 @@
     .pomo-ctrl-pause { background:var(--warn); color:#fff; }
     .pomo-ctrl-resume { background:var(--success); color:#fff; }
     .pomo-ctrl-stop { background:var(--error); color:#fff; }
+    @media (max-width:767px) {
+      .pomo-pill { max-width:calc(100vw - 32px); }
+    }
     @media (min-width:768px) {
       .pomo-pill { bottom:20px; left:20px; }
     }
