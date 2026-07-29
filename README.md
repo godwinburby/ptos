@@ -415,6 +415,7 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; type a term and press Search or Enter to filter todos by description
 - **Clickable todo chips** — click project, context, or priority chips on any todo row to filter the list; click again to remove filter
 - **Form modal** (press `n` or click `+`) — Priority as dropdown (None/A/B/C/D with labels from config), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
+- **Selection mode** (☐ Select in groupby bar) — toggle selection mode, click rows to multi-select, then bulk edit priority, due date, threshold, or recurrence across selected tasks
 - Inline edit (pencil icon on hover) and delete for open and done tasks; done tasks also support undo (checkmark) to move back to todo.txt
 - Project rail for filtering by `+Project` with toggle behavior
 - Collapsible `? Help` reference card with priority labels
@@ -1226,6 +1227,7 @@ ptos -y test -t td --delete --all
 | `--todo-list` | | List open todos with bucket grouping |
 | `--todo-done N` | | Mark todo at line N complete |
 | `--todo-edit N key=value` | | Edit a field on a todo (supports `+Project`, `-+Project`, `@Context`, `-@Context`) |
+| `--todo-bulk-edit LINE_NOS key=value` | | Bulk edit multiple todos (comma/range: `1,3,5-7`) |
 | `--todo-delete N` | | Delete a todo by line number |
 | `--todo-undo N` | | Undo completion (done.txt → todo.txt) |
 | `--todo-done-list` | | List completed todos from done.txt |

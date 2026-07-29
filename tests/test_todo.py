@@ -8,7 +8,7 @@ import ptos_todo
 from ptos_todo import (
     Todo, parse_todo_line, safe_parse_todo_line, format_line,
     load_todos, save_todos, add_todo, complete_todo, delete_todo, edit_todo,
-    filter_todos, get_projects, get_contexts, bucket_todos,
+    batch_edit_todos, filter_todos, get_projects, get_contexts, bucket_todos,
     resolve_todo_date, preprocess_todo_text, get_due_todos,
     archive_done_todos, undo_todo,
     TodoParseError,
@@ -417,6 +417,86 @@ class TestEditDoneTodo:
         path = _write_todo(tmpdir, lines=SAMPLE_DONE_LINES, filename="done.txt")
         with pytest.raises(TodoParseError):
             edit_todo(path, 999, {"priority": "A"})
+
+
+class TestBatchEditTodo:
+    def test_batch_edit_priority(self, tmpdir):
+        path = _write_todo(tmpdir)
+        todos, _ = load_todos(path)
+        line_nos = [t.line_no for t in todos[:2]]
+        results = batch_edit_todos(path, line_nos, {"priority": "A"})
+        assert len(results) == 2
+        reloaded, _ = load_todos(path)
+        for t in reloaded:
+            if t.line_no in line_nos:
+                assert t.priority == "A"
+
+    def test_batch_edit_priority_clear(self, tmpdir):
+        path = _write_todo(tmpdir)
+        todos, _ = load_todos(path)
+        line_nos = [t.line_no for t in todos[:2]]
+        batch_edit_todos(path, line_nos, {"priority": ""})
+        reloaded, _ = load_todos(path)
+        for t in reloaded:
+            if t.line_no in line_nos:
+                assert t.priority is None
+
+    def test_batch_edit_due(self, tmpdir):
+        path = _write_todo(tmpdir)
+        todos, _ = load_todos(path)
+        line_nos = [t.line_no for t in todos[:2]]
+        batch_edit_todos(path, line_nos, {"due": "2026-12-25"})
+        reloaded, _ = load_todos(path)
+        for t in reloaded:
+            if t.line_no in line_nos:
+                assert t.due == dt.date(2026, 12, 25)
+
+    def test_batch_edit_due_clear(self, tmpdir):
+        path = _write_todo(tmpdir)
+        todos, _ = load_todos(path)
+        line_nos = [t.line_no for t in todos[:2]]
+        batch_edit_todos(path, line_nos, {"due": ""})
+        reloaded, _ = load_todos(path)
+        for t in reloaded:
+            if t.line_no in line_nos:
+                assert t.due is None
+
+    def test_batch_edit_projects(self, tmpdir):
+        path = _write_todo(tmpdir)
+        todos, _ = load_todos(path)
+        line_nos = [t.line_no for t in todos[:2]]
+        batch_edit_todos(path, line_nos, {"projects": ["+Test"]})
+        reloaded, _ = load_todos(path)
+        for t in reloaded:
+            if t.line_no in line_nos:
+                assert t.projects == ["+Test"]
+
+    def test_batch_edit_contexts(self, tmpdir):
+        path = _write_todo(tmpdir)
+        todos, _ = load_todos(path)
+        line_nos = [t.line_no for t in todos[:2]]
+        batch_edit_todos(path, line_nos, {"contexts": ["@test"]})
+        reloaded, _ = load_todos(path)
+        for t in reloaded:
+            if t.line_no in line_nos:
+                assert t.contexts == ["@test"]
+
+    def test_batch_edit_nonexistent_line_no_raises(self, tmpdir):
+        path = _write_todo(tmpdir)
+        todos, _ = load_todos(path)
+        line_nos = [t.line_no for t in todos[:2]] + [9999]
+        with pytest.raises(TodoParseError):
+            batch_edit_todos(path, line_nos, {"priority": "B"})
+
+    def test_batch_edit_does_not_affect_other_todos(self, tmpdir):
+        path = _write_todo(tmpdir)
+        todos, _ = load_todos(path)
+        line_nos = [t.line_no for t in todos[:2]]
+        orig_rest = [t.description for t in todos[2:]]
+        batch_edit_todos(path, line_nos, {"priority": "A"})
+        reloaded, _ = load_todos(path)
+        unchanged = [t for t in reloaded if t.line_no not in line_nos]
+        assert [t.description for t in unchanged] == orig_rest
 
 
 # ── filtering ───────────────────────────────────────────────────────────────
