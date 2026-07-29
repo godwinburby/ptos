@@ -649,6 +649,52 @@ def edit_todo(todo_path, line_no, updates):
     save_todos(todo_path, todos)
     return [t for t in todos if t.line_no == line_no][0]
 
+
+def batch_edit_todos(todo_path, line_nos, updates):
+    """Apply the same updates to multiple todos by line numbers (single load/save)."""
+    todos, _ = load_todos(todo_path)
+    matched = []
+    for ln in line_nos:
+        found = False
+        for t in todos:
+            if t.line_no == ln:
+                found = True
+                for key, val in updates.items():
+                    if key == "priority":
+                        t.priority = val.upper() if val else None
+                    elif key == "description":
+                        t.description = val
+                    elif key == "due":
+                        if val:
+                            d, tm = resolve_todo_date(val)
+                            t.due = d
+                            t.due_time = tm
+                        else:
+                            t.due = None
+                            t.due_time = None
+                    elif key == "threshold":
+                        if val:
+                            d, tm = resolve_todo_date(val)
+                            t.threshold = d
+                            t.threshold_time = tm
+                        else:
+                            t.threshold = None
+                            t.threshold_time = None
+                    elif key == "projects":
+                        t.projects = val if isinstance(val, list) else [val]
+                    elif key == "contexts":
+                        t.contexts = val if isinstance(val, list) else [val]
+                    elif key == "rec":
+                        t.rec = val if val else None
+                matched.append(t)
+                break
+        if not found:
+            raise TodoParseError(f"Todo at line {ln} not found")
+
+    save_todos(todo_path, todos)
+    return matched
+
+
 # ── filtering ───────────────────────────────────────────────────────────────
 
 def filter_todos(todos, project=None, context=None, priority=None,

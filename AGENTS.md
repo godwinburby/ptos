@@ -119,6 +119,7 @@ x 2026-07-12 2026-07-10 Completed task
 - `preprocess_todo_text(text)` — converts `pri:a`, resolves NL dates, handles two-token time patterns
 - `resolve_todo_date(s)` — returns `(date, time_str|None)` tuple; supports `today`, `tomorrow`, `yesterday`, weekdays, `this_week`, `next_week`, `this_month`, `next_month`, `+Nd`, `+Nw`, `+Nm`, `YYYY-MM-DD`
 - `filter_todos(todos, project, context, priority, ...)` — filters by criteria; project/context/priority accept single value or list (OR within group, AND across groups)
+- `batch_edit_todos(todo_path, line_nos, updates)` — applies same updates to multiple todos (single load/save)
 - `archive_done_todos(path, months)` — moves old done items to `done.YYYY.txt`
 
 ### CLI commands
@@ -126,6 +127,7 @@ x 2026-07-12 2026-07-10 Completed task
 - `--todo-list` — list open todos (with `--all`: include done)
 - `--todo-done N` — mark complete
 - `--todo-edit N key=value ...` — edit fields (supports multiple key=value pairs, `+Project`, `-+Project`, `@Context`, `-@Context`)
+- `--todo-bulk-edit LINE_NOS key=value ...` — bulk edit multiple todos (comma/range notation: `1,3,5-7`)
 - `--todo-delete N` — delete
 - `--todo-undo N` — undo completion (done.txt → todo.txt)
 - `--todo-done-list` — list completed todos
@@ -165,6 +167,7 @@ x 2026-07-12 2026-07-10 Completed task
 - **Service worker** (`web_static/sw.js`) — caches GET requests for static assets; excludes `/api/events` (SSE) so real-time notifications work in PWA mode; POST requests always pass through to network
 - **Share Schema** (Backup page) — select record types to export a filtered bundle of schema, queries, presets, and config as a ZIP; `[global_fields]` included if defined; `[shared]` included only if referenced by selected types via `use = "shared.X"`; `[fields]` filtered to those used by selected types; queries/metrics/dashboards filtered to selected types; config.toml copied in full; route: `POST /backup/share-schema`, engine: `export_schema_bundle()` + `build_schema_bundle_zip()` in ptos.py
 - **Pomodoro timer** — per-todo play button (▶) in `.todo-actions` starts a configurable countdown; floating pill (`.pomo-pill`) persists across all pages via `localStorage`; engine lives in `base.html` (global, runs on every page); `startPomodoro(lineNo, desc)` defined on `window` so todo page can call it; pill shows task name + MM:SS countdown; click pill to expand (stop button); icon button toggles pause/resume; timer resumes on page load from `localStorage`; on completion: browser notification + `_showTodoToast`; duration from `[pomodoro] duration_minutes` config (default 25); pill positioned bottom-left (fixed), z-index 160
+- **Selection mode (bulk edit)** — click `☐ Select` in the groupby bar to activate selection mode; each todo row's check circle becomes a square checkbox; click rows to toggle selection; `.sel-bar` shows selected count + Cancel/Edit Selected buttons; **Edit Selected** opens the form modal with only priority/due/threshold/recurrence fields visible (description/projects/contexts hidden since they vary per task); backend `batch_edit_todos()` applies updates in a single load/save; CLI: `--todo-bulk-edit LINE_NOS key=value` supports comma/range notation (`1,3,5-7`)
 
 ### Autocomplete system
 - `_acData` object holds suggestions per prefix (`+`, `@`, `due:`, `t:`, `(`)

@@ -113,6 +113,7 @@ def build_parser(cycles):
             "  ptos --todo-done 3\n"
             "  ptos --todo-edit 3 priority=B due:tomorrow +Urgent\n"
             "  ptos --todo-edit 3 -+Home -@errand\n"
+            "  ptos --todo-bulk-edit 1,3,5 priority=B due:tomorrow\n"
             "  ptos --todo-delete 5\n"
             "  ptos --todo-undo 5\n"
             "  ptos --todo-done-list\n"
@@ -189,6 +190,9 @@ def build_parser(cycles):
     todo.add_argument("--todo-edit", nargs="+", metavar=("N", "KEY=VALUE"),
                      help="Edit fields on todo at line N  (e.g. --todo-edit 3 due:2026-07-25 priority=B)\n"
                           "  +Project add project, -+Project remove, @context add, -@context remove")
+    todo.add_argument("--todo-bulk-edit", nargs="+", metavar=("LINE_NOS", "KEY=VALUE"),
+                     help="Edit multiple todos  (e.g. --todo-bulk-edit 1,3,5 priority=B due:tomorrow)\n"
+                          "  Supports ranges: 1-5, combos: 1,3,5-7")
     todo.add_argument("--todo-delete", metavar="N",
                      help="Delete todo at line N")
     todo.add_argument("--todo-undo", metavar="N",
@@ -992,6 +996,74 @@ def _handle_todo_edit(n, kv_strs):
         print(f"Error: {e}")
 
 
+def _parse_line_nos(s):
+    """Parse a line number string like '1,3,5-7' into a list of ints."""
+    result = []
+    for part in s.split(","):
+        part = part.strip()
+        if "-" in part and not part.startswith("-"):
+            a, b = part.split("-", 1)
+            try:
+                result.extend(range(int(a), int(b) + 1))
+            except ValueError:
+                print(f"Invalid range: {part}")
+                return []
+        else:
+            try:
+                result.append(int(part))
+            except ValueError:
+                print(f"Invalid line number: {part}")
+                return []
+    return result
+
+
+def _handle_todo_bulk_edit(lines_str, kv_strs):
+    """Handle --todo-bulk-edit command with multiple line numbers and key=value pairs."""
+    import ptos_todo
+    line_nos = _parse_line_nos(lines_str)
+    if not line_nos:
+        return
+
+    if not kv_strs:
+        print("No edits specified. Use: --todo-bulk-edit 1,3,5 priority=B due:tomorrow")
+        return
+
+    updates, projects_add, projects_rm, contexts_add, contexts_rm = _parse_todo_updates(kv_strs)
+
+    if projects_add or projects_rm or contexts_add or contexts_rm:
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+        for ln in line_nos:
+            target = [t for t in todos if t.line_no == ln]
+            if not target:
+                print(f"Line {ln} not found in todo.txt — skipped")
+                continue
+            t = target[0]
+            if projects_add:
+                for p in projects_add:
+                    if p not in t.projects:
+                        t.projects.append(p)
+            if projects_rm:
+                for p in projects_rm:
+                    if p in t.projects:
+                        t.projects.remove(p)
+            if contexts_add:
+                for c in contexts_add:
+                    if c not in t.contexts:
+                        t.contexts.append(c)
+            if contexts_rm:
+                for c in contexts_rm:
+                    if c in t.contexts:
+                        t.contexts.remove(c)
+            updates["projects"] = t.projects
+            updates["contexts"] = t.contexts
+
+    try:
+        results = ptos_todo.batch_edit_todos(ptos.TODO_PATH, line_nos, updates)
+        print(f"Updated {len(results)} todo(s)")
+    except Exception as e:
+        print(f"Error: {e}")
+
+
 def _handle_todo_delete(n):
     """Handle --todo-delete command."""
     import ptos_todo
@@ -1315,6 +1387,9 @@ def main():
         return
     if args.todo_edit:
         _handle_todo_edit(args.todo_edit[0], args.todo_edit[1:])
+        return
+    if args.todo_bulk_edit:
+        _handle_todo_bulk_edit(args.todo_bulk_edit[0], args.todo_bulk_edit[1:])
         return
     if args.todo_delete:
         _handle_todo_delete(args.todo_delete)

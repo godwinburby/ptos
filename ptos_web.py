@@ -810,6 +810,20 @@ def todo_edit():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/todo/bulk-edit", methods=["POST"])
+def todo_bulk_edit():
+    data = request.get_json(silent=True) or {}
+    line_nos = data.get("line_nos", [])
+    updates = data.get("updates", {})
+    if not line_nos:
+        return jsonify(ok=False, error="No tasks selected")
+    try:
+        result = svc.bulk_edit_todos([int(ln) for ln in line_nos], updates)
+        return jsonify(ok=True, count=result["count"])
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
 @app.route("/todo/delete-done", methods=["POST"])
 def todo_delete_done():
     data = request.get_json(silent=True) or {}

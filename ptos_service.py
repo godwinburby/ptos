@@ -2395,6 +2395,15 @@ def edit_todo_by_line(line_no, updates):
         raise PTOSError(str(e))
 
 
+def bulk_edit_todos(line_nos, updates):
+    """Edit multiple open todos by line numbers."""
+    try:
+        results = ptos_todo.batch_edit_todos(TODO_PATH, line_nos, updates)
+        return {"ok": True, "count": len(results)}
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
 def delete_done_todo_by_line(line_no):
     """Delete a done todo by line number."""
     try:

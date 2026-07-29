@@ -2,17 +2,17 @@
 {% block content %}
 
 {% macro todo_row(t, badge_class) %}
-    <div class="todo-row" data-line="{{ t.line_no }}">
-      <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
-      <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}" onclick="popupEditPriority({{ t.line_no }}, '{{ t.priority or '' }}', this)" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %} — Change priority">{{ t.priority or '—' }}</div>
+    <div class="todo-row" data-line="{{ t.line_no }}" onclick="toggleRowSel(this)">
+      <div class="todo-check" onclick="if(_selMode)return;completeTodo({{ t.line_no }}, this)"></div>
+      <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}" onclick="if(_selMode)return;popupEditPriority({{ t.line_no }}, '{{ t.priority or '' }}', this)" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %} — Change priority">{{ t.priority or '—' }}</div>
       <div class="todo-body">
         <div class="todo-desc">{{ t.description }}</div>
         <div class="todo-meta">
-          {% if t.due %}<span class="todo-due-badge {{ badge_class }}" onclick="popupEditDate({{ t.line_no }}, 'due', '{{ t.due.isoformat() }}', this)" title="Change due date">{{ t.due.strftime('%d %b') }}{% if t.due_time %} {{ t.due_time }}{% endif %}</span>{% endif %}
-          {% if t.threshold %}<span class="todo-context" onclick="popupEditDate({{ t.line_no }}, 'threshold', '{{ t.threshold.isoformat() }}', this)" title="Change threshold date">threshold {{ t.threshold.strftime('%d %b') }}{% if t.threshold_time %} {{ t.threshold_time }}{% endif %}</span>{% endif %}
-          {% if t.rec %}<span class="todo-context" onclick="popupEditRec({{ t.line_no }}, '{{ t.rec }}', this)" title="Change recurrence">rec:{{ t.rec }}</span>{% endif %}
-          {% for p in t.projects %}<a class="todo-project{% if selected_project==p %} active{% endif %}" href="/todo?{% if selected_project != p %}project={{ p|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}">{{ p }}</a>{% endfor %}
-          {% for c in t.contexts %}<a class="todo-context{% if selected_context==c %} active{% endif %}" href="/todo?{% if selected_context != c %}context={{ c|urlencode }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}">{{ c }}</a>{% endfor %}
+          {% if t.due %}<span class="todo-due-badge {{ badge_class }}" onclick="if(_selMode)return;popupEditDate({{ t.line_no }}, 'due', '{{ t.due.isoformat() }}', this)" title="Change due date">{{ t.due.strftime('%d %b') }}{% if t.due_time %} {{ t.due_time }}{% endif %}</span>{% endif %}
+          {% if t.threshold %}<span class="todo-context" onclick="if(_selMode)return;popupEditDate({{ t.line_no }}, 'threshold', '{{ t.threshold.isoformat() }}', this)" title="Change threshold date">threshold {{ t.threshold.strftime('%d %b') }}{% if t.threshold_time %} {{ t.threshold_time }}{% endif %}</span>{% endif %}
+          {% if t.rec %}<span class="todo-context" onclick="if(_selMode)return;popupEditRec({{ t.line_no }}, '{{ t.rec }}', this)" title="Change recurrence">rec:{{ t.rec }}</span>{% endif %}
+          {% for p in t.projects %}<a class="todo-project{% if selected_project==p %} active{% endif %}" href="/todo?{% if selected_project != p %}project={{ p|urlencode }}&{% endif %}{% if selected_context %}context={{ selected_context|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}" onclick="if(_selMode){event.preventDefault();return;}">{{ p }}</a>{% endfor %}
+          {% for c in t.contexts %}<a class="todo-context{% if selected_context==c %} active{% endif %}" href="/todo?{% if selected_context != c %}context={{ c|urlencode }}&{% endif %}{% if selected_project %}project={{ selected_project|urlencode }}&{% endif %}{% if selected_priority %}priority={{ selected_priority }}&{% endif %}{% if selected_due %}due={{ selected_due }}&{% endif %}{% if selected_search %}search={{ selected_search|urlencode }}&{% endif %}" onclick="if(_selMode){event.preventDefault();return;}">{{ c }}</a>{% endfor %}
         </div>
       </div>
       <div class="todo-actions">
@@ -73,6 +73,15 @@
     flex-shrink:0; border-left:1px solid var(--border);
   }
   .groupby-sort:hover { color:var(--text); background:var(--bg); }
+  .groupby-sel {
+    padding:6px 10px; border-radius:7px; border:none;
+    background:transparent; color:var(--sub); font-size:13px;
+    cursor:pointer; transition:all .15s; font-family:inherit;
+    flex-shrink:0; border-left:1px solid var(--border);
+  }
+  .groupby-sel:hover { color:var(--text); background:var(--bg); }
+  .groupby-sel.active { color:var(--accent); font-weight:700; }
+
   .todo-row {
     display:flex; align-items:flex-start; gap:12px;
     padding:10px 0; border-bottom:1px solid var(--border);
@@ -93,6 +102,38 @@
   .todo-check.checked::after {
     content:"\2713"; color:#fff; font-size:13px; font-weight:700;
   }
+
+  .sel-bar {
+    display:none; align-items:center; gap:10px; padding:10px 16px;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    margin-bottom:14px;
+  }
+  .sel-bar.show { display:flex; }
+  .sel-bar span { font-size:13px; font-weight:600; color:var(--sub); flex:1; }
+  .sel-bar button {
+    padding:6px 14px; border-radius:7px; border:none; font-size:12px;
+    font-weight:600; cursor:pointer; font-family:inherit;
+  }
+  .sel-bar .btn-sel-edit { background:var(--accent); color:#fff; }
+  .sel-bar .btn-sel-cancel { background:var(--bg); color:var(--sub); }
+
+  .sel-mode { cursor:pointer; }
+  .sel-mode .todo-check {
+    border-color:var(--accent); border-radius:4px;
+  }
+  .sel-mode .todo-check::after {
+    content:""; display:block; width:12px; height:12px;
+    border:2px solid var(--accent); border-radius:2px;
+  }
+  .sel-mode .todo-check.checked::after {
+    background:var(--accent); border-color:var(--accent);
+  }
+  .sel-mode .todo-actions { display:none; }
+  .todo-row.selected {
+    background:var(--accent-lt); border-radius:6px;
+    box-shadow:inset 3px 0 0 var(--accent);
+  }
+
   .todo-pri {
     min-width:28px; height:24px; border-radius:6px; flex-shrink:0;
     font-size:12px; font-weight:700; text-align:center; line-height:24px;
@@ -642,6 +683,12 @@
      class="groupby-btn {% if groupby==mode %}active{% endif %}">{{ label }}</a>
   {% endfor %}
   <button class="groupby-sort" onclick="toggleSectionSort()" title="Toggle sort order">↕</button>
+  <button class="groupby-sel" onclick="toggleSelectMode()" title="Select multiple tasks">☐ Select</button>
+</div>
+<div class="sel-bar" id="sel-bar">
+  <span id="sel-count">0 selected</span>
+  <button class="btn-sel-cancel" onclick="toggleSelectMode()">Cancel</button>
+  <button class="btn-sel-edit" onclick="openBulkEdit()">Edit Selected</button>
 </div>
 
 {% for sec_key, sec_label, sec_color, sec_todos in grouped %}
@@ -693,7 +740,7 @@
     <h3 id="todo-modal-title">New Task</h3>
     <input type="hidden" id="modal-line-no" value="">
     <input type="hidden" id="modal-target" value="">
-    <div class="modal-field">
+    <div class="modal-field modal-field-bulk-hide">
       <label>Description</label>
       <input type="text" id="modal-desc" placeholder="What needs to be done?">
     </div>
@@ -744,7 +791,7 @@
         </select>
     </div>
     </div>
-    <div class="modal-field">
+    <div class="modal-field modal-field-bulk-hide">
       <label>Projects</label>
       <div class="modal-chips" id="modal-project-chips">
         {% for p in projects %}
@@ -754,7 +801,7 @@
       </div>
       <input type="text" class="modal-other-input" id="modal-project-other" placeholder="New project name" style="display:none;" onkeydown="handleOtherKey(event, 'project')">
     </div>
-    <div class="modal-field">
+    <div class="modal-field modal-field-bulk-hide">
       <label>Contexts</label>
       <div class="modal-chips" id="modal-context-chips">
         {% for c in contexts %}
@@ -972,8 +1019,73 @@ function openEditDone(lineNo, desc, pri, due, dueTime, threshold, thresholdTime,
   document.getElementById('todo-modal-title').textContent = 'Edit Done Task';
 }
 
+/* --- Selection Mode --- */
+var _selMode = false;
+var _selLines = {};
+
+function toggleSelectMode() {
+  _selMode = !_selMode;
+  var btn = document.querySelector('.groupby-sel');
+  var bar = document.getElementById('sel-bar');
+  var rows = document.querySelectorAll('.todo-row');
+  if (_selMode) {
+    btn.textContent = '☑ Selecting';
+    btn.classList.add('active');
+    bar.classList.add('show');
+    document.querySelector('.todo-list').classList.add('sel-mode');
+    rows.forEach(function(r) { r.classList.add('sel-mode'); });
+  } else {
+    btn.textContent = '☐ Select';
+    btn.classList.remove('active');
+    bar.classList.remove('show');
+    document.querySelector('.todo-list').classList.remove('sel-mode');
+    rows.forEach(function(r) {
+      r.classList.remove('sel-mode');
+      r.classList.remove('selected');
+    });
+    _selLines = {};
+  }
+}
+
+function toggleRowSel(el) {
+  if (!_selMode) return;
+  el.classList.toggle('selected');
+  var lineNo = parseInt(el.dataset.line);
+  if (el.classList.contains('selected')) {
+    _selLines[lineNo] = true;
+  } else {
+    delete _selLines[lineNo];
+  }
+  var count = Object.keys(_selLines).length;
+  document.getElementById('sel-count').textContent = count + ' selected';
+}
+
+function openBulkEdit() {
+  if (Object.keys(_selLines).length === 0) { alert('No tasks selected'); return; }
+  document.getElementById('todo-modal-title').textContent = 'Edit ' + Object.keys(_selLines).length + ' Selected Tasks';
+  document.getElementById('modal-line-no').value = '1';
+  document.getElementById('modal-desc').value = '';
+  document.getElementById('modal-pri').value = '';
+  document.getElementById('modal-due').value = '';
+  document.getElementById('modal-due-time').value = '';
+  document.getElementById('modal-threshold').value = '';
+  document.getElementById('modal-threshold-time').value = '';
+  document.getElementById('modal-rec').value = '';
+  document.getElementById('modal-target').value = '';
+  document.querySelectorAll('#modal-project-chips .modal-chip.selected').forEach(function(c) { c.classList.remove('selected'); });
+  document.querySelectorAll('#modal-context-chips .modal-chip.selected').forEach(function(c) { c.classList.remove('selected'); });
+  document.getElementById('modal-project-other').style.display = 'none';
+  document.getElementById('modal-project-other').value = '';
+  document.getElementById('modal-context-other').style.display = 'none';
+  document.getElementById('modal-context-other').value = '';
+  document.querySelectorAll('.modal-field-bulk-hide').forEach(function(f) { f.style.display = 'none'; });
+  document.getElementById('todo-modal').classList.add('open');
+  document.getElementById('modal-pri').focus();
+}
+
 function closeTodoModal() {
   document.getElementById('todo-modal').classList.remove('open');
+  document.querySelectorAll('.modal-field-bulk-hide').forEach(function(f) { f.style.display = ''; });
 }
 
 function toggleModalChip(el) {
@@ -1029,6 +1141,29 @@ function saveTodoModal() {
   if (otherProj) projs.push(otherProj);
   if (otherCtx) ctxs.push(otherCtx);
   var rec = document.getElementById('modal-rec').value;
+
+  if (_selMode && lineNo) {
+    var updates = {
+      priority: pri || null,
+      due: due ? (dueTime ? due + 'T' + dueTime : due) : null,
+      threshold: threshold ? (thresholdTime ? threshold + 'T' + thresholdTime : threshold) : null,
+      rec: rec || null,
+      projects: projs.map(function(p) { return '+' + p.replace(/^\+/, ''); }),
+      contexts: ctxs.map(function(c) { return '@' + c.replace(/^@/, ''); })
+    };
+    fetch('/todo/bulk-edit', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({line_nos: Object.keys(_selLines).map(Number), updates: updates})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (d.ok) { window.location.reload(); }
+      else { alert(d.error || 'Failed to bulk edit'); }
+    })
+    .catch(function() { alert('Network error'); });
+    return;
+  }
 
   if (!desc) { alert('Description is required'); return; }
 
