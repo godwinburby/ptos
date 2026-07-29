@@ -91,29 +91,18 @@ The web app is the primary interface. The CLI is the engine underneath — avail
 
 ## Installation & Setup Scripts
 
-**You only need to download the setup file(s) for your platform — they download
-PTOS from GitHub, install dependencies, and create all config files automatically.**
+**One script per platform — download once, use for first-time setup AND daily launch.**
 
 ### Windows
 
-Single file — download and double-click:
-
-[`run_ptos.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos.bat)
-
-The `.bat` downloads `run_ptos.ps1` automatically on first run,
-then hands off to it. The `.ps1` does all the real work — Python/Git detection
-and auto-install via `winget`, repo clone, Flask install, init, and server
-launch. PowerShell ships by default on Windows 7+ — no extra install needed.
-
-Or from PowerShell:
 ```powershell
 curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos.bat
 run_ptos.bat
 ```
 
-### Linux / macOS
+Or just download and double-click [`run_ptos.bat`](https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos.bat). The `.bat` downloads `run_ptos.ps1` automatically on first run, then hands off to it — PowerShell ships by default on Windows 7+.
 
-Single file — one script handles everything:
+### Linux / macOS
 
 ```bash
 curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos_linux.sh
@@ -124,8 +113,6 @@ Auto-installs Python if missing (detects apt, dnf, pacman, or zypper).
 
 ### Android / Termux
 
-Single file — one script handles everything:
-
 ```bash
 curl -O https://raw.githubusercontent.com/godwinburby/ptos/main/run_ptos_android.sh
 bash run_ptos_android.sh
@@ -133,38 +120,32 @@ bash run_ptos_android.sh
 
 Auto-installs Python via `pkg install -y python` if missing.
 
-### What the setup script does
+### First run
 
-On first run, the script performs full setup:
+The script handles everything on first launch:
 
-1. Checks Python version (3.11+ required, auto-installs on all platforms)
-2. Installs Git and rclone if missing (Windows: `winget`, Linux/macOS: package manager)
-3. Clones PTOS from GitHub via `git clone`
+1. Checks Python (3.11+) — auto-installs via winget/apt/dnf/pacman/zypper/pkg
+2. Installs Git and rclone if missing
+3. Clones PTOS from GitHub
 4. Installs Flask and tomli-w via pip
-5. Runs `ptos --init` to create `config/`, `records/`, `journal/` and starter config files
-6. Asks for your name and sets it in `config.toml`
+5. Runs `ptos --init` — creates config, records, journal, and starter files
+6. Prompts for your name and writes it to `config.toml`
+7. Starts the web server
 
-On subsequent runs, it checks for updates (`git pull`) and starts the server.
+On Android, code goes to `~/ptos` (Termux home), data to `~/storage/shared/ptos-data`.
+On Windows/Linux, data lives in a sibling directory (`~/ptos-data`) — outside the repo and away from OneDrive.
 
-On Android, setup installs code to `~/ptos` (Termux's native home, git-friendly)
-and data to shared storage (`~/storage/shared/ptos-data`) — keeping them separate
-for reliable git updates and Syncthing visibility.
+### Daily use
 
-On Windows and Linux, setup creates `ptos-data` as a sibling to the repo directory
-(e.g. `~/ptos-data` next to `~/ptos`), keeping data outside the code repo and
-away from OneDrive sync.
-
-Safe to re-run — setup skips steps that are already done.
-
-### Starting PTOS
-
-Use the start script — it checks for updates on every launch:
+Run the **same script** — it checks for updates and launches the server:
 
 | Platform | Command |
 |----------|---------|
 | Windows | `run_ptos.bat` |
 | Linux / macOS | `bash run_ptos_linux.sh` |
 | Android/Termux | `bash run_ptos_android.sh` |
+
+Safe to re-run anytime — setup steps are skipped once done.
 
 ### Alternative — git clone directly
 
