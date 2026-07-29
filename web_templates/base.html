@@ -1165,48 +1165,39 @@ function toggleMoreMenu(e) {
       </div>
 
       <div style="font-size:12px;font-weight:700;color:var(--sub);
-                  text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Navigation</div>
-      <table class="data-table" style="margin-bottom:18px;width:100%;">
-        <thead><tr><th style="width:180px;">Shortcut</th><th>Page</th></tr></thead>
+                  text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Quick Navigation</div>
+      <table class="data-table" style="margin-bottom:12px;width:100%;">
+        <thead><tr><th style="width:140px;">Key</th><th>Page</th></tr></thead>
         <tbody>
-          <tr><td><kbd>G</kbd> <kbd>H</kbd></td><td>Home</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>A</kbd></td><td>Add Record</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>B</kbd></td><td>Browse</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>Q</kbd></td><td>Queries</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>U</kbd></td><td>Query Builder</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>J</kbd></td><td>Journal</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>N</kbd></td><td>Notes</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>D</kbd></td><td>Due List</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>E</kbd></td><td>Log Editor</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>L</kbd></td><td>Lint</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>S</kbd></td><td>Settings</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>C</kbd></td><td>Schema Builder</td></tr>
-          <tr><td><kbd>G</kbd> <kbd>K</kbd></td><td>Backup</td></tr>
-        </tbody>
-      </table>
-
-      <div style="font-size:12px;font-weight:700;color:var(--sub);
-                  text-transform:uppercase;letter-spacing:.6px;margin:16px 0 10px;">Actions</div>
-      <table class="data-table" style="width:100%;">
-        <thead><tr><th style="width:180px;">Shortcut</th><th>Action</th></tr></thead>
-        <tbody>
-          <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
-          <tr><td><kbd>Esc</kbd></td><td>Close overlay / cancel</td></tr>
-          <tr><td><kbd>/</kbd></td><td>Focus search / filter (Browse)</td></tr>
-          <tr><td><kbd>E</kbd></td><td>New expense</td></tr>
-          <tr><td><kbd>I</kbd></td><td>New income</td></tr>
-          <tr><td><kbd>T</kbd></td><td>Todo list</td></tr>
+          <tr><td><kbd>H</kbd></td><td>Home</td></tr>
+          <tr><td><kbd>A</kbd></td><td>Add Record</td></tr>
           <tr><td><kbd>B</kbd></td><td>Browse</td></tr>
           <tr><td><kbd>Q</kbd></td><td>Queries</td></tr>
           <tr><td><kbd>J</kbd></td><td>Journal</td></tr>
           <tr><td><kbd>N</kbd></td><td>Notes</td></tr>
           <tr><td><kbd>S</kbd></td><td>Settings</td></tr>
+          <tr><td><kbd>T</kbd></td><td>Todo</td></tr>
+          <tr><td><kbd>E</kbd></td><td>Add expense</td></tr>
+          <tr><td><kbd>I</kbd></td><td>Add income</td></tr>
+          <tr><td><kbd>/</kbd></td><td>Focus search</td></tr>
+          <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Close overlay / cancel</td></tr>
         </tbody>
       </table>
 
-      <div style="font-size:11px;color:var(--sub);margin-top:16px;padding-top:12px;border-top:1px solid var(--border);">
-        Press G then the second key within 1.5s
-      </div>
+      <div style="font-size:12px;font-weight:700;color:var(--sub);
+                  text-transform:uppercase;letter-spacing:.6px;margin:16px 0 10px;">Extended Navigation</div>
+      <table class="data-table" style="width:100%;">
+        <thead><tr><th style="width:140px;"><kbd>G</kbd> then…</th><th>Page</th></tr></thead>
+        <tbody>
+          <tr><td><kbd>D</kbd></td><td>Due List</td></tr>
+          <tr><td><kbd>U</kbd></td><td>Query Builder</td></tr>
+          <tr><td><kbd>E</kbd></td><td>Log Editor</td></tr>
+          <tr><td><kbd>L</kbd></td><td>Lint</td></tr>
+          <tr><td><kbd>C</kbd></td><td>Schema Builder</td></tr>
+          <tr><td><kbd>K</kbd></td><td>Backup</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
   <style>
@@ -1280,6 +1271,20 @@ function toggleMoreMenu(e) {
       return;
     }
 
+    // H — go to Home
+    if (key === "h" && !_g) {
+      e.preventDefault();
+      window.location = "/";
+      return;
+    }
+
+    // A — go to Add Record
+    if (key === "a" && !_g) {
+      e.preventDefault();
+      window.location = "/add";
+      return;
+    }
+
     // B — go to Browse
     if (key === "b" && !_g) {
       e.preventDefault();
@@ -1336,15 +1341,18 @@ function toggleMoreMenu(e) {
       return;
     }
 
-    // / — focus search input if present on page
+    // / — focus visible search input
     if (key === "/") {
-      var search = document.querySelector(
+      e.preventDefault();
+      var candidates = document.querySelectorAll(
         "#sidebar-search, input[name='q'], input[placeholder*='search' i], input[placeholder*='filter' i], #browse-search, #q, #b-search"
       );
-      if (search) {
-        e.preventDefault();
-        search.focus();
-        search.select();
+      for (var i = 0; i < candidates.length; i++) {
+        if (candidates[i].offsetParent !== null) {
+          candidates[i].focus();
+          candidates[i].select();
+          break;
+        }
       }
       return;
     }
