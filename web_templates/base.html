@@ -1193,7 +1193,7 @@ function toggleMoreMenu(e) {
           <tr><td><kbd>N</kbd></td><td>New record (same as G A)</td></tr>
           <tr><td><kbd>E</kbd></td><td>New expense</td></tr>
           <tr><td><kbd>I</kbd></td><td>New income</td></tr>
-          <tr><td><kbd>T</kbd></td><td>New investment</td></tr>
+          <tr><td><kbd>T</kbd></td><td>Todo list</td></tr>
         </tbody>
       </table>
 
@@ -1294,10 +1294,10 @@ function toggleMoreMenu(e) {
       return;
     }
 
-    // T — go to add investment
+    // T — go to Todo page
     if (key === "t" && !_g) {
       e.preventDefault();
-      window.location = "/add?type=investment";
+      window.location = "/todo";
       return;
     }
 
@@ -1585,7 +1585,26 @@ function preprocessLinks(src) {
     if (pill) pill.classList.toggle('active', show);
   }
 
+  function _updateRowPomoIndicators() {
+    var s = _pomoState();
+    document.querySelectorAll('.todo-row').forEach(function(r) {
+      r.classList.remove('pomo-active', 'pomo-running', 'pomo-paused');
+      var btn = r.querySelector('.pomo-row-btn');
+      if (btn) btn.textContent = '\u25B6';
+    });
+    if (s && !s.done) {
+      var row = document.querySelector('.todo-row[data-line="'+s.lineNo+'"]');
+      if (row) {
+        row.classList.add('pomo-active');
+        row.classList.add(s.paused ? 'pomo-paused' : 'pomo-running');
+        var btn = row.querySelector('.pomo-row-btn');
+        if (btn) btn.textContent = s.paused ? '\u25B6' : '\u23F8';
+      }
+    }
+  }
+
   function _updatePill() {
+    _updateRowPomoIndicators();
     var s = _pomoState();
     if (!s || s.done) { _showPill(false); return; }
     var pill = document.getElementById('pomo-pill');
@@ -1662,6 +1681,31 @@ function preprocessLinks(src) {
   };
 
   window.stopPomo = function() {
+    _clearPomo();
+    _updatePill();
+  };
+
+  window.todoPomoAction = function(btn, desc) {
+    var lineNo = parseInt(btn.dataset.line);
+    var s = _pomoState();
+    if (s && s.lineNo === lineNo && !s.done) {
+      if (s.paused) {
+        s.endTime = Date.now() + s.pausedRemain * 1000;
+        s.paused = false;
+        _savePomo(s);
+        if (!_pomoInterval) { _pomoInterval = setInterval(_tickPomo, 1000); }
+      } else {
+        s.pausedRemain = Math.round((s.endTime - Date.now()) / 1000);
+        s.paused = true;
+        _savePomo(s);
+      }
+      _updatePill();
+    } else {
+      startPomo(lineNo, desc);
+    }
+  };
+
+  window.todoPomoStop = function() {
     _clearPomo();
     _updatePill();
   };

@@ -521,7 +521,7 @@ Press `?` from any page to view all shortcuts. Navigation uses a two-key chord: 
 | `N` | New record (same as `G` `A`) |
 | `E` | New expense |
 | `I` | New income |
-| `T` | New investment |
+| `T` | Todo list |
 
 ### Lint
 
