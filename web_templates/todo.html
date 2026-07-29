@@ -2,7 +2,7 @@
 {% block content %}
 
 {% macro todo_row(t, badge_class) %}
-    <div class="todo-row" data-line="{{ t.line_no }}" data-pri="{{ t.priority or '' }}" data-due="{{ t.due.isoformat() if t.due else '' }}" data-due-time="{{ t.due_time or '' }}" data-threshold="{{ t.threshold.isoformat() if t.threshold else '' }}" data-threshold-time="{{ t.threshold_time or '' }}" data-rec="{{ t.rec or '' }}" onclick="toggleRowSel(this)">
+    <div class="todo-row" data-line="{{ t.line_no }}" data-pri="{{ t.priority or '' }}" data-due="{{ t.due.isoformat() if t.due else '' }}" data-due-time="{{ t.due_time or '' }}" data-threshold="{{ t.threshold.isoformat() if t.threshold else '' }}" data-threshold-time="{{ t.threshold_time or '' }}" data-rec="{{ t.rec or '' }}" data-projects="{{ t.projects|join(' ') }}" data-contexts="{{ t.contexts|join(' ') }}" onclick="toggleRowSel(this)">
       <div class="todo-check" onclick="if(_selMode)return;completeTodo({{ t.line_no }}, this)"></div>
       <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}" onclick="if(_selMode)return;popupEditPriority({{ t.line_no }}, '{{ t.priority or '' }}', this)" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %} — Change priority">{{ t.priority or '—' }}</div>
       <div class="todo-body">
@@ -1081,6 +1081,16 @@ function _commonValue(rows, attr) {
   return val || '';
 }
 
+function _commonListValue(rows, attr) {
+  var common = null;
+  for (var i = 0; i < rows.length; i++) {
+    var vals = (rows[i].getAttribute(attr) || '').split(' ').filter(Boolean);
+    if (i === 0) { common = vals; }
+    else { common = common.filter(function(v) { return vals.indexOf(v) !== -1; }); }
+  }
+  return common || [];
+}
+
 function openBulkEdit() {
   if (Object.keys(_selLines).length === 0) { alert('No tasks selected'); return; }
   var lineNos = Object.keys(_selLines);
@@ -1115,6 +1125,14 @@ function openBulkEdit() {
     if (commonThresholdTime) document.getElementById('modal-threshold-time').value = commonThresholdTime;
     var commonRec = _commonValue(rows, 'data-rec');
     if (commonRec) document.getElementById('modal-rec').value = commonRec;
+    var commonProjects = _commonListValue(rows, 'data-projects');
+    document.querySelectorAll('#modal-project-chips .modal-chip:not(.modal-chip-other)').forEach(function(chip) {
+      if (commonProjects.indexOf(chip.dataset.value) !== -1) chip.classList.add('selected');
+    });
+    var commonContexts = _commonListValue(rows, 'data-contexts');
+    document.querySelectorAll('#modal-context-chips .modal-chip:not(.modal-chip-other)').forEach(function(chip) {
+      if (commonContexts.indexOf(chip.dataset.value) !== -1) chip.classList.add('selected');
+    });
   }
   document.getElementById('todo-modal').classList.add('open');
   document.getElementById('modal-pri').focus();
