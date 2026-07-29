@@ -2,7 +2,7 @@
 {% block content %}
 
 {% macro todo_row(t, badge_class) %}
-    <div class="todo-row" data-line="{{ t.line_no }}" onclick="toggleRowSel(this)">
+    <div class="todo-row" data-line="{{ t.line_no }}" data-pri="{{ t.priority or '' }}" data-due="{{ t.due.isoformat() if t.due else '' }}" data-due-time="{{ t.due_time or '' }}" data-threshold="{{ t.threshold.isoformat() if t.threshold else '' }}" data-threshold-time="{{ t.threshold_time or '' }}" data-rec="{{ t.rec or '' }}" onclick="toggleRowSel(this)">
       <div class="todo-check" onclick="if(_selMode)return;completeTodo({{ t.line_no }}, this)"></div>
       <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}" onclick="if(_selMode)return;popupEditPriority({{ t.line_no }}, '{{ t.priority or '' }}', this)" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %} — Change priority">{{ t.priority or '—' }}</div>
       <div class="todo-body">
@@ -16,7 +16,8 @@
         </div>
       </div>
       <div class="todo-actions">
-        <button onclick="startPomodoro({{ t.line_no }}, '{{ t.description|e }}')" title="Start pomodoro">▶</button>
+        <button class="pomo-row-btn" data-line="{{ t.line_no }}" onclick="todoPomoAction(this, '{{ t.description|e }}')" title="Start pomodoro">▶</button>
+        <button class="pomo-row-stop" onclick="todoPomoStop()" title="Stop pomodoro">⏹</button>
         <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}')" title="Edit">✎</button>
         <button onclick="deleteTodo({{ t.line_no }})" title="Delete">✕</button>
       </div>
@@ -174,14 +175,21 @@
   .todo-context:hover { background:var(--accent-lt); color:var(--accent); }
   .todo-context.active { background:var(--accent-lt); color:var(--accent); font-weight:600; }
   .todo-actions {
-    display:flex; gap:4px; opacity:0; transition:opacity 0.2s;
+    display:flex; gap:6px;
   }
-  .todo-row:hover .todo-actions { opacity:1; }
   .todo-actions button {
-    background:none; border:none; cursor:pointer; padding:2px 4px;
-    font-size:14px; color:var(--sub); border-radius:4px;
+    background:none; border:none; cursor:pointer; padding:6px 10px;
+    font-size:18px; color:var(--sub); border-radius:6px; min-width:36px;
+    min-height:36px; display:flex; align-items:center; justify-content:center;
   }
   .todo-actions button:hover { background:var(--bg); }
+  .pomo-row-stop { display:none; }
+  .todo-row.pomo-active { background:var(--accent-lt); border-radius:6px; }
+  .todo-row.pomo-running { box-shadow:inset 3px 0 0 var(--success); }
+  .todo-row.pomo-paused { box-shadow:inset 3px 0 0 var(--warn); }
+  .todo-row.pomo-active .pomo-row-btn { color:var(--success); font-weight:700; }
+  .todo-row.pomo-paused .pomo-row-btn { color:var(--warn); }
+  .todo-row.pomo-active .pomo-row-stop { display:inline-flex; }
   .todo-progress {
     font-size:13px; color:var(--sub); text-align:center;
     margin-bottom:12px;
@@ -791,7 +799,7 @@
         </select>
     </div>
     </div>
-    <div class="modal-field modal-field-bulk-hide">
+    <div class="modal-field">
       <label>Projects</label>
       <div class="modal-chips" id="modal-project-chips">
         {% for p in projects %}
@@ -801,7 +809,7 @@
       </div>
       <input type="text" class="modal-other-input" id="modal-project-other" placeholder="New project name" style="display:none;" onkeydown="handleOtherKey(event, 'project')">
     </div>
-    <div class="modal-field modal-field-bulk-hide">
+    <div class="modal-field">
       <label>Contexts</label>
       <div class="modal-chips" id="modal-context-chips">
         {% for c in contexts %}
@@ -1060,9 +1068,21 @@ function toggleRowSel(el) {
   document.getElementById('sel-count').textContent = count + ' selected';
 }
 
+function _commonValue(rows, attr) {
+  var val = null;
+  for (var i = 0; i < rows.length; i++) {
+    var v = rows[i].getAttribute(attr) || '';
+    if (i === 0) { val = v; }
+    else if (v !== val) { return ''; }
+  }
+  return val || '';
+}
+
 function openBulkEdit() {
   if (Object.keys(_selLines).length === 0) { alert('No tasks selected'); return; }
-  document.getElementById('todo-modal-title').textContent = 'Edit ' + Object.keys(_selLines).length + ' Selected Tasks';
+  var lineNos = Object.keys(_selLines);
+  var rows = lineNos.map(function(ln) { return document.querySelector('.todo-row[data-line="'+ln+'"]'); }).filter(Boolean);
+  document.getElementById('todo-modal-title').textContent = 'Edit ' + lineNos.length + ' Selected Tasks';
   document.getElementById('modal-line-no').value = '1';
   document.getElementById('modal-desc').value = '';
   document.getElementById('modal-pri').value = '';
@@ -1079,6 +1099,20 @@ function openBulkEdit() {
   document.getElementById('modal-context-other').style.display = 'none';
   document.getElementById('modal-context-other').value = '';
   document.querySelectorAll('.modal-field-bulk-hide').forEach(function(f) { f.style.display = 'none'; });
+  if (rows.length) {
+    var commonPri = _commonValue(rows, 'data-pri');
+    if (commonPri) document.getElementById('modal-pri').value = commonPri;
+    var commonDue = _commonValue(rows, 'data-due');
+    if (commonDue) document.getElementById('modal-due').value = commonDue;
+    var commonDueTime = _commonValue(rows, 'data-due-time');
+    if (commonDueTime) document.getElementById('modal-due-time').value = commonDueTime;
+    var commonThreshold = _commonValue(rows, 'data-threshold');
+    if (commonThreshold) document.getElementById('modal-threshold').value = commonThreshold;
+    var commonThresholdTime = _commonValue(rows, 'data-threshold-time');
+    if (commonThresholdTime) document.getElementById('modal-threshold-time').value = commonThresholdTime;
+    var commonRec = _commonValue(rows, 'data-rec');
+    if (commonRec) document.getElementById('modal-rec').value = commonRec;
+  }
   document.getElementById('todo-modal').classList.add('open');
   document.getElementById('modal-pri').focus();
 }
@@ -1143,14 +1177,14 @@ function saveTodoModal() {
   var rec = document.getElementById('modal-rec').value;
 
   if (_selMode && lineNo) {
-    var updates = {
-      priority: pri || null,
-      due: due ? (dueTime ? due + 'T' + dueTime : due) : null,
-      threshold: threshold ? (thresholdTime ? threshold + 'T' + thresholdTime : threshold) : null,
-      rec: rec || null,
-      projects: projs.map(function(p) { return '+' + p.replace(/^\+/, ''); }),
-      contexts: ctxs.map(function(c) { return '@' + c.replace(/^@/, ''); })
-    };
+    var updates = {};
+    if (pri) updates.priority = pri;
+    if (due) updates.due = dueTime ? due + 'T' + dueTime : due;
+    if (threshold) updates.threshold = thresholdTime ? threshold + 'T' + thresholdTime : threshold;
+    if (rec) updates.rec = rec;
+    if (projs.length) updates.projects = projs.map(function(p) { return '+' + p.replace(/^\+/, ''); });
+    if (ctxs.length) updates.contexts = ctxs.map(function(c) { return '@' + c.replace(/^@/, ''); });
+    if (Object.keys(updates).length === 0) { alert('No changes to apply'); return; }
     fetch('/todo/bulk-edit', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
