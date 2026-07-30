@@ -1950,55 +1950,6 @@ def advance_record(filepath, old_line, lineno, target_type, target_ctx_fields=No
         raise PTOSError(str(e))
 
 
-def save_board(name, columns):
-    """Save or update a single board configuration in queries.toml.
-    
-    Args:
-        name: Board name (lowercase, letters/numbers/underscores)
-        columns: List of record type names for the columns
-    
-    Raises PTOSError on invalid input or write failure."""
-    import re
-    if not re.match(r'^[a-z][a-z0-9_]*$', name):
-        raise PTOSError(f"Invalid board name '{name}' — use lowercase letters, numbers, underscores")
-    if not columns or not isinstance(columns, list):
-        raise PTOSError("Board must have a non-empty columns list")
-    
-    import tomli_w
-    try:
-        queries = ptos.get_queries()
-        key = f"board.{name}"
-        queries[key] = {"columns": columns}
-        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
-            tomli_w.dump(queries, w.stream)
-    except PTOSError:
-        raise
-    except Exception as e:
-        raise PTOSError(str(e))
-
-
-def delete_board(name):
-    """Delete a board configuration from queries.toml.
-    
-    Args:
-        name: Board name to delete
-    
-    Raises PTOSError if board not found or write failure."""
-    import tomli_w
-    try:
-        queries = ptos.get_queries()
-        key = f"board.{name}"
-        if key not in queries:
-            raise PTOSError(f"Board '{name}' not found")
-        del queries[key]
-        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
-            tomli_w.dump(queries, w.stream)
-    except PTOSError:
-        raise
-    except Exception as e:
-        raise PTOSError(str(e))
-
-
 # ══════════════════════════════════════════════════════════════════════════════
 # Query TOML management (full write)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2134,10 +2085,7 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
                 entry["limit"] = int(board_cfg["limit"])
             raw_ctf = board_cfg.get("card_title_fields")
             if raw_ctf:
-                if isinstance(raw_ctf, list):
-                    entry["card_title_fields"] = raw_ctf
-                elif isinstance(raw_ctf, str):
-                    entry["card_title_fields"] = raw_ctf
+                entry["card_title_fields"] = raw_ctf
             data[f"board.{bare}"] = entry
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
