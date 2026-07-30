@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .board-header { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px; }
+  .board-header .page-title { margin:0; }
+  .board-select { padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px;cursor:pointer; }
+  .board-lanes { display:flex;gap:14px;overflow-x:auto;padding:8px 4px 20px;min-height:70vh; }
+  .board-lane { flex:0 0 300px;min-width:260px;background:var(--card);border-radius:12px;border:1px solid var(--border);display:flex;flex-direction:column;max-height:calc(100vh - 200px); }
+  .lane-header { padding:12px 14px 10px;font-weight:700;font-size:14px;border-bottom:2px solid var(--border);display:flex;justify-content:space-between;align-items:center;flex-shrink:0; }
+  .lane-count { font-size:12px;font-weight:600;color:var(--sub);background:var(--bg);padding:2px 10px;border-radius:12px; }
+  .lane-cards { flex:1;overflow-y:auto;padding:8px 8px 12px; }
+  .board-card { background:var(--bg);border-radius:10px;border:1px solid var(--border);padding:10px 12px;margin-bottom:8px;cursor:grab;transition:box-shadow .15s,transform .15s; }
+  .board-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px); }
+  .board-card.dragging { opacity:.5; }
+  .board-card .card-date { font-size:11px;color:var(--sub);margin-bottom:4px; }
+  .board-card .card-title { font-size:14px;font-weight:600;margin-bottom:4px; }
+  .board-card .card-meta { font-size:12px;color:var(--sub); }
+  .board-card .card-meta span { display:inline-block;margin-right:6px; }
+  .board-card .card-meta .meta-label { color:var(--text);opacity:.6; }
+  .board-card .card-note { font-size:12px;color:var(--sub);margin-top:4px;padding-top:4px;border-top:1px solid var(--border); }
+  .card-actions { display:flex;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border); }
+  .card-actions button { background:none;border:none;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;color:var(--sub);transition:background .15s; }
+  .card-actions button:hover { background:var(--border); }
+  .card-actions .edit-btn { color:var(--accent); }
+  .card-actions .del-btn { color:var(--error); }
+  .lane-dropzone { min-height:60px;border-radius:8px;border:2px dashed transparent;transition:border-color .15s,background .15s; }
+  .lane-dropzone.drag-over { border-color:var(--accent);background:var(--accent-lt); }
+  .board-empty { text-align:center;padding:30px;color:var(--sub);font-size:14px; }
+  .board-toast { position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,.12);z-index:200;display:none; }
+</style>
+
+{% set tw_labels = {"this-month":"This month","this-week":"This week","last-month":"Last month","last-3-months":"Last 3 months","this-year":"This year","all":"All time"} %}
+<div class="board-header">
+  <div class="page-title">Board</div>
+  <select class="board-select" onchange="switchBoard(this.value)">
+    {% for bname in boards %}
+    <option value="{{ bname }}" {% if bname == active_board %}selected{% endif %}>{{ bname | replace('_',' ') }}</option>
+    {% endfor %}
+  </select>
+  {% if board_data and board_data.time_window %}
+  <span style="font-size:12px;color:var(--sub);background:var(--bg);padding:3px 10px;border-radius:10px;">
+    {{ tw_labels.get(board_data.time_window, board_data.time_window) }}
+  </span>
+  {% endif %}
+</div>
+
+{% if board_data %}
+<div class="board-lanes" id="board-lanes">
+  {% for col_type in board_data.columns %}
+  {% set records = board_data.data.get(col_type, []) %}
+  <div class="board-lane" data-type="{{ col_type }}">
+    <div class="lane-header">
+      <span>{{ col_type | replace('_',' ') }}</span>
+      {% set total_in_col = board_data.counts.get(col_type, 0) %}
+      {% set truncated_total = board_data.truncated.get(col_type, 0) %}
+      {% if truncated_total %}
+      <span class="lane-count" title="{{ records|length }} of {{ truncated_total }}">{{ records|length }}/{{ truncated_total }}</span>
+      {% else %}
+      <span class="lane-count">{{ records | length }}</span>
+      {% endif %}
+    </div>
+    <div class="lane-cards" ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+      {% if records %}
+      {% for rec in records %}
+      <div class="board-card" draggable="true"
+           ondragstart="onDragStart(event)"
+           ondragend="onDragEnd(event)"
+           data-filepath="{{ rec._filepath }}"
+           data-line="{{ rec._line }}"
+           data-lineno="{{ rec._lineno }}">
+        <div class="card-date">{{ rec.date }}</div>
+        {% set title_fields = board_data.card_title_fields or ['name','client','intent','title','subject'] %}
+        {% set card_title = [] %}
+        {% for f in title_fields %}
+        {% if rec.get(f) %}{% set _ = card_title.append(rec[f]) %}{% endif %}
+        {% endfor %}
+        {% if card_title %}
+        <div class="card-title">{{ card_title[:2] | join(' — ') }}</div>
+        {% endif %}
+        <div class="card-meta">
+          {% for k,v in rec.items() if not k.startswith('_') and k not in ('date','type','note') and k not in title_fields %}
+          <span><span class="meta-label">{{ k }}:</span> {{ v }}</span>
+          {% endfor %}
+        </div>
+        {% if rec.get('note') %}
+        <div class="card-note">{{ rec.note }}</div>
+        {% endif %}
+        <div class="card-actions">
+          <button class="edit-btn" onclick="editCard(this)" data-filepath="{{ rec._filepath }}" data-lineno="{{ rec._lineno }}" data-line="{{ rec._line | e }}">✎ Edit</button>
+          <button class="del-btn" onclick="deleteCard(this)" data-filepath="{{ rec._filepath }}" data-lineno="{{ rec._lineno }}" data-line="{{ rec._line | e }}">✕ Delete</button>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="board-empty">No records</div>
+      {% endif %}
+      <div class="lane-dropzone" style="min-height:10px;"></div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="board-empty" style="margin-top:40px;">
+  No board selected or no boards configured.
+  {% if boards %}
+  Select a board from the dropdown above.
+  {% else %}
+  Create a board in <a href="/query-builder">Query Builder</a>.
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="board-toast" id="board-toast"></div>
+
+<script>
+var _dragData = null;
+var _boardToastTimer = null;
+
+function switchBoard(name) {
+  if (name) {
+    window.location.href = "/board?board=" + encodeURIComponent(name);
+  }
+}
+
+function onDragStart(e) {
+  var card = e.target.closest('.board-card');
+  if (!card) return;
+  _dragData = {
+    filepath: card.dataset.filepath,
+    line: card.dataset.line,
+    lineno: parseInt(card.dataset.lineno),
+    sourceType: card.closest('.board-lane').dataset.type,
+  };
+  card.classList.add('dragging');
+  e.dataTransfer.effectAllowed = 'move';
+}
+
+function onDragEnd(e) {
+  document.querySelectorAll('.board-card.dragging').forEach(function(el) {
+    el.classList.remove('dragging');
+  });
+  document.querySelectorAll('.lane-dropzone.drag-over').forEach(function(el) {
+    el.classList.remove('drag-over');
+  });
+}
+
+function onDragOver(e) {
+  e.preventDefault();
+  e.dataTransfer.dropEffect = 'move';
+  var dropzone = e.target.closest('.lane-dropzone, .lane-cards');
+  if (dropzone) {
+    var target = dropzone.classList.contains('lane-cards') ? dropzone.querySelector('.lane-dropzone') : dropzone;
+    if (target) target.classList.add('drag-over');
+  }
+}
+
+function onDragLeave(e) {
+  var dropzone = e.target.closest('.lane-dropzone');
+  if (dropzone) {
+    dropzone.classList.remove('drag-over');
+  }
+}
+
+function showToast(msg, isError) {
+  var el = document.getElementById('board-toast');
+  el.textContent = msg;
+  el.style.display = 'block';
+  el.style.background = isError ? 'var(--error)' : 'var(--card)';
+  el.style.color = isError ? '#fff' : 'var(--text)';
+  clearTimeout(_boardToastTimer);
+  _boardToastTimer = setTimeout(function() { el.style.display = 'none'; }, 4000);
+}
+
+function onDrop(e) {
+  e.preventDefault();
+  document.querySelectorAll('.lane-dropzone.drag-over').forEach(function(el) {
+    el.classList.remove('drag-over');
+  });
+  if (!_dragData) return;
+  var lane = e.target.closest('.board-lane');
+  if (!lane) return;
+  var targetType = lane.dataset.type;
+  if (targetType === _dragData.sourceType) {
+    showToast('Card is already in this column', true);
+    return;
+  }
+
+  var btn = e.target.closest('button');
+  if (btn) return;
+
+  showToast('Moving card to ' + targetType.replace(/_/g, ' ') + '...');
+
+  fetch('/board/advance', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+      filepath: _dragData.filepath,
+      line: _dragData.line,
+      lineno: _dragData.lineno,
+      target_type: targetType,
+    }),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(resp) {
+    if (resp.ok) {
+      showToast('Card advanced to ' + targetType.replace(/_/g, ' '));
+      if (resp.data && resp.data.missing_required && resp.data.missing_required.length > 0) {
+        var params = new URLSearchParams({
+          filepath: resp.data.new_filepath,
+          lineno: resp.data.new_lineno,
+          line: resp.data.new_line,
+          return_to: '/board' + (window.location.search || ''),
+        });
+        window.location.href = '/edit?' + params.toString();
+      } else {
+        setTimeout(function() { location.reload(); }, 600);
+      }
+    } else {
+      showToast(resp.error || 'Failed to advance card', true);
+    }
+  })
+  .catch(function(err) {
+    showToast('Network error', true);
+  });
+}
+
+function editCard(btn) {
+  var fp = btn.dataset.filepath;
+  var ln = btn.dataset.lineno;
+  var line = btn.dataset.line;
+  var params = new URLSearchParams({filepath:fp, lineno:ln, line:line, return_to:window.location.pathname + window.location.search});
+  window.location.href = '/edit?' + params.toString();
+}
+
+function deleteCard(btn) {
+  if (!confirm('Delete this record?')) return;
+  var fp = btn.dataset.filepath;
+  var ln = btn.dataset.lineno;
+  var line = btn.dataset.line;
+  showToast('Deleting...');
+  fetch('/api/records/delete', {
+    method:'POST', headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({filepath:fp, old_line:line, lineno:ln}),
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(resp){
+    if (resp.ok) {
+      showToast('Deleted');
+      setTimeout(function(){ location.reload(); }, 400);
+    } else {
+      showToast(resp.error||'Delete failed', true);
+    }
+  })
+  .catch(function(){ showToast('Network error', true); });
+}
+
+</script>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function floatingAddAction() {
+  window.location.href = '/add?return_to=' + encodeURIComponent(window.location.href);
+}
+</script>
+{% endblock %}

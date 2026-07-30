@@ -25,6 +25,7 @@
   <button class="qb-sec-tab"        data-sec="dashboards" onclick="switchSection('dashboards')">Dashboards</button>
   <button class="qb-sec-tab"        data-sec="aliases"    onclick="switchSection('aliases')">Aliases</button>
   <button class="qb-sec-tab"        data-sec="due"        onclick="switchSection('due')">Due</button>
+  <button class="qb-sec-tab"        data-sec="boards"     onclick="switchSection('boards')">Boards</button>
 </div>
 
 <!-- ── Item chips row ── -->
@@ -34,6 +35,7 @@
   <div id="tabs-dashboards" class="qb-item-strip" style="display:none;"></div>
   <div id="tabs-aliases"    class="qb-item-strip" style="display:none;"></div>
   <div id="tabs-due"        class="qb-item-strip" style="display:none;"></div>
+  <div id="tabs-boards"     class="qb-item-strip" style="display:none;"></div>
 </div>
 
 <!-- ── Editor ── -->
@@ -146,7 +148,7 @@
 <script src="/static/js/time_picker.js"></script>
 <script src="/static/js/drag.js"></script>
 <script>
-var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{} };
+var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{}, boards:{} };
 var _cur = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
@@ -213,6 +215,14 @@ var _liveTimer = null;
   Object.entries(q.dashboards||{}).forEach(function(e) {
     _st.dashboards[e[0]] = { metrics: e[1].metrics||[] };
   });
+  // Boards
+  var _bkBoards = {{ boards | tojson }};
+  Object.entries(_bkBoards).forEach(function(e) {
+    var name = e[0].replace(/^board\./, '');
+    var rawCtf = e[1].card_title_fields || '';
+    var ctfArr = typeof rawCtf === 'string' ? rawCtf.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : (Array.isArray(rawCtf) ? rawCtf : []);
+    _st.boards[name] = { columns: e[1].columns||[], time_window: e[1].time_window||'this-month', limit: e[1].limit||0, card_title_fields: ctfArr };
+  });
   renderTabs();
   // Check URL params for edit mode
   var params = new URLSearchParams(window.location.search);
@@ -254,7 +264,7 @@ function switchSection(sec) {
     btn.classList.toggle("active", btn.dataset.sec === sec);
   });
   // show only the matching item strip
-  ["queries","metrics","dashboards","aliases","due"].forEach(function(s) {
+  ["queries","metrics","dashboards","aliases","due","boards"].forEach(function(s) {
     var el = document.getElementById("tabs-"+s);
     if (el) el.style.display = s === sec ? "flex" : "none";
   });
@@ -267,6 +277,7 @@ function renderTabs() {
   _renderSection("tabs-dashboards", _st.dashboards, "dashboards");
   _renderSection("tabs-aliases",    _st.aliases,    "aliases");
   renderDueTabs();
+  _renderSection("tabs-boards",     _st.boards,     "boards");
   _updateSectionCounts();
 }
 
@@ -277,6 +288,7 @@ function _updateSectionCounts() {
     dashboards: Object.keys(_st.dashboards).length,
     aliases:    Object.keys(_st.aliases).length,
     due:        Object.keys(_st.due).length,
+    boards:     Object.keys(_st.boards).length,
   };
   document.querySelectorAll(".qb-sec-tab").forEach(function(btn) {
     var sec = btn.dataset.sec;
@@ -352,10 +364,10 @@ function resetQuery() {
 
 // ── Add new ───────────────────────────────────────────────────────────────────
 function addEntry() {
-  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias\n  u = due","q");
+  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias\n  u = due\n  b = board","q");
   if (!kind) return;
   kind = kind.trim().toLowerCase();
-  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":kind==="u"?"due":"queries";
+  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":kind==="u"?"due":kind==="b"?"boards":"queries";
   var name = prompt("Name (lowercase, underscores):");
   if (!name) return;
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
@@ -369,6 +381,8 @@ function addEntry() {
     _st.aliases[name]    = {alias:""};
   else if (section==="due")
     _st.due[name]      = {type:"followup",key:"client",sort_by:"",days:7,exclude_results:[]};
+  else if (section==="boards")
+    _st.boards[name]   = {columns:[]};
   else
     _st.dashboards[name] = {metrics:[]};
   renderTabs();
@@ -389,6 +403,10 @@ function renderEditor() {
     showDueEditor();
     return;
   }
+  if (s==="boards") {
+    showBoardEditor();
+    return;
+  }
   // header
   var hdr = document.createElement("div");
   hdr.className = "card"; hdr.style.marginBottom = "12px";
@@ -405,7 +423,8 @@ function renderEditor() {
     '<div style="font-size:11px;color:var(--sub);margin-top:6px;">' +
     (s==="queries"?"Base query — filter records by type, fields, and time":
      s==="metrics"?"Metric — computed value over a base query":
-     "Dashboard — group of queries and metrics shown on Home")+'</div>';
+     s==="dashboards"?"Dashboard — group of queries and metrics shown on Home":
+     "Board — Kanban view with columns for each record type")+'</div>';
   ed.appendChild(hdr);
   if (s==="queries")     _buildQueryEditor(ed, n);
   else if (s==="metrics") ed.appendChild(_buildMetricEditor(n));
@@ -1037,10 +1056,10 @@ function confirmDelete() {
   if (!_delPending) return;
   var s=_delPending.section, n=_delPending.name;
   closeDeleteModal();
-  // Due configs have no individual backend delete endpoint — remove from state
+  // Due/Board configs have no individual backend delete endpoint — remove from state
   // and immediately Save All so the deletion persists.
-  if (s === "due") {
-    delete _st.due[n]; _cur=null; renderTabs();
+  if (s === "due" || s === "boards") {
+    delete _st[s][n]; _cur=null; renderTabs();
     document.getElementById("entry-editor").style.display = "none";
     document.getElementById("entry-empty").style.display  = "block";
     saveAll();
@@ -1196,7 +1215,7 @@ function saveAll() {
   Object.keys(_st.queries).forEach(function(n) {
     _st.queries[n].where = _buildWhereExpr(_st.queries[n]);
   });
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due };
+  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due, boards:_st.boards };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
     payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
@@ -1232,53 +1251,251 @@ document.getElementById("del-modal").addEventListener("click", function(e) {
 
 
 
-function showDueEditor() {
+function showBoardEditor() {
   var ed = document.getElementById("entry-editor");
   var empty = document.getElementById("entry-empty");
   ed.style.display = "block";
   empty.style.display = "none";
-  
-  var cfg = _st.due[_cur.name] || {};
-  var typeName = cfg.type || "followup";
+
+  var cfg = _st.boards[_cur.name] || {columns:[]};
+  var cols = cfg.columns || [];
+
   ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
       '<div style="flex:1;"><label>Name</label>'+
-        '<input type="text" id="due-name-input" value="'+_esc(_cur.name)+'" oninput="onDueNameChange()"'+
+        '<input type="text" id="board-name-input" value="'+_esc(_cur.name)+'" oninput="onBoardNameChange()"'+
         ' style="font-size:16px;font-weight:700;"></div>'+
       '<div style="margin-top:18px;">'+
         '<button onclick="askDelete()" class="btn btn-ghost btn-sm"'+
         ' style="color:var(--error);border-color:var(--error);">Delete</button>'+
       '</div>'+
     '</div>'+
-    '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">Due config — records overdue check for this type</div>'+
-    '<div style="margin-bottom:14px;">'+
-      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Record Type</div>'+
-      '<div id="due-type-chips" class="chip-group"></div>'+
+    '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
+      'Board — Kanban columns. Each column is a record type. Pick multiple types below.'+
     '</div>'+
     '<div style="margin-bottom:14px;">'+
-      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Group By (Key Field)</div>'+
-      '<div id="due-key-chips" class="chip-group"></div>'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Column Types <span style="font-weight:400;color:var(--sub);">(select 2+)</span></div>'+
+      '<div id="board-col-chips" class="chip-group"></div>'+
     '</div>'+
-    '<div style="margin-bottom:14px;">'+
-      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Sort By</div>'+
-      '<div id="due-sort-chips" class="chip-group"></div>'+
+    '<div id="board-overlap-area" style="margin-bottom:14px;display:none;">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Shared Fields <span id="board-overlap-status"></span></div>'+
+      '<div id="board-overlap-fields" style="font-size:12px;color:var(--sub);"></div>'+
     '</div>'+
-    '<div style="margin-bottom:14px;">'+
-      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Days Overdue</div>'+
-      '<input type="number" id="due-days" value="'+(cfg.days||7)+'" onchange="onDueDaysChange()" style="font-size:14px;padding:6px;width:80px;">'+
-    '</div>'+
-    '<div style="margin-bottom:14px;">'+
-      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Exclude Results</div>'+
-      '<div id="due-exclude-chips" class="chip-group" style="margin-bottom:6px;"></div>'+
-      '<div style="display:flex;gap:6px;">'+
-        '<input type="text" id="due-exclude-input" placeholder="add value…" style="flex:1;font-size:13px;padding:6px;" onkeydown="if(event.key===\'Enter\') addDueExclude()">'+
-        '<button onclick="addDueExclude()" class="btn btn-ghost btn-sm">Add</button>'+
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;">'+
+      '<div style="flex:1;min-width:120px;">'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Time Window</label>'+
+        '<select id="board-time-window" onchange="onBoardTimeWindowChange()" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+          '<option value="this-month"'+(cfg.time_window==='this-month'?' selected':'')+'>This month</option>'+
+          '<option value="this-week"'+(cfg.time_window==='this-week'?' selected':'')+'>This week</option>'+
+          '<option value="last-month"'+(cfg.time_window==='last-month'?' selected':'')+'>Last month</option>'+
+          '<option value="last-3-months"'+(cfg.time_window==='last-3-months'?' selected':'')+'>Last 3 months</option>'+
+          '<option value="this-year"'+(cfg.time_window==='this-year'?' selected':'')+'>This year</option>'+
+          '<option value="all"'+(cfg.time_window==='all'?' selected':'')+'>All time</option>'+
+        '</select>'+
+      '</div>'+
+      '<div style="flex:1;min-width:80px;">'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Max Cards</label>'+
+        '<input type="number" id="board-limit" value="'+(cfg.limit||'')+'" onchange="onBoardLimitChange()" placeholder="No limit" min="0" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
       '</div>'+
     '</div>'+
+    '<div id="board-title-area" style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Card Title Priority <span style="font-weight:400;color:var(--sub);">(drag to reorder)</span></div>'+
+      '<div id="board-title-chips" class="chip-group"></div>'+
+    '</div>'+
   '</div>';
-  
-  renderDueTypeChips(typeName);
-  fetchDueFieldsForType(typeName);
+
+  renderBoardColChips(cols);
+  fetchBoardOverlap(cols);
+}
+
+function renderBoardColChips(selected) {
+  var el = document.getElementById("board-col-chips");
+  if (!el) return;
+  el.innerHTML = "";
+  // Render selected chips as draggable items (ordered columns)
+  selected.forEach(function(t, i) {
+    var chip = document.createElement("span");
+    chip.className = "dash-chip";
+    chip.textContent = t;
+    chip.innerHTML += ' <button onclick="removeBoardCol('+i+')" style="background:none;border:none;cursor:pointer;color:var(--error);font-size:14px;line-height:1;padding:0;margin-left:2px;">×</button>';
+    chip.dataset.index = i;
+    _makeDraggable(chip, _st.boards[_cur.name].columns, i, function() {
+      renderBoardColChips(_st.boards[_cur.name].columns);
+      fetchBoardOverlap(_st.boards[_cur.name].columns);
+    }, ".dash-chip");
+    el.appendChild(chip);
+  });
+  // Render unselected chips as available types to add
+  var addContainer = document.createElement("div");
+  addContainer.style.marginTop = selected.length ? "8px" : "0";
+  addContainer.innerHTML = '<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">Add column:</div>';
+  _types.forEach(function(t) {
+    if (selected.indexOf(t) !== -1) return;
+    var chip = document.createElement("button");
+    chip.className = "qb-chip";
+    chip.textContent = '+ ' + t;
+    chip.addEventListener("click", function() {
+      var cfg = _st.boards[_cur.name];
+      if (!cfg) return;
+      if (!cfg.columns) cfg.columns = [];
+      cfg.columns.push(t);
+      renderBoardColChips(cfg.columns);
+      fetchBoardOverlap(cfg.columns);
+    });
+    addContainer.appendChild(chip);
+  });
+  el.appendChild(addContainer);
+}
+
+function removeBoardCol(idx) {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg || !cfg.columns) return;
+  cfg.columns.splice(idx, 1);
+  renderBoardColChips(cfg.columns);
+  fetchBoardOverlap(cfg.columns);
+}
+
+function onBoardTimeWindowChange() {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg) return;
+  cfg.time_window = document.getElementById("board-time-window").value;
+}
+
+function onBoardLimitChange() {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg) return;
+  var val = parseInt(document.getElementById("board-limit").value, 10);
+  cfg.limit = val > 0 ? val : 0;
+}
+
+var _lastAllFields = [];
+
+function fetchBoardOverlap(types) {
+  var area = document.getElementById("board-overlap-area");
+  var fieldsEl = document.getElementById("board-overlap-fields");
+  var statusEl = document.getElementById("board-overlap-status");
+  if (!area || !fieldsEl || !statusEl) return;
+  if (types.length < 2) {
+    area.style.display = "none";
+    // Still fetch all_fields for the card title picker with single type
+    fetch("/api/board/field-overlap", {
+      method: "POST",
+      headers: {"Content-Type":"application/json"},
+      body: JSON.stringify({types: types})
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(d) {
+      _lastAllFields = d.ok && d.all_fields ? d.all_fields : [];
+      renderBoardTitleChips();
+    })
+    .catch(function() {
+      _lastAllFields = [];
+      renderBoardTitleChips();
+    });
+    return;
+  }
+  area.style.display = "block";
+  fieldsEl.innerHTML = '<span style="color:var(--border);">Checking…</span>';
+  fetch("/api/board/field-overlap", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({types: types})
+  })
+  .then(function(r){ return r.json(); })
+  .then(function(d) {
+    if (d.ok && d.overlap) {
+      var meaningful = d.overlap.filter(function(f){ return f !== "date" && f !== "type"; });
+      if (meaningful.length === 0) {
+        statusEl.innerHTML = '<span style="color:var(--error);">⚠ Only date/type — cards will have no shared fields</span>';
+        fieldsEl.innerHTML = 'date, type';
+      } else {
+        statusEl.innerHTML = '<span style="color:var(--success);">✔ ' + meaningful.length + ' shared fields</span>';
+        fieldsEl.innerHTML = d.overlap.join(', ');
+      }
+      _lastAllFields = d.all_fields || [];
+    } else {
+      statusEl.innerHTML = '<span style="color:var(--error);">Error checking overlap</span>';
+      fieldsEl.innerHTML = '';
+      _lastAllFields = [];
+    }
+    renderBoardTitleChips();
+  })
+  .catch(function() {
+    statusEl.innerHTML = '<span style="color:var(--error);">Error</span>';
+    fieldsEl.innerHTML = '';
+    _lastAllFields = [];
+    renderBoardTitleChips();
+  });
+}
+
+function renderBoardTitleChips() {
+  var el = document.getElementById("board-title-chips");
+  if (!el) return;
+  var cfg = _st.boards[_cur.name];
+  if (!cfg) return;
+  var selected = cfg.card_title_fields || [];
+  el.innerHTML = "";
+
+  if (_lastAllFields.length === 0) {
+    el.innerHTML = '<span style="font-size:12px;color:var(--sub);">Add column types above to see available fields</span>';
+    return;
+  }
+
+  // Render selected chips as draggable items (priority order)
+  selected.forEach(function(f, i) {
+    var chip = document.createElement("span");
+    chip.className = "dash-chip";
+    chip.textContent = f;
+    chip.innerHTML += ' <button onclick="removeCardTitleField('+i+')" style="background:none;border:none;cursor:pointer;color:var(--error);font-size:14px;line-height:1;padding:0;margin-left:2px;">×</button>';
+    chip.dataset.index = i;
+    _makeDraggable(chip, cfg.card_title_fields, i, function() {
+      renderBoardTitleChips();
+    }, ".dash-chip");
+    el.appendChild(chip);
+  });
+
+  // Render unselected fields as addable chips
+  var addContainer = document.createElement("div");
+  addContainer.style.marginTop = selected.length ? "8px" : "0";
+  addContainer.innerHTML = '<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">Add title field:</div>';
+  _lastAllFields.forEach(function(f) {
+    if (selected.indexOf(f) !== -1) return;
+    var chip = document.createElement("button");
+    chip.className = "qb-chip";
+    chip.textContent = '+ ' + f;
+    chip.addEventListener("click", function() {
+      addCardTitleField(f);
+    });
+    addContainer.appendChild(chip);
+  });
+  el.appendChild(addContainer);
+}
+
+function addCardTitleField(field) {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg) return;
+  if (!cfg.card_title_fields) cfg.card_title_fields = [];
+  cfg.card_title_fields.push(field);
+  renderBoardTitleChips();
+}
+
+function removeCardTitleField(idx) {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg || !cfg.card_title_fields) return;
+  cfg.card_title_fields.splice(idx, 1);
+  renderBoardTitleChips();
+}
+
+function onBoardNameChange() {
+  var inp = document.getElementById("board-name-input");
+  if (!inp) return;
+  var newName = inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  var old = _cur.name;
+  if (!newName || newName === old || _st.boards[newName]) return;
+  _st.boards[newName] = _st.boards[old];
+  delete _st.boards[old];
+  _cur.name = newName;
+  renderTabs();
 }
 
 function renderDueTypeChips(selected) {

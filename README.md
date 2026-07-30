@@ -455,6 +455,22 @@ Visual builder for creating queries, metrics, and dashboards. Features:
 - **Dashboard editor** for managing dashboard metrics (drag-and-drop reorder items)
 - Save as Query or Metric
 
+### Board (Kanban)
+
+Kanban board view for tracking records across workflow stages. Configured in
+`queries.toml` under `[board.NAME]`. Features:
+- **Column-based workflow** — each column maps to a record type (e.g. `followup`,
+  `assessment`, `prescription`, `fitting`)
+- **Drag cards between columns** — creates a new record of the target type with
+  shared field values copied over; redirects to edit for missing required fields
+- **Configurable time window and card limit** per board
+- **Card title fields** — choose which record fields appear as the card header
+  via a chip picker with drag priority (stored in `queries.toml`)
+- **Edit/delete from card** — buttons on each card link back to the board after
+  save via `return_to` parameter
+- **Board editor in Query Builder** — drag-reorderable column chips, time
+  window/max cards fields, card title field chip picker with drag priority
+
 ### Settings
 
 Configure user profile and app preferences. Sections:
@@ -601,7 +617,7 @@ the starters are used again.
 |------|----------|
 | `starter_config.toml` | User, editor, display, cycles, dashboard, auth, backup, todo settings |
 | `starter_schema.toml` | 7 record types: expense, income, investment, exercise, sleep, mood, learning — with parent-dependent fields, tags, global optional fields (context, project) |
-| `starter_queries.toml` | 15 base queries + 6 metrics (savings_rate, food_ratio, avg_spend, total_income, total_expenses, avg_mood) + 2 dashboards (default, health) |
+| `starter_queries.toml` | 15 base queries + 6 metrics (savings_rate, food_ratio, avg_spend, total_income, total_expenses, avg_mood) + 2 dashboards (default, health) + 1 board (patient_journey) |
 | `starter_presets.toml` | 21 presets with short aliases — coffee, lunch, dinner, groceries, restaurant, auto, bus, metro, petrol, rapido, recharge, broadband, electricity, salary, sip, rd, walk, gym, run, read, course |
 
 ### config.toml
