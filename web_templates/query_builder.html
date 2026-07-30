@@ -1215,6 +1215,16 @@ function saveAll() {
   Object.keys(_st.queries).forEach(function(n) {
     _st.queries[n].where = _buildWhereExpr(_st.queries[n]);
   });
+  // validate boards client-side before POST
+  if (_st.boards) {
+    for (var bname in _st.boards) {
+      var cfg = _st.boards[bname];
+      if (!cfg.columns || !cfg.columns.length) {
+        showMsg("✖ Board '" + bname + "' must have at least one column", false);
+        return;
+      }
+    }
+  }
   var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due, boards:_st.boards };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
