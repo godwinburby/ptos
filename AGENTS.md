@@ -222,6 +222,30 @@ x 2026-07-12 2026-07-10 Completed task
 - Universal search (`/search`) scans note content using `_glob_match`
 - Results show `category/title` with snippet, link to note view
 
+## Board module specifics
+
+### Config storage
+- Boards stored in `queries.toml` as `[board.NAME]` sections
+- Keys: `columns` (list of record types), `time_window` (default `this-month`), `limit` (default 0 = unlimited), `card_title_fields` (comma-separated string or list of field names for card header)
+- Board editor in Query Builder: drag-reorderable column chips, time window/max cards fields, card title priority chip picker
+
+### Card title fields
+- `card_title_fields` config key per board controls which record fields appear as the card header
+- Chip picker in board editor: all fields across all column types shown as toggle chips, selected fields drag-reorderable for priority
+- First 2 matching fields on each card displayed; unused if no matching fields
+- Fallback if not configured: `['name', 'client', 'intent', 'title', 'subject']`
+- Passed to template as `board_data.card_title_fields` (list) from `get_board_data()`
+
+### API
+- `POST /api/board/field-overlap` — returns `{overlap: [...], all_fields: [...]}` (shared + union of all fields across columns)
+- `POST /board/advance` — creates a new record of target type, copies shared fields; returns `missing_required` + `new_line`/`new_filepath`/`new_lineno` for edit redirect
+- `GET /board` — renders Kanban view, board selected via `?board=NAME` query param; auto-selects first board if none specified
+
+### return_to flow
+- Board cards (edit/delete buttons) pass `return_to=pathname+search` to preserve board context
+- Drag→edit flow and multi-preset add also pass `return_to` through to redirect back to board
+- `onParentChange` in edit.html preserves `return_to` in URL when reloading field cascades
+
 ## Bracket cross-linking (`[[Target]]`)
 
 ### Overview
@@ -268,6 +292,7 @@ Wiki-style `[[links]]` sit on top of existing project conventions — not a repl
 | Todo features | `ptos_todo.py`, `ptos_service.py`, `ptos_web.py`, `web_templates/todo.html` |
 | Todo CLI | `ptos_cli.py` (argparse + handlers), `ptos_todo.py` (engine) |
 | Notes | `ptos.py` (CRUD + template), `ptos_service.py`, `ptos_web.py`, `web_templates/notes*.html` |
+| Board/Kanban | `ptos_service.py` (get_board_data, board_field_overlap, board_advance), `ptos_web.py` (routes), `web_templates/query_builder.html` (board editor), `web_templates/board.html` (Kanban view) |
 | Bracket linking | `ptos_web.py` (`/api/link-candidates`), `web_templates/base.html` (shared JS), `_markdown_editor.html`, `todo.html`, `add.html`, `edit.html`, `search.html` |
 | Schema/validation | `ptos.py`, `schema.toml` |
 | Web UI patterns | `web_templates/base.html`, neighboring templates |

@@ -1755,10 +1755,255 @@ def restore_config(zip_path):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Board / Kanban
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_boards():
+    """Get all board configurations from queries.toml.
+    Returns dict of {board_name: {columns: [...]}}."""
+    try:
+        queries = ptos.get_queries()
+    except Exception as e:
+        raise PTOSError(str(e))
+    boards = {}
+    for k, v in queries.items():
+        if k.startswith("board.") and isinstance(v, dict):
+            name = k[6:]
+            cols = v.get("columns", [])
+            if isinstance(cols, list) and cols:
+                boards[name] = {"columns": cols}
+    return boards
+
+
+def get_board_data(board_name):
+    """Load record data for each column of a board.
+    Returns dict mapping column type → list of parsed record dicts
+    with _filepath, _lineno, _line for edit support."""
+    try:
+        queries = ptos.get_queries()
+    except Exception as e:
+        raise PTOSError(str(e))
+
+    key = f"board.{board_name}"
+    cfg = queries.get(key)
+    if not cfg or not isinstance(cfg, dict):
+        raise PTOSError(f"Board '{board_name}' not found in queries.toml")
+
+    columns = cfg.get("columns", [])
+    if not columns:
+        raise PTOSError(f"Board '{board_name}' has no columns defined")
+
+    schema = ptos.get_schema()
+    allowed = set(schema.get("types", {}).get("allowed", []))
+    for t in columns:
+        if t not in allowed:
+            raise PTOSError(f"Type '{t}' in board '{board_name}' is not in schema types")
+
+    overlap = ptos.get_column_field_overlap(columns, schema)
+    field_info = {}
+    for t in columns:
+        field_info[t] = ptos.filter_fields_for_type(t, schema)
+
+    # Time window and limit from board config
+    today = dt.date.today()
+    time_window = cfg.get("time_window", "this-month")
+    if time_window == "all":
+        start = dt.date(2000, 1, 1)
+    elif time_window == "this-week":
+        start = today - dt.timedelta(days=today.weekday())
+    elif time_window == "last-month":
+        first = today.replace(day=1)
+        start = (first - dt.timedelta(days=1)).replace(day=1)
+    elif time_window == "last-3-months":
+        first = today.replace(day=1)
+        start = (first - dt.timedelta(days=1)).replace(day=1)
+        start = (start - dt.timedelta(days=1)).replace(day=1)
+    elif time_window == "this-year":
+        start = today.replace(month=1, day=1)
+    else:  # "this-month" default
+        start = today.replace(day=1)
+    end = today + dt.timedelta(days=365)
+
+    limit = cfg.get("limit", 0)  # 0 = no limit
+
+    result = {}
+    total_by_type = {}
+    truncated_by_type = {}
+
+    for col_type in columns:
+        filters = [f"type={col_type}"]
+        try:
+            loc_matches = ptos.find_records_with_location(filters, start=start, end=end)
+        except Exception:
+            loc_matches = []
+
+        records = []
+        for fp, idx, line in loc_matches:
+            row = _parse_record(line)
+            if not row:
+                continue
+            row["_filepath"] = fp
+            row["_lineno"] = idx
+            row["_line"] = line
+            records.append(row)
+
+        # Sort by date descending (newest first)
+        records.sort(key=lambda r: r.get("date", ""), reverse=True)
+        total = len(records)
+        if limit and total > limit:
+            records = records[:limit]
+            truncated_by_type[col_type] = total
+        result[col_type] = records
+        total_by_type[col_type] = total
+
+    card_title_fields = cfg.get("card_title_fields")
+    if isinstance(card_title_fields, str):
+        card_title_fields = [f.strip() for f in card_title_fields.split(",") if f.strip()]
+    elif not isinstance(card_title_fields, list):
+        card_title_fields = []
+
+    return {
+        "columns": columns,
+        "data": result,
+        "counts": total_by_type,
+        "truncated": truncated_by_type,
+        "time_window": time_window,
+        "overlap": overlap,
+        "field_info": field_info,
+        "board_name": board_name,
+        "card_title_fields": card_title_fields,
+    }
+
+
+def advance_record(filepath, old_line, lineno, target_type, target_ctx_fields=None):
+    """Move a record from one column/type to another.
+    Creates a NEW record with today's date and target_type.
+    Shared fields (common to both source and target types) are copied.
+    Source record is kept unchanged.
+    
+    target_ctx_fields: optional dict of extra field values for the target type
+                       (e.g. field values captured from the drag context).
+    
+    Returns dict with new record info or redirect info if fields need filling."""
+    try:
+        parsed = ptos.safe_parse_line(old_line)
+        if not parsed:
+            raise PTOSError("Could not parse source record")
+        d, kv, note = parsed
+
+        schema = ptos.get_schema()
+        source_type = kv.get("type", "")
+        allowed = set(schema.get("types", {}).get("allowed", []))
+        if target_type not in allowed:
+            raise PTOSError(f"Target type '{target_type}' is not in schema")
+
+        # Find shared fields between source and target
+        source_fields = set(ptos.filter_fields_for_type(source_type, schema))
+        target_fields = set(ptos.filter_fields_for_type(target_type, schema))
+        shared = source_fields & target_fields
+
+        # Build new record
+        new_kv = {"type": target_type}
+        for f in shared:
+            if f in ("date", "type", "note"):
+                continue
+            if f in kv:
+                new_kv[f] = kv[f]
+
+        # Apply any context-provided field values (override shared)
+        if target_ctx_fields:
+            for f, v in target_ctx_fields.items():
+                new_kv[f] = v
+
+        today_str = dt.date.today().isoformat()
+        new_line = ptos.build_record_line(today_str, new_kv, note or None)
+        ptos.append_record(new_line)
+
+        # Check if target type has required fields not yet filled
+        tdef = schema.get("type", {}).get(target_type, {})
+        required = tdef.get("required", [])
+        missing = [f for f in required if f not in new_kv]
+
+        # Find the new record's location (last line in the year file)
+        year_file = os.path.join(ptos.RECORDS_DIR, f"{today_str[:4]}.log")
+        new_lineno = -1
+        new_filepath = year_file
+        if os.path.exists(year_file):
+            with open(year_file, encoding="utf-8") as f:
+                lines = f.readlines()
+            for i, l in enumerate(reversed(lines)):
+                if l.strip() == new_line:
+                    new_lineno = len(lines) - 1 - i
+                    break
+
+        return {
+            "ok": True,
+            "new_line": new_line,
+            "new_filepath": new_filepath,
+            "new_lineno": new_lineno,
+            "missing_required": missing,
+            "target_type": target_type,
+        }
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def save_board(name, columns):
+    """Save or update a single board configuration in queries.toml.
+    
+    Args:
+        name: Board name (lowercase, letters/numbers/underscores)
+        columns: List of record type names for the columns
+    
+    Raises PTOSError on invalid input or write failure."""
+    import re
+    if not re.match(r'^[a-z][a-z0-9_]*$', name):
+        raise PTOSError(f"Invalid board name '{name}' — use lowercase letters, numbers, underscores")
+    if not columns or not isinstance(columns, list):
+        raise PTOSError("Board must have a non-empty columns list")
+    
+    import tomli_w
+    try:
+        queries = ptos.get_queries()
+        key = f"board.{name}"
+        queries[key] = {"columns": columns}
+        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+            tomli_w.dump(queries, w.stream)
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def delete_board(name):
+    """Delete a board configuration from queries.toml.
+    
+    Args:
+        name: Board name to delete
+    
+    Raises PTOSError if board not found or write failure."""
+    import tomli_w
+    try:
+        queries = ptos.get_queries()
+        key = f"board.{name}"
+        if key not in queries:
+            raise PTOSError(f"Board '{name}' not found")
+        del queries[key]
+        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+            tomli_w.dump(queries, w.stream)
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Query TOML management (full write)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None):
+def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None):
     """Build and write queries.toml using tomli-w with atomic write.
 
     raw_queries:    {name: {where, time, group, search, sort, sum}}
@@ -1776,8 +2021,14 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
     if raw_aliases is None:
         raw_aliases = {}
 
-    for n in list(raw_queries) + list(raw_metrics) + list(raw_dashboards) + list(raw_aliases):
-        if not re.match(r'^[a-z][a-z0-9_]*$', n):
+    def _clean_bare_name(n):
+        return n[6:] if n.startswith("board.") else n
+
+    all_names = list(raw_queries) + list(raw_metrics) + list(raw_dashboards) + list(raw_aliases)
+    board_names = list(raw_boards or {})
+    for n in all_names + board_names:
+        bare = _clean_bare_name(n)
+        if not re.match(r'^[a-z][a-z0-9_]*$', bare):
             raise PTOSError(
                 f"Invalid name '{n}' — use lowercase letters, numbers, underscores")
 
@@ -1870,6 +2121,24 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
             due[due_name] = entry
         if due:
             data["due"] = due
+
+    # Boards
+    for name, board_cfg in (raw_boards or {}).items():
+        bare = _clean_bare_name(name)
+        cols = board_cfg.get("columns", [])
+        if cols:
+            entry = {"columns": cols}
+            if board_cfg.get("time_window"):
+                entry["time_window"] = board_cfg["time_window"]
+            if board_cfg.get("limit"):
+                entry["limit"] = int(board_cfg["limit"])
+            raw_ctf = board_cfg.get("card_title_fields")
+            if raw_ctf:
+                if isinstance(raw_ctf, list):
+                    entry["card_title_fields"] = raw_ctf
+                elif isinstance(raw_ctf, str):
+                    entry["card_title_fields"] = raw_ctf
+            data[f"board.{bare}"] = entry
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
         tomli_w.dump(data, w.stream)

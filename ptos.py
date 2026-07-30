@@ -4598,6 +4598,41 @@ def set_date_format(fmt):
 
 
 # --------------------------------------------------
+# Board / Kanban helpers
+# --------------------------------------------------
+
+def filter_fields_for_type(type_name, schema=None):
+    """Get all field names applicable to a given record type.
+    Returns sorted list including 'date', 'type', global fields,
+    and type-specific fields."""
+    if schema is None:
+        schema = get_schema()
+    fields = {"date", "type"}
+    gf = get_global_fields(schema)
+    fields.update(gf.keys())
+    tdef = schema.get("type", {}).get(type_name, {})
+    fields.update(tdef.get("fields", {}).keys())
+    fields.update(tdef.get("required", []))
+    for cond_field in tdef.get("conditions", {}):
+        fields.add(cond_field)
+    return sorted(fields)
+
+
+def get_column_field_overlap(types, schema=None):
+    """Find common shared fields between multiple record types.
+    Returns sorted list of field names present in ALL given types."""
+    if not types:
+        return []
+    if schema is None:
+        schema = get_schema()
+    type_sets = []
+    for t in types:
+        type_sets.append(set(filter_fields_for_type(t, schema)))
+    common = set.intersection(*type_sets) if type_sets else set()
+    return sorted(common)
+
+
+# --------------------------------------------------
 # Backward-compatible CLI entry point
 # --------------------------------------------------
 # ptos.py can still be run directly: python ptos.py [args]

@@ -13,7 +13,12 @@
   width: auto;
 }
 </style>
-<div class="page-title">Add Record</div>
+<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+  <div class="page-title" style="margin:0;">Add Record</div>
+  {% if return_to and return_to != '/' %}
+  <a href="{{ return_to }}" style="font-size:13px;color:var(--sub);text-decoration:none;font-weight:600;">↩ Back</a>
+  {% endif %}
+</div>
 
 {% if msg %}
 <div class="msg msg-{{ msg_type }}">{{ msg }}</div>
@@ -25,7 +30,7 @@
   <div style="font-family:monospace;font-size:13px;word-break:break-all;color:var(--sub);">{{ last_line }}</div>
   <div style="margin-top:12px;display:flex;gap:8px;">
     <a href="/add" class="btn btn-primary btn-sm">Add Another</a>
-    <a href="/"    class="btn btn-ghost btn-sm">Home</a>
+    <a href="{{ return_to or '/' }}" class="btn btn-ghost btn-sm">Done</a>
   </div>
 </div>
 {% endif %}
@@ -75,7 +80,7 @@
     <div class="chip-group">
       {% for name, refs in multi_presets.items() %}
       <span class="preset-chip-wrap">
-        <button class="preset-chip" onclick="addMultiPreset('{{ name }}', this)">
+        <button class="preset-chip" onclick="addMultiPreset(this)" data-name="{{ name }}" data-return-to="{{ return_to }}">
           + {{ name }} <span style="opacity:.6;font-size:11px;">({{ refs }})</span>
         </button>
         <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
@@ -113,6 +118,7 @@
 <!-- ── STEP 2: fill fields ── -->
 <form method="POST" action="/add" id="add-form">
   <input type="hidden" name="type" value="{{ selected_type }}">
+  <input type="hidden" name="return_to" value="{{ return_to }}">
 
   <!-- type indicator + change link -->
   <div class="card" style="padding:12px 18px;margin-bottom:14px;">
@@ -597,7 +603,9 @@ document.getElementById("preset-name-input").addEventListener("keydown", functio
 
 {% if multi_presets %}
 <script>
-function addMultiPreset(name, btn) {
+function addMultiPreset(btn) {
+  const name = btn.dataset.name;
+  const returnTo = btn.dataset.returnTo || "";
   const today = new Date().toISOString().split("T")[0];
   const msg   = document.getElementById("multi-msg-add");
   btn.disabled = true;
@@ -614,11 +622,15 @@ function addMultiPreset(name, btn) {
       btn.textContent = `✔ ${d.count} added`;
       btn.style.background = "var(--success)";
       msg.style.display = "none";
-      setTimeout(() => {
-        btn.innerHTML = orig;
-        btn.style.background = "";
-        btn.disabled = false;
-      }, 3000);
+      if (returnTo) {
+        setTimeout(() => { window.location.href = returnTo; }, 1200);
+      } else {
+        setTimeout(() => {
+          btn.innerHTML = orig;
+          btn.style.background = "";
+          btn.disabled = false;
+        }, 3000);
+      }
     } else {
       btn.innerHTML = orig;
       btn.disabled = false;

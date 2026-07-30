@@ -912,6 +912,9 @@ def add_get():
         ts = schema.get("type", {}).get(selected_type, {})
         tag_options = svc.resolve_tags(schema, ts, initial_context)
         tag_context = svc.get_tag_context(selected_type, field_values)
+    return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
+    if not return_to.startswith("/"):
+        return_to = url_for("browse_get")
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
@@ -922,7 +925,7 @@ def add_get():
         tag_context=tag_context,
         field_values=field_values,
         today=dt.date.today().isoformat(),
-        msg=None, msg_type=None, last_line=None)
+        msg=None, msg_type=None, last_line=None, return_to=return_to)
 
 @app.route("/add", methods=["POST"])
 def add_post():
@@ -957,6 +960,9 @@ def add_post():
     tags = request.form.getlist("tag") + custom_tags
     if tags: record["tag"] = tags
     
+    return_to = request.form.get("return_to", "") or url_for("browse_get")
+    if not return_to.startswith("/"):
+        return_to = url_for("browse_get")
     try:   problems = svc.validate_record(schema, record)
     except PTOSError as e: problems = [str(e)]
     if problems:
@@ -970,7 +976,8 @@ def add_post():
             tag_options=svc.resolve_tags(schema, ts, record),
             tag_context=svc.get_tag_context(rtype, record),
             field_values=record, today=dt.date.today().isoformat(),
-            msg=" | ".join(problems), msg_type="error", last_line=None)
+            msg=" | ".join(problems), msg_type="error", last_line=None,
+            return_to=return_to)
     try:
         line = svc.build_record_line(date_str, record, note)
         svc.append_record(line)
@@ -985,14 +992,8 @@ def add_post():
             tag_options=svc.resolve_tags(schema, ts, record),
             tag_context=svc.get_tag_context(rtype, record),
             field_values=record, today=dt.date.today().isoformat(),
-            msg=str(e), msg_type="error", last_line=None)
-    return render_template("add.html",
-        tab="add", title="Add Record", now=_now_str(),
-        types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
-        multi_presets=_multi_presets(),
-        selected_type="", field_defs=[], tag_options=[],
-        tag_context=[],
-        global_field_defs=[], msg=None, msg_type=None, last_line=None)
+            msg=str(e), msg_type="error", last_line=None, return_to=return_to)
+    return redirect(return_to)
 
 
 @app.route("/add-field-option", methods=["POST"])
@@ -1949,6 +1950,110 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
     return schema
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Board / Kanban
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/board")
+def board():
+    try:
+        boards = svc.get_boards()
+        schema = svc.get_schema()
+        types  = schema.get("types", {}).get("allowed", [])
+    except Exception:
+        boards = {}
+        types  = []
+    # Pick first board if none selected
+    active_board = request.args.get("board")
+    if not active_board and boards:
+        active_board = list(boards.keys())[0]
+    board_data = None
+    if active_board and active_board in boards:
+        try:
+            board_data = svc.get_board_data(active_board)
+        except Exception:
+            pass
+    return render_template("board.html",
+        tab="board", title="Board",
+        now=_now_str(), boards=boards,
+        active_board=active_board,
+        board_data=board_data)
+
+
+@app.route("/board/advance", methods=["POST"])
+def board_advance():
+    """Advance (move) a record to another column.
+    Creates a new record with today's date and target type.
+    Source record stays. Returns new record info."""
+    data = request.get_json(silent=True) or {}
+    filepath = data.get("filepath", "")
+    old_line = data.get("line", "")
+    lineno   = data.get("lineno")
+    target   = data.get("target_type", "")
+    if not filepath or not old_line or lineno is None or not target:
+        return jsonify(ok=False, error="Missing required fields: filepath, line, lineno, target_type")
+    if lineno < 0:
+        return jsonify(ok=False, error="Invalid line number")
+    try:
+        result = svc.advance_record(filepath, old_line, lineno, target)
+        return jsonify(ok=True, data=result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("Board advance failed")
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/board/save", methods=["POST"])
+def board_save():
+    """Save a single board configuration."""
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    columns = data.get("columns", [])
+    try:
+        svc.save_board(name, columns)
+        return jsonify(ok=True)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("Board save failed")
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/board/delete", methods=["POST"])
+def board_delete():
+    """Delete a single board configuration."""
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    try:
+        svc.delete_board(name)
+        return jsonify(ok=True)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("Board delete failed")
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/board/field-overlap", methods=["POST"])
+def board_field_overlap():
+    """Return common fields shared by all given record types."""
+    data = request.get_json(silent=True) or {}
+    types = data.get("types", [])
+    if not types:
+        return jsonify(ok=False, error="No types provided")
+    try:
+        schema = svc.get_schema()
+        overlap = ptos.get_column_field_overlap(types, schema)
+        all_fields = set()
+        for t in types:
+            all_fields.update(ptos.filter_fields_for_type(t, schema))
+        all_sorted = sorted(all_fields - {"date", "type", "note"})
+        return jsonify(ok=True, overlap=overlap, all_fields=all_sorted)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Query Builder
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2004,12 +2109,25 @@ def query_builder():
             "exclude_results": ["fix_appointment", "deceased", "not_relevant", "another_provider"]
         }}
     
+    boards = {}
+    for k, v in queries.items():
+        if k.startswith("board.") and isinstance(v, dict):
+            name = k[6:]
+            cols = v.get("columns", [])
+            if cols:
+                boards[name] = {
+                    "columns": cols,
+                    "time_window": v.get("time_window", "this-month"),
+                    "limit": v.get("limit", 0),
+                    "card_title_fields": v.get("card_title_fields", ""),
+                }
+    
     return render_template("query_builder.html",
         tab="query_builder", title="Query Builder",
         now=_now_str(), queries=queries, types=types,
         field_types=field_types,
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
-        due_config=all_due_configs)
+        due_config=all_due_configs, boards=boards)
 
 
 @app.route("/query-builder/save", methods=["POST"])
@@ -2023,6 +2141,7 @@ def query_builder_save():
             data.get("dashboards", {}),
             data.get("aliases", {}),
             data.get("due", {}),
+            raw_boards=data.get("boards", {}),
         )
         return jsonify(ok=True)
     except Exception as e:
@@ -2427,7 +2546,9 @@ def edit_get():
     return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
     # Only allow internal paths — reject anything that could be javascript: or external
     if not return_to.startswith("/"):
+        app.logger.warning("edit_get: return_to '%s' is external, falling back to /browse", return_to)
         return_to = url_for("browse_get")
+    app.logger.info("edit_get: return_to=%s", return_to)
     return render_template("edit.html",
         tab="browse", title="Edit Record", now=_now_str(),
         filepath=filepath, lineno=lineno_int, old_line=line,
@@ -2507,14 +2628,17 @@ def edit_post():
     new_note  = note if note != (old_note or "") else None
     return_to = request.form.get("return_to", "") or url_for("browse_get")
     if not return_to.startswith("/"):
+        app.logger.warning("edit_post: return_to '%s' is external, falling back to /browse", return_to)
         return_to = url_for("browse_get")
     if not set_args and new_note is None:
+        app.logger.info("edit_post: no changes, redirect to %s", return_to)
         return redirect(return_to)
     if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
         return redirect(return_to)
     try:
         svc.edit_record(filepath, old_line,
                         set_args=set_args, new_note=new_note, lineno=lineno_int)
+        app.logger.info("edit_post: success, redirect to %s", return_to)
         return redirect(return_to)
     except PTOSError as e:
         try:
