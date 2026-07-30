@@ -2077,16 +2077,17 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
     for name, board_cfg in (raw_boards or {}).items():
         bare = _clean_bare_name(name)
         cols = board_cfg.get("columns", [])
-        if cols:
-            entry = {"columns": cols}
-            if board_cfg.get("time_window"):
-                entry["time_window"] = board_cfg["time_window"]
-            if board_cfg.get("limit"):
-                entry["limit"] = int(board_cfg["limit"])
-            raw_ctf = board_cfg.get("card_title_fields")
-            if raw_ctf:
-                entry["card_title_fields"] = raw_ctf
-            data[f"board.{bare}"] = entry
+        if not cols or not isinstance(cols, list):
+            raise PTOSError(f"Board '{name}' must have a non-empty columns list")
+        entry = {"columns": cols}
+        if board_cfg.get("time_window"):
+            entry["time_window"] = board_cfg["time_window"]
+        if board_cfg.get("limit"):
+            entry["limit"] = int(board_cfg["limit"])
+        raw_ctf = board_cfg.get("card_title_fields")
+        if raw_ctf:
+            entry["card_title_fields"] = raw_ctf
+        data[f"board.{bare}"] = entry
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
         tomli_w.dump(data, w.stream)
