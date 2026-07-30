@@ -2003,37 +2003,6 @@ def board_advance():
         return jsonify(ok=False, error=str(e))
 
 
-@app.route("/api/board/save", methods=["POST"])
-def board_save():
-    """Save a single board configuration."""
-    data = request.get_json(silent=True) or {}
-    name = data.get("name", "").strip()
-    columns = data.get("columns", [])
-    try:
-        svc.save_board(name, columns)
-        return jsonify(ok=True)
-    except PTOSError as e:
-        return jsonify(ok=False, error=str(e))
-    except Exception as e:
-        log.exception("Board save failed")
-        return jsonify(ok=False, error=str(e))
-
-
-@app.route("/api/board/delete", methods=["POST"])
-def board_delete():
-    """Delete a single board configuration."""
-    data = request.get_json(silent=True) or {}
-    name = data.get("name", "").strip()
-    try:
-        svc.delete_board(name)
-        return jsonify(ok=True)
-    except PTOSError as e:
-        return jsonify(ok=False, error=str(e))
-    except Exception as e:
-        log.exception("Board delete failed")
-        return jsonify(ok=False, error=str(e))
-
-
 @app.route("/api/board/field-overlap", methods=["POST"])
 def board_field_overlap():
     """Return common fields shared by all given record types."""
