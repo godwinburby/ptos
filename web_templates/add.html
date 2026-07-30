@@ -301,11 +301,14 @@
 
     <!-- note -->
     <div class="divider"></div>
-    <div class="field-group">
-      <label>Note <span style="color:var(--sub);font-weight:400;">(optional)</span></label>
-      <input type="text" name="note"
-             value="{{ field_values.get('note','') if field_values else '' }}"
-             placeholder="brief context">
+    <div style="background:var(--accent-lt);border-left:3px solid var(--accent);border-radius:8px;padding:12px 16px;margin:14px 0;">
+      <div class="field-group" style="margin:0;">
+        <label>Note <span style="color:var(--sub);font-weight:400;">(optional)</span></label>
+        <input type="text" name="note"
+               value="{{ field_values.get('note','') if field_values else '' }}"
+               placeholder="brief context">
+        <div style="font-size:11px;color:var(--sub);margin-top:4px;">After the pipe (|) — this is freeform text, not a key=value field or tag</div>
+      </div>
     </div>
   </div>
 

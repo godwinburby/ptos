@@ -133,6 +133,10 @@ document.addEventListener("DOMContentLoaded", function() {
   RecordTable._bkClear     =function(){ _rt._bkClear(); };
   RecordTable._bkFieldChange=function(){ _rt._bkFieldChange(); };
 
+  // Reload when returning from bfcache (e.g. after edit redirect)
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted) window.location.reload();
+  });
 });
 </script>
 
@@ -170,9 +174,7 @@ var tp;
     if (run && run.startsWith("q:")) {
       // Load from query - for now just show chip builder
     }
-    if (search) {
-      setTimeout(function() { runBrowse(); }, 100);
-    }
+    setTimeout(function() { runBrowse(); }, 100);
   })();
 })();
 

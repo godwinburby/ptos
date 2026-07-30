@@ -244,6 +244,10 @@ document.addEventListener("DOMContentLoaded", function() {
     columns: window._recentCols   || [],
     count:   (window._recentRecords||[]).length
   });
+  // Reload when returning from bfcache (e.g. after edit redirect)
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted) window.location.reload();
+  });
 });
 
 
