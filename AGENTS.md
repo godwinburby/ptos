@@ -232,7 +232,7 @@ x 2026-07-12 2026-07-10 Completed task
 
 ### Card title fields
 - `card_title_fields` config key per board controls which record fields appear as the card header
-- Chip picker in board editor: all fields across all column types shown as toggle chips, selected fields drag-reorderable for priority
+- Chip picker in board editor: only fields common to all column types shown as toggle chips, selected fields drag-reorderable for priority
 - First 2 matching fields on each card displayed; unused if no matching fields
 - Fallback if not configured: `['name', 'client', 'intent', 'title', 'subject']`
 - Passed to template as `board_data.card_title_fields` (list) from `get_board_data()`

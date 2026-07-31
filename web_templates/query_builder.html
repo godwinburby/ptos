@@ -1410,6 +1410,11 @@ function onBoardLimitChange() {
 
 var _lastAllFields = [];
 
+function _commonTitleFields(resp) {
+  var overlap = resp.ok && resp.overlap ? resp.overlap : [];
+  return overlap.filter(function(f) { return f !== "date" && f !== "type" && f !== "note"; });
+}
+
 function fetchBoardOverlap(types) {
   var area = document.getElementById("board-overlap-area");
   var fieldsEl = document.getElementById("board-overlap-fields");
@@ -1417,7 +1422,6 @@ function fetchBoardOverlap(types) {
   if (!area || !fieldsEl || !statusEl) return;
   if (types.length < 2) {
     area.style.display = "none";
-    // Still fetch all_fields for the card title picker with single type
     fetch("/api/board/field-overlap", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -1425,7 +1429,7 @@ function fetchBoardOverlap(types) {
     })
     .then(function(r){ return r.json(); })
     .then(function(d) {
-      _lastAllFields = d.ok && d.all_fields ? d.all_fields : [];
+      _lastAllFields = _commonTitleFields(d);
       renderBoardTitleChips();
     })
     .catch(function() {
@@ -1452,7 +1456,7 @@ function fetchBoardOverlap(types) {
         statusEl.innerHTML = '<span style="color:var(--success);">✔ ' + meaningful.length + ' shared fields</span>';
         fieldsEl.innerHTML = d.overlap.join(', ');
       }
-      _lastAllFields = d.all_fields || [];
+      _lastAllFields = _commonTitleFields(d);
     } else {
       statusEl.innerHTML = '<span style="color:var(--error);">Error checking overlap</span>';
       fieldsEl.innerHTML = '';
