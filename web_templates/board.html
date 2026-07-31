@@ -127,7 +127,6 @@ function onDragStart(e) {
   var card = e.target.closest('.board-card');
   if (!card) return;
   _dragData = {
-    filepath: card.dataset.filepath,
     line: card.dataset.line,
     lineno: parseInt(card.dataset.lineno),
     sourceType: card.closest('.board-lane').dataset.type,
@@ -195,7 +194,6 @@ function onDrop(e) {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
-      filepath: _dragData.filepath,
       line: _dragData.line,
       lineno: _dragData.lineno,
       target_type: targetType,

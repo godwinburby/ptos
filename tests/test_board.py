@@ -180,7 +180,7 @@ class TestAdvanceRecord:
     def test_copies_shared_fields(self):
         _write_queries({})
         old_line = "2026-07-01 type=expense domain=self category=food amount=50"
-        result = advance_record("/fake/path", old_line, 1, "income",
+        result = advance_record(old_line, 1, "income",
                                 target_ctx_fields={"source": "salary"})
         assert result["ok"] is True
         assert result["target_type"] == "income"
@@ -192,7 +192,7 @@ class TestAdvanceRecord:
     def test_target_ctx_fields_override(self):
         _write_queries({})
         old_line = "2026-07-01 type=expense domain=self category=food amount=50"
-        result = advance_record("/fake/path", old_line, 1, "income",
+        result = advance_record(old_line, 1, "income",
                                 target_ctx_fields={"source": "salary", "amount": "99"})
         assert result["ok"] is True
         assert "amount=99" in result["new_line"]
@@ -200,13 +200,13 @@ class TestAdvanceRecord:
 
     def test_target_type_not_in_schema(self):
         with pytest.raises(PTOSError):
-            advance_record("/fake/path", "2026-07-01 type=expense", 1, "bogus")
+            advance_record("2026-07-01 type=expense", 1, "bogus")
 
     def test_missing_required_fields(self):
         _write_queries({})
         old_line = "2026-07-01 type=expense domain=self category=food amount=50"
         # income requires "source" which we don't provide
-        result = advance_record("/fake/path", old_line, 1, "income")
+        result = advance_record(old_line, 1, "income")
         assert result["ok"] is True
         assert "source" in result["missing_required"]
 
@@ -215,7 +215,7 @@ class TestAdvanceRecord:
         old_line = "2026-07-01 type=expense domain=self amount=50"
         # Pre-write the source record into the year file
         _write_record("2026-07-01", old_line)
-        result = advance_record("/fake/path", old_line, 1, "income",
+        result = advance_record(old_line, 1, "income",
                                 target_ctx_fields={"source": "salary"})
         assert result["ok"] is True
         year_file = result["new_filepath"]
@@ -229,6 +229,6 @@ class TestAdvanceRecord:
         # expense has domain/category/amount, income has source/amount
         # only "amount" is shared — income requires "source"
         old_line = "2026-07-01 type=expense domain=self category=food amount=50"
-        result = advance_record("/fake/path", old_line, 1, "income")
+        result = advance_record(old_line, 1, "income")
         assert result["ok"] is True
         assert "source" in result["missing_required"]
