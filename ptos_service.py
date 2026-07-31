@@ -1943,19 +1943,28 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
 
         today_str = dt.date.today().isoformat()
         new_line = ptos.build_record_line(today_str, new_kv, note or None)
-        new_filepath, new_lineno = ptos.append_record(new_line, return_position=True)
 
         # Check if target type has required fields not yet filled
         tdef = schema.get("type", {}).get(target_type, {})
         required = tdef.get("required", [])
         missing = [f for f in required if f not in new_kv]
 
+        if missing:
+            return {
+                "ok": True,
+                "target_type": target_type,
+                "missing_required": missing,
+                "draft": {k: v for k, v in new_kv.items() if k != "type"},
+                "note": note or "",
+            }
+
+        new_filepath, new_lineno = ptos.append_record(new_line, return_position=True)
         return {
             "ok": True,
             "new_line": new_line,
             "new_filepath": new_filepath,
             "new_lineno": new_lineno,
-            "missing_required": missing,
+            "missing_required": [],
             "target_type": target_type,
         }
     except PTOSError:
