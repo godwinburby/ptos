@@ -210,6 +210,44 @@ class TestAdvanceRecord:
         assert result["ok"] is True
         assert "source" in result["missing_required"]
 
+    def test_missing_required_does_not_append(self):
+        _write_queries({})
+        old_line = "2026-07-01 type=expense domain=self category=food amount=50"
+        before = set(ptos.get_log_files())
+        result = advance_record(old_line, 1, "income")
+        assert "source" in result["missing_required"]
+        assert "new_filepath" not in result
+        assert "new_lineno" not in result
+        assert "new_line" not in result
+        after = set(ptos.get_log_files())
+        assert after == before
+        for fname in before:
+            with open(os.path.join(ptos.RECORDS_DIR, fname), encoding="utf-8") as f:
+                assert "type=income" not in f.read()
+
+    def test_missing_required_returns_draft(self):
+        _write_queries({})
+        old_line = "2026-07-01 type=expense domain=self category=food amount=50 | shared note"
+        result = advance_record(old_line, 1, "income")
+        assert "source" in result["missing_required"]
+        assert result["target_type"] == "income"
+        assert result["draft"] == {"amount": "50"}
+        assert result["note"] == "shared note"
+        assert "type" not in result["draft"]
+        assert "date" not in result["draft"]
+
+    def test_all_required_satisfied_appends(self):
+        _write_queries({})
+        old_line = "2026-07-01 type=expense domain=self category=food amount=50"
+        result = advance_record(old_line, 1, "income",
+                                target_ctx_fields={"source": "salary"})
+        assert result["ok"] is True
+        assert result["missing_required"] == []
+        assert "new_filepath" in result
+        assert "new_lineno" in result
+        with open(result["new_filepath"], encoding="utf-8") as f:
+            assert "type=income" in f.read()
+
     def test_source_record_unchanged(self):
         _write_queries({})
         old_line = "2026-07-01 type=expense domain=self amount=50"
