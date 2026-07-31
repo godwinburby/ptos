@@ -2128,6 +2128,8 @@ def query_builder():
                     "time_window": v.get("time_window", "this-month"),
                     "limit": v.get("limit", 0),
                     "card_title_fields": v.get("card_title_fields", ""),
+                    "rollup_field": v.get("rollup_field", ""),
+                    "rollup_op": v.get("rollup_op", "count"),
                 }
     
     return render_template("query_builder.html",
