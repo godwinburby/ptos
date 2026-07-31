@@ -231,6 +231,7 @@ x 2026-07-12 2026-07-10 Completed task
 - Board time windows use the full named set (`td`/`yd`/`tw`/`lw`/`tm`/`lm`/`last-3-months`/`tq`/`lq`/`ty`/`ly`/`all`) plus custom cycles; resolved via `resolve_time()` in `get_board_data()` (only `last-3-months` is special-cased); board page has a live `<select>` that persists via `POST /api/board/time-window` → `update_board_time_window()`; Query Builder board editor options generated from `_timeOpts` filtered via `_boardTimeOpts()`
 - **Rollups**: `get_board_data()` computes `rollups` per column type (raw float values) over the FULL matched record set *before* limit truncation, skipping non-numeric values; column types lacking the rollup field get `None` (per spec: "skip that column's rollup"); op `sum`/`avg`/`count`; avg returns `None` on empty (no ZeroDivision); `rollup_op` returned in board data; display formatting done template-side — `/board` route passes `rollup_fmt`/`rollup_avg_fmt` (`ptos.fmt`/`fmt_avg`) and board.html renders `rollup_fmt(rollup_val)` / `avg {{ rollup_avg_fmt(rollup_val) }}` / `count {{ rollup_val }}`
 - **Rollup validation on save**: `save_queries_full()` board loop persists `rollup_field`/`rollup_op` and raises `PTOSError` if the field lacks `aggregatable = true` in `schema[fields]` or applies to none of the board's column types (via `filter_fields_for_type`)
+- **Rollup field dropdown**: Query Builder board editor populates the Rollup Field select from `aggregatable_all` (aggregatable fields present on any column type) so mixed-type boards can roll up a field only some lanes have — columns lacking the field show count only (per spec)
 
 ### Card title fields
 - `card_title_fields` config key per board controls which record fields appear as the card header
@@ -240,7 +241,7 @@ x 2026-07-12 2026-07-10 Completed task
 - Passed to template as `board_data.card_title_fields` (list) from `get_board_data()`
 
 ### API
-- `POST /api/board/field-overlap` — returns `{overlap: [...], all_fields: [...], aggregatable_overlap: [...]}` (shared + union of all fields across columns; aggregatable subset drives the rollup field dropdown)
+- `POST /api/board/field-overlap` — returns `{overlap: [...], all_fields: [...], aggregatable_overlap: [...], aggregatable_all: [...]}` (shared + union of all fields across columns; `aggregatable_overlap` = shared aggregatable subset, `aggregatable_all` = aggregatable fields on any column — the latter drives the rollup field dropdown)
 - `POST /board/advance` — creates a new record of target type, copies shared fields; returns `missing_required` + `new_line`/`new_filepath`/`new_lineno` for edit redirect
 - `GET /board` — renders Kanban view, board selected via `?board=NAME` query param; auto-selects first board if none specified
 

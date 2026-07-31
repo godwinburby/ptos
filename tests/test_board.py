@@ -461,3 +461,36 @@ class TestUpdateBoardTimeWindow:
         from ptos_service import update_board_time_window
         with pytest.raises(PTOSError):
             update_board_time_window("b", "bogus-window")
+
+
+# ── board_field_overlap endpoint ──────────────────────────────────────────────
+
+class TestBoardFieldOverlapEndpoint:
+    def _post(self, types):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/board/field-overlap",
+                           json={"types": types})
+        return resp.get_json()
+
+    def test_aggregatable_all_includes_fields_present_on_any_column(self):
+        # amount/duration are aggregatable but only present on one of the
+        # two types each — so they appear in aggregatable_all (rollup dropdown)
+        # but not in aggregatable_overlap (common-only).
+        data = self._post(["expense", "exercise"])
+        assert data["ok"] is True
+        assert "amount" in data["aggregatable_all"]
+        assert "duration" in data["aggregatable_all"]
+        assert data["aggregatable_overlap"] == []
+
+    def test_aggregatable_overlap_for_shared_aggregatable_field(self):
+        data = self._post(["expense", "income"])
+        assert "amount" in data["aggregatable_overlap"]
+        assert "amount" in data["aggregatable_all"]
+
+    def test_missing_types(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/board/field-overlap", json={})
+        data = resp.get_json()
+        assert data["ok"] is False

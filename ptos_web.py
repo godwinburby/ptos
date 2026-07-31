@@ -2050,8 +2050,13 @@ def board_field_overlap():
             f for f in overlap
             if f not in ("date", "type", "note") and agg_fields.get(f, {}).get("aggregatable")
         ]
+        aggregatable_all = [
+            f for f in all_sorted
+            if agg_fields.get(f, {}).get("aggregatable")
+        ]
         return jsonify(ok=True, overlap=overlap, all_fields=all_sorted,
-                       aggregatable_overlap=aggregatable_overlap)
+                       aggregatable_overlap=aggregatable_overlap,
+                       aggregatable_all=aggregatable_all)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
