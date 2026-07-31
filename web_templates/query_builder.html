@@ -154,6 +154,20 @@ var _delPending = null;
 var _types    = {{ types | tojson }};
 var _timeOpts = {{ time_options | tojson }};
 
+function _boardTimeOpts() {
+  var skip = {year:1, month:1, date:1, range:1};
+  var opts = _timeOpts.filter(function(o) { return !skip[o[1]]; });
+  var has3m = opts.some(function(o) { return o[1] === 'last-3-months'; });
+  if (!has3m) {
+    var idx = 6;
+    for (var i = 0; i < opts.length; i++) {
+      if (opts[i][1] === 'lm') { idx = i + 1; break; }
+    }
+    opts.splice(idx, 0, ['Last 3 months', 'last-3-months']);
+  }
+  return opts;
+}
+
 // Initialize due from backend config
 var _dueFromBackend = {{ due_config | tojson }};
 Object.entries(_dueFromBackend).forEach(function(e) {
@@ -1295,12 +1309,9 @@ function showBoardEditor() {
       '<div style="flex:1;min-width:120px;">'+
         '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Time Window</label>'+
         '<select id="board-time-window" onchange="onBoardTimeWindowChange()" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
-          '<option value="this-month"'+(cfg.time_window==='this-month'?' selected':'')+'>This month</option>'+
-          '<option value="this-week"'+(cfg.time_window==='this-week'?' selected':'')+'>This week</option>'+
-          '<option value="last-month"'+(cfg.time_window==='last-month'?' selected':'')+'>Last month</option>'+
-          '<option value="last-3-months"'+(cfg.time_window==='last-3-months'?' selected':'')+'>Last 3 months</option>'+
-          '<option value="this-year"'+(cfg.time_window==='this-year'?' selected':'')+'>This year</option>'+
-          '<option value="all"'+(cfg.time_window==='all'?' selected':'')+'>All time</option>'+
+          _boardTimeOpts().map(function(o){
+            return '<option value="'+o[1]+'"'+(cfg.time_window===o[1]?' selected':'')+'>'+o[0]+'</option>';
+          }).join("")+
         '</select>'+
       '</div>'+
       '<div style="flex:1;min-width:80px;">'+

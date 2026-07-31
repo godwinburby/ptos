@@ -32,7 +32,7 @@
   .board-toast { position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,.12);z-index:200;display:none; }
 </style>
 
-{% set tw_labels = {"this-month":"This month","this-week":"This week","last-month":"Last month","last-3-months":"Last 3 months","this-year":"This year","all":"All time"} %}
+
 <div class="board-header">
   <div class="page-title">Board</div>
   <select class="board-select" onchange="switchBoard(this.value)">
@@ -40,10 +40,12 @@
     <option value="{{ bname }}" {% if bname == active_board %}selected{% endif %}>{{ bname | replace('_',' ') }}</option>
     {% endfor %}
   </select>
-  {% if board_data and board_data.time_window %}
-  <span style="font-size:12px;color:var(--sub);background:var(--bg);padding:3px 10px;border-radius:10px;">
-    {{ tw_labels.get(board_data.time_window, board_data.time_window) }}
-  </span>
+  {% if board_data %}
+  <select class="board-select" id="board-time-window" onchange="setBoardTimeWindow(this.value)">
+    {% for label, code in board_time_options %}
+    <option value="{{ code }}" {% if code == board_data.time_window %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
   {% endif %}
 </div>
 
@@ -238,6 +240,24 @@ function onDrop(e) {
   .catch(function(err) {
     showToast('Network error', true);
   });
+}
+
+function setBoardTimeWindow(code) {
+  fetch('/api/board/time-window', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({board: '{{ active_board }}', time_window: code}),
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(resp) {
+    if (resp.ok) {
+      showToast('Time window updated');
+      setTimeout(function() { location.reload(); }, 400);
+    } else {
+      showToast(resp.error || 'Failed to update time window', true);
+    }
+  })
+  .catch(function() { showToast('Network error', true); });
 }
 
 function editCard(btn) {

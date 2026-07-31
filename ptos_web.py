@@ -119,6 +119,14 @@ def _build_time_options():
 def _get_time_options():
     return _build_time_options()
 
+def _board_time_options():
+    """Time window options for boards: all named windows + last-3-months + custom cycles.
+    Excludes picker-style codes (year/month/date/range) since boards use fixed windows."""
+    skip = {"year", "month", "date", "range"}
+    opts = [(label, code) for label, code in _build_time_options() if code not in skip]
+    opts.insert(6, ("Last 3 months", "last-3-months"))
+    return opts
+
 # module-level for templates — refreshed per-request in routes that need it
 TIME_OPTIONS = _build_time_options()
 _TIME_DICT   = dict(TIME_OPTIONS)
@@ -1976,7 +1984,26 @@ def board():
         tab="board", title="Board",
         now=_now_str(), boards=boards,
         active_board=active_board,
-        board_data=board_data)
+        board_data=board_data,
+        board_time_options=_board_time_options())
+
+
+@app.route("/api/board/time-window", methods=["POST"])
+def board_time_window():
+    """Update a board's time_window config."""
+    data = request.get_json(silent=True) or {}
+    name = data.get("board", "")
+    window = data.get("time_window", "")
+    if not name or not window:
+        return jsonify(ok=False, error="Missing board or time_window")
+    try:
+        result = svc.update_board_time_window(name, window)
+        return jsonify(ok=True, data=result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("Board time-window update failed")
+        return jsonify(ok=False, error=str(e))
 
 
 @app.route("/board/advance", methods=["POST"])
