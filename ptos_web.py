@@ -1985,16 +1985,15 @@ def board_advance():
     Creates a new record with today's date and target type.
     Source record stays. Returns new record info."""
     data = request.get_json(silent=True) or {}
-    filepath = data.get("filepath", "")
     old_line = data.get("line", "")
     lineno   = data.get("lineno")
     target   = data.get("target_type", "")
-    if not filepath or not old_line or lineno is None or not target:
-        return jsonify(ok=False, error="Missing required fields: filepath, line, lineno, target_type")
+    if not old_line or lineno is None or not target:
+        return jsonify(ok=False, error="Missing required fields: line, lineno, target_type")
     if lineno < 0:
         return jsonify(ok=False, error="Invalid line number")
     try:
-        result = svc.advance_record(filepath, old_line, lineno, target)
+        result = svc.advance_record(old_line, lineno, target)
         return jsonify(ok=True, data=result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))

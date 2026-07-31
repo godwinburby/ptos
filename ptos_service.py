@@ -1775,6 +1775,32 @@ def get_boards():
     return boards
 
 
+def _earliest_record_date():
+    """Scan records/ for the earliest record date (for the 'all' time window).
+    Files are named YYYY.log and records are appended chronologically,
+    so the earliest record is the first data line of the earliest year file.
+    Falls back to today if no records exist."""
+    log_files = ptos.get_log_files()
+    if not log_files:
+        return dt.date.today()
+    for fname in log_files:
+        fpath = os.path.join(ptos.RECORDS_DIR, fname)
+        try:
+            with open(fpath, encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line or line.startswith("#"):
+                        continue
+                    date_part = line[:10]
+                    try:
+                        return dt.date.fromisoformat(date_part)
+                    except ValueError:
+                        continue
+        except OSError:
+            continue
+    return dt.date.today()
+
+
 def get_board_data(board_name):
     """Load record data for each column of a board.
     Returns dict mapping column type → list of parsed record dicts
@@ -1808,7 +1834,7 @@ def get_board_data(board_name):
     today = dt.date.today()
     time_window = cfg.get("time_window", "this-month")
     if time_window == "all":
-        start = dt.date(2000, 1, 1)
+        start = _earliest_record_date()
     elif time_window == "this-week":
         start = today - dt.timedelta(days=today.weekday())
     elif time_window == "last-month":
@@ -1875,7 +1901,7 @@ def get_board_data(board_name):
     }
 
 
-def advance_record(filepath, old_line, lineno, target_type, target_ctx_fields=None):
+def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
     """Move a record from one column/type to another.
     Creates a NEW record with today's date and target_type.
     Shared fields (common to both source and target types) are copied.
@@ -1917,24 +1943,12 @@ def advance_record(filepath, old_line, lineno, target_type, target_ctx_fields=No
 
         today_str = dt.date.today().isoformat()
         new_line = ptos.build_record_line(today_str, new_kv, note or None)
-        ptos.append_record(new_line)
+        new_filepath, new_lineno = ptos.append_record(new_line, return_position=True)
 
         # Check if target type has required fields not yet filled
         tdef = schema.get("type", {}).get(target_type, {})
         required = tdef.get("required", [])
         missing = [f for f in required if f not in new_kv]
-
-        # Find the new record's location (last line in the year file)
-        year_file = os.path.join(ptos.RECORDS_DIR, f"{today_str[:4]}.log")
-        new_lineno = -1
-        new_filepath = year_file
-        if os.path.exists(year_file):
-            with open(year_file, encoding="utf-8") as f:
-                lines = f.readlines()
-            for i, l in enumerate(reversed(lines)):
-                if l.strip() == new_line:
-                    new_lineno = len(lines) - 1 - i
-                    break
 
         return {
             "ok": True,

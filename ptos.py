@@ -2286,11 +2286,14 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
                     total += val
     return results, total
 
-def append_record(line):
+def append_record(line, return_position=False):
     """Append a single log line to the correct yearly file.
     Extracts the year from the line's first 4 characters,
     routes to records/<YEAR>.log, and writes atomically.
-    Creates the records directory and yearly file if missing."""
+    Creates the records directory and yearly file if missing.
+
+    If return_position=True, returns (filepath, lineno) of the
+    newly appended line; otherwise returns None."""
     os.makedirs(RECORDS_DIR, exist_ok=True)
     year = line[:4]
     path = os.path.join(RECORDS_DIR, f"{year}.log")
@@ -2308,7 +2311,11 @@ def append_record(line):
     else:
         new_content = existing + line + "\n"
     
+    # The appended line is the last physical line before the trailing ""
+    lineno = len(new_content.split("\n")) - 2
     atomic_write(path, new_content)
+    if return_position:
+        return path, lineno
 
 # --------------------------------------------------
 # Validation
