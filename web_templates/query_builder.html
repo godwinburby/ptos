@@ -1321,13 +1321,14 @@ function showBoardEditor() {
     '</div>'+
     '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;">'+
       '<div style="flex:1;min-width:120px;">'+
-        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Rollup Field <span style="font-weight:400;color:var(--sub);">(common fields only)</span></label>'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Rollup Field <span style="font-weight:400;color:var(--sub);">(aggregatable fields)</span></label>'+
         '<select id="board-rollup-field" onchange="onBoardRollupChange()" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
           '<option value="">— none —</option>'+
           _lastAggFields.map(function(f){
             return '<option value="'+f+'"'+(cfg.rollup_field===f?' selected':'')+'>'+f+'</option>';
           }).join("")+
         '</select>'+
+        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Columns whose type lacks this field show count only.</div>'+
       '</div>'+
       '<div style="flex:1;min-width:80px;">'+
         '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Rollup Op</label>'+
@@ -1450,7 +1451,7 @@ function fetchBoardOverlap(types) {
     .then(function(r){ return r.json(); })
     .then(function(d) {
       _lastAllFields = _commonTitleFields(d);
-      _lastAggFields = d.ok && d.aggregatable_overlap ? d.aggregatable_overlap : [];
+      _lastAggFields = d.ok && d.aggregatable_all ? d.aggregatable_all : [];
       renderBoardTitleChips();
       renderBoardRollup();
     })
@@ -1481,7 +1482,7 @@ function fetchBoardOverlap(types) {
         fieldsEl.innerHTML = d.overlap.join(', ');
       }
       _lastAllFields = _commonTitleFields(d);
-      _lastAggFields = d.ok && d.aggregatable_overlap ? d.aggregatable_overlap : [];
+      _lastAggFields = d.ok && d.aggregatable_all ? d.aggregatable_all : [];
     } else {
       statusEl.innerHTML = '<span style="color:var(--error);">Error checking overlap</span>';
       fieldsEl.innerHTML = '';
