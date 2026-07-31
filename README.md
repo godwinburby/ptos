@@ -468,8 +468,14 @@ Kanban board view for tracking records across workflow stages. Configured in
   via a chip picker with drag priority (stored in `queries.toml`)
 - **Edit/delete from card** — buttons on each card link back to the board after
   save via `return_to` parameter
+- **Column rollups** — per-lane `sum` / `avg` / `count` over an aggregatable
+  field (e.g. `amount`). Config keys: `rollup_field` + `rollup_op` (default
+  `count`). Rollups are computed over the full matched record set before the
+  card limit truncates the display; columns whose type lacks the field show
+  count only
 - **Board editor in Query Builder** — drag-reorderable column chips, time
-  window/max cards fields, card title field chip picker with drag priority
+  window/max cards fields, card title field chip picker with drag priority,
+  rollup field/op dropdowns
 
 ### Settings
 
