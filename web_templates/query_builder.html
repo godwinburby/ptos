@@ -1318,43 +1318,62 @@ function showBoardEditor() {
   fetchBoardOverlap(cols);
 }
 
-function renderBoardColChips(selected) {
-  var el = document.getElementById("board-col-chips");
+function renderChipPicker(opts) {
+  var el = document.getElementById(opts.containerId);
   if (!el) return;
+  var items = opts.items();
+  if (!items) items = [];
+  var available = opts.available() || [];
   el.innerHTML = "";
-  // Render selected chips as draggable items (ordered columns)
-  selected.forEach(function(t, i) {
+  if (opts.emptyText && available.length === 0) {
+    el.innerHTML = opts.emptyText;
+    return;
+  }
+  items.forEach(function(item, i) {
     var chip = document.createElement("span");
     chip.className = "dash-chip";
-    chip.textContent = t;
-    chip.innerHTML += ' <button onclick="removeBoardCol('+i+')" style="background:none;border:none;cursor:pointer;color:var(--error);font-size:14px;line-height:1;padding:0;margin-left:2px;">×</button>';
+    chip.textContent = item;
+    chip.innerHTML += ' <button onclick="'+opts.removeFn+'('+i+')" style="background:none;border:none;cursor:pointer;color:var(--error);font-size:14px;line-height:1;padding:0;margin-left:2px;">×</button>';
     chip.dataset.index = i;
-    _makeDraggable(chip, _st.boards[_cur.name].columns, i, function() {
-      renderBoardColChips(_st.boards[_cur.name].columns);
-      fetchBoardOverlap(_st.boards[_cur.name].columns);
-    }, ".dash-chip");
+    _makeDraggable(chip, items, i, opts.onReorder, ".dash-chip");
     el.appendChild(chip);
   });
-  // Render unselected chips as available types to add
   var addContainer = document.createElement("div");
-  addContainer.style.marginTop = selected.length ? "8px" : "0";
-  addContainer.innerHTML = '<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">Add column:</div>';
-  _types.forEach(function(t) {
-    if (selected.indexOf(t) !== -1) return;
+  addContainer.style.marginTop = items.length ? "8px" : "0";
+  addContainer.innerHTML = '<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">'+opts.addLabel+'</div>';
+  available.forEach(function(item) {
+    if (items.indexOf(item) !== -1) return;
     var chip = document.createElement("button");
     chip.className = "qb-chip";
-    chip.textContent = '+ ' + t;
+    chip.textContent = '+ ' + item;
     chip.addEventListener("click", function() {
+      opts.onAdd(item);
+    });
+    addContainer.appendChild(chip);
+  });
+  el.appendChild(addContainer);
+}
+
+function renderBoardColChips(selected) {
+  renderChipPicker({
+    containerId: "board-col-chips",
+    items: function() { return _st.boards[_cur.name].columns || []; },
+    available: function() { return _types; },
+    removeFn: "removeBoardCol",
+    addLabel: "Add column:",
+    onReorder: function() {
+      renderBoardColChips(_st.boards[_cur.name].columns);
+      fetchBoardOverlap(_st.boards[_cur.name].columns);
+    },
+    onAdd: function(t) {
       var cfg = _st.boards[_cur.name];
       if (!cfg) return;
       if (!cfg.columns) cfg.columns = [];
       cfg.columns.push(t);
       renderBoardColChips(cfg.columns);
       fetchBoardOverlap(cfg.columns);
-    });
-    addContainer.appendChild(chip);
+    }
   });
-  el.appendChild(addContainer);
 }
 
 function removeBoardCol(idx) {
@@ -1439,46 +1458,20 @@ function fetchBoardOverlap(types) {
 }
 
 function renderBoardTitleChips() {
-  var el = document.getElementById("board-title-chips");
-  if (!el) return;
   var cfg = _st.boards[_cur.name];
   if (!cfg) return;
-  var selected = cfg.card_title_fields || [];
-  el.innerHTML = "";
-
-  if (_lastAllFields.length === 0) {
-    el.innerHTML = '<span style="font-size:12px;color:var(--sub);">Add column types above to see available fields</span>';
-    return;
-  }
-
-  // Render selected chips as draggable items (priority order)
-  selected.forEach(function(f, i) {
-    var chip = document.createElement("span");
-    chip.className = "dash-chip";
-    chip.textContent = f;
-    chip.innerHTML += ' <button onclick="removeCardTitleField('+i+')" style="background:none;border:none;cursor:pointer;color:var(--error);font-size:14px;line-height:1;padding:0;margin-left:2px;">×</button>';
-    chip.dataset.index = i;
-    _makeDraggable(chip, cfg.card_title_fields, i, function() {
+  renderChipPicker({
+    containerId: "board-title-chips",
+    items: function() { return cfg.card_title_fields || []; },
+    available: function() { return _lastAllFields; },
+    emptyText: '<span style="font-size:12px;color:var(--sub);">Add column types above to see available fields</span>',
+    removeFn: "removeCardTitleField",
+    addLabel: "Add title field:",
+    onReorder: function() {
       renderBoardTitleChips();
-    }, ".dash-chip");
-    el.appendChild(chip);
+    },
+    onAdd: addCardTitleField
   });
-
-  // Render unselected fields as addable chips
-  var addContainer = document.createElement("div");
-  addContainer.style.marginTop = selected.length ? "8px" : "0";
-  addContainer.innerHTML = '<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">Add title field:</div>';
-  _lastAllFields.forEach(function(f) {
-    if (selected.indexOf(f) !== -1) return;
-    var chip = document.createElement("button");
-    chip.className = "qb-chip";
-    chip.textContent = '+ ' + f;
-    chip.addEventListener("click", function() {
-      addCardTitleField(f);
-    });
-    addContainer.appendChild(chip);
-  });
-  el.appendChild(addContainer);
 }
 
 function addCardTitleField(field) {

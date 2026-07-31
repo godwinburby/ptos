@@ -2516,7 +2516,7 @@ def edit_get():
     if not return_to.startswith("/"):
         app.logger.warning("edit_get: return_to '%s' is external, falling back to /browse", return_to)
         return_to = url_for("browse_get")
-    app.logger.info("edit_get: return_to=%s", return_to)
+    app.logger.debug("edit_get: return_to=%s", return_to)
     return render_template("edit.html",
         tab="browse", title="Edit Record", now=_now_str(),
         filepath=filepath, lineno=lineno_int, old_line=line,
@@ -2599,14 +2599,14 @@ def edit_post():
         app.logger.warning("edit_post: return_to '%s' is external, falling back to /browse", return_to)
         return_to = url_for("browse_get")
     if not set_args and new_note is None:
-        app.logger.info("edit_post: no changes, redirect to %s", return_to)
+        app.logger.debug("edit_post: no changes, redirect to %s", return_to)
         return redirect(return_to)
     if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
         return redirect(return_to)
     try:
         svc.edit_record(filepath, old_line,
                         set_args=set_args, new_note=new_note, lineno=lineno_int)
-        app.logger.info("edit_post: success, redirect to %s", return_to)
+        app.logger.debug("edit_post: success, redirect to %s", return_to)
         return redirect(return_to)
     except PTOSError as e:
         try:
