@@ -228,6 +228,7 @@ x 2026-07-12 2026-07-10 Completed task
 - Boards stored in `queries.toml` as `[board.NAME]` sections
 - Keys: `columns` (list of record types), `time_window` (default `this-month`), `limit` (default 0 = unlimited), `card_title_fields` (comma-separated string or list of field names for card header)
 - Board editor in Query Builder: drag-reorderable column chips, time window/max cards fields, card title priority chip picker
+- Board time windows use the full named set (`td`/`yd`/`tw`/`lw`/`tm`/`lm`/`last-3-months`/`tq`/`lq`/`ty`/`ly`/`all`) plus custom cycles; resolved via `resolve_time()` in `get_board_data()` (only `last-3-months` is special-cased); board page has a live `<select>` that persists via `POST /api/board/time-window` → `update_board_time_window()`; Query Builder board editor options generated from `_timeOpts` filtered via `_boardTimeOpts()`
 
 ### Card title fields
 - `card_title_fields` config key per board controls which record fields appear as the card header

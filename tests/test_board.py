@@ -140,6 +140,47 @@ class TestGetBoardData:
         result = get_board_data("b")
         assert result["time_window"] == "this-month"
 
+    def test_time_window_today(self):
+        _write_queries({"b": {"columns": ["expense"], "time_window": "td"}})
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense amount=1")
+        _write_record(dt.date.today().replace(day=1).isoformat(),
+                      f"{dt.date.today().replace(day=1).isoformat()} type=expense amount=2")
+        result = get_board_data("b")
+        assert result["time_window"] == "td"
+        amounts = [r["amount"] for r in result["data"].get("expense", [])]
+        assert amounts == ["1"]
+
+    def test_time_window_last_week(self):
+        _write_queries({"b": {"columns": ["expense"], "time_window": "lw"}})
+        start, end = ptos.resolve_time("lw", {})
+        _write_record(start.isoformat(), f"{start.isoformat()} type=expense amount=1")
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense amount=2")
+        result = get_board_data("b")
+        amounts = [r["amount"] for r in result["data"].get("expense", [])]
+        assert amounts == ["1"]
+
+    def test_time_window_last_quarter(self):
+        _write_queries({"b": {"columns": ["expense"], "time_window": "lq"}})
+        start, end = ptos.resolve_time("lq", {})
+        _write_record(start.isoformat(), f"{start.isoformat()} type=expense amount=1")
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense amount=2")
+        result = get_board_data("b")
+        amounts = [r["amount"] for r in result["data"].get("expense", [])]
+        assert amounts == ["1"]
+
+    def test_time_window_last_year(self):
+        _write_queries({"b": {"columns": ["expense"], "time_window": "ly"}})
+        start, end = ptos.resolve_time("ly", {})
+        _write_record(start.isoformat(), f"{start.isoformat()} type=expense amount=1")
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense amount=2")
+        result = get_board_data("b")
+        amounts = [r["amount"] for r in result["data"].get("expense", [])]
+        assert amounts == ["1"]
+
     def test_limit_truncates(self):
         _write_queries({"b": {"columns": ["expense"], "limit": 1}})
         today = dt.date.today().isoformat()
@@ -270,3 +311,28 @@ class TestAdvanceRecord:
         result = advance_record(old_line, 1, "income")
         assert result["ok"] is True
         assert "source" in result["missing_required"]
+
+
+# ── update_board_time_window ──────────────────────────────────────────────────
+
+class TestUpdateBoardTimeWindow:
+    def test_updates_time_window(self):
+        _write_queries({"b": {"columns": ["expense"], "time_window": "tm"}})
+        from ptos_service import update_board_time_window
+        result = update_board_time_window("b", "ly")
+        assert result["ok"] is True
+        assert result["time_window"] == "ly"
+        got = get_board_data("b")
+        assert got["time_window"] == "ly"
+
+    def test_unknown_board(self):
+        _write_queries({})
+        from ptos_service import update_board_time_window
+        with pytest.raises(PTOSError):
+            update_board_time_window("nonexistent", "ly")
+
+    def test_invalid_time_window(self):
+        _write_queries({"b": {"columns": ["expense"], "time_window": "tm"}})
+        from ptos_service import update_board_time_window
+        with pytest.raises(PTOSError):
+            update_board_time_window("b", "bogus-window")

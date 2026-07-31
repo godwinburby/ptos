@@ -1775,32 +1775,6 @@ def get_boards():
     return boards
 
 
-def _earliest_record_date():
-    """Scan records/ for the earliest record date (for the 'all' time window).
-    Files are named YYYY.log and records are appended chronologically,
-    so the earliest record is the first data line of the earliest year file.
-    Falls back to today if no records exist."""
-    log_files = ptos.get_log_files()
-    if not log_files:
-        return dt.date.today()
-    for fname in log_files:
-        fpath = os.path.join(ptos.RECORDS_DIR, fname)
-        try:
-            with open(fpath, encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if not line or line.startswith("#"):
-                        continue
-                    date_part = line[:10]
-                    try:
-                        return dt.date.fromisoformat(date_part)
-                    except ValueError:
-                        continue
-        except OSError:
-            continue
-    return dt.date.today()
-
-
 def get_board_data(board_name):
     """Load record data for each column of a board.
     Returns dict mapping column type → list of parsed record dicts
@@ -1831,24 +1805,15 @@ def get_board_data(board_name):
         field_info[t] = ptos.filter_fields_for_type(t, schema)
 
     # Time window and limit from board config
-    today = dt.date.today()
     time_window = cfg.get("time_window", "this-month")
-    if time_window == "all":
-        start = _earliest_record_date()
-    elif time_window == "this-week":
-        start = today - dt.timedelta(days=today.weekday())
-    elif time_window == "last-month":
+    if time_window == "last-3-months":
+        today = dt.date.today()
         first = today.replace(day=1)
-        start = (first - dt.timedelta(days=1)).replace(day=1)
-    elif time_window == "last-3-months":
-        first = today.replace(day=1)
+        end = today + dt.timedelta(days=365)
         start = (first - dt.timedelta(days=1)).replace(day=1)
         start = (start - dt.timedelta(days=1)).replace(day=1)
-    elif time_window == "this-year":
-        start = today.replace(month=1, day=1)
-    else:  # "this-month" default
-        start = today.replace(day=1)
-    end = today + dt.timedelta(days=365)
+    else:
+        start, end = _resolve_time(time_window)
 
     limit = cfg.get("limit", 0)  # 0 = no limit
 
@@ -1899,6 +1864,35 @@ def get_board_data(board_name):
         "board_name": board_name,
         "card_title_fields": card_title_fields,
     }
+
+
+def update_board_time_window(board_name, time_window):
+    """Update the time_window config for a board in queries.toml.
+    Validates the window before saving."""
+    valid = {"td", "yd", "tw", "lw", "tm", "lm", "last-3-months", "tq", "lq", "ty", "ly", "all"}
+    try:
+        cycles = ptos.get_config().get("cycles", {})
+    except Exception:
+        cycles = {}
+    for name in cycles:
+        valid.add(name)
+        valid.add(f"{name}-1")
+    if time_window not in valid:
+        raise PTOSError(f"Invalid time window '{time_window}'")
+    try:
+        queries = ptos.get_queries()
+    except Exception as e:
+        raise PTOSError(str(e))
+    key = f"board.{board_name}"
+    cfg = queries.get(key)
+    if not cfg or not isinstance(cfg, dict):
+        raise PTOSError(f"Board '{board_name}' not found in queries.toml")
+    cfg["time_window"] = time_window
+    import tomli_w
+    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+        tomli_w.dump(queries, w.stream)
+    ptos._invalidate_all()
+    return {"ok": True, "board": board_name, "time_window": time_window}
 
 
 def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
