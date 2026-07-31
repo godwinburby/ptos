@@ -1,6 +1,8 @@
 import pytest
 import datetime as dt
 import os
+import json
+import re
 import tomli_w
 import ptos
 from ptos_service import get_board_data, advance_record, save_queries_full, PTOSError
@@ -494,3 +496,32 @@ class TestBoardFieldOverlapEndpoint:
         resp = client.post("/api/board/field-overlap", json={})
         data = resp.get_json()
         assert data["ok"] is False
+
+
+# ── query-builder boards payload ──────────────────────────────────────────────
+
+class TestQueryBuilderBoardsPayload:
+    def test_rollup_fields_round_trip(self):
+        _write_queries({"b": {"columns": ["expense"],
+                              "rollup_field": "amount", "rollup_op": "sum"}})
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/query-builder")
+        html = resp.get_data(as_text=True)
+        m = re.search(r"var _bkBoards = (.*?);", html, re.S)
+        assert m, "boards JSON not found in rendered page"
+        boards = json.loads(m.group(1))
+        assert "b" in boards
+        assert boards["b"]["rollup_field"] == "amount"
+        assert boards["b"]["rollup_op"] == "sum"
+
+    def test_no_rollup_defaults(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/query-builder")
+        html = resp.get_data(as_text=True)
+        m = re.search(r"var _bkBoards = (.*?);", html, re.S)
+        boards = json.loads(m.group(1))
+        assert boards["b"]["rollup_field"] == ""
+        assert boards["b"]["rollup_op"] == "count"
