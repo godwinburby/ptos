@@ -1817,9 +1817,13 @@ def get_board_data(board_name):
 
     limit = cfg.get("limit", 0)  # 0 = no limit
 
+    rollup_field = cfg.get("rollup_field")
+    rollup_op = cfg.get("rollup_op", "count")
+
     result = {}
     total_by_type = {}
     truncated_by_type = {}
+    rollup_by_type = {}
 
     for col_type in columns:
         filters = [f"type={col_type}"]
@@ -1841,6 +1845,25 @@ def get_board_data(board_name):
         # Sort by date descending (newest first)
         records.sort(key=lambda r: r.get("date", ""), reverse=True)
         total = len(records)
+
+        # Rollup over the full matched set, before limit truncation
+        if rollup_field and rollup_field in field_info[col_type]:
+            vals = []
+            for r in records:
+                raw = r.get(rollup_field)
+                try:
+                    vals.append(float(raw))
+                except (TypeError, ValueError):
+                    continue
+            if rollup_op == "sum":
+                rollup_by_type[col_type] = sum(vals)
+            elif rollup_op == "avg":
+                rollup_by_type[col_type] = (sum(vals) / len(vals)) if vals else None
+            else:
+                rollup_by_type[col_type] = len(vals)
+        else:
+            rollup_by_type[col_type] = None
+
         if limit and total > limit:
             records = records[:limit]
             truncated_by_type[col_type] = total
@@ -1863,6 +1886,8 @@ def get_board_data(board_name):
         "field_info": field_info,
         "board_name": board_name,
         "card_title_fields": card_title_fields,
+        "rollups": rollup_by_type,
+        "rollup_op": rollup_op,
     }
 
 
@@ -2104,6 +2129,19 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         raw_ctf = board_cfg.get("card_title_fields")
         if raw_ctf:
             entry["card_title_fields"] = raw_ctf
+        rollup_field = board_cfg.get("rollup_field")
+        if rollup_field:
+            schema = ptos.get_schema()
+            fmeta = schema.get("fields", {}).get(rollup_field, {})
+            if not fmeta.get("aggregatable"):
+                raise PTOSError(
+                    f"Board '{name}': rollup_field '{rollup_field}' is not aggregatable in schema")
+            present = [t for t in cols if rollup_field in ptos.filter_fields_for_type(t, schema)]
+            if not present:
+                raise PTOSError(
+                    f"Board '{name}': rollup_field '{rollup_field}' does not apply to any column type")
+            entry["rollup_field"] = rollup_field
+            entry["rollup_op"] = board_cfg.get("rollup_op", "count")
         data[f"board.{bare}"] = entry
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:

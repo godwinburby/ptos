@@ -235,7 +235,7 @@ var _liveTimer = null;
     var name = e[0].replace(/^board\./, '');
     var rawCtf = e[1].card_title_fields || '';
     var ctfArr = typeof rawCtf === 'string' ? rawCtf.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : (Array.isArray(rawCtf) ? rawCtf : []);
-    _st.boards[name] = { columns: e[1].columns||[], time_window: e[1].time_window||'this-month', limit: e[1].limit||0, card_title_fields: ctfArr };
+    _st.boards[name] = { columns: e[1].columns||[], time_window: e[1].time_window||'this-month', limit: e[1].limit||0, card_title_fields: ctfArr, rollup_field: e[1].rollup_field||'', rollup_op: e[1].rollup_op||'count' };
   });
   renderTabs();
   // Check URL params for edit mode
@@ -1319,6 +1319,25 @@ function showBoardEditor() {
         '<input type="number" id="board-limit" value="'+(cfg.limit||'')+'" onchange="onBoardLimitChange()" placeholder="No limit" min="0" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
       '</div>'+
     '</div>'+
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;">'+
+      '<div style="flex:1;min-width:120px;">'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Rollup Field <span style="font-weight:400;color:var(--sub);">(common fields only)</span></label>'+
+        '<select id="board-rollup-field" onchange="onBoardRollupChange()" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+          '<option value="">— none —</option>'+
+          _lastAggFields.map(function(f){
+            return '<option value="'+f+'"'+(cfg.rollup_field===f?' selected':'')+'>'+f+'</option>';
+          }).join("")+
+        '</select>'+
+      '</div>'+
+      '<div style="flex:1;min-width:80px;">'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Rollup Op</label>'+
+        '<select id="board-rollup-op" onchange="onBoardRollupChange()" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+          '<option value="sum"'+(cfg.rollup_op==='sum'?' selected':'')+'>Sum</option>'+
+          '<option value="avg"'+(cfg.rollup_op==='avg'?' selected':'')+'>Avg</option>'+
+          '<option value="count"'+(cfg.rollup_op==='count'?' selected':'')+'>Count</option>'+
+        '</select>'+
+      '</div>'+
+    '</div>'+
     '<div id="board-title-area" style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Card Title Priority <span style="font-weight:400;color:var(--sub);">(drag to reorder)</span></div>'+
       '<div id="board-title-chips" class="chip-group"></div>'+
@@ -1409,6 +1428,7 @@ function onBoardLimitChange() {
 }
 
 var _lastAllFields = [];
+var _lastAggFields = [];
 
 function _commonTitleFields(resp) {
   var overlap = resp.ok && resp.overlap ? resp.overlap : [];
@@ -1430,11 +1450,15 @@ function fetchBoardOverlap(types) {
     .then(function(r){ return r.json(); })
     .then(function(d) {
       _lastAllFields = _commonTitleFields(d);
+      _lastAggFields = d.ok && d.aggregatable_overlap ? d.aggregatable_overlap : [];
       renderBoardTitleChips();
+      renderBoardRollup();
     })
     .catch(function() {
       _lastAllFields = [];
+      _lastAggFields = [];
       renderBoardTitleChips();
+      renderBoardRollup();
     });
     return;
   }
@@ -1457,18 +1481,23 @@ function fetchBoardOverlap(types) {
         fieldsEl.innerHTML = d.overlap.join(', ');
       }
       _lastAllFields = _commonTitleFields(d);
+      _lastAggFields = d.ok && d.aggregatable_overlap ? d.aggregatable_overlap : [];
     } else {
       statusEl.innerHTML = '<span style="color:var(--error);">Error checking overlap</span>';
       fieldsEl.innerHTML = '';
       _lastAllFields = [];
+      _lastAggFields = [];
     }
     renderBoardTitleChips();
+    renderBoardRollup();
   })
   .catch(function() {
     statusEl.innerHTML = '<span style="color:var(--error);">Error</span>';
     fieldsEl.innerHTML = '';
     _lastAllFields = [];
+    _lastAggFields = [];
     renderBoardTitleChips();
+    renderBoardRollup();
   });
 }
 
@@ -1502,6 +1531,27 @@ function removeCardTitleField(idx) {
   if (!cfg || !cfg.card_title_fields) return;
   cfg.card_title_fields.splice(idx, 1);
   renderBoardTitleChips();
+}
+
+function renderBoardRollup() {
+  var cfg = _st.boards[_cur.name];
+  var sel = document.getElementById("board-rollup-field");
+  if (!cfg || !sel) return;
+  if (cfg.rollup_field && _lastAggFields.indexOf(cfg.rollup_field) === -1) {
+    cfg.rollup_field = "";
+  }
+  var cur = cfg.rollup_field || "";
+  sel.innerHTML = '<option value="">— none —</option>' +
+    _lastAggFields.map(function(f) {
+      return '<option value="'+f+'"'+(cur===f?' selected':'')+'>'+f+'</option>';
+    }).join("");
+}
+
+function onBoardRollupChange() {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg) return;
+  cfg.rollup_field = document.getElementById("board-rollup-field").value;
+  cfg.rollup_op = document.getElementById("board-rollup-op").value;
 }
 
 function onBoardNameChange() {
