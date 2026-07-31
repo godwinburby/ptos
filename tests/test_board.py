@@ -3,7 +3,7 @@ import datetime as dt
 import os
 import tomli_w
 import ptos
-from ptos_service import get_board_data, advance_record, PTOSError
+from ptos_service import get_board_data, advance_record, save_queries_full, PTOSError
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -213,6 +213,131 @@ class TestGetBoardData:
                               "card_title_fields": 123}})
         result = get_board_data("b")
         assert result["card_title_fields"] == []
+
+
+# ── board rollups ──────────────────────────────────────────────────────────────
+
+class TestBoardRollup:
+    def _write_amounts(self, amounts, col_type="expense", field="amount"):
+        today = dt.date.today().isoformat()
+        for a in amounts:
+            _write_record(today, f"{today} type={col_type} {field}={a}")
+
+    def test_default_no_rollup_field(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        result = get_board_data("b")
+        assert result["rollups"]["expense"] is None
+        assert result["rollup_op"] == "count"
+
+    def test_default_op_count(self):
+        _write_queries({"b": {"columns": ["expense"], "rollup_field": "amount"}})
+        self._write_amounts([1, 2, 3])
+        result = get_board_data("b")
+        assert result["rollup_op"] == "count"
+        assert result["rollups"]["expense"] == 3
+
+    def test_sum(self):
+        _write_queries({"b": {"columns": ["expense"],
+                              "rollup_field": "amount", "rollup_op": "sum"}})
+        self._write_amounts([10, 20, 30])
+        result = get_board_data("b")
+        assert result["rollups"]["expense"] == 60
+
+    def test_avg(self):
+        _write_queries({"b": {"columns": ["expense"],
+                              "rollup_field": "amount", "rollup_op": "avg"}})
+        self._write_amounts([10, 20, 30])
+        result = get_board_data("b")
+        assert result["rollups"]["expense"] == 20
+
+    def test_avg_no_records(self):
+        _write_queries({"b": {"columns": ["expense"],
+                              "rollup_field": "amount", "rollup_op": "avg"}})
+        result = get_board_data("b")
+        assert result["rollups"]["expense"] is None
+
+    def test_sum_skips_non_numeric(self):
+        _write_queries({"b": {"columns": ["expense"],
+                              "rollup_field": "amount", "rollup_op": "sum"}})
+        self._write_amounts([10, "abc", 20])
+        result = get_board_data("b")
+        assert result["rollups"]["expense"] == 30
+
+    def test_sum_over_full_set_before_limit(self):
+        _write_queries({"b": {"columns": ["expense"], "limit": 1,
+                              "rollup_field": "amount", "rollup_op": "sum"}})
+        self._write_amounts([10, 20, 30])
+        result = get_board_data("b")
+        assert len(result["data"]["expense"]) == 1
+        assert result["rollups"]["expense"] == 60
+
+    def test_rollup_skipped_for_type_missing_field(self):
+        _write_queries({"b": {"columns": ["expense", "exercise"],
+                              "rollup_field": "amount", "rollup_op": "sum"}})
+        self._write_amounts([10, 20], col_type="expense")
+        self._write_amounts([5], col_type="exercise", field="duration")
+        result = get_board_data("b")
+        assert result["rollups"]["expense"] == 30
+        assert result["rollups"]["exercise"] is None
+
+    def test_missing_field_value_treated_as_skip(self):
+        _write_queries({"b": {"columns": ["expense"],
+                              "rollup_field": "amount", "rollup_op": "sum"}})
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense amount=10")
+        _write_record(today, f"{today} type=expense")
+        result = get_board_data("b")
+        assert result["rollups"]["expense"] == 10
+
+
+# ── save_queries_full board persistence ───────────────────────────────────────
+
+class TestSaveQueriesFullBoard:
+    def _save(self, boards):
+        save_queries_full({}, {}, {}, raw_boards=boards)
+
+    def test_persists_rollup(self):
+        self._save({"b": {"columns": ["expense"],
+                          "rollup_field": "amount", "rollup_op": "sum"}})
+        result = get_board_data("b")
+        assert result["rollup_op"] == "sum"
+        assert result["rollups"]["expense"] is not None
+
+    def test_omits_rollup_when_field_absent(self):
+        self._save({"b": {"columns": ["expense"]}})
+        with open(ptos.QUERIES_PATH, "rb") as f:
+            import tomllib
+            data = tomllib.load(f)
+        assert "rollup_field" not in data["board.b"]
+        result = get_board_data("b")
+        assert result["rollup_op"] == "count"
+        assert result["rollups"]["expense"] is None
+
+    def test_default_op_count(self):
+        self._save({"b": {"columns": ["expense"],
+                          "rollup_field": "amount"}})
+        with open(ptos.QUERIES_PATH, "rb") as f:
+            import tomllib
+            data = tomllib.load(f)
+        assert data["board.b"]["rollup_op"] == "count"
+
+    def test_rejects_non_aggregatable_field(self):
+        with pytest.raises(PTOSError, match="not aggregatable"):
+            self._save({"b": {"columns": ["expense"],
+                              "rollup_field": "domain", "rollup_op": "sum"}})
+
+    def test_rejects_field_not_applicable_to_any_column(self):
+        with pytest.raises(PTOSError, match="does not apply"):
+            self._save({"b": {"columns": ["expense"],
+                              "rollup_field": "duration", "rollup_op": "sum"}})
+
+    def test_rejects_empty_columns(self):
+        with pytest.raises(PTOSError, match="non-empty columns"):
+            self._save({"b": {"columns": []}})
+
+    def test_rejects_invalid_name(self):
+        with pytest.raises(PTOSError, match="Invalid name"):
+            self._save({"My Board": {"columns": ["expense"]}})
 
 
 # ── advance_record ────────────────────────────────────────────────────────────

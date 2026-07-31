@@ -1985,7 +1985,9 @@ def board():
         now=_now_str(), boards=boards,
         active_board=active_board,
         board_data=board_data,
-        board_time_options=_board_time_options())
+        board_time_options=_board_time_options(),
+        rollup_fmt=ptos.fmt,
+        rollup_avg_fmt=ptos.fmt_avg)
 
 
 @app.route("/api/board/time-window", methods=["POST"])
@@ -2043,7 +2045,13 @@ def board_field_overlap():
         for t in types:
             all_fields.update(ptos.filter_fields_for_type(t, schema))
         all_sorted = sorted(all_fields - {"date", "type", "note"})
-        return jsonify(ok=True, overlap=overlap, all_fields=all_sorted)
+        agg_fields = schema.get("fields", {})
+        aggregatable_overlap = [
+            f for f in overlap
+            if f not in ("date", "type", "note") and agg_fields.get(f, {}).get("aggregatable")
+        ]
+        return jsonify(ok=True, overlap=overlap, all_fields=all_sorted,
+                       aggregatable_overlap=aggregatable_overlap)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
