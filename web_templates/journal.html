@@ -13,6 +13,9 @@
     {% if date == today %}
     <div style="font-size:12px;color:var(--accent);font-weight:700;letter-spacing:.5px;">TODAY</div>
     {% endif %}
+    <input type="date" value="{{ date }}" max="{{ today }}"
+           onchange="if(this.value) window.location='/journal?date='+encodeURIComponent(this.value)"
+           style="margin-top:4px;font-size:13px;color:var(--text);background:var(--bg,#fff);border:1px solid var(--border);border-radius:6px;padding:3px 6px;width:140px;">
   </div>
 
   {% if date < today %}
