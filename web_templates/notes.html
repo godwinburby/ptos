@@ -11,6 +11,11 @@
 
 {% include "_markdown_editor.html" with context %}
 
+<div id="backlinks-panel" style="margin-top:16px;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;background:var(--bg-card,var(--bg));">
+  <div style="font-size:13px;font-weight:800;margin-bottom:2px;color:var(--text);">Linked mentions</div>
+  <div id="backlinks-panel-body" style="margin-top:4px;"></div>
+</div>
+
 <div style="margin-top:10px;display:flex;gap:8px;">
   <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success" style="flex:1;">
     Save Note
@@ -52,5 +57,12 @@ function deleteNote() {
     else alert(d.error || "Failed to delete");
   });
 }
+
+document.addEventListener("DOMContentLoaded", function() {
+  initBacklinksPanel(
+    document.getElementById("backlinks-panel-body"),
+    {{ title|tojson }}
+  );
+});
 </script>
 {% endblock %}

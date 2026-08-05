@@ -1108,6 +1108,26 @@ def get_global_fields(schema=None):
         schema = get_schema()
     return schema.get("global_fields", {})
 
+def get_linkable_fields(schema=None):
+    """Return set of field names flagged `linkable = true` in schema.
+    Scans [fields.*], [global_fields.*], and per-type [type.*.fields.*]."""
+    if schema is None:
+        schema = get_schema()
+    fields = set()
+    for fname, fdef in schema.get("fields", {}).items():
+        if isinstance(fdef, dict) and fdef.get("linkable"):
+            fields.add(fname)
+    for fname, fdef in schema.get("global_fields", {}).items():
+        if isinstance(fdef, dict) and fdef.get("linkable"):
+            fields.add(fname)
+    for tdef in schema.get("type", {}).values():
+        if not isinstance(tdef, dict):
+            continue
+        for fname, fdef in (tdef.get("fields") or {}).items():
+            if isinstance(fdef, dict) and fdef.get("linkable"):
+                fields.add(fname)
+    return fields
+
 def get_queries():
     if not os.path.exists(QUERIES_PATH):
         return {}

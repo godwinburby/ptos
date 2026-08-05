@@ -237,8 +237,9 @@ var _currentType = null;
     var fname = entry[0], fdef = entry[1];
     if (!fdef || typeof fdef !== "object") return;
     _state.global_fields[fname] = {
-      is_int:  fdef.type === "int",
-      options: Array.isArray(fdef.options) ? fdef.options : [],
+      is_int:   fdef.type === "int",
+      options:  Array.isArray(fdef.options) ? fdef.options : [],
+      linkable: fdef.linkable === true,
     };
   });
 
@@ -261,6 +262,7 @@ var _currentType = null;
       aggregatable: fmeta.aggregatable === true,
       dimension:    fmeta.dimension    !== false,
       unit:         fmeta.unit         || "",
+      linkable:     fmeta.linkable     === true,
     };
   });
 
@@ -291,8 +293,9 @@ var _currentType = null;
       }
       var opts = Array.isArray(fdef.options) ? fdef.options : [];
       fields[fname] = {
-        is_int:  fdef.type === "int",
-        options: opts,
+        is_int:   fdef.type === "int",
+        options:  opts,
+        linkable: fdef.linkable === true,
       };
     });
 
@@ -493,7 +496,7 @@ function addField() {
       return;
     }
   }
-  ts().fields[name] = { is_int: false, options: [] };
+  ts().fields[name] = { is_int: false, options: [], linkable: false };
   renderFields(ts());
 }
 
@@ -598,6 +601,10 @@ function makeFieldRow(fname, fdef) {
       '<input type="checkbox" ' + (fdef.is_int ? "checked" : "") +
       ' onchange="toggleInt(\'' + fname + '\',this.checked)"> Number field' +
     '</label>' +
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
+      '<input type="checkbox" ' + (fdef.linkable ? "checked" : "") +
+      ' onchange="setFieldLinkable(\'' + fname + '\',this.checked)"> Linkable' +
+    '</label>' +
     '<button onclick="deleteField(\'' + fname + '\')" ' +
     'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;' +
     'line-height:1;padding:0;">×</button>';
@@ -640,6 +647,10 @@ function toggleInt(fname, val) {
   ts().fields[fname].is_int = val;
   if (val) ts().fields[fname].options = [];
   renderFields(ts());
+}
+
+function setFieldLinkable(fname, val) {
+  ts().fields[fname].linkable = val;
 }
 
 function updateFieldUse(fname, val) {
@@ -848,7 +859,7 @@ function addGlobalField() {
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
   if (!name) return;
   if (_state.global_fields[name]) { alert("Field already exists"); return; }
-  _state.global_fields[name] = { is_int: false, options: [] };
+  _state.global_fields[name] = { is_int: false, options: [], linkable: false };
   renderGlobalFields();
 }
 
@@ -864,6 +875,10 @@ function makeGlobalFieldRow(fname, fdef) {
     '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
       '<input type="checkbox" ' + (fdef.is_int ? "checked" : "") +
       ' onchange="toggleGlobalInt(\'' + fname + '\',this.checked)"> Number field' +
+    '</label>' +
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
+      '<input type="checkbox" ' + (fdef.linkable ? "checked" : "") +
+      ' onchange="setGlobalFieldLinkable(\'' + fname + '\',this.checked)"> Linkable' +
     '</label>' +
     '<button onclick="deleteGlobalField(\'' + fname + '\')" ' +
     'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;' +
@@ -914,6 +929,10 @@ function toggleGlobalInt(fname, val) {
   _state.global_fields[fname].is_int = val;
   if (val) _state.global_fields[fname].options = [];
   renderGlobalFields();
+}
+
+function setGlobalFieldLinkable(fname, val) {
+  _state.global_fields[fname].linkable = val;
 }
 
 function deleteGlobalField(fname) {
@@ -1114,7 +1133,7 @@ function addFieldMeta() {
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
   if (!name) return;
   if (_state.field_meta[name]) { alert("Already exists"); return; }
-  _state.field_meta[name] = { type: "string", aggregatable: false, dimension: true, unit: "" };
+  _state.field_meta[name] = { type: "string", aggregatable: false, dimension: true, unit: "", linkable: false };
   renderFieldMeta();
 }
 function makeFieldMetaRow(fname, fmeta) {
@@ -1142,6 +1161,9 @@ function makeFieldMetaRow(fname, fmeta) {
     '<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;">' +
       '<input type="checkbox" ' + (fmeta.aggregatable ? "checked":"") +
       ' onchange="setFieldMeta(\'' + fname + '\',\'aggregatable\',this.checked)"> Aggregatable</label>' +
+    '<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;">' +
+      '<input type="checkbox" ' + (fmeta.linkable ? "checked":"") +
+      ' onchange="setFieldMeta(\'' + fname + '\',\'linkable\',this.checked)"> Linkable</label>' +
     '<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;">' +
       '<input type="checkbox" ' + (fmeta.dimension !== false ? "checked":"") +
       ' onchange="setFieldMeta(\'' + fname + '\',\'dimension\',this.checked)"> Dimension</label>';

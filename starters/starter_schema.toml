@@ -60,11 +60,13 @@ multi     = true
 # These appear on EVERY record type — always optional.
 
 [global_fields.context]
-type    = "string"
+type     = "string"
+linkable = true
 options = ["home", "work", "travel", "outdoor"]
 
 [global_fields.project]
-type    = "string"
+type     = "string"
+linkable = true
 # no options = free-text entry
 
 # ==================================================
