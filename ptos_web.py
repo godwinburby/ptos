@@ -1157,7 +1157,13 @@ def notes_view(category, slug):
     content = svc.read_note(category, slug)
     if content is None:
         return "Note not found", 404
-    return render_template("notes.html", category=category, slug=slug, content=content)
+    title = slug
+    for note in svc.list_notes(category):
+        if note.get("slug") == slug:
+            title = note.get("title") or title
+            break
+    return render_template("notes.html", category=category, slug=slug,
+                           title=title, content=content)
 
 
 @app.route("/notes/save", methods=["POST"])
@@ -1816,6 +1822,7 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
         fd = {}
         fd["type"] = fmeta.get("type", "string")
         if "aggregatable" in fmeta: fd["aggregatable"] = fmeta["aggregatable"]
+        if "linkable"     in fmeta: fd["linkable"]     = fmeta["linkable"]
         if "dimension"    in fmeta: fd["dimension"]    = fmeta["dimension"]
         if fmeta.get("unit"):       fd["unit"]         = fmeta["unit"]
         if fmeta.get("derived"):    fd["derived"]      = fmeta["derived"]
@@ -1845,6 +1852,8 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
         opts = fdef.get("options", [])
         if opts:
             gfd["options"] = opts
+        if fdef.get("linkable"):
+            gfd["linkable"] = True
         gf_out[fname] = gfd
     schema["global_fields"] = gf_out
 
@@ -1899,6 +1908,8 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
                     opts = fdef_new.get("options", [])
                     if opts:
                         fd["options"] = list(opts)
+                if fdef_new.get("linkable"):
+                    fd["linkable"] = True
                 fields_dict[fname] = fd
             else:
                 # preserve old field verbatim
@@ -3184,52 +3195,16 @@ def shutdown_server():
 
 @app.route("/api/link-candidates")
 def api_link_candidates():
-    q = request.args.get("q", "").lower()
-    results = []
-    seen = set()
-    _bracket_re = re.compile(r'\[\[([^\]]+)\]\]')
-    _kv_re = re.compile(r'\b(project|context)=(\S+)')
-    def _add(val):
-        v = val.strip()
-        if not v or v.lower() in seen or q not in v.lower():
-            return
-        seen.add(v.lower())
-        results.append(v)
-    def _scan_file(path):
-        try:
-            with open(path, encoding="utf-8") as f:
-                content = f.read()
-            for m in _bracket_re.finditer(content):
-                _add(m.group(1))
-        except Exception:
-            pass
-    for path in glob.glob(os.path.join(ptos.NOTES_DIR, "*", "*.md")):
-        _scan_file(path)
-    for path in glob.glob(os.path.join(ptos.JOURNAL_DIR, "*", "*", "*.md")):
-        _scan_file(path)
-    for tpath_name in ["todo.txt", "done.txt"]:
-        _scan_file(os.path.join(ptos.TODO_DIR, tpath_name))
-    try:
-        for fname in ptos.get_log_files():
-            path = os.path.join(ptos.RECORDS_DIR, fname)
-            try:
-                with open(path, encoding="utf-8") as f:
-                    for line in f:
-                        for m in _kv_re.finditer(line):
-                            _add(m.group(2))
-            except Exception:
-                pass
-    except Exception:
-        pass
-    try:
-        import ptos_todo as _todo_mod
-        todos, _ = _todo_mod.load_todos(ptos.TODO_PATH)
-        done, _ = _todo_mod.load_todos(ptos.DONE_PATH)
-        for p in _todo_mod.get_projects(todos + done):
-            _add(p.lstrip("+"))
-    except Exception:
-        pass
-    return jsonify(sorted(results)[:20])
+    q = request.args.get("q", "")
+    return jsonify(svc.get_link_candidates(q))
+
+
+@app.route("/api/backlinks")
+def api_backlinks():
+    subject = request.args.get("q", "")
+    if not subject:
+        return jsonify({"notes": [], "journal": [], "todo": [], "records": []})
+    return jsonify(svc.get_backlinks(subject))
 
 
 @app.route("/api/save_query", methods=["POST"])

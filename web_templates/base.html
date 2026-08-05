@@ -1596,6 +1596,132 @@ function preprocessLinks(src) {
     return '[' + target + '](/search?q=' + encodeURIComponent(target) + ')';
   });
 }
+
+// ── Backlinks / "Linked mentions" panel ───────────────────────────────────────
+// Given a subject, fetch /api/backlinks?q= and render four collapsible groups
+// (Notes / Journal / Todo / Records). Hides the container if nothing matches.
+
+var _blGroups = [
+  { key: "notes",   label: "Notes" },
+  { key: "journal", label: "Journal" },
+  { key: "todo",    label: "Todo" },
+  { key: "records", label: "Records" }
+];
+
+function _blItemHref(key, item) {
+  if (key === "notes")   return "/notes/" + encodeURIComponent(item.category) + "/" + encodeURIComponent(item.slug);
+  if (key === "journal") return "/journal?date=" + encodeURIComponent(item.date);
+  if (key === "todo")    return "/todo?search=" + encodeURIComponent(item.line);
+  if (key === "records") return "/editor?file=" + encodeURIComponent(item.path) + "&goto=" + encodeURIComponent(item.lineno);
+  return "#";
+}
+
+function _blItemText(key, item) {
+  if (key === "notes")   return item.title || item.slug;
+  if (key === "journal") return item.date;
+  if (key === "todo")    return item.line || "line " + item.lineno + (item.done ? " (done)" : "");
+  if (key === "records") return (item.date || "") + " · " + (item.type || "") + " · " + (item.field || "");
+  return "";
+}
+
+function _blItemSnippet(item) {
+  return item.snippet ? item.snippet.trim() : "";
+}
+
+function _blRenderGroups(container, data, openFirst) {
+  container.innerHTML = "";
+  var any = false;
+  _blGroups.forEach(function(g) {
+    var items = data[g.key] || [];
+    if (!items.length) return;
+    any = true;
+    var wrap = document.createElement("details");
+    if (g.key === openFirst) wrap.open = true;
+    wrap.style.cssText = "margin:0;border-bottom:1px solid var(--border,#ddd);";
+    var sum = document.createElement("summary");
+    sum.style.cssText = "cursor:pointer;font-size:12px;font-weight:700;padding:6px 2px;";
+    sum.textContent = g.label + " (" + items.length + ")";
+    wrap.appendChild(sum);
+    var list = document.createElement("div");
+    list.style.cssText = "padding:0 2px 6px 14px;display:flex;flex-direction:column;gap:4px;";
+    items.forEach(function(item) {
+      var a = document.createElement("a");
+      a.href = _blItemHref(g.key, item);
+      a.style.cssText = "color:var(--accent);text-decoration:none;font-size:12px;";
+      a.textContent = _blItemText(g.key, item);
+      list.appendChild(a);
+      var snip = _blItemSnippet(item);
+      if (snip) {
+        var p = document.createElement("div");
+        p.style.cssText = "font-size:11px;color:var(--sub,#888);margin-top:-2px;";
+        p.textContent = "“" + snip + "”";
+        list.appendChild(p);
+      }
+    });
+    wrap.appendChild(list);
+    container.appendChild(wrap);
+  });
+  if (!any) container.style.display = "none";
+}
+
+function _blEmpty(container) {
+  if (container) container.style.display = "none";
+}
+
+// Full panel for a single subject (used by notes.html).
+function initBacklinksPanel(container, subject) {
+  if (!container || !subject) return;
+  fetch("/api/backlinks?q=" + encodeURIComponent(subject))
+    .then(function(r) { return r.json(); })
+    .then(function(d) { _blRenderGroups(container, d); })
+    .catch(function() { _blEmpty(container); });
+}
+
+// Journal mode: show one expandable section per [[link]] found inside the
+// journal content itself, each listing that link's backlinks.
+function initJournalBacklinks(container, content) {
+  if (!container) return;
+  var links = [];
+  var seen = {};
+  var re = /\[\[([^\]]+)\]\]/g, m;
+  while ((m = re.exec(content)) !== null) {
+    var t = m[1].trim();
+    if (t && !seen[t.toLowerCase()]) { seen[t.toLowerCase()] = true; links.push(t); }
+  }
+  if (!links.length) { _blEmpty(container); return; }
+  container.innerHTML = "";
+  var done = 0;
+  links.forEach(function(link) {
+    var wrap = document.createElement("details");
+    wrap.style.cssText = "margin:0;border-bottom:1px solid var(--border,#ddd);";
+    var sum = document.createElement("summary");
+    sum.style.cssText = "cursor:pointer;font-size:12px;font-weight:700;padding:6px 2px;";
+    sum.textContent = link;
+    wrap.appendChild(sum);
+    container.appendChild(wrap);
+    fetch("/api/backlinks?q=" + encodeURIComponent(link))
+      .then(function(r) { return r.json(); })
+      .then(function(d) {
+        var inner = document.createElement("div");
+        inner.style.cssText = "padding:0 2px 6px 14px;";
+        if (!(d.notes && d.notes.length) && !(d.journal && d.journal.length) &&
+            !(d.todo && d.todo.length) && !(d.records && d.records.length)) {
+          inner.textContent = "No references found.";
+          inner.style.cssText += "font-size:11px;color:var(--sub,#888);";
+        } else {
+          _blRenderGroups(inner, d, null);
+          inner.style.display = "block";
+        }
+        wrap.appendChild(inner);
+        done++;
+        if (done === links.length) container.style.display = "block";
+      })
+      .catch(function() {
+        done++;
+        if (done === links.length) container.style.display = "block";
+      });
+  });
+}
 </script>
 
 <!-- Pomodoro Timer Engine -->

@@ -58,6 +58,7 @@ def _isolated_ptos_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(ptos, "QUERIES_PATH", str(base / "config" / "queries.toml"))
     monkeypatch.setattr(ptos, "CONFIG_PATH", str(base / "config" / "config.toml"))
     monkeypatch.setattr(ptos, "PRESETS_PATH", str(base / "config" / "presets.toml"))
+    ptos._invalidate_all()
     yield
 
 

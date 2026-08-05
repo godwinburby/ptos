@@ -258,13 +258,25 @@ Wiki-style `[[links]]` sit on top of existing project conventions — not a repl
 ### Backend — `/api/link-candidates`
 - `GET /api/link-candidates?q=...` — returns up to 20 sorted candidates
 - Scans `[[Target]]` brackets from journal, notes, and todo files — any text inside `[[ ]]` becomes a candidate (multi-word phrases like `[[buy house]]` work)
-- Scans `project=` and `context=` values from record `.log` files
-- Todo project names (stripped of `+`) from `get_projects()`
+- Field matches are **schema-driven**: any field flagged `linkable = true` in schema (in `[fields.*]`, `[global_fields.*]`, or `[type.*.fields.*]`) is scanned for `field=value` in record `.log` files, plus `+Project`/`@Context` tokens in todo files. No hardcoded field-name regex.
+- Shared scan logic lives in `ptos_service.py`: `_iter_link_matches(linkable_fields)` walks notes/journal/todo/records and yields `{source, value, loc}` matches; `get_link_candidates(q)` aggregates unique candidates; `get_backlinks(subject)` aggregates locations for one subject. Both callers use the same helper so they can't drift apart.
+
+### Backend — backlinks panel
+- `GET /api/backlinks?q=...` — returns `{"notes": [...], "journal": [...], "todo": [...], "records": [...]}` where each list holds `{...loc}` dicts for every reference to `subject` (case-insensitive exact match):
+  - notes: `{category, slug, title, path, snippet}` from `[[subject]]` in note files
+  - journal: `{date, path, snippet}` from `[[subject]]` in journal files
+  - todo: `{line, lineno, done, path}` from `[[subject]]`, `+subject`, `@subject` (field tokens only when `project`/`context` are linkable)
+  - records: `{date, type, field, path, lineno, snippet}` from `linkable`-flagged `field=subject`
+- Each match includes a ~60-char `snippet` around the hit.
+- Empty `q` returns all-empty groups.
 
 ### Frontend — shared JS in `base.html`
 - `_getBracketToken(inputEl)` — scans backward for unclosed `[[`, returns `{query, start, fullToken}` or null
 - `attachBracketAutocomplete(inputEl)` — fetches from `/api/link-candidates`, renders dropdown, handles Arrow/Enter/Escape; used on all input fields that support bracket linking
 - `preprocessLinks(src)` — converts `[[Target]]` → `[Target](/search?q=Target)` markdown links for preview rendering
+- `initBacklinksPanel(container, subject)` — fetches `/api/backlinks?q=`, renders four collapsible groups (Notes/Journal/Todo/Records); hides container when nothing references the subject. Used by `notes.html`, keyed on the note's title.
+- `initJournalBacklinks(container, content)` — journal mode: extracts unique `[[...]]` links from the journal text, renders one expandable section per link showing that link's backlinks. Used by `journal.html` (loads once on page load, no live updates).
+- Item link targets: note → `/notes/<category>/<slug>`, journal → `/journal?date=...`, record → `/editor?file=<path>&goto=<lineno>`, todo → `/todo?search=<line>`.
 
 ### Where bracket autocomplete is attached
 | Location | Element |

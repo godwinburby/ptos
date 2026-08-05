@@ -22,6 +22,8 @@ ptos.py CLI is unchanged and does not use this file.
 
 import sys
 import os
+import re
+import glob
 import datetime as dt
 import dataclasses
 
@@ -2721,4 +2723,150 @@ def archive_old_todos(threshold_months=6):
         return ptos_todo.archive_done_todos(DONE_PATH, threshold_months)
     except Exception as e:
         raise PTOSError(str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Backlinks / link candidates — shared scan helper
+# ══════════════════════════════════════════════════════════════════════════════
+
+_BRACKET_RE = re.compile(r'\[\[([^\]]+)\]\]')
+
+
+def _snippet(text, start, span=60):
+    """Short snippet (~span chars) centered around a match start."""
+    s = max(0, start - span // 2)
+    return text[s:s + span]
+
+
+def _iter_link_matches(linkable_fields):
+    """Walk notes/journal/todo/records and yield match dicts:
+    {"source": "note"|"journal"|"todo"|"record",
+     "value": matched text,
+     "loc": {...per-source location dict...}}
+
+    Uses ptos.* attribute access so test monkeypatching of engine paths works.
+    """
+    def _scan_brackets(path, source, make_loc):
+        try:
+            with open(path, encoding="utf-8") as f:
+                content = f.read()
+            for m in _BRACKET_RE.finditer(content):
+                yield {"source": source, "value": m.group(1),
+                       "loc": make_loc(m.start(), content)}
+        except Exception:
+            return
+
+    def _read_lines(path):
+        try:
+            with open(path, encoding="utf-8") as f:
+                return f.readlines()
+        except Exception:
+            return []
+
+    def _note_loc(slug, title, path, start, content):
+        return {"category": cat, "slug": slug, "title": title,
+                "path": path, "snippet": _snippet(content, start)}
+
+    for cat in ptos.list_note_categories():
+        try:
+            for note in ptos.list_notes(cat):
+                title = note.get("title", "")
+                slug = note.get("slug", "")
+                path = os.path.join(ptos.NOTES_DIR, cat, f"{slug}.md")
+                yield from _scan_brackets(
+                    path, "note",
+                    lambda s, c, cat=cat, slug=slug, title=title, path=path:
+                        _note_loc(slug, title, path, s, c))
+        except Exception:
+            continue
+
+    try:
+        for date_dir_path in sorted(glob.glob(os.path.join(ptos.JOURNAL_DIR, "*", "*", "*.md"))):
+            date_str = os.path.splitext(os.path.basename(date_dir_path))[0]
+            yield from _scan_brackets(
+                date_dir_path, "journal",
+                lambda s, c, date_str=date_str, path=date_dir_path:
+                    {"date": date_str, "path": path,
+                     "snippet": _snippet(c, s)})
+    except Exception:
+        pass
+
+    for tpath_name in ["todo.txt", "done.txt"]:
+        tpath = os.path.join(ptos.TODO_DIR, tpath_name)
+        done = tpath_name == "done.txt"
+        lines = _read_lines(tpath)
+        for lineno, line in enumerate(lines, start=1):
+            for m in _BRACKET_RE.finditer(line):
+                yield {"source": "todo", "value": m.group(1),
+                       "loc": _todo_loc(line, lineno, done, tpath)}
+            if "project" in linkable_fields:
+                for m in re.finditer(r'\+\S+', line):
+                    yield {"source": "todo", "value": m.group(0)[1:],
+                           "loc": _todo_loc(line, lineno, done, tpath)}
+            if "context" in linkable_fields:
+                for m in re.finditer(r'@\S+', line):
+                    yield {"source": "todo", "value": m.group(0)[1:],
+                           "loc": _todo_loc(line, lineno, done, tpath)}
+
+    try:
+        for fname in ptos.get_log_files():
+            path = os.path.join(ptos.RECORDS_DIR, fname)
+            lines = _read_lines(path)
+            if not linkable_fields:
+                continue
+            _kv_re = re.compile(r'\b(' + '|'.join(re.escape(f) for f in linkable_fields) + r')=(\S+)')
+            for lineno, line in enumerate(lines, start=1):
+                for m in _kv_re.finditer(line):
+                    yield {"source": "record",
+                           "value": m.group(2),
+                           "loc": _record_loc(line, fname, m.group(1), lineno, m.start(2))}
+    except Exception:
+        pass
+
+
+def _todo_loc(line, lineno, done, path):
+    return {"line": line.strip(), "lineno": lineno, "done": done, "path": path}
+
+
+def _record_loc(line, fname, field, lineno, value_start):
+    return {"date": line[:10], "type": _record_type(line),
+            "field": field, "path": fname, "lineno": lineno,
+            "snippet": _snippet(line, value_start)}
+
+
+def _record_type(line):
+    try:
+        return line.split()[1].split("=", 1)[1]
+    except Exception:
+        return ""
+
+
+def get_link_candidates(q):
+    """Collect unique candidate strings (from brackets + linkable fields)
+    filtered by q. Mirrors the old /api/link-candidates endpoint."""
+    q = (q or "").lower()
+    results = []
+    seen = set()
+    for m in _iter_link_matches(ptos.get_linkable_fields()):
+        v = m["value"].strip()
+        if not v or v.lower() in seen or q not in v.lower():
+            continue
+        seen.add(v.lower())
+        results.append(v)
+    return sorted(results)[:20]
+
+
+def get_backlinks(subject):
+    """Return every reference to subject across notes/journal/todo/records."""
+    subject = (subject or "").strip().lower()
+    out = {"notes": [], "journal": [], "todo": [], "records": []}
+    if not subject:
+        return out
+    for m in _iter_link_matches(ptos.get_linkable_fields()):
+        if m["value"].strip().lower() != subject:
+            continue
+        key = "notes" if m["source"] == "note" else \
+              "records" if m["source"] == "record" else m["source"]
+        out[key].append(m["loc"])
+    return out
 
