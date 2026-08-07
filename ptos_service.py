@@ -115,6 +115,18 @@ def invalidate_cache(keys):
     invalidate(keys)
 
 
+def _invalidate_history_cache():
+    """Invalidate every history/conditional-suggestion cache key.
+
+    Called after any record write (or schema change) regardless of which
+    rtype changed — correctness over precision: writes are rare compared
+    to cascade reads, and selectively invalidating individual condsug keys
+    risks missing one and serving stale suggestions."""
+    for key in list(ptos._CACHE.keys()):
+        if key.startswith("history:") or key.startswith("condsug:"):
+            ptos._CACHE.pop(key, None)
+
+
 def _cycles():
     return ptos.get_config().get("cycles", {})
 
@@ -221,7 +233,9 @@ def append_record(line):
         dict: Result with ok and message.
     """
     try:
-        return ptos.append_record(line)
+        result = ptos.append_record(line)
+        _invalidate_history_cache()
+        return result
     except Exception as e:
         raise PTOSError(str(e))
 
@@ -349,20 +363,12 @@ def restore_full(zip_path):
 # History suggestions
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_history_suggestions(rtype, context_record=None):
-    """Scan all records of the given type and return:
-      tags: sorted list of all tags ever used for this type
-      filtered_tags: tags filtered by context_record's field cascade (schema + history based)
-      field_values: {fieldname: [values by freq]} for free-text fields
-      field_defaults: {fieldname: most_common_value} for schema option fields
-                      (used to pre-select the most likely value on type selection)
-
-    If context_record is provided, filtered_tags includes:
-    1. Schema-defined tags from resolve_tags() based on context field values
-    2. Historical tags that appeared in past records with matching field values
-
-    Single scan, results suitable for caching by the caller.
-    """
+def _build_history_suggestions(rtype):
+    """Scan all records of the given type and aggregate suggestion data.
+    Expensive part (full file scan) — cached by get_history_suggestions.
+    Returns a dict with the scan-derived aggregates; filtered_tags is
+    computed per-call by _apply_context_filter since it depends on the
+    per-request context_record."""
     try:
         schema      = ptos.get_schema()
         type_schema = schema.get("type", {}).get(rtype, {})
@@ -386,7 +392,7 @@ def get_history_suggestions(rtype, context_record=None):
             dt.date.min, dt.date.max,
             [f"type={rtype}"], None)
     except Exception:
-        return {"tags": [], "filtered_tags": [], "field_values": {}, "field_defaults": {}}
+        return {"tags": [], "field_values": {}, "field_defaults": {}, "tags_by_field_value": {}}
 
     from collections import Counter
     tag_set      = set()
@@ -439,13 +445,31 @@ def get_history_suggestions(rtype, context_record=None):
         if k in fields_with_options and counter:
             field_defaults[k] = counter.most_common(1)[0][0]
 
-    # Calculate filtered tags based on context_record
+    return {
+        "tags":                sorted(tag_set),
+        "field_values":        field_values,
+        "field_defaults":      field_defaults,
+        "tags_by_field_value": tags_by_field_value,
+    }
+
+
+def _apply_context_filter(tags_by_field_value, rtype, context_record):
+    """Compute filtered_tags for one context_record from cached aggregates.
+    Cheap per-call step (schema is itself cached) — run fresh on every
+    call so the context-specific result is never shared across requests."""
+    try:
+        schema      = ptos.get_schema()
+        type_schema = schema.get("type", {}).get(rtype, {})
+    except Exception:
+        schema = {}
+        type_schema = {}
+
     filtered_tags = set()
     if context_record:
         # 1. Schema-defined tags from resolve_tags (based on context field values)
         schema_tags = ptos.resolve_tags(schema, type_schema, context_record)
         filtered_tags.update(schema_tags)
-        
+
         # 2. Historical tags from records that match context field values
         for field, value in context_record.items():
             if field in tags_by_field_value and value:
@@ -459,11 +483,38 @@ def get_history_suggestions(rtype, context_record=None):
                         if v_str in tags_by_field_value[field]:
                             filtered_tags.update(tags_by_field_value[field][v_str])
 
+    return filtered_tags
+
+
+def get_history_suggestions(rtype, context_record=None):
+    """Scan all records of the given type and return:
+      tags: sorted list of all tags ever used for this type
+      filtered_tags: tags filtered by context_record's field cascade (schema + history based)
+      field_values: {fieldname: [values by freq]} for free-text fields
+      field_defaults: {fieldname: most_common_value} for schema option fields
+                      (used to pre-select the most likely value on type selection)
+
+    If context_record is provided, filtered_tags includes:
+    1. Schema-defined tags from resolve_tags() based on context field values
+    2. Historical tags that appeared in past records with matching field values
+
+    The expensive full-file scan is cached per rtype (key history:{rtype});
+    the context-dependent filter is re-run cheaply on every call since
+    context_record varies per request and the aggregates are already built.
+    """
+    cache_key = f"history:{rtype}"
+    cached = ptos._CACHE.get(cache_key)
+    if cached is None:
+        cached = _build_history_suggestions(rtype)
+        ptos._CACHE[cache_key] = cached
+
+    filtered_tags = _apply_context_filter(cached["tags_by_field_value"], rtype, context_record)
+
     return {
-        "tags":           sorted(tag_set),
+        "tags":           cached["tags"],
         "filtered_tags":  sorted(filtered_tags),
-        "field_values":   field_values,
-        "field_defaults": field_defaults,
+        "field_values":   cached["field_values"],
+        "field_defaults": cached["field_defaults"],
     }
 
 
@@ -472,7 +523,14 @@ def get_conditional_suggestions(rtype, field, value):
     other schema-option field across matching history records.
     Used for cascade pre-fill: user picks source=mgm → suggest booked_by=cso.
     Returns: {fieldname: most_common_value}
+    Fully cacheable per (rtype, field, value) — invalidated on any record
+    write via _invalidate_history_cache.
     """
+    cache_key = f"condsug:{rtype}:{field}:{value}"
+    cached = ptos._CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
     from collections import Counter
 
     try:
@@ -514,11 +572,13 @@ def get_conditional_suggestions(rtype, field, value):
             for val in vals:
                 field_counts[k][val] += 1
 
-    return {
+    result = {
         k: counter.most_common(1)[0][0]
         for k, counter in field_counts.items()
         if counter
     }
+    ptos._CACHE[cache_key] = result
+    return result
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1550,6 +1610,7 @@ def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
     except Exception as e:
         raise PTOSError(str(e))
 
+    _invalidate_history_cache()
     return {"old_line": old_line, "new_line": new_line,
             "changed_date": changed_date}
 
@@ -1565,6 +1626,7 @@ def delete_record(filepath, old_line, lineno=None):
         raise PTOSError(str(e))
     except Exception as e:
         raise PTOSError(str(e))
+    _invalidate_history_cache()
     return {"deleted_line": old_line}
 
 
@@ -1594,6 +1656,8 @@ def bulk_delete(records):
                 deleted += 1
             except Exception as e:
                 errors.append(str(e))
+    if deleted:
+        _invalidate_history_cache()
     return {"deleted": deleted, "errors": errors}
 
 
@@ -1623,6 +1687,8 @@ def bulk_set(records, set_args):
                     updated += 1
             except Exception as e:
                 errors.append(str(e))
+    if updated:
+        _invalidate_history_cache()
     return {"updated": updated, "errors": errors}
 
 
@@ -1980,6 +2046,7 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
             }
 
         new_filepath, new_lineno = ptos.append_record(new_line, return_position=True)
+        _invalidate_history_cache()
         return {
             "ok": True,
             "new_line": new_line,
@@ -2579,6 +2646,7 @@ def save_schema(schema_dict):
     """
     try:
         ptos._save_schema(schema_dict)
+        _invalidate_history_cache()
     except Exception as e:
         raise PTOSError(str(e))
 

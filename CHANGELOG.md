@@ -7,6 +7,18 @@ Format: `[version or date] — description`
 
 ## 2026-08-07
 
+### Cache history/conditional suggestions
+
+- **`get_history_suggestions(rtype, context_record)`** now splits into a cached scan-and-aggregate step (`_build_history_suggestions`, key `history:{rtype}`) and a cheap per-call context filter (`_apply_context_filter`). The full-file `scan_records(date.min, date.max)` no longer runs on every add/edit page load or cascade parent-field change — only on the first call after any invalidation. `context_record` is deliberately excluded from the cache key so `filtered_tags` still varies per request
+- **`get_conditional_suggestions(rtype, field, value)`** (behind `/api/field_suggest/<rtype>/<field>/<value>`) is now fully cached per `(rtype, field, value)` under key `condsug:{rtype}:{field}:{value}` — the live AJAX cascade fill no longer does a fresh full scan per selection
+- **Invalidation** — new `_invalidate_history_cache()` pops every `history:`/`condsug:` key after any record write: `append_record`, `edit_record`, `delete_record`, `advance_record`, `bulk_delete`, `bulk_set`, and `save_schema`. Correctness over precision: all types invalidated on any write, avoiding the "missed one condsug key" stale-suggestion bug class
+- **Zero behavior change** — no scan-window lookback bound (scan stays unbounded); suggestions returned are identical, this is purely a performance fix
+- **Tests** — `test_history_cache.py`: no-rescan on repeat call (scan call-counter), per-mutator invalidation for all seven write paths, condsug cache-hit identical dict, context-filter variance across context records, bulk invalidate-all
+
+---
+
+## 2026-08-07
+
 ### Time-proximity reminders for `due_time`
 
 - **Independent `_reminder_loop`** — a new background thread fires a "Todo due soon" notification once when a todo's `due_time` is within `remind_before_minutes` of arriving. Runs on its own timer, decoupled from the due-today `notify_interval`, so a tight window can't slip past between two slow polls

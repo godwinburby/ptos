@@ -250,6 +250,14 @@ x 2026-07-12 2026-07-10 Completed task
 - Drag→edit flow and multi-preset add also pass `return_to` through to redirect back to board
 - `onParentChange` in edit.html preserves `return_to` in URL when reloading field cascades
 
+## Suggestions caching (history + conditional)
+
+- **`get_history_suggestions(rtype, context_record=None)`** (`ptos_service.py`) splits into a cached scan-and-aggregate step `_build_history_suggestions(rtype)` (key `history:{rtype}`) and a cheap per-call filter `_apply_context_filter(tags_by_field_value, rtype, context_record)`. `context_record` is intentionally **excluded** from the cache key — the full-file scan is the expensive part; `filtered_tags` is recomputed from the cached aggregates on every call since it varies per request. Only the first call per rtype after invalidation triggers `scan_records(date.min, date.max, [f"type={rtype}"], None)`
+- **`get_conditional_suggestions(rtype, field, value)`** (`/api/field_suggest`) is fully cached under `condsug:{rtype}:{field}:{value}` — the whole return dict, since there's no per-call variable part. This removes the per-selection full scan that made cascade fill feel slow
+- **Invalidation** — `_invalidate_history_cache()` (`ptos_service.py`) pops every `history:`/`condsug:` key and is called after **any** record write: `append_record`, `edit_record`, `delete_record`, `advance_record`, `bulk_delete`, `bulk_set`, `save_schema`. Correctness over precision — all types invalidated on any write (writes are rare vs cascade reads; selectively invalidating individual `condsug` keys risks serving stale suggestions)
+- Scan window stays unbounded (`date.min`→`date.max`) — deliberate zero-behavior-change choice; the lookback bound from the spec was **not** applied
+- Tests: `tests/test_history_cache.py` (no-rescan call counter, per-mutator invalidation, cache-hit identity, context-filter variance, bulk invalidate-all)
+
 ## Bracket cross-linking (`[[Target]]`)
 
 ### Overview
