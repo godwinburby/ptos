@@ -60,6 +60,10 @@ sync_interval_minutes = 0
 [todo]
 # Background notification check interval in minutes (0 = disabled)
 notify_interval = 5
+# Advance warning before due_time in minutes (0 = disabled). Requires a due_time on the todo.
+remind_before_minutes = 0
+# How often the due-soon proximity check runs (independent of notify_interval)
+reminder_check_interval = 2
 # Months before done items are archived to done.YYYY.txt
 archive_months = 6
 # Priority labels shown in the todo UI (not stored in todo.txt)

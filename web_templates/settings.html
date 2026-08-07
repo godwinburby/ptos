@@ -174,6 +174,16 @@
       <div class="hint">How often PTOS checks for due todos. Takes effect after restarting PTOS.</div>
     </div>
     <div class="field-group" style="flex:1;min-width:120px;">
+      <label>Remind before due time (minutes)</label>
+      <input type="number" id="remind-before" min="0" max="120" style="width:80px;">
+      <div class="hint">0 disables. Gets a separate "due soon" notice before due_time. Requires a due_time on the todo.</div>
+    </div>
+    <div class="field-group" style="flex:1;min-width:120px;">
+      <label>Proximity check interval (minutes)</label>
+      <input type="number" id="reminder-check" min="1" max="120" style="width:80px;">
+      <div class="hint">How often the due-soon check runs, independent of the due-today poll. Takes effect after restarting PTOS.</div>
+    </div>
+    <div class="field-group" style="flex:1;min-width:120px;">
       <label>Archive done items after (months)</label>
       <input type="number" id="archive-months" min="1" max="24" style="width:80px;">
       <div class="hint">Done items older than this are moved to done.YYYY.txt archives on startup.</div>
@@ -287,6 +297,8 @@
   document.getElementById("max-full-backups").value = {{ backup.get('max_full_backups', 10) }};
   document.getElementById("max-config-backups").value = {{ backup.get('max_config_backups', 10) }};
   document.getElementById("notify-interval").value = {{ todo.get('notify_interval', 5) }};
+  document.getElementById("remind-before").value = {{ todo.get('remind_before_minutes', 0) }};
+  document.getElementById("reminder-check").value = {{ todo.get('reminder_check_interval', 2) }};
   document.getElementById("archive-months").value = {{ todo.get('archive_months', 6) }};
   document.getElementById("auto-sync-startup").checked = {{ 'true' if sync_auto_on_startup else 'false' }};
   document.getElementById("auto-sync-shutdown").checked = {{ 'true' if sync_auto_on_shutdown else 'false' }};
@@ -395,6 +407,8 @@
         max_full_backups: parseInt(document.getElementById("max-full-backups").value) || 10,
         max_config_backups: parseInt(document.getElementById("max-config-backups").value) || 10,
         notify_interval: parseInt(document.getElementById("notify-interval").value) || 5,
+        remind_before_minutes: parseInt(document.getElementById("remind-before").value) || 0,
+        reminder_check_interval: parseInt(document.getElementById("reminder-check").value) || 2,
         archive_months: parseInt(document.getElementById("archive-months").value) || 6,
         default_dashboard: defaultDashboard,
         backup_folders: backupFolders,

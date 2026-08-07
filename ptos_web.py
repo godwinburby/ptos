@@ -1463,6 +1463,14 @@ def settings_save():
             cfg.setdefault("backup", {})["max_config_backups"] = max(1, min(100, int(data["max_config_backups"])))
         if "notify_interval" in data:
             cfg.setdefault("todo", {})["notify_interval"] = max(1, min(120, int(data["notify_interval"])))
+        if "remind_before_minutes" in data:
+            cfg.setdefault("todo", {})["remind_before_minutes"] = max(0, min(120, int(data["remind_before_minutes"])))
+        if "reminder_check_interval" in data:
+            rci = max(1, int(data["reminder_check_interval"]))
+            rb = cfg.get("todo", {}).get("remind_before_minutes", 0)
+            if rb > 0:
+                rci = min(rci, rb)
+            cfg.setdefault("todo", {})["reminder_check_interval"] = rci
         if "archive_months" in data:
             cfg.setdefault("todo", {})["archive_months"] = max(1, min(24, int(data["archive_months"])))
         if "remote_name" in data:
@@ -3133,6 +3141,52 @@ def _housekeeping_loop(interval_minutes=5):
         time.sleep(interval_minutes * 60)
 
 
+def _reminder_key(t):
+    return (t.line_no, str(t.due), t.due_time)
+
+
+def _due_soon(todos, now, remind_before):
+    import datetime as _dt
+    due_soon = []
+    for t in todos:
+        if t.done or not t.due or not t.due_time:
+            continue
+        due_dt = _dt.datetime.combine(t.due, _dt.time.fromisoformat(t.due_time))
+        mins_until = (due_dt - now).total_seconds() / 60
+        if 0 <= mins_until <= remind_before:
+            due_soon.append((t, mins_until))
+    return due_soon
+
+
+def _reminder_loop(check_interval_minutes=2):
+    """Background thread: fire a 'due soon' notice when due_time is close.
+    Independent of _housekeeping_loop's due-today interval."""
+    import datetime as _dt
+    import ptos_todo as _todo_mod
+    time_notified = set()
+    while True:
+        try:
+            todo_cfg = svc.get_config().get("todo", {})
+            remind_before = todo_cfg.get("remind_before_minutes", 0)
+            if remind_before > 0:
+                todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
+                now = _dt.datetime.now()
+                for t, mins_until in _due_soon(todos, now, remind_before):
+                    key = _reminder_key(t)
+                    if key in time_notified:
+                        continue
+                    p = f"({t.priority}) " if t.priority else ""
+                    print(f"[reminder] {p}{t.description} due in {mins_until:.0f} min ({t.due} {t.due_time})")
+                    _system_notify("Todo due soon", f"{p}{t.description} (due {t.due_time})")
+                    task = {"line_no": t.line_no, "description": t.description, "priority": t.priority,
+                            "due": str(t.due), "due_time": t.due_time, "mins_until": round(mins_until)}
+                    _sse_broadcast("todo-reminder", [task])
+                    time_notified.add(key)
+        except Exception:
+            log.exception("reminder loop error")
+        time.sleep(max(1, svc.get_config().get("todo", {}).get("reminder_check_interval", 2)) * 60)
+
+
 def _sync_loop(interval_minutes=30):
     """Background thread: periodic rclone bisync."""
     while True:
@@ -3369,6 +3423,29 @@ if __name__ == "__main__":
             print(f"Todo notifications enabled (every {notify_min} min) [{_notify_platform or 'browser-only'}]")
     except Exception:
         pass
+
+def _start_reminder_thread():
+    """Start the due-time proximity reminder thread if enabled. Returns the thread or None."""
+    try:
+        todo_cfg = svc.get_config().get("todo", {})
+        remind_before = todo_cfg.get("remind_before_minutes", 0)
+        if remind_before > 0:
+            check_min = todo_cfg.get("reminder_check_interval", 2)
+            _t = threading.Thread(target=_reminder_loop, args=(check_min,), daemon=True)
+            _t.start()
+            print(f"Due-time reminders enabled ({remind_before} min ahead, checked every {check_min} min)")
+            notify_min = todo_cfg.get("notify_interval", 5)
+            if notify_min > 0 and remind_before < notify_min:
+                print(f"  Note: remind_before_minutes ({remind_before}) < notify_interval ({notify_min}); "
+                      f"the separate reminder loop still catches the window.")
+            return _t
+    except Exception:
+        pass
+    return None
+
+
+if __name__ == "__main__":
+    _start_reminder_thread()
 
     # Start periodic sync background thread
     try:
