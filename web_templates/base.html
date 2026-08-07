@@ -1457,6 +1457,19 @@ function updateSyncDot(state) {
           }
           _showTodoToast(tasks);
         }
+        if (msg.type === "todo-reminder") {
+          var tasks = msg.data;
+          if ("Notification" in window && Notification.permission === "default") {
+            Notification.requestPermission();
+          }
+          if ("Notification" in window && Notification.permission === "granted") {
+            var t = tasks[0];
+            var p = t.priority ? "(" + t.priority + ") " : "";
+            var body = p + t.description + " (due in ~" + t.mins_until + " min, " + t.due + " " + t.due_time + ")";
+            new Notification("Todo due soon", {body: body, icon: "/static/icon-192.png"});
+          }
+          _showTodoToast(tasks);
+        }
         if (msg.type === "sync-start") {
           updateSyncDot("running");
         }

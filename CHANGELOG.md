@@ -5,6 +5,20 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-08-07
+
+### Time-proximity reminders for `due_time`
+
+- **Independent `_reminder_loop`** — a new background thread fires a "Todo due soon" notification once when a todo's `due_time` is within `remind_before_minutes` of arriving. Runs on its own timer, decoupled from the due-today `notify_interval`, so a tight window can't slip past between two slow polls
+- **Config** — `[todo] remind_before_minutes` (0 = disabled, the default; no thread started) and `[todo] reminder_check_interval` (default 2 min, clamped server-side to ≤ `remind_before_minutes`). Both editable in Settings → Todo; restart required, same as `notify_interval`
+- **Scans all open todos with a `due_time`**, not just today's — a task due tomorrow at 00:10 is caught once inside the window. Already-past `due_time` and done tasks are skipped; fires once per `(line_no, due, due_time)` (in-memory dedup, same caveat as the due-today set), so editing `due_time` re-arms it
+- **Web notification via SSE** — `_reminder_loop` now also broadcasts a `todo-reminder` SSE event (task dict `{line_no, description, priority, due, due_time, mins_until}`) so the browser shows a toast + "Todo due soon" Notification, alongside the OS toast and a `[reminder]` console trace. Live-only, deliberately not added to the `_pending_notifications` replay cache (avoids the hardcoded `todo-due` replay type and the housekeeping `clear()` race)
+- **Startup note** — `_start_reminder_thread()` prints a note when `remind_before_minutes < notify_interval`, flagging the missed-window scenario that the independent loop is designed to fix
+- **`_housekeeping_loop` untouched** — due-today behavior is exactly as before
+- **Tests** — `test_reminder.py`: window firing, too-early/past/done/no-time skipped, tomorrow-caught, dedup-key on edited time, config clamping, thread-start gating, SSE `todo-reminder` payload shape
+
+---
+
 ## 2026-08-05
 
 ### Schema-driven linkable fields + backlinks panel
