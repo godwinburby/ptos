@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 import ptos
 from ptos_service import get_frequent_presets, increment_preset_use
 
@@ -121,3 +123,169 @@ class TestIncrementPresetUse:
         monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
         increment_preset_use("coffee")
         assert not (tmp_path / "nope.toml").exists()
+
+
+class TestInstantPresets:
+    """Single presets flagged `instant = true` save via /api/preset_add
+    instead of opening the add form."""
+
+    def _write_presets(self, tmp_path, monkeypatch):
+        presets_path = Path(ptos.PRESETS_PATH)
+        presets_path.parent.mkdir(parents=True, exist_ok=True)
+        presets_path.write_text(
+            '[presets.exercise]\n'
+            'type = "habit"\n'
+            'name = "exercise"\n'
+            'instant = true\n'
+            '\n'
+            '[presets.snacks]\n'
+            'type = "expense"\n'
+            'domain = "home"\n'
+            'category = "food"\n'
+            'amount = 50\n'
+            '\n'
+            '[presets.commute]\n'
+            'records = ["auto", "bus"]\n'
+            '\n'
+            '[presets.auto]\n'
+            'type = "expense"\n'
+            'domain = "self"\n'
+            'category = "transport"\n'
+            'amount = 60\n'
+            '\n'
+            '[presets.bus]\n'
+            'type = "expense"\n'
+            'domain = "self"\n'
+            'category = "transport"\n'
+            'amount = 30\n',
+            encoding="utf-8",
+        )
+        ptos._invalidate("presets")
+
+    def _records(self, tmp_path):
+        records_dir = ptos.RECORDS_DIR
+        os.makedirs(records_dir, exist_ok=True)
+        files = list(Path(records_dir).glob("*.log"))
+        if not files:
+            return []
+        return files[0].read_text(encoding="utf-8").strip().splitlines()
+
+    def test_instant_preset_appends_record(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/preset_add", json={"name": "exercise"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["count"] == 1
+        lines = self._records(tmp_path)
+        assert len(lines) == 1
+        assert "type=habit" in lines[0]
+        assert "name=exercise" in lines[0]
+
+    def test_non_instant_preset_rejected(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/preset_add", json={"name": "snacks"})
+        data = resp.get_json()
+        assert data["ok"] is False
+        assert "not a multi-record or instant preset" in data["error"]
+
+    def test_unknown_preset_rejected(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/preset_add", json={"name": "nope"})
+        data = resp.get_json()
+        assert data["ok"] is False
+
+    def test_multi_preset_still_works(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/preset_add", json={"name": "commute"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["count"] == 2
+
+    def test_instant_preset_excluded_from_multi_card(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import _multi_presets
+        multi = _multi_presets()
+        assert "exercise" not in multi
+        assert "commute" in multi
+
+    def test_add_page_renders_instant_chip(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/add")
+        html = resp.get_data(as_text=True)
+        assert 'data-name="exercise"' in html
+        assert 'class="preset-chip preset-instant"' in html
+
+    def test_preset_instant_toggle_on(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/preset_instant", json={"name": "snacks", "instant": True})
+        assert resp.get_json()["ok"] is True
+        import tomllib
+        data = tomllib.loads(Path(ptos.PRESETS_PATH).read_text(encoding="utf-8"))
+        assert data["presets"]["snacks"].get("instant") is True
+
+    def test_preset_instant_toggle_off(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/preset_instant", json={"name": "exercise", "instant": False})
+        assert resp.get_json()["ok"] is True
+        import tomllib
+        data = tomllib.loads(Path(ptos.PRESETS_PATH).read_text(encoding="utf-8"))
+        assert "instant" not in data["presets"]["exercise"]
+
+    def test_preset_instant_toggle_unknown(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/preset_instant", json={"name": "nope", "instant": True})
+        assert resp.get_json()["ok"] is False
+
+    def test_save_preset_with_instant(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/save_preset", json={
+            "name": "walk",
+            "record": {"type": "habit", "name": "walk"},
+            "note": "",
+            "instant": True,
+        })
+        assert resp.get_json()["ok"] is True
+        import tomllib
+        data = tomllib.loads(Path(ptos.PRESETS_PATH).read_text(encoding="utf-8"))
+        assert data["presets"]["walk"]["instant"] is True
+
+    def test_save_preset_default_not_instant(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/save_preset", json={
+            "name": "walk",
+            "record": {"type": "habit", "name": "walk"},
+            "note": "",
+        })
+        assert resp.get_json()["ok"] is True
+        import tomllib
+        data = tomllib.loads(Path(ptos.PRESETS_PATH).read_text(encoding="utf-8"))
+        assert "instant" not in data["presets"]["walk"]
+
+    def test_set_preset_instant_direct(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        import ptos_service
+        ptos_service.set_preset_instant("snacks", True)
+        ptos._invalidate("presets")
+        import tomllib
+        data = tomllib.loads(Path(ptos.PRESETS_PATH).read_text(encoding="utf-8"))
+        assert data["presets"]["snacks"].get("instant") is True

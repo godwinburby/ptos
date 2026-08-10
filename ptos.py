@@ -3707,10 +3707,11 @@ def save_query(name, args, extra_filters):
     print(f"\nQuery '{name}' saved to queries.toml")
     print(f"Run with: ptos -q {name}")
 
-def save_as_preset(name, record, note=None):
+def save_as_preset(name, record, note=None, instant=False):
     """Write a preset to presets.toml using tomli-w.
     If a preset with the same name already exists it is replaced.
     note: optional note string to store alongside the record fields.
+    instant: flag the preset for one-click (no form) record saving.
     """
     try:
         import tomli_w
@@ -3741,6 +3742,8 @@ def save_as_preset(name, record, note=None):
             entry[k] = v
     if note:
         entry["note"] = note
+    if instant:
+        entry["instant"] = True
 
     data["presets"][name] = entry
 
@@ -3777,6 +3780,39 @@ def delete_preset(name):
     with AtomicWrite(presets_path, "presets") as w:
         tomli_w.dump(data, w.stream)
     print(f"Preset '{name}' deleted from presets.toml")
+
+
+def set_preset_instant(name, instant):
+    """Set or clear the `instant` flag on a preset in presets.toml."""
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+
+    presets_path = os.path.join(CONFIG_DIR, "presets.toml")
+    if not os.path.exists(presets_path):
+        raise ValueError(f"Preset '{name}' not found")
+
+    with open(presets_path, "rb") as f:
+        try:
+            import tomllib
+        except ImportError:
+            import tomli as tomllib
+        data = tomllib.load(f)
+
+    presets = data.get("presets", {})
+    if name not in presets:
+        raise ValueError(f"Preset '{name}' not found")
+
+    entry = presets[name]
+    if instant:
+        entry["instant"] = True
+    else:
+        entry.pop("instant", None)
+    data["presets"] = presets
+
+    with AtomicWrite(presets_path, "presets") as w:
+        tomli_w.dump(data, w.stream)
 
 
 def interactive_add(schema, date=None, save_preset_name=None):

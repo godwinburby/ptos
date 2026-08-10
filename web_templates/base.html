@@ -301,6 +301,13 @@
       border: 1.5px solid var(--accent); text-decoration: none; transition: all .15s;
     }
     .preset-chip:hover { background: var(--accent); color: #fff; }
+    .preset-instant {
+      background: var(--success-lt);
+      color: var(--success);
+      border-color: var(--success);
+      cursor: pointer;
+    }
+    .preset-instant:hover { background: var(--success); color: #fff; }
     .preset-chip-wrap {
       display: inline-flex; align-items: center; gap: 2px;
     }
@@ -308,6 +315,16 @@
       display: inline-block; padding: 2px 6px; margin-left: -4px;
       font-size: 12px; font-weight: 700; color: var(--error);
       background: transparent; border: none; border-radius: 10px; cursor: pointer;
+    }
+    .preset-instant-toggle {
+      display: inline-block; padding: 2px 6px;
+      font-size: 12px; font-weight: 700; color: var(--sub);
+      background: transparent; border: 1.5px solid var(--border); border-radius: 10px;
+      cursor: pointer; line-height: 1.2;
+    }
+    .preset-instant-toggle:hover { border-color: var(--success); color: var(--success); }
+    .preset-instant-toggle[data-active="1"] {
+      color: var(--success); border-color: var(--success); background: var(--success-lt);
     }
 
     /* output */
