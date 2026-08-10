@@ -2652,10 +2652,10 @@ def delete_note(category, slug):
     return ptos.delete_note(category, slug)
 
 
-def save_as_preset(name, record, note=None):
+def save_as_preset(name, record, note=None, instant=False):
     """Save a record as a preset."""
     try:
-        return ptos.save_as_preset(name, record, note)
+        return ptos.save_as_preset(name, record, note, instant=instant)
     except Exception as e:
         raise PTOSError(str(e))
 
@@ -2664,6 +2664,14 @@ def delete_preset(name):
     """Delete a preset by name."""
     try:
         ptos.delete_preset(name)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def set_preset_instant(name, instant):
+    """Set or clear the instant flag on a preset."""
+    try:
+        ptos.set_preset_instant(name, instant)
     except Exception as e:
         raise PTOSError(str(e))
 

@@ -130,8 +130,16 @@ var tp;
   <div class="chip-group" id="frequent-presets">
     {% for name in frequent_presets %}
     <span class="preset-chip-wrap">
+      {% if name in instant_presets %}
+      <button class="preset-chip preset-instant" onclick="addMultiPreset('{{ name }}', this)">
+        + {{ name }} <span style="opacity:.7;font-size:11px;">instant</span>
+      </button>
+      {% else %}
       <a href="/add?preset={{ name }}" class="preset-chip"
          onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
+      {% endif %}
+      <button class="preset-instant-toggle" {% if name in instant_presets %}data-active="1"{% endif %}
+              onclick="toggleInstantPreset('{{ name }}', this)" title="Toggle instant save">⚡</button>
       <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
     </span>
     {% endfor %}
@@ -140,8 +148,16 @@ var tp;
   <div class="chip-group" id="remaining-presets" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
     {% for name in remaining_presets %}
     <span class="preset-chip-wrap">
+      {% if name in instant_presets %}
+      <button class="preset-chip preset-instant" onclick="addMultiPreset('{{ name }}', this)">
+        + {{ name }} <span style="opacity:.7;font-size:11px;">instant</span>
+      </button>
+      {% else %}
       <a href="/add?preset={{ name }}" class="preset-chip"
          onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
+      {% endif %}
+      <button class="preset-instant-toggle" {% if name in instant_presets %}data-active="1"{% endif %}
+              onclick="toggleInstantPreset('{{ name }}', this)" title="Toggle instant save">⚡</button>
       <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
     </span>
     {% endfor %}
@@ -166,6 +182,8 @@ var tp;
   </div>
   <div id="multi-msg-home" style="font-size:13px;margin-top:8px;display:none;"></div>
 </div>
+{% else %}
+<div id="multi-msg-home" style="font-size:13px;display:none;"></div>
 {% endif %}
 
 <!-- due preview -->
@@ -265,6 +283,24 @@ function toggleAllPresets(btn) {
   var open = el.style.display !== "none";
   el.style.display = open ? "none" : "flex";
   btn.textContent  = open ? "Show all ▾" : "Show less ▲";
+}
+
+function toggleInstantPreset(name, btn) {
+  const active = btn.getAttribute("data-active") === "1";
+  fetch("/api/preset_instant", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({name, instant: !active})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      location.reload();
+    } else {
+      alert("Toggle failed: " + (d.error || "Unknown error"));
+    }
+  })
+  .catch(e => alert("Toggle failed: " + String(e)));
 }
 
 function deletePreset(name, btn) {

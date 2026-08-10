@@ -373,6 +373,24 @@ def _build_global_field_defs(schema, current_record=None):
     return defs
 
 
+def _strip_and_validate_record(schema, record, label):
+    """Strip non-schema metadata keys (use_count, return_to, instant, alias)
+    from a preset record dict, then validate it. Returns (record, err)."""
+    known = {"type", "tag", "note"}
+    known.update(schema.get("fields", {}).keys())
+    known.update(schema.get("global_fields", {}).keys())
+    rtype = record.get("type")
+    if rtype:
+        ts = schema.get("type", {}).get(rtype, {})
+        known.update(ts.get("required", []))
+        known.update(ts.get("fields", {}).keys())
+    record = {k: v for k, v in record.items() if k in known}
+    problems = svc.validate_record(schema, record)
+    if problems:
+        return None, f"preset '{label}': {problems[0]}"
+    return record, None
+
+
 def _resolve_multi_preset(name):
     presets = svc.get_presets()
     pd = presets.get(name, {})
@@ -395,22 +413,35 @@ def _resolve_multi_preset(name):
             ref = presets.get(ref["alias"], {})
         if isinstance(ref, dict) and "records" in ref:
             return None, f"nested multi-record presets not supported"
-        record = dict(ref)
-        # Strip metadata fields (e.g. use_count) not in the record schema
-        known = {"type", "tag", "note"}
-        known.update(schema.get("fields", {}).keys())
-        known.update(schema.get("global_fields", {}).keys())
-        rtype = record.get("type")
-        if rtype:
-            ts = schema.get("type", {}).get(rtype, {})
-            known.update(ts.get("required", []))
-            known.update(ts.get("fields", {}).keys())
-        record = {k: v for k, v in record.items() if k in known}
-        problems = svc.validate_record(schema, record)
-        if problems:
-            return None, f"preset '{item}': {problems[0]}"
+        record, err = _strip_and_validate_record(schema, dict(ref), item)
+        if err:
+            return None, err
         resolved.append(record)
     return resolved, None
+
+
+def _resolve_preset_records(name):
+    """Resolve a preset into the list of records to append. Supports both
+    multi-record presets (`records = [...]`) and single presets flagged
+    `instant = true`. Returns (records, err)."""
+    presets = svc.get_presets()
+    pd = presets.get(name, {})
+    if isinstance(pd, dict) and "alias" in pd:
+        pd = presets.get(pd["alias"], {})
+    if not isinstance(pd, dict):
+        return None, f"'{name}' is not a multi-record or instant preset"
+    if "records" in pd:
+        return _resolve_multi_preset(name)
+    if pd.get("instant"):
+        try:
+            schema = svc.get_schema()
+        except Exception as e:
+            return None, str(e)
+        record, err = _strip_and_validate_record(schema, dict(pd), name)
+        if err:
+            return None, err
+        return [record], None
+    return None, f"'{name}' is not a multi-record or instant preset"
 
 
 def _multi_presets():
@@ -422,6 +453,18 @@ def _multi_presets():
         if records is not None:
             refs = p["records"]
             result[name] = ", ".join(refs) if isinstance(refs, list) else ""
+    return result
+
+
+def _instant_presets():
+    """Names of single presets flagged `instant = true` (excludes aliases
+    and multi-record presets). These render as one-click save buttons."""
+    result = set()
+    for name, p in svc.get_presets().items():
+        if not isinstance(p, dict) or "records" in p or "alias" in p:
+            continue
+        if p.get("instant"):
+            result.add(name)
     return result
 
 
@@ -441,6 +484,7 @@ def home():
     presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
     multi_presets = _multi_presets()
+    instant_presets = _instant_presets()
     
     # Get selected due config from query param, default to first one
     selected_due = request.args.get("due", None)
@@ -557,6 +601,7 @@ def home():
         frequent_presets=freq,
         remaining_presets=rem,
         multi_presets=multi_presets,
+        instant_presets=instant_presets,
         due_count=due_count, due_rows=due_rows[:5],
         due_configs=list(due_configs.keys()), selected_due=selected_due or "default",
         stats=stats,
@@ -874,6 +919,7 @@ def add_get():
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
     freq_presets, rem_presets = svc.get_frequent_presets(6)
     multi_presets = _multi_presets()
+    instant_presets = _instant_presets()
     selected_type = request.args.get("type", "")
     preset_name   = request.args.get("preset", "")
     field_values  = {k: v for k, v in request.args.items()
@@ -927,6 +973,7 @@ def add_get():
         tab="add", title="Add Record", now=_now_str(),
         types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
         multi_presets=multi_presets,
+        instant_presets=instant_presets,
         selected_type=selected_type, field_defs=field_defs,
         global_field_defs=global_field_defs,
         tag_options=tag_options, history_tags=history_filtered_tags,
@@ -979,6 +1026,7 @@ def add_post():
             tab="add", title="Add Record", now=_now_str(),
             types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
             multi_presets=_multi_presets(),
+            instant_presets=_instant_presets(),
             selected_type=rtype, field_defs=fd,
             global_field_defs=_build_global_field_defs(schema, record),
             tag_options=svc.resolve_tags(schema, ts, record),
@@ -995,6 +1043,7 @@ def add_post():
             tab="add", title="Add Record", now=_now_str(),
             types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
             multi_presets=_multi_presets(),
+            instant_presets=_instant_presets(),
             selected_type=rtype, field_defs=fd,
             global_field_defs=_build_global_field_defs(schema, record),
             tag_options=svc.resolve_tags(schema, ts, record),
@@ -2954,7 +3003,7 @@ def api_preset_add():
     note     = data.get("note", "").strip() or None
     if not name:
         return jsonify(ok=False, error="Preset name required")
-    records, err = _resolve_multi_preset(name)
+    records, err = _resolve_preset_records(name)
     if err:
         return jsonify(ok=False, error=err)
     added = []
@@ -2981,7 +3030,7 @@ def api_save_preset():
     if not record.get("type"):
         return jsonify(ok=False, error="No record type in form — fill at least the type field")
     try:
-        svc.save_as_preset(name, record, note=note)
+        svc.save_as_preset(name, record, note=note, instant=bool(data.get("instant")))
         svc.invalidate("presets")
         return jsonify(ok=True, name=name)
     except PTOSError as e:
@@ -3009,6 +3058,23 @@ def api_preset_delete():
         svc.delete_preset(name)
         svc.invalidate("presets")
         return jsonify(ok=True)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/preset_instant", methods=["POST"])
+def api_preset_instant():
+    data    = request.get_json(silent=True) or {}
+    name    = data.get("name", "").strip()
+    instant = bool(data.get("instant"))
+    if not name:
+        return jsonify(ok=False, error="Preset name required")
+    try:
+        svc.set_preset_instant(name, instant)
+        svc.invalidate("presets")
+        return jsonify(ok=True, instant=instant)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
     except Exception as e:
