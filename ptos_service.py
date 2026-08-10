@@ -116,14 +116,14 @@ def invalidate_cache(keys):
 
 
 def _invalidate_history_cache():
-    """Invalidate every history/conditional-suggestion cache key.
+    """Invalidate every history/conditional-suggestion/habit cache key.
 
     Called after any record write (or schema change) regardless of which
     rtype changed — correctness over precision: writes are rare compared
     to cascade reads, and selectively invalidating individual condsug keys
     risks missing one and serving stale suggestions."""
     for key in list(ptos._CACHE.keys()):
-        if key.startswith("history:") or key.startswith("condsug:"):
+        if key.startswith("history:") or key.startswith("condsug:") or key.startswith("habit:"):
             ptos._CACHE.pop(key, None)
 
 
@@ -1843,6 +1843,76 @@ def get_boards():
     return boards
 
 
+def get_habit_names():
+    """List configured [habit.*] entries, for the /habits index page."""
+    try:
+        queries = ptos.get_queries()
+    except Exception as e:
+        raise PTOSError(str(e))
+    return sorted(k.split(".", 1)[1] for k in queries if k.startswith("habit."))
+
+
+def get_habit_data(habit_name):
+    """Return streak + weekly presence grid for a configured habit.
+
+    Cached per habit under key habit:{habit_name}; invalidated by
+    _invalidate_history_cache() on any record write."""
+    cache_key = f"habit:{habit_name}"
+    cached = ptos._CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        queries = ptos.get_queries()
+    except Exception as e:
+        raise PTOSError(str(e))
+    cfg = queries.get(f"habit.{habit_name}")
+    if not cfg or not isinstance(cfg, dict):
+        raise PTOSError(f"Habit '{habit_name}' not found in queries.toml")
+
+    filters = cfg.get("filters", [])
+    if not filters:
+        raise PTOSError(f"Habit '{habit_name}' has no filters defined")
+    weeks = int(cfg.get("weeks", 12))
+
+    today = dt.date.today()
+    start = today - dt.timedelta(weeks=weeks)
+    matches = ptos.find_records_with_location(filters, start=start, end=today)
+
+    days_present = set()
+    for _, _, line in matches:
+        try:
+            d, _, _ = ptos.parse_line(line)
+            days_present.add(d)
+        except Exception:
+            continue
+
+    streak = 0
+    cursor = today
+    if today not in days_present:
+        cursor = today - dt.timedelta(days=1)
+    while cursor in days_present:
+        streak += 1
+        cursor -= dt.timedelta(days=1)
+
+    grid = [
+        {"date": str(start + dt.timedelta(days=i)),
+         "present": (start + dt.timedelta(days=i)) in days_present}
+        for i in range((today - start).days + 1)
+    ]
+
+    result = {
+        "habit_name": habit_name,
+        "streak": streak,
+        "weeks": weeks,
+        "grid": grid,
+        "total_days": len(grid),
+        "days_done": len(days_present),
+    }
+    ptos._CACHE[cache_key] = result
+    return result
+
+
 def get_board_data(board_name):
     """Load record data for each column of a board.
     Returns dict mapping column type → list of parsed record dicts
@@ -2065,7 +2135,7 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
 # Query TOML management (full write)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None):
+def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None):
     """Build and write queries.toml using tomli-w with atomic write.
 
     raw_queries:    {name: {where, time, group, search, sort, sum}}
@@ -2212,6 +2282,17 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
             entry["rollup_field"] = rollup_field
             entry["rollup_op"] = board_cfg.get("rollup_op", "count")
         data[f"board.{bare}"] = entry
+
+    # Habits
+    for name, habit_cfg in (raw_habits or {}).items():
+        bare = _clean_bare_name(name)
+        hfilters = habit_cfg.get("filters", [])
+        if not hfilters or not isinstance(hfilters, list):
+            raise PTOSError(f"Habit '{name}' must have a non-empty filters list")
+        entry = {"filters": hfilters}
+        if habit_cfg.get("weeks"):
+            entry["weeks"] = int(habit_cfg["weeks"])
+        data[f"habit.{bare}"] = entry
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
         tomli_w.dump(data, w.stream)

@@ -5,6 +5,20 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-08-10
+
+### Habit tracker (`/habits` heatmap + streak)
+
+- **New `type=habit`** — added to `[types].allowed` + `[type.habit]` in starter schema (and live user schema), `required = ["name"]` with `name` options. A habit is just a record: `2026-08-10 type=habit name=meditation` — no new write path, logging reuses `append_record`/presets
+- **`/habits` page** — one card per configured habit: current streak badge, GitHub-style contribution grid (weeks as columns, 7 day-rows, filled = present), and "X of Y days" summary. Grid presence is boolean — logging twice in a day still counts as one present cell. Empty state shows the config snippet. Nav link in sidebar next to Board (`icons/habits.html`)
+- **Config** — `["habit.NAME"]` tables in `queries.toml` (quoted dotted key form, same as boards — the bare `[habit.NAME]` nested-table form does NOT load): `filters` (any valid `field=value` list, same syntax `find_records_with_location` takes), `weeks` (default 12). Existing types work too: `filters = ["type=exercise"]` tracks "did I exercise today"
+- **Streak rule** — walks back from today, or yesterday if today isn't logged yet ("today isn't over yet" — a missed morning doesn't zero your streak until the day actually passes)
+- **Caching** — `get_habit_data` cached per habit under `habit:{name}`; `_invalidate_history_cache()` now also pops `habit:` keys, so all 7 existing record-write invalidation paths cover habits with zero new call sites
+- **Query Builder** — new "Habits" tab (name, space-separated `field=value` filters, weeks), round-tripping through `save_queries_full(raw_habits=...)` which validates a non-empty filters list
+- **Tests** — `test_habits.py`: consecutive/gap/today-missing streak rules, double-log single present, days-done totals, cache invalidation on `append_record`, no-rescan on repeat call, unconfigured name raises `PTOSError`
+
+---
+
 ## 2026-08-07
 
 ### Cache history/conditional suggestions

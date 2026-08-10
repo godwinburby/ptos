@@ -156,4 +156,18 @@ columns = ["followup", "assessment", "prescription", "fitting"]
 time_window = "this-month"
 limit = 50
 
+# ══════════════════════════════════════════════════════════════════════════════
+
+# ══════════════════════════════════════════════════════════════════════════════
+# HABITS
+# ══════════════════════════════════════════════════════════════════════════════
+
+["habit.meditation"]
+filters = ["type=habit", "name=meditation"]
+weeks = 12
+
+["habit.walk"]
+filters = ["type=habit", "name=walk"]
+weeks = 12
+
 

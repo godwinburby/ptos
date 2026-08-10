@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .habits-header { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px; }
+  .habits-header .page-title { margin:0; }
+  .habits-grid-list { display:flex;flex-direction:column;gap:16px; }
+  .habit-card { background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px; }
+  .habit-head { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px; }
+  .habit-name { font-size:16px;font-weight:700; }
+  .habit-streak { font-size:15px;font-weight:800;color:#fff;background:var(--accent);padding:3px 12px;border-radius:14px; }
+  .habit-stats { font-size:12px;color:var(--sub); }
+  .habit-grid { display:flex;gap:3px;overflow-x:auto;padding:4px 0 8px; }
+  .habit-week { display:flex;flex-direction:column;gap:3px; }
+  .habit-cell { width:13px;height:13px;border-radius:3px;background:var(--border); }
+  .habit-cell.on { background:#2ECC71; }
+  .habit-legend { display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub); }
+  .habit-empty { text-align:center;padding:40px;color:var(--sub);font-size:14px; }
+</style>
+
+<div class="habits-header">
+  <div class="page-title">Habits</div>
+  {% if habits %}
+  <span style="font-size:13px;color:var(--sub);">{{ habits | length }} habit(s) configured</span>
+  {% endif %}
+</div>
+
+{% if not habits %}
+<div class="card" style="max-width:520px;padding:24px;margin:0 auto;">
+  <div style="font-size:15px;font-weight:700;margin-bottom:8px;">No habits configured yet</div>
+  <div style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Add a <code>[habit.NAME]</code> table to <code>queries.toml</code>, or use the
+    <a href="/query-builder">Query Builder</a> Habits tab.
+  </div>
+  <pre style="background:var(--bg);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;">[habit.meditation]
+filters = ["type=habit", "name=meditation"]
+weeks = 12</pre>
+</div>
+{% endif %}
+
+<div class="habits-grid-list">
+  {% for hname, h in habits.items() %}
+  <div class="habit-card">
+    <div class="habit-head">
+      <span class="habit-name">{{ hname | replace('_',' ') }}</span>
+      <span class="habit-streak">{{ h.streak }} day{{ '' if h.streak == 1 else 's' }}</span>
+      <span class="habit-stats">{{ h.days_done }} of {{ h.total_days }} days · last {{ h.weeks }} weeks</span>
+    </div>
+    <div class="habit-grid">
+      {% for week in h.grid | batch(7) %}
+      <div class="habit-week">
+        {% for cell in week %}
+        <div class="habit-cell {{ 'on' if cell.present }}" title="{{ cell.date }}"></div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+    </div>
+    <div class="habit-legend">
+      <span>less</span>
+      <div class="habit-cell"></div>
+      <div class="habit-cell on"></div>
+      <span>more</span>
+      <span style="margin-left:auto;">{{ h.streak }} day streak</span>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endblock %}

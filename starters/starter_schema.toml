@@ -25,7 +25,7 @@
 # --------------------------------------------------
 
 [types]
-allowed = ["expense", "income", "investment", "exercise", "sleep", "mood", "learning"]
+allowed = ["expense", "income", "investment", "exercise", "sleep", "mood", "learning", "habit"]
 
 # --------------------------------------------------
 # GLOBAL FIELD METADATA
@@ -240,4 +240,17 @@ options = [
     "coding", "finance", "productivity", "philosophy",
     "health", "science", "history", "creative",
     "language", "design", "other",
+]
+
+# ----------------------
+# HABIT
+# ----------------------
+
+[type.habit]
+required = ["name"]
+
+[type.habit.fields.name]
+options = [
+    "meditation", "reading", "journaling", "exercise",
+    "prayer", "wakeup", "walk", "water",
 ]
