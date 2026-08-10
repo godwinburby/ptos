@@ -1876,7 +1876,7 @@ def get_habit_data(habit_name):
     weeks = int(cfg.get("weeks", 12))
 
     today = dt.date.today()
-    start = today - dt.timedelta(weeks=weeks)
+    start = today - dt.timedelta(days=weeks * 7 - 1)
     matches = ptos.find_records_with_location(filters, start=start, end=today)
 
     days_present = set()

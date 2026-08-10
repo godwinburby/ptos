@@ -93,8 +93,8 @@ class TestHabitDataBasics:
         ])
         data = svc.get_habit_data("med")
         assert data["days_done"] == 2
-        assert data["total_days"] == 15
-        assert len(data["grid"]) == 15
+        assert data["total_days"] == 14
+        assert len(data["grid"]) == 14
 
     def test_habit_names_lists_configured(self):
         _clean_cache()
