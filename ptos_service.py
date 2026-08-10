@@ -116,14 +116,15 @@ def invalidate_cache(keys):
 
 
 def _invalidate_history_cache():
-    """Invalidate every history/conditional-suggestion/habit cache key.
+    """Invalidate every history/conditional-suggestion/habit/calendar cache key.
 
     Called after any record write (or schema change) regardless of which
     rtype changed — correctness over precision: writes are rare compared
     to cascade reads, and selectively invalidating individual condsug keys
     risks missing one and serving stale suggestions."""
     for key in list(ptos._CACHE.keys()):
-        if key.startswith("history:") or key.startswith("condsug:") or key.startswith("habit:"):
+        if (key.startswith("history:") or key.startswith("condsug:")
+                or key.startswith("habit:") or key.startswith("calendar:")):
             ptos._CACHE.pop(key, None)
 
 
@@ -1913,6 +1914,110 @@ def get_habit_data(habit_name):
     return result
 
 
+def get_calendar_names():
+    """List configured [calendar.*] entries, for the /calendar index page."""
+    try:
+        queries = ptos.get_queries()
+    except Exception as e:
+        raise PTOSError(str(e))
+    return sorted(k.split(".", 1)[1] for k in queries if k.startswith("calendar."))
+
+
+def get_calendar_data(name, year=None, month=None):
+    """Return a month grid of records for a calendar view.
+
+    name == "__all__" renders the implicit global view (every record, no
+    config entry needed); any other name must match a [calendar.*] table.
+    year/month default to the initial month from the calendar's time_window
+    (falling back to the current month); pass explicit values to navigate
+    to a different month. Cached per (name, year, month) under key
+    calendar:{name}:{year}:{month}; invalidated by _invalidate_history_cache()
+    on any record write."""
+    y = year
+    m = month
+    cache_key = f"calendar:{name}:{y}:{m}"
+    cached = ptos._CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    if name == "__all__":
+        filters = []
+        time_window = "this-month"
+    else:
+        try:
+            queries = ptos.get_queries()
+        except Exception as e:
+            raise PTOSError(str(e))
+        cfg = queries.get(f"calendar.{name}")
+        if not cfg or not isinstance(cfg, dict):
+            raise PTOSError(f"Calendar '{name}' not found in queries.toml")
+        filters = cfg.get("filters", [])
+        if not filters:
+            raise PTOSError(f"Calendar '{name}' has no filters defined")
+        time_window = cfg.get("time_window", "this-month")
+
+    if y is None or m is None:
+        try:
+            initial = _resolve_time(time_window)[0]
+        except Exception:
+            initial = dt.date.today()
+        y = y or initial.year
+        m = m or initial.month
+
+    import calendar as _cal
+    first_weekday, days_in_month = _cal.monthrange(y, m)
+    start = dt.date(y, m, 1)
+    end = dt.date(y, m, days_in_month)
+
+    matches = ptos.find_records_with_location(filters, start=start, end=end)
+
+    by_day = {}
+    for fp, idx, line in matches:
+        try:
+            d, kv, _ = ptos.parse_line(line)
+        except Exception:
+            continue
+        row = _parse_record(line) or {}
+        title = next((str(row[f]) for f in ("name", "client", "intent", "title", "subject")
+                      if row.get(f)), "")
+        if not title:
+            t = kv.get("type", "")
+            t = ", ".join(t) if isinstance(t, list) else str(t)
+            title = f"({t})" if t else ""
+        by_day.setdefault(d.day, []).append({
+            "line": line,
+            "title": title,
+            "note": row.get("note", ""),
+        })
+
+    weeks = []
+    week = [None] * first_weekday
+    for day in range(1, days_in_month + 1):
+        week.append({"day": day, "records": by_day.get(day, []),
+                     "count": len(by_day.get(day, []))})
+        if len(week) == 7:
+            weeks.append(week)
+            week = []
+    if week:
+        week += [None] * (7 - len(week))
+        weeks.append(week)
+
+    prev_m, prev_y = (12, y - 1) if m == 1 else (m - 1, y)
+    next_m, next_y = (1, y + 1) if m == 12 else (m + 1, y)
+
+    result = {
+        "calendar_name": name,
+        "filters": filters,
+        "year": y, "month": m,
+        "weeks": weeks,
+        "total_records": len(matches),
+        "prev": {"year": prev_y, "month": prev_m},
+        "next": {"year": next_y, "month": next_m},
+    }
+    ptos._CACHE[cache_key] = result
+    return result
+
+
 def get_board_data(board_name):
     """Load record data for each column of a board.
     Returns dict mapping column type → list of parsed record dicts
@@ -2135,7 +2240,7 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
 # Query TOML management (full write)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None):
+def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None, raw_calendars=None):
     """Build and write queries.toml using tomli-w with atomic write.
 
     raw_queries:    {name: {where, time, group, search, sort, sum}}
@@ -2143,6 +2248,9 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
     raw_dashboards: {name: {metrics: [...]}}
     raw_aliases:    {name: {alias: target}}   (optional)
     raw_due:        {config_name: {type, key, sort_by, days, exclude_results}} (optional)
+    raw_boards:     {name: {columns, time_window, limit, card_title_fields, rollup_field, rollup_op}} (optional)
+    raw_habits:     {name: {filters, weeks}}  (optional)
+    raw_calendars:  {name: {filters, time_window}}  (optional)
 
     Raises:
         PTOSError on invalid names or write failure.
@@ -2154,11 +2262,21 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         raw_aliases = {}
 
     def _clean_bare_name(n):
-        return n[6:] if n.startswith("board.") else n
+        if n.startswith("board."):
+            return n[6:]
+        if n.startswith("calendar."):
+            return n[9:]
+        return n
 
-    all_names = list(raw_queries) + list(raw_metrics) + list(raw_dashboards) + list(raw_aliases)
+    def _is_config_key(n):
+        return any(n.startswith(p) for p in ("board.", "habit.", "calendar.", "due."))
+
+    all_names = [n for n in (list(raw_queries) + list(raw_metrics)
+                             + list(raw_dashboards) + list(raw_aliases))
+                 if not _is_config_key(n)]
     board_names = list(raw_boards or {})
-    for n in all_names + board_names:
+    calendar_names = list(raw_calendars or {})
+    for n in all_names + board_names + calendar_names:
         bare = _clean_bare_name(n)
         if not re.match(r'^[a-z][a-z0-9_]*$', bare):
             raise PTOSError(
@@ -2167,6 +2285,8 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
     data = {}
 
     for name, q in raw_queries.items():
+        if _is_config_key(name):
+            continue
         entry = {}
         if q.get("where", "").strip():
             entry["where"] = q["where"].strip()
@@ -2228,6 +2348,8 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
 
     # Aliases
     for name, a in (raw_aliases or {}).items():
+        if _is_config_key(name):
+            continue
         alias = a.get("alias", "").strip()
         if alias:
             data[name] = {"alias": alias}
@@ -2293,6 +2415,17 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         if habit_cfg.get("weeks"):
             entry["weeks"] = int(habit_cfg["weeks"])
         data[f"habit.{bare}"] = entry
+
+    # Calendars
+    for name, cal_cfg in (raw_calendars or {}).items():
+        bare = _clean_bare_name(name)
+        cfilters = cal_cfg.get("filters", [])
+        if not cfilters or not isinstance(cfilters, list):
+            raise PTOSError(f"Calendar '{name}' must have a non-empty filters list")
+        entry = {"filters": cfilters}
+        if cal_cfg.get("time_window"):
+            entry["time_window"] = cal_cfg["time_window"]
+        data[f"calendar.{bare}"] = entry
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
         tomli_w.dump(data, w.stream)
