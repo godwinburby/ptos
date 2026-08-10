@@ -27,6 +27,7 @@
   <button class="qb-sec-tab"        data-sec="due"        onclick="switchSection('due')">Due</button>
   <button class="qb-sec-tab"        data-sec="boards"     onclick="switchSection('boards')">Boards</button>
   <button class="qb-sec-tab"        data-sec="habits"     onclick="switchSection('habits')">Habits</button>
+  <button class="qb-sec-tab"        data-sec="calendars"  onclick="switchSection('calendars')">Calendars</button>
 </div>
 
 <!-- ── Item chips row ── -->
@@ -38,6 +39,7 @@
   <div id="tabs-due"        class="qb-item-strip" style="display:none;"></div>
   <div id="tabs-boards"     class="qb-item-strip" style="display:none;"></div>
   <div id="tabs-habits"     class="qb-item-strip" style="display:none;"></div>
+  <div id="tabs-calendars"  class="qb-item-strip" style="display:none;"></div>
 </div>
 
 <!-- ── Editor ── -->
@@ -150,7 +152,7 @@
 <script src="/static/js/time_picker.js"></script>
 <script src="/static/js/drag.js"></script>
 <script>
-var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{}, boards:{}, habits:{} };
+var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{}, boards:{}, habits:{}, calendars:{} };
 var _cur = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
@@ -186,7 +188,10 @@ var _liveTimer = null;
   Object.entries(q).forEach(function(e) {
     var k = e[0], v = e[1];
     if (reserved.indexOf(k)!==-1 || typeof v!=="object") return;
-    if (k.startsWith("due.")) return;  // Skip due configs - loaded separately
+    if (k.startsWith("due.")) return;      // Skip due configs - loaded separately
+    if (k.startsWith("board.")) return;    // Skip board configs - loaded separately
+    if (k.startsWith("habit.")) return;    // Skip habit configs - loaded separately
+    if (k.startsWith("calendar.")) return; // Skip calendar configs - loaded separately
     if (v.alias) {
       _st.aliases[k] = { alias: v.alias };
       return;
@@ -245,6 +250,12 @@ var _liveTimer = null;
     var name = e[0].replace(/^habit\./, '');
     _st.habits[name] = { filters: e[1].filters||[], weeks: e[1].weeks||12 };
   });
+  // Calendars
+  var _bkCalendars = {{ calendars | tojson }};
+  Object.entries(_bkCalendars).forEach(function(e) {
+    var name = e[0].replace(/^calendar\./, '');
+    _st.calendars[name] = { filters: e[1].filters||[], time_window: e[1].time_window||'this-month' };
+  });
   renderTabs();
   // Check URL params for edit mode
   var params = new URLSearchParams(window.location.search);
@@ -286,7 +297,7 @@ function switchSection(sec) {
     btn.classList.toggle("active", btn.dataset.sec === sec);
   });
   // show only the matching item strip
-  ["queries","metrics","dashboards","aliases","due","boards","habits"].forEach(function(s) {
+  ["queries","metrics","dashboards","aliases","due","boards","habits","calendars"].forEach(function(s) {
     var el = document.getElementById("tabs-"+s);
     if (el) el.style.display = s === sec ? "flex" : "none";
   });
@@ -301,6 +312,7 @@ function renderTabs() {
   renderDueTabs();
   _renderSection("tabs-boards",     _st.boards,     "boards");
   _renderSection("tabs-habits",     _st.habits,     "habits");
+  _renderSection("tabs-calendars",  _st.calendars,  "calendars");
   _updateSectionCounts();
 }
 
@@ -313,6 +325,7 @@ function _updateSectionCounts() {
     due:        Object.keys(_st.due).length,
     boards:     Object.keys(_st.boards).length,
     habits:     Object.keys(_st.habits).length,
+    calendars:  Object.keys(_st.calendars).length,
   };
   document.querySelectorAll(".qb-sec-tab").forEach(function(btn) {
     var sec = btn.dataset.sec;
@@ -388,10 +401,10 @@ function resetQuery() {
 
 // ── Add new ───────────────────────────────────────────────────────────────────
 function addEntry() {
-  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias\n  u = due\n  b = board\n  h = habit","q");
+  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias\n  u = due\n  b = board\n  h = habit\n  c = calendar","q");
   if (!kind) return;
   kind = kind.trim().toLowerCase();
-  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":kind==="u"?"due":kind==="b"?"boards":kind==="h"?"habits":"queries";
+  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":kind==="u"?"due":kind==="b"?"boards":kind==="h"?"habits":kind==="c"?"calendars":"queries";
   var name = prompt("Name (lowercase, underscores):");
   if (!name) return;
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
@@ -409,6 +422,8 @@ function addEntry() {
     _st.boards[name]   = {columns:[]};
   else if (section==="habits")
     _st.habits[name]   = {filters:[],weeks:12};
+  else if (section==="calendars")
+    _st.calendars[name] = {filters:[],time_window:'this-month'};
   else
     _st.dashboards[name] = {metrics:[]};
   renderTabs();
@@ -435,6 +450,10 @@ function renderEditor() {
   }
   if (s==="habits") {
     showHabitEditor();
+    return;
+  }
+  if (s==="calendars") {
+    showCalendarEditor();
     return;
   }
   // header
@@ -1088,7 +1107,7 @@ function confirmDelete() {
   closeDeleteModal();
   // Due/Board configs have no individual backend delete endpoint — remove from state
   // and immediately Save All so the deletion persists.
-  if (s === "due" || s === "boards") {
+  if (s === "due" || s === "boards" || s === "habits" || s === "calendars") {
     delete _st[s][n]; _cur=null; renderTabs();
     document.getElementById("entry-editor").style.display = "none";
     document.getElementById("entry-empty").style.display  = "block";
@@ -1265,7 +1284,17 @@ function saveAll() {
       }
     }
   }
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due, boards:_st.boards, habits:_st.habits };
+  // validate calendars client-side before POST
+  if (_st.calendars) {
+    for (var cname in _st.calendars) {
+      var ccfg = _st.calendars[cname];
+      if (!ccfg.filters || !ccfg.filters.length) {
+        showMsg("✖ Calendar '" + cname + "' must have at least one filter", false);
+        return;
+      }
+    }
+  }
+  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due, boards:_st.boards, habits:_st.habits, calendars:_st.calendars };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
     payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
@@ -1435,6 +1464,73 @@ function onHabitNameChange() {
   if (!newName || newName === old || _st.habits[newName]) return;
   _st.habits[newName] = _st.habits[old];
   delete _st.habits[old];
+  _cur.name = newName;
+  renderTabs();
+}
+
+// ── Calendar editor ────────────────────────────────────────────────────────────
+function showCalendarEditor() {
+  var ed = document.getElementById("entry-editor");
+  var empty = document.getElementById("entry-empty");
+  ed.style.display = "block";
+  empty.style.display = "none";
+
+  var cfg = _st.calendars[_cur.name] || {filters:[], time_window:'this-month'};
+  var filtersText = (cfg.filters || []).join(" ");
+
+  ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
+      '<div style="flex:1;"><label>Name</label>'+
+        '<input type="text" id="calendar-name-input" value="'+_esc(_cur.name)+'" oninput="onCalendarNameChange()"'+
+        ' style="font-size:16px;font-weight:700;"></div>'+
+      '<div style="margin-top:18px;">'+
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm"'+
+        ' style="color:var(--error);border-color:var(--error);">Delete</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
+      'Calendar — a month grid of matching records. Filters use the same syntax as queries.'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Filters</label>'+
+      '<input type="text" id="calendar-filters-input" value="'+_esc(filtersText)+'" oninput="onCalendarFiltersChange()" placeholder="type=expense category=recurring" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+      '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Space-separated field=value pairs. Any matching record is plotted on its date.</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;">'+
+      '<div style="flex:1;min-width:120px;">'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Initial Month</label>'+
+        '<select id="calendar-time-window" onchange="onCalendarTimeWindowChange()" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+          _boardTimeOpts().map(function(o){
+            return '<option value="'+o[1]+'"'+(cfg.time_window===o[1]?' selected':'')+'>'+o[0]+'</option>';
+          }).join("")+
+        '</select>'+
+        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Which month loads first. Prev/next arrows navigate after that.</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function onCalendarFiltersChange() {
+  var cfg = _st.calendars[_cur.name];
+  if (!cfg) return;
+  var raw = document.getElementById("calendar-filters-input").value;
+  cfg.filters = raw.trim().split(/\s+/).filter(Boolean);
+}
+
+function onCalendarTimeWindowChange() {
+  var cfg = _st.calendars[_cur.name];
+  if (!cfg) return;
+  cfg.time_window = document.getElementById("calendar-time-window").value;
+}
+
+function onCalendarNameChange() {
+  var inp = document.getElementById("calendar-name-input");
+  if (!inp) return;
+  var newName = inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  var old = _cur.name;
+  if (!newName || newName === old || _st.calendars[newName]) return;
+  _st.calendars[newName] = _st.calendars[old];
+  delete _st.calendars[old];
   _cur.name = newName;
   renderTabs();
 }

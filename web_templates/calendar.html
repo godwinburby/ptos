@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% set _months = {1:'January',2:'February',3:'March',4:'April',5:'May',6:'June',7:'July',8:'August',9:'September',10:'October',11:'November',12:'December'} %}
+{% set _dows = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'] %}
+
+<style>
+  .cal-header { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px; }
+  .cal-header .page-title { margin:0; }
+  .cal-nav { display:flex;align-items:center;gap:6px; }
+  .cal-nav a { text-decoration:none; font-size:20px; font-weight:700; color:var(--sub); background:var(--card); border:1px solid var(--border); border-radius:8px; width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; transition:all .15s; }
+  .cal-nav a:hover { color:var(--accent); border-color:var(--accent); }
+  .cal-nav .cal-month-label { font-size:16px; font-weight:800; min-width:150px; text-align:center; }
+  .cal-select { padding:6px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:14px;cursor:pointer; }
+  .cal-count-label { font-size:13px;color:var(--sub); }
+  .cal-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:6px; }
+  .cal-dow { text-align:center; font-size:11px; font-weight:700; color:var(--sub); padding:4px 0; }
+  .cal-cell { background:var(--card); border:1px solid var(--border); border-radius:10px; min-height:82px; padding:6px 8px; position:relative; overflow:hidden; }
+  .cal-cell.empty { background:transparent; border:none; min-height:0; }
+  .cal-cell.has-records { cursor:pointer; transition:border-color .15s; }
+  .cal-cell.has-records:hover { border-color:var(--accent); }
+  .cal-cell.today { border-color:var(--accent); }
+  .cal-cell.expanded { cursor:default; border-color:var(--accent); }
+  .cal-day-top { display:flex; align-items:center; gap:6px; }
+  .cal-day { font-size:12px; font-weight:700; color:var(--text); }
+  .cal-cell.today .cal-day { color:var(--accent); }
+  .cal-count { font-size:10px; font-weight:700; color:var(--accent); background:var(--accent-lt); padding:1px 6px; border-radius:8px; }
+  .cal-chip { display:block; font-size:11px; font-weight:600; color:var(--text); background:var(--bg); border:1px solid var(--border); border-radius:6px; padding:2px 6px; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .cal-day-records { display:none; margin-top:6px; padding-top:6px; border-top:1px dashed var(--border); }
+  .cal-cell.expanded .cal-day-records { display:block; }
+  .cal-rec { font-size:12px; color:var(--text); margin-bottom:6px; }
+  .cal-rec-title { font-weight:700; }
+  .cal-rec-note { color:var(--sub); font-size:11px; margin-top:2px; }
+  .cal-rec-link { font-size:11px; color:var(--accent); text-decoration:none; }
+  .cal-empty { text-align:center;padding:40px;color:var(--sub);font-size:14px; }
+  .cal-browse-all { font-size:12px; color:var(--accent); text-decoration:none; display:inline-block; margin-top:4px; }
+</style>
+
+<div class="cal-header">
+  <div class="page-title">Calendar</div>
+  {% if data %}
+  <select class="cal-select" onchange="goCalendar(this.value)">
+    <option value="__all__" {% if active == '__all__' %}selected{% endif %}>All records</option>
+    {% for cname in calendars %}
+    <option value="{{ cname }}" {% if cname == active %}selected{% endif %}>{{ cname | replace('_',' ') }}</option>
+    {% endfor %}
+  </select>
+  {% set cal_base = '/calendar' if active == '__all__' else '/calendar/' + active %}
+  <div class="cal-nav">
+    <a href="{{ cal_base }}?year={{ data.prev.year }}&month={{ data.prev.month }}" title="Previous month">‹</a>
+    <span class="cal-month-label">{{ _months[data.month] }} {{ data.year }}</span>
+    <a href="{{ cal_base }}?year={{ data.next.year }}&month={{ data.next.month }}" title="Next month">›</a>
+  </div>
+  <span class="cal-count-label">{{ data.total_records }} record(s) this month</span>
+  {% endif %}
+</div>
+
+{% if not data %}
+<div class="cal-empty">Calendar not found or not configured.</div>
+{% else %}
+{% if not calendars %}
+<div class="card" style="max-width:520px;padding:16px 20px;margin:0 0 14px;">
+  <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">
+    Showing <strong>all records</strong>. Add a <code>[calendar.NAME]</code> table in
+    <a href="/query-builder">Query Builder</a> → Calendars for a filtered view.
+  </div>
+  <pre style="background:var(--bg);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;">[calendar.expenses]
+filters = ["type=expense"]
+time_window = "this-month"</pre>
+</div>
+{% endif %}
+<div class="cal-grid">
+  {% for dow in _dows %}
+  <div class="cal-dow">{{ dow }}</div>
+  {% endfor %}
+  {% for week in data.weeks %}
+    {% for cell in week %}
+      {% if cell is none %}
+      <div class="cal-cell empty"></div>
+      {% else %}
+      <div class="cal-cell {{ 'has-records' if cell.records }} {{ 'today' if cell.day == today.day and data.month == today.month and data.year == today.year }}" onclick="toggleDay(this)">
+        <div class="cal-day-top">
+          <span class="cal-day">{{ cell.day }}</span>
+          {% if cell.count %}<span class="cal-count">{{ cell.count }}</span>{% endif %}
+        </div>
+        {% for r in cell.records[:3] %}
+        <div class="cal-chip">{{ r.title }}</div>
+        {% endfor %}
+        <div class="cal-day-records">
+          {% for r in cell.records %}
+          <div class="cal-rec">
+            <span class="cal-rec-title">{{ r.title }}</span>
+            {% if r.note %}<div class="cal-rec-note">{{ r.note }}</div>{% endif %}
+          </div>
+          {% endfor %}
+          <a class="cal-browse-all" href="/browse?time=range&from_date={{ data.year }}-{{ '%02d' % data.month }}-{{ '%02d' % cell.day }}&to_date={{ data.year }}-{{ '%02d' % data.month }}-{{ '%02d' % cell.day }}">Open day in Browse →</a>
+        </div>
+      </div>
+      {% endif %}
+    {% endfor %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<script>
+function goCalendar(v) {
+  window.location.href = v === '__all__' ? '/calendar' : '/calendar/' + encodeURIComponent(v);
+}
+function toggleDay(el) {
+  if (!el.classList.contains('has-records')) return;
+  var was = el.classList.contains('expanded');
+  document.querySelectorAll('.cal-cell.expanded').forEach(function(c) {
+    c.classList.remove('expanded');
+  });
+  if (!was) el.classList.add('expanded');
+}
+</script>
+
+{% endblock %}

@@ -2046,6 +2046,32 @@ def habits():
         now=_now_str(), habits=data)
 
 
+@app.route("/calendar")
+@app.route("/calendar/<name>")
+def calendar_view(name=None):
+    try:
+        names = svc.get_calendar_names()
+    except Exception:
+        names = []
+    year = request.args.get("year", type=int)
+    month = request.args.get("month", type=int)
+    # No name = the implicit global "All records" view
+    if name:
+        try:
+            data = svc.get_calendar_data(name, year, month)
+        except PTOSError as e:
+            data = None
+        except Exception as e:
+            log.exception("Calendar data load failed")
+            data = None
+    else:
+        data = svc.get_calendar_data("__all__", year, month)
+    return render_template("calendar.html",
+        tab="calendar", title="Calendar",
+        now=_now_str(), today=dt.date.today(),
+        calendars=names, active=name or "__all__", data=data)
+
+
 @app.route("/board")
 def board():
     try:
@@ -2226,12 +2252,22 @@ def query_builder():
                 "weeks": v.get("weeks", 12),
             }
 
+    calendars = {}
+    for k, v in queries.items():
+        if k.startswith("calendar.") and isinstance(v, dict):
+            name = k[9:]
+            calendars[name] = {
+                "filters": v.get("filters", []),
+                "time_window": v.get("time_window", "this-month"),
+            }
+
     return render_template("query_builder.html",
         tab="query_builder", title="Query Builder",
         now=_now_str(), queries=queries, types=types,
         field_types=field_types,
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
-        due_config=all_due_configs, boards=boards, habits=habits)
+        due_config=all_due_configs, boards=boards, habits=habits,
+        calendars=calendars)
 
 
 @app.route("/query-builder/save", methods=["POST"])
@@ -2247,6 +2283,7 @@ def query_builder_save():
             data.get("due", {}),
             raw_boards=data.get("boards", {}),
             raw_habits=data.get("habits", {}),
+            raw_calendars=data.get("calendars", {}),
         )
         return jsonify(ok=True)
     except Exception as e:
@@ -2315,6 +2352,7 @@ def queries_get():
         field_types = {}
     named = [k for k in all_q
              if k not in ("metrics","dashboards","due")
+             and not k.startswith(("board.","habit.","calendar.","due."))
              and not (isinstance(all_q[k], dict) and "alias" in all_q[k])]
     return render_template("queries.html",
         tab="queries", title="Queries", now=_now_str(),
