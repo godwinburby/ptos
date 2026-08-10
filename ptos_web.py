@@ -1980,6 +1980,23 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
 # Board / Kanban
 # ══════════════════════════════════════════════════════════════════════════════
 
+@app.route("/habits")
+def habits():
+    try:
+        names = svc.get_habit_names()
+    except Exception:
+        names = []
+    data = {}
+    for n in names:
+        try:
+            data[n] = svc.get_habit_data(n)
+        except Exception:
+            continue
+    return render_template("habits.html",
+        tab="habits", title="Habits",
+        now=_now_str(), habits=data)
+
+
 @app.route("/board")
 def board():
     try:
@@ -2150,13 +2167,22 @@ def query_builder():
                     "rollup_field": v.get("rollup_field", ""),
                     "rollup_op": v.get("rollup_op", "count"),
                 }
-    
+
+    habits = {}
+    for k, v in queries.items():
+        if k.startswith("habit.") and isinstance(v, dict):
+            name = k[6:]
+            habits[name] = {
+                "filters": v.get("filters", []),
+                "weeks": v.get("weeks", 12),
+            }
+
     return render_template("query_builder.html",
         tab="query_builder", title="Query Builder",
         now=_now_str(), queries=queries, types=types,
         field_types=field_types,
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
-        due_config=all_due_configs, boards=boards)
+        due_config=all_due_configs, boards=boards, habits=habits)
 
 
 @app.route("/query-builder/save", methods=["POST"])
@@ -2171,6 +2197,7 @@ def query_builder_save():
             data.get("aliases", {}),
             data.get("due", {}),
             raw_boards=data.get("boards", {}),
+            raw_habits=data.get("habits", {}),
         )
         return jsonify(ok=True)
     except Exception as e:

@@ -26,6 +26,7 @@
   <button class="qb-sec-tab"        data-sec="aliases"    onclick="switchSection('aliases')">Aliases</button>
   <button class="qb-sec-tab"        data-sec="due"        onclick="switchSection('due')">Due</button>
   <button class="qb-sec-tab"        data-sec="boards"     onclick="switchSection('boards')">Boards</button>
+  <button class="qb-sec-tab"        data-sec="habits"     onclick="switchSection('habits')">Habits</button>
 </div>
 
 <!-- ── Item chips row ── -->
@@ -36,6 +37,7 @@
   <div id="tabs-aliases"    class="qb-item-strip" style="display:none;"></div>
   <div id="tabs-due"        class="qb-item-strip" style="display:none;"></div>
   <div id="tabs-boards"     class="qb-item-strip" style="display:none;"></div>
+  <div id="tabs-habits"     class="qb-item-strip" style="display:none;"></div>
 </div>
 
 <!-- ── Editor ── -->
@@ -148,7 +150,7 @@
 <script src="/static/js/time_picker.js"></script>
 <script src="/static/js/drag.js"></script>
 <script>
-var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{}, boards:{} };
+var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{}, boards:{}, habits:{} };
 var _cur = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
@@ -237,6 +239,12 @@ var _liveTimer = null;
     var ctfArr = typeof rawCtf === 'string' ? rawCtf.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : (Array.isArray(rawCtf) ? rawCtf : []);
     _st.boards[name] = { columns: e[1].columns||[], time_window: e[1].time_window||'this-month', limit: e[1].limit||0, card_title_fields: ctfArr, rollup_field: e[1].rollup_field||'', rollup_op: e[1].rollup_op||'count' };
   });
+  // Habits
+  var _bkHabits = {{ habits | tojson }};
+  Object.entries(_bkHabits).forEach(function(e) {
+    var name = e[0].replace(/^habit\./, '');
+    _st.habits[name] = { filters: e[1].filters||[], weeks: e[1].weeks||12 };
+  });
   renderTabs();
   // Check URL params for edit mode
   var params = new URLSearchParams(window.location.search);
@@ -278,7 +286,7 @@ function switchSection(sec) {
     btn.classList.toggle("active", btn.dataset.sec === sec);
   });
   // show only the matching item strip
-  ["queries","metrics","dashboards","aliases","due","boards"].forEach(function(s) {
+  ["queries","metrics","dashboards","aliases","due","boards","habits"].forEach(function(s) {
     var el = document.getElementById("tabs-"+s);
     if (el) el.style.display = s === sec ? "flex" : "none";
   });
@@ -292,6 +300,7 @@ function renderTabs() {
   _renderSection("tabs-aliases",    _st.aliases,    "aliases");
   renderDueTabs();
   _renderSection("tabs-boards",     _st.boards,     "boards");
+  _renderSection("tabs-habits",     _st.habits,     "habits");
   _updateSectionCounts();
 }
 
@@ -303,6 +312,7 @@ function _updateSectionCounts() {
     aliases:    Object.keys(_st.aliases).length,
     due:        Object.keys(_st.due).length,
     boards:     Object.keys(_st.boards).length,
+    habits:     Object.keys(_st.habits).length,
   };
   document.querySelectorAll(".qb-sec-tab").forEach(function(btn) {
     var sec = btn.dataset.sec;
@@ -378,10 +388,10 @@ function resetQuery() {
 
 // ── Add new ───────────────────────────────────────────────────────────────────
 function addEntry() {
-  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias\n  u = due\n  b = board","q");
+  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias\n  u = due\n  b = board\n  h = habit","q");
   if (!kind) return;
   kind = kind.trim().toLowerCase();
-  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":kind==="u"?"due":kind==="b"?"boards":"queries";
+  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":kind==="u"?"due":kind==="b"?"boards":kind==="h"?"habits":"queries";
   var name = prompt("Name (lowercase, underscores):");
   if (!name) return;
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
@@ -397,6 +407,8 @@ function addEntry() {
     _st.due[name]      = {type:"followup",key:"client",sort_by:"",days:7,exclude_results:[]};
   else if (section==="boards")
     _st.boards[name]   = {columns:[]};
+  else if (section==="habits")
+    _st.habits[name]   = {filters:[],weeks:12};
   else
     _st.dashboards[name] = {metrics:[]};
   renderTabs();
@@ -419,6 +431,10 @@ function renderEditor() {
   }
   if (s==="boards") {
     showBoardEditor();
+    return;
+  }
+  if (s==="habits") {
+    showHabitEditor();
     return;
   }
   // header
@@ -1239,7 +1255,17 @@ function saveAll() {
       }
     }
   }
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due, boards:_st.boards };
+  // validate habits client-side before POST
+  if (_st.habits) {
+    for (var hname in _st.habits) {
+      var hcfg = _st.habits[hname];
+      if (!hcfg.filters || !hcfg.filters.length) {
+        showMsg("✖ Habit '" + hname + "' must have at least one filter", false);
+        return;
+      }
+    }
+  }
+  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due, boards:_st.boards, habits:_st.habits };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
     payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
@@ -1347,6 +1373,70 @@ function showBoardEditor() {
 
   renderBoardColChips(cols);
   fetchBoardOverlap(cols);
+}
+
+// ── Habit editor ──────────────────────────────────────────────────────────────
+function showHabitEditor() {
+  var ed = document.getElementById("entry-editor");
+  var empty = document.getElementById("entry-empty");
+  ed.style.display = "block";
+  empty.style.display = "none";
+
+  var cfg = _st.habits[_cur.name] || {filters:[],weeks:12};
+  var filtersText = (cfg.filters || []).join(" ");
+
+  ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
+      '<div style="flex:1;"><label>Name</label>'+
+        '<input type="text" id="habit-name-input" value="'+_esc(_cur.name)+'" oninput="onHabitNameChange()"'+
+        ' style="font-size:16px;font-weight:700;"></div>'+
+      '<div style="margin-top:18px;">'+
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm"'+
+        ' style="color:var(--error);border-color:var(--error);">Delete</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
+      'Habit — a presence grid + streak over matching records. Filters use the same syntax as queries.'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Filters</label>'+
+      '<input type="text" id="habit-filters-input" value="'+_esc(filtersText)+'" oninput="onHabitFiltersChange()" placeholder="type=habit name=meditation" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+      '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Space-separated field=value pairs. Logging any matching record marks that day present.</div>'+
+    '</div>'+
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;">'+
+      '<div style="flex:1;min-width:120px;">'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Weeks</label>'+
+        '<input type="number" id="habit-weeks-input" value="'+(cfg.weeks||12)+'" onchange="onHabitWeeksChange()" min="1" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">How many weeks back the heatmap grid covers.</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function onHabitFiltersChange() {
+  var cfg = _st.habits[_cur.name];
+  if (!cfg) return;
+  var raw = document.getElementById("habit-filters-input").value;
+  cfg.filters = raw.trim().split(/\s+/).filter(Boolean);
+}
+
+function onHabitWeeksChange() {
+  var cfg = _st.habits[_cur.name];
+  if (!cfg) return;
+  var val = parseInt(document.getElementById("habit-weeks-input").value, 10);
+  cfg.weeks = val > 0 ? val : 12;
+}
+
+function onHabitNameChange() {
+  var inp = document.getElementById("habit-name-input");
+  if (!inp) return;
+  var newName = inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  var old = _cur.name;
+  if (!newName || newName === old || _st.habits[newName]) return;
+  _st.habits[newName] = _st.habits[old];
+  delete _st.habits[old];
+  _cur.name = newName;
+  renderTabs();
 }
 
 function renderChipPicker(opts) {

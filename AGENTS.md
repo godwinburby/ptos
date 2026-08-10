@@ -250,11 +250,22 @@ x 2026-07-12 2026-07-10 Completed task
 - Drag→edit flow and multi-preset add also pass `return_to` through to redirect back to board
 - `onParentChange` in edit.html preserves `return_to` in URL when reloading field cascades
 
+## Habits module (`/habits` heatmap + streak)
+
+- **Data model** — a habit is just a record. Dedicated `type=habit name=X` (zero required fields beyond `name`) is the recommended model; existing types work too via per-habit `filters` (e.g. `filters = ["type=exercise"]` for "did I exercise today"). No new write path — logging reuses `append_record`/presets
+- **Config** — `[habit.NAME]` in `queries.toml` (quoted dotted key `["habit.NAME"]`, same as boards — the bare `[habit.NAME]` nested-table form does NOT load): `filters` (list of `field=value` strings, same syntax `find_records_with_location` takes), `weeks` (default 12). Multiple entries = multiple tracked habits on one page
+- **Service** (`ptos_service.py`): `get_habit_names()` lists configured habits; `get_habit_data(habit_name)` raises `PTOSError` if unconfigured/no filters, calls `find_records_with_location(filters, start, end)` over the last N weeks, builds `days_present` set (any matching record marks the day), computes streak walking back from today (yesterday if today not yet logged — "today isn't over yet" rule), returns `{habit_name, streak, weeks, grid:[{date,present}], total_days, days_done}`. Grid presence is boolean — logging twice in one day still = one present cell
+- **Caching** — `get_habit_data` cached under `habit:{name}`; `_invalidate_history_cache()` pops `habit:` keys alongside `history:`/`condsug:` so all 7 record-write paths already invalidate habits (no new call sites)
+- **Route** — `GET /habits` renders `habits.html` (one card per habit: streak badge, GitHub-style grid with weeks as columns / 7 day-rows, "X of Y days" summary); empty state shows the config snippet. Nav link in `base.html` next to Board (`icons/habits.html`)
+- **Query Builder** — "Habits" tab (mirrors Boards tab): name, filters (space-separated `field=value` text input), weeks; round-trips through `save_queries_full(raw_habits=...)` which validates a non-empty `filters` list and writes `["habit.NAME"]` keys
+- **Schema** — `type=habit` in `[types].allowed` + `[type.habit]` (`required = ["name"]`, `name` field options in `[type.habit.fields.name]`). Without the schema entry, `validate_record` rejects `type=habit`
+- **Tests**: `tests/test_habits.py` (streak consecutive/gap/today-missing, double-log single present, cache invalidation on append, no-rescan on repeat call, unconfigured raises)
+
 ## Suggestions caching (history + conditional)
 
 - **`get_history_suggestions(rtype, context_record=None)`** (`ptos_service.py`) splits into a cached scan-and-aggregate step `_build_history_suggestions(rtype)` (key `history:{rtype}`) and a cheap per-call filter `_apply_context_filter(tags_by_field_value, rtype, context_record)`. `context_record` is intentionally **excluded** from the cache key — the full-file scan is the expensive part; `filtered_tags` is recomputed from the cached aggregates on every call since it varies per request. Only the first call per rtype after invalidation triggers `scan_records(date.min, date.max, [f"type={rtype}"], None)`
 - **`get_conditional_suggestions(rtype, field, value)`** (`/api/field_suggest`) is fully cached under `condsug:{rtype}:{field}:{value}` — the whole return dict, since there's no per-call variable part. This removes the per-selection full scan that made cascade fill feel slow
-- **Invalidation** — `_invalidate_history_cache()` (`ptos_service.py`) pops every `history:`/`condsug:` key and is called after **any** record write: `append_record`, `edit_record`, `delete_record`, `advance_record`, `bulk_delete`, `bulk_set`, `save_schema`. Correctness over precision — all types invalidated on any write (writes are rare vs cascade reads; selectively invalidating individual `condsug` keys risks serving stale suggestions)
+- **Invalidation** — `_invalidate_history_cache()` (`ptos_service.py`) pops every `history:`/`condsug:`/`habit:` key and is called after **any** record write: `append_record`, `edit_record`, `delete_record`, `advance_record`, `bulk_delete`, `bulk_set`, `save_schema`. Correctness over precision — all types invalidated on any write (writes are rare vs cascade reads; selectively invalidating individual `condsug` keys risks serving stale suggestions)
 - Scan window stays unbounded (`date.min`→`date.max`) — deliberate zero-behavior-change choice; the lookback bound from the spec was **not** applied
 - Tests: `tests/test_history_cache.py` (no-rescan call counter, per-mutator invalidation, cache-hit identity, context-filter variance, bulk invalidate-all)
 
