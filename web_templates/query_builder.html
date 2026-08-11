@@ -19,15 +19,25 @@
 </div>
 
 <!-- ── Section tabs row ── -->
-<div class="qb-section-bar">
-  <button class="qb-sec-tab active" data-sec="queries"    onclick="switchSection('queries')">Queries</button>
-  <button class="qb-sec-tab"        data-sec="metrics"    onclick="switchSection('metrics')">Metrics</button>
-  <button class="qb-sec-tab"        data-sec="dashboards" onclick="switchSection('dashboards')">Dashboards</button>
-  <button class="qb-sec-tab"        data-sec="aliases"    onclick="switchSection('aliases')">Aliases</button>
-  <button class="qb-sec-tab"        data-sec="due"        onclick="switchSection('due')">Due</button>
-  <button class="qb-sec-tab"        data-sec="boards"     onclick="switchSection('boards')">Boards</button>
-  <button class="qb-sec-tab"        data-sec="habits"     onclick="switchSection('habits')">Habits</button>
-  <button class="qb-sec-tab"        data-sec="calendars"  onclick="switchSection('calendars')">Calendars</button>
+<div class="qb-sec-groups">
+  <div class="qb-sec-group">
+    <span class="qb-sec-group-label">Data</span>
+    <div class="qb-section-bar">
+      <button class="qb-sec-tab active" data-sec="queries"    onclick="switchSection('queries')">Queries</button>
+      <button class="qb-sec-tab"        data-sec="metrics"    onclick="switchSection('metrics')">Metrics</button>
+      <button class="qb-sec-tab"        data-sec="dashboards" onclick="switchSection('dashboards')">Dashboards</button>
+      <button class="qb-sec-tab"        data-sec="aliases"    onclick="switchSection('aliases')">Aliases</button>
+    </div>
+  </div>
+  <div class="qb-sec-group">
+    <span class="qb-sec-group-label">Views</span>
+    <div class="qb-section-bar">
+      <button class="qb-sec-tab"        data-sec="due"        onclick="switchSection('due')">Due</button>
+      <button class="qb-sec-tab"        data-sec="boards"     onclick="switchSection('boards')">Boards</button>
+      <button class="qb-sec-tab"        data-sec="habits"     onclick="switchSection('habits')">Habits</button>
+      <button class="qb-sec-tab"        data-sec="calendars"  onclick="switchSection('calendars')">Calendars</button>
+    </div>
+  </div>
 </div>
 
 <!-- ── Item chips row ── -->
@@ -67,6 +77,18 @@
 <!-- Record delete modal injected by RecordTable -->
 
 <style>
+  /* ── Section tab groups ───────────────────────────────────────────────────── */
+  .qb-sec-groups {
+    display:flex;flex-wrap:wrap;gap:10px;align-items:center;
+  }
+  .qb-sec-group {
+    display:flex;align-items:center;gap:8px;min-width:0;
+  }
+  .qb-sec-group-label {
+    font-size:11px;font-weight:700;letter-spacing:.08em;
+    text-transform:uppercase;color:var(--sub);white-space:nowrap;
+  }
+
   /* ── Section tab bar ─────────────────────────────────────────────────────── */
   .qb-section-bar {
     display:flex;gap:4px;padding:4px;

@@ -134,6 +134,7 @@ var tp;
       <button class="preset-chip preset-instant" onclick="addMultiPreset('{{ name }}', this)">
         + {{ name }} <span style="opacity:.7;font-size:11px;">instant</span>
       </button>
+      <a href="/add?preset={{ name }}" class="preset-edit" title="Edit preset">✎</a>
       {% else %}
       <a href="/add?preset={{ name }}" class="preset-chip"
          onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
@@ -152,6 +153,7 @@ var tp;
       <button class="preset-chip preset-instant" onclick="addMultiPreset('{{ name }}', this)">
         + {{ name }} <span style="opacity:.7;font-size:11px;">instant</span>
       </button>
+      <a href="/add?preset={{ name }}" class="preset-edit" title="Edit preset">✎</a>
       {% else %}
       <a href="/add?preset={{ name }}" class="preset-chip"
          onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
