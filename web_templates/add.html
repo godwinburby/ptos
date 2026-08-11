@@ -57,6 +57,7 @@
         <button class="preset-chip preset-instant" onclick="addMultiPreset(this)" data-name="{{ name }}" data-return-to="{{ return_to }}">
           + {{ name }} <span style="opacity:.6;font-size:11px;">instant</span>
         </button>
+        <a href="/add?preset={{ name }}" class="preset-edit" title="Edit preset">✎</a>
         {% else %}
         <a href="/add?preset={{ name }}" class="preset-chip"
            onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
@@ -75,6 +76,7 @@
         <button class="preset-chip preset-instant" onclick="addMultiPreset(this)" data-name="{{ name }}" data-return-to="{{ return_to }}">
           + {{ name }} <span style="opacity:.6;font-size:11px;">instant</span>
         </button>
+        <a href="/add?preset={{ name }}" class="preset-edit" title="Edit preset">✎</a>
         {% else %}
         <a href="/add?preset={{ name }}" class="preset-chip"
            onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
@@ -568,13 +570,20 @@ function _currentNote() {
   return fd.get("note") || "";
 }
 
+var _existingPresets = new Set([
+  {% for name in frequent_presets %}"{{ name }}",{% endfor %}
+  {% for name in remaining_presets %}"{{ name }}",{% endfor %}
+  {% for name in multi_presets %}"{{ name }}",{% endfor %}
+]);
+var _loadedPresetName = "{{ preset_name|default('') }}";
+
 function showSavePreset() {
   const rec = _currentRecord();
   if (!rec.type) {
     alert("Select a record type first.");
     return;
   }
-  document.getElementById("preset-name-input").value = "";
+  document.getElementById("preset-name-input").value = "{{ preset_name|default('') }}";
   document.getElementById("preset-msg").style.display = "none";
   const dlg = document.getElementById("preset-dialog");
   dlg.style.display = "flex";
@@ -589,6 +598,9 @@ function doSavePreset() {
   const name = document.getElementById("preset-name-input").value.trim();
   const msg  = document.getElementById("preset-msg");
   if (!name) { msg.textContent = "Enter a name."; msg.style.display="block"; return; }
+  if (_existingPresets.has(name) && name !== _loadedPresetName) {
+    if (!confirm(`"${name}" already exists. Overwrite it?`)) return;
+  }
   const record = _currentRecord();
   const note   = _currentNote();
   const instant = document.getElementById("preset-instant-input").checked;

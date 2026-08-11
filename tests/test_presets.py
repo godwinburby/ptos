@@ -225,6 +225,20 @@ class TestInstantPresets:
         assert 'data-name="exercise"' in html
         assert 'class="preset-chip preset-instant"' in html
 
+    def test_add_page_renders_edit_pencil_and_warning(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        html = client.get("/add").get_data(as_text=True)
+        assert 'class="preset-edit" title="Edit preset"' in html
+        assert 'href="/add?preset=exercise"' in html
+        home_html = client.get("/").get_data(as_text=True)
+        assert 'class="preset-edit" title="Edit preset"' in home_html
+        edit_html = client.get("/add?preset=exercise").get_data(as_text=True)
+        assert "_existingPresets" in edit_html
+        assert '_loadedPresetName = "exercise"' in edit_html
+        assert 'preset-name-input").value = "exercise"' in edit_html
+
     def test_preset_instant_toggle_on(self, tmp_path, monkeypatch):
         self._write_presets(tmp_path, monkeypatch)
         from ptos_web import app

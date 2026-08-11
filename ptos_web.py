@@ -974,6 +974,7 @@ def add_get():
         types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
         multi_presets=multi_presets,
         instant_presets=instant_presets,
+        preset_name=preset_name,
         selected_type=selected_type, field_defs=field_defs,
         global_field_defs=global_field_defs,
         tag_options=tag_options, history_tags=history_filtered_tags,
