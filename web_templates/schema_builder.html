@@ -43,68 +43,93 @@
 
     <!-- required fields -->
     <div class="card" style="margin-bottom:12px;">
-      <div class="card-title">Required fields</div>
-      <div class="hint" style="margin-bottom:10px;">
-        These fields must be present on every record of this type.
-      </div>
-      <div id="required-chips" class="chip-group" style="margin-bottom:10px;"></div>
-      <div style="display:flex;gap:8px;">
-        <input type="text" id="req-input" placeholder="field name"
-               style="flex:1;font-size:14px;"
-               onkeydown="if(event.key==='Enter') addRequired()">
-        <button onclick="addRequired()" class="btn btn-ghost btn-sm">Add</button>
+      <div class="chip-section" style="border-top:3px solid var(--accent);">
+        <div class="chip-section-header" onclick="toggleSection(this)">
+          <div class="chip-section-label" style="color:var(--accent);">Required fields</div>
+          <span class="chip-toggle">−</span>
+        </div>
+        <div class="hint" style="margin-bottom:10px;">
+          These fields must be present on every record of this type.
+        </div>
+        <div id="required-chips" class="chip-group" style="margin-bottom:10px;"></div>
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="req-input" placeholder="field name"
+                 style="flex:1;font-size:14px;"
+                 onkeydown="if(event.key==='Enter') addRequired()">
+          <button onclick="addRequired()" class="btn btn-ghost btn-sm">Add</button>
+        </div>
       </div>
     </div>
 
     <!-- fields editor -->
     <div class="card" style="margin-bottom:12px;">
-      <div class="card-title">Fields</div>
-      <div class="hint" style="margin-bottom:10px;">
-        Define what each field accepts. Leave options empty for free-text fields.
+      <div class="chip-section" style="border-top:3px solid var(--success);">
+        <div class="chip-section-header" onclick="toggleSection(this)">
+          <div class="chip-section-label" style="color:var(--success);">Fields</div>
+          <span class="chip-toggle">−</span>
+        </div>
+        <div class="hint" style="margin-bottom:10px;">
+          Define what each field accepts. Leave options empty for free-text fields.
+        </div>
+        <div id="fields-list"></div>
+        <button onclick="addField()" class="btn btn-ghost btn-sm" style="margin-top:8px;">
+          + Add field
+        </button>
       </div>
-      <div id="fields-list"></div>
-      <button onclick="addField()" class="btn btn-ghost btn-sm" style="margin-top:8px;">
-        + Add field
-      </button>
     </div>
 
     <!-- tags editor -->
     <div class="card" style="margin-bottom:12px;">
-      <div class="card-title">Tag options</div>
-      <div class="hint" style="margin-bottom:10px;">
-        Tags that appear based on a field value. Pick a field, then define
-        which tags show for each value of that field.
+      <div class="chip-section collapsed" style="border-top:3px solid var(--warn);">
+        <div class="chip-section-header" onclick="toggleSection(this)">
+          <div class="chip-section-label" style="color:var(--warn);">Tag options</div>
+          <span class="chip-toggle">+</span>
+        </div>
+        <div class="hint" style="margin-bottom:10px;">
+          Tags that appear based on a field value. Pick a field, then define
+          which tags show for each value of that field.
+        </div>
+        <div id="tags-list"></div>
+        <button onclick="addTagRule()" class="btn btn-ghost btn-sm" style="margin-top:8px;">
+          + Add tag rule
+        </button>
       </div>
-      <div id="tags-list"></div>
-      <button onclick="addTagRule()" class="btn btn-ghost btn-sm" style="margin-top:8px;">
-        + Add tag rule
-      </button>
     </div>
 
     <!-- derived fields editor -->
     <div class="card" style="margin-bottom:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <div class="card-title" style="margin:0;">Derived fields</div>
-        <button onclick="addDerivedField()" class="btn btn-ghost btn-sm">+ Add</button>
+      <div class="chip-section collapsed" style="border-top:3px solid var(--success);">
+        <div class="chip-section-header" onclick="toggleSection(this)">
+          <div class="chip-section-label" style="color:var(--success);">Derived fields</div>
+          <span class="chip-toggle">+</span>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+          <button onclick="addDerivedField()" class="btn btn-ghost btn-sm">+ Add</button>
+        </div>
+        <div class="hint" style="margin-bottom:10px;">
+          Computed from other fields or dates. Available in filters and table output.
+          Example: <code>is_overdue = (today - date) &gt; 30</code>
+        </div>
+        <div id="derived-fields-list"></div>
       </div>
-      <div class="hint" style="margin-bottom:10px;">
-        Computed from other fields or dates. Available in filters and table output.
-        Example: <code>is_overdue = (today - date) &gt; 30</code>
-      </div>
-      <div id="derived-fields-list"></div>
     </div>
 
     <!-- conditions editor -->
     <div class="card" style="margin-bottom:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-        <div class="card-title" style="margin:0;">Conditional fields</div>
-        <button onclick="addCondition()" class="btn btn-ghost btn-sm">+ Add</button>
+      <div class="chip-section collapsed" style="border-top:3px solid var(--accent);">
+        <div class="chip-section-header" onclick="toggleSection(this)">
+          <div class="chip-section-label" style="color:var(--accent);">Conditional fields</div>
+          <span class="chip-toggle">+</span>
+        </div>
+        <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+          <button onclick="addCondition()" class="btn btn-ghost btn-sm">+ Add</button>
+        </div>
+        <div class="hint" style="margin-bottom:10px;">
+          Make a field required only when another field equals a specific value.
+          Example: <code>fit</code> required when <code>outcome = prescribed</code>
+        </div>
+        <div id="conditions-list"></div>
       </div>
-      <div class="hint" style="margin-bottom:10px;">
-        Make a field required only when another field equals a specific value.
-        Example: <code>fit</code> required when <code>outcome = prescribed</code>
-      </div>
-      <div id="conditions-list"></div>
     </div>
 
 </div>
@@ -122,9 +147,12 @@
   </div>
 
   <!-- Global Optional Fields -->
-  <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div style="font-size:13px;font-weight:700;">Global Optional Fields</div>
+  <div class="chip-section collapsed" style="border-top:3px solid var(--warn);">
+    <div class="chip-section-header" onclick="toggleSection(this)">
+      <div class="chip-section-label" style="color:var(--warn);">Global Optional Fields</div>
+      <span class="chip-toggle">+</span>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
       <button onclick="addGlobalField()" class="btn btn-ghost btn-sm">+ Add field</button>
     </div>
     <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
@@ -135,11 +163,14 @@
   </div>
 
   <!-- Shared Definitions -->
-  <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div style="font-size:13px;font-weight:700;">Shared Definitions
+  <div class="chip-section collapsed" style="border-top:3px solid var(--warn);">
+    <div class="chip-section-header" onclick="toggleSection(this)">
+      <div class="chip-section-label" style="color:var(--warn);">Shared Definitions
         <span style="font-size:11px;font-weight:400;color:var(--sub);margin-left:6px;">[shared.*]</span>
       </div>
+      <span class="chip-toggle">+</span>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
       <button onclick="addSharedDef()" class="btn btn-ghost btn-sm">+ Add</button>
     </div>
     <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
@@ -149,11 +180,14 @@
   </div>
 
   <!-- Field Metadata -->
-  <div style="border-top:1px solid var(--border);padding-top:16px;margin-bottom:18px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
-      <div style="font-size:13px;font-weight:700;">Field Metadata
+  <div class="chip-section collapsed" style="border-top:3px solid var(--warn);">
+    <div class="chip-section-header" onclick="toggleSection(this)">
+      <div class="chip-section-label" style="color:var(--warn);">Field Metadata
         <span style="font-size:11px;font-weight:400;color:var(--sub);margin-left:6px;">[fields.*]</span>
       </div>
+      <span class="chip-toggle">+</span>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
       <button onclick="addFieldMeta()" class="btn btn-ghost btn-sm">+ Add</button>
     </div>
     <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
@@ -212,6 +246,14 @@
 
 <script src="/static/js/drag.js"></script>
 <script>
+// ── Collapsible section helper ────────────────────────────────────────────────
+function toggleSection(el) {
+  var section = el.parentElement;
+  section.classList.toggle("collapsed");
+  el.querySelector(".chip-toggle").textContent =
+    section.classList.contains("collapsed") ? "+" : "−";
+}
+
 // ── State ─────────────────────────────────────────────────────────────────────
 // _state.types: ["expense","income",...]
 // _state.type_schemas: { expense: { required:[...], fields:{...}, tags:{...} } }
