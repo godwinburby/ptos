@@ -144,3 +144,90 @@ class TestInputTags:
         tags, new_tags = ptos.input_tags(["food", "transport"])
         assert tags == ["food"]
         assert new_tags == []
+
+
+class TestPromptDefaults:
+    def test_input_text_default_accepted(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda _: "")
+        assert ptos.input_text("Name:", default="coffee") == "coffee"
+
+    def test_input_text_default_override(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda _: "tea")
+        assert ptos.input_text("Name:", default="coffee") == "tea"
+
+    def test_input_text_shows_default(self, monkeypatch):
+        seen = []
+        monkeypatch.setattr("builtins.input", lambda p: seen.append(p) or "x")
+        ptos.input_text("Name:", default="coffee")
+        assert "[coffee]" in seen[0]
+
+    def test_input_text_no_default_requires_value(self, monkeypatch):
+        inputs = iter(["", "ok"])
+        monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+        assert ptos.input_text("Name:") == "ok"
+
+    def test_input_int_default_accepted(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda _: "")
+        assert ptos.input_int("Amount:", default=42) == "42"
+
+    def test_input_int_default_override(self, monkeypatch):
+        monkeypatch.setattr("builtins.input", lambda _: "7")
+        assert ptos.input_int("Amount:", default=42) == "7"
+
+    def test_choose_from_list_default_accepted(self, monkeypatch, capsys):
+        monkeypatch.setattr("builtins.input", lambda _: "")
+        assert ptos.choose_from_list("Pick:", ["a", "b", "c"], default="b") == "b"
+
+    def test_choose_from_list_default_marker(self, monkeypatch, capsys):
+        monkeypatch.setattr("builtins.input", lambda _: "1")
+        ptos.choose_from_list("Pick:", ["a", "b"], default="b")
+        assert "← default" in capsys.readouterr().out
+
+    def test_choose_from_list_invalid_default_reprompts(self, monkeypatch):
+        inputs = iter(["", "2"])
+        monkeypatch.setattr("builtins.input", lambda _: next(inputs))
+        assert ptos.choose_from_list("Pick:", ["a", "b"], default="zzz") == "b"
+
+    def test_choose_from_list_optional_default_accepted(self, monkeypatch, capsys):
+        monkeypatch.setattr("builtins.input", lambda _: "")
+        assert ptos.choose_from_list_optional("Pick:", ["a", "b"], default="b") == "b"
+
+    def test_choose_from_list_optional_invalid_default_skips(self, monkeypatch, capsys):
+        monkeypatch.setattr("builtins.input", lambda _: "")
+        assert ptos.choose_from_list_optional("Pick:", ["a", "b"], default="zzz") == ""
+
+
+class TestCompleteRecordSuggestions:
+    def test_suggested_defaults_prefill(self, sample_schema, monkeypatch):
+        answers = iter(["1", "", "", "50", "", "", "", ""])
+        monkeypatch.setattr("builtins.input", lambda _: next(answers))
+
+        def suggest(rtype, record):
+            assert rtype == "expense"
+            return {"domain": "work", "category": "supplies", "project": "proj_b"}
+
+        record, note = ptos.complete_record(sample_schema, {}, suggest_fn=suggest)
+        assert record["type"] == "expense"
+        assert record["domain"] == "work"
+        assert record["category"] == "supplies"
+        assert record["amount"] == "50"
+        assert record.get("project") == "proj_b"
+
+    def test_invalid_suggested_default_ignored(self, sample_schema, monkeypatch):
+        # category default "food" is not a valid option for domain=work
+        answers = iter(["1", "", "2", "50", "", "", "", ""])
+        monkeypatch.setattr("builtins.input", lambda _: next(answers))
+
+        def suggest(rtype, record):
+            return {"domain": "work", "category": "food"}
+
+        record, note = ptos.complete_record(sample_schema, {}, suggest_fn=suggest)
+        assert record["domain"] == "work"
+        assert record["category"] == "travel"
+
+    def test_no_suggest_fn_no_defaults(self, sample_schema, monkeypatch):
+        answers = iter(["1", "2", "1", "50", "", "", "", ""])
+        monkeypatch.setattr("builtins.input", lambda _: next(answers))
+        record, note = ptos.complete_record(sample_schema, {})
+        assert record["domain"] == "work"
+        assert record["category"] == "supplies"

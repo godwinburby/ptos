@@ -46,8 +46,10 @@ from ptos import (
     # Misc
     resolve_time, resolve_date, parse_date, today,
     edit_target, init_ptos, set_home, set_user_name, set_date_format,
+    set_currency, add_cycle, set_auth,
+    add_type, add_type_field, remove_type,
     restore_data, restore_config,
-    backup_data, backup_config, list_backups,
+    backup_data, backup_config, list_backups, delete_backup,
     doctor_check, print_doctor_results,
     get_log_files, atomic_write, run_sync,
     # Output / rendering helpers
@@ -161,6 +163,10 @@ def build_parser(cycles):
     qry.add_argument("-g", "--tag",    action="append",             help="Filter by tag (repeatable)")
     qry.add_argument("-S", "--search",                              help="Full-text search")
     qry.add_argument("--save",                                      help="Save current query to queries.toml under this name")
+    qry.add_argument("--add-dashboard", dest="add_dashboard", metavar="NAME",
+                     help="Add a dashboard referencing metrics to queries.toml")
+    qry.add_argument("--metrics", nargs="+", metavar="METRIC",
+                     help="Metrics for the new dashboard (with --add-dashboard)")
     qry.add_argument("--file",   dest="from_file", metavar="FILENAME", help="Read from this file in records/ folder (e.g. 2025.log)")
     qry.add_argument("--select", nargs="+", metavar="FIELD",           help="Show only these fields in output (date and type always included; add note to include notes)")
 
@@ -229,7 +235,8 @@ def build_parser(cycles):
     utl = p.add_argument_group("Utilities")
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
     utl.add_argument("--fix",           action="store_true", help="With --lint: open files with errors in editor")
-    utl.add_argument("-j", "--journal", action="store_true", help="Open today's journal")
+    utl.add_argument("-j", "--journal", nargs="?", const="today", default=None, metavar="DATE",
+                     help="Open a journal file (default: today; accepts today/yesterday/YYYY-MM-DD)")
     utl.add_argument("-e", "--edit",    nargs="?", const="records", metavar="TARGET",
                      help="Edit a workspace file  (r s q c p d/j x)")
     utl.add_argument("--set",      nargs="+", metavar="KEY=VALUE",
@@ -254,6 +261,14 @@ def build_parser(cycles):
     utl.add_argument("--restore-full", nargs="?", const="", metavar="PATH", help="Restore from full backup (shows list if no path given)")
     utl.add_argument("--restore-config", nargs="?", const="", metavar="PATH", help="Restore from config backup (shows list if no path given)")
     utl.add_argument("--list-backups", action="store_true", help="List available backups in backups/ folder")
+    utl.add_argument("--delete-backup", dest="delete_backup", metavar="NAME",
+                     help="Delete a specific backup file by name")
+    utl.add_argument("--set-currency", dest="set_currency", metavar="SYMBOL",
+                     help="Set currency symbol in config")
+    utl.add_argument("--add-cycle", dest="add_cycle", nargs=2, metavar=("NAME", "DAY"),
+                     help="Add or replace a custom cycle: NAME DAY (day of month, 1-31)")
+    utl.add_argument("--set-auth", dest="set_auth", nargs=2, metavar=("USERNAME", "PASSWORD"),
+                     help="Set HTTP Basic Auth credentials (stored in plaintext in config)")
     utl.add_argument("--doctor", action="store_true", help="Check PTOS installation health")
     utl.add_argument("--doctor-fix", dest="doctor_fix", action="store_true", help="With --doctor: fix any issues found")
     utl.add_argument("--check-schema", action="store_true", help="Validate schema.toml structure and report issues")
@@ -273,6 +288,21 @@ def build_parser(cycles):
     utl.add_argument("--resync", action="store_true",
                      help="With --bisync: initialize bisync relationship\n"
                           "  (first-time setup or reset)")
+
+    sch = p.add_argument_group("Schema")
+    sch.add_argument("--add-type", dest="add_type", metavar="NAME",
+                     help="Add a new record type to schema.toml")
+    sch.add_argument("--required", nargs="+", metavar="FIELD",
+                     help="Required fields for the new type (with --add-type)")
+    sch.add_argument("--add-field", dest="add_field", metavar="TYPE.FIELD",
+                     help="Add a field to a type (e.g. expense.fuel)")
+    sch.add_argument("--field-type", dest="field_type",
+                     choices=["int", "string", "datetime", "bool"], default="string",
+                     help="Field type for --add-field (default: string)")
+    sch.add_argument("--field-options", dest="field_options", nargs="+", metavar="OPTION",
+                     help="Flat list of valid options for the new field (with --add-field)")
+    sch.add_argument("--remove-type", dest="remove_type", metavar="NAME",
+                     help="Remove a record type from schema.toml")
 
     return p
 
@@ -1330,6 +1360,127 @@ def _print_todo_table(todos):
         print(line)
 
 
+def _interactive_suggest(rtype, record):
+    """Return {field: most_common_value} for interactive --add prompts,
+    sourced from history suggestions (cached full-file scan per type).
+    Enter-picking a suggested default is a no-op — the value is returned as-is."""
+    try:
+        import ptos_service
+        sugg = ptos_service.get_history_suggestions(rtype)
+    except Exception:
+        return {}
+    defaults = dict(sugg.get("field_defaults") or {})
+    for fname, values in (sugg.get("field_values") or {}).items():
+        if fname not in defaults and values:
+            defaults[fname] = values[0]
+    return defaults
+
+
+def _metric_to_internal(m):
+    """Convert a stored metrics.toml entry ({avg: base, ratio: [...]}) into
+    the internal {kind, base, base2, ...} form save_queries_full expects."""
+    m = dict(m)
+    internal = {}
+    for k in ("unit_field", "unit_weights", "time"):
+        if k in m:
+            internal[k] = m.pop(k)
+    if "derived" in m:
+        internal["derived"] = m.pop("derived")
+    elif "ratio" in m and isinstance(m.get("ratio"), list) and len(m["ratio"]) >= 2:
+        internal["kind"] = "ratio"
+        internal["base"], internal["base2"] = m.pop("ratio")[:2]
+    else:
+        for kind in ("avg", "sum", "max", "min"):
+            if kind in m:
+                internal["kind"] = kind
+                internal["base"] = m.pop(kind)
+                break
+        else:
+            internal["kind"] = "avg"
+    if m:
+        internal["_raw"] = m
+    return internal
+
+
+def _handle_add_dashboard(args):
+    """Add a dashboard referencing metrics to queries.toml, preserving
+    all other queries state (queries, metrics, aliases, due, boards,
+    habits, calendars)."""
+    import ptos_service
+    queries = get_queries()
+    if not isinstance(queries, dict):
+        queries = {}
+    reserved = ("metrics", "dashboards", "due")
+
+    def _norm(q):
+        q = dict(q)
+        if isinstance(q.get("where"), list):
+            q["where"] = ptos._filters_to_expr(q["where"])
+        return q
+
+    # Flat config keys are stored as "board.X" / "habit.X" / "calendar.X";
+    # starter files may use [board.X] tables which tomllib nests under a
+    # bare "board" key. Extract both forms so round-trips never drop configs.
+    def _nested(container, is_cfg):
+        cfg = {}
+        if isinstance(queries.get(container), dict):
+            for k, v in queries[container].items():
+                if isinstance(v, dict) and is_cfg(v):
+                    cfg[k] = v
+        return cfg
+
+    boards    = {k[6:]: v for k, v in queries.items() if k.startswith("board.") and isinstance(v, dict)}
+    habits    = {k[6:]: v for k, v in queries.items() if k.startswith("habit.") and isinstance(v, dict)}
+    calendars = {k[9:]: v for k, v in queries.items() if k.startswith("calendar.") and isinstance(v, dict)}
+    boards.update(_nested("board", lambda v: "columns" in v))
+    habits.update(_nested("habit", lambda v: "filters" in v))
+    calendars.update(_nested("calendar", lambda v: "filters" in v))
+    nested_containers = {"board", "habit", "calendar"}
+
+    raw_q = {k: _norm(v) for k, v in queries.items()
+             if k not in reserved and k not in nested_containers
+             and isinstance(v, dict) and "alias" not in v
+             and not k.startswith(("board.", "habit.", "calendar.", "due."))}
+    raw_a = {k: v for k, v in queries.items()
+             if k not in reserved and k not in nested_containers
+             and isinstance(v, dict) and "alias" in v}
+    raw_due = {}
+    for k, v in queries.items():
+        if isinstance(v, dict):
+            if k.startswith("due."):
+                raw_due[k[4:]] = v
+            elif k == "due":
+                raw_due["default"] = v
+
+    dashboards = dict(queries.get("dashboards", {}))
+    if args.add_dashboard in dashboards:
+        sys.exit(f"Dashboard '{args.add_dashboard}' already exists.")
+    known_metrics = set((queries.get("metrics") or {}).keys())
+    for m in (args.metrics or []):
+        if m not in known_metrics:
+            print(f"Warning: metric '{m}' not found in queries.toml — dashboard will be empty until defined.")
+    dashboards[args.add_dashboard] = {"metrics": list(args.metrics or [])}
+
+    try:
+        ptos_service.save_queries_full(
+            raw_q,
+            {name: _metric_to_internal(m) for name, m in (queries.get("metrics") or {}).items()
+             if isinstance(m, dict)},
+            dashboards,
+            raw_a,
+            raw_due=raw_due,
+            raw_boards=boards,
+            raw_habits=habits,
+            raw_calendars=calendars,
+        )
+    except ptos_service.PTOSError as e:
+        sys.exit(str(e))
+    except Exception as e:
+        sys.exit(f"Error saving dashboard: {e}")
+    metrics_str = ", ".join(args.metrics) if args.metrics else "none"
+    print(f"Dashboard '{args.add_dashboard}' saved (metrics: {metrics_str}).")
+
+
 # --------------------------------------------------
 # Main
 # --------------------------------------------------
@@ -1369,6 +1520,18 @@ def main():
 
     if args.set_date_format:
         set_date_format(args.set_date_format)
+        return
+
+    if args.set_currency:
+        set_currency(args.set_currency)
+        return
+
+    if args.add_cycle:
+        add_cycle(args.add_cycle[0], args.add_cycle[1])
+        return
+
+    if args.set_auth:
+        set_auth(args.set_auth[0], args.set_auth[1])
         return
 
     if args.edit:
@@ -1427,8 +1590,8 @@ def main():
         quick_add(args)
         return
 
-    if args.journal:
-        edit_target("daily")
+    if args.journal is not None:
+        edit_target("daily", date_str=resolve_date(args.journal))
         return
 
     if args.doctor:
@@ -1453,6 +1616,25 @@ def main():
             print("Schema looks valid!")
         return
 
+    if args.add_type:
+        add_type(args.add_type, args.required)
+        return
+
+    if args.add_field:
+        if "." not in args.add_field:
+            sys.exit("--add-field expects TYPE.FIELD (e.g. expense.fuel)")
+        type_name, field_name = args.add_field.split(".", 1)
+        add_type_field(type_name, field_name, args.field_type, args.field_options)
+        return
+
+    if args.remove_type:
+        remove_type(args.remove_type)
+        return
+
+    if args.add_dashboard:
+        _handle_add_dashboard(args)
+        return
+
     if args.backup_full:
         backup_path = backup_data()
         print(f"Full backup created: {backup_path}")
@@ -1471,6 +1653,16 @@ def main():
         print("\nAvailable backups:")
         for name, date, btype in backups:
             print(f"  {name}  ({btype}, {fmt_datetime(date)})")
+        return
+
+    if args.delete_backup:
+        try:
+            delete_backup(args.delete_backup)
+        except FileNotFoundError as e:
+            sys.exit(str(e))
+        except ValueError as e:
+            sys.exit(f"Invalid backup name: {e}")
+        print(f"Deleted backup: {args.delete_backup}")
         return
 
     if args.restore_full is not None:
@@ -1496,7 +1688,8 @@ def main():
 
     if args.add is not None:
         if not args.add:
-            interactive_add(schema, resolve_date(args.date), args.save_preset)
+            interactive_add(schema, resolve_date(args.date), args.save_preset,
+                            suggest_fn=_interactive_suggest)
         else:
             record = {}
             for item in args.add:

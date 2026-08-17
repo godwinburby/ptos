@@ -39,6 +39,31 @@ def _schema():
     return copy.deepcopy(BASE_SCHEMA)
 
 
+VALID_SCHEMA = {
+    "types": {"allowed": ["expense", "income"]},
+    "type": {
+        "expense": {
+            "required": ["amount", "category"],
+            "fields": {
+                "amount": {"type": "int"},
+                "category": {"options": ["food", "transport"]},
+            },
+        },
+        "income": {
+            "required": ["source", "amount"],
+            "fields": {
+                "source": {"options": ["salary", "gift"]},
+                "amount": {"type": "int"},
+            },
+        },
+    },
+}
+
+
+def _valid_schema():
+    return copy.deepcopy(VALID_SCHEMA)
+
+
 class TestAddFieldOption:
     @pytest.fixture(autouse=True)
     def setup(self, monkeypatch):
@@ -289,3 +314,117 @@ class TestValidateSchemaStructure:
                   "shared": {}}
         issues = ptos.validate_schema_structure(schema)
         assert any("badformat" in i and "expected format" in i for i in issues)
+
+
+class TestAddType:
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch):
+        self.saved = []
+        monkeypatch.setattr(ptos, "get_schema", _valid_schema)
+        monkeypatch.setattr(ptos, "_save_schema", lambda s: self.saved.append(s))
+
+    def test_adds_type(self, capsys):
+        ptos.add_type("book")
+        assert "book" in capsys.readouterr().out
+        schema = self.saved[0]
+        assert "book" in schema["types"]["allowed"]
+        assert schema["type"]["book"] == {"required": [], "fields": {}}
+
+    def test_adds_type_with_required(self, capsys):
+        ptos.add_type("book", ["title", "author"])
+        schema = self.saved[0]
+        assert schema["type"]["book"]["required"] == ["title", "author"]
+
+    def test_required_field_def_auto_created(self, capsys):
+        ptos.add_type("book", ["title"])
+        schema = self.saved[0]
+        assert schema["type"]["book"]["fields"]["title"] == {"type": "string"}
+
+    def test_duplicate_type_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos.add_type("expense")
+        assert self.saved == []
+
+    def test_invalid_name_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos.add_type("Bad Name")
+        assert self.saved == []
+
+    def test_uppercase_name_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos.add_type("Book")
+        assert self.saved == []
+
+    def test_empty_name_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos.add_type("   ")
+        assert self.saved == []
+
+    def test_required_field_definition_auto_created(self, capsys):
+        ptos.add_type("book", ["crop"])
+        schema = self.saved[0]
+        assert schema["type"]["book"]["fields"]["crop"] == {"type": "string"}
+
+
+class TestAddTypeField:
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch):
+        self.saved = []
+        monkeypatch.setattr(ptos, "get_schema", _valid_schema)
+        monkeypatch.setattr(ptos, "_save_schema", lambda s: self.saved.append(s))
+
+    def test_adds_field_with_options(self, capsys):
+        ptos.add_type_field("expense", "fuel", "string", ["diesel", "petrol"])
+        assert "fuel" in capsys.readouterr().out
+        fields = self.saved[0]["type"]["expense"]["fields"]
+        assert fields["fuel"] == {"type": "string", "options": ["diesel", "petrol"]}
+
+    def test_adds_field_without_options(self, capsys):
+        ptos.add_type_field("expense", "fuel", "int")
+        fields = self.saved[0]["type"]["expense"]["fields"]
+        assert fields["fuel"] == {"type": "int"}
+
+    def test_bool_field_type(self, capsys):
+        ptos.add_type_field("expense", "paid", "bool")
+        fields = self.saved[0]["type"]["expense"]["fields"]
+        assert fields["paid"] == {"type": "bool"}
+
+    def test_unknown_type_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos.add_type_field("nope", "fuel", "string")
+        assert self.saved == []
+
+    def test_invalid_field_type_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos.add_type_field("expense", "fuel", "money")
+        assert self.saved == []
+
+    def test_duplicate_field_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos.add_type_field("expense", "category", "string")
+        assert self.saved == []
+
+    def test_invalid_field_name_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos.add_type_field("expense", "Bad Field", "string")
+        assert self.saved == []
+
+
+class TestRemoveType:
+    @pytest.fixture(autouse=True)
+    def setup(self, monkeypatch):
+        self.saved = []
+        monkeypatch.setattr(ptos, "get_schema", _valid_schema)
+        monkeypatch.setattr(ptos, "_save_schema", lambda s: self.saved.append(s))
+
+    def test_removes_type(self, capsys):
+        ptos.remove_type("income")
+        assert "income" in capsys.readouterr().out
+        schema = self.saved[0]
+        assert "income" not in schema["types"]["allowed"]
+        assert "income" not in schema["type"]
+
+    def test_missing_type_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos.remove_type("nope")
+        assert self.saved == []
