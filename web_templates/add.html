@@ -325,6 +325,27 @@
     </script>
     {% endif %}
 
+    <!-- links -->
+    <div class="divider"></div>
+    <div class="field-group">
+      <label>Id <span style="color:var(--sub);font-weight:400;">optional · link target</span></label>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <input type="text" name="id" id="add-id" list="add-link-id-list"
+               value="{{ field_values.get('id','') if field_values else '' }}"
+               placeholder="auto link target (e.g. k3f9a1)" style="flex:1;">
+        <button type="button" onclick="generateRecordId()" style="padding:4px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;" title="Generate a random id">Generate</button>
+      </div>
+      <datalist id="add-link-id-list"></datalist>
+    </div>
+    <div class="field-group">
+      <label>Links <span style="color:var(--sub);font-weight:400;">optional · comma-separated type:id</span></label>
+      <input type="text" name="links" id="add-links" list="add-link-ids-list"
+             value="{{ field_values.get('links','') if field_values else '' }}"
+             placeholder="expense:k3f9a1, todo:t7c2b8">
+      <datalist id="add-link-ids-list"></datalist>
+      <div style="font-size:11px;color:var(--sub);margin-top:4px;">links reference existing entries by their id — e.g. project:p91a, expense:k3f9a1</div>
+    </div>
+
     <!-- note -->
     <div class="divider"></div>
     <div style="background:var(--accent-lt);border-left:3px solid var(--accent);border-radius:8px;padding:12px 16px;margin:14px 0;">
@@ -781,6 +802,23 @@ document.addEventListener("DOMContentLoaded", function() {
   if (noteInput && typeof attachBracketAutocomplete === "function") {
     attachBracketAutocomplete(noteInput);
   }
+});
+</script>
+<script>
+function generateRecordId() {
+  var chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  var out = '';
+  for (var i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  document.getElementById('add-id').value = out;
+}
+document.addEventListener("DOMContentLoaded", function() {
+  fetch("/api/link-ids").then(function(r) { return r.json(); }).then(function(d) {
+    if (!d || d.ok === false || !Array.isArray(d)) return;
+    var dl = document.getElementById('add-link-ids-list');
+    if (dl) dl.innerHTML = d.map(function(it) {
+      return '<option value="' + it.target + '">' + (it.line || '') + '</option>';
+    }).join('');
+  }).catch(function() {});
 });
 </script>
 

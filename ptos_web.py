@@ -672,6 +672,7 @@ def todo_page():
     pri = request.args.get("priority", None)
     due_filter = request.args.get("due", None)
     search = request.args.get("search", None)
+    linked_to = request.args.get("linked_to", None)
     groupby = request.args.get("groupby", "timeline")
 
     try:
@@ -696,6 +697,8 @@ def todo_page():
             result = [t for t in result if t.priority == pri.upper()]
         if search:
             result = [t for t in result if _glob_match(search, t.description)]
+        if linked_to:
+            result = [t for t in result if linked_to in t.links]
         return result
 
     for key in ("overdue", "today", "tomorrow", "upcoming", "someday"):
@@ -792,6 +795,7 @@ def todo_page():
         now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
         error=error, selected_project=project, selected_context=context,
         selected_priority=pri, selected_due=due_filter, selected_search=search,
+        selected_linked_to=linked_to,
         done_today=done_today, total_today=total_today, done_recent=done_recent,
         all_priorities=all_priorities, priority_labels=priority_labels,
         grouped=grouped, groupby=groupby)
@@ -1015,6 +1019,12 @@ def add_post():
         if val: record[fname] = val.replace(" ", "_")
     tags = request.form.getlist("tag") + custom_tags
     if tags: record["tag"] = tags
+    id_val = request.form.get("id", "").strip().replace(" ", "_")
+    links_val = request.form.get("links", "").strip()
+    if id_val: record["id"] = id_val
+    if links_val:
+        record["links"] = ",".join(t.strip().replace(" ", "_")
+                                   for t in links_val.split(",") if t.strip())
     
     return_to = request.form.get("return_to", "") or url_for("browse_get")
     if not return_to.startswith("/"):
@@ -2739,6 +2749,12 @@ def edit_post():
     for fname in svc.get_global_fields(schema):
         val = request.form.get(fname, "").strip()
         if val: new_record[fname] = val.replace(" ", "_")
+    id_val = request.form.get("id", "").strip().replace(" ", "_")
+    links_val = request.form.get("links", "").strip()
+    if id_val: new_record["id"] = id_val
+    if links_val:
+        new_record["links"] = ",".join(t.strip().replace(" ", "_")
+                                       for t in links_val.split(",") if t.strip())
     tags = request.form.getlist("tag") + custom_tags
     if tags: new_record["tag"] = tags
     
@@ -3391,6 +3407,52 @@ def api_backlinks():
     if not subject:
         return jsonify({"notes": [], "journal": [], "todo": [], "records": []})
     return jsonify(svc.get_backlinks(subject))
+
+
+@app.route("/api/link-ids")
+def api_link_ids():
+    try:
+        return jsonify(svc.get_link_ids())
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("link-ids failed")
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/retro-id", methods=["POST"])
+def api_retro_id():
+    data = request.get_json(silent=True) or {}
+    kind = data.get("kind", "record")
+    try:
+        if kind == "todo":
+            return jsonify(svc.retro_id_todo(int(data.get("line_no", 0))))
+        filepath = data.get("filepath", "")
+        lineno = int(data.get("lineno", 0))
+        if not filepath or lineno < 1:
+            raise PTOSError("Missing filepath/lineno")
+        return jsonify(svc.retro_id_record(filepath, lineno))
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("retro-id failed")
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/link", methods=["POST"])
+def api_link():
+    data = request.get_json(silent=True) or {}
+    source = (data.get("source") or "").strip()
+    target = (data.get("target") or "").strip()
+    try:
+        if not source or not target:
+            raise PTOSError("source and target are required (type:id)")
+        return jsonify(svc.link_entries(source, target))
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("link failed")
+        return jsonify(ok=False, error=str(e))
 
 
 @app.route("/api/save_query", methods=["POST"])

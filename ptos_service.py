@@ -3097,19 +3097,32 @@ def _iter_link_matches(linkable_fields):
                 for m in re.finditer(r'@\S+', line):
                     yield {"source": "todo", "value": m.group(0)[1:],
                            "loc": _todo_loc(line, lineno, done, tpath)}
+            for m in re.finditer(r'\blinks:([\w:,\-]+)', line):
+                for token in m.group(1).split(","):
+                    token = token.strip()
+                    if token:
+                        yield {"source": "todo", "value": token,
+                               "loc": _todo_loc(line, lineno, done, tpath)}
 
     try:
         for fname in ptos.get_log_files():
             path = os.path.join(ptos.RECORDS_DIR, fname)
             lines = _read_lines(path)
-            if not linkable_fields:
-                continue
-            _kv_re = re.compile(r'\b(' + '|'.join(re.escape(f) for f in linkable_fields) + r')=(\S+)')
+            _kv_re = None
+            if linkable_fields:
+                _kv_re = re.compile(r'\b(' + '|'.join(re.escape(f) for f in linkable_fields) + r')=(\S+)')
             for lineno, line in enumerate(lines, start=1):
-                for m in _kv_re.finditer(line):
-                    yield {"source": "record",
-                           "value": m.group(2),
-                           "loc": _record_loc(line, fname, m.group(1), lineno, m.start(2))}
+                if _kv_re:
+                    for m in _kv_re.finditer(line):
+                        yield {"source": "record",
+                               "value": m.group(2),
+                               "loc": _record_loc(line, fname, m.group(1), lineno, m.start(2))}
+                for m in re.finditer(r'\blinks=([\w:,\-]+)', line):
+                    for token in m.group(1).split(","):
+                        token = token.strip()
+                        if token:
+                            yield {"source": "record", "value": token,
+                                   "loc": _record_loc(line, fname, "links", lineno, line.find(token))}
     except Exception:
         pass
 
@@ -3159,4 +3172,86 @@ def get_backlinks(subject):
               "records" if m["source"] == "record" else m["source"]
         out[key].append(m["loc"])
     return out
+
+
+def get_link_ids():
+    """All type:id targets currently present (for autocomplete / link picker)."""
+    try:
+        return ptos.list_link_ids()
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def retro_id_record(filepath, lineno):
+    """Generate + append id=<id> to a record line in place.
+    lineno is the 0-based file index (engine convention)."""
+    try:
+        with open(filepath, encoding="utf-8") as f:
+            lines = f.readlines()
+        if lineno < 0 or lineno >= len(lines):
+            raise PTOSError(f"Line {lineno + 1} out of range in {filepath}")
+        raw = lines[lineno].rstrip("\n")
+        d, kv, _ = ptos.parse_line(raw)
+        rtype = kv.get("type")
+        if not rtype:
+            raise PTOSError("Can't assign an id to a line without a type field")
+        if kv.get("id"):
+            raise PTOSError(f"Line already has id={kv['id']}")
+        new_id = ptos.append_record_id(filepath, lineno, raw)
+        _invalidate_history_cache()
+        return {"ok": True, "id": new_id, "target": f"{rtype}:{new_id}"}
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def retro_id_todo(line_no):
+    """Generate + append id:<id> to a todo line in place."""
+    try:
+        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        target = [t for t in todos if t.line_no == line_no]
+        if not target:
+            raise PTOSError(f"Todo at line {line_no} not found")
+        t = target[0]
+        if t.id:
+            raise PTOSError(f"Todo already has id:{t.id}")
+        new_line, new_id = ptos.append_todo_id(t.raw_line)
+        ptos_todo.rewrite_line_by_number(TODO_PATH, t.line_no, new_line)
+        return {"ok": True, "id": new_id, "target": f"todo:{new_id}"}
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def link_entries(src_target, dst_target):
+    """Add dst_target to the source entry's links field. Returns the new target
+    list. Raises PTOSError if the source can't carry links."""
+    try:
+        src = ptos.resolve_link(src_target)
+        if src is None:
+            raise PTOSError(f"Source '{src_target}' not found — give it an id first "
+                            "(edit it and press Generate, or use --retro-id).")
+        dst_resolves = ptos.resolve_link(dst_target) is not None
+        if src["kind"] == "journal":
+            raise PTOSError("Journal entries can't carry links= tokens — write [[...]] "
+                            "in the prose instead.")
+        if src["kind"] == "todo":
+            new_line = ptos.append_links_to_todo_line(src["line"], [dst_target])
+            updated = ptos_todo.rewrite_line_by_number(src["filepath"], src["lineno"], new_line)
+        else:
+            new_line = ptos.append_links_to_line(src["line"], [dst_target])
+            ptos.rewrite_line_in_file(src["filepath"], src["line"], new_line, lineno=src["lineno"])
+            updated = True
+        _invalidate_history_cache()
+        links = []
+        for tok in re.findall(r'links[=:](\S+)', new_line):
+            links.extend(x.strip() for x in tok.split(",") if x.strip())
+        return {"ok": True, "source": src_target, "target": dst_target,
+                "resolves": dst_resolves, "updated": updated, "links": links}
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
 

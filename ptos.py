@@ -2306,6 +2306,236 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
                     total += val
     return results, total
 
+# --------------------------------------------------
+# Cross-record links (type:id)
+# --------------------------------------------------
+
+_LINK_RE = re.compile(r'\b(links|id)=([^\s|]+)')
+
+
+def generate_id(length=6):
+    """Generate a short random id (lowercase alphanumeric)."""
+    import secrets
+    alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
+    return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def split_link_target(target):
+    """Split a 'type:id' link target into (type, id).
+    journal targets are 'journal:YYYY-MM-DD'. Returns None if malformed."""
+    if not target or ":" not in target:
+        return None
+    rtype, _, rid = target.partition(":")
+    rtype = rtype.strip().lower()
+    rid = rid.strip()
+    if not rtype or not rid:
+        return None
+    return rtype, rid
+
+
+def _links_list(value):
+    """Normalise a links value (string or list) into a list of tokens."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(v) for v in value]
+    return [str(value)]
+
+
+def resolve_link(target):
+    """Resolve a 'type:id' link target to its source location.
+    Returns a dict {kind, type, id, filepath, lineno, line} or None.
+    Records scan .log files for id=<id>; todos scan todo.txt/done.txt
+    for id:<id>; journal targets resolve if the date file exists."""
+    parts = split_link_target(target)
+    if not parts:
+        return None
+    rtype, rid = parts
+
+    if rtype == "journal":
+        if not (len(rid) == 10 and rid[4] == "-" and rid[7] == "-"):
+            return None
+        path = _journal_path(rid)
+        if not os.path.isfile(path):
+            return None
+        return {"kind": "journal", "type": "journal", "id": rid,
+                "filepath": path, "lineno": 1, "line": ""}
+
+    if rtype == "todo":
+        for tpath in (TODO_PATH, DONE_PATH):
+            if not os.path.isfile(tpath):
+                continue
+            with open(tpath, encoding="utf-8") as f:
+                for lineno, line in enumerate(f, start=1):
+                    line = line.rstrip("\n")
+                    if re.search(rf"\bid:{re.escape(rid)}(?:\s|$)", line):
+                        return {"kind": "todo", "type": "todo", "id": rid,
+                                "filepath": tpath, "lineno": lineno, "line": line}
+        return None
+
+    hits = find_records_with_location([f"type={rtype}", f"id={rid}"])
+    if not hits:
+        return None
+    filepath, lineno, raw = hits[0]
+    return {"kind": "record", "type": rtype, "id": rid,
+            "filepath": filepath, "lineno": lineno, "line": raw}
+
+
+def list_link_ids():
+    """Return all (type, id) targets currently present in records and todos,
+    sorted, deduplicated. Used by autocomplete and the link picker."""
+    seen = set()
+    out = []
+    for filepath, lineno, raw in find_records_with_location([], search=None):
+        d, kv, _ = parse_line(raw)
+        rid = kv.get("id")
+        rtype = kv.get("type")
+        if rid and rtype:
+            key = f"{rtype}:{rid}"
+            if key not in seen:
+                seen.add(key)
+                out.append({"target": key, "kind": "record",
+                            "date": str(d), "line": raw.strip()})
+    for tpath in (TODO_PATH, DONE_PATH):
+        if not os.path.isfile(tpath):
+            continue
+        with open(tpath, encoding="utf-8") as f:
+            for lineno, line in enumerate(f, start=1):
+                m = re.search(r'\bid:(\S+)', line)
+                if m:
+                    key = f"todo:{m.group(1)}"
+                    if key not in seen:
+                        seen.add(key)
+                        out.append({"target": key, "kind": "todo",
+                                    "date": "", "line": line.strip()})
+    out.sort(key=lambda x: x["target"])
+    return out
+
+
+def check_dangling_links():
+    """Walk every record/todo/journal carrying links and resolve each target.
+    Returns a list of {kind, target, error, filepath, lineno, line} dicts for
+    broken links, plus duplicate-id reports for records and todos."""
+    problems = []
+    seen_ids = {}
+
+    for filepath, lineno, raw in find_records_with_location([], search=None):
+        d, kv, _ = parse_line(raw)
+        rid = kv.get("id")
+        rtype = kv.get("type")
+        if rid and rtype:
+            key = f"{rtype}:{rid}"
+            if key in seen_ids:
+                problems.append({
+                    "kind": "record", "target": key, "error": "duplicate id",
+                    "filepath": filepath, "lineno": lineno, "line": raw.strip()})
+            else:
+                seen_ids[key] = (filepath, lineno)
+        for t in _links_list(kv.get("links")):
+            for tok in str(t).split(","):
+                tok = tok.strip()
+                if not tok:
+                    continue
+                if resolve_link(tok) is None:
+                    problems.append({
+                        "kind": "record", "target": tok,
+                        "error": "dangling link", "filepath": filepath,
+                        "lineno": lineno, "line": raw.strip()})
+
+    for tpath in (TODO_PATH, DONE_PATH):
+        if not os.path.isfile(tpath):
+            continue
+        with open(tpath, encoding="utf-8") as f:
+            for lineno, line in enumerate(f, start=1):
+                line = line.rstrip("\n")
+                m = re.search(r'\bid:(\S+)', line)
+                if m:
+                    key = f"todo:{m.group(1)}"
+                    if key in seen_ids:
+                        problems.append({
+                            "kind": "todo", "target": key,
+                            "error": "duplicate id",
+                            "filepath": tpath, "lineno": lineno, "line": line})
+                    else:
+                        seen_ids[key] = (tpath, lineno)
+                for m in re.finditer(r'\blinks:(\S+)', line):
+                    for tok in m.group(1).split(","):
+                        tok = tok.strip()
+                        if not tok:
+                            continue
+                        if resolve_link(tok) is None:
+                            problems.append({
+                                "kind": "todo", "target": tok,
+                                "error": "dangling link",
+                                "filepath": tpath, "lineno": lineno, "line": line})
+
+    return problems
+
+
+def append_links_to_line(raw_line, new_links):
+    """Append a 'links=...' token to a record line, merging with any
+    existing links value. Returns the new line."""
+    existing = _links_list(parse_line(raw_line)[1].get("links"))
+    all_links = []
+    for v in existing:
+        all_links.extend(tok.strip() for tok in str(v).split(",") if tok.strip())
+    for v in new_links:
+        all_links.extend(tok.strip() for tok in str(v).split(",") if tok.strip())
+    merged = []
+    for tok in all_links:
+        if tok not in merged:
+            merged.append(tok)
+    # strip any existing links token, then append merged
+    parts = raw_line.split()
+    kept = [p for p in parts if not p.startswith("links=")]
+    if merged:
+        kept.append("links=" + ",".join(merged))
+    return " ".join(kept)
+
+
+def append_record_id(filepath, lineno, old_line, new_id=None):
+    """Append id=<id> to a record line in place. Generates one if not given.
+    Returns the new id."""
+    if not new_id:
+        new_id = generate_id()
+    line = old_line.rstrip("\n")
+    if re.search(r'\bid=(\S+)', line):
+        raise ValueError(f"Line already has an id: {line}")
+    parts = line.split()
+    parts.append(f"id={new_id}")
+    rewrite_line_in_file(filepath, old_line, " ".join(parts), lineno=lineno)
+    return new_id
+
+
+def append_todo_id(line, new_id=None):
+    """Append id:<id> to a todo.txt line. Generates one if not given.
+    Returns (new_line, new_id)."""
+    if not new_id:
+        new_id = generate_id()
+    line = line.rstrip("\n")
+    if re.search(r'\bid:(\S+)', line):
+        raise ValueError(f"Line already has an id: {line}")
+    return line + f" id:{new_id}", new_id
+
+
+def append_links_to_todo_line(line, new_links):
+    """Append/merge links:<tokens> to a todo.txt line. Returns new line."""
+    existing = []
+    m = re.search(r'\blinks:(\S+)', line)
+    if m:
+        existing = [t for t in m.group(1).split(",") if t.strip()]
+    merged = list(existing)
+    for v in new_links:
+        for tok in str(v).split(","):
+            tok = tok.strip()
+            if tok and tok not in merged:
+                merged.append(tok)
+    parts = [p for p in line.split() if not p.startswith("links:")]
+    if merged:
+        parts.append("links:" + ",".join(merged))
+    return " ".join(parts)
+
+
 def append_record(line, return_position=False):
     """Append a single log line to the correct yearly file.
     Extracts the year from the line's first 4 characters,
@@ -2416,7 +2646,7 @@ def validate_record(schema, record):
                 )
 
     # allowed field names
-    allowed_fields = {"type", "tag"}
+    allowed_fields = {"type", "tag", "id", "links"}
     allowed_fields.update(schema.get("fields", {}).keys())
     allowed_fields.update(type_schema.get("required", []))
     allowed_fields.update(type_schema.get("fields", {}).keys())
@@ -2589,6 +2819,14 @@ def lint_records(records, schema):
 
     type_summary = "  ".join(f"{t}:{n}" for t, n in sorted(type_counts.items()))
     print(f"\nChecked {total_checked} record(s) across {len(type_counts)} type(s)  [{type_summary}]")
+
+    for link_issue in check_dangling_links():
+        total_errors += 1
+        print(f"\n{'─' * 60}")
+        print(link_issue.get("line", ""))
+        print(f"  ✖ {link_issue['error']}: {link_issue['target']}")
+        error_files.add(link_issue.get("filepath", ""))
+
     print()
     if total_errors == 0 and total_warnings == 0:
         print("✔ All records clean — no errors or warnings")
@@ -2679,7 +2917,16 @@ def lint_all_records():
                         "filepath": fname,
                         "lineno": lineno
                     })
-    
+
+    for link_issue in check_dangling_links():
+        total_errors += 1
+        errors_list.append({
+            "line": link_issue.get("line", ""),
+            "problems": [f"{link_issue['error']}: {link_issue['target']}"],
+            "filepath": os.path.basename(link_issue.get("filepath", "")),
+            "lineno": link_issue.get("lineno", 1),
+        })
+
     return {
         "clean": total_errors == 0 and total_warnings == 0,
         "checked": total_checked,

@@ -37,6 +37,8 @@ class Todo:
     threshold: Optional[dt.date] = None
     threshold_time: Optional[str] = None    # "09:00" or None
     rec: Optional[str] = None               # "1w", "+1m", "3d", etc.
+    id: Optional[str] = None                # "t7c2b8" or None
+    links: List[str] = field(default_factory=list)  # ["expense:k3f9a1", ...]
     line_no: int = 0
 
 # ── date resolution ─────────────────────────────────────────────────────────
@@ -210,6 +212,8 @@ def parse_todo_line(line, line_no=0):
     threshold = None
     threshold_time = None
     rec = None
+    todo_id = None
+    links = []
     desc_parts = []
 
     for token in remaining.split():
@@ -235,6 +239,10 @@ def parse_todo_line(line, line_no=0):
             threshold_time = _normalise_time(token[7:]) or threshold_time
         elif token.lower().startswith("rec:") and rec is None:
             rec = token[4:] if len(token) > 4 else None
+        elif token.lower().startswith("id:") and todo_id is None:
+            todo_id = token[3:] if len(token) > 3 else None
+        elif token.lower().startswith("links:") and len(token) > 6:
+            links = [t for t in token[6:].split(",") if t.strip()]
         elif token.lower().startswith("pri:") and len(token) == 5 and token[4].isalpha() and priority is None:
             priority = token[4].upper()
         else:
@@ -256,6 +264,8 @@ def parse_todo_line(line, line_no=0):
         threshold=threshold,
         threshold_time=threshold_time,
         rec=rec,
+        id=todo_id,
+        links=links,
         line_no=line_no,
     )
 
@@ -319,6 +329,12 @@ def format_line(todo):
 
     if todo.rec:
         parts.append(f"rec:{todo.rec}")
+
+    if todo.id:
+        parts.append(f"id:{todo.id}")
+
+    if todo.links:
+        parts.append("links:" + ",".join(todo.links))
 
     return " ".join(parts)
 
@@ -605,6 +621,25 @@ def archive_done_todos(done_path, threshold_months=6):
     return archived_count
 
 
+def rewrite_line_by_number(todo_path, line_no, new_line):
+    """Replace a single todo line (by line number) with new raw text.
+    Round-trips the file via save_todos (atomic .bak/.tmp pattern).
+    Returns True if the file changed."""
+    todos, _ = load_todos(todo_path)
+    idx = None
+    for i, t in enumerate(todos):
+        if t.line_no == line_no:
+            idx = i
+            break
+    if idx is None:
+        raise TodoParseError(f"Todo at line {line_no} not found")
+    if todos[idx].raw_line.rstrip("\n") == new_line.rstrip("\n"):
+        return False
+    todos[idx] = parse_todo_line(new_line, line_no=line_no)
+    save_todos(todo_path, todos)
+    return True
+
+
 def edit_todo(todo_path, line_no, updates):
     """Edit fields on a todo by line number. updates is a dict of field=value."""
     todos, _ = load_todos(todo_path)
@@ -639,6 +674,10 @@ def edit_todo(todo_path, line_no, updates):
                     t.contexts = val if isinstance(val, list) else [val]
                 elif key == "rec":
                     t.rec = val if val else None
+                elif key == "id":
+                    t.id = val if val else None
+                elif key == "links":
+                    t.links = val if isinstance(val, list) else ([val] if val else [])
                 elif key == "done":
                     t.done = bool(val)
             break
@@ -686,6 +725,10 @@ def batch_edit_todos(todo_path, line_nos, updates):
                         t.contexts = val if isinstance(val, list) else [val]
                     elif key == "rec":
                         t.rec = val if val else None
+                    elif key == "id":
+                        t.id = val if val else None
+                    elif key == "links":
+                        t.links = val if isinstance(val, list) else ([val] if val else [])
                 matched.append(t)
                 break
         if not found:
@@ -698,16 +741,22 @@ def batch_edit_todos(todo_path, line_nos, updates):
 # ── filtering ───────────────────────────────────────────────────────────────
 
 def filter_todos(todos, project=None, context=None, priority=None,
-                 due_before=None, threshold_before=None, include_done=False):
+                 due_before=None, threshold_before=None, include_done=False,
+                 linked_to=None):
     """Filter a list of Todo objects by various criteria.
 
     project, context, priority can be a single value or a list.
     Matching is OR within a group, AND across groups.
+    linked_to is a 'type:id' target — matches todos whose links contain it.
     """
     result = []
     for t in todos:
         if not include_done and t.done:
             continue
+        if linked_to:
+            targets = linked_to if isinstance(linked_to, list) else [linked_to]
+            if not any(tgt in t.links for tgt in targets):
+                continue
         if project:
             proj_list = project if isinstance(project, list) else [project]
             if not any(p in t.projects for p in proj_list):
