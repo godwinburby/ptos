@@ -223,6 +223,10 @@ date        type          fields                                  tag(s)        
 | tag | recommended | freeform labels for cross-cutting queries — `tag=auto tag=bus` |
 | note | recommended | human context after `\|` that fields cannot capture |
 
+Records may also carry two schema-free tokens: `id=<id>` (a unique link target) and
+`links=type:id,type:id` (links to other entries) — see
+[Cross-record Links](#cross-record-links-typeid).
+
 A record missing a tag or note is valid but weak — Lint will warn you.
 A record missing a date or type is broken — Lint will error.
 
@@ -379,6 +383,42 @@ Where bracket autocomplete works:
 - Sidebar search
 - Search page
 
+### Cross-record Links (`type:id`)
+
+Explicit one-to-one / one-to-many cross-references between records and todos. A record
+or todo can carry an `id` (a unique link target) and `links` (a list of targets it points
+to). Targets are strict `type:id` — e.g. an expense linked to the income that refunds it,
+or a todo linked to an expense.
+
+**How it looks in the files:**
+```
+# record line (.log)
+2026-08-17 type=income amount=450 source=salary id=ins9x links=expense:k3f9a1 | refund
+
+# todo line (todo.txt)
+(A) Call supplier about refund id:t7c2b8 links:expense:k3f9a1
+```
+
+**How ids are created** (no auto-generation):
+- Record/todo edit forms have an Id field with a **Generate** button
+- `ptos --add type=expense ... --link expense:k3f9a1` — creates a record with a generated id + link
+- `ptos --retro-id expense --where "amount=450"` / `ptos --retro-id todo --search "call"` — assigns an id to an existing entry
+- Or hand-type `id=...` / `id:...` in the file
+
+**How to link:**
+- 🔗 button on any todo row (assigns an id if missing, then prompts for the target)
+- Record/todo edit forms' Links field with autocomplete (`type` the target's `type:id`)
+- `ptos --link expense:k3f9a1 income:ins9x` — adds a link to an existing entry
+- `links:` prefix autocomplete in the todo quick-add bar
+
+**Finding linked things:**
+- Todo rows show `id:` badges and clickable link badges — click a badge to filter the list (`/todo?linked_to=...`)
+- The record edit page shows a **Linked from** panel (who links to me)
+- `ptos --linked-to expense:k3f9a1` — query records by link target
+- `ptos --lint` flags dangling links (target doesn't exist) and duplicate ids
+
+Journal entries can't carry `links=` tokens — use `[[journal:YYYY-MM-DD]]` bracket links instead.
+
 ### Todo
 
 Plain-text task manager using the [todo.txt](http://todotxt.org/) format. Tasks live
@@ -391,6 +431,7 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - Priority badges (A=red, B=orange, C=blue, D=gray) with configurable labels, due date badges, project/context chips
 - Quick-add text input with todo.txt syntax (`(A) Task +Project @context due:tomorrow`)
 - **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `t:t` for `t:today`, `(a` for `(A) Critical`. Arrow keys + Enter to select.
+- **Cross-record links** — 🔗 button on each row to link to another entry (assigns an `id:` if missing); rows show `id:` and clickable `type:id` link badges that filter the list; `links:` prefix in quick-add and the edit modal
 - **Quick pick chips** (collapsible) — click Due, Priority (with labels from config, e.g. "(A) Critical"), Projects, Contexts, or Threshold chips to insert into input. Due/Threshold include `this_week`, `next_week`, `this_month`, `next_month` shortcuts. On mobile, groups stack vertically instead of scrolling
 - **Filter chips** (collapsible) — filter by Priority (A-D with labels), Due Range (overdue/today/upcoming/someday/none), and Context. Click a chip to toggle filter on/off. On mobile, groups stack vertically
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support; type a term and press Search or Enter to filter todos by description
@@ -417,6 +458,8 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 | `due:date` | Due date — `today`, `tomorrow`, `fri`, `due:this_week`, `due:next_month`, `+3d`, `2026-07-12` |
 | `t:date` | Threshold date (surfaces when it arrives) |
 | `due:date time` | With time — `due:tomorrow 3pm`, `due:2026-07-12T14:30` |
+| `id:text` | Link target id (unique per todo) |
+| `links:type:id,type:id` | Comma-separated links to other entries |
 
 **Keyboard shortcuts:**
 - `G` `T` — navigate to Todo page

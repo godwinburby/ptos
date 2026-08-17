@@ -24,7 +24,7 @@ import ptos
 from ptos import (
     # Constants
     BASE_DIR, RECORDS_DIR, BACKUP_DIR, EXPORTS_DIR,
-    SCHEMA_PATH, CONFIG_PATH, QUERIES_PATH, PRESETS_PATH,
+    SCHEMA_PATH, CONFIG_PATH, QUERIES_PATH, PRESETS_PATH, TODO_PATH,
     TimeCode,
     # Config / schema helpers
     get_config, get_schema, get_queries, get_presets,
@@ -60,10 +60,14 @@ from ptos import (
     datetime_fields, compute_derived,
     # Record helpers
     parse_line, lint_records, build_record_line,
+    # Link helpers
+    resolve_link, list_link_ids, check_dangling_links,
+    generate_id, append_links_to_line, append_record_id,
+    append_todo_id, append_links_to_todo_line,
     # Date helpers
     month_range, quarter_range, resolve_cycle,
     # Internal helpers used by CLI
-    _disp, _filters_to_expr, resolve_editor, _TIME_ALIASES,
+    _disp, _filters_to_expr, resolve_editor, _TIME_ALIASES, _glob_match,
 )
 
 # --------------------------------------------------
@@ -152,6 +156,11 @@ def build_parser(cycles):
     add.add_argument("-p", "--preset",       nargs="*", help="Quick-add from preset")
     add.add_argument("--save-preset",                   help="Save the record being added as a preset under this name")
     add.add_argument("--delete-preset",                  help="Delete a preset by name")
+    add.add_argument("--link", nargs="+", metavar=("TARGET", "SRC_TARGET"),
+                     help="Link an entry. With --add: one TARGET to link the new\n"
+                          "  record to (generates its id). Standalone: link existing\n"
+                          "  entries: --link SRC_TARGET TARGET\n"
+                          "  (e.g. --link expense:k3f9a1 project:p91a)")
 
     qry = p.add_argument_group("Query")
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
@@ -162,6 +171,9 @@ def build_parser(cycles):
     qry.add_argument("-y", "--type",                                help="Filter by record type")
     qry.add_argument("-g", "--tag",    action="append",             help="Filter by tag (repeatable)")
     qry.add_argument("-S", "--search",                              help="Full-text search")
+    qry.add_argument("--linked-to", dest="linked_to", nargs="+", metavar="TYPE:ID",
+                     help="Only show entries whose links reference the given\n"
+                          "  type:id target (e.g. project:p91a)")
     qry.add_argument("--save",                                      help="Save current query to queries.toml under this name")
     qry.add_argument("--add-dashboard", dest="add_dashboard", metavar="NAME",
                      help="Add a dashboard referencing metrics to queries.toml")
@@ -269,6 +281,10 @@ def build_parser(cycles):
                      help="Add or replace a custom cycle: NAME DAY (day of month, 1-31)")
     utl.add_argument("--set-auth", dest="set_auth", nargs=2, metavar=("USERNAME", "PASSWORD"),
                      help="Set HTTP Basic Auth credentials (stored in plaintext in config)")
+    utl.add_argument("--retro-id", dest="retro_id", metavar="TYPE",
+                     help="Assign an id to an existing entry so it can be linked to.\n"
+                          "  Records: --retro-id expense --where \"amount=450 category=food\"\n"
+                          "  Todo:    --retro-id todo --search \"call nair\"")
     utl.add_argument("--doctor", action="store_true", help="Check PTOS installation health")
     utl.add_argument("--doctor-fix", dest="doctor_fix", action="store_true", help="With --doctor: fix any issues found")
     utl.add_argument("--check-schema", action="store_true", help="Validate schema.toml structure and report issues")
@@ -1481,6 +1497,67 @@ def _handle_add_dashboard(args):
     print(f"Dashboard '{args.add_dashboard}' saved (metrics: {metrics_str}).")
 
 
+def _handle_link(src_target, target):
+    """Add a links=... token to the source entry pointing at target."""
+    import ptos_todo
+    src = resolve_link(src_target)
+    if src is None:
+        sys.exit(f"Source '{src_target}' not found — give it an id first "
+                 f"(ptos --retro-id ...).")
+    if resolve_link(target) is None:
+        print(f"Warning: target '{target}' does not resolve — link saved anyway, "
+              f"lint will flag it as dangling.")
+    if src["kind"] == "todo":
+        new_line = append_links_to_todo_line(src["line"], [target])
+        rewritten = ptos_todo.rewrite_line_by_number(src["filepath"], src["lineno"], new_line)
+        print(f"Linked {src_target} -> {target}  ({'updated' if rewritten else 'unchanged'})")
+    elif src["kind"] == "record":
+        new_line = append_links_to_line(src["line"], [target])
+        rewrite_line_in_file(src["filepath"], src["line"], new_line, lineno=src["lineno"])
+        print(f"Linked {src_target} -> {target}")
+    else:
+        sys.exit("Journal entries can't carry links= tokens — write [[...]] in the prose instead.")
+
+
+def _handle_retro_id(args):
+    """Assign an id to an existing hand-typed line so it can be a link target."""
+    import ptos_todo
+    target_type = (args.retro_id or "").strip().lower()
+    if not target_type:
+        sys.exit("--retro-id requires a TYPE (record type or 'todo')")
+    if target_type == "todo":
+        search = " ".join(args.search or []) if isinstance(args.search, list) else (args.search or "")
+        if not search:
+            sys.exit("--retro-id todo requires --search TEXT to find the todo")
+        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        matches = [t for t in todos if not t.done and _glob_match(search, t.description)]
+        if not matches:
+            sys.exit(f"No open todo matching '{search}'.")
+        if len(matches) > 1:
+            sys.exit(f"{len(matches)} todos match '{search}' — be more specific.")
+        t = matches[0]
+        if t.id:
+            sys.exit(f"Todo already has id:{t.id}")
+        new_id = generate_id()
+        line, _ = append_todo_id(t.raw_line, new_id)
+        ptos_todo.rewrite_line_by_number(TODO_PATH, t.line_no, line)
+        print(f"Added id:{new_id} to line {t.line_no}")
+        return
+    filters = [item for group in (args.where or []) for item in group]
+    if not filters:
+        sys.exit(f"--retro-id {target_type} requires --where filters to locate the record")
+    hits = find_records_with_location([f"type={target_type}"] + filters)
+    if not hits:
+        sys.exit(f"No record of type '{target_type}' matches those filters.")
+    if len(hits) > 1:
+        sys.exit(f"{len(hits)} records match — add more --where filters to pick one.")
+    filepath, lineno, raw = hits[0]
+    if re.search(r'\bid=(\S+)', raw):
+        sys.exit(f"Record already has an id: {raw}")
+    new_id = append_record_id(filepath, lineno, raw)
+    print(f"Added id={new_id} to {os.path.basename(filepath)}:{lineno}")
+
+
 # --------------------------------------------------
 # Main
 # --------------------------------------------------
@@ -1690,6 +1767,8 @@ def main():
         if not args.add:
             interactive_add(schema, resolve_date(args.date), args.save_preset,
                             suggest_fn=_interactive_suggest)
+            if args.link:
+                sys.exit("--link requires --add with key=value fields, not the interactive prompt.")
         else:
             record = {}
             for item in args.add:
@@ -1701,13 +1780,33 @@ def main():
                     record[k].append(v)
                 else:
                     record[k] = v
+            if args.link:
+                if len(args.link) != 1:
+                    sys.exit("With --add, --link takes exactly one TARGET (e.g. --link project:p91a)")
+                record["links"] = args.link[0]
+                if "id" not in record:
+                    record["id"] = generate_id()
             problems = validate_record(schema, record)
             if problems:
                 sys.exit(problems[0])
             append_record(build_record_line(resolve_date(args.date), record, args.note))
-            print("Record added.")
+            print("Record added." + (f"  id={record.get('id', '')}  links={record.get('links', '')}"
+                                     if args.link else ""))
             if args.save_preset:
                 save_as_preset(args.save_preset, record)
+        return
+
+    # ---- link existing entries ----
+    if args.link:
+        if len(args.link) != 2:
+            sys.exit("--link (standalone) takes SRC_TARGET and TARGET: "
+                     "--link expense:k3f9a1 project:p91a")
+        _handle_link(args.link[0], args.link[1])
+        return
+
+    # ---- retro-id ----
+    if args.retro_id:
+        _handle_retro_id(args)
         return
 
     # ---- lint mode ----
@@ -1767,6 +1866,8 @@ def main():
 
     if args.type: final_filters = final_filters + [f"type={args.type}"]
     if args.tag:  final_filters = final_filters + [f"tag={t}" for t in args.tag]
+    if args.linked_to:
+        final_filters = final_filters + [f"links~{t}" for t in args.linked_to]
 
     # ---- time resolution ----
     if args.date_from or args.date_to:

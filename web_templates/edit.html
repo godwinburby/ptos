@@ -215,11 +215,61 @@
         <div style="font-size:11px;color:var(--sub);margin-top:4px;">After the pipe (|) — this is freeform text, not a key=value field or tag</div>
       </div>
     </div>
+
+    <!-- id / links -->
+    <div class="divider"></div>
+    <div class="field-group">
+      <label>Id <span style="color:var(--sub);font-weight:400;">optional · link target</span></label>
+      <div style="display:flex;gap:4px;align-items:center;">
+        <input type="text" name="id" id="edit-id" list="edit-link-id-list"
+               value="{{ field_values.get('id', '') }}"
+               placeholder="link target (e.g. k3f9a1)" style="flex:1;">
+        <button type="button" onclick="generateEditId()" style="padding:4px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;" title="Generate a random id">Generate</button>
+      </div>
+      <datalist id="edit-link-id-list"></datalist>
+    </div>
+    <div class="field-group">
+      <label>Links <span style="color:var(--sub);font-weight:400;">optional · comma-separated type:id</span></label>
+      <input type="text" name="links" id="edit-links" list="edit-link-ids-list"
+             value="{{ field_values.get('links', '') }}"
+             placeholder="expense:k3f9a1, todo:t7c2b8">
+      <datalist id="edit-link-ids-list"></datalist>
+      <div style="font-size:11px;color:var(--sub);margin-top:4px;">Links to other entries by their id. Clear both to remove.</div>
+    </div>
+    <div class="field-group" id="linked-from-wrap" style="display:none;">
+      <label>Linked from</label>
+      <div id="linked-from"></div>
+    </div>
   </div>
 
   <button type="submit" class="btn btn-primary btn-full" id="save-btn">Save Changes</button>
   <a href="{{ return_to }}" class="btn btn-ghost btn-full" style="margin-top:10px;">✕ Cancel</a>
 </form>
+
+<script>
+function generateEditId() {
+  var chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  var out = '';
+  for (var i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  document.getElementById('edit-id').value = out;
+}
+document.addEventListener("DOMContentLoaded", function() {
+  fetch("/api/link-ids").then(function(r) { return r.json(); }).then(function(d) {
+    if (!d || d.ok === false || !Array.isArray(d)) return;
+    var dl = document.getElementById('edit-link-ids-list');
+    if (dl) dl.innerHTML = d.map(function(it) {
+      return '<option value="' + it.target + '">' + (it.line || '') + '</option>';
+    }).join('');
+  }).catch(function() {});
+  var idInput = document.getElementById('edit-id');
+  var wrap = document.getElementById('linked-from-wrap');
+  var panel = document.getElementById('linked-from');
+  if (idInput && idInput.value && typeof initBacklinksPanel === "function") {
+    var subject = "{{ rtype }}:" + idInput.value;
+    initBacklinksPanel(wrap, subject);
+  }
+});
+</script>
 
 <script>
 var field_defs = {{ field_defs | tojson | safe }};

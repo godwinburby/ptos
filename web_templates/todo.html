@@ -2,12 +2,14 @@
 {% block content %}
 
 {% macro todo_row(t, badge_class) %}
-    <div class="todo-row" data-line="{{ t.line_no }}" data-pri="{{ t.priority or '' }}" data-due="{{ t.due.isoformat() if t.due else '' }}" data-due-time="{{ t.due_time or '' }}" data-threshold="{{ t.threshold.isoformat() if t.threshold else '' }}" data-threshold-time="{{ t.threshold_time or '' }}" data-rec="{{ t.rec or '' }}" data-projects="{{ t.projects|join(' ') }}" data-contexts="{{ t.contexts|join(' ') }}" onclick="toggleRowSel(this)">
+    <div class="todo-row" data-line="{{ t.line_no }}" data-id="{{ t.id or '' }}" data-links="{{ t.links|join(',') }}" data-pri="{{ t.priority or '' }}" data-due="{{ t.due.isoformat() if t.due else '' }}" data-due-time="{{ t.due_time or '' }}" data-threshold="{{ t.threshold.isoformat() if t.threshold else '' }}" data-threshold-time="{{ t.threshold_time or '' }}" data-rec="{{ t.rec or '' }}" data-projects="{{ t.projects|join(' ') }}" data-contexts="{{ t.contexts|join(' ') }}" onclick="toggleRowSel(this)">
       <div class="todo-check" onclick="if(_selMode)return;completeTodo({{ t.line_no }}, this)"></div>
       <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}" onclick="if(_selMode)return;popupEditPriority({{ t.line_no }}, '{{ t.priority or '' }}', this)" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %} — Change priority">{{ t.priority or '—' }}</div>
       <div class="todo-body">
         <div class="todo-desc">{{ t.description }}</div>
         <div class="todo-meta">
+          {% if t.id %}<span class="todo-link-badge" title="id:{{ t.id }}">id:{{ t.id }}</span>{% endif %}
+          {% for lk in t.links %}<a class="todo-link-badge" href="/todo?linked_to={{ lk }}" title="Todos linked to {{ lk }}">{{ lk }}</a>{% endfor %}
           {% if t.due %}<span class="todo-due-badge {{ badge_class }}" onclick="if(_selMode)return;popupEditDate({{ t.line_no }}, 'due', '{{ t.due.isoformat() }}', this)" title="Change due date">{{ t.due.strftime('%d %b') }}{% if t.due_time %} {{ t.due_time }}{% endif %}</span>{% endif %}
           {% if t.threshold %}<span class="todo-context" onclick="if(_selMode)return;popupEditDate({{ t.line_no }}, 'threshold', '{{ t.threshold.isoformat() }}', this)" title="Change threshold date">threshold {{ t.threshold.strftime('%d %b') }}{% if t.threshold_time %} {{ t.threshold_time }}{% endif %}</span>{% endif %}
           {% if t.rec %}<span class="todo-context" onclick="if(_selMode)return;popupEditRec({{ t.line_no }}, '{{ t.rec }}', this)" title="Change recurrence">rec:{{ t.rec }}</span>{% endif %}
@@ -18,7 +20,8 @@
       <div class="todo-actions">
         <button class="pomo-row-btn" data-line="{{ t.line_no }}" onclick="todoPomoAction(this, '{{ t.description|e }}')" title="Start pomodoro">▶</button>
         <button class="pomo-row-stop" onclick="todoPomoStop()" title="Stop pomodoro">⏹</button>
-        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}')" title="Edit">✎</button>
+        <button onclick="linkTodoRow({{ t.line_no }})" title="Link to...">🔗</button>
+        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')" title="Edit">✎</button>
         <button onclick="deleteTodo({{ t.line_no }})" title="Delete">✕</button>
       </div>
     </div>
@@ -158,6 +161,12 @@
   .todo-due-badge.overdue { background:var(--error-lt); color:var(--error); }
   .todo-due-badge.today { background:#FEF3E7; color:var(--warn); }
   .todo-due-badge.future { background:var(--accent-lt); color:var(--accent); }
+  .todo-link-badge {
+    font-size:11px; padding:2px 6px; border-radius:4px;
+    background:#E9E7FF; color:#5B52C7;
+    text-decoration:none; cursor:pointer; font-weight:600;
+  }
+  .todo-link-badge:hover { background:#D8D4FF; }
   .todo-project {
     font-size:12px; padding:2px 7px; border-radius:4px;
     background:var(--bg); color:var(--sub);
@@ -736,7 +745,7 @@
         </div>
       </div>
       <div class="todo-actions">
-        <button onclick="openEditDone({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}')" title="Edit">✎</button>
+        <button onclick="openEditDone({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')" title="Edit">✎</button>
         <button onclick="deleteDoneTodo({{ t.line_no }})" title="Delete">✕</button>
       </div>
     </div>
@@ -821,6 +830,19 @@
         <span class="modal-chip modal-chip-other" onclick="toggleOtherInput(this, 'context')">+ New</span>
       </div>
       <input type="text" class="modal-other-input" id="modal-context-other" placeholder="New context name" style="display:none;" onkeydown="handleOtherKey(event, 'context')">
+    </div>
+    <div class="modal-field modal-field-bulk-hide">
+      <label>Id <span class="modal-sub">(link target)</span></label>
+      <div class="modal-id-row">
+        <input type="text" id="modal-id" placeholder="e.g. t7c2b8" list="link-id-list" style="flex:1;">
+        <button type="button" class="btn-save" onclick="generateTodoId()" title="Generate a random id">Generate</button>
+      </div>
+      <datalist id="link-id-list"></datalist>
+    </div>
+    <div class="modal-field modal-field-bulk-hide">
+      <label>Links <span class="modal-sub">(comma-separated type:id, e.g. expense:k3f9a1)</span></label>
+      <input type="text" id="modal-links" placeholder="expense:k3f9a1, todo:t7c2b8" oninput="onLinksInput(this)" onkeydown="handleLinksKey(event)">
+      <div class="todo-ac-list" id="modal-links-ac"></div>
     </div>
     <div class="modal-actions">
       <button class="btn-cancel" onclick="closeTodoModal()">Cancel</button>
@@ -986,7 +1008,7 @@ function deleteDoneTodo(lineNo) {
   });
 }
 
-function openTodoModal(mode, lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec) {
+function openTodoModal(mode, lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec, id, links) {
   const el = document.getElementById('todo-modal');
   document.getElementById('todo-modal-title').textContent = mode === 'edit' ? 'Edit Task' : 'New Task';
   document.getElementById('todo-modal-save').textContent = mode === 'edit' ? 'Save' : 'Add';
@@ -999,6 +1021,8 @@ function openTodoModal(mode, lineNo, desc, pri, due, dueTime, threshold, thresho
   document.getElementById('modal-threshold').value = threshold || '';
   document.getElementById('modal-threshold-time').value = thresholdTime || '';
   document.getElementById('modal-rec').value = rec || '';
+  document.getElementById('modal-id').value = id || '';
+  document.getElementById('modal-links').value = (links || '').split(',').filter(Boolean).join(', ');
 
   var projList = (projects || '').split(/\s+/).filter(Boolean);
   document.querySelectorAll('#modal-project-chips .modal-chip:not(.modal-chip-other)').forEach(function(c) {
@@ -1020,14 +1044,112 @@ function openTodoModal(mode, lineNo, desc, pri, due, dueTime, threshold, thresho
 
 function openAdd() { openTodoModal('add'); }
 
-function openEdit(lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec) {
-  openTodoModal('edit', lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec);
+function openEdit(lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec, id, links) {
+  openTodoModal('edit', lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec, id, links);
 }
 
-function openEditDone(lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec) {
-  openTodoModal('edit', lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec);
+function openEditDone(lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec, id, links) {
+  openTodoModal('edit', lineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec, id, links);
   document.getElementById('modal-target').value = 'done';
   document.getElementById('todo-modal-title').textContent = 'Edit Done Task';
+}
+
+function generateTodoId() {
+  var chars = 'abcdefghjkmnpqrstuvwxyz23456789';
+  var out = '';
+  for (var i = 0; i < 6; i++) out += chars[Math.floor(Math.random() * chars.length)];
+  document.getElementById('modal-id').value = out;
+}
+
+var _acLinksIdx = -1, _acLinksItems = [];
+
+function onLinksInput(inputEl) {
+  var input = inputEl || document.getElementById('modal-links');
+  var val = input.value;
+  var pos = input.selectionStart;
+  var before = val.substring(0, pos);
+  var words = before.split(/[\s,]+/);
+  var token = words[words.length - 1] || '';
+  var list = document.getElementById('modal-links-ac');
+  if (!token || !window._linkIdItems) { list.classList.remove('open'); return; }
+  var q = token.toLowerCase();
+  _acLinksItems = window._linkIdItems.filter(function(it) {
+    return it.target.toLowerCase().indexOf(q) !== -1;
+  });
+  if (!_acLinksItems.length) { list.classList.remove('open'); return; }
+  _acLinksIdx = -1;
+  list.innerHTML = _acLinksItems.map(function(it, i) {
+    return '<div class="todo-ac-item" data-idx="'+i+'">'+it.target+' <span class="ac-desc">'+it.label+'</span></div>';
+  }).join('');
+  list.classList.add('open');
+}
+
+function handleLinksKey(e) {
+  var list = document.getElementById('modal-links-ac');
+  if (!list.classList.contains('open')) { onLinksInput(); return; }
+  if (e.key === 'ArrowDown') { e.preventDefault(); _acLinksIdx = Math.min(_acLinksIdx + 1, _acLinksItems.length - 1); _acLinksHighlight(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); _acLinksIdx = Math.max(_acLinksIdx - 1, 0); _acLinksHighlight(); }
+  else if (e.key === 'Enter' && _acLinksIdx >= 0) { e.preventDefault(); pickLinksAC(_acLinksIdx); }
+  else if (e.key === 'Escape') { list.classList.remove('open'); }
+  else { onLinksInput(); }
+}
+
+function _acLinksHighlight() {
+  var list = document.getElementById('modal-links-ac');
+  list.querySelectorAll('.todo-ac-item').forEach(function(el, i) { el.classList.toggle('active', i === _acLinksIdx); });
+}
+
+function pickLinksAC(idx) {
+  var input = document.getElementById('modal-links');
+  var item = _acLinksItems[idx];
+  if (!item) return;
+  var val = input.value;
+  var pos = input.selectionStart;
+  var before = val.substring(0, pos);
+  var words = before.split(/[\s,]+/);
+  var token = words[words.length - 1] || '';
+  var tokenStart = before.lastIndexOf(token);
+  var newVal = before.substring(0, tokenStart) + item.target + val.substring(pos);
+  input.value = newVal.replace(/,\s*,/g, ', ').trim();
+  var newPos = tokenStart + item.target.length;
+  input.setSelectionRange(newPos, newPos);
+  input.focus();
+  document.getElementById('modal-links-ac').classList.remove('open');
+}
+
+function linkTodoRow(lineNo) {
+  var row = document.querySelector('.todo-row[data-line="' + lineNo + '"]');
+  var tid = row ? row.dataset.id : '';
+  if (!tid) {
+    fetch('/api/retro-id', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({kind: 'todo', line_no: lineNo})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.ok) { alert(d.error || 'Failed to assign an id'); return; }
+      _doLink(d.target, prompt('Link to (type:id):', ''));
+    })
+    .catch(function() { alert('Network error'); });
+    return;
+  }
+  _doLink('todo:' + tid, prompt('Link to (type:id):', ''));
+}
+
+function _doLink(source, target) {
+  if (!target || !target.trim()) return;
+  fetch('/api/link', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({source: source, target: target.trim()})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) { if (d.updated) { window.location.reload(); } else { alert('Already linked'); } }
+    else { alert(d.error || 'Failed to link'); }
+  })
+  .catch(function() { alert('Network error'); });
 }
 
 /* --- Selection Mode --- */
@@ -1196,6 +1318,8 @@ function saveTodoModal() {
   if (otherProj) projs.push(otherProj);
   if (otherCtx) ctxs.push(otherCtx);
   var rec = document.getElementById('modal-rec').value;
+  var tid = document.getElementById('modal-id').value.trim().replace(/[^\w-]/g, '');
+  var links = document.getElementById('modal-links').value.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
 
   if (_selMode && lineNo) {
     var updates = {};
@@ -1232,6 +1356,9 @@ function saveTodoModal() {
       projects: projs.map(function(p) { return '+' + p.replace(/^\+/, ''); }),
       contexts: ctxs.map(function(c) { return '@' + c.replace(/^@/, ''); })
     };
+    if (tid) updates.id = tid;
+    else if (!document.getElementById('modal-id').value.trim()) updates.id = null;
+    updates.links = links;
     var target = document.getElementById('modal-target').value || 'todo';
     var editUrl = target === 'done' ? '/todo/edit-done' : '/todo/edit';
     fetch(editUrl, {
@@ -1252,6 +1379,8 @@ function saveTodoModal() {
     ctxs.forEach(function(c) { line += ' @' + c.replace(/^@/, ''); });
     if (due) line += ' due:' + due + (dueTime ? 'T' + dueTime : '');
     if (threshold) line += ' t:' + threshold + (thresholdTime ? 'T' + thresholdTime : '');
+    if (tid) line += ' id:' + tid;
+    if (links.length) line += ' links:' + links.join(',');
     fetch('/todo/add', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -1401,9 +1530,26 @@ var _acData = {
     {l:'(B) ' + (_priLabels.B || 'Important'), v:'(B) '},
     {l:'(C) ' + (_priLabels.C || 'Moderate'), v:'(C) '},
     {l:'(D) ' + (_priLabels.D || 'Low'), v:'(D) '}
-  ]
+  ],
+  'links:': []
 };
 var _acIdx = -1, _acItems = [];
+window._linkIdItems = [];
+(function() {
+  fetch('/api/link-ids').then(function(r) { return r.json(); }).then(function(d) {
+    if (!d || d.ok === false || !Array.isArray(d)) return;
+    var items = d.map(function(it) {
+      var label = it.target;
+      if (it.kind === 'todo' && it.line) label += ' — ' + it.line;
+      else if (it.kind === 'record' && it.line) label += ' — ' + it.line;
+      return {target: it.target, label: label, l: it.target + ' ' + it.line, v: it.target + ' '};
+    });
+    window._linkIdItems = items;
+    _acData['links:'] = items.map(function(it) { return {l: it.target, v: it.v, _full: it.label}; });
+    var dl = document.getElementById('link-id-list');
+    if (dl) dl.innerHTML = items.map(function(it) { return '<option value="' + it.target + '">' + it.line + '</option>'; }).join('');
+  }).catch(function() {});
+})();
 
 function _getCurrentToken(inputEl) {
   var input = inputEl || document.getElementById('todo-input');
