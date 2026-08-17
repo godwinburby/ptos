@@ -1,6 +1,7 @@
 import os
 import pytest
 import ptos
+import tomllib
 
 
 def _write(path, content):
@@ -296,6 +297,95 @@ class TestSetDateFormat:
     def test_none_format_exits(self, cfg):
         with pytest.raises(SystemExit):
             ptos.set_date_format(None)
+
+
+class TestSetCurrency:
+    def test_sets_currency(self, cfg, capsys):
+        ptos.set_currency("$")
+        assert "$" in capsys.readouterr().out
+        assert ptos.get_config()["display"]["currency"] == "$"
+
+    def test_empty_exits(self, cfg):
+        with pytest.raises(SystemExit):
+            ptos.set_currency("")
+
+    def test_whitespace_exits(self, cfg):
+        with pytest.raises(SystemExit):
+            ptos.set_currency("   ")
+
+    def test_missing_config_exits(self, monkeypatch):
+        monkeypatch.setattr(ptos, "CONFIG_PATH", "/nonexistent/config.toml")
+        with pytest.raises(SystemExit):
+            ptos.set_currency("€")
+
+
+class TestAddCycle:
+    def test_adds_cycle(self, cfg, capsys):
+        ptos.add_cycle("clinic", 26)
+        assert "clinic" in capsys.readouterr().out
+        assert ptos.get_config()["cycles"]["clinic"] == 26
+
+    def test_replaces_existing_cycle(self, cfg):
+        ptos.add_cycle("clinic", 5)
+        ptos.add_cycle("clinic", 15)
+        assert ptos.get_config()["cycles"]["clinic"] == 15
+
+    def test_invalid_name_exits(self, cfg):
+        with pytest.raises(SystemExit):
+            ptos.add_cycle("Bad Cycle", 1)
+
+    def test_day_out_of_range_exits(self, cfg):
+        with pytest.raises(SystemExit):
+            ptos.add_cycle("clinic", 0)
+        with pytest.raises(SystemExit):
+            ptos.add_cycle("clinic", 32)
+
+    def test_non_integer_day_exits(self, cfg):
+        with pytest.raises(SystemExit):
+            ptos.add_cycle("clinic", "abc")
+
+    def test_missing_config_exits(self, monkeypatch):
+        monkeypatch.setattr(ptos, "CONFIG_PATH", "/nonexistent/config.toml")
+        with pytest.raises(SystemExit):
+            ptos.add_cycle("clinic", 1)
+
+
+class TestSetAuth:
+    def test_sets_credentials(self, cfg, capsys):
+        ptos.set_auth("admin", "secret")
+        auth = ptos.get_config()["auth"]
+        assert auth["username"] == "admin"
+        assert auth["password"] == "secret"
+        assert "plaintext" in capsys.readouterr().out
+
+    def test_defaults_enabled_true(self, cfg):
+        ptos.set_auth("u", "p")
+        assert ptos.get_config()["auth"]["enabled"] is True
+
+    def test_preserves_disabled_enabled(self, cfg):
+        import tomli_w
+        cfg_path = ptos.CONFIG_PATH
+        with open(cfg_path, "rb") as f:
+            config = tomllib.load(f)
+        config["auth"] = {"enabled": False, "username": "old", "password": "oldpw"}
+        with open(cfg_path, "wb") as f:
+            tomli_w.dump(config, f)
+        ptos.set_auth("newu", "newp")
+        auth = ptos.get_config()["auth"]
+        assert auth["enabled"] is False
+        assert auth["username"] == "newu"
+        assert auth["password"] == "newp"
+
+    def test_empty_credentials_exit(self, cfg):
+        with pytest.raises(SystemExit):
+            ptos.set_auth("", "pw")
+        with pytest.raises(SystemExit):
+            ptos.set_auth("u", "")
+
+    def test_missing_config_exits(self, monkeypatch):
+        monkeypatch.setattr(ptos, "CONFIG_PATH", "/nonexistent/config.toml")
+        with pytest.raises(SystemExit):
+            ptos.set_auth("u", "p")
 
 
 class TestSavePreset:

@@ -1,5 +1,6 @@
 import os
 import zipfile
+import pytest
 import ptos
 
 
@@ -168,3 +169,39 @@ class TestMigrateBackupDir:
         monkeypatch.setattr(ptos, "BACKUP_DIR", str(custom_dir))
         ptos.migrate_backup_dir()
         assert (custom_dir / "backups").exists() or custom_dir.exists()
+
+
+class TestDeleteBackup:
+    def test_deletes_full_backup(self, tmp_path, monkeypatch):
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        f = backup_dir / "ptos-backup-full-20260101_000000.zip"
+        f.write_text("data")
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(backup_dir))
+        assert ptos.delete_backup(f.name) is True
+        assert not f.exists()
+
+    def test_deletes_config_backup(self, tmp_path, monkeypatch):
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        f = backup_dir / "ptos-backup-config-20260101_000000.zip"
+        f.write_text("data")
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(backup_dir))
+        assert ptos.delete_backup(f.name) is True
+        assert not f.exists()
+
+    def test_missing_backup_raises(self, tmp_path, monkeypatch):
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(backup_dir))
+        with pytest.raises(FileNotFoundError):
+            ptos.delete_backup("none.zip")
+
+    def test_invalid_name_raises(self, tmp_path, monkeypatch):
+        backup_dir = tmp_path / "backups"
+        backup_dir.mkdir()
+        f = backup_dir / "random.zip"
+        f.write_text("data")
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(backup_dir))
+        with pytest.raises(ValueError):
+            ptos.delete_backup("random.zip")

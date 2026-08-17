@@ -3158,39 +3158,49 @@ def show_fields(results):
 # Interactive prompts
 # --------------------------------------------------
 
-def choose_from_list(prompt, options):
+def choose_from_list(prompt, options, default=None):
     while True:
         print(f"\n{prompt}")
         for i, opt in enumerate(options, 1):
-            print(f"{i}) {opt}")
+            marker = "   ← default" if opt == default else ""
+            print(f"{i}) {opt}{marker}")
         choice = input("\nEnter number: ").strip()
+        if not choice and default in options:
+            return default
         if choice.isdigit() and 1 <= int(choice) <= len(options):
             return options[int(choice) - 1]
 
-def choose_from_list_optional(prompt, options):
-    """Like choose_from_list but Enter with no input skips (returns empty string)."""
+def choose_from_list_optional(prompt, options, default=None):
+    """Like choose_from_list but Enter with no input skips (returns empty string).
+    When default is provided and valid, Enter accepts it instead of skipping."""
     print(f"\n{prompt} (Enter to skip):")
     for i, opt in enumerate(options, 1):
         print(f"  {i}) {opt}")
     while True:
         raw = input("> ").strip()
         if not raw:
-            return ""
+            return default if default in options else ""
         if raw.isdigit() and 1 <= int(raw) <= len(options):
             return options[int(raw) - 1]
         if raw in options:
             return raw
         print(f"  Enter a number 1–{len(options)} or press Enter to skip.")
 
-def input_text(prompt):
+def input_text(prompt, default=None):
     while True:
-        val = input(f"\n{prompt}: ").strip()
+        suffix = f" [{default}]" if default else ""
+        val = input(f"\n{prompt}{suffix}: ").strip()
+        if not val and default is not None:
+            return default
         if val:
             return val.replace(" ", "_")
 
-def input_int(prompt):
+def input_int(prompt, default=None):
     while True:
-        val = input(f"\n{prompt}: ").strip()
+        suffix = f" [{default}]" if default else ""
+        val = input(f"\n{prompt}{suffix}: ").strip()
+        if not val and default is not None:
+            return str(default)
         if val.isdigit():
             return val
 
@@ -3342,6 +3352,89 @@ def _save_schema(schema):
         tomli_w.dump(schema, w.stream)
 
 
+def add_type(name, required=None):
+    """Add a new record type to schema.toml. sys.exit on invalid name or
+    a schema that would fail validate_schema_structure."""
+    name = name.strip()
+    if not name:
+        sys.exit("Error: Type name cannot be empty.")
+    if not re.match(r"^[a-z][a-z0-9_]*$", name):
+        sys.exit("Error: Invalid type name '%s' — use lowercase letters, digits, underscores." % name)
+
+    schema = get_schema()
+    types_allowed = schema.setdefault("types", {}).setdefault("allowed", [])
+    if name in types_allowed:
+        sys.exit(f"Error: Type '{name}' already exists.")
+
+    req = [r.strip() for r in (required or []) if r.strip()]
+    types_allowed.append(name)
+    type_entry = {"required": req}
+    global_fields = schema.setdefault("global_fields", {})
+    type_fields = type_entry.setdefault("fields", {})
+    for r in req:
+        if r in global_fields or r in type_fields:
+            continue
+        type_fields[r] = {"type": "string"}
+    schema.setdefault("type", {})[name] = type_entry
+
+    issues = validate_schema_structure(schema)
+    if issues:
+        sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in issues))
+    _save_schema(schema)
+    print(f"Added type '{name}' (required: {', '.join(req) if req else 'none'}).")
+
+
+def add_type_field(type_name, field_name, field_type="string", options=None):
+    """Add a field to a record type in schema.toml.
+    options is an optional flat list of valid values.
+    sys.exit on invalid input or a schema that would fail validation."""
+    valid = {"int", "string", "datetime", "bool"}
+    if field_type not in valid:
+        sys.exit("Error: Unknown field type '%s' (expected %s)."
+                 % (field_type, ", ".join(sorted(valid))))
+    type_name = type_name.strip()
+    field_name = field_name.strip()
+    if not field_name or not re.match(r"^[a-z][a-z0-9_]*$", field_name):
+        sys.exit("Error: Invalid field name '%s' — use lowercase letters, digits, underscores." % field_name)
+
+    schema = get_schema()
+    if type_name not in schema.setdefault("type", {}):
+        sys.exit(f"Error: Type '{type_name}' not found.")
+    fields = schema["type"][type_name].setdefault("fields", {})
+    if field_name in fields:
+        sys.exit(f"Error: Type '{type_name}' already has field '{field_name}'.")
+
+    field_def = {"type": field_type}
+    if options:
+        field_def["options"] = list(options)
+    fields[field_name] = field_def
+
+    issues = validate_schema_structure(schema)
+    if issues:
+        sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in issues))
+    _save_schema(schema)
+    print(f"Added field '{field_name}' (type={field_type}) to type '{type_name}'.")
+
+
+def remove_type(name):
+    """Remove a record type and its definition from schema.toml.
+    sys.exit if the type doesn't exist or removal would break the schema."""
+    name = name.strip()
+    schema = get_schema()
+    types_allowed = schema.setdefault("types", {}).setdefault("allowed", [])
+    if name not in types_allowed:
+        sys.exit(f"Error: Type '{name}' not found.")
+
+    types_allowed.remove(name)
+    schema.setdefault("type", {}).pop(name, None)
+
+    issues = validate_schema_structure(schema)
+    if issues:
+        sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in issues))
+    _save_schema(schema)
+    print(f"Removed type '{name}'.")
+
+
 def add_field_option(type_name, field_name, new_option, option_source,
                     parent_field="", parent_value="", shared_key=""):
     """Add a new option to schema.toml and save."""
@@ -3442,19 +3535,21 @@ def add_global_field_option(field_name, new_option):
     return {"success": True}
 
 
-def resolve_field(schema, type_schema, field, record):
-    """Prompt user for a single field value."""
+def resolve_field(schema, type_schema, field, record, default=None):
+    """Prompt user for a single field value.
+    default is shown as the accepted value when the user presses Enter."""
     # integer field  (from global [fields] metadata)
     field_meta = schema.get("fields", {}).get(field, {})
     if isinstance(field_meta, dict) and field_meta.get("type") == "int":
-        return input_int(f"Enter {field}")
+        return input_int(f"Enter {field}", default=default)
 
     # datetime field — prompt with format hint and validate
     if isinstance(field_meta, dict) and field_meta.get("type") == "datetime":
         while True:
-            raw = input(f"  {field} (YYYY-MM-DDTHH:MM, e.g. 2026-04-20T10:30): ").strip()
+            suffix = f" [{default}]" if default else ""
+            raw = input(f"  {field} (YYYY-MM-DDTHH:MM, e.g. 2026-04-20T10:30){suffix}: ").strip()
             if not raw:
-                return ""
+                return default if default else ""
             try:
                 dt.datetime.fromisoformat(raw)
                 return raw
@@ -3469,16 +3564,18 @@ def resolve_field(schema, type_schema, field, record):
         parent_value = record.get(parent)
         options      = resolve_options_for_value(type_schema, field, parent_value)
         if options:
-            return choose_from_list(f"Select {field}:", options)
-        return input_text(f"Enter {field}")
+            d = default if default in options else None
+            return choose_from_list(f"Select {field}:", options, default=d)
+        return input_text(f"Enter {field}", default=default)
 
     # flat options or shared reference
     options = resolve_options(schema, type_schema, field)
     if options:
-        return choose_from_list(f"Select {field}:", options)
+        d = default if default in options else None
+        return choose_from_list(f"Select {field}:", options, default=d)
 
     # free text fallback
-    return input_text(f"Enter {field}")
+    return input_text(f"Enter {field}", default=default)
 
 def resolve_tags(schema, type_schema, record):
     """
@@ -3562,26 +3659,29 @@ def add_tags_to_schema(schema_path, rtype, record, new_tags):
             print(f"  ✔ Added '{tag}' to schema.")
 
 
-def complete_record(schema, record, skip_optional=False):
+def complete_record(schema, record, skip_optional=False, suggest_fn=None):
     """Fill missing required and conditional fields interactively. Returns (record, note).
-    When skip_optional=True, skips tags, note, and global fields prompts."""
+    When skip_optional=True, skips tags, note, and global fields prompts.
+    suggest_fn(rtype, record) may return {field: default_value} — shown as
+    the accepted default (Enter picks it) for still-unset fields."""
     rtype = record.get("type")
     if not rtype:
         rtype          = choose_from_list("Select type:", schema["types"]["allowed"])
         record["type"] = rtype
 
     type_schema = schema["type"][rtype]
+    defaults    = suggest_fn(rtype, record) if suggest_fn else {}
 
     # required fields
     for field in type_schema.get("required", []):
         if field not in record:
-            record[field] = resolve_field(schema, type_schema, field, record)
+            record[field] = resolve_field(schema, type_schema, field, record, defaults.get(field))
 
     # conditional required  (e.g. fit when outcome=prescribed)
     for field, rule in type_schema.get("conditions", {}).items():
         if all(record.get(k) == v for k, v in rule.get("when", {}).items()):
             if field not in record:
-                record[field] = resolve_field(schema, type_schema, field, record)
+                record[field] = resolve_field(schema, type_schema, field, record, defaults.get(field))
 
     if skip_optional:
         return record, None
@@ -3615,9 +3715,12 @@ def complete_record(schema, record, skip_optional=False):
                 continue
             opts = fdef.get("options", []) if isinstance(fdef, dict) else []
             if opts:
-                val = choose_from_list_optional(f"  {fname}", opts)
+                val = choose_from_list_optional(f"  {fname}", opts, defaults.get(fname))
             else:
-                val = input(f"  {fname}: ").strip()
+                suffix = f" [{defaults.get(fname)}]" if defaults.get(fname) else ""
+                val = input(f"  {fname}{suffix}: ").strip()
+                if not val and defaults.get(fname):
+                    val = defaults[fname]
             if val:
                 record[fname] = val.replace(" ", "_")
 
@@ -3815,11 +3918,13 @@ def set_preset_instant(name, instant):
         tomli_w.dump(data, w.stream)
 
 
-def interactive_add(schema, date=None, save_preset_name=None):
+def interactive_add(schema, date=None, save_preset_name=None, suggest_fn=None):
     """Interactive guided record addition.
     Prompts user for all fields, validates, shows preview, asks for
-    confirmation, then appends. Optionally saves as a preset."""
-    record, note = complete_record(schema, {})
+    confirmation, then appends. Optionally saves as a preset.
+    suggest_fn(rtype, record) may return {field: default_value} to pre-fill
+    prompts from history (see complete_record)."""
+    record, note = complete_record(schema, {}, suggest_fn=suggest_fn)
     problems     = validate_record(schema, record)
     if problems:
         sys.exit(problems[0])
@@ -3975,12 +4080,19 @@ def get_note_template(category, context=None):
 def get_today_journal():
     """Return the path to today's journal file, creating it from
     template if it doesn't exist. Creates year/month subdirectory as needed."""
-    today_str = today().isoformat()
-    month_dir = os.path.join(JOURNAL_DIR, today_str[:4], today_str[5:7])
+    return get_journal_path(today().isoformat())
+
+
+def get_journal_path(date_str):
+    """Return the path to a journal file for the given YYYY-MM-DD date,
+    creating it from template if it doesn't exist.
+    Creates year/month subdirectory as needed."""
+    date_str = date_str[:10]
+    month_dir = os.path.join(JOURNAL_DIR, date_str[:4], date_str[5:7])
     os.makedirs(month_dir, exist_ok=True)
-    path = os.path.join(month_dir, f"{today_str}.md")
+    path = os.path.join(month_dir, f"{date_str}.md")
     if not os.path.exists(path):
-        content = get_note_template("daily", {"date": today_str})
+        content = get_note_template("daily", {"date": date_str})
         with open(path, "w", encoding="utf-8") as f:
             f.write(content)
     return path
@@ -4119,10 +4231,11 @@ def resolve_editor():
         return os.environ["EDITOR"].split()
     return ["notepad"] if os.name == "nt" else ["nvim"]
 
-def edit_target(target):
+def edit_target(target, date_str=None):
     """Open a PTOS file in the system editor.
     Targets: records, schema, queries, config, presets, daily.
-    Single-letter shortcuts supported (r, s, q, c, p, d/j, x)."""
+    Single-letter shortcuts supported (r, s, q, c, p, d/j, x).
+    date_str (YYYY-MM-DD) selects the journal file for the daily target."""
     shortcuts = {
         "r": "records", "s": "schema", "q": "queries",
         "c": "config",  "p": "presets", "d": "daily", "j": "daily", "x": "script",
@@ -4134,7 +4247,7 @@ def edit_target(target):
         "queries": QUERIES_PATH,
         "config":  CONFIG_PATH,
         "presets": PRESETS_PATH,
-        "daily":   get_today_journal(),
+        "daily":   get_journal_path(date_str) if date_str else get_today_journal(),
         "script":  os.path.abspath(sys.argv[0]),
     }
     if target not in paths:
@@ -4658,6 +4771,97 @@ def set_date_format(fmt):
         tomli_w.dump(config, w.stream)
 
     print(f"Date format set to: {fmt}")
+
+
+def set_currency(symbol):
+    """Set the currency symbol in config.toml using tomli-w."""
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+
+    if not symbol or not symbol.strip():
+        sys.exit("Error: Currency symbol cannot be empty.")
+    symbol = symbol.strip()
+
+    if not os.path.exists(CONFIG_PATH):
+        sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
+
+    with open(CONFIG_PATH, "rb") as f:
+        config = tomllib.load(f)
+
+    if "display" not in config:
+        config["display"] = {}
+    config["display"]["currency"] = symbol
+
+    with AtomicWrite(CONFIG_PATH, "config") as w:
+        tomli_w.dump(config, w.stream)
+
+    print(f"Currency symbol set to: {symbol}")
+
+
+def add_cycle(name, day):
+    """Add or replace a custom cycle in config.toml.
+    Cycles are stored as {name: start_day} under [cycles]."""
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+
+    name = name.strip()
+    if not re.match(r"^[a-z][a-z0-9_-]*$", name):
+        sys.exit("Error: Invalid cycle name '%s' — use lowercase letters, digits, dashes, underscores." % name)
+    try:
+        day = int(day)
+    except (TypeError, ValueError):
+        sys.exit(f"Error: Cycle day must be an integer 1-31, got '{day}'.")
+    if not 1 <= day <= 31:
+        sys.exit(f"Error: Cycle day must be 1-31, got {day}.")
+
+    if not os.path.exists(CONFIG_PATH):
+        sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
+
+    with open(CONFIG_PATH, "rb") as f:
+        config = tomllib.load(f)
+
+    if "cycles" not in config or not isinstance(config.get("cycles"), dict):
+        config["cycles"] = {}
+    config["cycles"][name] = day
+
+    with AtomicWrite(CONFIG_PATH, "config") as w:
+        tomli_w.dump(config, w.stream)
+
+    print(f"Cycle '{name}' set to start on day {day}.")
+
+
+def set_auth(username, password):
+    """Set HTTP Basic Auth credentials in config.toml.
+    Preserves the existing 'enabled' flag (defaults to true if absent)."""
+    try:
+        import tomli_w
+    except ImportError:
+        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+
+    if not username or not username.strip():
+        sys.exit("Error: Username cannot be empty.")
+    if not password or not password.strip():
+        sys.exit("Error: Password cannot be empty.")
+
+    if not os.path.exists(CONFIG_PATH):
+        sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
+
+    with open(CONFIG_PATH, "rb") as f:
+        config = tomllib.load(f)
+
+    auth = config.setdefault("auth", {})
+    enabled = auth.get("enabled", True)
+    auth.update({"enabled": enabled, "username": username.strip(), "password": password})
+
+    with AtomicWrite(CONFIG_PATH, "config") as w:
+        tomli_w.dump(config, w.stream)
+
+    print("Auth credentials set.")
+    print("  NOTE: Password is stored in plaintext in config/config.toml.")
 
 
 # --------------------------------------------------

@@ -902,12 +902,24 @@ alias = "commute"    # ptos -p c  runs the commute preset
 
 ### Multi-record presets
 
+A multi-record preset references other presets by name — each entry is added
+as its own record.
+
 ```toml
+[presets.exercise_walk]
+type     = "exercise"
+activity = "walk"
+duration = "30"
+tag      = ["morning"]
+
+[presets.stoicism_podcast]
+type   = "learning"
+topic  = "stoicism"
+source = "podcast"
+domain = "self"
+
 [presets.morning]
-records = [
-  { type = "exercise", activity = "walk", duration = "30", tag = ["morning"] },
-  { type = "learning", topic = "stoicism", source = "podcast", domain = "self" },
-]
+records = ["exercise_walk", "stoicism_podcast"]
 ```
 
 ---
