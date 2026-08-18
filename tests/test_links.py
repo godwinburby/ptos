@@ -570,3 +570,251 @@ class TestTodoParserStarter:
         assert t.id == "m1"
         assert t.links == ["expense:k3f9a1"]
         assert t.line_no == 3
+
+
+def _link_env(tmp_path, monkeypatch, records="", todo="", done=""):
+    import ptos
+    monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+    monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+    monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+    (tmp_path / "records").mkdir(exist_ok=True)
+    (tmp_path / "todo").mkdir(exist_ok=True)
+    _write(tmp_path / "records" / "2026.log", records)
+    _write(tmp_path / "todo.txt", todo)
+    _write(tmp_path / "done.txt", done)
+    return ptos
+
+
+class TestGenerateUniqueId:
+    def test_avoids_existing_ids(self, tmp_path, monkeypatch):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n",
+                         todo="Call x id:t1\n")
+        calls = {"n": 0}
+
+        def fake(length=6):
+            calls["n"] += 1
+            return "abc123" if calls["n"] == 1 else "zzzz99"
+
+        monkeypatch.setattr(ptos, "generate_id", fake)
+        assert ptos.generate_unique_id() == "zzzz99"
+        assert calls["n"] == 2
+
+    def test_retries_then_sys_exit(self, tmp_path, monkeypatch):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n")
+        monkeypatch.setattr(ptos, "generate_id", lambda length=6: "abc123")
+        with pytest.raises(SystemExit):
+            ptos.generate_unique_id(max_attempts=3)
+
+    def test_generates_when_clean(self, tmp_path, monkeypatch):
+        ptos = _link_env(tmp_path, monkeypatch)
+        assert len(ptos.generate_unique_id()) == 6
+
+
+class TestCliAddLinkWarning:
+    def _run_add(self, monkeypatch, *argv):
+        import ptos_cli
+        monkeypatch.setattr("sys.argv", ["ptos"] + list(argv))
+        ptos_cli.main()
+
+    def test_warns_on_unresolvable(self, tmp_path, monkeypatch, capsys):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n")
+        self._run_add(monkeypatch, "--add", "type=expense", "domain=self",
+                      "category=food", "amount=50", "--link", "expense:zz99")
+        out = capsys.readouterr().out
+        assert "does not resolve" in out
+        content = open(tmp_path / "records" / "2026.log", encoding="utf-8").read()
+        assert "links=expense:zz99" in content
+
+    def test_no_warning_when_resolves(self, tmp_path, monkeypatch, capsys):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n")
+        self._run_add(monkeypatch, "--add", "type=expense", "domain=self",
+                      "category=food", "amount=50", "--link", "expense:abc123")
+        out = capsys.readouterr().out
+        assert "does not resolve" not in out
+        content = open(tmp_path / "records" / "2026.log", encoding="utf-8").read()
+        assert "links=expense:abc123" in content
+
+
+class TestCliAddExplicitIdUniqueness:
+    def test_duplicate_id_rejected(self, tmp_path, monkeypatch, capsys):
+        import ptos_cli
+        _link_env(tmp_path, monkeypatch,
+                  records="2026-08-17 type=expense amount=1 category=food "
+                          "domain=self id=abc123\n")
+        monkeypatch.setattr("sys.argv", ["ptos", "--add", "type=income",
+                                         "source=salary", "amount=100", "id=abc123"])
+        with pytest.raises(SystemExit) as exc:
+            ptos_cli.main()
+        assert "already in use" in str(exc.value.code)
+        content = open(tmp_path / "records" / "2026.log", encoding="utf-8").read()
+        assert "source=salary" not in content
+
+
+class TestSetIdLinksValidation:
+    def test_set_id_duplicate_rejected(self, tmp_path, monkeypatch):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n")
+        line = "2026-08-18 type=income amount=100 source=salary"
+        with pytest.raises(SystemExit):
+            ptos.apply_set(line, ["id=abc123"], None)
+
+    def test_set_own_id_allowed(self, tmp_path, monkeypatch):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n")
+        line = "2026-08-17 type=expense amount=1 category=food domain=self id=abc123"
+        new_line, _ = ptos.apply_set(line, ["amount=2"], None)
+        assert "id=abc123" in new_line
+        new_line, _ = ptos.apply_set(line, ["id=abc123"], None)
+        assert "id=abc123" in new_line
+
+    def test_set_links_dangling_warns(self, tmp_path, monkeypatch, capsys):
+        ptos = _link_env(tmp_path, monkeypatch)
+        line = "2026-08-18 type=income amount=100 source=salary"
+        new_line, _ = ptos.apply_set(line, ["links=expense:zz99"], None)
+        assert "does not resolve" in capsys.readouterr().out
+        assert "links=expense:zz99" in new_line
+
+    def test_set_links_resolving_no_warning(self, tmp_path, monkeypatch, capsys):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n")
+        line = "2026-08-18 type=income amount=100 source=salary"
+        new_line, _ = ptos.apply_set(line, ["links=expense:abc123"], None)
+        assert "does not resolve" not in capsys.readouterr().out
+        assert "links=expense:abc123" in new_line
+
+
+class TestBacklinkRefs:
+    def test_finds_record_and_todo(self, tmp_path, monkeypatch):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n"
+                                 "2026-08-18 type=income amount=100 source=salary "
+                                 "links=expense:abc123\n",
+                         todo="Call x links:expense:abc123\n")
+        refs = ptos.backlink_refs("expense:abc123")
+        assert len(refs) == 2
+        assert {r["kind"] for r in refs} == {"record", "todo"}
+
+    def test_empty(self, tmp_path, monkeypatch):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n")
+        assert ptos.backlink_refs("expense:abc123") == []
+
+    def test_ignores_unrelated_links(self, tmp_path, monkeypatch):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n"
+                                 "2026-08-18 type=income amount=100 source=salary "
+                                 "links=expense:other1\n")
+        assert ptos.backlink_refs("expense:abc123") == []
+
+
+class TestRunSetDeleteWarning:
+    def test_warns_before_delete(self, tmp_path, monkeypatch, capsys):
+        import datetime as dt
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n"
+                                 "2026-08-18 type=income amount=100 source=salary "
+                                 "links=expense:abc123\n")
+        monkeypatch.setattr("builtins.input", lambda *a: "y")
+        ptos.run_set([], dt.date.min, dt.date.max, None, None,
+                     do_delete=True, do_all=True)
+        out = capsys.readouterr().out
+        assert "1 entry link to expense:abc123" in out
+        assert "will become dangling" in out
+        content = open(tmp_path / "records" / "2026.log", encoding="utf-8").read()
+        assert "type=expense" not in content
+
+    def test_no_warning_when_no_backlinks(self, tmp_path, monkeypatch, capsys):
+        import datetime as dt
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n")
+        monkeypatch.setattr("builtins.input", lambda *a: "y")
+        ptos.run_set([], dt.date.min, dt.date.max, None, None,
+                     do_delete=True, do_all=True)
+        assert "will become dangling" not in capsys.readouterr().out
+
+
+class TestTodoDeleteWarnings:
+    def test_todo_done_warns(self, tmp_path, monkeypatch, capsys):
+        import ptos_todo
+        import ptos_cli
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=income amount=100 source=salary "
+                                 "links=todo:t7c2b8\n",
+                         todo="(A) Call supplier id:t7c2b8\n")
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        ptos_cli._handle_todo_done("1")
+        out = capsys.readouterr().out
+        assert "will become dangling" in out
+        assert "todo:t7c2b8" in out
+
+    def test_todo_delete_warns(self, tmp_path, monkeypatch, capsys):
+        import ptos_todo
+        import ptos_cli
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=income amount=100 source=salary "
+                                 "links=todo:t7c2b8\n",
+                         todo="(A) Call supplier id:t7c2b8\n")
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        ptos_cli._handle_todo_delete("1")
+        out = capsys.readouterr().out
+        assert "will become dangling" in out
+        assert open(tmp_path / "todo.txt", encoding="utf-8").read() == ""
+
+    def test_todo_done_delete_warns(self, tmp_path, monkeypatch, capsys):
+        import ptos_todo
+        import ptos_cli
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=income amount=100 source=salary "
+                                 "links=todo:t7c2b8\n",
+                         done="x 2026-08-18 2026-08-17 Call supplier id:t7c2b8\n")
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        ptos_cli._handle_todo_done_delete("1")
+        out = capsys.readouterr().out
+        assert "will become dangling" in out
+        assert open(tmp_path / "done.txt", encoding="utf-8").read() == ""
+
+    def test_todo_done_no_warning_when_clean(self, tmp_path, monkeypatch, capsys):
+        import ptos_todo
+        import ptos_cli
+        ptos = _link_env(tmp_path, monkeypatch, todo="(A) Call supplier id:t7c2b8\n")
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        ptos_cli._handle_todo_done("1")
+        assert "will become dangling" not in capsys.readouterr().out
+
+
+class TestRemoveTypeAwareness:
+    def test_awareness_message(self, tmp_path, monkeypatch, capsys):
+        ptos = _link_env(tmp_path, monkeypatch,
+                         records="2026-08-17 type=expense amount=1 category=food "
+                                 "domain=self id=abc123\n"
+                                 "2026-08-18 type=expense amount=2 category=food "
+                                 "domain=self\n")
+        ptos.remove_type("expense")
+        out = capsys.readouterr().out
+        assert "2 existing records use type 'expense'" in out
+        assert "id set on 1 of them" in out
+
+    def test_no_message_when_unused(self, tmp_path, monkeypatch, capsys):
+        ptos = _link_env(tmp_path, monkeypatch)
+        ptos.remove_type("expense")
+        assert "existing records use type 'expense'" not in capsys.readouterr().out

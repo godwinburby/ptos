@@ -2162,6 +2162,21 @@ def apply_set(old_line, set_args, new_note):
     if new_note is not None:
         note = new_note
 
+    if "id" in kv:
+        rid = str(kv["id"])
+        old_id = parse_line(old_line)[1].get("id")
+        if rid != old_id:
+            existing = {item["target"].split(":", 1)[1] for item in list_link_ids()}
+            if rid in existing:
+                sys.exit(f"id '{rid}' is already in use — pick another.")
+    if "links" in kv:
+        for tok in _links_list(kv["links"]):
+            for subtok in tok.split(","):
+                subtok = subtok.strip()
+                if subtok and resolve_link(subtok) is None:
+                    print(f"Warning: link target '{subtok}' does not resolve — "
+                          "saved anyway; lint will flag it as dangling.")
+
     return build_record_line(date_str, kv, note if note else None), changed_date
 
 
@@ -2205,6 +2220,16 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
     plan = []  # (filepath, lineno, old_line, new_line, changed_date)
     for filepath, lineno, old_line in targets:
         if do_delete:
+            d, kv, _ = parse_line(old_line)
+            rid = kv.get("id")
+            rtype = kv.get("type")
+            if rid and rtype:
+                target = f"{rtype}:{rid}"
+                refs = backlink_refs(target)
+                if refs:
+                    n = len(refs)
+                    print(f"Warning: {n} entr{'y' if n == 1 else 'ies'} link to "
+                          f"{target} — they will become dangling.")
             plan.append((filepath, lineno, old_line, None, None))
         else:
             new_line, changed_date = apply_set(old_line, set_args, new_note)
@@ -2318,6 +2343,18 @@ def generate_id(length=6):
     import secrets
     alphabet = "abcdefghjkmnpqrstuvwxyz23456789"
     return "".join(secrets.choice(alphabet) for _ in range(length))
+
+
+def generate_unique_id(length=6, max_attempts=5):
+    """Generate a random id guaranteed not to collide with any existing
+    record/todo id. sys.exit if a unique id can't be found quickly."""
+    existing = {item["target"].split(":", 1)[1] for item in list_link_ids()}
+    for _ in range(max_attempts):
+        candidate = generate_id(length)
+        if candidate not in existing:
+            return candidate
+    sys.exit("Could not generate a unique id after several attempts — "
+             "this should be extremely rare; try again.")
 
 
 def split_link_target(target):
@@ -2472,6 +2509,32 @@ def check_dangling_links():
     return problems
 
 
+def backlink_refs(target):
+    """Return {kind, filepath, lineno, line} dicts for every record/todo whose
+    links= / links: tokens reference the given type:id target."""
+    refs = []
+    for filepath, lineno, raw in find_records_with_location([], search=None):
+        kv = parse_line(raw)[1]
+        links = kv.get("links")
+        if not links:
+            continue
+        for tok in _links_list(links):
+            if any(t.strip() == target for t in tok.split(",")):
+                refs.append({"kind": "record", "filepath": filepath,
+                             "lineno": lineno, "line": raw.strip()})
+    for tpath in (TODO_PATH, DONE_PATH):
+        if not os.path.isfile(tpath):
+            continue
+        with open(tpath, encoding="utf-8") as f:
+            for lineno, line in enumerate(f, start=1):
+                line = line.rstrip("\n")
+                m = re.search(r'\blinks:(\S+)', line)
+                if m and any(t.strip() == target for t in m.group(1).split(",")):
+                    refs.append({"kind": "todo", "filepath": tpath,
+                                 "lineno": lineno, "line": line})
+    return refs
+
+
 def append_links_to_line(raw_line, new_links):
     """Append a 'links=...' token to a record line, merging with any
     existing links value. Returns the new line."""
@@ -2497,7 +2560,7 @@ def append_record_id(filepath, lineno, old_line, new_id=None):
     """Append id=<id> to a record line in place. Generates one if not given.
     Returns the new id."""
     if not new_id:
-        new_id = generate_id()
+        new_id = generate_unique_id()
     line = old_line.rstrip("\n")
     if re.search(r'\bid=(\S+)', line):
         raise ValueError(f"Line already has an id: {line}")
@@ -2511,7 +2574,7 @@ def append_todo_id(line, new_id=None):
     """Append id:<id> to a todo.txt line. Generates one if not given.
     Returns (new_line, new_id)."""
     if not new_id:
-        new_id = generate_id()
+        new_id = generate_unique_id()
     line = line.rstrip("\n")
     if re.search(r'\bid:(\S+)', line):
         raise ValueError(f"Line already has an id: {line}")
@@ -3679,6 +3742,12 @@ def remove_type(name):
     if issues:
         sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in issues))
     _save_schema(schema)
+    recs = find_records_with_location([f"type={name}"])
+    if recs:
+        ids_count = sum(1 for _, _, raw in recs if parse_line(raw)[1].get("id"))
+        print(f"{len(recs)} existing records use type '{name}' "
+              f"(id set on {ids_count} of them); they are not modified but "
+              "will fail schema validation from now on.")
     print(f"Removed type '{name}'.")
 
 

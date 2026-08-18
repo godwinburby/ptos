@@ -405,17 +405,23 @@ or a todo linked to an expense.
 - `ptos --retro-id expense --where "amount=450"` / `ptos --retro-id todo --search "call"` — assigns an id to an existing entry
 - Or hand-type `id=...` / `id:...` in the file
 
+Tool-generated ids are collision-checked against all existing ids before saving; an explicit `id=X` passed to `--add` or `--set` is rejected with `sys.exit` if the id is already in use. Hand-typed ids in `.log`/`todo.txt` files are never checked — that stays your responsibility (and `--lint` reports any duplicates it finds).
+
 **How to link:**
 - 🔗 button on any todo row (assigns an id if missing, then prompts for the target)
 - Record/todo edit forms' Links field with autocomplete (`type` the target's `type:id`)
 - `ptos --link expense:k3f9a1 income:ins9x` — adds a link to an existing entry
 - `links:` prefix autocomplete in the todo quick-add bar
 
+Creating or `--set`-ing a link to a target that doesn't resolve prints a warning but saves anyway (lint will flag it as dangling later).
+
 **Finding linked things:**
 - Todo rows show `id:` badges and clickable link badges — click a badge to filter the list (`/todo?linked_to=...`)
 - The record edit page shows a **Linked from** panel (who links to me)
 - `ptos --linked-to expense:k3f9a1` — query records by link target
 - `ptos --lint` flags dangling links (target doesn't exist) and duplicate ids
+
+Deleting a record or todo that other entries link to prints a warning ("N entries link to type:id — they will become dangling") before it commits — non-blocking, just visible at the moment of consequence.
 
 Journal entries can't carry `links=` tokens — use `[[journal:YYYY-MM-DD]]` bracket links instead.
 
