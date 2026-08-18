@@ -62,7 +62,7 @@ from ptos import (
     parse_line, lint_records, build_record_line,
     # Link helpers
     resolve_link, list_link_ids, check_dangling_links,
-    generate_id, append_links_to_line, append_record_id,
+    generate_unique_id, append_links_to_line, append_record_id,
     append_todo_id, append_links_to_todo_line,
     # Date helpers
     month_range, quarter_range, resolve_cycle,
@@ -959,6 +959,13 @@ def _handle_todo_done(n):
         print(f"Line {line_no} not found in todo.txt")
         return
 
+    if target[0].id:
+        refs = ptos.backlink_refs(f"todo:{target[0].id}")
+        if refs:
+            n = len(refs)
+            print(f"Warning: {n} entr{'y' if n == 1 else 'ies'} link to "
+                  f"todo:{target[0].id} — they will become dangling.")
+
     try:
         ptos_todo.complete_todo(target[0])
         print(f"Completed: {ptos_todo.format_line(target[0])}")
@@ -1119,6 +1126,18 @@ def _handle_todo_delete(n):
         print(f"Invalid line number: {n}")
         return
 
+    todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+    target = [t for t in todos if t.line_no == line_no]
+    if not target:
+        print(f"Line {line_no} not found in todo.txt")
+        return
+    if target[0].id:
+        refs = ptos.backlink_refs(f"todo:{target[0].id}")
+        if refs:
+            n = len(refs)
+            print(f"Warning: {n} entr{'y' if n == 1 else 'ies'} link to "
+                  f"todo:{target[0].id} — they will become dangling.")
+
     try:
         ptos_todo.delete_todo(ptos.TODO_PATH, line_no)
         print(f"Deleted line {line_no}")
@@ -1202,6 +1221,18 @@ def _handle_todo_done_delete(n):
     except ValueError:
         print(f"Invalid line number: {n}")
         return
+
+    done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+    target = [t for t in done if t.line_no == line_no]
+    if not target:
+        print(f"Line {line_no} not found in done.txt")
+        return
+    if target[0].id:
+        refs = ptos.backlink_refs(f"todo:{target[0].id}")
+        if refs:
+            n = len(refs)
+            print(f"Warning: {n} entr{'y' if n == 1 else 'ies'} link to "
+                  f"todo:{target[0].id} — they will become dangling.")
 
     try:
         ptos_todo.delete_todo(ptos.DONE_PATH, line_no)
@@ -1538,7 +1569,7 @@ def _handle_retro_id(args):
         t = matches[0]
         if t.id:
             sys.exit(f"Todo already has id:{t.id}")
-        new_id = generate_id()
+        new_id = generate_unique_id()
         line, _ = append_todo_id(t.raw_line, new_id)
         ptos_todo.rewrite_line_by_number(TODO_PATH, t.line_no, line)
         print(f"Added id:{new_id} to line {t.line_no}")
@@ -1783,9 +1814,17 @@ def main():
             if args.link:
                 if len(args.link) != 1:
                     sys.exit("With --add, --link takes exactly one TARGET (e.g. --link project:p91a)")
-                record["links"] = args.link[0]
+                target = args.link[0]
+                if resolve_link(target) is None:
+                    print(f"Warning: link target '{target}' does not resolve — "
+                          "saved anyway; lint will flag it as dangling.")
+                record["links"] = target
                 if "id" not in record:
-                    record["id"] = generate_id()
+                    record["id"] = generate_unique_id()
+            if "id" in record:
+                existing_ids = {item["target"].split(":", 1)[1] for item in list_link_ids()}
+                if record["id"] in existing_ids:
+                    sys.exit(f"id '{record['id']}' is already in use — pick another.")
             problems = validate_record(schema, record)
             if problems:
                 sys.exit(problems[0])
