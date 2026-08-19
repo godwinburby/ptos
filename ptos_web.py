@@ -374,9 +374,10 @@ def _build_global_field_defs(schema, current_record=None):
 
 
 def _strip_and_validate_record(schema, record, label):
-    """Strip non-schema metadata keys (use_count, return_to, instant, alias)
-    from a preset record dict, then validate it. Returns (record, err)."""
-    known = {"type", "tag", "note"}
+    """Strip non-schema metadata keys (use_count, return_to, instant, alias,
+    note) from a preset record dict, then validate it. Returns (record, note,
+    err) where note is the preset's stored note (or None)."""
+    known = {"type", "tag"}
     known.update(schema.get("fields", {}).keys())
     known.update(schema.get("global_fields", {}).keys())
     rtype = record.get("type")
@@ -384,11 +385,12 @@ def _strip_and_validate_record(schema, record, label):
         ts = schema.get("type", {}).get(rtype, {})
         known.update(ts.get("required", []))
         known.update(ts.get("fields", {}).keys())
+    note = record.get("note") or None
     record = {k: v for k, v in record.items() if k in known}
     problems = svc.validate_record(schema, record)
     if problems:
-        return None, f"preset '{label}': {problems[0]}"
-    return record, None
+        return None, None, f"preset '{label}': {problems[0]}"
+    return record, note, None
 
 
 def _resolve_multi_preset(name):
@@ -397,51 +399,53 @@ def _resolve_multi_preset(name):
     if isinstance(pd, dict) and "alias" in pd:
         pd = presets.get(pd["alias"], {})
     if not isinstance(pd, dict) or "records" not in pd:
-        return None, f"'{name}' is not a multi-record preset"
+        return None, None, f"'{name}' is not a multi-record preset"
     try:
         schema = svc.get_schema()
     except Exception as e:
-        return None, str(e)
+        return None, None, str(e)
     resolved = []
+    notes = []
     for item in pd["records"]:
         if not isinstance(item, str):
-            return None, "records list must contain preset names"
+            return None, None, "records list must contain preset names"
         if item not in presets:
-            return None, f"references unknown preset '{item}'"
+            return None, None, f"references unknown preset '{item}'"
         ref = presets[item]
         if isinstance(ref, dict) and "alias" in ref:
             ref = presets.get(ref["alias"], {})
         if isinstance(ref, dict) and "records" in ref:
-            return None, f"nested multi-record presets not supported"
-        record, err = _strip_and_validate_record(schema, dict(ref), item)
+            return None, None, f"nested multi-record presets not supported"
+        record, note, err = _strip_and_validate_record(schema, dict(ref), item)
         if err:
-            return None, err
+            return None, None, err
         resolved.append(record)
-    return resolved, None
+        notes.append(note)
+    return resolved, notes, None
 
 
 def _resolve_preset_records(name):
     """Resolve a preset into the list of records to append. Supports both
     multi-record presets (`records = [...]`) and single presets flagged
-    `instant = true`. Returns (records, err)."""
+    `instant = true`. Returns (records, notes, err) with one note per record."""
     presets = svc.get_presets()
     pd = presets.get(name, {})
     if isinstance(pd, dict) and "alias" in pd:
         pd = presets.get(pd["alias"], {})
     if not isinstance(pd, dict):
-        return None, f"'{name}' is not a multi-record or instant preset"
+        return None, None, f"'{name}' is not a multi-record or instant preset"
     if "records" in pd:
         return _resolve_multi_preset(name)
     if pd.get("instant"):
         try:
             schema = svc.get_schema()
         except Exception as e:
-            return None, str(e)
-        record, err = _strip_and_validate_record(schema, dict(pd), name)
+            return None, None, str(e)
+        record, note, err = _strip_and_validate_record(schema, dict(pd), name)
         if err:
-            return None, err
-        return [record], None
-    return None, f"'{name}' is not a multi-record or instant preset"
+            return None, None, err
+        return [record], [note], None
+    return None, None, f"'{name}' is not a multi-record or instant preset"
 
 
 def _multi_presets():
@@ -449,7 +453,7 @@ def _multi_presets():
     for name, p in svc.get_presets().items():
         if not isinstance(p, dict) or "records" not in p:
             continue
-        records, err = _resolve_multi_preset(name)
+        records, notes, err = _resolve_multi_preset(name)
         if records is not None:
             refs = p["records"]
             result[name] = ", ".join(refs) if isinstance(refs, list) else ""
@@ -3058,13 +3062,13 @@ def api_preset_add():
     note     = data.get("note", "").strip() or None
     if not name:
         return jsonify(ok=False, error="Preset name required")
-    records, err = _resolve_preset_records(name)
+    records, notes, err = _resolve_preset_records(name)
     if err:
         return jsonify(ok=False, error=err)
     added = []
     try:
-        for record in records:
-            line = svc.build_record_line(date_str, record, note)
+        for record, rec_note in zip(records, notes):
+            line = svc.build_record_line(date_str, record, rec_note or note or None)
             svc.append_record(line)
             added.append(line)
     except Exception as e:

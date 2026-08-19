@@ -137,6 +137,7 @@ class TestInstantPresets:
             'type = "habit"\n'
             'name = "exercise"\n'
             'instant = true\n'
+            'note = "daily workout"\n'
             '\n'
             '[presets.snacks]\n'
             'type = "expense"\n'
@@ -152,6 +153,7 @@ class TestInstantPresets:
             'domain = "self"\n'
             'category = "transport"\n'
             'amount = 60\n'
+            'note = "uber to station"\n'
             '\n'
             '[presets.bus]\n'
             'type = "expense"\n'
@@ -182,6 +184,27 @@ class TestInstantPresets:
         assert len(lines) == 1
         assert "type=habit" in lines[0]
         assert "name=exercise" in lines[0]
+
+    def test_instant_preset_applies_stored_note(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/preset_add", json={"name": "exercise"})
+        data = resp.get_json()
+        assert data["ok"] is True, data.get("error")
+        lines = self._records(tmp_path)
+        assert "| daily workout" in lines[0]
+
+    def test_multi_preset_applies_per_record_notes(self, tmp_path, monkeypatch):
+        self._write_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/preset_add", json={"name": "commute"})
+        data = resp.get_json()
+        assert data["ok"] is True, data.get("error")
+        lines = self._records(tmp_path)
+        assert "| uber to station" in lines[0]
+        assert "|" not in lines[1]
 
     def test_non_instant_preset_rejected(self, tmp_path, monkeypatch):
         self._write_presets(tmp_path, monkeypatch)

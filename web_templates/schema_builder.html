@@ -538,6 +538,23 @@ function addField() {
       return;
     }
   }
+
+  // shared-definition option: options come from a [shared.*] list above
+  var sharedNames = Object.keys(_state.shared_defs);
+  if (sharedNames.length) {
+    var pick = prompt(
+      "Use options from a shared definition?\nEnter: shared.NAME (one of: " + sharedNames.join(", ") + ")" +
+      "\n\n(Leave blank for a standalone field)"
+    );
+    if (pick) {
+      var ref = pick.trim();
+      var sname = ref.indexOf("shared.") === 0 ? ref.slice(7) : ref;
+      if (!_state.shared_defs[sname]) { alert("Unknown shared definition: " + ref); return; }
+      ts().fields[name] = { is_int: false, options: [], use: "shared." + sname, linkable: false };
+      renderFields(ts());
+      return;
+    }
+  }
   ts().fields[name] = { is_int: false, options: [], linkable: false };
   renderFields(ts());
 }

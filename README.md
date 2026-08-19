@@ -591,6 +591,7 @@ Navigate to the **Schema Builder** tab in the web app to:
 - Set field types (text, int, options)
 - Configure conditional fields and tags
 - Drag-and-drop reorder field options, shared options, and chips
+- Reuse option lists across fields: define a **Shared Definition** (`[shared.*]`) and create a type field that references it (`use = "shared.name"`) — when adding a field, the builder offers the shared definitions as an option
 
 No need to edit `schema.toml` directly for most changes.
 
@@ -947,6 +948,25 @@ tag      = ["snacks"]
 ```toml
 [presets.c]
 alias = "commute"    # ptos -p c  runs the commute preset
+```
+
+### Preset notes & instant presets
+
+A preset can carry a `note` that is applied to the record when the preset runs
+(`note = "uber to station"` → line ends with `| uber to station`). Setting
+`instant = true` marks a single preset as one-click: the web UI renders it as a
+tap-to-add chip that appends the record immediately (its stored note included)
+without opening the form.
+
+```toml
+[presets.work_broadband]
+type     = "expense"
+domain   = "work"
+category = "telephone"
+amount   = 1531
+tag      = ["broadband"]
+note     = "work broadband"
+instant  = true
 ```
 
 ### Multi-record presets
