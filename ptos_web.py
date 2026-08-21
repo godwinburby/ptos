@@ -2416,7 +2416,7 @@ def queries_get():
         field_types = {}
     named = [k for k in all_q
              if k not in ("metrics","dashboards","due")
-             and not k.startswith(("board.","habit.","calendar.","due."))
+             and not k.startswith(("board.","habit.","calendar.","due.","threshold."))
              and not (isinstance(all_q[k], dict) and "alias" in all_q[k])]
     return render_template("queries.html",
         tab="queries", title="Queries", now=_now_str(),
