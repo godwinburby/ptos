@@ -1195,6 +1195,123 @@ def get_metric(name, time="tm", from_date=None, to_date=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Thresholds
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _resolve_value(ref_name, threshold_cfg, time="tm", from_date=None, to_date=None):
+    """Resolve a metric or query name to a numeric value.
+    Used by get_threshold_status() for both the metric and the target value."""
+    queries = ptos.get_queries()
+    metrics = queries.get("metrics", {})
+    if ref_name in metrics:
+        result = get_metric(ref_name, time=time, from_date=from_date, to_date=to_date)
+        return result["raw"]
+    reserved = {"metrics", "dashboards", "due"}
+    q = None
+    if ref_name in queries.get("queries", {}):
+        q = queries["queries"][ref_name]
+    elif ref_name in queries and isinstance(queries[ref_name], dict) and ref_name not in reserved:
+        q = queries[ref_name]
+    if q is not None:
+        where = q.get("where", "") if isinstance(q, dict) else ""
+        filters = [where] if where.strip() else []
+        agg = threshold_cfg.get("agg", "sum")
+        sum_field = threshold_cfg.get("sum_field") if agg == "sum" else None
+        result = get_records(filters, time=time, from_date=from_date,
+                             to_date=to_date, sum_field=sum_field)
+        return result["count"] if agg == "count" else result["total"]
+    raise PTOSError(f"'{ref_name}' is not a known metric or query")
+
+
+def get_threshold_status(name, time=None, from_date=None, to_date=None):
+    """Evaluate a single threshold and return its status.
+
+    Returns:
+      {name, raw, target, direction, pct, unit, status}
+      status: ok | warning | over | met
+    """
+    thresholds = ptos.get_thresholds()
+    t = thresholds.get(name)
+    if not t:
+        raise PTOSError(f"Threshold '{name}' not found")
+
+    resolved_time = time or t.get("time", "tm")
+    raw = _resolve_value(t["metric"], t, resolved_time, from_date, to_date)
+    if raw is None:
+        raw = 0
+
+    target = t.get("value", 0)
+    if isinstance(target, str):
+        target = _resolve_value(target, t, resolved_time, from_date, to_date)
+    if target is None:
+        target = 0
+
+    pct = (raw / target * 100) if target else 0
+    direction = t.get("direction", "max")
+    if direction == "max":
+        status = "over" if pct >= 100 else ("warning" if pct >= 80 else "ok")
+    else:
+        status = "met" if pct >= 100 else ("warning" if pct < 50 else "ok")
+
+    return {
+        "name": name,
+        "raw": raw,
+        "target": target,
+        "direction": direction,
+        "pct": pct,
+        "unit": t.get("unit", ""),
+        "status": status,
+    }
+
+
+def get_all_threshold_status(time=None, from_date=None, to_date=None):
+    """Return status for every configured threshold."""
+    thresholds = ptos.get_thresholds()
+    results = []
+    for name in thresholds:
+        try:
+            results.append(get_threshold_status(name, time, from_date, to_date))
+        except Exception:
+            results.append({"name": name, "raw": 0, "target": 0,
+                            "direction": "max", "pct": 0, "unit": "",
+                            "status": "error"})
+    return results
+
+
+def get_matching_thresholds(record):
+    """Return threshold names whose underlying query's where clause matches
+    the given record dict. Used for live add-form feedback."""
+    thresholds = ptos.get_thresholds()
+    queries = ptos.get_queries()
+    matches = []
+    for name, t in thresholds.items():
+        ref = t.get("metric", "")
+        if ref in queries.get("metrics", {}):
+            base = queries["metrics"][ref]
+            query_name = None
+            if isinstance(base, dict):
+                query_name = base.get("sum") or base.get("count") or base.get("avg")
+        else:
+            query_name = ref
+        if query_name:
+            q_def = queries.get("queries", {}).get(query_name)
+            if q_def is None:
+                reserved = {"metrics", "dashboards", "due"}
+                q_def = queries.get(query_name) if query_name not in reserved else None
+            where_expr = q_def.get("where", "") if isinstance(q_def, dict) else ""
+        else:
+            where_expr = ""
+        if where_expr and ptos.apply_where(record, [where_expr]):
+            try:
+                status = get_threshold_status(name)
+            except Exception:
+                status = {"name": name, "raw": 0, "target": 0, "direction": "max",
+                          "pct": 0, "unit": "", "status": "error"}
+            matches.append(status)
+    return matches
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Dashboard
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -2240,7 +2357,7 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
 # Query TOML management (full write)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None, raw_calendars=None):
+def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None, raw_calendars=None, raw_thresholds=None):
     """Build and write queries.toml using tomli-w with atomic write.
 
     raw_queries:    {name: {where, time, group, search, sort, sum}}
@@ -2251,6 +2368,7 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
     raw_boards:     {name: {columns, time_window, limit, card_title_fields, rollup_field, rollup_op}} (optional)
     raw_habits:     {name: {filters, weeks}}  (optional)
     raw_calendars:  {name: {filters, time_window}}  (optional)
+    raw_thresholds: {name: {metric, agg, sum_field, value, direction, time, unit}}  (optional)
 
     Raises:
         PTOSError on invalid names or write failure.
@@ -2266,17 +2384,20 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
             return n[6:]
         if n.startswith("calendar."):
             return n[9:]
+        if n.startswith("threshold."):
+            return n[10:]
         return n
 
     def _is_config_key(n):
-        return any(n.startswith(p) for p in ("board.", "habit.", "calendar.", "due."))
+        return any(n.startswith(p) for p in ("board.", "habit.", "calendar.", "due.", "threshold."))
 
     all_names = [n for n in (list(raw_queries) + list(raw_metrics)
                              + list(raw_dashboards) + list(raw_aliases))
                  if not _is_config_key(n)]
     board_names = list(raw_boards or {})
     calendar_names = list(raw_calendars or {})
-    for n in all_names + board_names + calendar_names:
+    threshold_names = list(raw_thresholds or {})
+    for n in all_names + board_names + calendar_names + threshold_names:
         bare = _clean_bare_name(n)
         if not re.match(r'^[a-z][a-z0-9_]*$', bare):
             raise PTOSError(
@@ -2426,6 +2547,28 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         if cal_cfg.get("time_window"):
             entry["time_window"] = cal_cfg["time_window"]
         data[f"calendar.{bare}"] = entry
+
+    # Thresholds
+    for name, thr_cfg in (raw_thresholds or {}).items():
+        bare = _clean_bare_name(name)
+        if not thr_cfg.get("metric", "").strip():
+            raise PTOSError(f"Threshold '{name}' must have a metric")
+        entry = {"metric": thr_cfg["metric"].strip()}
+        if thr_cfg.get("agg", "").strip():
+            entry["agg"] = thr_cfg["agg"].strip()
+        if thr_cfg.get("sum_field", "").strip():
+            entry["sum_field"] = thr_cfg["sum_field"].strip()
+        raw_val = thr_cfg.get("value", "")
+        if isinstance(raw_val, (int, float)):
+            entry["value"] = raw_val
+        elif isinstance(raw_val, str) and raw_val.strip():
+            entry["value"] = raw_val.strip()
+        entry["direction"] = thr_cfg.get("direction", "max")
+        if thr_cfg.get("time", "").strip():
+            entry["time"] = thr_cfg["time"].strip()
+        if thr_cfg.get("unit", "").strip():
+            entry["unit"] = thr_cfg["unit"].strip()
+        data[f"threshold.{bare}"] = entry
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
         tomli_w.dump(data, w.stream)

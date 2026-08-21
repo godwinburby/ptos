@@ -170,4 +170,16 @@ weeks = 12
 filters = ["type=habit", "name=walk"]
 weeks = 12
 
+# ══════════════════════════════════════════════════════════════════════════════
+# THRESHOLDS
+# ══════════════════════════════════════════════════════════════════════════════
+
+["threshold.food_spend"]
+metric    = "food_this_month"
+agg       = "sum"
+sum_field = "amount"
+value     = 5000
+direction = "max"
+time      = "this-month"
+
 

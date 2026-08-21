@@ -524,6 +524,7 @@
     <a href="/board" class="{% if tab=='board' %}active{% endif %}">{% include 'icons/board.html' ignore missing %} Board</a>
     <a href="/habits" class="{% if tab=='habits' %}active{% endif %}">{% include 'icons/habits.html' ignore missing %} Habits</a>
     <a href="/calendar" class="{% if tab=='calendar' %}active{% endif %}">{% include 'icons/calendar.html' ignore missing %} Calendar</a>
+    <a href="/thresholds" class="{% if tab=='thresholds' %}active{% endif %}">{% include 'icons/thresholds.html' ignore missing %} Thresholds</a>
     <a href="/query-builder" class="{% if tab=='query_builder' %}active{% endif %}">{% include 'icons/query_builder.html' ignore missing %} Query Builder</a>
     <a href="/backup" class="{% if tab=='backup' %}active{% endif %}">{% include 'icons/backup.html' ignore missing %} Backup</a>
     <a href="/settings" class="{% if tab=='settings' %}active{% endif %}">{% include 'icons/settings.html' ignore missing %} Settings <span id="sync-dot-sidebar" class="sync-dot"></span></a>
@@ -893,6 +894,10 @@
       {% include 'icons/query_builder.html' ignore missing %}
       Query Builder
     </a>
+    <a href="/thresholds" class="more-menu-item {% if tab=='thresholds' %}active{% endif %}">
+      {% include 'icons/thresholds.html' ignore missing %}
+      Thresholds
+    </a>
     <a href="/backup" class="more-menu-item {% if tab=='backup' %}active{% endif %}">
       {% include 'icons/backup.html' ignore missing %}
       Backup
@@ -1174,6 +1179,7 @@ function toggleMoreMenu(e) {
     "g k": "/backup",
     "g c": "/schema-builder",
     "g u": "/query-builder",
+    "g T": "/thresholds",
   };
 
   // Help overlay HTML
