@@ -2418,11 +2418,14 @@ def queries_get():
              if k not in ("metrics","dashboards","due")
              and not k.startswith(("board.","habit.","calendar.","due.","threshold."))
              and not (isinstance(all_q[k], dict) and "alias" in all_q[k])]
+    threshold_names = [k[10:] for k in all_q
+                       if k.startswith("threshold.") and isinstance(all_q[k], dict)]
     return render_template("queries.html",
         tab="queries", title="Queries", now=_now_str(),
         queries=named,
         metrics=list(all_q.get("metrics",{}).keys()),
         dashboards=list(all_q.get("dashboards",{}).keys()),
+        thresholds=threshold_names,
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
         current_time=request.args.get("time", ""),
         custom_time=request.args.get("custom_time", ""),
