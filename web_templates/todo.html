@@ -217,6 +217,8 @@
   .todo-project-rail {
     display:flex; gap:6px; overflow-x:auto; padding-bottom:8px;
     margin-bottom:14px; -webkit-overflow-scrolling:touch;
+    mask-image: linear-gradient(to right, black 90%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, black 90%, transparent 100%);
   }
   .todo-project-rail::-webkit-scrollbar { display:none; }
   .todo-proj-chip {
@@ -863,7 +865,9 @@ function goSearch() {
   {% if selected_context %}params.set("context", "{{ selected_context }}");{% endif %}
   {% if selected_priority %}params.set("priority", "{{ selected_priority }}");{% endif %}
   {% if selected_due %}params.set("due", "{{ selected_due }}");{% endif %}
-  var search = raw.replace(/\bdue:(\S+)/gi, function(_, v) { params.set("due", v); return ''; })
+  var search = raw.replace(/\+(\S+)/g, function(_, v) { params.set("project", v); return ''; })
+                  .replace(/@(\S+)/g, function(_, v) { params.set("context", v); return ''; })
+                  .replace(/\bdue:(\S+)/gi, function(_, v) { params.set("due", v); return ''; })
                   .replace(/\bpri:([A-Da-d])/gi, function(_, v) { params.set("priority", v.toUpperCase()); return ''; })
                   .trim();
   if (search) params.set("search", search);
@@ -1817,6 +1821,7 @@ function pickSearchAC(idx) {
     document.getElementById('search-ac-list').classList.remove('open');
     return;
   }
+  if (tok.prefix === '+' || tok.prefix === '@') val = tok.prefix + val;
   var before = input.value.substring(0, tok.start);
   var after = input.value.substring(tok.start + tok.fullToken.length);
   input.value = before + val + after;
