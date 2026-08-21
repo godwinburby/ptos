@@ -5,6 +5,42 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-08-15
+
+### Thresholds — budget warnings
+
+- **New `/thresholds` page** — progress bars comparing a computed metric against a target, with color-coded status (ok / warning / over / met)
+- **Config** — `[threshold.NAME]` in `queries.toml`: `metric` (query or metric name), `agg` (`sum`/`count`), `sum_field`, `value` (literal or another metric/query name for dynamic targets), `direction` (`min`/`max`), `time`
+- **Status logic** — `max`: warning ≥80%, over ≥100%; `min`: warning <50%, met ≥100%
+- **Engine** — `get_thresholds()` reads config; `_resolve_value()` resolves metric/query refs; `get_threshold_status()` evaluates one threshold; `get_all_threshold_status()` evaluates all; `get_matching_thresholds(record)` checks a record against thresholds
+- **CLI** — `--thresholds` flag prints a formatted table with values, targets, and status
+- **Add-form integration** — debounced POST to `/api/thresholds/match` shows live threshold match bars above the form
+- **Home dashboard widget** — compact threshold card with progress bars for each threshold
+- **Query Builder** — Thresholds tab with full editor (metric, agg, sum_field, value, direction, time); round-trips through `save_queries_full(raw_thresholds=...)`
+- **Nav** — links in desktop sidebar and mobile more menu, keyboard shortcut `G T`, icon in `web_templates/icons/thresholds.html`
+- **Tests** — `tests/test_thresholds.py`: config load, metric/query resolution, status logic for all direction/pct combos, matching, save round-trip, preserves queries/metrics
+
+---
+
+## 2026-08-10
+
+### Links hardening
+
+- **`generate_unique_id()`** — collision-safe ID generator (checks `list_link_ids()`, retries up to 5 attempts, `sys.exit` on failure). Every tool-chosen ID now goes through this (append_record_id, append_todo_id, `--retro-id`, `--add --link`)
+- **`--add id=X` duplicate check** — hand-typed IDs validated against `list_link_ids()` before save; `sys.exit` on collision
+- **`apply_set` validation** — `--set id=X` routes through uniqueness check; `--set links=X` routes through resolve+dangling-warning
+- **`backlink_refs()` warnings** — record delete, `--todo-done`, `--todo-delete`, `--todo-done-delete` all print "N entries link to type:id — they will become dangling" when the target has incoming links
+- **`--add ... --link TARGET`** — creates record with generated `id=` + `links=TARGET`; warns (saves anyway) if target doesn't resolve
+- **`remove_type()` awareness** — prints a message when removing a type that existing records use ("N existing records use type 'X'; they are not modified but will fail schema validation")
+- **Tests** — `tests/test_links.py` expanded: generate_unique_id collision/retry, `--add id=` duplicate rejection, `apply_set` id/links validation, `run_set` delete warning, todo done/delete/done-delete warnings, remove_type awareness message
+
+### Bug fixes
+
+- **Preset note** — `_strip_and_validate_record` returns `(record, note, err)` tuple; `_resolve_multi_preset`/`_resolve_preset_records` pass note through; `api_preset_add` applies per-record notes from presets with `multi` flag
+- **Schema Builder shared fields** — `addField()` prompts "Add to shared definitions?" when adding a field to a type; creates `{use:"shared.NAME"}` for shared fields; preserves existing shared fields when editing type fields that reference them
+
+---
+
 ## 2026-08-10
 
 ### Habit tracker (`/habits` heatmap + streak)
