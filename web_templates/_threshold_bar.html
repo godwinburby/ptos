@@ -1,0 +1,37 @@
+{# Reusable threshold bar. Usage:
+     {% include '_threshold_bar.html' with context %}
+   Expects `t` in context: {name, raw, target, pct, status, direction, unit}
+   Set `compact=true` for home page (smaller, no status badge)
+#}
+{% if compact %}
+<div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
+  <span style="font-size:13px;font-weight:600;min-width:120px;">{{ t.name | replace('_',' ') }}</span>
+  <div style="flex:1;min-width:120px;height:14px;background:var(--border);border-radius:7px;overflow:hidden;">
+    <div class="thr-bar-fill {{ t.status }}" style="height:100%;border-radius:7px;width:{{ [t.pct, 100] | min }}%"></div>
+  </div>
+  <span style="font-size:12px;color:var(--sub);white-space:nowrap;">{{ '%.0f' | format(t.pct) }}% &nbsp; {{ t.raw }}/{{ t.target }}{% if t.unit %} {{ t.unit }}{% endif %}</span>
+</div>
+{% else %}
+<div class="thr-card">
+  <div class="thr-row">
+    <span class="thr-name">{{ t.name | replace('_',' ') }}</span>
+    <div class="thr-bar-wrap">
+      <div class="thr-bar-bg">
+        <div class="thr-bar-fill {{ t.status }}" style="width:{{ [t.pct, 100] | min }}%"></div>
+      </div>
+    </div>
+    <span class="thr-vals">
+      {{ '%.0f' | format(t.pct) }}% &nbsp; {{ '%s / %s' | format(t.raw, t.target) }}
+      {% if t.unit %} ({{ t.unit }}){% endif %}
+      {% if t.direction == 'max' %} max{% else %} min{% endif %}
+    </span>
+    <span class="thr-status {{ t.status }}">
+      {% if t.direction == 'max' %}
+        {% if t.status == 'over' %}OVER{% elif t.status == 'warning' %}WARN{% else %}OK{% endif %}
+      {% else %}
+        {% if t.status == 'met' %}MET{% elif t.status == 'warning' %}WARN{% else %}OK{% endif %}
+      {% endif %}
+    </span>
+  </div>
+</div>
+{% endif %}
