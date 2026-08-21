@@ -618,13 +618,14 @@ function _checkThresholds() {
         } else {
           label = previewStatus === "met" ? "WILL MEET" : previewStatus === "warning" ? "WARN" : "OK";
         }
+        var _thrColor = {ok:"#2ECC71",warning:"#F39C12",over:"#E74C3C",met:"#3498DB"};
         return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
           + '<span style="font-size:12px;font-weight:600;min-width:100px;">' + m.name.replace(/_/g, ' ') + '</span>'
           + '<div style="flex:1;min-width:120px;height:14px;background:var(--border);border-radius:7px;overflow:hidden;">'
           + '<div class="thr-bar-fill ' + previewStatus + '" style="height:100%;border-radius:7px;width:' + Math.min(previewPct, 100) + '%"></div>'
           + '</div>'
           + '<span style="font-size:11px;color:var(--sub);white-space:nowrap;">' + previewRaw + '/' + m.target + (m.unit ? ' ' + m.unit : '') + '</span>'
-          + '<span style="font-size:11px;font-weight:700;">' + label + '</span>'
+          + '<span style="font-size:11px;font-weight:700;color:' + (_thrColor[previewStatus]||'var(--sub)') + ';">' + label + '</span>'
           + '</div>';
       }).join("");
     })
