@@ -320,7 +320,6 @@ function renderThresholdResult(thresholds) {
       return t.status === "met" ? "MET" : t.status === "warning" ? "WARN" : "OK";
     }
   };
-  var pct = Math.min(t.pct || 0, 100);
   var bars = thresholds.map(function(t) {
     var pct = Math.min(t.pct || 0, 100);
     return '<div class="thr-card" style="margin-bottom:8px;">' +
