@@ -9,14 +9,13 @@
   .thr-row { display:flex;align-items:center;gap:16px;flex-wrap:wrap; }
   .thr-name { font-size:15px;font-weight:700;min-width:160px; }
   .thr-bar-wrap { flex:1;min-width:200px; }
-  .thr-bar-bg { height:20px;background:var(--border);border-radius:10px;overflow:hidden;position:relative; }
+  .thr-bar-bg { height:20px;background:var(--border);border-radius:10px;overflow:hidden; }
   .thr-bar-fill { height:100%;border-radius:10px;transition:width .3s; }
   .thr-bar-fill.ok { background:#2ECC71; }
   .thr-bar-fill.warning { background:#F39C12; }
   .thr-bar-fill.over { background:#E74C3C; }
   .thr-bar-fill.met { background:#3498DB; }
   .thr-bar-fill.error { background:#95A5A6; }
-  .thr-pct { position:absolute;right:8px;top:50%;transform:translateY(-50%);font-size:11px;font-weight:700;color:#fff; }
   .thr-vals { font-size:13px;color:var(--sub);white-space:nowrap; }
   .thr-status { font-size:13px;font-weight:700;min-width:60px;text-align:center;padding:3px 10px;border-radius:10px; }
   .thr-status.ok { background:#2ECC7122;color:#2ECC71; }
@@ -53,11 +52,10 @@
       <div class="thr-bar-wrap">
         <div class="thr-bar-bg">
           <div class="thr-bar-fill {{ t.status }}" style="width:{{ [t.pct, 100] | min }}%"></div>
-          <span class="thr-pct">{{ '%.0f' | format(t.pct) }}%</span>
         </div>
       </div>
       <span class="thr-vals">
-        {{ '%s / %s' | format(t.raw, t.target) }}
+        {{ '%.0f' | format(t.pct) }}% &nbsp; {{ '%s / %s' | format(t.raw, t.target) }}
         {% if t.unit %} ({{ t.unit }}){% endif %}
         {% if t.direction == 'max' %} max{% else %} min{% endif %}
       </span>

@@ -1584,6 +1584,39 @@ function onCalendarNameChange() {
 }
 
 // ── Threshold editor ──────────────────────────────────────────────────────────
+function _thrQueryMetricOpts(selected) {
+  var html = '<option value="">— pick one —</option>';
+  var mKeys = Object.keys(_st.metrics);
+  var qKeys = Object.keys(_st.queries);
+  if (mKeys.length) {
+    html += '<optgroup label="Metrics">';
+    mKeys.forEach(function(k) { html += '<option value="'+k+'"'+(k===selected?' selected':'')+'>'+k+'</option>'; });
+    html += '</optgroup>';
+  }
+  if (qKeys.length) {
+    html += '<optgroup label="Queries">';
+    qKeys.forEach(function(k) { html += '<option value="'+k+'"'+(k===selected?' selected':'')+'>'+k+'</option>'; });
+    html += '</optgroup>';
+  }
+  return html;
+}
+function _thrValueOpts(selected) {
+  var isNum = selected && !isNaN(Number(selected));
+  var html = '<option value=""'+(!selected?' selected':'')+'>Custom number…</option>';
+  var mKeys = Object.keys(_st.metrics);
+  var qKeys = Object.keys(_st.queries);
+  if (mKeys.length) {
+    html += '<optgroup label="Metrics">';
+    mKeys.forEach(function(k) { html += '<option value="'+k+'"'+(k===selected?' selected':'')+'>'+k+'</option>'; });
+    html += '</optgroup>';
+  }
+  if (qKeys.length) {
+    html += '<optgroup label="Queries">';
+    qKeys.forEach(function(k) { html += '<option value="'+k+'"'+(k===selected?' selected':'')+'>'+k+'</option>'; });
+    html += '</optgroup>';
+  }
+  return html;
+}
 function showThresholdEditor() {
   var ed = document.getElementById("entry-editor");
   var empty = document.getElementById("entry-empty");
@@ -1591,6 +1624,7 @@ function showThresholdEditor() {
   empty.style.display = "none";
 
   var cfg = _st.thresholds[_cur.name] || {metric:"",agg:"sum",sum_field:"",value:"",direction:"max",time:"",unit:""};
+  var isNum = cfg.value && !isNaN(Number(cfg.value));
 
   ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
@@ -1608,15 +1642,23 @@ function showThresholdEditor() {
     '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">'+
       '<div>'+
         '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Metric / Query</label>'+
-        '<input type="text" id="thr-metric" value="'+_esc(cfg.metric)+'" oninput="onThrField(\'metric\')"'+
-        ' placeholder="food_this_month" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
-        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Name of a query or metric from queries.toml</div>'+
+        '<select id="thr-metric" onchange="onThrField(\'metric\')"'+
+        ' style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+        _thrQueryMetricOpts(cfg.metric)+
+        '</select>'+
+        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Pick a metric or query to measure</div>'+
       '</div>'+
       '<div>'+
         '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Target Value</label>'+
-        '<input type="text" id="thr-value" value="'+_esc(String(cfg.value))+'" oninput="onThrField(\'value\')"'+
-        ' placeholder="5000" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
-        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Number or another metric/query name</div>'+
+        '<div style="display:flex;gap:6px;">'+
+          '<select id="thr-value-select" onchange="onThrValueSelect()"'+
+          ' style="flex:1;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+          _thrValueOpts(String(cfg.value))+
+          '</select>'+
+          '<input type="number" id="thr-value-num" value="'+(isNum?_esc(String(cfg.value)):'')+'" oninput="onThrField(\'value\')"'+
+          ' placeholder="5000" style="width:90px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;'+(isNum?'':'display:none;')+'">'+
+        '</div>'+
+        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Number or reference another metric/query</div>'+
       '</div>'+
     '</div>'+
     '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">'+
@@ -1667,7 +1709,29 @@ function onThrField(field) {
   if (field === "direction") cfg.direction = document.getElementById("thr-direction").value;
   else if (field === "agg") cfg.agg = document.getElementById("thr-agg").value;
   else if (field === "time") cfg.time = document.getElementById("thr-time").value;
+  else if (field === "value") {
+    var sel = document.getElementById("thr-value-select");
+    var num = document.getElementById("thr-value-num");
+    cfg.value = (sel && sel.value) ? sel.value : (num ? num.value : "");
+  }
   else cfg[field] = document.getElementById("thr-" + field.replace(/_/g, "-")).value;
+}
+
+function onThrValueSelect() {
+  var cfg = _st.thresholds[_cur.name];
+  if (!cfg) return;
+  var sel = document.getElementById("thr-value-select");
+  var num = document.getElementById("thr-value-num");
+  if (!sel) return;
+  if (sel.value === "") {
+    num.style.display = "";
+    num.focus();
+    cfg.value = num.value;
+  } else {
+    num.style.display = "none";
+    num.value = "";
+    cfg.value = sel.value;
+  }
 }
 
 function onThrNameChange() {
