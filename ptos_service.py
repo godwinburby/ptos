@@ -1264,6 +1264,8 @@ def get_threshold_status(name, time=None, from_date=None, to_date=None):
         "pct": pct,
         "unit": t.get("unit", ""),
         "status": status,
+        "agg": t.get("agg", "sum"),
+        "sum_field": t.get("sum_field"),
     }
 
 
