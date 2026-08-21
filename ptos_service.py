@@ -1242,7 +1242,10 @@ def get_threshold_status(name, time=None, from_date=None, to_date=None):
 
     target = t.get("value", 0)
     if isinstance(target, str):
-        target = _resolve_value(target, t, resolved_time, from_date, to_date)
+        try:
+            target = float(target)
+        except (ValueError, TypeError):
+            target = _resolve_value(target, t, resolved_time, from_date, to_date)
     if target is None:
         target = 0
 

@@ -327,7 +327,7 @@ function switchSection(sec) {
     btn.classList.toggle("active", btn.dataset.sec === sec);
   });
   // show only the matching item strip
-  ["queries","metrics","dashboards","aliases","due","boards","habits","calendars"].forEach(function(s) {
+  ["queries","metrics","dashboards","aliases","due","boards","habits","calendars","thresholds"].forEach(function(s) {
     var el = document.getElementById("tabs-"+s);
     if (el) el.style.display = s === sec ? "flex" : "none";
   });
