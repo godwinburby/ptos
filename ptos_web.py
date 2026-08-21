@@ -2350,6 +2350,8 @@ def query_builder_delete():
     try:
         queries = svc.get_queries()
         reserved = ("metrics", "dashboards", "due")
+        def _normalise_query_for_write(v):
+            return dict(v) if isinstance(v, dict) else v
         def _raw_q():
             return {k: _normalise_query_for_write(v)
                     for k, v in queries.items()

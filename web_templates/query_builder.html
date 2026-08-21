@@ -216,6 +216,7 @@ var _liveTimer = null;
     if (k.startsWith("board.")) return;    // Skip board configs - loaded separately
     if (k.startsWith("habit.")) return;    // Skip habit configs - loaded separately
     if (k.startsWith("calendar.")) return; // Skip calendar configs - loaded separately
+    if (k.startsWith("threshold.")) return; // Skip threshold configs - loaded separately
     if (v.alias) {
       _st.aliases[k] = { alias: v.alias };
       return;
