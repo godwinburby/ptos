@@ -29,6 +29,15 @@
     <div id="d-chip-group" class="chip-group"></div>
   </div>
   {% endif %}
+  {% if thresholds %}
+  <div class="chip-section collapsed" style="border-top:3px solid #E74C3C;">
+    <div class="chip-section-header" onclick="toggleSection(this)">
+      <div class="chip-section-label" style="color:#E74C3C;">Thresholds</div>
+      <span class="chip-toggle">+</span>
+    </div>
+    <div id="t-chip-group" class="chip-group"></div>
+  </div>
+  {% endif %}
   <div class="field-group">
     <label>Time Override</label>
     <select id="q-time-select" onchange="onQTimeChange(this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
@@ -62,6 +71,7 @@ var _qName = null;
 var _qNames = {{ queries | tojson }};
 var _mNames = {{ metrics | tojson }};
 var _dNames = {{ dashboards | tojson }};
+var _tNames = {{ thresholds | tojson }};
 
 function _selectChip(kind, name) {
   _qKind = kind;
@@ -87,6 +97,8 @@ function _renderAllChips() {
   selected = (_qKind === "d") ? _qName : null;
   el = document.getElementById("d-chip-group");
   if (el) renderChipGroup(el, _dNames, selected, function(n) { _selectChip("d", n); });
+  el = document.getElementById("t-chip-group");
+  if (el) renderChipGroup(el, _tNames, null, function(n) { window.location.href = "/thresholds"; });
 }
 
 // ── Queries TimePicker ─────────────────────────────────────────────────────
