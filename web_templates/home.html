@@ -362,10 +362,8 @@ function addMultiPreset(name, btn) {
       btn.style.background = "var(--success)";
       msg.style.display = "none";
       setTimeout(() => {
-        btn.innerHTML = orig;
-        btn.style.background = "";
-        btn.disabled = false;
-      }, 3000);
+        location.reload();
+      }, 1200);
     } else {
       btn.innerHTML = orig;
       btn.disabled = false;
