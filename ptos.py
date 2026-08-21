@@ -1134,6 +1134,12 @@ def get_queries():
     return _load("queries", QUERIES_PATH)
 def get_presets(): return _load("presets", PRESETS_PATH).get("presets", {}) if os.path.exists(PRESETS_PATH) else {}
 
+def get_thresholds():
+    """Return {name: config_dict} for all [threshold.*] sections in queries.toml."""
+    q = get_queries()
+    return {k.split(".", 1)[1]: v for k, v in q.items()
+            if k.startswith("threshold.") and isinstance(v, dict)}
+
 
 def _query_refs_type(query, selected):
     """Check if a base query's where clause references any of the selected types."""

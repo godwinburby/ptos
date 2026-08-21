@@ -271,6 +271,12 @@
              value="{{ field_values.get('custom_tags','') if field_values else '' }}">
     </div>
 
+    <!-- threshold match indicator -->
+    <div id="threshold-match-area" style="display:none;margin-top:8px;">
+      <div style="font-size:11px;color:var(--sub);margin-bottom:4px;">Thresholds</div>
+      <div id="threshold-match-bars"></div>
+    </div>
+
     <!-- global optional fields -->
     {% if global_field_defs %}
     <div class="divider"></div>
@@ -569,6 +575,51 @@ document.getElementById("add-form").addEventListener("submit", function() {
     });
   });
 })();
+
+// ── Threshold matching ──────────────────────────────────────────────────────
+var _thresholdTimer = null;
+function _checkThresholds() {
+  if (_thresholdTimer) clearTimeout(_thresholdTimer);
+  _thresholdTimer = setTimeout(function() {
+    var rec = _currentRecord();
+    var area = document.getElementById("threshold-match-area");
+    var bars = document.getElementById("threshold-match-bars");
+    if (!area || !bars) return;
+    fetch("/api/thresholds/match", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(rec)
+    })
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok || !d.matches || !d.matches.length) {
+        area.style.display = "none";
+        return;
+      }
+      area.style.display = "block";
+      bars.innerHTML = d.matches.map(function(m) {
+        var color = m.status === "ok" ? "#2ECC71" : m.status === "warning" ? "#F39C12" : m.status === "over" ? "#E74C3C" : m.status === "met" ? "#3498DB" : "#95A5A6";
+        var label = m.direction === "max"
+          ? (m.status === "over" ? "OVER" : m.status === "warning" ? "WARN" : "OK")
+          : (m.status === "met" ? "MET" : m.status === "warning" ? "WARN" : "OK");
+        return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+          + '<span style="font-size:12px;font-weight:600;min-width:100px;">' + m.name.replace(/_/g, ' ') + '</span>'
+          + '<div style="flex:1;height:12px;background:var(--border);border-radius:6px;overflow:hidden;position:relative;">'
+          + '<div style="height:100%;border-radius:6px;background:' + color + ';width:' + Math.min(m.pct, 100) + '%"></div>'
+          + '<span style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;color:#fff;">' + Math.round(m.pct) + '%</span>'
+          + '</div>'
+          + '<span style="font-size:11px;color:var(--sub);white-space:nowrap;">' + m.raw + '/' + m.target + (m.unit ? ' ' + m.unit : '') + '</span>'
+          + '<span style="font-size:11px;font-weight:700;color:' + color + ';">' + label + '</span>'
+          + '</div>';
+      }).join("");
+    })
+    .catch(function() { area.style.display = "none"; });
+  }, 300);
+}
+document.querySelectorAll("#add-form select[name], #add-form input[name]").forEach(function(el) {
+  el.addEventListener("change", _checkThresholds);
+  el.addEventListener("input", _checkThresholds);
+});
 
 // ── Save as Preset ────────────────────────────────────────────────────────────
 function _currentRecord() {

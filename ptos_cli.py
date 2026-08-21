@@ -191,6 +191,8 @@ def build_parser(cycles):
                      help="Show last N periods side by side (default: 6)")
     ana.add_argument("--due",          nargs="?", const="__DEFAULT__", metavar="NAME_OR_DAYS",
                      help="Show overdue records. Optional: named due config from queries.toml, or N days override")
+    ana.add_argument("--thresholds",   nargs="?", const="__ALL__", metavar="TIME",
+                     help="Show threshold status. Optional: time window override (default: this-month)")
     ana.add_argument("--sum-field", dest="sum_field", metavar="FIELD",
                      help="Field to sum instead of the default numeric field (e.g. advance, duration)")
     ana.add_argument("--table",        action="store_true", help="Show results as a table instead of raw lines")
@@ -635,6 +637,56 @@ def run_due(arg):
             print(f"{gap:>{days_col}}d  {name:<{name_col}}  {note}")
 
     print(f"\n{len(overdue)} record(s) due\n")
+
+
+def run_thresholds(time_arg):
+    import ptos_service as svc
+    time = None if time_arg == "__ALL__" else time_arg
+    results = svc.get_all_threshold_status(time=time)
+    if not results:
+        print("\nNo thresholds configured.\n")
+        print("Add thresholds to queries.toml:\n")
+        print('  ["threshold.food_spend"]')
+        print('  metric    = "food_this_month"')
+        print('  agg       = "sum"')
+        print('  sum_field = "amount"')
+        print('  value     = 5000')
+        print('  direction = "max"')
+        print('  time      = "this-month"\n')
+        return
+
+    name_col = 20
+    raw_col = 12
+    target_col = 12
+    pct_col = 8
+    status_col = 10
+    unit_col = 8
+
+    print(f"\nThresholds\n")
+    print(f"{'name':<{name_col}} {'raw':>{raw_col}} {'target':>{target_col}} "
+          f"{'pct':>{pct_col}} {'status':>{status_col}} {'unit':<{unit_col}}")
+    print("-" * 80)
+
+    for r in results:
+        raw_val = r["raw"]
+        target_val = r["target"]
+        unit = r["unit"] or ""
+        direction = r["direction"]
+        status = r["status"]
+        pct = r["pct"]
+
+        if direction == "max":
+            sym = {"ok": " ", "warning": "!", "over": "X"}.get(status, "?")
+        else:
+            sym = {"ok": " ", "warning": "!", "met": "V"}.get(status, "?")
+
+        raw_s = ptos.fmt(int(raw_val)) if isinstance(raw_val, (int, float)) and raw_val == int(raw_val) else ptos.fmt_avg(raw_val) if isinstance(raw_val, float) else str(raw_val)
+        target_s = ptos.fmt(int(target_val)) if isinstance(target_val, (int, float)) and target_val == int(target_val) else ptos.fmt_avg(target_val) if isinstance(target_val, float) else str(target_val)
+
+        print(f"{r['name']:<{name_col}} {raw_s:>{raw_col}} {target_s:>{target_col}} "
+              f"{pct:>{pct_col}.0f}% {sym:>{status_col}} {unit:<{unit_col}}")
+
+    print(f"\n{len(results)} threshold(s)\n")
 
 
 # --------------------------------------------------
@@ -1487,7 +1539,7 @@ def _handle_add_dashboard(args):
     raw_q = {k: _norm(v) for k, v in queries.items()
              if k not in reserved and k not in nested_containers
              and isinstance(v, dict) and "alias" not in v
-             and not k.startswith(("board.", "habit.", "calendar.", "due."))}
+             and not k.startswith(("board.", "habit.", "calendar.", "due.", "threshold."))}
     raw_a = {k: v for k, v in queries.items()
              if k not in reserved and k not in nested_containers
              and isinstance(v, dict) and "alias" in v}
@@ -1498,6 +1550,7 @@ def _handle_add_dashboard(args):
                 raw_due[k[4:]] = v
             elif k == "due":
                 raw_due["default"] = v
+    thresholds = {k[10:]: v for k, v in queries.items() if k.startswith("threshold.") and isinstance(v, dict)}
 
     dashboards = dict(queries.get("dashboards", {}))
     if args.add_dashboard in dashboards:
@@ -1519,6 +1572,7 @@ def _handle_add_dashboard(args):
             raw_boards=boards,
             raw_habits=habits,
             raw_calendars=calendars,
+            raw_thresholds=thresholds,
         )
     except ptos_service.PTOSError as e:
         sys.exit(str(e))
@@ -1890,6 +1944,11 @@ def main():
     # ---- due mode ----
     if args.due is not None:
         run_due(args.due)
+        return
+
+    # ---- thresholds mode ----
+    if args.thresholds is not None:
+        run_thresholds(args.thresholds)
         return
 
     if args.query:

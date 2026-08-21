@@ -599,6 +599,11 @@ def home():
     username = cfg.get("user", {}).get("name", "User")
     freq, rem = svc.get_frequent_presets(6)
 
+    try:
+        threshold_data = svc.get_all_threshold_status()
+    except Exception:
+        threshold_data = []
+
     return render_template("home.html",
         tab="home", title="Home", now=_now_str(), greeting=_greeting(),
         username=username,
@@ -618,7 +623,8 @@ def home():
         from_date=request.args.get("from_date", ""),
         to_date=request.args.get("to_date", ""),
         recent_rows=recent_rows, recent_cols=recent_cols,
-        field_types=field_types)
+        field_types=field_types,
+        threshold_data=threshold_data)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2061,6 +2067,19 @@ def habits():
         now=_now_str(), habits=data)
 
 
+@app.route("/thresholds")
+@app.route("/thresholds/<time>")
+def thresholds_page(time=None):
+    try:
+        data = svc.get_all_threshold_status(time=time)
+    except Exception:
+        data = []
+    return render_template("thresholds.html",
+        tab="thresholds", title="Thresholds",
+        now=_now_str(), thresholds=data, time=time or "this-month",
+        time_options=_get_time_options())
+
+
 @app.route("/calendar")
 @app.route("/calendar/<name>")
 def calendar_view(name=None):
@@ -2276,13 +2295,27 @@ def query_builder():
                 "time_window": v.get("time_window", "this-month"),
             }
 
+    thresholds = {}
+    for k, v in queries.items():
+        if k.startswith("threshold.") and isinstance(v, dict):
+            name = k[10:]
+            thresholds[name] = {
+                "metric": v.get("metric", ""),
+                "agg": v.get("agg", ""),
+                "sum_field": v.get("sum_field", ""),
+                "value": v.get("value", ""),
+                "direction": v.get("direction", "max"),
+                "time": v.get("time", ""),
+                "unit": v.get("unit", ""),
+            }
+
     return render_template("query_builder.html",
         tab="query_builder", title="Query Builder",
         now=_now_str(), queries=queries, types=types,
         field_types=field_types,
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
         due_config=all_due_configs, boards=boards, habits=habits,
-        calendars=calendars)
+        calendars=calendars, thresholds=thresholds)
 
 
 @app.route("/query-builder/save", methods=["POST"])
@@ -2299,6 +2332,7 @@ def query_builder_save():
             raw_boards=data.get("boards", {}),
             raw_habits=data.get("habits", {}),
             raw_calendars=data.get("calendars", {}),
+            raw_thresholds=data.get("thresholds", {}),
         )
         return jsonify(ok=True)
     except Exception as e:
@@ -2316,36 +2350,51 @@ def query_builder_delete():
     try:
         queries = svc.get_queries()
         reserved = ("metrics", "dashboards", "due")
-        # helper: normalise raw queries from TOML (list group → string)
         def _raw_q():
             return {k: _normalise_query_for_write(v)
                     for k, v in queries.items()
-                    if k not in reserved and isinstance(v, dict) and "alias" not in v}
+                    if k not in reserved and isinstance(v, dict) and "alias" not in v
+                    and not k.startswith("threshold.")}
         def _raw_a():
             return {k: v for k, v in queries.items()
                     if k not in reserved and isinstance(v, dict) and "alias" in v}
+        def _raw_thr():
+            return {k[10:]: v for k, v in queries.items()
+                    if k.startswith("threshold.") and isinstance(v, dict)}
         if kind == "metric":
             if name not in queries.get("metrics", {}):
                 return jsonify(ok=False, error=f"Metric '{name}' not found")
             del queries["metrics"][name]
             svc.save_queries_full(_raw_q(), queries.get("metrics", {}),
-                                queries.get("dashboards", {}), _raw_a())
+                                queries.get("dashboards", {}), _raw_a(),
+                                raw_thresholds=_raw_thr())
         elif kind == "dashboard":
             if name not in queries.get("dashboards", {}):
                 return jsonify(ok=False, error=f"Dashboard '{name}' not found")
             del queries["dashboards"][name]
             svc.save_queries_full(_raw_q(), queries.get("metrics", {}),
-                                queries.get("dashboards", {}), _raw_a())
+                                queries.get("dashboards", {}), _raw_a(),
+                                raw_thresholds=_raw_thr())
+        elif kind == "threshold":
+            thr_key = f"threshold.{name}"
+            if thr_key not in queries:
+                return jsonify(ok=False, error=f"Threshold '{name}' not found")
+            del queries[thr_key]
+            svc.save_queries_full(_raw_q(), queries.get("metrics", {}),
+                                queries.get("dashboards", {}), _raw_a(),
+                                raw_thresholds=_raw_thr())
         elif kind == "alias":
             svc.save_queries_full(_raw_q(), queries.get("metrics", {}),
                                 queries.get("dashboards", {}),
-                                {k: v for k, v in _raw_a().items() if k != name})
+                                {k: v for k, v in _raw_a().items() if k != name},
+                                raw_thresholds=_raw_thr())
         else:
             if name not in queries or name in reserved:
                 return jsonify(ok=False, error=f"Query '{name}' not found")
             del queries[name]
             svc.save_queries_full(_raw_q(), queries.get("metrics", {}),
-                                queries.get("dashboards", {}), _raw_a())
+                                queries.get("dashboards", {}), _raw_a(),
+                                raw_thresholds=_raw_thr())
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -3052,6 +3101,26 @@ def api_field_suggest(rtype, field, value):
         return jsonify(ok=True, suggestions=suggestions)
     except Exception as e:
         return jsonify(ok=False, suggestions={}, error=str(e))
+
+
+@app.route("/api/thresholds/match", methods=["POST"])
+def api_thresholds_match():
+    data = request.get_json(silent=True) or {}
+    try:
+        matches = svc.get_matching_thresholds(data)
+        return jsonify(ok=True, matches=matches)
+    except Exception as e:
+        return jsonify(ok=False, matches=[], error=str(e))
+
+
+@app.route("/api/thresholds/status")
+def api_thresholds_status():
+    time = request.args.get("time")
+    try:
+        results = svc.get_all_threshold_status(time=time)
+        return jsonify(ok=True, thresholds=results)
+    except Exception as e:
+        return jsonify(ok=False, thresholds=[], error=str(e))
 
 
 @app.route("/api/preset_add", methods=["POST"])

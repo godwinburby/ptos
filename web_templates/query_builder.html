@@ -36,6 +36,7 @@
       <button class="qb-sec-tab"        data-sec="boards"     onclick="switchSection('boards')">Boards</button>
       <button class="qb-sec-tab"        data-sec="habits"     onclick="switchSection('habits')">Habits</button>
       <button class="qb-sec-tab"        data-sec="calendars"  onclick="switchSection('calendars')">Calendars</button>
+      <button class="qb-sec-tab"        data-sec="thresholds" onclick="switchSection('thresholds')">Thresholds</button>
     </div>
   </div>
 </div>
@@ -50,6 +51,7 @@
   <div id="tabs-boards"     class="qb-item-strip" style="display:none;"></div>
   <div id="tabs-habits"     class="qb-item-strip" style="display:none;"></div>
   <div id="tabs-calendars"  class="qb-item-strip" style="display:none;"></div>
+  <div id="tabs-thresholds" class="qb-item-strip" style="display:none;"></div>
 </div>
 
 <!-- ── Editor ── -->
@@ -174,7 +176,7 @@
 <script src="/static/js/time_picker.js"></script>
 <script src="/static/js/drag.js"></script>
 <script>
-var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{}, boards:{}, habits:{}, calendars:{} };
+var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{}, boards:{}, habits:{}, calendars:{}, thresholds:{} };
 var _cur = null;
 var _delPending = null;
 var _types    = {{ types | tojson }};
@@ -278,6 +280,12 @@ var _liveTimer = null;
     var name = e[0].replace(/^calendar\./, '');
     _st.calendars[name] = { filters: e[1].filters||[], time_window: e[1].time_window||'this-month' };
   });
+  // Thresholds
+  var _bkThresholds = {{ thresholds | tojson }};
+  Object.entries(_bkThresholds).forEach(function(e) {
+    var name = e[0].replace(/^threshold\./, '');
+    _st.thresholds[name] = { metric: e[1].metric||'', agg: e[1].agg||'', sum_field: e[1].sum_field||'', value: e[1].value||'', direction: e[1].direction||'max', time: e[1].time||'', unit: e[1].unit||'' };
+  });
   renderTabs();
   // Check URL params for edit mode
   var params = new URLSearchParams(window.location.search);
@@ -335,6 +343,7 @@ function renderTabs() {
   _renderSection("tabs-boards",     _st.boards,     "boards");
   _renderSection("tabs-habits",     _st.habits,     "habits");
   _renderSection("tabs-calendars",  _st.calendars,  "calendars");
+  _renderSection("tabs-thresholds", _st.thresholds, "thresholds");
   _updateSectionCounts();
 }
 
@@ -348,6 +357,7 @@ function _updateSectionCounts() {
     boards:     Object.keys(_st.boards).length,
     habits:     Object.keys(_st.habits).length,
     calendars:  Object.keys(_st.calendars).length,
+    thresholds: Object.keys(_st.thresholds).length,
   };
   document.querySelectorAll(".qb-sec-tab").forEach(function(btn) {
     var sec = btn.dataset.sec;
@@ -423,10 +433,10 @@ function resetQuery() {
 
 // ── Add new ───────────────────────────────────────────────────────────────────
 function addEntry() {
-  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias\n  u = due\n  b = board\n  h = habit\n  c = calendar","q");
+  var kind = prompt("What kind?\n  q = query\n  m = metric\n  d = dashboard\n  a = alias\n  u = due\n  b = board\n  h = habit\n  c = calendar\n  t = threshold","q");
   if (!kind) return;
   kind = kind.trim().toLowerCase();
-  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":kind==="u"?"due":kind==="b"?"boards":kind==="h"?"habits":kind==="c"?"calendars":"queries";
+  var section = kind==="m"?"metrics":kind==="d"?"dashboards":kind==="a"?"aliases":kind==="u"?"due":kind==="b"?"boards":kind==="h"?"habits":kind==="c"?"calendars":kind==="t"?"thresholds":"queries";
   var name = prompt("Name (lowercase, underscores):");
   if (!name) return;
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
@@ -446,6 +456,8 @@ function addEntry() {
     _st.habits[name]   = {filters:[],weeks:12};
   else if (section==="calendars")
     _st.calendars[name] = {filters:[],time_window:'this-month'};
+  else if (section==="thresholds")
+    _st.thresholds[name] = {metric:"",agg:"sum",sum_field:"",value:"",direction:"max",time:"",unit:""};
   else
     _st.dashboards[name] = {metrics:[]};
   renderTabs();
@@ -476,6 +488,10 @@ function renderEditor() {
   }
   if (s==="calendars") {
     showCalendarEditor();
+    return;
+  }
+  if (s==="thresholds") {
+    showThresholdEditor();
     return;
   }
   // header
@@ -1316,7 +1332,17 @@ function saveAll() {
       }
     }
   }
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due, boards:_st.boards, habits:_st.habits, calendars:_st.calendars };
+  // validate thresholds client-side before POST
+  if (_st.thresholds) {
+    for (var tname in _st.thresholds) {
+      var tcfg = _st.thresholds[tname];
+      if (!tcfg.metric || !tcfg.metric.trim()) {
+        showMsg("✖ Threshold '" + tname + "' must have a metric", false);
+        return;
+      }
+    }
+  }
+  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due, boards:_st.boards, habits:_st.habits, calendars:_st.calendars, thresholds:_st.thresholds };
   Object.entries(_st.queries).forEach(function(e) {
     var k=e[0],v=e[1];
     payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
@@ -1553,6 +1579,105 @@ function onCalendarNameChange() {
   if (!newName || newName === old || _st.calendars[newName]) return;
   _st.calendars[newName] = _st.calendars[old];
   delete _st.calendars[old];
+  _cur.name = newName;
+  renderTabs();
+}
+
+// ── Threshold editor ──────────────────────────────────────────────────────────
+function showThresholdEditor() {
+  var ed = document.getElementById("entry-editor");
+  var empty = document.getElementById("entry-empty");
+  ed.style.display = "block";
+  empty.style.display = "none";
+
+  var cfg = _st.thresholds[_cur.name] || {metric:"",agg:"sum",sum_field:"",value:"",direction:"max",time:"",unit:""};
+
+  ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
+      '<div style="flex:1;"><label>Name</label>'+
+        '<input type="text" id="thr-name-input" value="'+_esc(_cur.name)+'" oninput="onThrNameChange()"'+
+        ' style="font-size:16px;font-weight:700;"></div>'+
+      '<div style="margin-top:18px;">'+
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm"'+
+        ' style="color:var(--error);border-color:var(--error);">Delete</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
+      'Threshold — compare a computed value against a target. Uses existing queries/metrics.'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">'+
+      '<div>'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Metric / Query</label>'+
+        '<input type="text" id="thr-metric" value="'+_esc(cfg.metric)+'" oninput="onThrField(\'metric\')"'+
+        ' placeholder="food_this_month" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Name of a query or metric from queries.toml</div>'+
+      '</div>'+
+      '<div>'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Target Value</label>'+
+        '<input type="text" id="thr-value" value="'+_esc(String(cfg.value))+'" oninput="onThrField(\'value\')"'+
+        ' placeholder="5000" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Number or another metric/query name</div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;margin-bottom:14px;">'+
+      '<div>'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Direction</label>'+
+        '<select id="thr-direction" onchange="onThrField(\'direction\')" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+          '<option value="max"'+(cfg.direction==="max"?" selected":'')+'>max (don\'t exceed)</option>'+
+          '<option value="min"'+(cfg.direction==="min"?" selected":'')+'>min (reach target)</option>'+
+        '</select>'+
+      '</div>'+
+      '<div>'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Agg (if plain query)</label>'+
+        '<select id="thr-agg" onchange="onThrField(\'agg\')" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+          '<option value="sum"'+(cfg.agg==="sum"?" selected":'')+'>sum</option>'+
+          '<option value="count"'+(cfg.agg==="count"?" selected":'')+'>count</option>'+
+          '<option value=""'+(!cfg.agg?" selected":'')+'>n/a (use metric)</option>'+
+        '</select>'+
+      '</div>'+
+      '<div>'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Sum Field</label>'+
+        '<input type="text" id="thr-sum-field" value="'+_esc(cfg.sum_field)+'" oninput="onThrField(\'sum_field\')"'+
+        ' placeholder="amount" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+      '</div>'+
+    '</div>'+
+    '<div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">'+
+      '<div>'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Time Override</label>'+
+        '<select id="thr-time" onchange="onThrField(\'time\')" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+          '<option value=""'+(!cfg.time?" selected":'')+'>Default (this-month)</option>'+
+          _timeOpts.map(function(o){
+            return '<option value="'+o[1]+'"'+(cfg.time===o[1]?' selected':'')+'>'+o[0]+'</option>';
+          }).join("")+
+        '</select>'+
+      '</div>'+
+      '<div>'+
+        '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Unit</label>'+
+        '<input type="text" id="thr-unit" value="'+_esc(cfg.unit)+'" oninput="onThrField(\'unit\')"'+
+        ' placeholder="fills" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+        '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Optional. Money uses ₹ automatically.</div>'+
+      '</div>'+
+    '</div>'+
+  '</div>';
+}
+
+function onThrField(field) {
+  var cfg = _st.thresholds[_cur.name];
+  if (!cfg) return;
+  if (field === "direction") cfg.direction = document.getElementById("thr-direction").value;
+  else if (field === "agg") cfg.agg = document.getElementById("thr-agg").value;
+  else if (field === "time") cfg.time = document.getElementById("thr-time").value;
+  else cfg[field] = document.getElementById("thr-" + field.replace(/_/g, "-")).value;
+}
+
+function onThrNameChange() {
+  var inp = document.getElementById("thr-name-input");
+  if (!inp) return;
+  var newName = inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  var old = _cur.name;
+  if (!newName || newName === old || _st.thresholds[newName]) return;
+  _st.thresholds[newName] = _st.thresholds[old];
+  delete _st.thresholds[old];
   _cur.name = newName;
   renderTabs();
 }

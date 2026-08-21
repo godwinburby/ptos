@@ -271,6 +271,23 @@ x 2026-07-12 2026-07-10 Completed task
 - **Query Builder** — "Calendars" tab (mirrors Habits tab): name, filters (space-separated `field=value` text input), initial-month time window select; round-trips through `save_queries_full(raw_calendars=...)` which validates a non-empty `filters` list and writes `["calendar.NAME"]` keys (named calendars require ≥1 filter; the global view is implicit, not stored); deletion goes through the delete-from-state-then-SaveAll path (same as due/boards/habits)
 - **Tests**: `tests/test_calendar.py` (day-cell placement, outside-month exclusion, leading/trailing blanks + multiple-of-7 grid, day-1 weekday column, prev/next year-boundary rollover, time_window initial month, unconfigured raises, `__all__` includes all types with no config + defaults to current month + excluded from names, global-vs-named route filtering, cache invalidation on append, no-rescan on repeat call, `save_queries_full` round-trip + empty-filters rejection + leaked-config-key guard)
 
+## Thresholds module (`/thresholds` budget warnings)
+
+- **Data model** — a threshold compares a computed value against a target with min/max direction; configured as `[threshold.NAME]` in `queries.toml`. Keys: `metric` (query/metric name to measure), `agg` (`sum`/`count`, default `sum`), `sum_field` (field to sum when `agg=sum`), `value` (literal number or another metric/query name to resolve at eval time), `direction` (`min`/`max`), `time` (default `this-month`), `target` (literal value for backward compat, ignored when `value` is set). Derived values: `pct` = actual/target × 100; `status` = `ok`/`warning`/`over`/`met`
+- **Resolution** — `_resolve_value(ref, cfg, time)` in `ptos_service.py` resolves a ref to a float: checks `metrics` dict first (calls `get_metric`), then top-level queries/`queries` dict (calls `get_records` with `sum_field`). The `value` field can reference another metric/query for dynamic targets
+- **Status logic** — `get_threshold_status(name)` evaluates one threshold: direction `max` → over ≥100%, warning ≥80%, ok; direction `min` → met ≥100%, warning <50%, ok. Returns `{name, raw, target, direction, pct, unit, status}`
+- **Matching** — `get_matching_thresholds(record)` checks each threshold's query `where` clause against a record dict; returns matching thresholds with live status
+- **Config** — stored in `queries.toml` as `["threshold.NAME"]` (quoted dotted key, same pattern as boards/habits/calendar). `save_queries_full(raw_thresholds=...)` persists thresholds alongside queries/metrics/dashboards
+- **Engine** — `get_thresholds()` in `ptos.py` reads `get_queries()` and filters for `threshold.*` keys
+- **CLI** — `--thresholds` flag prints a formatted table of all thresholds with values/targets/status
+- **Service** — `get_all_threshold_status()` evaluates all thresholds; `get_matching_thresholds(record)` for add-form integration
+- **Web routes** — `GET /thresholds` (progress bars page), `POST /api/thresholds/match` (matches a record against thresholds), `GET /api/thresholds/status` (all threshold statuses)
+- **Add-form integration** — debounced POST to `/api/thresholds/match` on field change; shows threshold match bars above the form when a record would trigger a threshold
+- **Home widget** — compact threshold card on home page with progress bars for each threshold
+- **Query Builder** — "Thresholds" tab with editor for metric/agg/sum_field/value/direction/time; saves via `save_queries_full(raw_thresholds=...)`, deletes via threshold-specific path
+- **Nav** — links in desktop sidebar and mobile more menu (keyboard shortcut `g T`), icon in `web_templates/icons/thresholds.html`
+- **Tests**: `tests/test_thresholds.py` (config load, metric/query resolution, status logic for all direction/pct combos, matching, save round-trip, preserves queries/metrics)
+
 ## Suggestions caching (history + conditional)
 
 - **`get_history_suggestions(rtype, context_record=None)`** (`ptos_service.py`) splits into a cached scan-and-aggregate step `_build_history_suggestions(rtype)` (key `history:{rtype}`) and a cheap per-call filter `_apply_context_filter(tags_by_field_value, rtype, context_record)`. `context_record` is intentionally **excluded** from the cache key — the full-file scan is the expensive part; `filtered_tags` is recomputed from the cached aggregates on every call since it varies per request. Only the first call per rtype after invalidation triggers `scan_records(date.min, date.max, [f"type={rtype}"], None)`

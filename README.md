@@ -526,6 +526,24 @@ Kanban board view for tracking records across workflow stages. Configured in
   window/max cards fields, card title field chip picker with drag priority,
   rollup field/op dropdowns
 
+### Thresholds
+
+Budget-style warnings that compare a computed metric against a target.
+Configured in `queries.toml` under `[threshold.NAME]`. Features:
+- **Metric resolution** — `metric` can reference a named metric or a plain query;
+  `agg` (`sum`/`count`) controls how values are computed
+- **Dynamic targets** — `value` can be a literal number or another metric/query
+  name resolved at eval time (e.g. `value = "last_month_income"`)
+- **Direction** — `max` (stay under budget: warning at 80%, over at 100%) or
+  `min` (minimum target: warning below 50%, met at 100%)
+- **Web page** (`/thresholds`) — progress bars with color-coded status
+- **Add-form integration** — shows match bars when a record would trigger a
+  threshold
+- **Home dashboard widget** — compact threshold card with live values
+- **Query Builder** — Thresholds tab with full editor
+- **CLI** — `--thresholds` flag prints a formatted table
+- **Tests**: `tests/test_thresholds.py`
+
 ### Settings
 
 Configure user profile and app preferences. Sections:
@@ -556,6 +574,7 @@ Press `?` from any page to view all shortcuts. Navigation uses a two-key chord: 
 | `G` `U` | [Query Builder](#query-builder) |
 | `G` `J` | [Journal](#journal) |
 | `G` `D` | [Due](#due) |
+| `G` `T` | [Thresholds](#thresholds) |
 | `G` `E` | [Log Editor](#log-editor) |
 | `G` `L` | [Lint](#lint) |
 | `G` `S` | [Settings](#settings) |
