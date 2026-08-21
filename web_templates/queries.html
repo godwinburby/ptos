@@ -80,6 +80,23 @@ function _selectChip(kind, name) {
   runQuery();
 }
 
+function _selectThreshold(name) {
+  _qKind = "t";
+  _qName = name;
+  _renderAllChips();
+  var area = document.getElementById("result-area");
+  area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
+  fetch("/api/thresholds/status")
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.ok) { area.innerHTML = errorCard(d.error || "Failed to load thresholds"); return; }
+      area.innerHTML = renderThresholdResult(d.thresholds || []);
+    })
+    .catch(function(e) { area.innerHTML = errorCard(String(e)); });
+  var builderLink = document.getElementById("builder-link");
+  if (builderLink) builderLink.href = "/query-builder";
+}
+
 function toggleSection(el) {
   var section = el.parentElement;
   section.classList.toggle("collapsed");
@@ -98,7 +115,7 @@ function _renderAllChips() {
   el = document.getElementById("d-chip-group");
   if (el) renderChipGroup(el, _dNames, selected, function(n) { _selectChip("d", n); });
   el = document.getElementById("t-chip-group");
-  if (el) renderChipGroup(el, _tNames, null, function(n) { window.location.href = "/thresholds"; });
+  if (el) renderChipGroup(el, _tNames, (_qKind==="t")?_qName:null, function(n) { _selectThreshold(n); });
 }
 
 // ── Queries TimePicker ─────────────────────────────────────────────────────
@@ -292,6 +309,38 @@ function renderTrend(d) {
     ${exprBadge(d)}
     <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
   </div>`;
+}
+
+function renderThresholdResult(thresholds) {
+  if (!thresholds || !thresholds.length) return '<div class="card" style="color:var(--sub);">No thresholds configured.</div>';
+  var statusLabel = function(t) {
+    if (t.direction === "max") {
+      return t.status === "over" ? "OVER" : t.status === "warning" ? "WARN" : "OK";
+    } else {
+      return t.status === "met" ? "MET" : t.status === "warning" ? "WARN" : "OK";
+    }
+  };
+  var pct = Math.min(t.pct || 0, 100);
+  var bars = thresholds.map(function(t) {
+    var pct = Math.min(t.pct || 0, 100);
+    return '<div class="thr-card" style="margin-bottom:8px;">' +
+      '<div class="thr-row">' +
+        '<span class="thr-name">' + (t.name||'').replace(/_/g,' ') + '</span>' +
+        '<div class="thr-bar-wrap">' +
+          '<div class="thr-bar-bg">' +
+            '<div class="thr-bar-fill ' + (t.status||'') + '" style="width:' + pct + '%"></div>' +
+          '</div>' +
+        '</div>' +
+        '<span class="thr-vals">' +
+          pct.toFixed(0) + '% &nbsp; ' + (t.raw||0) + ' / ' + (t.target||0) +
+          (t.unit ? ' (' + t.unit + ')' : '') +
+          (t.direction === 'max' ? ' max' : ' min') +
+        '</span>' +
+        '<span class="thr-status ' + (t.status||'') + '">' + statusLabel(t) + '</span>' +
+      '</div>' +
+    '</div>';
+  }).join("");
+  return '<div class="card"><div class="card-title">Thresholds</div>' + bars + '</div>';
 }
 
 // ── Records: delegated to RecordTable ────────────────────────────────────────
