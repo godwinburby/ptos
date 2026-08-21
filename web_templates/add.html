@@ -598,18 +598,33 @@ function _checkThresholds() {
       }
       area.style.display = "block";
       bars.innerHTML = d.matches.map(function(m) {
-        var color = m.status === "ok" ? "#2ECC71" : m.status === "warning" ? "#F39C12" : m.status === "over" ? "#E74C3C" : m.status === "met" ? "#3498DB" : "#95A5A6";
-        var label = m.direction === "max"
-          ? (m.status === "over" ? "OVER" : m.status === "warning" ? "WARN" : "OK")
-          : (m.status === "met" ? "MET" : m.status === "warning" ? "WARN" : "OK");
+        var pendingAmount = 0;
+        if (m.agg === "count") {
+          pendingAmount = 1;
+        } else if (m.sum_field && rec[m.sum_field] !== undefined) {
+          pendingAmount = parseFloat(rec[m.sum_field]) || 0;
+        }
+        var previewRaw = m.raw + pendingAmount;
+        var previewPct = m.target ? (previewRaw / m.target * 100) : 0;
+        var previewStatus;
+        if (m.direction === "max") {
+          previewStatus = previewPct >= 100 ? "over" : previewPct >= 80 ? "warning" : "ok";
+        } else {
+          previewStatus = previewPct >= 100 ? "met" : previewPct < 50 ? "warning" : "ok";
+        }
+        var label;
+        if (m.direction === "max") {
+          label = previewStatus === "over" ? "WILL BE OVER" : previewStatus === "warning" ? "WARN" : "OK";
+        } else {
+          label = previewStatus === "met" ? "WILL MEET" : previewStatus === "warning" ? "WARN" : "OK";
+        }
         return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
           + '<span style="font-size:12px;font-weight:600;min-width:100px;">' + m.name.replace(/_/g, ' ') + '</span>'
-          + '<div style="flex:1;height:12px;background:var(--border);border-radius:6px;overflow:hidden;position:relative;">'
-          + '<div style="height:100%;border-radius:6px;background:' + color + ';width:' + Math.min(m.pct, 100) + '%"></div>'
-          + '<span style="position:absolute;right:4px;top:50%;transform:translateY(-50%);font-size:9px;font-weight:700;color:#fff;">' + Math.round(m.pct) + '%</span>'
+          + '<div style="flex:1;min-width:120px;height:14px;background:var(--border);border-radius:7px;overflow:hidden;">'
+          + '<div class="thr-bar-fill ' + previewStatus + '" style="height:100%;border-radius:7px;width:' + Math.min(previewPct, 100) + '%"></div>'
           + '</div>'
-          + '<span style="font-size:11px;color:var(--sub);white-space:nowrap;">' + m.raw + '/' + m.target + (m.unit ? ' ' + m.unit : '') + '</span>'
-          + '<span style="font-size:11px;font-weight:700;color:' + color + ';">' + label + '</span>'
+          + '<span style="font-size:11px;color:var(--sub);white-space:nowrap;">' + previewRaw + '/' + m.target + (m.unit ? ' ' + m.unit : '') + '</span>'
+          + '<span style="font-size:11px;font-weight:700;">' + label + '</span>'
           + '</div>';
       }).join("");
     })
