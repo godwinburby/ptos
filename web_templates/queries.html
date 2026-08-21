@@ -90,7 +90,8 @@ function _selectThreshold(name) {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       if (!d.ok) { area.innerHTML = errorCard(d.error || "Failed to load thresholds"); return; }
-      area.innerHTML = renderThresholdResult(d.thresholds || []);
+      var match = (d.thresholds || []).filter(function(t) { return t.name === name; });
+      area.innerHTML = renderThresholdResult(match);
     })
     .catch(function(e) { area.innerHTML = errorCard(String(e)); });
   var builderLink = document.getElementById("builder-link");
