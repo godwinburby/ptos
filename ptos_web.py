@@ -600,8 +600,10 @@ def home():
     freq, rem = svc.get_frequent_presets(6)
 
     try:
-        thr_time = request.args.get("thr_time", None)
-        threshold_data = svc.get_all_threshold_status(time=thr_time)
+        threshold_data = svc.get_all_threshold_status(
+            time=time_code if 'time_code' in locals() else None,
+            from_date=from_date if 'from_date' in locals() else None,
+            to_date=to_date if 'to_date' in locals() else None)
     except Exception:
         threshold_data = []
 
@@ -625,8 +627,7 @@ def home():
         to_date=request.args.get("to_date", ""),
         recent_rows=recent_rows, recent_cols=recent_cols,
         field_types=field_types,
-        threshold_data=threshold_data,
-        thr_time=thr_time or "")
+        threshold_data=threshold_data)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2072,14 +2073,27 @@ def habits():
 @app.route("/thresholds")
 @app.route("/thresholds/<time>")
 def thresholds_page(time=None):
+    # Support query params for custom time / date range (same as home page)
+    time_param = request.args.get("time", time)
+    custom_time = request.args.get("custom_time", "")
+    from_date = request.args.get("from_date") or None
+    to_date = request.args.get("to_date") or None
+    if from_date:
+        resolved_time = "range"
+    elif time_param in ("custom", "year", "month", "date") and custom_time and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
+        resolved_time = custom_time
+    else:
+        resolved_time = time_param
     try:
-        data = svc.get_all_threshold_status(time=time)
+        data = svc.get_all_threshold_status(time=resolved_time, from_date=from_date, to_date=to_date)
     except Exception:
         data = []
     return render_template("thresholds.html",
         tab="thresholds", title="Thresholds",
-        now=_now_str(), thresholds=data, time=time or "",
-        time_options=_get_time_options())
+        now=_now_str(), thresholds=data, time=time_param or "",
+        custom_time=custom_time, from_date=from_date or "",
+        to_date=to_date or "",
+        time_options=_get_time_options(), year_range=_YEAR_RANGE)
 
 
 @app.route("/calendar")

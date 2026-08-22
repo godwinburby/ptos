@@ -222,16 +222,7 @@ var tp;
 <div class="card">
   <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
     <div class="card-title" style="margin:0;">Thresholds</div>
-    <div style="display:flex;align-items:center;gap:10px;">
-      <select style="font-size:12px;padding:3px 6px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg);"
-        onchange="var p=new URLSearchParams(window.location.search);if(this.value){p.set('thr_time',this.value)}else{p.delete('thr_time')};window.location.href='/?'+p.toString()">
-        <option value="" {% if not thr_time %}selected{% endif %}>Default</option>
-        {% for opt in time_options %}
-        <option value="{{ opt.value }}" {% if thr_time == opt.value %}selected{% endif %}>{{ opt.label }}</option>
-        {% endfor %}
-      </select>
-      <a href="/thresholds" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
-    </div>
+    <a href="/thresholds" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
   </div>
   {% set compact = true %}
   {% for t in threshold_data %}

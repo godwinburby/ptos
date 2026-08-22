@@ -11,13 +11,63 @@
 
 <div class="thr-header">
   <div class="page-title">Thresholds</div>
-  <select class="thr-time-select" onchange="window.location.href='/thresholds'+(this.value?'/'+this.value:'')">
-    <option value="" {% if not time or time == 'this-month' %}selected{% endif %}>Default (per threshold)</option>
-    {% for opt in time_options %}
-    <option value="{{ opt.value }}" {% if opt.value == time %}selected{% endif %}>{{ opt.label }}</option>
+  <select class="thr-time-select" id="thr-time-select" onchange="onTimeChange(this.value)">
+    <option value="" {% if not time %}selected{% endif %}>Default (per threshold)</option>
+    {% for label, code in time_options %}
+    <option value="{{ code }}" {% if code == time %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+  {% with prefix="thr-" %}
+  {% include "_time_picker.html" %}
+  {% endwith %}
 </div>
+
+<script src="/static/js/time_picker.js"></script>
+<script>
+var tp;
+(function() {
+  tp = new TimePicker({
+    prefix: "thr-",
+    yearMin: {{ year_range[0] }},
+    yearMax: {{ year_range[-1] }},
+    onChange: function(code) { updateUrl(); }
+  });
+
+  function updateUrl() {
+    var time = document.getElementById('thr-time-select').value;
+    var params = new URLSearchParams();
+    if (time === '') {
+      // Default — no time param; each threshold uses its own config
+    } else if (time === 'year' || time === 'month' || time === 'date') {
+      var ct = tp.getTime();
+      if (ct) { params.set('time', time); params.set('custom_time', ct); }
+    } else if (time === 'range') {
+      var r = tp.getRange();
+      if (r) { params.set('time', 'range'); }
+      if (r && r.from) params.set('from_date', r.from);
+      if (r && r.to)   params.set('to_date', r.to);
+    } else {
+      params.set('time', time);
+    }
+    window.location = '/thresholds' + (params.toString() ? '?' + params.toString() : '');
+  }
+  window.updateUrl = updateUrl;
+  window.onTimeChange = function(val) { tp.onSelectChange(val); };
+
+  // Restore state from URL params
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    var time = params.get('time');
+    if (time === 'year' || time === 'month' || time === 'date') {
+      tp.setTime(time, params.get('custom_time'));
+    } else if (time === 'range') {
+      tp.setTime('range', null, params.get('from_date'), params.get('to_date'));
+    } else if (time) {
+      tp.setTime(time);
+    }
+  })();
+})();
+</script>
 
 {% if not thresholds %}
 <div class="thr-empty">
