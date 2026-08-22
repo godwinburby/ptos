@@ -600,7 +600,8 @@ def home():
     freq, rem = svc.get_frequent_presets(6)
 
     try:
-        threshold_data = svc.get_all_threshold_status()
+        thr_time = request.args.get("thr_time", None)
+        threshold_data = svc.get_all_threshold_status(time=thr_time)
     except Exception:
         threshold_data = []
 
@@ -624,7 +625,8 @@ def home():
         to_date=request.args.get("to_date", ""),
         recent_rows=recent_rows, recent_cols=recent_cols,
         field_types=field_types,
-        threshold_data=threshold_data)
+        threshold_data=threshold_data,
+        thr_time=thr_time or "")
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2076,7 +2078,7 @@ def thresholds_page(time=None):
         data = []
     return render_template("thresholds.html",
         tab="thresholds", title="Thresholds",
-        now=_now_str(), thresholds=data, time=time or "this-month",
+        now=_now_str(), thresholds=data, time=time or "",
         time_options=_get_time_options())
 
 

@@ -11,9 +11,10 @@
 
 <div class="thr-header">
   <div class="page-title">Thresholds</div>
-  <select class="thr-time-select" onchange="window.location.href='/thresholds'+('/'+this.value)">
+  <select class="thr-time-select" onchange="window.location.href='/thresholds'+(this.value?'/'+this.value:'')">
+    <option value="" {% if not time or time == 'this-month' %}selected{% endif %}>Default (per threshold)</option>
     {% for opt in time_options %}
-    <option value="{{ opt.value }}" {{ 'selected' if opt.value == time }}>{{ opt.label }}</option>
+    <option value="{{ opt.value }}" {% if opt.value == time %}selected{% endif %}>{{ opt.label }}</option>
     {% endfor %}
   </select>
 </div>
