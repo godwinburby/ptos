@@ -15,10 +15,19 @@ Format: `[version or date] — description`
 - **Engine** — `get_thresholds()` reads config; `_resolve_value()` resolves metric/query refs; `get_threshold_status()` evaluates one threshold; `get_all_threshold_status()` evaluates all; `get_matching_thresholds(record)` checks a record against thresholds
 - **CLI** — `--thresholds` flag prints a formatted table with values, targets, and status
 - **Add-form integration** — debounced POST to `/api/thresholds/match` shows live threshold match bars above the form
-- **Home dashboard widget** — compact threshold card with progress bars for each threshold
+- **Post-save preview** — add-form threshold bars show what the bar will look like after saving (client-side computation using `agg`/`sum_field` from the API response)
+- **Home dashboard widget** — compact threshold card on home page; uses the dashboard's selected time window for threshold evaluation
+- **Thresholds page time picker** — full time window dropdown (today, this week, this month, specific year/month/date, date range) using the shared `_time_picker.html` partial
 - **Query Builder** — Thresholds tab with full editor (metric, agg, sum_field, value, direction, time); round-trips through `save_queries_full(raw_thresholds=...)`
 - **Nav** — links in desktop sidebar and mobile more menu, keyboard shortcut `G T`, icon in `web_templates/icons/thresholds.html`
 - **Tests** — `tests/test_thresholds.py`: config load, metric/query resolution, status logic for all direction/pct combos, matching, save round-trip, preserves queries/metrics
+
+### Bug fixes
+
+- **Query Builder delete** — fixed `NameError: _normalise_query_for_write` on query/metric/dashboard delete
+- **Query Builder threshold filtering** — threshold entries no longer appear in the queries list
+- **Search autocomplete** — `+project` and `@context` tokens now correctly filter to project/context (not text search)
+- **Project rail scroll** — added fade gradient hint on horizontal project list when content overflows
 
 ---
 

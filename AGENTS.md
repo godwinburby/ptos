@@ -281,9 +281,10 @@ x 2026-07-12 2026-07-10 Completed task
 - **Engine** — `get_thresholds()` in `ptos.py` reads `get_queries()` and filters for `threshold.*` keys
 - **CLI** — `--thresholds` flag prints a formatted table of all thresholds with values/targets/status
 - **Service** — `get_all_threshold_status()` evaluates all thresholds; `get_matching_thresholds(record)` for add-form integration
-- **Web routes** — `GET /thresholds` (progress bars page), `POST /api/thresholds/match` (matches a record against thresholds), `GET /api/thresholds/status` (all threshold statuses)
-- **Add-form integration** — debounced POST to `/api/thresholds/match` on field change; shows threshold match bars above the form when a record would trigger a threshold
-- **Home widget** — compact threshold card on home page with progress bars for each threshold
+- **Web routes** — `GET /thresholds` (progress bars page with time picker), `GET /thresholds/<time>` (time override), `POST /api/thresholds/match` (matches a record against thresholds), `GET /api/thresholds/status` (all threshold statuses)
+- **Add-form integration** — debounced POST to `/api/thresholds/match` on field change; shows threshold match bars above the form; post-save preview computes client-side using `agg`/`sum_field` from API response to show what the bar will look like after saving
+- **Home widget** — compact threshold card on home page; uses the dashboard's selected time window (via `time_code`/`from_date`/`to_date`); no separate time dropdown
+- **Thresholds page time picker** — full time window dropdown using shared `_time_picker.html` partial with `thr-` prefix; supports specific year/month/date and date range; `get_all_threshold_status()` receives resolved `time`, `from_date`, `to_date`
 - **Query Builder** — "Thresholds" tab with editor for metric/agg/sum_field/value/direction/time; saves via `save_queries_full(raw_thresholds=...)`, deletes via threshold-specific path
 - **Nav** — links in desktop sidebar and mobile more menu (keyboard shortcut `g T`), icon in `web_templates/icons/thresholds.html`
 - **Tests**: `tests/test_thresholds.py` (config load, metric/query resolution, status logic for all direction/pct combos, matching, save round-trip, preserves queries/metrics)
