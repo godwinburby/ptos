@@ -150,6 +150,12 @@
              style="margin-top:{% if tag_options %}10px{% else %}4px{% endif %};">
     </div>
 
+    <!-- threshold match indicator -->
+    <div id="threshold-match-area" style="display:none;margin-top:8px;">
+      <div style="font-size:11px;color:var(--sub);margin-bottom:4px;">Thresholds</div>
+      <div id="threshold-match-bars"></div>
+    </div>
+
     <!-- global optional fields -->
     {% if global_field_defs %}
     <div class="divider"></div>
@@ -274,6 +280,78 @@ document.addEventListener("DOMContentLoaded", function() {
 <script>
 var field_defs = {{ field_defs | tojson | safe }};
 var tag_context = {{ tag_context | tojson | safe }};
+var _originalFields = {{ field_values | tojson }};
+
+// ── Threshold matching (edit: replacement math) ───────────────────────────────
+var _thresholdTimer = null;
+function _checkThresholds() {
+  if (_thresholdTimer) clearTimeout(_thresholdTimer);
+  _thresholdTimer = setTimeout(function() {
+    var form = document.getElementById("edit-form");
+    var fd = new FormData(form);
+    var rec = {};
+    for (var [k, v] of fd.entries()) {
+      if (!k || k === "old_line" || k === "filepath" || k === "lineno" || k === "return_to" || !v) continue;
+      rec[k] = v;
+    }
+    var area = document.getElementById("threshold-match-area");
+    var bars = document.getElementById("threshold-match-bars");
+    if (!area || !bars) return;
+    fetch("/api/thresholds/match", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify(rec)
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      if (!d.ok || !d.matches || !d.matches.length) {
+        area.style.display = "none";
+        return;
+      }
+      area.style.display = "block";
+      var _thrColor = {ok:"#2ECC71",warning:"#F39C12",over:"#E74C3C",met:"#3498DB"};
+      bars.innerHTML = d.matches.map(function(m) {
+        var oldAmount = 0;
+        if (m.agg !== "count" && m.sum_field) {
+          oldAmount = parseFloat(_originalFields[m.sum_field]) || 0;
+        }
+        var newAmount = m.agg === "count" ? 0 : (parseFloat(rec[m.sum_field]) || 0);
+        var previewRaw;
+        if (m.agg === "count") {
+          previewRaw = m.raw;
+        } else {
+          previewRaw = m.raw - oldAmount + newAmount;
+        }
+        var previewPct = m.target ? (previewRaw / m.target * 100) : 0;
+        var previewStatus;
+        if (m.direction === "max") {
+          previewStatus = previewPct >= 100 ? "over" : previewPct >= 80 ? "warning" : "ok";
+        } else {
+          previewStatus = previewPct >= 100 ? "met" : previewPct < 50 ? "warning" : "ok";
+        }
+        var label;
+        if (m.direction === "max") {
+          label = previewStatus === "over" ? "WILL BE OVER" : previewStatus === "warning" ? "WARN" : "OK";
+        } else {
+          label = previewStatus === "met" ? "WILL MEET" : previewStatus === "warning" ? "WARN" : "OK";
+        }
+        return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
+          + '<span style="font-size:12px;font-weight:600;min-width:100px;">' + m.name.replace(/_/g, ' ') + '</span>'
+          + '<div style="flex:1;min-width:120px;height:14px;background:var(--border);border-radius:7px;overflow:hidden;">'
+          + '<div style="height:100%;border-radius:7px;width:' + Math.min(previewPct, 100) + '%;background:' + (_thrColor[previewStatus]||'var(--sub)') + '"></div>'
+          + '</div>'
+          + '<span style="font-size:11px;color:var(--sub);white-space:nowrap;">' + previewRaw + '/' + m.target + (m.unit ? ' ' + m.unit : '') + '</span>'
+          + '<span style="font-size:11px;font-weight:700;color:' + (_thrColor[previewStatus]||'var(--sub)') + ';">' + label + '</span>'
+          + '</div>';
+      }).join("");
+    })
+    .catch(function() { area.style.display = "none"; });
+  }, 300);
+}
+document.querySelectorAll("#edit-form select[name], #edit-form input[name]").forEach(function(el) {
+  el.addEventListener("change", _checkThresholds);
+  el.addEventListener("input", _checkThresholds);
+});
 
 function addSchemaTag(rtype) {
   if (!tag_context || tag_context.length === 0) {

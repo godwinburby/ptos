@@ -19,6 +19,9 @@ Format: `[version or date] — description`
 - **Home dashboard widget** — compact threshold card on home page; uses the dashboard's selected time window for threshold evaluation
 - **Thresholds page time picker** — full time window dropdown (today, this week, this month, specific year/month/date, date range) using the shared `_time_picker.html` partial
 - **Query Builder** — Thresholds tab with full editor (metric, agg, sum_field, value, direction, time); round-trips through `save_queries_full(raw_thresholds=...)`
+- **Home threshold selection** — `[home] thresholds` list in `config.toml` to pick which thresholds show on the home page; Settings page checkbox list to configure; empty = show all
+- **Edit-form threshold preview** — ported from Add form to Edit form; uses replacement math (`previewRaw = m.raw - oldAmount + newAmount`) for sum-type thresholds; count-type shows conservative `m.raw` (known limitation: no before/after match comparison)
+- **Query Builder bugfix** — "Custom number…" input now shows on first paint for new thresholds
 - **Nav** — links in desktop sidebar and mobile more menu, keyboard shortcut `G T`, icon in `web_templates/icons/thresholds.html`
 - **Tests** — `tests/test_thresholds.py`: config load, metric/query resolution, status logic for all direction/pct combos, matching, save round-trip, preserves queries/metrics
 
