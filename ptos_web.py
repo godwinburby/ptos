@@ -604,6 +604,10 @@ def home():
             time=time_code if 'time_code' in locals() else None,
             from_date=from_date if 'from_date' in locals() else None,
             to_date=to_date if 'to_date' in locals() else None)
+        selected_thr = cfg.get("home", {}).get("thresholds")
+        if selected_thr:
+            lookup = {t["name"]: t for t in threshold_data}
+            threshold_data = [lookup[name] for name in selected_thr if name in lookup]
     except Exception:
         threshold_data = []
 
@@ -1484,6 +1488,8 @@ def settings_page():
     ]
     
     dashboards = list(svc.get_dashboard_names()) if hasattr(svc, 'get_dashboard_names') else []
+    thresholds = list(svc.get_thresholds().keys())
+    home_thresholds = cfg.get("home", {}).get("thresholds", [])
     
     return render_template("settings.html",
         tab="settings", title="Settings", now=_now_str(),
@@ -1496,6 +1502,8 @@ def settings_page():
         backup_folders=backup.get("folders", []),
         dashboards=dashboards,
         default_dashboard=dashboard.get("default", ""),
+        thresholds=thresholds,
+        home_thresholds=home_thresholds,
         auth_enabled=auth.get("enabled", False),
         auth_username=auth.get("username", ""),
         auth_password=auth.get("password", ""),
@@ -1565,6 +1573,9 @@ def settings_save():
         if "default_dashboard" in data:
             db_val = data["default_dashboard"]
             cfg["dashboard"] = {"default": db_val} if db_val else {}
+        
+        if "home_thresholds" in data and isinstance(data["home_thresholds"], list):
+            cfg.setdefault("home", {})["thresholds"] = data["home_thresholds"]
         
         if "backup_folders" in data and isinstance(data["backup_folders"], list):
             core_folders = ["records", "config", "templates", "journal", "todo", "notes"]

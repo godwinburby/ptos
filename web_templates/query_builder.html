@@ -1625,7 +1625,7 @@ function showThresholdEditor() {
   empty.style.display = "none";
 
   var cfg = _st.thresholds[_cur.name] || {metric:"",agg:"sum",sum_field:"",value:"",direction:"max",time:"",unit:""};
-  var isNum = cfg.value && !isNaN(Number(cfg.value));
+  var isNum = !cfg.value || (cfg.value && !isNaN(Number(cfg.value)));
 
   ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
