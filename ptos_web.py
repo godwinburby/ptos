@@ -1488,7 +1488,7 @@ def settings_page():
     ]
     
     dashboards = list(svc.get_dashboard_names()) if hasattr(svc, 'get_dashboard_names') else []
-    thresholds = list(svc.get_thresholds().keys())
+    thresholds = list(ptos.get_thresholds().keys())
     home_thresholds = cfg.get("home", {}).get("thresholds", [])
     
     return render_template("settings.html",
