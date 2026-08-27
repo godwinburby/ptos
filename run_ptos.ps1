@@ -107,24 +107,26 @@ if (Test-Path "$scriptDir\ptos.py") {
 Set-Location $ptosDir
 Write-Host "PTOS found at: $ptosDir"
 
-# -- 4. Create data directory (sibling to repo) --
+# -- 4. Resolve data directory --
 $parentDir = Split-Path -Parent $ptosDir
-$dataDir = Join-Path $parentDir "ptos-data"
-if (-not (Test-Path $dataDir)) {
-    Write-Step "Creating data directory"
-    New-Item -ItemType Directory -Path $dataDir | Out-Null
-    Write-Host "Data directory created at: $dataDir"
+$homeFile = Join-Path $ptosDir ".ptos_home"
+if (Test-Path $homeFile) {
+    $dataDir = [System.IO.File]::ReadAllText($homeFile).Trim()
+    Write-Host "Data directory: $dataDir (from .ptos_home)"
 } else {
-    Write-Host "Data directory: $dataDir"
-}
-
-# -- 5. Write .ptos_home if missing (no BOM — Python can't read BOM-prefixed paths) --
-if (-not (Test-Path "$ptosDir\.ptos_home")) {
-    [System.IO.File]::WriteAllText("$ptosDir\.ptos_home", "$dataDir`n")
+    $dataDir = Join-Path $parentDir "ptos-data"
+    if (-not (Test-Path $dataDir)) {
+        Write-Step "Creating data directory"
+        New-Item -ItemType Directory -Path $dataDir | Out-Null
+        Write-Host "Data directory created at: $dataDir"
+    } else {
+        Write-Host "Data directory: $dataDir"
+    }
+    [System.IO.File]::WriteAllText($homeFile, "$dataDir`n")
     Write-Host "Configured .ptos_home -> $dataDir"
 }
 
-# -- 6. Set PTOS_HOME for this session (bypasses .ptos_home, immediate effect) --
+# -- 5. Set PTOS_HOME for this session --
 $env:PTOS_HOME = $dataDir
 
 # -- 7. Install Flask + tomli-w --
