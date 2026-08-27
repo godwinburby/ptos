@@ -1353,6 +1353,11 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
         period_from, period_to = db_start, db_end
     
     items = []
+    try:
+        cfg = ptos.get_config()
+        highlight_map = cfg.get("dashboard", {}).get("highlights", {}).get(name, {})
+    except Exception:
+        highlight_map = {}
     for item_name in dashboards[name].get("metrics", []):
         metrics = queries.get("metrics", {})
         queries_dict = queries.get("queries", queries)
@@ -1390,6 +1395,8 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
             item["kind"] = "metric"
             item["item_time"] = item_time
             item["item_period"] = item_period
+            if item_name in highlight_map:
+                item["highlight"] = highlight_map[item_name]
             items.append(item)
         elif item_name in queries_dict:
             try:
@@ -1397,11 +1404,17 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
                 value = str(cnt)
                 if total > 0:
                     value += f"  ({ptos.fmt(total)})"
-                items.append({"name": _disp(item_name), "raw_name": item_name, "value": value, "raw": cnt,
-                               "kind": "query", "item_time": item_time, "item_period": item_period})
+                entry = {"name": _disp(item_name), "raw_name": item_name, "value": value, "raw": cnt,
+                         "kind": "query", "item_time": item_time, "item_period": item_period}
+                if item_name in highlight_map:
+                    entry["highlight"] = highlight_map[item_name]
+                items.append(entry)
             except Exception as e:
-                items.append({"name": _disp(item_name), "raw_name": item_name, "value": f"error: {e}", "raw": None,
-                               "kind": "query", "item_time": item_time, "item_period": item_period})
+                entry = {"name": _disp(item_name), "raw_name": item_name, "value": f"error: {e}", "raw": None,
+                         "kind": "query", "item_time": item_time, "item_period": item_period}
+                if item_name in highlight_map:
+                    entry["highlight"] = highlight_map[item_name]
+                items.append(entry)
         else:
             items.append({"name": _disp(item_name), "value": "not found", "raw": None,
                            "kind": "unknown", "item_time": item_time, "item_period": item_period})

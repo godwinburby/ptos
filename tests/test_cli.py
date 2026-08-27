@@ -35,9 +35,10 @@ class TestJournalPath:
 
 
 class FakeDashboardArgs:
-    def __init__(self, name, metrics):
+    def __init__(self, name, metrics, highlight=None):
         self.add_dashboard = name
         self.metrics = metrics
+        self.highlight = highlight
 
 
 def _norm_query(q):

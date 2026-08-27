@@ -25,6 +25,7 @@
   <a href="#sec-profile">Profile</a>
   <a href="#sec-display">Display</a>
   <a href="#sec-dashboard">Dashboard</a>
+  {% if dashboards %}<a href="#sec-highlights">Highlights</a>{% endif %}
   <a href="#sec-auth">Auth</a>
   <a href="#sec-cycles">Cycles</a>
   <a href="#sec-backup-folders">Folders</a>
@@ -101,6 +102,41 @@
     {% endif %}
   </div>
 </div>
+
+{% if dashboards %}
+<div class="card" id="sec-highlights" style="margin-bottom:14px;">
+  <div class="card-title">Dashboard Highlights</div>
+  <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
+    Click a metric name to cycle its color. Repeated clicks: none → blue → orange → green → red → none.
+  </div>
+  {% for db in dashboards %}
+  {% if dashboard_metrics_map.get(db) %}
+  <div style="margin-bottom:10px;">
+    <div style="font-size:12px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;">{{ db.replace('_', ' ') }}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:4px;">
+      {% for metric in dashboard_metrics_map[db] %}
+      <span class="hl-chip" data-dashboard="{{ db }}" data-metric="{{ metric }}" data-color="{{ dashboard_highlights.get(db, {}).get(metric, '') }}"
+            style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--card);transition:all .12s;user-select:none;"
+            onclick="cycleHighlight(this)">
+        <span class="hl-dot" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;"></span>
+        {{ metric.replace('_', ' ') }}
+      </span>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+  {% endfor %}
+</div>
+{% endif %}
+
+<style>
+.hl-chip:hover { border-color: var(--accent); }
+.hl-dot { background: var(--border); width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: background .12s; }
+.hl-chip[data-color="accent"] .hl-dot { background: var(--accent); }
+.hl-chip[data-color="warn"]   .hl-dot { background: var(--warn); }
+.hl-chip[data-color="success"] .hl-dot { background: #2a9d4e; }
+.hl-chip[data-color="error"]  .hl-dot { background: #d14343; }
+</style>
 
 <div class="card" id="sec-auth" style="margin-bottom:14px;">
   <div class="card-title">Authentication</div>
@@ -394,6 +430,14 @@
     cycles.splice(idx, 1);
     renderCycles();
   };
+
+  window.cycleHighlight = function(el) {
+    var colors = ["", "accent", "warn", "success", "error"];
+    var cur = el.dataset.color || "";
+    var idx = colors.indexOf(cur);
+    var next = colors[(idx + 1) % colors.length];
+    el.dataset.color = next;
+  };
   
   window.updateCycle = function(input) {
     var idx = parseInt(input.dataset.cycleIdx);
@@ -440,7 +484,20 @@
         auto_sync_on_startup: !!(document.getElementById("auto-sync-startup") || {}).checked,
         auto_sync_on_shutdown: !!(document.getElementById("auto-sync-shutdown") || {}).checked,
         sync_interval_minutes: parseInt((document.getElementById("sync-interval") || {}).value) || 0,
-        sync_enabled: !!(document.getElementById("sync-enabled") || {}).checked
+        sync_enabled: !!(document.getElementById("sync-enabled") || {}).checked,
+        dashboard_highlights: (function() {
+          var h = {};
+          document.querySelectorAll(".hl-chip").forEach(function(chip) {
+            var c = chip.dataset.color;
+            if (c) {
+              var db = chip.dataset.dashboard;
+              var m = chip.dataset.metric;
+              if (!h[db]) h[db] = {};
+              h[db][m] = c;
+            }
+          });
+          return h;
+        })()
       })
     })
     .then(function(r) { return r.json(); })

@@ -179,6 +179,8 @@ def build_parser(cycles):
                      help="Add a dashboard referencing metrics to queries.toml")
     qry.add_argument("--metrics", nargs="+", metavar="METRIC",
                      help="Metrics for the new dashboard (with --add-dashboard)")
+    qry.add_argument("--highlight", nargs="+", metavar="METRIC:COLOR",
+                     help="Highlight entries (with --add-dashboard). Colors: accent, warn, success, error")
     qry.add_argument("--file",   dest="from_file", metavar="FILENAME", help="Read from this file in records/ folder (e.g. 2025.log)")
     qry.add_argument("--select", nargs="+", metavar="FIELD",           help="Show only these fields in output (date and type always included; add note to include notes)")
 
@@ -1559,7 +1561,16 @@ def _handle_add_dashboard(args):
     for m in (args.metrics or []):
         if m not in known_metrics:
             print(f"Warning: metric '{m}' not found in queries.toml — dashboard will be empty until defined.")
-    dashboards[args.add_dashboard] = {"metrics": list(args.metrics or [])}
+    highlight = {}
+    for entry in (args.highlight or []):
+        if ":" not in entry:
+            sys.exit(f"Invalid highlight format '{entry}' — use METRIC:COLOR (e.g. food_spend:accent)")
+        metric, color = entry.split(":", 1)
+        if color not in ("accent", "warn", "success", "error"):
+            sys.exit(f"Unknown highlight color '{color}' — use: accent, warn, success, error")
+        highlight[metric] = color
+    db_entry = {"metrics": list(args.metrics or [])}
+    dashboards[args.add_dashboard] = db_entry
 
     try:
         ptos_service.save_queries_full(
@@ -1578,6 +1589,10 @@ def _handle_add_dashboard(args):
         sys.exit(str(e))
     except Exception as e:
         sys.exit(f"Error saving dashboard: {e}")
+    if highlight:
+        cfg = ptos.get_config()
+        cfg.setdefault("dashboard", {}).setdefault("highlights", {})[args.add_dashboard] = highlight
+        ptos_service.save_config(cfg)
     metrics_str = ", ".join(args.metrics) if args.metrics else "none"
     print(f"Dashboard '{args.add_dashboard}' saved (metrics: {metrics_str}).")
 
