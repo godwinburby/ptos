@@ -3183,7 +3183,7 @@ def _run_base_query_lines(name, queries, start, end, cycles):
     filters = [where] if where.strip() else []
     return scan_records(start, end, filters, None)
 
-def run_metric(name, queries, start, end, cycles):
+def run_metric(name, queries, start, end, cycles, color="", reset=""):
     """Compute and print a named metric. Returns True if found, False if not.
 
     Metric types (defined under [metrics] in queries.toml):
@@ -3192,6 +3192,9 @@ def run_metric(name, queries, start, end, cycles):
       ratio   — percentage of two sub-metrics
       max/min — extreme values across matching records
       derived — arithmetic expression referencing other metrics"""
+    def _lbl(n):
+        label = f"{_disp(n):<24}"
+        return f"{color}{label}{reset}" if color else label
     metrics = queries.get("metrics", {})
     if name not in metrics:
         return False
@@ -3222,9 +3225,9 @@ def run_metric(name, queries, start, end, cycles):
         v1 = t1 if t1 else c1
         v2 = t2 if t2 else c2
         if v2 == 0:
-            print(f"{_disp(name):<24} no data")
+            print(f"{_lbl(name)} no data")
         else:
-            print(f"{_disp(name):<24} {(v1/v2)*100:.1f}%  ({v1}/{v2})")
+            print(f"{_lbl(name)} {(v1/v2)*100:.1f}%  ({v1}/{v2})")
         return True
 
     if "avg" in m:
@@ -3234,7 +3237,7 @@ def run_metric(name, queries, start, end, cycles):
             # weighted average: divide total by sum of per-record unit weights
             lines, total = _run_base_query_lines(m["avg"], queries, start, end, cycles)
             if not lines:
-                print(f"{_disp(name):<24} no data")
+                print(f"{_lbl(name)} no data")
                 return True
             units = 0
             for line in lines:
@@ -3243,26 +3246,26 @@ def run_metric(name, queries, start, end, cycles):
                 if isinstance(val, list):
                     val = val[0]
                 units += unit_weights.get(val, 1)
-            print(f"{_disp(name):<24} {fmt_avg(total / units)}")
+            print(f"{_lbl(name)} {fmt_avg(total / units)}")
         else:
             count, total = _run_base_query(m["avg"], queries, start, end, cycles)
             if count == 0:
-                print(f"{_disp(name):<24} no data")
+                print(f"{_lbl(name)} no data")
             else:
-                print(f"{_disp(name):<24} {fmt_avg(total / count)}")
+                print(f"{_lbl(name)} {fmt_avg(total / count)}")
         return True
 
     if "sum" in m:
         sum_field = m.get("field")
         _, total = _run_base_query(m["sum"], queries, start, end, cycles, sum_field=sum_field)
-        print(f"{_disp(name):<24} {fmt(total)}")
+        print(f"{_lbl(name)} {fmt(total)}")
         return True
 
     if "max" in m or "min" in m:
         key      = "max" if "max" in m else "min"
         lines, _ = _run_base_query_lines(m[key], queries, start, end, cycles)
         if not lines:
-            print(f"{_disp(name):<24} no data")
+            print(f"{_lbl(name)} no data")
             return True
         values = []
         for line in lines:
@@ -3271,10 +3274,10 @@ def run_metric(name, queries, start, end, cycles):
             if v is not None:
                 values.append(v)
         if not values:
-            print(f"{_disp(name):<24} no data")
+            print(f"{_lbl(name)} no data")
         else:
             result = max(values) if key == "max" else min(values)
-            print(f"{_disp(name):<24} {fmt(result)}")
+            print(f"{_lbl(name)} {fmt(result)}")
         return True
 
     if "derived" in m:
@@ -3380,34 +3383,47 @@ def run_metric(name, queries, start, end, cycles):
         for token, val in resolved.items():
             eval_expr = re.sub(rf'\b{token}\b', str(val), eval_expr)
         if not re.match(r'^[\d\s\.+\-*/()e]+$', eval_expr):
-            print(f"{_disp(name):<24} unsafe: [{eval_expr!r}]")
+            print(f"{_lbl(name)} unsafe: [{eval_expr!r}]")
             return True
         try:
             result = float(eval(eval_expr))  # noqa: S307
             formatted = fmt(int(result)) if result == int(result) else fmt_avg(result)
-            print(f"{_disp(name):<24} {formatted}")
+            print(f"{_lbl(name)} {formatted}")
         except ZeroDivisionError:
-            print(f"{_disp(name):<24} no data")
+            print(f"{_lbl(name)} no data")
         except Exception as e:
-            print(f"{_disp(name):<24} error: {e}")
+            print(f"{_lbl(name)} error: {e}")
         return True
 
     return False
 
 def run_dashboard(name, queries, start, end, cycles):
+    _ANSI = {"accent": "\033[94m", "warn": "\033[93m", "success": "\033[92m", "error": "\033[91m"}
+    _RESET = "\033[0m"
+    _BOLD  = "\033[1m"
     dashboards = queries.get("dashboards", {})
     if name not in dashboards:
         return False
+    try:
+        cfg = get_config()
+        highlight_map = cfg.get("dashboard", {}).get("highlights", {}).get(name, {})
+    except Exception:
+        highlight_map = {}
     print(f"\nDashboard: {_disp(name)}")
     print(f"Period:    {start} to {end}")
     print("-" * 40)
     for item in dashboards[name].get("metrics", []):
-        if run_metric(item, queries, start, end, cycles):
+        color = _ANSI.get(highlight_map.get(item, ""), "")
+        reset = _RESET if color else ""
+        if run_metric(item, queries, start, end, cycles, color=color, reset=reset):
             continue
         if item in queries:
             count, total = _run_base_query(item, queries, start, end, cycles)
             suffix = f"  ({fmt(total)})" if total > 0 else ""
-            print(f"{_disp(item):<24} {count}{suffix}")
+            label = f"{_disp(item):<24}"
+            if color:
+                label = f"{color}{_BOLD}{label}{reset}"
+            print(f"{label} {count}{suffix}")
     print()
     return True
 

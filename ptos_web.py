@@ -577,6 +577,7 @@ def home():
                     "value": item["value"],
                     "sub":   item.get("sub", sub),
                     "kind":  kind,
+                    "highlight": item.get("highlight", ""),
                 }
                 raw_name = item.get("raw_name", item["name"])
                 if kind == "query":
@@ -1490,6 +1491,12 @@ def settings_page():
     dashboards = list(svc.get_dashboard_names()) if hasattr(svc, 'get_dashboard_names') else []
     thresholds = list(ptos.get_thresholds().keys())
     home_thresholds = cfg.get("home", {}).get("thresholds", [])
+    dashboard_highlights = cfg.get("dashboard", {}).get("highlights", {})
+    queries = svc.get_queries()
+    dashboard_metrics_map = {}
+    for db_name in dashboards:
+        db_def = queries.get("dashboards", {}).get(db_name, {})
+        dashboard_metrics_map[db_name] = db_def.get("metrics", [])
     
     return render_template("settings.html",
         tab="settings", title="Settings", now=_now_str(),
@@ -1504,6 +1511,8 @@ def settings_page():
         default_dashboard=dashboard.get("default", ""),
         thresholds=thresholds,
         home_thresholds=home_thresholds,
+        dashboard_highlights=dashboard_highlights,
+        dashboard_metrics_map=dashboard_metrics_map,
         auth_enabled=auth.get("enabled", False),
         auth_username=auth.get("username", ""),
         auth_password=auth.get("password", ""),
@@ -1592,6 +1601,9 @@ def settings_save():
             if enabled and (not username or not password):
                 return jsonify(ok=False, error="Username and password required when auth is enabled")
             cfg["auth"] = {"enabled": enabled, "username": username, "password": password}
+        
+        if "dashboard_highlights" in data and isinstance(data["dashboard_highlights"], dict):
+            cfg.setdefault("dashboard", {})["highlights"] = data["dashboard_highlights"]
         
         result = svc.save_config(cfg)
         if result.get("ok"):

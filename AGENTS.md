@@ -290,6 +290,22 @@ x 2026-07-12 2026-07-10 Completed task
 - **Nav** — links in desktop sidebar and mobile more menu (keyboard shortcut `g T`), icon in `web_templates/icons/thresholds.html`
 - **Tests**: `tests/test_thresholds.py` (config load, metric/query resolution, status logic for all direction/pct combos, matching, save round-trip, preserves queries/metrics)
 
+## Dashboard highlights
+
+- **Config** — `[dashboard.highlights.DASHBOARD]` in `config.toml` maps metric names to colors; stored in config (UI concern), not queries.toml. Colors: `accent` (blue), `warn` (orange), `success` (green), `error` (red)
+- **Service** — `get_dashboard()` in `ptos_service.py` reads highlights from `cfg["dashboard"]["highlights"][name]` and attaches `highlight` key to each item dict
+- **Web route** — `home()` passes `highlight` through stat dict to template; `settings_page()` passes `dashboard_highlights` and `dashboard_metrics_map` to template; `settings_save()` persists highlights to `config.toml`
+- **Template** — `home.html` applies `c-{color}` CSS class to `.stat-card`; `settings.html` renders compact clickable chips that cycle colors on click
+- **CSS** — `.c-accent` (blue), `.c-warn` (orange), `.c-success` (green), `.c-error` (red) modifier classes in `base.html`
+- **CLI** — `run_dashboard()` reads highlights from config, applies bold ANSI colors; `run_metric()` accepts `color`/`reset` params; `--add-dashboard` supports `--highlight METRIC:COLOR` flag
+- **Settings page** — per-dashboard metric chips with color dot; click cycles: none → blue → orange → green → red → none; same color can be assigned to multiple metrics
+
+## Stock tracking
+
+- **Schema** — two record types: `stock_unit` (serialized items: hearing aids with category, model, serial, status, date_sold) and `stock_txn` (movements: batteries, domes, receivers with category, model, qty, serial)
+- **Battery thresholds** — queries/metrics/thresholds per battery size (10, 13, 312, 675) using `min` direction, `time = "all"`, reorder point 5 units; battery queries filter by `type=stock_txn AND category=battery AND model=SIZE`
+- **Metric pattern** — each battery size has a `_moves` query (all transactions), a `_stock` metric (sum of qty), and a `_stock` threshold (min 5, all-time)
+
 ## Suggestions caching (history + conditional)
 
 - **`get_history_suggestions(rtype, context_record=None)`** (`ptos_service.py`) splits into a cached scan-and-aggregate step `_build_history_suggestions(rtype)` (key `history:{rtype}`) and a cheap per-call filter `_apply_context_filter(tags_by_field_value, rtype, context_record)`. `context_record` is intentionally **excluded** from the cache key — the full-file scan is the expensive part; `filtered_tags` is recomputed from the cached aggregates on every call since it varies per request. Only the first call per rtype after invalidation triggers `scan_records(date.min, date.max, [f"type={rtype}"], None)`

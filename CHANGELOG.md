@@ -5,6 +5,25 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-08-27
+
+### Dashboard highlights
+
+- **Color-coded dashboard entries** — highlight specific metrics on the home page dashboard and CLI dashboard with colored stat cards
+- **Config** — `[dashboard.highlights.DASHBOARD]` in `config.toml`, maps metric names to colors (`accent`=blue, `warn`=orange, `success`=green, `error`=red); stored in config (UI concern), not queries.toml
+- **Settings page** — compact clickable chips per dashboard; click to cycle colors (none → blue → orange → green → red → none); each metric independently colored
+- **Home page** — stat cards render with colored background and white text via `.c-accent`/`.c-warn`/`.c-success`/`.c-error` CSS classes
+- **CLI** — `run_dashboard()` reads highlights from config, applies bold ANSI colors; `run_metric()` accepts `color`/`reset` params
+- **CLI flag** — `--add-dashboard NAME --metrics M1 M2 --highlight M1:accent M2:warn` saves highlights to config.toml
+- **CSS** — added `.c-success` (green) and `.c-error` (red) modifier classes alongside existing `.c-accent`/`.c-warn`
+
+### Stock tracking (schema change)
+
+- **Replaced `stock` type** with `stock_unit` (serialized hearing aids: category, model, serial, status, date_sold) and `stock_txn` (movements: category, model, qty, serial)
+- **Battery thresholds** — queries/metrics/thresholds for battery sizes 10, 13, 312, 675 (min direction, all-time, reorder point 5 units)
+
+---
+
 ## 2026-08-15
 
 ### Thresholds — budget warnings

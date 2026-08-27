@@ -94,7 +94,7 @@ var tp;
   {% for s in stats %}
   {% if s.query_url %}
   <a href="{{ s.query_url }}" style="text-decoration:none;">
-    <div class="stat-card" style="cursor:pointer;transition:box-shadow .15s;"
+    <div class="stat-card{% if s.highlight %} c-{{ s.highlight }}{% endif %}" style="cursor:pointer;transition:box-shadow .15s;"
          onmouseover="this.style.boxShadow='0 4px 16px rgba(79,107,237,.18)'"
          onmouseout="this.style.boxShadow=''">
       <div class="stat-label" style="display:flex;align-items:center;justify-content:space-between;">
@@ -106,7 +106,7 @@ var tp;
     </div>
   </a>
   {% else %}
-  <div class="stat-card">
+  <div class="stat-card{% if s.highlight %} c-{{ s.highlight }}{% endif %}">
     <div class="stat-label">{{ s.label }}</div>
     <div class="stat-value">{{ s.value }}</div>
     <div class="stat-sub">{{ s.sub }}</div>

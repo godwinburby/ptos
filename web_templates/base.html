@@ -213,12 +213,20 @@
     .stat-sub   { font-size: 12px; color: var(--sub); }
     .stat-card.c-accent { background: var(--accent); border-color: var(--accent); }
     .stat-card.c-warn   { background: var(--warn);   border-color: var(--warn); }
+    .stat-card.c-success { background: #2a9d4e; border-color: #2a9d4e; }
+    .stat-card.c-error   { background: #d14343; border-color: #d14343; }
     .stat-card.c-accent .stat-label,
     .stat-card.c-accent .stat-value,
     .stat-card.c-accent .stat-sub,
     .stat-card.c-warn .stat-label,
     .stat-card.c-warn .stat-value,
-    .stat-card.c-warn .stat-sub { color: #fff; }
+    .stat-card.c-warn .stat-sub,
+    .stat-card.c-success .stat-label,
+    .stat-card.c-success .stat-value,
+    .stat-card.c-success .stat-sub,
+    .stat-card.c-error .stat-label,
+    .stat-card.c-error .stat-value,
+    .stat-card.c-error .stat-sub { color: #fff; }
     .stat-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 160px)); gap: 12px; }
     @media (max-width: 480px) {
       .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
