@@ -67,20 +67,21 @@ if [ -z "$PYTHON" ]; then
 fi
 echo "Using $PYTHON ($($PYTHON --version))"
 
-# ── Create data directory (sibling to repo) ──────────────────────────────────
+# ── Resolve data directory ────────────────────────────────────────────────────
 PARENT_DIR="$(dirname "$PTOS_DIR")"
-DATA_DIR="$PARENT_DIR/ptos-data"
-if [ ! -d "$DATA_DIR" ]; then
-    echo ""
-    echo "--- Creating data directory ---"
-    mkdir -p "$DATA_DIR"
-    echo "Data directory created at: $DATA_DIR"
+if [ -f "$PTOS_DIR/.ptos_home" ]; then
+    DATA_DIR="$(cat "$PTOS_DIR/.ptos_home" | tr -d '[:space:]')"
+    echo "Data directory: $DATA_DIR (from .ptos_home)"
 else
-    echo "Data directory: $DATA_DIR"
-fi
-
-# ── Write .ptos_home if missing ──────────────────────────────────────────────
-if [ ! -f "$PTOS_DIR/.ptos_home" ]; then
+    DATA_DIR="$PARENT_DIR/ptos-data"
+    if [ ! -d "$DATA_DIR" ]; then
+        echo ""
+        echo "--- Creating data directory ---"
+        mkdir -p "$DATA_DIR"
+        echo "Data directory created at: $DATA_DIR"
+    else
+        echo "Data directory: $DATA_DIR"
+    fi
     echo "$DATA_DIR" > "$PTOS_DIR/.ptos_home"
     echo "Configured .ptos_home -> $DATA_DIR"
 fi
