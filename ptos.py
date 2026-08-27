@@ -25,7 +25,7 @@ if _home:
 DESKTOP_MODE = os.environ.get("DESKTOP_MODE") == "1"
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 
-if not _home and not DESKTOP_MODE:
+if not _home:
     bootstrap = os.path.join(SCRIPT_DIR, ".ptos_home")
     if os.path.isfile(bootstrap):
         with open(bootstrap, encoding="utf-8") as f:
@@ -35,10 +35,10 @@ if not _home and not DESKTOP_MODE:
             if os.path.isdir(path):
                 _home = path
 
-if DESKTOP_MODE:
-    BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'ptos')
-elif _home:
+if _home:
     BASE_DIR = _home
+elif DESKTOP_MODE:
+    BASE_DIR = os.path.join(os.environ.get('LOCALAPPDATA', os.path.expanduser('~')), 'ptos')
 else:
     BASE_DIR = SCRIPT_DIR
 
