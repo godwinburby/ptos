@@ -29,8 +29,8 @@
   {% for f in listing.folders %}
   <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-hover,#f5f5f5)'" onmouseout="this.style.background=''">
     <a href="/notes/browse/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128193; {{ f.name }}</a>
-    <button onclick="promptRename({{ f.rel_path|tojson }},{{ f.name|tojson }})" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
-    <button onclick="confirmDelete({{ f.rel_path|tojson }},{{ f.name|tojson }},true)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+    <button data-path="{{ f.rel_path }}" data-name="{{ f.name }}" data-folder="true" onclick="promptRename(this)" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
+    <button data-path="{{ f.rel_path }}" data-name="{{ f.name }}" data-folder="true" onclick="confirmDelete(this)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
   </div>
   {% endfor %}
 {% endif %}
@@ -39,8 +39,8 @@
   {% for f in listing.files %}
   <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-hover,#f5f5f5)'" onmouseout="this.style.background=''">
     <a href="/notes/edit/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128196; {{ f.name }}</a>
-    <button onclick="promptRename({{ f.rel_path|tojson }},{{ f.name|tojson }})" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
-    <button onclick="confirmDelete({{ f.rel_path|tojson }},{{ f.name|tojson }},false)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+    <button data-path="{{ f.rel_path }}" data-name="{{ f.name }}" data-folder="false" onclick="promptRename(this)" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
+    <button data-path="{{ f.rel_path }}" data-name="{{ f.name }}" data-folder="false" onclick="confirmDelete(this)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
   </div>
   {% endfor %}
 {% endif %}
@@ -174,9 +174,9 @@ function submitNewFile() {
   });
 }
 
-function promptRename(relPath, oldName) {
-  _renameTarget = relPath;
-  document.getElementById("rn-name").value = oldName;
+function promptRename(btn) {
+  _renameTarget = btn.getAttribute("data-path");
+  document.getElementById("rn-name").value = btn.getAttribute("data-name");
   openDialog("rename-dialog");
   setTimeout(function() {
     var el = document.getElementById("rn-name");
@@ -199,7 +199,10 @@ function submitRename() {
   });
 }
 
-function confirmDelete(relPath, name, isFolder) {
+function confirmDelete(btn) {
+  var relPath = btn.getAttribute("data-path");
+  var name = btn.getAttribute("data-name");
+  var isFolder = btn.getAttribute("data-folder") === "true";
   var msg = isFolder
     ? "Delete '" + name + "' and everything inside it? This cannot be undone."
     : "Delete '" + name + "' permanently?";
