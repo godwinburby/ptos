@@ -912,6 +912,26 @@
       {% include 'icons/notes.html' ignore missing %}
       Notes
     </a>
+    <a href="/board" class="more-menu-item {% if tab=='board' %}active{% endif %}">
+      {% include 'icons/board.html' ignore missing %}
+      Board
+    </a>
+    <a href="/habits" class="more-menu-item {% if tab=='habits' %}active{% endif %}">
+      {% include 'icons/habits.html' ignore missing %}
+      Habits
+    </a>
+    <a href="/calendar" class="more-menu-item {% if tab=='calendar' %}active{% endif %}">
+      {% include 'icons/calendar.html' ignore missing %}
+      Calendar
+    </a>
+    <a href="/browse" class="more-menu-item {% if tab=='browse' %}active{% endif %}">
+      {% include 'icons/browse.html' ignore missing %}
+      Browse
+    </a>
+    <a href="/queries" class="more-menu-item {% if tab=='queries' %}active{% endif %}">
+      {% include 'icons/query.html' ignore missing %}
+      Queries
+    </a>
     <a href="/schema-builder" class="more-menu-item {% if tab=='schema_builder' %}active{% endif %}">
       {% include 'icons/schema_builder.html' ignore missing %}
       Schema Builder
@@ -932,6 +952,7 @@
       {% include 'icons/settings.html' ignore missing %}
       Settings
     </a>
+    <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
     <a href="/editor" class="more-menu-item {% if tab=='editor' %}active{% endif %}">
       {% include 'icons/editor.html' ignore missing %}
       Log Editor
@@ -1206,6 +1227,9 @@ function toggleMoreMenu(e) {
     "g c": "/schema-builder",
     "g u": "/query-builder",
     "g T": "/thresholds",
+    "g B": "/board",
+    "g H": "/habits",
+    "g C": "/calendar",
   };
 
   // Help overlay HTML
