@@ -4502,7 +4502,7 @@ def list_dir(rel_path=""):
         entry_rel = (rel_path + "/" + name) if rel_path else name
         if os.path.isdir(os.path.join(full, name)):
             folders.append({"name": name, "rel_path": entry_rel})
-        elif name.endswith(".md") and name != "template.md":
+        elif name.endswith(".md"):
             files.append({"name": name, "rel_path": entry_rel})
     return {"folders": folders, "files": files}
 
