@@ -3,140 +3,6 @@ import ptos
 import pytest
 
 
-class TestListNoteCategories:
-    def test_empty(self):
-        result = ptos.list_note_categories()
-        assert result == []
-
-    def test_with_categories(self):
-        os.makedirs(os.path.join(ptos.NOTES_DIR, "daily"))
-        os.makedirs(os.path.join(ptos.NOTES_DIR, "project"))
-        os.makedirs(os.path.join(ptos.NOTES_DIR, "meeting"))
-        result = ptos.list_note_categories()
-        assert result == ["daily", "meeting", "project"]
-
-    def test_ignores_files(self):
-        cat_dir = os.path.join(ptos.NOTES_DIR, "daily")
-        os.makedirs(cat_dir)
-        with open(os.path.join(cat_dir, "test.md"), "w") as f:
-            f.write("test")
-        with open(os.path.join(ptos.NOTES_DIR, "stray.txt"), "w") as f:
-            f.write("stray")
-        result = ptos.list_note_categories()
-        assert result == ["daily"]
-
-
-class TestListNotes:
-    def test_empty_category(self):
-        os.makedirs(os.path.join(ptos.NOTES_DIR, "daily"))
-        result = ptos.list_notes("daily")
-        assert result == []
-
-    def test_nonexistent_category(self):
-        result = ptos.list_notes("nonexistent")
-        assert result == []
-
-    def test_with_notes(self):
-        cat_dir = os.path.join(ptos.NOTES_DIR, "daily")
-        os.makedirs(cat_dir)
-        with open(os.path.join(cat_dir, "2026-07-21-my-note.md"), "w") as f:
-            f.write("# My Note\n\nContent here.")
-        with open(os.path.join(cat_dir, "2026-07-20-older.md"), "w") as f:
-            f.write("# Older Note")
-        result = ptos.list_notes("daily")
-        assert len(result) == 2
-        assert result[0]["slug"] == "2026-07-21-my-note"
-        assert result[0]["title"] == "My Note"
-        assert result[0]["date"] == "2026-07-21"
-        assert result[1]["slug"] == "2026-07-20-older"
-        assert result[1]["title"] == "Older Note"
-
-    def test_title_fallback_from_filename(self):
-        cat_dir = os.path.join(ptos.NOTES_DIR, "ideas")
-        os.makedirs(cat_dir)
-        with open(os.path.join(cat_dir, "2026-07-21-bright-idea.md"), "w") as f:
-            f.write("No heading here.")
-        result = ptos.list_notes("ideas")
-        assert result[0]["title"] == "Bright Idea"
-
-    def test_ignores_non_md(self):
-        cat_dir = os.path.join(ptos.NOTES_DIR, "daily")
-        os.makedirs(cat_dir)
-        with open(os.path.join(cat_dir, "test.txt"), "w") as f:
-            f.write("not md")
-        with open(os.path.join(cat_dir, "2026-07-21-ok.md"), "w") as f:
-            f.write("# OK")
-        result = ptos.list_notes("daily")
-        assert len(result) == 1
-        assert result[0]["slug"] == "2026-07-21-ok"
-
-
-class TestCreateNote:
-    def test_creates_category_and_file(self):
-        result = ptos.create_note("project", "My Project")
-        assert result["category"] == "project"
-        import datetime as _dt
-        assert result["slug"].startswith(f"{_dt.date.today().isoformat()}-")
-        assert os.path.isdir(os.path.join(ptos.NOTES_DIR, "project"))
-        assert os.path.isfile(result["path"])
-        with open(result["path"], encoding="utf-8") as f:
-            content = f.read()
-        assert "My Project" in content
-
-    def test_slug_collision(self):
-        r1 = ptos.create_note("daily", "Test Note")
-        r2 = ptos.create_note("daily", "Test Note")
-        assert r1["slug"] != r2["slug"]
-        assert r2["slug"].endswith("-2")
-
-    def test_custom_content(self):
-        result = ptos.create_note("ideas", "Custom", content="# Custom\nHello")
-        with open(result["path"], encoding="utf-8") as f:
-            assert f.read() == "# Custom\nHello"
-
-
-class TestReadNote:
-    def test_read_existing(self):
-        cat_dir = os.path.join(ptos.NOTES_DIR, "daily")
-        os.makedirs(cat_dir)
-        with open(os.path.join(cat_dir, "2026-07-21-test.md"), "w", encoding="utf-8") as f:
-            f.write("# Test\n\nContent")
-        content = ptos.read_note("daily", "2026-07-21-test")
-        assert content == "# Test\n\nContent"
-
-    def test_read_nonexistent(self):
-        assert ptos.read_note("daily", "nonexistent") is None
-
-
-class TestSaveNote:
-    def test_save_existing(self):
-        cat_dir = os.path.join(ptos.NOTES_DIR, "daily")
-        os.makedirs(cat_dir)
-        with open(os.path.join(cat_dir, "2026-07-21-test.md"), "w", encoding="utf-8") as f:
-            f.write("old content")
-        ptos.save_note("daily", "2026-07-21-test", "new content")
-        with open(os.path.join(cat_dir, "2026-07-21-test.md"), encoding="utf-8") as f:
-            assert f.read() == "new content"
-
-    def test_save_creates_dirs(self):
-        ptos.save_note("meetings", "2026-07-21-standup", "# Standup")
-        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "meetings", "2026-07-21-standup.md"))
-
-
-class TestDeleteNote:
-    def test_delete_existing(self):
-        cat_dir = os.path.join(ptos.NOTES_DIR, "daily")
-        os.makedirs(cat_dir)
-        with open(os.path.join(cat_dir, "2026-07-21-test.md"), "w") as f:
-            f.write("delete me")
-        ptos.delete_note("daily", "2026-07-21-test")
-        assert not os.path.exists(os.path.join(cat_dir, "2026-07-21-test.md"))
-
-    def test_delete_nonexistent(self):
-        with pytest.raises(FileNotFoundError):
-            ptos.delete_note("daily", "nonexistent")
-
-
 class TestGetNoteTemplate:
     def test_daily_template(self):
         content = ptos.get_note_template("daily", {"date": "2026-07-21"})
@@ -328,3 +194,220 @@ class TestLinkCandidates:
         resp = client.get("/api/link-candidates?q=115")
         data = resp.get_json()
         assert "11500" not in data
+
+
+class TestSafePath:
+    def test_empty_returns_notes_dir(self):
+        assert ptos._safe_path("") == ptos.NOTES_DIR
+
+    def test_normal_path(self):
+        result = ptos._safe_path("folder/file.md")
+        assert result.startswith(os.path.abspath(ptos.NOTES_DIR))
+        assert "folder/file.md" in result.replace("\\", "/")
+
+    def test_rejects_dotdot(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid path"):
+            ptos._safe_path("../etc/passwd")
+
+    def test_rejects_absolute(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid path"):
+            ptos._safe_path("/etc/passwd")
+
+    def test_rejects_windows_absolute(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid path"):
+            ptos._safe_path("C:\\Windows\\System32")
+
+
+class TestValidateName:
+    def test_rejects_empty(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name("")
+
+    def test_rejects_slash(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name("foo/bar")
+
+    def test_rejects_backslash(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name("foo\\bar")
+
+    def test_rejects_dot(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name(".")
+
+    def test_rejects_dotdot(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name("..")
+
+    def test_valid_name(self):
+        ptos._validate_name("my-note.md")
+
+
+class TestListDir:
+    def test_empty_dir(self):
+        result = ptos.list_dir("")
+        assert result == {"folders": [], "files": []}
+
+    def test_folders_and_files(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "sub"))
+        with open(os.path.join(ptos.NOTES_DIR, "readme.md"), "w") as f:
+            f.write("# Notes")
+        result = ptos.list_dir("")
+        assert len(result["folders"]) == 1
+        assert result["folders"][0]["name"] == "sub"
+        assert len(result["files"]) == 1
+        assert result["files"][0]["name"] == "readme.md"
+
+    def test_excludes_template_md(self):
+        with open(os.path.join(ptos.NOTES_DIR, "template.md"), "w") as f:
+            f.write("tpl")
+        result = ptos.list_dir("")
+        assert len(result["files"]) == 0
+
+    def test_nested_rel_path(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "a", "b"))
+        result = ptos.list_dir("a")
+        assert len(result["folders"]) == 1
+        assert result["folders"][0]["rel_path"] == os.path.join("a", "b")
+
+    def test_nonexistent_folder(self):
+        with pytest.raises(ptos.PTOSError, match="Folder not found"):
+            ptos.list_dir("nope")
+
+    def test_ignores_non_md_files(self):
+        with open(os.path.join(ptos.NOTES_DIR, "data.txt"), "w") as f:
+            f.write("txt")
+        result = ptos.list_dir("")
+        assert len(result["files"]) == 0
+
+
+class TestCreateFolder:
+    def test_creates_folder(self):
+        ptos.create_folder("", "projects")
+        assert os.path.isdir(os.path.join(ptos.NOTES_DIR, "projects"))
+
+    def test_rejects_duplicate(self):
+        ptos.create_folder("", "dup")
+        with pytest.raises(ptos.PTOSError, match="already exists"):
+            ptos.create_folder("", "dup")
+
+    def test_rejects_bad_name(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos.create_folder("", "../escape")
+
+
+class TestCreateFile:
+    def test_creates_file(self):
+        ptos.create_file("", "notes.md", "# Hello")
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "notes.md"))
+        with open(os.path.join(ptos.NOTES_DIR, "notes.md")) as f:
+            assert f.read() == "# Hello"
+
+    def test_auto_appends_md(self):
+        ptos.create_file("", "readme", "content")
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "readme.md"))
+
+    def test_rejects_existing(self):
+        ptos.create_file("", "dup.md", "first")
+        with pytest.raises(ptos.PTOSError, match="already exists"):
+            ptos.create_file("", "dup.md", "second")
+
+    def test_creates_parent_dirs(self):
+        ptos.create_file("sub/dir", "file.md", "content")
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "sub", "dir", "file.md"))
+
+    def test_rejects_bad_name(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos.create_file("", "bad/name.md", "x")
+
+
+class TestRename:
+    def test_rename_file(self):
+        with open(os.path.join(ptos.NOTES_DIR, "old.md"), "w") as f:
+            f.write("content")
+        ptos.rename_note("old.md", "new.md")
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "new.md"))
+        assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "old.md"))
+
+    def test_rename_folder(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "old_folder"))
+        ptos.rename_note("old_folder", "new_folder")
+        assert os.path.isdir(os.path.join(ptos.NOTES_DIR, "new_folder"))
+        assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "old_folder"))
+
+    def test_rejects_existing_target(self):
+        with open(os.path.join(ptos.NOTES_DIR, "a.md"), "w") as f:
+            f.write("a")
+        with open(os.path.join(ptos.NOTES_DIR, "b.md"), "w") as f:
+            f.write("b")
+        with pytest.raises(ptos.PTOSError, match="already exists"):
+            ptos.rename_note("a.md", "b.md")
+
+
+class TestDeleteEntry:
+    def test_delete_file(self):
+        with open(os.path.join(ptos.NOTES_DIR, "del.md"), "w") as f:
+            f.write("bye")
+        ptos.delete_note_entry("del.md")
+        assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "del.md"))
+
+    def test_delete_folder_recursive(self):
+        d = os.path.join(ptos.NOTES_DIR, "folder")
+        os.makedirs(os.path.join(d, "sub"))
+        with open(os.path.join(d, "file.md"), "w") as f:
+            f.write("x")
+        with open(os.path.join(d, "sub", "inner.md"), "w") as f:
+            f.write("y")
+        ptos.delete_note_entry("folder")
+        assert not os.path.exists(d)
+
+    def test_delete_nonexistent(self):
+        with pytest.raises(FileNotFoundError):
+            ptos.delete_note_entry("nope.md")
+
+
+class TestFindParentTemplate:
+    def test_local_template_exists(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "clinic"))
+        with open(os.path.join(ptos.NOTES_DIR, "clinic", "template.md"), "w") as f:
+            f.write("# Clinic note")
+        result = ptos.find_parent_template("clinic/sub")
+        assert result is not None
+        assert result["rel_path"] == "clinic"
+        assert "# Clinic note" in result["content"]
+
+    def test_no_template_anywhere(self):
+        result = ptos.find_parent_template("empty")
+        assert result is None
+
+    def test_root_template(self):
+        with open(os.path.join(ptos.NOTES_DIR, "template.md"), "w") as f:
+            f.write("# Root template")
+        result = ptos.find_parent_template("deep/nested/folder")
+        assert result is not None
+        assert result["rel_path"] == "."
+
+
+class TestResolveNewFileTemplate:
+    def test_local_template(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "myfolder"))
+        with open(os.path.join(ptos.NOTES_DIR, "myfolder", "template.md"), "w") as f:
+            f.write("# Local tpl")
+        result = ptos.resolve_new_file_template("myfolder")
+        assert result["source"] == "local"
+        assert "# Local tpl" in result["content"]
+
+    def test_parent_template(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "parent"))
+        with open(os.path.join(ptos.NOTES_DIR, "parent", "template.md"), "w") as f:
+            f.write("# Parent tpl")
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "parent", "child"))
+        result = ptos.resolve_new_file_template("parent/child")
+        assert result["source"] == "choice"
+        assert result["parent"] is not None
+        assert "# Parent tpl" in result["parent"]["content"]
+
+    def test_no_template(self):
+        result = ptos.resolve_new_file_template("bare")
+        assert result["source"] == "choice"
+        assert result["parent"] is None

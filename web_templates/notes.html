@@ -1,68 +1,238 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;">
-  <a href="/notes" style="color:var(--accent);text-decoration:none;font-size:14px;">Notes</a>
-  <span style="color:var(--sub);">/</span>
-  <a href="/notes/{{ category }}" style="color:var(--accent);text-decoration:none;font-size:14px;">{{ category }}</a>
-  <span style="color:var(--sub);">/</span>
-  <span style="font-size:17px;font-weight:800;color:var(--text);">{{ slug }}</span>
+{% if error %}
+<div style="padding:12px 16px;background:var(--danger,#e55);color:#fff;border-radius:8px;margin-bottom:12px;">{{ error }}</div>
+{% endif %}
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+  {% for crumb in breadcrumbs %}
+    {% if not loop.last %}
+      <a href="/notes/browse{% if crumb.path %}/{{ crumb.path }}{% endif %}"
+         style="color:var(--accent);text-decoration:none;font-size:14px;">{{ crumb.label }}</a>
+      <span style="color:var(--sub);">/</span>
+    {% else %}
+      <span style="font-size:17px;font-weight:800;color:var(--text);">{{ crumb.label }}</span>
+    {% endif %}
+  {% endfor %}
+  {% if not breadcrumbs %}
+    <span style="font-size:17px;font-weight:800;color:var(--text);">Notes</span>
+  {% endif %}
 </div>
 
-{% include "_markdown_editor.html" with context %}
-
-<div id="backlinks-panel" style="margin-top:16px;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;background:var(--bg-card,var(--bg));">
-  <div style="font-size:13px;font-weight:800;margin-bottom:2px;color:var(--text);">Linked mentions</div>
-  <div id="backlinks-panel-body" style="margin-top:4px;"></div>
+<div style="display:flex;gap:8px;margin-bottom:14px;">
+  <button onclick="promptNewFolder()" class="btn btn-sm btn-ghost" style="border:1px solid var(--border,#ccc);">New Folder</button>
+  <button onclick="promptNewFile()" class="btn btn-sm btn-ghost" style="border:1px solid var(--border,#ccc);">New File</button>
 </div>
 
-<div style="margin-top:10px;display:flex;gap:8px;">
-  <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success" style="flex:1;">
-    Save Note
-  </button>
-  <button onclick="deleteNote()" class="btn btn-ghost" style="color:var(--danger,#e55);border:1px solid var(--danger,#e55);">
-    Delete
-  </button>
+{% if listing.folders %}
+  {% for f in listing.folders %}
+  <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-hover,#f5f5f5)'" onmouseout="this.style.background=''">
+    <a href="/notes/browse/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128193; {{ f.name }}</a>
+    <button onclick="promptRename('{{ f.rel_path }}','{{ f.name }}')" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
+    <button onclick="confirmDelete('{{ f.rel_path }}','{{ f.name }}',true)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+{% if listing.files %}
+  {% for f in listing.files %}
+  <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-hover,#f5f5f5)'" onmouseout="this.style.background=''">
+    <a href="/notes/edit/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128196; {{ f.name }}</a>
+    <button onclick="promptRename('{{ f.rel_path }}','{{ f.name }}')" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
+    <button onclick="confirmDelete('{{ f.rel_path }}','{{ f.name }}',false)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+  </div>
+  {% endfor %}
+{% endif %}
+
+{% if not listing.folders and not listing.files %}
+<div style="padding:24px;text-align:center;color:var(--sub);">
+  No files yet. Click <b>New File</b> above to get started.
+</div>
+{% endif %}
+
+<div id="new-folder-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-card,var(--bg));border:1px solid var(--border,#ccc);border-radius:10px;padding:20px;min-width:320px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:10px;">New Folder</div>
+    <input id="nf-name" type="text" placeholder="Folder name" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+      <button onclick="closeDialog('new-folder-dialog')" class="btn btn-sm btn-ghost">Cancel</button>
+      <button onclick="submitNewFolder()" class="btn btn-sm btn-primary">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="new-file-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-card,var(--bg));border:1px solid var(--border,#ccc);border-radius:10px;padding:20px;min-width:320px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:10px;">New File</div>
+    <input id="nfl-name" type="text" placeholder="File name" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
+    <div id="template-choice" style="display:none;margin-top:12px;padding:10px;background:var(--bg-subtle,#f9f9f9);border-radius:6px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Use template?</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button id="tpl-use-parent" onclick="useTemplate('parent')" class="btn btn-xs btn-ghost" style="border:1px solid var(--border,#ccc);">Use parent template</button>
+        <button onclick="useTemplate('none')" class="btn btn-xs btn-ghost" style="border:1px solid var(--border,#ccc);">Continue blank</button>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+      <button onclick="closeDialog('new-file-dialog')" class="btn btn-sm btn-ghost">Cancel</button>
+      <button onclick="submitNewFile()" class="btn btn-sm btn-primary">Create</button>
+    </div>
+  </div>
+</div>
+
+<div id="rename-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center;">
+  <div style="background:var(--bg-card,var(--bg));border:1px solid var(--border,#ccc);border-radius:10px;padding:20px;min-width:320px;">
+    <div style="font-size:15px;font-weight:700;margin-bottom:10px;">Rename</div>
+    <input id="rn-name" type="text" placeholder="New name" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
+    <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
+      <button onclick="closeDialog('rename-dialog')" class="btn btn-sm btn-ghost">Cancel</button>
+      <button onclick="submitRename()" class="btn btn-sm btn-primary">Rename</button>
+    </div>
+  </div>
 </div>
 
 <script>
-window._mdSaveFn = function(silent) {
-  var content = document.getElementById("md-editor").value;
-  if (silent && !content.trim()) return;
-  fetch("/notes/save", {
-    method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({category: "{{ category }}", slug: "{{ slug }}", content: content})
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    if (!silent) {
-      var btn = document.querySelector(".btn-success");
-      if (btn) {
-        btn.textContent = d.ok ? "✔ Saved" : "Error — retry";
-        setTimeout(function() { btn.textContent = "Save Note"; }, d.ok ? 2000 : 3000);
-      }
-    }
-  });
-};
+var _curPath = "{{ rel_path }}";
+var _parentDir = _curPath ? _curPath : "";
+var _templateContent = null;
+var _renameTarget = "";
 
-function deleteNote() {
-  if (!confirm("Delete this note permanently?")) return;
-  fetch("/notes/delete", {
+function promptNewFolder() {
+  document.getElementById("nf-name").value = "";
+  openDialog("new-folder-dialog");
+  setTimeout(function() { document.getElementById("nf-name").focus(); }, 100);
+}
+
+function promptNewFile() {
+  document.getElementById("nfl-name").value = "";
+  _templateContent = null;
+  document.getElementById("template-choice").style.display = "none";
+  openDialog("new-file-dialog");
+  setTimeout(function() {
+    document.getElementById("nfl-name").focus();
+    checkTemplate();
+  }, 100);
+}
+
+function checkTemplate() {
+  fetch("/notes/template-check", {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({category: "{{ category }}", slug: "{{ slug }}"})
+    body: JSON.stringify({path: _curPath})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
-    if (d.ok) window.location.href = "/notes/{{ category }}";
-    else alert(d.error || "Failed to delete");
+    if (!d.ok) return;
+    if (d.source === "local") {
+      _templateContent = d.content;
+    } else if (d.parent) {
+      document.getElementById("template-choice").style.display = "";
+      document.getElementById("template-choice")._parentContent = d.parent.content;
+    }
   });
 }
 
-document.addEventListener("DOMContentLoaded", function() {
-  initBacklinksPanel(
-    document.getElementById("backlinks-panel-body"),
-    {{ title|tojson }}
-  );
+function useTemplate(which) {
+  if (which === "parent") {
+    var el = document.getElementById("template-choice");
+    _templateContent = el._parentContent || null;
+  } else {
+    _templateContent = null;
+  }
+  document.getElementById("template-choice").style.display = "none";
+}
+
+function submitNewFolder() {
+  var name = document.getElementById("nf-name").value.trim();
+  if (!name) return;
+  fetch("/notes/new-folder", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: _curPath, name: name})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) window.location.reload();
+    else alert(d.error || "Failed");
+  });
+}
+
+function submitNewFile() {
+  var name = document.getElementById("nfl-name").value.trim();
+  if (!name) return;
+  fetch("/notes/new-file", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: _curPath, name: name, content: _templateContent || ""})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      var fileName = name.endsWith(".md") ? name : name + ".md";
+      var editPath = _curPath ? _curPath + "/" + fileName : fileName;
+      window.location.href = "/notes/edit/" + encodeURIComponent(editPath);
+    } else {
+      alert(d.error || "Failed");
+    }
+  });
+}
+
+function promptRename(relPath, oldName) {
+  _renameTarget = relPath;
+  document.getElementById("rn-name").value = oldName;
+  openDialog("rename-dialog");
+  setTimeout(function() {
+    var el = document.getElementById("rn-name");
+    el.focus();
+    el.select();
+  }, 100);
+}
+
+function submitRename() {
+  var newName = document.getElementById("rn-name").value.trim();
+  if (!newName) return;
+  fetch("/notes/rename", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: _renameTarget, new_name: newName})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) window.location.reload();
+    else alert(d.error || "Failed");
+  });
+}
+
+function confirmDelete(relPath, name, isFolder) {
+  var msg = isFolder
+    ? "Delete '" + name + "' and everything inside it? This cannot be undone."
+    : "Delete '" + name + "' permanently?";
+  if (!confirm(msg)) return;
+  fetch("/notes/delete", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: relPath})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) window.location.reload();
+    else alert(d.error || "Failed");
+  });
+}
+
+function openDialog(id) {
+  var el = document.getElementById(id);
+  el.style.display = "flex";
+  el.addEventListener("click", function handler(e) {
+    if (e.target === el) { el.style.display = "none"; el.removeEventListener("click", handler); }
+  });
+}
+
+function closeDialog(id) {
+  document.getElementById(id).style.display = "none";
+}
+
+document.addEventListener("keydown", function(e) {
+  if (e.key === "Escape") {
+    ["new-folder-dialog","new-file-dialog","rename-dialog"].forEach(function(id) {
+      document.getElementById(id).style.display = "none";
+    });
+  }
 });
 </script>
 {% endblock %}

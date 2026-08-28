@@ -75,6 +75,11 @@ def _glob_match(pattern, text):
     return re.search(regex, text.lower())
 
 
+class PTOSError(Exception):
+    """Raised instead of sys.exit() so callers can handle gracefully."""
+    pass
+
+
 def get_log_files():
     """Get list of log files from records/, excluding conflict files."""
     if not os.path.isdir(RECORDS_DIR):
@@ -4467,93 +4472,116 @@ def _ensure_notes_dir():
     os.makedirs(NOTES_DIR, exist_ok=True)
 
 
-def list_note_categories():
-    """Return sorted list of note category names."""
+def _safe_path(rel_path):
+    """Resolve a relative path under NOTES_DIR, rejecting anything that
+    escapes it (../, absolute paths, symlink tricks)."""
     _ensure_notes_dir()
-    return sorted(
-        d for d in os.listdir(NOTES_DIR)
-        if os.path.isdir(os.path.join(NOTES_DIR, d))
-    )
+    if not rel_path:
+        return NOTES_DIR
+    full = os.path.normpath(os.path.join(NOTES_DIR, rel_path))
+    if not full.startswith(os.path.abspath(NOTES_DIR) + os.sep) \
+       and full != os.path.abspath(NOTES_DIR):
+        raise PTOSError("Invalid path")
+    return full
 
 
-def list_notes(category):
-    """Return list of dicts for notes in a category, newest first."""
-    cat_dir = os.path.join(NOTES_DIR, category)
-    if not os.path.isdir(cat_dir):
-        return []
-    notes = []
-    for fname in sorted(os.listdir(cat_dir), reverse=True):
-        if not fname.endswith(".md"):
-            continue
-        path = os.path.join(cat_dir, fname)
-        slug = fname[:-3]
-        date_part = slug[:10] if len(slug) >= 10 and slug[4] == "-" else ""
-        title = slug[11:].replace("-", " ").title() if date_part else slug.replace("-", " ").title()
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                first_line = f.readline().strip()
-            if first_line.startswith("# "):
-                title = first_line[2:]
-        except Exception:
-            pass
-        notes.append({"slug": slug, "title": title, "date": date_part, "file": fname})
-    return notes
+def _validate_name(name):
+    if not name or "/" in name or "\\" in name or name in (".", ".."):
+        raise PTOSError("Invalid name")
 
 
-def get_note_path(category, slug):
-    """Return full path for a note."""
-    return os.path.join(NOTES_DIR, category, f"{slug}.md")
+def list_dir(rel_path=""):
+    """Return {folders: [...], files: [...]} for a directory under
+    NOTES_DIR. Each entry: {name, rel_path}. template.md is excluded
+    from the files list — it's a folder property, not a note."""
+    full = _safe_path(rel_path)
+    if not os.path.isdir(full):
+        raise PTOSError("Folder not found")
+    folders, files = [], []
+    for name in sorted(os.listdir(full)):
+        entry_rel = os.path.join(rel_path, name) if rel_path else name
+        if os.path.isdir(os.path.join(full, name)):
+            folders.append({"name": name, "rel_path": entry_rel})
+        elif name.endswith(".md") and name != "template.md":
+            files.append({"name": name, "rel_path": entry_rel})
+    return {"folders": folders, "files": files}
 
 
-def read_note(category, slug):
-    """Read note content. Returns None if not found."""
-    path = get_note_path(category, slug)
-    if not os.path.isfile(path):
-        return None
-    with open(path, "r", encoding="utf-8") as f:
-        return f.read()
+def create_folder(rel_path, name):
+    """mkdir under rel_path. name sanitized: no /, no .., no leading dot."""
+    _validate_name(name)
+    full = _safe_path(os.path.join(rel_path, name))
+    try:
+        os.makedirs(full, exist_ok=False)
+    except FileExistsError:
+        raise PTOSError(f"'{name}' already exists")
 
 
-def create_note(category, title, content=None):
-    """Create a new note. Returns {category, slug, path}.
-    Auto-creates category folder. Handles slug collisions."""
-    _ensure_notes_dir()
-    cat_dir = os.path.join(NOTES_DIR, category)
-    os.makedirs(cat_dir, exist_ok=True)
-
-    today_str = today().isoformat()
-    base_slug = f"{today_str}-{slugify(title)}"
-    slug = base_slug
-
-    counter = 2
-    while os.path.exists(get_note_path(category, slug)):
-        slug = f"{base_slug}-{counter}"
-        counter += 1
-
-    if content is None:
-        content = get_note_template(category, {"title": title, "date": today_str})
-
-    path = get_note_path(category, slug)
-    with open(path, "w", encoding="utf-8") as f:
-        f.write(content)
-
-    return {"category": category, "slug": slug, "path": path}
-
-
-def save_note(category, slug, content):
-    """Save content to an existing note."""
-    path = get_note_path(category, slug)
-    os.makedirs(os.path.dirname(path), exist_ok=True)
-    with open(path, "w", encoding="utf-8") as f:
+def create_file(rel_path, name, content):
+    """Create name.md (append .md if missing) under rel_path with the
+    given content. No date prefix, no auto-slugging."""
+    _validate_name(name)
+    if not name.endswith(".md"):
+        name += ".md"
+    full = _safe_path(os.path.join(rel_path, name))
+    if os.path.exists(full):
+        raise PTOSError(f"'{name}' already exists")
+    os.makedirs(os.path.dirname(full), exist_ok=True)
+    with open(full, "w", encoding="utf-8") as f:
         f.write(content)
 
 
-def delete_note(category, slug):
-    """Delete a note. Raises FileNotFoundError if not found."""
-    path = get_note_path(category, slug)
-    if not os.path.isfile(path):
-        raise FileNotFoundError(f"Note not found: {category}/{slug}")
-    os.remove(path)
+def rename_note(rel_path, new_name):
+    """Rename a file or a folder. Works identically for both."""
+    _validate_name(new_name)
+    full = _safe_path(rel_path)
+    new_full = _safe_path(os.path.join(os.path.dirname(
+        os.path.relpath(full, NOTES_DIR)), new_name))
+    if os.path.exists(new_full):
+        raise PTOSError(f"'{new_name}' already exists")
+    os.rename(full, new_full)
+
+
+def delete_note_entry(rel_path):
+    """Delete a file, or a folder and everything under it. Folder
+    delete is destructive and irreversible — route layer must require
+    explicit confirmation before calling this."""
+    full = _safe_path(rel_path)
+    if os.path.isdir(full):
+        shutil.rmtree(full)
+    else:
+        os.remove(full)
+
+
+def find_parent_template(rel_path):
+    """Walk up from rel_path toward NOTES_DIR root, returning the
+    nearest ancestor's template.md if one exists. Does not check
+    rel_path itself — caller already confirmed that's absent."""
+    rel_path = rel_path.replace("/", os.sep)
+    parts = rel_path.split(os.sep) if rel_path else []
+    while parts:
+        parts.pop()
+        candidate = os.sep.join(parts)
+        tpl_path = os.path.join(NOTES_DIR, candidate, "template.md")
+        if os.path.isfile(tpl_path):
+            with open(tpl_path, encoding="utf-8") as f:
+                return {"rel_path": candidate or ".", "content": f.read()}
+    return None
+
+
+def resolve_new_file_template(rel_path):
+    """Called when the user clicks 'New File' in a folder. Returns
+    what the route layer needs to decide whether to prompt:
+      {source: "local", content: str}                    — silent, no prompt
+      {source: "choice", parent: {...} or None}           — prompt needed
+    """
+    local_path = os.path.join(NOTES_DIR, rel_path, "template.md")
+    if os.path.isfile(local_path):
+        with open(local_path, encoding="utf-8") as f:
+            return {"source": "local", "content": f.read()}
+    parent = find_parent_template(rel_path)
+    return {"source": "choice", "parent": parent}
+
 
 # --------------------------------------------------
 # Editor

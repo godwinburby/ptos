@@ -187,40 +187,49 @@ x 2026-07-12 2026-07-10 Completed task
 ## Notes module specifics
 
 ### Storage
-- Notes live in `notes/{category}/{slug}.md` (e.g. `notes/meeting/2026-07-21-standup.md`)
-- Slug format: `YYYY-MM-DD-title-slug` (auto-generated, collision-safe)
-- Category folders created on demand
+- Notes live in `notes/` directory, browsable as a file explorer with arbitrary folder depth
+- No forced date prefixes or slug conventions — files are named by the user
+- Each folder may contain a `template.md` — a local template applied to new files created in that folder
+- `template.md` is excluded from file listings (it's a folder property, not a note)
 
-### Template fallback chain
-- `get_note_template(category, context)` checks in order:
-  1. `templates/{category}.md` — category-specific template (user-editable)
-  2. `templates/note.md` — generic note default (created by `--init` from `starters/starter_note.md`)
-  3. `_load_starter(category)` — ships with PTOS (e.g. `starters/starter_book.md`)
-  4. `_load_starter("note")` — ships with PTOS (final fallback)
-  5. Hardcoded stub: `# {{title}}\n\n_Created: {{date}}_\n`
-- Placeholders: `{{title}}`, `{{date}}` — substituted at creation time
-- Metadata: Key-value lines at top of template (e.g. `Author:`, `Rating:`, `Tags:`) are plain markdown, parseable for future search
+### Template resolution
+- `find_parent_template(rel_path)` walks up from `rel_path` toward `NOTES_DIR` root, returning the nearest ancestor's `template.md`
+- `resolve_new_file_template(rel_path)` returns:
+  - `{source: "local", content: str}` — silent, no prompt needed
+  - `{source: "choice", parent: {...} or None}` — prompt needed
+- Fallback chain: local `template.md` → parent's `template.md` → blank
 
 ### Key functions (in `ptos.py`)
-- `list_note_categories()` — sorted list of category folder names
-- `list_notes(category)` — list of `{slug, title, date, file}` dicts, newest first
-- `read_note(category, slug)` — returns file content or `None`
-- `create_note(category, title, content=None)` — creates file, returns `{category, slug, path}`
-- `save_note(category, slug, content)` — overwrites file content
-- `delete_note(category, slug)` — deletes file, raises `FileNotFoundError` if missing
-- `get_note_template(category, context)` — returns template string with placeholders substituted
+- `_safe_path(rel_path)` — resolve relative path under NOTES_DIR, reject escapes
+- `_validate_name(name)` — reject empty, `/`, `\`, `.`, `..`
+- `list_dir(rel_path="")` — return `{folders: [...], files: [...]}` for a directory
+- `create_folder(rel_path, name)` — mkdir under rel_path
+- `create_file(rel_path, name, content)` — create `name.md` (auto-append `.md`)
+- `rename_note(rel_path, new_name)` — rename file or folder
+- `delete_note_entry(rel_path)` — delete file or recursive folder delete
+- `find_parent_template(rel_path)` — walk up to find nearest `template.md`
+- `resolve_new_file_template(rel_path)` — local → silent; parent → choice
+- `get_note_template(category, context)` — legacy template resolution (still available)
 
 ### Web routes
-- `GET /notes` — category browser with create form
-- `GET /notes/<category>` — note list in a category
-- `GET /notes/<category>/<slug>` — view/edit note (uses shared `_markdown_editor.html`)
-- `POST /notes/save` — save note content (JSON: `{category, slug, content}`)
-- `POST /notes/create` — create new note (JSON: `{category, title}`)
-- `POST /notes/delete` — delete note (JSON: `{category, slug}`)
+- `GET /notes` — root listing (also `GET /notes/browse`)
+- `GET /notes/browse/<path:rel_path>` — folder listing with breadcrumbs
+- `GET /notes/edit/<path:rel_path>` — edit view (markdown editor + backlinks panel)
+- `POST /notes/new-folder` — create folder (JSON: `{path, name}`)
+- `POST /notes/template-check` — AJAX template resolution (JSON: `{path}`)
+- `POST /notes/new-file` — create file (JSON: `{path, name, content}`)
+- `POST /notes/rename` — rename file/folder (JSON: `{path, new_name}`)
+- `POST /notes/delete` — delete file/folder (JSON: `{path}`)
+- `POST /notes/save` — save file content (JSON: `{path, content}`)
 
 ### Search integration
-- Universal search (`/search`) scans note content using `_glob_match`
-- Results show `category/title` with snippet, link to note view
+- Universal search (`/search`) scans note content using `os.walk` + `_glob_match`
+- Results show `rel_path` with snippet, link to edit view
+
+### Concept tags
+- `[[Target]]` in notes is scanned by `_iter_link_matches()` via `os.walk` over `NOTES_DIR`
+- Existing bracket-linking infrastructure handles everything: `get_link_candidates()`, `get_backlinks()`, `attachBracketAutocomplete()`, `initBacklinksPanel()`
+- No separate concept-tag API needed — reuse existing `_BRACKET_RE` and `_iter_link_matches()`
 
 ## Board module specifics
 
