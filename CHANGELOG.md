@@ -7,6 +7,13 @@ Format: `[version or date] — description`
 
 ## 2026-08-28
 
+### Drag-and-drop highlight colors
+
+- Settings page Highlights card now has a **color palette row** — 8 labeled swatches filled with their actual color + a dashed "⊗ clear" swatch
+- **Drag a swatch onto a metric chip** to assign its color (chips show a dashed outline on drag-over); drag "⊗ clear" to remove
+- Click-to-cycle kept as a mobile/touch fallback (native HTML5 DnD doesn't work on touch)
+- `saveSettings()` unchanged — still reads `data-color` per chip
+
 ### Dashboard highlight colors expanded
 
 - **8 colors** — added `purple`, `teal`, `rose`, `slate` to the existing `accent`/`warn`/`success`/`error`

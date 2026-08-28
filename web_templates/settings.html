@@ -110,8 +110,18 @@
 <div class="card" id="sec-highlights" style="margin-bottom:14px;">
   <div class="card-title">Dashboard Highlights</div>
   <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
-    Click a metric name to cycle its color. Repeated clicks: none → blue → orange → green → red → purple → teal → rose → slate → none.
+    Drag a color onto a metric to assign it, or click a metric to cycle. Drag the clear (⊗) to remove.
   </div>
+  <div class="hl-palette">
+    {% for c in ["accent","warn","success","error","purple","teal","rose","slate"] %}
+    <span class="hl-swatch" data-color="{{ c }}" draggable="true"
+          ondragstart="dragStartColor(event)" ondragend="dragEndColor(event)"
+          style="background:{{ {'accent':'var(--accent)','warn':'var(--warn)','success':'#2a9d4e','error':'#d14343','purple':'#8B5CF6','teal':'#14B8A6','rose':'#E11D78','slate':'#64748B'}[c] }}">{{ c }}</span>
+    {% endfor %}
+    <span class="hl-swatch hl-swatch-clear" data-color="" draggable="true"
+          ondragstart="dragStartColor(event)" ondragend="dragEndColor(event)">⊗ clear</span>
+  </div>
+  <div style="height:8px;"></div>
   {% for db in dashboards %}
   {% if dashboard_metrics_map.get(db) %}
   <div style="margin-bottom:10px;">
@@ -120,7 +130,8 @@
       {% for metric in dashboard_metrics_map[db] %}
       <span class="hl-chip" data-dashboard="{{ db }}" data-metric="{{ metric }}" data-color="{{ dashboard_highlights.get(db, {}).get(metric, '') }}"
             style="display:inline-flex;align-items:center;gap:4px;padding:3px 8px;border-radius:6px;font-size:12px;cursor:pointer;border:1px solid var(--border);background:var(--card);transition:all .12s;user-select:none;"
-            onclick="cycleHighlight(this)">
+            onclick="cycleHighlight(this)"
+            ondragover="dragOverColor(event)" ondragleave="dragLeaveColor(event)" ondrop="dropColor(event)">
         <span class="hl-dot" style="width:8px;height:8px;border-radius:50%;flex-shrink:0;"></span>
         {{ metric.replace('_', ' ') }}
       </span>
@@ -133,6 +144,18 @@
 {% endif %}
 
 <style>
+.hl-palette { display: flex; flex-wrap: wrap; gap: 6px; }
+.hl-swatch {
+  display: inline-flex; align-items: center; justify-content: center;
+  padding: 4px 12px; border-radius: 14px; font-size: 12px; font-weight: 700;
+  color: #fff; cursor: grab; user-select: none; border: 2px solid transparent;
+  transition: transform .12s, box-shadow .12s, border-color .12s;
+}
+.hl-swatch:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,.18); }
+.hl-swatch:active { cursor: grabbing; }
+.hl-swatch-clear { background: var(--card); color: var(--sub); border: 2px dashed var(--border); }
+.hl-swatch-clear:hover { border-color: var(--sub); }
+.hl-chip.drag-over { border-color: var(--accent); border-style: dashed; box-shadow: 0 0 0 2px var(--accent-lt); }
 .hl-chip:hover { border-color: var(--accent); }
 .hl-dot { background: var(--border); width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: background .12s; }
 .hl-chip[data-color="accent"] .hl-dot { background: var(--accent); }
@@ -440,6 +463,31 @@
     var idx = colors.indexOf(cur);
     var next = colors[(idx + 1) % colors.length];
     el.dataset.color = next;
+  };
+
+  window.dragStartColor = function(e) {
+    e.dataTransfer.setData("text/plain", e.currentTarget.dataset.color || "");
+    e.currentTarget.style.opacity = ".5";
+  };
+
+  window.dragEndColor = function(e) {
+    e.currentTarget.style.opacity = "";
+  };
+
+  window.dragOverColor = function(e) {
+    e.preventDefault();
+    e.currentTarget.classList.add("drag-over");
+  };
+
+  window.dragLeaveColor = function(e) {
+    e.currentTarget.classList.remove("drag-over");
+  };
+
+  window.dropColor = function(e) {
+    e.preventDefault();
+    e.currentTarget.classList.remove("drag-over");
+    var c = e.dataTransfer.getData("text/plain");
+    e.currentTarget.dataset.color = c;
   };
   
   window.updateCycle = function(input) {

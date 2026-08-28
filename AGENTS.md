@@ -307,10 +307,10 @@ x 2026-07-12 2026-07-10 Completed task
 - **Config** — `[dashboard.highlights.DASHBOARD]` in `config.toml` maps metric names to colors; stored in config (UI concern), not queries.toml. Colors: `accent` (blue), `warn` (orange), `success` (green), `error` (red), `purple`, `teal`, `rose`, `slate` — 8 total
 - **Service** — `get_dashboard()` in `ptos_service.py` reads highlights from `cfg["dashboard"]["highlights"][name]` and attaches `highlight` key to each item dict
 - **Web route** — `home()` passes `highlight` through stat dict to template; `settings_page()` passes `dashboard_highlights` and `dashboard_metrics_map` to template; `settings_save()` persists highlights to `config.toml`
-- **Template** — `home.html` applies `c-{color}` CSS class to `.stat-card`; `settings.html` renders compact clickable chips that cycle colors on click
-- **CSS** — `.c-accent` (blue), `.c-warn` (orange), `.c-success` (green), `.c-error` (red) modifier classes in `base.html`
+- **Template** — `home.html` applies `c-{color}` CSS class to `.stat-card`; `settings.html` renders a drag-and-drop color palette (8 labeled swatches + a clear ⊗ swatch) with metric chips as drop targets (`dragStartColor`/`dragOverColor`/`dropColor` handlers); chip clicks still cycle colors as mobile fallback
+- **CSS** — `.c-accent` (blue), `.c-warn` (orange), `.c-success` (green), `.c-error` (red), `.c-purple`, `.c-teal`, `.c-rose`, `.c-slate` modifier classes in `base.html`
 - **CLI** — `run_dashboard()` reads highlights from config, applies bold ANSI colors; `run_metric()` accepts `color`/`reset` params; `--add-dashboard` supports `--highlight METRIC:COLOR` flag
-- **Settings page** — per-dashboard metric chips with color dot; click cycles: none → blue → orange → green → red → none; same color can be assigned to multiple metrics
+- **Settings page** — per-dashboard metric chips with color dot; drag a color onto a chip or click to cycle: none → blue → orange → green → red → purple → teal → rose → slate → none; same color can be assigned to multiple metrics
 
 ## Stock tracking
 
