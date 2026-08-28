@@ -70,6 +70,7 @@
       <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Use template?</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
         <button id="tpl-use-parent" onclick="useTemplate('parent')" class="btn btn-xs btn-ghost" style="border:1px solid var(--border,#ccc);">Use parent template</button>
+        <button onclick="createTemplateHere()" class="btn btn-xs btn-ghost" style="border:1px solid var(--border,#ccc);">Create a template here</button>
         <button onclick="useTemplate('none')" class="btn btn-xs btn-ghost" style="border:1px solid var(--border,#ccc);">Continue blank</button>
       </div>
     </div>
@@ -124,9 +125,10 @@ function checkTemplate() {
     if (!d.ok) return;
     if (d.source === "local") {
       _templateContent = d.content;
-    } else if (d.parent) {
+    } else if (d.source === "choice") {
       document.getElementById("template-choice").style.display = "";
-      document.getElementById("template-choice")._parentContent = d.parent.content;
+      document.getElementById("tpl-use-parent").style.display = d.parent ? "" : "none";
+      document.getElementById("template-choice")._parentContent = d.parent ? d.parent.content : null;
     }
   });
 }
@@ -139,6 +141,23 @@ function useTemplate(which) {
     _templateContent = null;
   }
   document.getElementById("template-choice").style.display = "none";
+}
+
+function createTemplateHere() {
+  document.getElementById("template-choice").style.display = "none";
+  fetch("/notes/new-file", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: _curPath, name: "template", content: ""})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      var editPath = _curPath ? _curPath + "/template.md" : "template.md";
+      window.location.href = "/notes/edit/" + encodeURIComponent(editPath);
+    } else {
+      alert(d.error || "Failed");
+    }
+  });
 }
 
 function submitNewFolder() {
