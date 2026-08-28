@@ -21,6 +21,7 @@
 </div>
 
 <div style="margin-top:10px;display:flex;gap:8px;">
+  <button onclick="linkToNote()" class="btn btn-ghost" style="border:1px solid var(--accent,#4a9);color:var(--accent,#4a9);">Link to this note</button>
   <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success" style="flex:1;">
     Save Note
   </button>
@@ -59,7 +60,34 @@ function deleteNote() {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) window.location.href = "/notes/browse{% if parent_dir %}/{{ parent_dir }}{% endif %}";
-    else alert(d.error || "Failed to delete");
+    else if (d.needs_confirm) {
+      if (confirm(d.warning + "\n\nDelete anyway?")) {
+        fetch("/notes/delete", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({path: "{{ rel_path }}", force: true})
+        })
+        .then(function(r2) { return r2.json(); })
+        .then(function(d2) {
+          if (d2.ok) window.location.href = "/notes/browse{% if parent_dir %}/{{ parent_dir }}{% endif %}";
+          else alert(d2.error || "Failed to delete");
+        });
+      }
+    } else alert(d.error || "Failed to delete");
+  });
+}
+
+function linkToNote() {
+  fetch("/api/note-link-id", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: "{{ rel_path }}"})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      var msg = "Note id: " + d.id + "\nLink target: " + d.target + "\n\nCopied to clipboard. Paste it into a record's links= field or a todo's links: field.";
+      if (navigator.clipboard) navigator.clipboard.writeText(d.target);
+      alert(msg);
+    } else alert(d.error || "Failed");
   });
 }
 

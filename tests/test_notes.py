@@ -412,3 +412,135 @@ class TestResolveNewFileTemplate:
         result = ptos.resolve_new_file_template("bare")
         assert result["source"] == "choice"
         assert result["parent"] is None
+
+
+class TestNoteId:
+    def test_note_id_of_with_id(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "sub"), exist_ok=True)
+        path = os.path.join(ptos.NOTES_DIR, "sub", "test.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("<!-- ptos-id: k3f9a1 -->\n# Hello\nContent\n")
+        assert ptos._note_id_of(path) == "k3f9a1"
+
+    def test_note_id_of_without_id(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "sub"), exist_ok=True)
+        path = os.path.join(ptos.NOTES_DIR, "sub", "plain.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# Hello\nContent\n")
+        assert ptos._note_id_of(path) is None
+
+    def test_note_id_of_nonexistent(self):
+        assert ptos._note_id_of(os.path.join(ptos.NOTES_DIR, "nope.md")) is None
+
+    def test_ensure_note_id_generates(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "sub"), exist_ok=True)
+        rel = "sub/gen.md"
+        full = os.path.join(ptos.NOTES_DIR, rel)
+        with open(full, "w", encoding="utf-8") as f:
+            f.write("# My Note\nSome content\n")
+        nid = ptos.ensure_note_id(rel)
+        assert len(nid) == 6
+        with open(full, encoding="utf-8") as f:
+            content = f.read()
+        assert content.startswith(f"<!-- ptos-id: {nid} -->")
+        assert "# My Note" in content
+
+    def test_ensure_note_id_preserves_existing(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "sub"), exist_ok=True)
+        rel = "sub/exists.md"
+        full = os.path.join(ptos.NOTES_DIR, rel)
+        with open(full, "w", encoding="utf-8") as f:
+            f.write("<!-- ptos-id: abc123 -->\n# Note\n")
+        nid = ptos.ensure_note_id(rel)
+        assert nid == "abc123"
+
+
+class TestResolveLinkNote:
+    def test_resolve_note_link(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "journal"), exist_ok=True)
+        path = os.path.join(ptos.NOTES_DIR, "journal", "ref.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("<!-- ptos-id: xyz789 -->\n# Reference\n")
+        result = ptos.resolve_link("note:xyz789")
+        assert result is not None
+        assert result["kind"] == "note"
+        assert result["type"] == "note"
+        assert result["id"] == "xyz789"
+        assert result["lineno"] == 1
+
+    def test_resolve_note_link_missing(self):
+        assert ptos.resolve_link("note:zzzzzz") is None
+
+    def test_resolve_note_link_nonexistent_file(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "x"), exist_ok=True)
+        path = os.path.join(ptos.NOTES_DIR, "x", "gone.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("<!-- ptos-id: abcdef -->\n")
+        os.remove(path)
+        assert ptos.resolve_link("note:abcdef") is None
+
+    def test_resolve_note_excludes_template(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "t"), exist_ok=True)
+        path = os.path.join(ptos.NOTES_DIR, "t", "template.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("<!-- ptos-id: tpl123 -->\n# Template\n")
+        assert ptos.resolve_link("note:tpl123") is None
+
+
+class TestListLinkIdsNotes:
+    def test_notes_appear_in_list(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "docs"), exist_ok=True)
+        path = os.path.join(ptos.NOTES_DIR, "docs", "guide.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("<!-- ptos-id: note01 -->\n# Guide\n")
+        ids = ptos.list_link_ids()
+        targets = [i["target"] for i in ids]
+        assert "note:note01" in targets
+
+    def test_notes_without_id_excluded(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "docs"), exist_ok=True)
+        path = os.path.join(ptos.NOTES_DIR, "docs", "plain.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# Plain note\n")
+        ids = ptos.list_link_ids()
+        targets = [i["target"] for i in ids]
+        assert not any("plain" in t for t in targets)
+
+
+class TestCheckDanglingLinksNotes:
+    def test_duplicate_note_id(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "a"), exist_ok=True)
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "b"), exist_ok=True)
+        with open(os.path.join(ptos.NOTES_DIR, "a", "one.md"), "w", encoding="utf-8") as f:
+            f.write("<!-- ptos-id: dup99 -->\n# A\n")
+        with open(os.path.join(ptos.NOTES_DIR, "b", "two.md"), "w", encoding="utf-8") as f:
+            f.write("<!-- ptos-id: dup99 -->\n# B\n")
+        problems = ptos.check_dangling_links()
+        dupes = [p for p in problems if p["error"] == "duplicate id"]
+        assert any("note:dup99" in p["target"] for p in dupes)
+
+    def test_clean_note_no_problems(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "ok"), exist_ok=True)
+        with open(os.path.join(ptos.NOTES_DIR, "ok", "clean.md"), "w", encoding="utf-8") as f:
+            f.write("<!-- ptos-id: uniq01 -->\n# Clean\n")
+        problems = ptos.check_dangling_links()
+        note_problems = [p for p in problems if p["kind"] == "note"]
+        assert not any("note:uniq01" in p["target"] for p in note_problems)
+
+
+class TestDeleteNoteEntryBacklinks:
+    def test_delete_file_with_no_backlinks(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "del"), exist_ok=True)
+        path = os.path.join(ptos.NOTES_DIR, "del", "solo.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# Solo\n")
+        ptos.delete_note_entry("del/solo.md")
+        assert not os.path.exists(path)
+
+    def test_delete_folder(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "delfolder"), exist_ok=True)
+        path = os.path.join(ptos.NOTES_DIR, "delfolder", "inside.md")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("# Inside\n")
+        ptos.delete_note_entry("delfolder")
+        assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "delfolder"))

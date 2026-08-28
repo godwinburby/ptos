@@ -2941,6 +2941,42 @@ def svc_delete(rel_path):
     ptos.delete_note_entry(rel_path)
 
 
+def svc_ensure_note_id(rel_path):
+    """Generate and persist an id for a note if it doesn't have one.
+    Returns the id string."""
+    return ptos.ensure_note_id(rel_path)
+
+
+def check_note_delete_links(rel_path):
+    """Check if a note (or folder of notes) has incoming backlinks.
+    Returns a dict with ok=True if safe, or ok=False with warning details."""
+    import fnmatch
+    full = ptos._safe_path(rel_path)
+    notes_to_check = []
+    if os.path.isdir(full):
+        for root, _, files in os.walk(full):
+            for fname in files:
+                if fname == "template.md" or not fname.endswith(".md"):
+                    continue
+                fpath = os.path.join(root, fname)
+                nid = ptos._note_id_of(fpath)
+                if nid:
+                    bl = get_backlinks(f"note:{nid}")
+                    if bl:
+                        rel = os.path.relpath(fpath, ptos.NOTES_DIR).replace("\\", "/")
+                        notes_to_check.append({"path": rel, "id": nid, "backlinks": bl})
+    else:
+        nid = ptos._note_id_of(full)
+        if nid:
+            bl = get_backlinks(f"note:{nid}")
+            if bl:
+                notes_to_check.append({"path": rel_path, "id": nid, "backlinks": bl})
+    if notes_to_check:
+        total = sum(len(n["backlinks"]) for n in notes_to_check)
+        return {"ok": False, "warning": f"{total} incoming link(s) to {len(notes_to_check)} note(s)", "notes": notes_to_check}
+    return {"ok": True}
+
+
 def svc_read_file(rel_path):
     full = ptos._safe_path(rel_path)
     if not os.path.isfile(full):

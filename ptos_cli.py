@@ -1643,6 +1643,30 @@ def _handle_retro_id(args):
         ptos_todo.rewrite_line_by_number(TODO_PATH, t.line_no, line)
         print(f"Added id:{new_id} to line {t.line_no}")
         return
+    if target_type == "note":
+        search = " ".join(args.search or []) if isinstance(args.search, list) else (args.search or "")
+        if not search:
+            sys.exit("--retro-id note requires --search TEXT to find the note file")
+        found = None
+        for root, _, files in os.walk(NOTES_DIR):
+            for fname in files:
+                if fname == "template.md" or not fname.endswith(".md"):
+                    continue
+                fpath = os.path.join(root, fname)
+                rel = os.path.relpath(fpath, NOTES_DIR).replace("\\", "/")
+                if _glob_match(search, fname.replace(".md", "")) or _glob_match(search, rel):
+                    if found:
+                        sys.exit(f"Multiple notes match '{search}' — be more specific.")
+                    found = (fpath, rel)
+        if not found:
+            sys.exit(f"No note matching '{search}'.")
+        fpath, rel = found
+        existing = ptos._note_id_of(fpath)
+        if existing:
+            sys.exit(f"Note already has id: note:{existing}")
+        nid = ensure_note_id(rel)
+        print(f"Added id:note:{nid} to {rel}")
+        return
     filters = [item for group in (args.where or []) for item in group]
     if not filters:
         sys.exit(f"--retro-id {target_type} requires --where filters to locate the record")
