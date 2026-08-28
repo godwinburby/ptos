@@ -553,6 +553,23 @@ Color-code specific metrics on the home page dashboard and CLI. Configured in
 - **CLI** — `--add-dashboard NAME --highlight M1:accent M2:warn` saves highlights
 - Each dashboard has independent highlights
 
+### Dashboard Grouping
+
+Organize a dashboard's metrics into labeled sections on the home page. Add an
+optional `groups` dict to `[dashboards.NAME]` in `queries.toml`:
+```toml
+[dashboards.default]
+metrics = ["income_this_month", "total_income", "assessment", "assessment_pct"]
+groups = { "Revenue" = ["income_this_month", "total_income"],
+           "Assessment" = ["assessment", "assessment_pct"] }
+```
+- Old dashboards with just `metrics` are untouched — groups are opt-in and `groups` falls back to `None`
+- Ungrouped leftovers render first (headerless), then each group under its own small uppercase label
+- Highlights (colors) still work per metric
+- Query Builder dashboard editor — drag chips between group boxes, `+ New group`, rename via ✎, remove via ×
+- CLI — `--add-dashboard NAME --dash-group Group:metric1,metric2 Group2:metric3`
+- Share Schema preserves groups, filtering members to included queries/metrics
+
 ### Habits
 
 GitHub-style contribution grid for tracking recurring activities. Configured in

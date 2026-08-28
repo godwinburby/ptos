@@ -312,6 +312,16 @@ x 2026-07-12 2026-07-10 Completed task
 - **CLI** — `run_dashboard()` reads highlights from config, applies bold ANSI colors; `run_metric()` accepts `color`/`reset` params; `--add-dashboard` supports `--highlight METRIC:COLOR` flag
 - **Settings page** — per-dashboard metric chips with color dot; drag a color onto a chip or click to cycle: none → blue → orange → green → red → purple → teal → rose → slate → none; same color can be assigned to multiple metrics
 
+## Dashboard grouping
+
+- **Config** — optional `groups` dict in `[dashboards.NAME]` (`queries.toml`): `groups = { "Revenue" = ["income_this_month"], "Assessment" = ["assessment", "assessment_pct"] }`. `metrics` remains the flat ordered union and is required for backward compat with old entries, but may be empty/absent — the highlight picker reads `metrics` then falls back to flattening `groups`. Order is TOML insertion order.
+- **Service** — `get_dashboard()` returns a new `groups` key: an ordered list of `{name, items}` chunks with the **ungrouped leftovers (name `""`) first**, then groups in definition order. Falls back to `groups=None` when no `groups` configured (exact old behavior). String group values are normalized to lists; items present only in `groups` (hand-written configs) are still rendered.
+- **Home page** — `home()` builds `stat_groups` alongside flat `stats`; `home.html` renders each group under a `.stat-group-label` header (uppercase small text) followed by its own `.stat-grid`. Highlights (`c-{color}`) still work per metric. Flat dashboards render exactly as before via the `stat_card` Jinja macro.
+- **Query Builder** — dashboard editor renders **group boxes**: a `General (ungrouped)` box plus one box per group. Chips drag **between** boxes (native HTML5 DnD); each grouped box has `✎` rename and `×` remove (items return to ungrouped). `+ New group` creates an empty box. `db.groups` state round-trips load/save through `save_queries_full`, which strips blank group names and empty item lists.
+- **CLI** — `--add-dashboard NAME --dash-group GROUP:M1,M2 GROUP:M2,M3` seeds groups (note: `--dash-group`, not `--group` — that long option is already taken by `-G/--group` analysis grouping). Group members are auto-merged into `metrics` (union). `run_dashboard()` (ptos.py) prints bold group headers in CLI output.
+- **Share Schema** — `export_schema_bundle()` preserves `groups`, filtering both `metrics` and each group list to included queries/metrics.
+- **Tests**: `tests/test_dashboards.py` (order + ungrouped-first, full partition, string-value normalization, groups-only config, highlights on grouped items, save round-trip, blank/empty stripping, no-groups metrics-only, home grouped/flat render via web client). `test_export.py` covers group preservation + member filtering in shares.
+
 ## Stock tracking
 
 - **Schema** — two record types: `stock_unit` (serialized items: hearing aids with category, model, serial, status, date_sold) and `stock_txn` (movements: batteries, domes, receivers with category, model, qty, serial)

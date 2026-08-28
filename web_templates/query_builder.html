@@ -139,6 +139,14 @@
   .dash-chip[draggable] { cursor:grab; }
   .dash-chip.dragging  { opacity:.4; }
   .dash-chip.drag-over { border-color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent); }
+  .dbg-box {
+    border:1.5px dashed var(--border);border-radius:8px;padding:8px 10px;
+    margin-bottom:10px;transition:border-color .15s, background .15s;min-height:44px;
+  }
+  .dbg-box.drag-over { border-color:var(--accent);border-style:dashed;background:color-mix(in srgb,var(--accent) 8%,transparent); }
+  .dbg-head { display:flex;align-items:center;justify-content:space-between;margin-bottom:4px; }
+  .dbg-name { font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--sub); }
+  .dbg-ungrouped .dbg-name { font-weight:600;color:var(--sub); }
   .qb-chip {
     display:inline-flex;align-items:center;gap:4px;padding:6px 12px;
     border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;
@@ -259,7 +267,7 @@ var _liveTimer = null;
     _st.metrics[k] = { kind, base, base2, derived, unit_field, unit_weights, _raw: raw };
   });
   Object.entries(q.dashboards||{}).forEach(function(e) {
-    _st.dashboards[e[0]] = { metrics: e[1].metrics||[] };
+    _st.dashboards[e[0]] = { metrics: e[1].metrics||[], groups: Object.assign({}, e[1].groups)||{} };
   });
   // Boards
   var _bkBoards = {{ boards | tojson }};
@@ -460,7 +468,7 @@ function addEntry() {
   else if (section==="thresholds")
     _st.thresholds[name] = {metric:"",agg:"sum",sum_field:"",value:"",direction:"max",time:"",unit:""};
   else
-    _st.dashboards[name] = {metrics:[]};
+    _st.dashboards[name] = {metrics:[], groups:{}};
   renderTabs();
   select(section, name);
 }
@@ -1051,6 +1059,7 @@ function onMetricRawChange(val) {
 // ══════════════════════════════════════════════════════════════════════════════
 // DASHBOARD EDITOR
 // ══════════════════════════════════════════════════════════════════════════════
+var _dragDbItem = null;
 function _buildDashEditor(name) {
   var db = _st.dashboards[name];
   var div = document.createElement("div");
@@ -1065,51 +1074,187 @@ function _buildDashEditor(name) {
     }).join("");
   card.innerHTML =
     '<label>Items</label>'+
-    '<div class="hint" style="margin-bottom:10px;">Choose queries and metrics to show on Home. Order matters.</div>'+
-    '<div id="db-chips" class="chip-group" style="margin-bottom:10px;"></div>'+
-    '<div style="display:flex;gap:8px;">'+
+    '<div class="hint" style="margin-bottom:10px;">Choose queries and metrics to show on Home. Order matters — drag an item into a group to give it a section label; ungrouped items sit under their own header first.</div>'+
+    '<div id="db-groups"></div>'+
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">'+
       '<select id="db-add-sel" style="flex:1;"><option value="">— add item —</option>'+opts+'</select>'+
       '<button onclick="addDashItem()" class="btn btn-ghost btn-sm">Add</button>'+
+      '<button onclick="addDbGroup()" class="btn btn-ghost btn-sm">+ New group</button>'+
     '</div>';
   div.appendChild(card);
-  // Defer renderChips until after div is in DOM
-  setTimeout(function() { _renderDashChips(db); }, 0);
+  // Defer renderBoxes until after div is in DOM
+  setTimeout(function() { _renderDashBoxes(db); }, 0);
   return div;
 }
-function _renderDashChips(db) {
-  var el = document.getElementById("db-chips");
-  if (!el) return;
-  el.innerHTML = "";
-  (db.metrics||[]).forEach(function(item, i) {
-    var chip = document.createElement("span");
-    chip.className = "dash-chip";
-    var m = _st.metrics[item];
-    var tag = m ? (m.derived ? "derived" : "metric") : "query";
-    chip.innerHTML =
-      '<span style="color:var(--accent);opacity:.7;font-size:11px;margin-right:4px;">'+
-      tag+'</span>'+
-      item+
-      ' <button onclick="removeDashItem('+i+')">×</button>';
-    _makeDraggable(chip, db.metrics, i, function() { _renderDashChips(db); }, ".dash-chip");
-    el.appendChild(chip);
+function _groupOf(db, item) {
+  for (var g in db.groups) {
+    if (db.groups[g].indexOf(item) !== -1) return g;
+  }
+  return null;
+}
+function _renderDashBoxes(db) {
+  var holder = document.getElementById("db-groups");
+  if (!holder) return;
+  var all = db.metrics.slice();
+  for (var g in db.groups) {
+    db.groups[g].forEach(function(item) {
+      if (all.indexOf(item) === -1) all.push(item);
+    });
+  }
+  holder.innerHTML = "";
+  var buckets = {};   // "" or group name -> [items]
+  var order = [];
+  if (!_groupHasItems(db)) order.push("");
+  for (var g in db.groups) order.push(g);
+  function bucket(g) {
+    if (!(g in buckets)) { buckets[g] = []; }
+    return buckets[g];
+  }
+  all.forEach(function(item) {
+    var g = _groupOf(db, item);
+    bucket(g === null ? "" : g).push(item);
   });
+  order.forEach(function(g) {
+    if (bucket(g).length) holder.appendChild(_buildDashBox(db, g, buckets[g]));
+  });
+}
+function _groupHasItems(db) {
+  return db.metrics.some(function(item) { return _groupOf(db, item) !== null; });
+}
+function _buildDashBox(db, gname, items) {
+  var boxEl = document.createElement("div");
+  boxEl.className = "dbg-box" + (gname ? "" : " dbg-ungrouped");
+  var head = document.createElement("div");
+  head.className = "dbg-head";
+  var nameSpan = document.createElement("span");
+  nameSpan.className = "dbg-name";
+  nameSpan.textContent = gname || "General (ungrouped)";
+  head.appendChild(nameSpan);
+  if (gname) {
+    var actions = document.createElement("span");
+    actions.style.display = "inline-flex"; actions.style.gap = "6px";
+    var renameBtn = document.createElement("button");
+    renameBtn.className = "btn btn-ghost btn-sm"; renameBtn.textContent = "✎";
+    renameBtn.title = "Rename group";
+    renameBtn.addEventListener("click", function() { renameDbGroup(gname); });
+    var delBtn = document.createElement("button");
+    delBtn.className = "btn btn-ghost btn-sm"; delBtn.textContent = "×";
+    delBtn.title = "Remove group (items become ungrouped)";
+    delBtn.addEventListener("click", function() { deleteDbGroup(gname); });
+    actions.appendChild(renameBtn); actions.appendChild(delBtn);
+    head.appendChild(actions);
+  }
+  boxEl.appendChild(head);
+  var chips = document.createElement("div");
+  chips.className = "chip-group";
+  items.forEach(function(item) { chips.appendChild(_dbChip(db, item)); });
+  boxEl.appendChild(chips);
+  boxEl.dataset.group = gname;
+  boxEl.ondragover = function(e) {
+    e.preventDefault();
+    if (_dragDbItem) boxEl.classList.add("drag-over");
+  };
+  boxEl.ondragleave = function() { boxEl.classList.remove("drag-over"); };
+  boxEl.ondrop = function(e) {
+    e.preventDefault();
+    boxEl.classList.remove("drag-over");
+    if (_dragDbItem) moveDbItem(db, _dragDbItem, boxEl.dataset.group || "");
+    _dragDbItem = null;
+  };
+  return boxEl;
+}
+function _dbChip(db, item) {
+  var chip = document.createElement("span");
+  chip.className = "dash-chip";
+  chip.draggable = true;
+  var m = _st.metrics[item];
+  var tag = m ? (m.derived ? "derived" : "metric") : "query";
+  var tagSpan = document.createElement("span");
+  tagSpan.style.cssText = "color:var(--accent);opacity:.7;font-size:11px;margin-right:4px;";
+  tagSpan.textContent = tag;
+  var nameSpan = document.createElement("span");
+  nameSpan.textContent = item;
+  var rmBtn = document.createElement("button");
+  rmBtn.textContent = "×";
+  rmBtn.title = "Remove item";
+  rmBtn.addEventListener("click", function() { removeDashItem(item); });
+  chip.appendChild(tagSpan); chip.appendChild(nameSpan); chip.appendChild(rmBtn);
+  chip.addEventListener("dragstart", function() {
+    _dragDbItem = item;
+    chip.classList.add("dragging");
+  });
+  chip.addEventListener("dragend", function() {
+    _dragDbItem = null;
+    chip.classList.remove("dragging", "drag-over");
+    document.querySelectorAll(".dbg-box.drag-over").forEach(function(b) { b.classList.remove("drag-over"); });
+  });
+  return chip;
+}
+function addDbGroup() {
+  if (!_cur) return;
+  var name = prompt("Group name (shown as a section label on Home):");
+  if (!name) return;
+  name = name.trim();
+  if (!name) return;
+  var db = _st.dashboards[_cur.name];
+  if (db.groups[name] !== undefined) { alert("Group '"+name+"' already exists."); return; }
+  db.groups[name] = [];
+  _renderDashBoxes(db);
+}
+function renameDbGroup(name) {
+  if (!_cur) return;
+  var db = _st.dashboards[_cur.name];
+  var newName = prompt("Rename group:", name);
+  if (!newName) return;
+  newName = newName.trim();
+  if (!newName || newName === name) return;
+  if (db.groups[newName] !== undefined) { alert("Group '"+newName+"' already exists."); return; }
+  db.groups[newName] = db.groups[name];
+  delete db.groups[name];
+  _renderDashBoxes(db);
+}
+function deleteDbGroup(name) {
+  if (!_cur) return;
+  var db = _st.dashboards[_cur.name];
+  delete db.groups[name];
+  _renderDashBoxes(db);
+}
+function moveDbItem(db, item, gname) {
+  if (!item) return;
+  for (var g in db.groups) {
+    var arr = db.groups[g];
+    var i = arr.indexOf(item);
+    if (i !== -1) arr.splice(i, 1);
+  }
+  if (gname && db.groups[gname] !== undefined) db.groups[gname].push(item);
+  var mi = db.metrics.indexOf(item);
+  if (mi !== -1) db.metrics.splice(mi, 1);
+  db.metrics.push(item);
+  _renderDashBoxes(db);
 }
 function addDashItem() {
   var sel = document.getElementById("db-add-sel");
   var item = sel.value; if (!item||!_cur) return;
   var db = _st.dashboards[_cur.name];
   if (db.metrics.indexOf(item)===-1) db.metrics.push(item);
-  _renderDashChips(db);
+  _renderDashBoxes(db);
   var opt = sel.querySelector('option[value="'+item+'"]');
   if (opt) opt.remove(); sel.value="";
 }
-function removeDashItem(idx) {
+function removeDashItem(item) {
   if (!_cur) return;
   var db = _st.dashboards[_cur.name];
-  var removed = db.metrics.splice(idx,1)[0];
-  _renderDashChips(db);
+  var removed = item;
+  for (var g in db.groups) {
+    var arr = db.groups[g];
+    var i = arr.indexOf(item);
+    if (i !== -1) arr.splice(i, 1);
+  }
+  var mi = db.metrics.indexOf(item);
+  if (mi !== -1) db.metrics.splice(mi, 1);
+  _renderDashBoxes(db);
   var sel = document.getElementById("db-add-sel");
-  if (sel && removed) {
+  if (sel) {
     var opt = document.createElement("option");
     opt.value = removed; opt.textContent = removed; sel.appendChild(opt);
   }

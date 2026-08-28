@@ -35,10 +35,11 @@ class TestJournalPath:
 
 
 class FakeDashboardArgs:
-    def __init__(self, name, metrics, highlight=None):
+    def __init__(self, name, metrics, highlight=None, dash_group=None):
         self.add_dashboard = name
         self.metrics = metrics
         self.highlight = highlight
+        self.dash_group = dash_group
 
 
 def _norm_query(q):
@@ -102,6 +103,27 @@ class TestAddDashboard:
     def test_invalid_name_raises(self, capsys):
         with pytest.raises(SystemExit):
             ptos_cli._handle_add_dashboard(FakeDashboardArgs("Bad Name", ["total_income"]))
+
+    def test_group_adds_groups_and_union_metrics(self, capsys):
+        ptos_cli._handle_add_dashboard(
+            FakeDashboardArgs("grp", ["avg_mood"],
+                              dash_group=["Assessment:total_income,total_expenses", "Mood:avg_mood"]))
+        q = ptos.get_queries()
+        db = q["dashboards"]["grp"]
+        assert db["groups"] == {"Assessment": ["total_income", "total_expenses"],
+                                "Mood": ["avg_mood"]}
+        assert db["metrics"] == ["avg_mood", "total_income", "total_expenses"]
+
+    def test_group_bad_format_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos_cli._handle_add_dashboard(
+                FakeDashboardArgs("bad", ["avg_mood"], dash_group=["Assessment"]))
+
+    def test_group_duplicate_name_exits(self, capsys):
+        with pytest.raises(SystemExit):
+            ptos_cli._handle_add_dashboard(
+                FakeDashboardArgs("bad2", ["avg_mood"],
+                                  dash_group=["Assessment:total_income", "Assessment:total_expenses"]))
 
 
 class TestInteractiveSuggest:

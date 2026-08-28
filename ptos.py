@@ -1262,10 +1262,25 @@ def export_schema_bundle(selected_types):
     included_names = included_queries | included_metrics
     included_dashboards = {}
     for dname, ddef in dashboards.items():
-        if isinstance(ddef, dict) and "metrics" in ddef:
-            refs = [m for m in ddef["metrics"] if m in included_names]
-            if refs:
-                included_dashboards[dname] = {"metrics": refs}
+        if not isinstance(ddef, dict):
+            continue
+        refs = [m for m in ddef.get("metrics", []) if m in included_names]
+        entry = {}
+        if refs:
+            entry["metrics"] = refs
+        groups = ddef.get("groups")
+        if isinstance(groups, dict):
+            clean_groups = {}
+            for gname, gitems in groups.items():
+                if isinstance(gitems, str):
+                    gitems = [gitems]
+                kept = [m for m in gitems if m in included_names]
+                if kept:
+                    clean_groups[gname] = kept
+            if clean_groups:
+                entry["groups"] = clean_groups
+        if entry:
+            included_dashboards[dname] = entry
     if included_dashboards:
         out_queries["dashboards"] = included_dashboards
 
@@ -3462,7 +3477,33 @@ def run_dashboard(name, queries, start, end, cycles):
     print(f"\nDashboard: {_disp(name)}")
     print(f"Period:    {start} to {end}")
     print("-" * 40)
-    for item in dashboards[name].get("metrics", []):
+    dashdef = dashboards[name]
+    group_defs = dashdef.get("groups") or {}
+    has_groups = bool(group_defs)
+    ordered = []
+    if has_groups:
+        grouped = set()
+        for gname, gitems in group_defs.items():
+            if isinstance(gitems, str):
+                gitems = [gitems]
+            for item in gitems:
+                ordered.append((gname, item))
+                grouped.add(item)
+        for item in dashdef.get("metrics", []):
+            if item not in grouped:
+                ordered.append((None, item))
+    else:
+        ordered = [(None, item) for item in dashdef.get("metrics", [])]
+    prev_group = None
+    first = True
+    for gname, item in ordered:
+        if has_groups and gname != prev_group:
+            if not first:
+                print()
+            if gname:
+                print(_BOLD + gname + _RESET)
+            first = False
+            prev_group = gname
         color = _ANSI.get(highlight_map.get(item, ""), "")
         reset = _RESET if color else ""
         if run_metric(item, queries, start, end, cycles, color=color, reset=reset):

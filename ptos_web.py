@@ -539,6 +539,7 @@ def home():
     except Exception:
         due_rows = []; due_count = 0
     stats = []
+    stat_groups = None
     dashboards = {}
     try:
         queries    = svc.get_queries()
@@ -567,7 +568,7 @@ def home():
         if db_name and db_name in dashboards:
             db = svc.get_dashboard(db_name, time_code, use_dashboard_time,
                                    from_date=from_date, to_date=to_date)
-            for item in db["items"]:
+            def _to_stat(item):
                 kind = item.get("kind", "unknown")
                 # Each card shows its own query's time window, not a global label
                 item_time = item.get("item_time", time_code)
@@ -580,11 +581,13 @@ def home():
                     "highlight": item.get("highlight", ""),
                 }
                 raw_name = item.get("raw_name", item["name"])
-                if kind == "query":
+                if kind in ("query", "metric"):
                     stat["query_url"] = f"/queries?run={raw_name}"
-                elif kind == "metric":
-                    stat["query_url"] = f"/queries?run={raw_name}"
-                stats.append(stat)
+                return stat
+            stats = [_to_stat(it) for it in db["items"]]
+            if db.get("groups"):
+                stat_groups = [{"name": g["name"], "stats": [_to_stat(it) for it in g["items"]]}
+                               for g in db["groups"] if g["items"]]
     except Exception:
         log.exception("Failed to load dashboard stats for home page")
     recent_rows = []
@@ -622,6 +625,7 @@ def home():
         due_count=due_count, due_rows=due_rows[:5],
         due_configs=list(due_configs.keys()), selected_due=selected_due or "default",
         stats=stats,
+        stat_groups=stat_groups,
         dashboards=list(dashboards.keys()),
         current_db=db_name if 'db_name' in locals() else None,
         time_options=_get_time_options(),
@@ -1581,7 +1585,15 @@ def settings_page():
     dashboard_metrics_map = {}
     for db_name in dashboards:
         db_def = queries.get("dashboards", {}).get(db_name, {})
-        dashboard_metrics_map[db_name] = db_def.get("metrics", [])
+        items = list(db_def.get("metrics", []))
+        if not items and isinstance(db_def.get("groups"), dict):
+            for gitems in db_def["groups"].values():
+                if isinstance(gitems, str):
+                    gitems = [gitems]
+                for it in gitems:
+                    if it not in items:
+                        items.append(it)
+        dashboard_metrics_map[db_name] = items
     
     return render_template("settings.html",
         tab="settings", title="Settings", now=_now_str(),

@@ -7,6 +7,16 @@ Format: `[version or date] — description`
 
 ## 2026-08-28
 
+### Dashboard metric grouping
+
+- Dashboards can now organize metrics into labeled groups on Home via an optional `groups = { "Name" = ["metric1", "metric2"] }` key in `[dashboards.NAME]` (`queries.toml`); `metrics` stays the flat union, so old dashboards are untouched
+- `get_dashboard()` returns an ordered `groups` list — ungrouped leftovers first (headerless), then each group in definition order; falls back to `None` when no groups configured (exact old behavior)
+- Home page renders each group under a small uppercase `.stat-group-label` header with its own stat-card grid; highlights (`c-{color}`) still apply per metric
+- Query Builder dashboard editor: drag chips **between** group boxes (`General (ungrouped)` + one box per group), with `+ New group`, per-group rename (✎) and remove (×)
+- CLI: `--add-dashboard NAME --dash-group GROUP:M1,M2 GROUP:M2,M3` seeds groups (members auto-merged into `metrics`); `run_dashboard()` prints bold group headers
+- Highlight picker falls back to flattening `groups` when `metrics` is empty; Share Schema preserves `groups` (filtering members to included queries/metrics)
+- Tests: 13 in `tests/test_dashboards.py` + 2 in `test_export.py` + 3 CLI group tests
+
 ### Drag-and-drop highlight colors
 
 - Settings page Highlights card now has a **color palette row** — 8 labeled swatches filled with their actual color + a dashed "⊗ clear" swatch
