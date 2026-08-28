@@ -268,7 +268,7 @@ class TestListDir:
         os.makedirs(os.path.join(ptos.NOTES_DIR, "a", "b"))
         result = ptos.list_dir("a")
         assert len(result["folders"]) == 1
-        assert result["folders"][0]["rel_path"] == os.path.join("a", "b")
+        assert result["folders"][0]["rel_path"] == "a/b"
 
     def test_nonexistent_folder(self):
         with pytest.raises(ptos.PTOSError, match="Folder not found"):
