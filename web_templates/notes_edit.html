@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
+  {% for crumb in breadcrumbs %}
+    {% if not loop.last %}
+      <a href="/notes/browse{% if crumb.path %}/{{ crumb.path }}{% endif %}"
+         style="color:var(--accent);text-decoration:none;font-size:14px;">{{ crumb.label }}</a>
+      <span style="color:var(--sub);">/</span>
+    {% else %}
+      <span style="font-size:17px;font-weight:800;color:var(--text);">{{ crumb.label }}</span>
+    {% endif %}
+  {% endfor %}
+</div>
+
+{% include "_markdown_editor.html" with context %}
+
+<div id="backlinks-panel" style="margin-top:16px;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;background:var(--bg-card,var(--bg));">
+  <div style="font-size:13px;font-weight:800;margin-bottom:2px;color:var(--text);">Linked mentions</div>
+  <div id="backlinks-panel-body" style="margin-top:4px;"></div>
+</div>
+
+<div style="margin-top:10px;display:flex;gap:8px;">
+  <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success" style="flex:1;">
+    Save Note
+  </button>
+  <button onclick="deleteNote()" class="btn btn-ghost" style="color:var(--danger,#e55);border:1px solid var(--danger,#e55);">
+    Delete
+  </button>
+</div>
+
+<script>
+window._mdSaveFn = function(silent) {
+  var content = document.getElementById("md-editor").value;
+  if (silent && !content.trim()) return;
+  fetch("/notes/save", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: "{{ rel_path }}", content: content})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (!silent) {
+      var btn = document.querySelector(".btn-success");
+      if (btn) {
+        btn.textContent = d.ok ? "\u2714 Saved" : "Error \u2014 retry";
+        setTimeout(function() { btn.textContent = "Save Note"; }, d.ok ? 2000 : 3000);
+      }
+    }
+  });
+};
+
+function deleteNote() {
+  var name = "{{ rel_path }}".split("/").pop();
+  if (!confirm("Delete '" + name + "' permanently?")) return;
+  fetch("/notes/delete", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: "{{ rel_path }}"})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) window.location.href = "/notes/browse{% if parent_dir %}/{{ parent_dir }}{% endif %}";
+    else alert(d.error || "Failed to delete");
+  });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+  initBacklinksPanel(
+    document.getElementById("backlinks-panel-body"),
+    {{ breadcrumbs[-1].label|tojson }}
+  );
+});
+</script>
+{% endblock %}

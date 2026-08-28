@@ -29,8 +29,7 @@ class TestBacklinks:
         data = resp.get_json()
         assert len(data["notes"]) == 1
         hit = data["notes"][0]
-        assert hit["category"] == "project"
-        assert hit["slug"] == "note"
+        assert hit["rel_path"] == os.path.join("project", "note.md")
         assert hit["title"] == "Note"
         assert "Atomic Habits" in hit["snippet"]
 

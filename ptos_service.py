@@ -30,9 +30,6 @@ import dataclasses
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 # ── patch sys.exit BEFORE importing ptos so it never kills the process ────────
-class PTOSError(Exception):
-    """Raised instead of sys.exit() so callers can handle gracefully."""
-    pass
 
 def _disp(s):
     """Convert underscore-separated value to space-separated for display only."""
@@ -46,6 +43,8 @@ def _safe_exit(msg=""):
 # ─────────────────────────────────────────────────────────────────────────────
 
 import ptos
+
+PTOSError = ptos.PTOSError
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -2922,28 +2921,46 @@ def delete_journal(date_str):
     return ptos.delete_journal(date_str)
 
 
-def list_note_categories():
-    return ptos.list_note_categories()
+def svc_list_dir(rel_path=""):
+    return ptos.list_dir(rel_path)
 
 
-def list_notes(category):
-    return ptos.list_notes(category)
+def svc_create_folder(rel_path, name):
+    ptos.create_folder(rel_path, name)
 
 
-def read_note(category, slug):
-    return ptos.read_note(category, slug)
+def svc_create_file(rel_path, name, content):
+    ptos.create_file(rel_path, name, content)
 
 
-def create_note(category, title, content=None):
-    return ptos.create_note(category, title, content)
+def svc_rename(rel_path, new_name):
+    ptos.rename_note(rel_path, new_name)
 
 
-def save_note(category, slug, content):
-    return ptos.save_note(category, slug, content)
+def svc_delete(rel_path):
+    ptos.delete_note_entry(rel_path)
 
 
-def delete_note(category, slug):
-    return ptos.delete_note(category, slug)
+def svc_read_file(rel_path):
+    full = ptos._safe_path(rel_path)
+    if not os.path.isfile(full):
+        return None
+    with open(full, encoding="utf-8") as f:
+        return f.read()
+
+
+def svc_save_file(rel_path, content):
+    full = ptos._safe_path(rel_path)
+    with open(full, "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def svc_resolve_template(rel_path):
+    return ptos.resolve_new_file_template(rel_path)
+
+
+def svc_parent_template(rel_path):
+    return ptos.find_parent_template(rel_path)
 
 
 def save_as_preset(name, record, note=None, instant=False):
@@ -3214,22 +3231,31 @@ def _iter_link_matches(linkable_fields):
         except Exception:
             return []
 
-    def _note_loc(slug, title, path, start, content):
-        return {"category": cat, "slug": slug, "title": title,
+    def _note_loc(rel, title, path, start, content):
+        return {"rel_path": rel, "title": title,
                 "path": path, "snippet": _snippet(content, start)}
 
-    for cat in ptos.list_note_categories():
-        try:
-            for note in ptos.list_notes(cat):
-                title = note.get("title", "")
-                slug = note.get("slug", "")
-                path = os.path.join(ptos.NOTES_DIR, cat, f"{slug}.md")
+    try:
+        for root, _, files in os.walk(ptos.NOTES_DIR):
+            for fname in sorted(files):
+                if fname == "template.md" or not fname.endswith(".md"):
+                    continue
+                fpath = os.path.join(root, fname)
+                rel = os.path.relpath(fpath, ptos.NOTES_DIR)
+                title = fname[:-3]
+                try:
+                    with open(fpath, encoding="utf-8") as f:
+                        first_line = f.readline().strip()
+                    if first_line.startswith("# "):
+                        title = first_line[2:]
+                except Exception:
+                    pass
                 yield from _scan_brackets(
-                    path, "note",
-                    lambda s, c, cat=cat, slug=slug, title=title, path=path:
-                        _note_loc(slug, title, path, s, c))
-        except Exception:
-            continue
+                    fpath, "note",
+                    lambda s, c, rel=rel, title=title, path=fpath:
+                        _note_loc(rel, title, path, s, c))
+    except Exception:
+        pass
 
     try:
         for date_dir_path in sorted(glob.glob(os.path.join(ptos.JOURNAL_DIR, "*", "*", "*.md"))):

@@ -1215,58 +1215,84 @@ def journal_delete():
 
 
 @app.route("/notes")
-def notes_list():
-    categories = svc.list_note_categories()
-    cats = []
-    for c in categories:
-        notes = svc.list_notes(c)
-        cats.append({"name": c, "count": len(notes)})
-    return render_template("notes_list.html", categories=cats)
+@app.route("/notes/browse")
+def notes_browse():
+    listing = svc.svc_list_dir("")
+    return render_template("notes.html", listing=listing, rel_path="", breadcrumbs=[])
 
 
-@app.route("/notes/<category>")
-def notes_category(category):
-    notes = svc.list_notes(category)
-    return render_template("notes_category.html", category=category, notes=notes)
+@app.route("/notes/browse/<path:rel_path>")
+def notes_browse_path(rel_path):
+    try:
+        listing = svc.svc_list_dir(rel_path)
+    except Exception as e:
+        return render_template("notes.html", error=str(e),
+                               listing={"folders": [], "files": []},
+                               rel_path=rel_path, breadcrumbs=_notes_breadcrumbs(rel_path))
+    return render_template("notes.html", listing=listing,
+                           rel_path=rel_path,
+                           breadcrumbs=_notes_breadcrumbs(rel_path))
 
 
-@app.route("/notes/<category>/<slug>")
-def notes_view(category, slug):
-    content = svc.read_note(category, slug)
+@app.route("/notes/edit/<path:rel_path>")
+def notes_edit(rel_path):
+    content = svc.svc_read_file(rel_path)
     if content is None:
         return "Note not found", 404
-    title = slug
-    for note in svc.list_notes(category):
-        if note.get("slug") == slug:
-            title = note.get("title") or title
-            break
-    return render_template("notes.html", category=category, slug=slug,
-                           title=title, content=content)
+    parent_dir = str(os.path.dirname(rel_path)).replace("\\", "/")
+    return render_template("notes_edit.html", rel_path=rel_path,
+                           content=content,
+                           breadcrumbs=_notes_breadcrumbs(rel_path),
+                           parent_dir=parent_dir)
 
 
-@app.route("/notes/save", methods=["POST"])
-def notes_save():
+@app.route("/notes/new-folder", methods=["POST"])
+def notes_new_folder():
     data = request.get_json(silent=True) or {}
-    category = data.get("category", "")
-    slug = data.get("slug", "")
-    content = data.get("content", "")
+    rel_path = data.get("path", "")
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify(ok=False, error="Folder name is required")
     try:
-        svc.save_note(category, slug, content)
+        svc.svc_create_folder(rel_path, name)
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
 
-@app.route("/notes/create", methods=["POST"])
-def notes_create():
+@app.route("/notes/template-check", methods=["POST"])
+def notes_template_check():
     data = request.get_json(silent=True) or {}
-    category = data.get("category", "").strip()
-    title = data.get("title", "").strip()
-    if not category or not title:
-        return jsonify(ok=False, error="Category and title are required")
+    rel_path = data.get("path", "")
+    result = svc.svc_resolve_template(rel_path)
+    return jsonify(ok=True, **result)
+
+
+@app.route("/notes/new-file", methods=["POST"])
+def notes_new_file():
+    data = request.get_json(silent=True) or {}
+    rel_path = data.get("path", "")
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify(ok=False, error="File name is required")
+    content = data.get("content", "")
     try:
-        result = svc.create_note(category, title)
-        return jsonify(ok=True, slug=result["slug"])
+        svc.svc_create_file(rel_path, name, content)
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/notes/rename", methods=["POST"])
+def notes_rename():
+    data = request.get_json(silent=True) or {}
+    rel_path = data.get("path", "")
+    new_name = data.get("new_name", "").strip()
+    if not new_name:
+        return jsonify(ok=False, error="New name is required")
+    try:
+        svc.svc_rename(rel_path, new_name)
+        return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
@@ -1274,15 +1300,36 @@ def notes_create():
 @app.route("/notes/delete", methods=["POST"])
 def notes_delete():
     data = request.get_json(silent=True) or {}
-    category = data.get("category", "")
-    slug = data.get("slug", "")
+    rel_path = data.get("path", "")
+    if not rel_path:
+        return jsonify(ok=False, error="Path is required")
     try:
-        svc.delete_note(category, slug)
+        svc.svc_delete(rel_path)
         return jsonify(ok=True)
-    except FileNotFoundError:
-        return jsonify(ok=False, error="Note not found")
     except Exception as e:
         return jsonify(ok=False, error=str(e))
+
+
+@app.route("/notes/save", methods=["POST"])
+def notes_save():
+    data = request.get_json(silent=True) or {}
+    rel_path = data.get("path", "")
+    content = data.get("content", "")
+    try:
+        svc.svc_save_file(rel_path, content)
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+def _notes_breadcrumbs(rel_path):
+    parts = rel_path.replace("\\", "/").split("/") if rel_path else []
+    crumbs = [{"label": "Notes", "path": ""}]
+    running = []
+    for part in parts:
+        running.append(part)
+        crumbs.append({"label": part, "path": "/".join(running)})
+    return crumbs
 
 
 def _extract_snippet(text, query, context_chars=80):
@@ -1361,12 +1408,31 @@ def search_page():
         except Exception:
             pass
     notes = []
-    for cat in svc.list_note_categories():
-        for note in svc.list_notes(cat):
-            content = svc.read_note(cat, note["slug"])
-            if content and _glob_match(q, content):
-                snippet = _extract_snippet(content, q)
-                notes.append({"category": cat, "slug": note["slug"], "title": note["title"], "snippet": snippet})
+    try:
+        for root, _, files in os.walk(ptos.NOTES_DIR):
+            for fname in sorted(files):
+                if fname == "template.md" or not fname.endswith(".md"):
+                    continue
+                fpath = os.path.join(root, fname)
+                rel = os.path.relpath(fpath, ptos.NOTES_DIR)
+                title = fname[:-3]
+                try:
+                    with open(fpath, encoding="utf-8") as f:
+                        first_line = f.readline().strip()
+                    if first_line.startswith("# "):
+                        title = first_line[2:]
+                except Exception:
+                    pass
+                try:
+                    with open(fpath, encoding="utf-8") as f:
+                        content = f.read()
+                except Exception:
+                    continue
+                if _glob_match(q, content):
+                    snippet = _extract_snippet(content, q)
+                    notes.append({"rel_path": rel, "title": title, "snippet": snippet})
+    except Exception:
+        pass
     return render_template("search.html",
         tab="search", title="Search", now=_now_str(), query=q,
         records=records, journal=journal, todo=todo, notes=notes)
