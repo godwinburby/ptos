@@ -180,7 +180,7 @@ def build_parser(cycles):
     qry.add_argument("--metrics", nargs="+", metavar="METRIC",
                      help="Metrics for the new dashboard (with --add-dashboard)")
     qry.add_argument("--highlight", nargs="+", metavar="METRIC:COLOR",
-                     help="Highlight entries (with --add-dashboard). Colors: accent, warn, success, error")
+                     help="Highlight entries (with --add-dashboard). Colors: accent, warn, success, error, purple, teal, rose, slate")
     qry.add_argument("--file",   dest="from_file", metavar="FILENAME", help="Read from this file in records/ folder (e.g. 2025.log)")
     qry.add_argument("--select", nargs="+", metavar="FIELD",           help="Show only these fields in output (date and type always included; add note to include notes)")
 
@@ -1566,8 +1566,8 @@ def _handle_add_dashboard(args):
         if ":" not in entry:
             sys.exit(f"Invalid highlight format '{entry}' — use METRIC:COLOR (e.g. food_spend:accent)")
         metric, color = entry.split(":", 1)
-        if color not in ("accent", "warn", "success", "error"):
-            sys.exit(f"Unknown highlight color '{color}' — use: accent, warn, success, error")
+        if color not in ("accent", "warn", "success", "error", "purple", "teal", "rose", "slate"):
+            sys.exit(f"Unknown highlight color '{color}' — use: accent, warn, success, error, purple, teal, rose, slate")
         highlight[metric] = color
     db_entry = {"metrics": list(args.metrics or [])}
     dashboards[args.add_dashboard] = db_entry

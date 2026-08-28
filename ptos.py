@@ -3447,7 +3447,8 @@ def run_metric(name, queries, start, end, cycles, color="", reset=""):
     return False
 
 def run_dashboard(name, queries, start, end, cycles):
-    _ANSI = {"accent": "\033[94m", "warn": "\033[93m", "success": "\033[92m", "error": "\033[91m"}
+    _ANSI = {"accent": "\033[94m", "warn": "\033[93m", "success": "\033[92m", "error": "\033[91m",
+             "purple": "\033[95m", "teal": "\033[96m", "rose": "\033[35;1m", "slate": "\033[90m"}
     _RESET = "\033[0m"
     _BOLD  = "\033[1m"
     dashboards = queries.get("dashboards", {})
