@@ -198,6 +198,78 @@ metrics = ["expenses", "food_ratio", "avg_spend"]
         assert "dashboards" in q
         assert "spending" in q["dashboards"]
 
+    def test_grouped_dashboard_share_preserves_groups(self):
+        _write(ptos.CONFIG_DIR, "schema.toml", """
+[types]
+allowed = ["expense", "income"]
+
+[type.expense]
+required = ["amount"]
+
+[type.expense.fields.amount]
+
+[type.income]
+required = ["amount"]
+
+[type.income.fields.amount]
+""")
+        _write(ptos.CONFIG_DIR, "queries.toml", """
+[expenses]
+where = "type=expense"
+time = "this-month"
+
+[income]
+where = "type=income"
+time = "this-month"
+
+[dashboards.spending]
+metrics = ["income", "expenses"]
+groups = { "Revenue" = ["income"], "Spend" = ["expenses"] }
+""")
+        _write(ptos.CONFIG_DIR, "presets.toml", "")
+        _write(ptos.CONFIG_DIR, "config.toml", "")
+
+        bundle = ptos.export_schema_bundle(["expense", "income"])
+        db = bundle["queries"]["dashboards"]["spending"]
+        assert db["groups"] == {"Revenue": ["income"], "Spend": ["expenses"]}
+        assert db["metrics"] == ["income", "expenses"]
+
+    def test_grouped_dashboard_drops_unincluded_group_members(self):
+        _write(ptos.CONFIG_DIR, "schema.toml", """
+[types]
+allowed = ["expense", "income"]
+
+[type.expense]
+required = ["amount"]
+
+[type.expense.fields.amount]
+
+[type.income]
+required = ["amount"]
+
+[type.income.fields.amount]
+""")
+        _write(ptos.CONFIG_DIR, "queries.toml", """
+[expenses]
+where = "type=expense"
+time = "this-month"
+
+[income]
+where = "type=income"
+time = "this-month"
+
+[dashboards.spending]
+metrics = ["income", "expenses"]
+groups = { "Revenue" = ["income", "unrelated"], "Spend" = ["expenses"] }
+""")
+        _write(ptos.CONFIG_DIR, "presets.toml", "")
+        _write(ptos.CONFIG_DIR, "config.toml", "")
+
+        bundle = ptos.export_schema_bundle(["expense"])
+        db = bundle["queries"]["dashboards"]["spending"]
+        assert db["metrics"] == ["expenses"]
+        assert db["groups"] == {"Spend": ["expenses"]}
+
     def test_unrelated_metrics_excluded(self):
         _write(ptos.CONFIG_DIR, "schema.toml", """
 [types]

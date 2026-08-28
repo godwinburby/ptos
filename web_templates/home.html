@@ -3,6 +3,29 @@
 
 <div class="page-title">Good {{ greeting }}, {{ username }}</div>
 
+{% macro stat_card(s) %}
+{% if s.query_url %}
+<a href="{{ s.query_url }}" style="text-decoration:none;">
+  <div class="stat-card{% if s.highlight %} c-{{ s.highlight }}{% endif %}" style="cursor:pointer;transition:box-shadow .15s;"
+       onmouseover="this.style.boxShadow='0 4px 16px rgba(79,107,237,.18)'"
+       onmouseout="this.style.boxShadow=''">
+    <div class="stat-label" style="display:flex;align-items:center;justify-content:space-between;">
+      <span>{{ s.label }}</span>
+      <span style="font-size:11px;color:var(--accent);font-weight:700;opacity:.7;">→</span>
+    </div>
+    <div class="stat-value">{{ s.value }}</div>
+    <div class="stat-sub">{{ s.sub }}</div>
+  </div>
+</a>
+{% else %}
+<div class="stat-card{% if s.highlight %} c-{{ s.highlight }}{% endif %}">
+  <div class="stat-label">{{ s.label }}</div>
+  <div class="stat-value">{{ s.value }}</div>
+  <div class="stat-sub">{{ s.sub }}</div>
+</div>
+{% endif %}
+{% endmacro %}
+
 <!-- dashboard + time selector -->
 {% if dashboards %}
 <div style="margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
@@ -83,6 +106,18 @@ var tp;
 {% endif %}
 
 <!-- stat cards - dashboard metrics (2 rows) -->
+{% if stat_groups %}
+{% for g in stat_groups %}
+  {% if g.name %}
+  <div class="stat-group-label">{{ g.name }}</div>
+  {% endif %}
+  <div class="stat-grid">
+    {% for s in g.stats %}
+    {{ stat_card(s) }}
+    {% endfor %}
+  </div>
+{% endfor %}
+{% else %}
 <div class="stat-grid">
   {% if not stats %}
   <div class="stat-card">
@@ -92,29 +127,11 @@ var tp;
   </div>
   {% else %}
   {% for s in stats %}
-  {% if s.query_url %}
-  <a href="{{ s.query_url }}" style="text-decoration:none;">
-    <div class="stat-card{% if s.highlight %} c-{{ s.highlight }}{% endif %}" style="cursor:pointer;transition:box-shadow .15s;"
-         onmouseover="this.style.boxShadow='0 4px 16px rgba(79,107,237,.18)'"
-         onmouseout="this.style.boxShadow=''">
-      <div class="stat-label" style="display:flex;align-items:center;justify-content:space-between;">
-        <span>{{ s.label }}</span>
-        <span style="font-size:11px;color:var(--accent);font-weight:700;opacity:.7;">→</span>
-      </div>
-      <div class="stat-value">{{ s.value }}</div>
-      <div class="stat-sub">{{ s.sub }}</div>
-    </div>
-  </a>
-  {% else %}
-  <div class="stat-card{% if s.highlight %} c-{{ s.highlight }}{% endif %}">
-    <div class="stat-label">{{ s.label }}</div>
-    <div class="stat-value">{{ s.value }}</div>
-    <div class="stat-sub">{{ s.sub }}</div>
-  </div>
-  {% endif %}
+  {{ stat_card(s) }}
   {% endfor %}
   {% endif %}
 </div>
+{% endif %}
 
 <!-- quick add — frequent presets + toggle for rest -->
 {% if frequent_presets %}

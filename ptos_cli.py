@@ -181,6 +181,8 @@ def build_parser(cycles):
                      help="Metrics for the new dashboard (with --add-dashboard)")
     qry.add_argument("--highlight", nargs="+", metavar="METRIC:COLOR",
                      help="Highlight entries (with --add-dashboard). Colors: accent, warn, success, error, purple, teal, rose, slate")
+    qry.add_argument("--dash-group", dest="dash_group", nargs="+", metavar="GROUP:M1,M2",
+                     help="Group items into a labeled section on Home (with --add-dashboard), e.g. --dash-group Revenue:income_this_month,total_income")
     qry.add_argument("--file",   dest="from_file", metavar="FILENAME", help="Read from this file in records/ folder (e.g. 2025.log)")
     qry.add_argument("--select", nargs="+", metavar="FIELD",           help="Show only these fields in output (date and type always included; add note to include notes)")
 
@@ -1569,7 +1571,26 @@ def _handle_add_dashboard(args):
         if color not in ("accent", "warn", "success", "error", "purple", "teal", "rose", "slate"):
             sys.exit(f"Unknown highlight color '{color}' — use: accent, warn, success, error, purple, teal, rose, slate")
         highlight[metric] = color
-    db_entry = {"metrics": list(args.metrics or [])}
+    groups = {}
+    for entry in (args.dash_group or []):
+        if ":" not in entry:
+            sys.exit(f"Invalid group format '{entry}' — use GROUP:M1,M2 (comma-separated)")
+        gname, _, items = entry.partition(":")
+        gname = gname.strip()
+        gitems = [i.strip() for i in items.split(",") if i.strip()]
+        if not gname or not gitems:
+            sys.exit(f"Invalid group format '{entry}' — use GROUP:M1,M2 (comma-separated)")
+        if gname in groups:
+            sys.exit(f"Group '{gname}' appears twice — merge comma-separated items instead.")
+        groups[gname] = gitems
+    metrics_list = list(args.metrics or [])
+    for gitems in groups.values():
+        for it in gitems:
+            if it not in metrics_list:
+                metrics_list.append(it)
+    db_entry = {"metrics": metrics_list}
+    if groups:
+        db_entry["groups"] = groups
     dashboards[args.add_dashboard] = db_entry
 
     try:
@@ -1593,8 +1614,9 @@ def _handle_add_dashboard(args):
         cfg = ptos.get_config()
         cfg.setdefault("dashboard", {}).setdefault("highlights", {})[args.add_dashboard] = highlight
         ptos_service.save_config(cfg)
-    metrics_str = ", ".join(args.metrics) if args.metrics else "none"
-    print(f"Dashboard '{args.add_dashboard}' saved (metrics: {metrics_str}).")
+    metrics_str = ", ".join(metrics_list) if metrics_list else "none"
+    groups_str = ", ".join(f"{g} ({len(it)})" for g, it in groups.items()) or "none"
+    print(f"Dashboard '{args.add_dashboard}' saved (metrics: {metrics_str}, groups: {groups_str}).")
 
 
 def _handle_link(src_target, target):

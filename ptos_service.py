@@ -1325,7 +1325,8 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
     Returns:
       { name: str,
         period: str,
-        items: [{name, value, raw}] }
+        items: [{name, value, raw}],
+        groups: [{name, items}] | None }   # None when no groups configured
     
     use_dashboard_time: if False (default), each metric/query uses its own time.
                       if True, all use the dashboard's time.
@@ -1352,12 +1353,42 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
         period_from, period_to = db_start, db_end
     
     items = []
+    group_map = {}
+    group_order = []
     try:
         cfg = ptos.get_config()
         highlight_map = cfg.get("dashboard", {}).get("highlights", {}).get(name, {})
     except Exception:
         highlight_map = {}
-    for item_name in dashboards[name].get("metrics", []):
+
+    dashdef = dashboards[name]
+    group_defs = dashdef.get("groups") or {}
+    has_groups = bool(group_defs)
+    ordered = []
+    if has_groups:
+        grouped = set()
+        for gname, gitems in group_defs.items():
+            if isinstance(gitems, str):
+                gitems = [gitems]
+            for item_name in gitems:
+                ordered.append((gname, item_name))
+                grouped.add(item_name)
+        for item_name in dashdef.get("metrics", []):
+            if item_name not in grouped:
+                ordered.append((None, item_name))
+    else:
+        for item_name in dashdef.get("metrics", []):
+            ordered.append((None, item_name))
+
+    def _push(entry):
+        items.append(entry)
+        key = group_name if group_name is not None else ""
+        if key not in group_map:
+            group_map[key] = []
+            group_order.append(key)
+        group_map[key].append(entry)
+
+    for group_name, item_name in ordered:
         metrics = queries.get("metrics", {})
         queries_dict = queries.get("queries", queries)
         
@@ -1396,7 +1427,7 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
             item["item_period"] = item_period
             if item_name in highlight_map:
                 item["highlight"] = highlight_map[item_name]
-            items.append(item)
+            _push(item)
         elif item_name in queries_dict:
             try:
                 cnt, total = ptos._run_base_query(item_name, queries, item_start, item_end, cycles)
@@ -1407,27 +1438,37 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
                          "kind": "query", "item_time": item_time, "item_period": item_period}
                 if item_name in highlight_map:
                     entry["highlight"] = highlight_map[item_name]
-                items.append(entry)
+                _push(entry)
             except Exception as e:
                 entry = {"name": _disp(item_name), "raw_name": item_name, "value": f"error: {e}", "raw": None,
                          "kind": "query", "item_time": item_time, "item_period": item_period}
                 if item_name in highlight_map:
                     entry["highlight"] = highlight_map[item_name]
-                items.append(entry)
+                _push(entry)
         else:
-            items.append({"name": _disp(item_name), "value": "not found", "raw": None,
-                           "kind": "unknown", "item_time": item_time, "item_period": item_period})
+            _push({"name": _disp(item_name), "value": "not found", "raw": None,
+                   "kind": "unknown", "item_time": item_time, "item_period": item_period})
     
     if from_date:
         period_from = ptos.parse_from_to(from_date)
         period_end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
     else:
         period_from, period_end = _resolve_time(time)
-    
+
+    groups = None
+    if has_groups:
+        groups = []
+        if group_map.get(""):
+            groups.append({"name": "", "items": group_map[""]})
+        for g in group_order:
+            if g != "":
+                groups.append({"name": g, "items": group_map[g]})
+
     return {
         "name":   _disp(name),
         "period": f"{period_from} to {period_end}",
         "items":  items,
+        "groups": groups,
     }
 
 
@@ -2480,6 +2521,17 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         items = db.get("metrics", [])
         if items:
             entry["metrics"] = items
+        groups = db.get("groups")
+        if isinstance(groups, dict) and groups:
+            clean_groups = {}
+            for gname, gitems in groups.items():
+                if isinstance(gitems, str):
+                    gitems = [gitems]
+                items = [str(i) for i in gitems if str(i)]
+                if gname.strip() and items:
+                    clean_groups[gname.strip()] = items
+            if clean_groups:
+                entry["groups"] = clean_groups
         dashboards[name] = entry
     if dashboards:
         data["dashboards"] = dashboards
