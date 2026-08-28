@@ -7,6 +7,17 @@ Format: `[version or date] — description`
 
 ## 2026-08-28
 
+### Dashboard highlight colors expanded
+
+- **8 colors** — added `purple`, `teal`, `rose`, `slate` to the existing `accent`/`warn`/`success`/`error`
+- Settings page chip picker and home page stat cards support all 8
+- CLI `--highlight` flag validates the full 8-color set; ANSI mappings updated
+- Threshold colors unchanged (they remain semantic: ok/warning/over/met)
+
+### Settings save button at top
+
+- Save Settings button moved to the top of the page below the title (no more scrolling)
+
 ### Notes as link targets
 
 - Notes can now be link targets via `<!-- ptos-id: XXXXX -->` on line 1 (opt-in, never auto-generated)

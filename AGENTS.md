@@ -304,7 +304,7 @@ x 2026-07-12 2026-07-10 Completed task
 
 ## Dashboard highlights
 
-- **Config** — `[dashboard.highlights.DASHBOARD]` in `config.toml` maps metric names to colors; stored in config (UI concern), not queries.toml. Colors: `accent` (blue), `warn` (orange), `success` (green), `error` (red)
+- **Config** — `[dashboard.highlights.DASHBOARD]` in `config.toml` maps metric names to colors; stored in config (UI concern), not queries.toml. Colors: `accent` (blue), `warn` (orange), `success` (green), `error` (red), `purple`, `teal`, `rose`, `slate` — 8 total
 - **Service** — `get_dashboard()` in `ptos_service.py` reads highlights from `cfg["dashboard"]["highlights"][name]` and attaches `highlight` key to each item dict
 - **Web route** — `home()` passes `highlight` through stat dict to template; `settings_page()` passes `dashboard_highlights` and `dashboard_metrics_map` to template; `settings_save()` persists highlights to `config.toml`
 - **Template** — `home.html` applies `c-{color}` CSS class to `.stat-card`; `settings.html` renders compact clickable chips that cycle colors on click

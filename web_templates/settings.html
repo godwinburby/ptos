@@ -18,6 +18,10 @@
 
 <div class="page-title">Settings</div>
 
+<div style="display:flex;gap:10px;margin-bottom:14px;">
+  <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
+</div>
+
 <div id="save-msg" style="display:none;margin-bottom:14px;"></div>
 
 <nav class="settings-toc">
@@ -107,7 +111,7 @@
 <div class="card" id="sec-highlights" style="margin-bottom:14px;">
   <div class="card-title">Dashboard Highlights</div>
   <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
-    Click a metric name to cycle its color. Repeated clicks: none → blue → orange → green → red → none.
+    Click a metric name to cycle its color. Repeated clicks: none → blue → orange → green → red → purple → teal → rose → slate → none.
   </div>
   {% for db in dashboards %}
   {% if dashboard_metrics_map.get(db) %}
@@ -136,6 +140,10 @@
 .hl-chip[data-color="warn"]   .hl-dot { background: var(--warn); }
 .hl-chip[data-color="success"] .hl-dot { background: #2a9d4e; }
 .hl-chip[data-color="error"]  .hl-dot { background: #d14343; }
+.hl-chip[data-color="purple"] .hl-dot { background: #8B5CF6; }
+.hl-chip[data-color="teal"]   .hl-dot { background: #14B8A6; }
+.hl-chip[data-color="rose"]   .hl-dot { background: #E11D78; }
+.hl-chip[data-color="slate"]  .hl-dot { background: #64748B; }
 </style>
 
 <div class="card" id="sec-auth" style="margin-bottom:14px;">
@@ -334,10 +342,6 @@
   </div><!-- /sync-card-body -->
 </div>
 
-<div style="display:flex;gap:10px;margin-top:20px;">
-  <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
-</div>
-
 <script>
 (function() {
   var cycles = {{ cycles | tojson }};
@@ -432,7 +436,7 @@
   };
 
   window.cycleHighlight = function(el) {
-    var colors = ["", "accent", "warn", "success", "error"];
+    var colors = ["", "accent", "warn", "success", "error", "purple", "teal", "rose", "slate"];
     var cur = el.dataset.color || "";
     var idx = colors.indexOf(cur);
     var next = colors[(idx + 1) % colors.length];

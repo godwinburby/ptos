@@ -547,7 +547,7 @@ Configured in `queries.toml` under `[threshold.NAME]`. Features:
 
 Color-code specific metrics on the home page dashboard and CLI. Configured in
 `config.toml` under `[dashboard.highlights.DASHBOARD]`:
-- Colors: `accent` (blue), `warn` (orange), `success` (green), `error` (red)
+- Colors: `accent` (blue), `warn` (orange), `success` (green), `error` (red), `purple`, `teal`, `rose`, `slate` (8 total)
 - **Settings page** — compact clickable chips per dashboard; click to cycle colors
 - **Home page** — stat cards render with colored backgrounds
 - **CLI** — `--add-dashboard NAME --highlight M1:accent M2:warn` saves highlights
