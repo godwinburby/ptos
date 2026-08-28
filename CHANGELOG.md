@@ -5,6 +5,24 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-08-28
+
+### Notes File Explorer
+
+- **Replaced fixed two-level notes** (`category/slug.md`) with arbitrary filesystem browsing — folders can nest to any depth, files are user-named
+- **File explorer UI** (`/notes`) — folder/file listing with breadcrumbs, New Folder/New File buttons, inline rename, delete with confirmation; `template.md` shown in folder listings (editable)
+- **Template resolution** — each folder may contain a `template.md`; new files inherit the nearest ancestor's template via `find_parent_template()` / `resolve_new_file_template()`
+- **Concept tags** (`[[Target]]`) — existing bracket-linking infrastructure (`_iter_link_matches`, `get_link_candidates`, `get_backlinks`, `attachBracketAutocomplete`) now scans notes via `os.walk` (no separate concept-tag API needed)
+- **Engine** — 9 new functions: `_safe_path`, `_validate_name`, `list_dir`, `create_folder`, `create_file`, `rename_note`, `delete_note_entry`, `find_parent_template`, `resolve_new_file_template`
+- **PTOSError** moved from `ptos_service.py` to `ptos.py` (engine defines its own exceptions)
+- **Old CRUD functions removed** — `list_note_categories`, `list_notes`, `read_note`, `create_note`, `save_note`, `delete_note`, `get_note_path` removed from engine and service layer
+- **Search** — universal search scans notes via `os.walk` + `_glob_match`; results link to edit view with `rel_path`
+- **Old templates deleted** — `notes_list.html`, `notes_category.html` replaced by `notes.html` (browse) + `notes_edit.html` (editor)
+- **Backlinks panel** — `_blItemHref`/`_blItemText` updated to handle `rel_path` (with `category`/`slug` fallback)
+- **42 new tests** for engine functions (safe path, validate name, list dir, create folder/file, rename, delete, template resolution)
+
+---
+
 ## 2026-08-27
 
 ### Dashboard highlights

@@ -424,7 +424,7 @@ Wiki-style `[[links]]` sit on top of existing project conventions — not a repl
 | Record CRUD | `ptos.py` (engine), `ptos_service.py` (service), `ptos_web.py` (routes) |
 | Todo features | `ptos_todo.py`, `ptos_service.py`, `ptos_web.py`, `web_templates/todo.html` |
 | Todo CLI | `ptos_cli.py` (argparse + handlers), `ptos_todo.py` (engine) |
-| Notes | `ptos.py` (CRUD + template), `ptos_service.py`, `ptos_web.py`, `web_templates/notes*.html` |
+| Notes | `ptos.py` (file explorer CRUD + template resolution), `ptos_service.py`, `ptos_web.py`, `web_templates/notes.html` (browse), `web_templates/notes_edit.html` (editor) |
 | Board/Kanban | `ptos_service.py` (get_board_data, board_field_overlap, board_advance), `ptos_web.py` (routes), `web_templates/query_builder.html` (board editor), `web_templates/board.html` (Kanban view) |
 | Bracket linking | `ptos_web.py` (`/api/link-candidates`), `web_templates/base.html` (shared JS), `_markdown_editor.html`, `todo.html`, `add.html`, `edit.html`, `search.html` |
 | Schema/validation | `ptos.py`, `schema.toml` |
