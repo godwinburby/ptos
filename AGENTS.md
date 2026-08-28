@@ -25,7 +25,7 @@ config/          → User config (created by --init, gitignored)
 records/         → Log files (YYYY.log)
 journal/         → Markdown journal entries (YYYY/MM/YYYY-MM-DD.md)
 todo/            → Todo files (todo.txt, done.txt, done.YYYY.txt)
-notes/           → Markdown notes organized by category (notes/{category}/{slug}.md)
+notes/           → Markdown notes (arbitrary folder depth, browsable as file explorer)
 
 ptos-backups/    → ZIP backups (sibling to ptos-data, outside sync scope)
 ```
@@ -380,7 +380,7 @@ Wiki-style `[[links]]` sit on top of existing project conventions — not a repl
 
 ### Backend — backlinks panel
 - `GET /api/backlinks?q=...` — returns `{"notes": [...], "journal": [...], "todo": [...], "records": [...]}` where each list holds `{...loc}` dicts for every reference to `subject` (case-insensitive exact match):
-  - notes: `{category, slug, title, path, snippet}` from `[[subject]]` in note files
+  - notes: `{rel_path, title, path, snippet}` from `[[subject]]` in note files
   - journal: `{date, path, snippet}` from `[[subject]]` in journal files
   - todo: `{line, lineno, done, path}` from `[[subject]]`, `+subject`, `@subject` (field tokens only when `project`/`context` are linkable)
   - records: `{date, type, field, path, lineno, snippet}` from `linkable`-flagged `field=subject`
@@ -393,7 +393,7 @@ Wiki-style `[[links]]` sit on top of existing project conventions — not a repl
 - `preprocessLinks(src)` — converts `[[Target]]` → `[Target](/search?q=Target)` markdown links for preview rendering
 - `initBacklinksPanel(container, subject)` — fetches `/api/backlinks?q=`, renders four collapsible groups (Notes/Journal/Todo/Records); hides container when nothing references the subject. Used by `notes.html`, keyed on the note's title.
 - `initJournalBacklinks(container, content)` — journal mode: extracts unique `[[...]]` links from the journal text, renders one expandable section per link showing that link's backlinks. Used by `journal.html` (loads once on page load, no live updates).
-- Item link targets: note → `/notes/<category>/<slug>`, journal → `/journal?date=...`, record → `/editor?file=<path>&goto=<lineno>`, todo → `/todo?search=<line>`.
+- Item link targets: note → `/notes/edit/<rel_path>`, journal → `/journal?date=...`, record → `/editor?file=<path>&goto=<lineno>`, todo → `/todo?search=<line>`.
 
 ### Where bracket autocomplete is attached
 | Location | Element |

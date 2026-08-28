@@ -258,11 +258,12 @@ class TestListDir:
         assert len(result["files"]) == 1
         assert result["files"][0]["name"] == "readme.md"
 
-    def test_excludes_template_md(self):
+    def test_template_md_is_shown(self):
         with open(os.path.join(ptos.NOTES_DIR, "template.md"), "w") as f:
             f.write("tpl")
         result = ptos.list_dir("")
-        assert len(result["files"]) == 0
+        assert len(result["files"]) == 1
+        assert result["files"][0]["name"] == "template.md"
 
     def test_nested_rel_path(self):
         os.makedirs(os.path.join(ptos.NOTES_DIR, "a", "b"))
