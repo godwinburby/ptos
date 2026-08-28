@@ -354,18 +354,17 @@ to create cross-references — search picks them up automatically.
 
 ### Notes
 
-Markdown notes organized by category. Create notes from the Notes page — each note
-lives in `notes/{category}/{slug}.md`. Notes support live preview with markdown
-rendering, and you can cross-link between notes, journal entries, and todos using
-`[[bracket]]` links (e.g. `[[Meeting Notes]]`). PTOS ships with starter templates
-for common categories; customise them in `templates/`.
+Markdown notes with a file-explorer interface. Notes live in `notes/` and can
+be organized into folders of any depth — no forced naming conventions. Each
+folder may contain a `template.md` that is applied to new files created in it.
 
 Features:
-- Create notes in any category (meeting, book, recipe, etc.)
+- Arbitrary folder nesting — create any structure you need
+- New Folder / New File / Rename / Delete with confirmation dialogs
+- Template resolution — nearest ancestor `template.md` auto-applies to new files
 - Live markdown preview with `[[bracket]]` cross-linking
-- Edit and delete notes inline
 - Search integration — notes appear in universal search results
-- Template system — each category can have its own template
+- Backlinks panel — see which journal entries, todos, and records reference a note
 
 ### Bracket Cross-linking (`[[Target]]`)
 
@@ -543,6 +542,36 @@ Configured in `queries.toml` under `[threshold.NAME]`. Features:
 - **Query Builder** — Thresholds tab with full editor
 - **CLI** — `--thresholds` flag prints a formatted table
 - **Tests**: `tests/test_thresholds.py`
+
+### Dashboard Highlights
+
+Color-code specific metrics on the home page dashboard and CLI. Configured in
+`config.toml` under `[dashboard.highlights.DASHBOARD]`:
+- Colors: `accent` (blue), `warn` (orange), `success` (green), `error` (red)
+- **Settings page** — compact clickable chips per dashboard; click to cycle colors
+- **Home page** — stat cards render with colored backgrounds
+- **CLI** — `--add-dashboard NAME --highlight M1:accent M2:warn` saves highlights
+- Each dashboard has independent highlights
+
+### Habits
+
+GitHub-style contribution grid for tracking recurring activities. Configured in
+`queries.toml` under `["habit.NAME"]`. Features:
+- A habit is just a record (`type=habit name=X`) or any record matching a filter
+- Streak tracking — consecutive days with at least one matching record
+- `/habits` page — one card per habit with streak badge, grid, and "X of Y days" summary
+- Configurable weeks (default 12) and filters (`field=value` list)
+- Query Builder — Habits tab for creating/editing habit entries
+
+### Calendar
+
+Month-grid view of all records. No configuration required for the global view;
+named filtered calendars via `["calendar.NAME"]` in `queries.toml`. Features:
+- `/calendar` — "All records" month grid (default)
+- `/calendar/<name>` — named filtered view
+- Click a day to expand its records inline
+- Switcher dropdown to toggle between global and named views
+- Prev/next navigation across months
 
 ### Settings
 
