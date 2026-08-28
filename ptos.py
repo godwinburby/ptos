@@ -2421,6 +2421,20 @@ def resolve_link(target):
                                 "filepath": tpath, "lineno": lineno, "line": line}
         return None
 
+    if rtype == "note":
+        for root, _, files in os.walk(NOTES_DIR):
+            for fname in files:
+                if fname == "template.md" or not fname.endswith(".md"):
+                    continue
+                fpath = os.path.join(root, fname)
+                with open(fpath, encoding="utf-8") as f:
+                    first_line = f.readline()
+                if f"ptos-id: {rid}" in first_line:
+                    return {"kind": "note", "type": "note", "id": rid,
+                            "filepath": fpath, "lineno": 1,
+                            "line": first_line.rstrip()}
+        return None
+
     hits = find_records_with_location([f"type={rtype}", f"id={rid}"])
     if not hits:
         return None
@@ -2456,6 +2470,18 @@ def list_link_ids():
                         seen.add(key)
                         out.append({"target": key, "kind": "todo",
                                     "date": "", "line": line.strip()})
+    for root, _, files in os.walk(NOTES_DIR):
+        for fname in sorted(files):
+            if fname == "template.md" or not fname.endswith(".md"):
+                continue
+            fpath = os.path.join(root, fname)
+            nid = _note_id_of(fpath)
+            if nid:
+                key = f"note:{nid}"
+                if key not in seen:
+                    seen.add(key)
+                    out.append({"target": key, "kind": "note",
+                                "date": "", "line": fname})
     out.sort(key=lambda x: x["target"])
     return out
 
@@ -2516,6 +2542,24 @@ def check_dangling_links():
                                 "kind": "todo", "target": tok,
                                 "error": "dangling link",
                                 "filepath": tpath, "lineno": lineno, "line": line})
+
+    for root, _, files in os.walk(NOTES_DIR):
+        for fname in sorted(files):
+            if fname == "template.md" or not fname.endswith(".md"):
+                continue
+            fpath = os.path.join(root, fname)
+            nid = _note_id_of(fpath)
+            if nid:
+                key = f"note:{nid}"
+                if key in seen_ids:
+                    other_fp, other_ln = seen_ids[key]
+                    problems.append({
+                        "kind": "note", "target": key,
+                        "error": "duplicate id",
+                        "filepath": fpath, "lineno": 1,
+                        "line": f"<!-- ptos-id: {nid} -->"})
+                else:
+                    seen_ids[key] = (fpath, 1)
 
     return problems
 
@@ -4542,6 +4586,36 @@ def rename_note(rel_path, new_name):
     if os.path.exists(new_full):
         raise PTOSError(f"'{new_name}' already exists")
     os.rename(full, new_full)
+
+
+def _note_id_of(fpath):
+    """Extract the ptos-id from a note file's first line comment.
+    Returns the id string or None."""
+    try:
+        with open(fpath, encoding="utf-8") as f:
+            first_line = f.readline()
+        m = re.match(r'<!--\s*ptos-id:\s*(\S+)\s*-->', first_line)
+        if m:
+            return m.group(1)
+    except Exception:
+        pass
+    return None
+
+
+def ensure_note_id(rel_path):
+    """Return this note's id, generating and writing one as the first
+    line if it doesn't already have one. Called only when a note is
+    about to become a link target — never on note creation."""
+    full = _safe_path(rel_path)
+    with open(full, encoding="utf-8") as f:
+        content = f.read()
+    m = re.match(r'<!--\s*ptos-id:\s*(\S+)\s*-->', content)
+    if m:
+        return m.group(1)
+    new_id = generate_unique_id()
+    with open(full, "w", encoding="utf-8") as f:
+        f.write(f"<!-- ptos-id: {new_id} -->\n" + content)
+    return new_id
 
 
 def delete_note_entry(rel_path):

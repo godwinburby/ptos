@@ -233,7 +233,19 @@ function confirmDelete(btn) {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) window.location.reload();
-    else alert(d.error || "Failed");
+    else if (d.needs_confirm) {
+      if (confirm(d.warning + "\n\nDelete anyway?")) {
+        fetch("/notes/delete", {
+          method: "POST", headers: {"Content-Type": "application/json"},
+          body: JSON.stringify({path: relPath, force: true})
+        })
+        .then(function(r2) { return r2.json(); })
+        .then(function(d2) {
+          if (d2.ok) window.location.reload();
+          else alert(d2.error || "Failed to delete");
+        });
+      }
+    } else alert(d.error || "Failed");
   });
 }
 

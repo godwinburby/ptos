@@ -1297,13 +1297,32 @@ def notes_rename():
         return jsonify(ok=False, error=str(e))
 
 
-@app.route("/notes/delete", methods=["POST"])
-def notes_delete():
+@app.route("/api/note-link-id", methods=["POST"])
+def api_note_link_id():
     data = request.get_json(silent=True) or {}
     rel_path = data.get("path", "")
     if not rel_path:
         return jsonify(ok=False, error="Path is required")
     try:
+        nid = svc.svc_ensure_note_id(rel_path)
+        return jsonify(ok=True, id=nid, target=f"note:{nid}")
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/notes/delete", methods=["POST"])
+def notes_delete():
+    data = request.get_json(silent=True) or {}
+    rel_path = data.get("path", "")
+    force = data.get("force", False)
+    if not rel_path:
+        return jsonify(ok=False, error="Path is required")
+    try:
+        if not force:
+            check = svc.check_note_delete_links(rel_path)
+            if not check["ok"]:
+                return jsonify(ok=False, warning=check["warning"],
+                               notes=check["notes"], needs_confirm=True)
         svc.svc_delete(rel_path)
         return jsonify(ok=True)
     except Exception as e:
