@@ -3629,6 +3629,12 @@ def api_retro_id():
     try:
         if kind == "todo":
             return jsonify(svc.retro_id_todo(int(data.get("line_no", 0))))
+        if kind == "note":
+            path = data.get("path", "")
+            if not path:
+                raise PTOSError("Missing path")
+            nid = svc.svc_ensure_note_id(path)
+            return jsonify(ok=True, id=nid, target=f"note:{nid}")
         filepath = data.get("filepath", "")
         lineno = int(data.get("lineno", 0))
         if not filepath or lineno < 1:
