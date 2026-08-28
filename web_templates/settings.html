@@ -5,8 +5,9 @@
 .settings-toc {
   display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 18px;
   position: sticky; top: 0; z-index: 50;
-  background: var(--bg); padding: 10px 0;
+  background: var(--bg); padding: 10px 0; align-items: center;
 }
+.settings-toc-save { display: flex; align-items: center; padding-right: 6px; }
 .settings-toc a {
   padding: 5px 12px; border-radius: 20px; font-size: 12px; font-weight: 600;
   background: var(--card); color: var(--sub); border: 1px solid var(--border);
@@ -18,13 +19,11 @@
 
 <div class="page-title">Settings</div>
 
-<div style="display:flex;gap:10px;margin-bottom:14px;">
-  <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
-</div>
-
-<div id="save-msg" style="display:none;margin-bottom:14px;"></div>
-
 <nav class="settings-toc">
+  <span class="settings-toc-save">
+    <button onclick="saveSettings()" class="btn btn-primary">Save Settings</button>
+  </span>
+  <div id="save-msg" style="display:none;font-size:13px;"></div>
   <a href="#sec-data">Data</a>
   <a href="#sec-profile">Profile</a>
   <a href="#sec-display">Display</a>
