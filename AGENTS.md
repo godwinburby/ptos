@@ -202,6 +202,8 @@ x 2026-07-12 2026-07-10 Completed task
 ### Key functions (in `ptos.py`)
 - `_safe_path(rel_path)` — resolve relative path under NOTES_DIR, reject escapes
 - `_validate_name(name)` — reject empty, `/`, `\`, `.`, `..`
+- `_note_id_of(fpath)` — extract `ptos-id` from a note's first-line HTML comment, or `None`
+- `ensure_note_id(rel_path)` — return note's id, generating+prepending `<!-- ptos-id: XXXXX -->` if absent (opt-in, never on creation)
 - `list_dir(rel_path="")` — return `{folders: [...], files: [...]}` for a directory
 - `create_folder(rel_path, name)` — mkdir under rel_path
 - `create_file(rel_path, name, content)` — create `name.md` (auto-append `.md`)
@@ -219,8 +221,9 @@ x 2026-07-12 2026-07-10 Completed task
 - `POST /notes/template-check` — AJAX template resolution (JSON: `{path}`)
 - `POST /notes/new-file` — create file (JSON: `{path, name, content}`)
 - `POST /notes/rename` — rename file/folder (JSON: `{path, new_name}`)
-- `POST /notes/delete` — delete file/folder (JSON: `{path}`)
+- `POST /notes/delete` — delete file/folder (JSON: `{path, force?}`); checks for backlinks first, returns `needs_confirm` if note has incoming links
 - `POST /notes/save` — save file content (JSON: `{path, content}`)
+- `POST /api/note-link-id` — generate+persist an id for a note (JSON: `{path}`); returns `{id, target}`
 
 ### Search integration
 - Universal search (`/search`) scans note content using `os.walk` + `_glob_match`
@@ -326,16 +329,16 @@ x 2026-07-12 2026-07-10 Completed task
 ## Cross-record links (`type:id`)
 
 ### Overview
-Records and todos can carry **engine-reserved** `id`/`links` tokens for explicit one-to-one/one-to-many cross-references (e.g. an expense linked to the income that refunds it, or a todo linked to an expense). `id=<id>` (records, in `.log` lines) and `id:<id>` (todo.txt lines) identify a single line; `links=type:id,type:id` (records) / `links:type:id,type:id` (todos) point at other entries. Link targets are **strict `type:id`** — no field-value targets like `project:hearing_aid` (grouping stays on `project=` / `+Project`; `[[brackets]]` remain the free-text cross-ref mechanism). `id`/`links` are schema-free: `validate_record`'s always-allowed field set is `{"type", "tag", "id", "links"}` (ptos.py `validate_record`). **No auto-id generation** — ids appear only via hand-typing, `--add --link`, or `--retro-id`. Forward direction (`links=`) is stored; reverse (who links to me) is always computed via backlinks.
+Records, todos, and notes can carry **engine-reserved** `id`/`links` tokens for explicit one-to-one/one-to-many cross-references (e.g. an expense linked to the income that refunds it, or a todo linked to an expense). `id=<id>` (records, in `.log` lines) and `id:<id>` (todo.txt lines) identify a single line; `links=type:id,type:id` (records) / `links:type:id,type:id` (todos) point at other entries. Notes use `<!-- ptos-id: XXXXX -->` on line 1 as their id. Link targets are **strict `type:id`** — no field-value targets like `project:hearing_aid` (grouping stays on `project=` / `+Project`; `[[brackets]]` remain the free-text cross-ref mechanism). `id`/`links` are schema-free: `validate_record`'s always-allowed field set is `{"type", "tag", "id", "links"}` (ptos.py `validate_record`). **No auto-id generation** — ids appear only via hand-typing, `--add --link`, or `--retro-id`. Forward direction (`links=`) is stored; reverse (who links to me) is always computed via backlinks.
 
 ### Engine (`ptos.py`, section "Cross-record links (type:id)" after `scan_records`)
 - `generate_id(length=6)` — `secrets`-based, alphabet `abcdefghjkmnpqrstuvwxyz23456789` (no 0/O/1/l)
 - `generate_unique_id(length=6, max_attempts=5)` — `generate_id()` wrapped with a collision check against `list_link_ids()`; retries up to `max_attempts`, then `sys.exit`. **Every tool-chosen id goes through this** (`append_record_id`, `append_todo_id`, `_handle_retro_id`, `--add --link`), so a tool-generated collision "can't happen" — hand-typed ids are untouched
 - `backlink_refs(target)` — reverse lookup for `type:id`: scans records (`links=`) and todos (`links:`) for tokens equal to `target`, returns `{kind, filepath, lineno, line}` dicts; powers the delete/complete warnings
 - `split_link_target(target)` — `(type, id)` tuple or `None`; journal targets are `journal:YYYY-MM-DD`
-- `resolve_link(target)` — returns `{kind, type, id, filepath, lineno, line}` or `None`; records via `find_records_with_location([f"type={t}", f"id={i}"])`, todos scan `TODO_PATH`/`DONE_PATH` for `\bid:<id>` (whole token), journal resolves if the date file exists. **Record `lineno` is 0-based** (engine convention); todo `lineno` is 1-based
-- `list_link_ids()` — all `type:id` targets (records + todos), deduped, sorted
-- `check_dangling_links()` — returns `{kind, target, error, filepath, lineno, line}` for **dangling links** (target unresolvable) and **duplicate ids** (records + todos); wired into `lint_records` (prints + adds to `error_files`) and `lint_all_records` (adds to `errors_list`)
+- `resolve_link(target)` — returns `{kind, type, id, filepath, lineno, line}` or `None`; records via `find_records_with_location([f"type={t}", f"id={i}"])`, todos scan `TODO_PATH`/`DONE_PATH` for `\bid:<id>` (whole token), notes walk `NOTES_DIR` checking first-line `<!-- ptos-id: X -->` comments, journal resolves if the date file exists. **Record `lineno` is 0-based** (engine convention); todo `lineno` is 1-based
+- `list_link_ids()` — all `type:id` targets (records + todos + notes), deduped, sorted
+- `check_dangling_links()` — returns `{kind, target, error, filepath, lineno, line}` for **dangling links** (target unresolvable) and **duplicate ids** (records + todos + notes); wired into `lint_records` (prints + adds to `error_files`) and `lint_all_records` (adds to `errors_list`)
 - `append_links_to_line(raw, new_links)` / `append_links_to_todo_line(line, new_links)` — merge links (dedupe, keep one token)
 - `append_record_id(filepath, lineno, old_line, new_id=None)` — appends `id=` in place via `rewrite_line_in_file` (0-based lineno), raises `ValueError` if already present; `append_todo_id(line, new_id=None)` — returns `(new_line, new_id)`
 
@@ -347,7 +350,7 @@ Records and todos can carry **engine-reserved** `id`/`links` tokens for explicit
 - `--add ... --link TARGET` — creates a record with generated `id=` + `links=TARGET` (exactly 1 target required); warns (saves anyway) if the target doesn't resolve, same as standalone `--link`
 - `--add ... id=X` — explicit ids are checked against `list_link_ids()` before `append_record()`; `sys.exit` "id already in use" on collision (hand-typed ids in `.log` files remain unchecked by design)
 - `--link SRC_TARGET TARGET` (standalone) — adds TARGET to an existing entry's links; journal source rejected; warns (saves anyway) if target is dangling; todo source rewrites via `rewrite_line_by_number`
-- `--retro-id TYPE` — assigns an id to an existing entry: records via `--where` filters (`find_records_with_location` must match exactly one; `date=` is NOT a kv filter — use `amount=...` style), todo via `--search TEXT` (must match one open todo)
+- `--retro-id TYPE` — assigns an id to an existing entry: records via `--where` filters (`find_records_with_location` must match exactly one; `date=` is NOT a kv filter — use `amount=...` style), todo via `--search TEXT` (must match one open todo), note via `--search TEXT` (must match one note file by name)
 - `--linked-to TARGET [TARGET ...]` (Query group) — appends `links~TARGET` to query filters; works standalone or with `--query`/`--type`/`--tag`
 - **Destructive-action warnings** — record delete (`run_set` `do_delete`, including `--delete --all`), `--todo-done`, `--todo-delete`, and `--todo-done-delete` print "N entrY/ies link to type:id — they will become dangling" via `backlink_refs()` when the target has incoming links; non-blocking (proceeds after confirm)
 - **`--set` validation** — `apply_set()` routes `id=` through the same uniqueness check (duplicate → `sys.exit`) and `links=` through the same resolve-warning as `--add`; re-setting a record's own id is a no-op, not an error
@@ -356,16 +359,16 @@ Records and todos can carry **engine-reserved** `id`/`links` tokens for explicit
 
 ### Web (`ptos_web.py` + templates)
 - `GET /api/link-ids` — all `type:id` targets for autocomplete/datalists
-- `POST /api/retro-id` — `{kind: "record", filepath, lineno}` (0-based) or `{kind: "todo", line_no}` (1-based) → assigns an id
+- `POST /api/retro-id` — `{kind: "record", filepath, lineno}` (0-based) or `{kind: "todo", line_no}` (1-based) or `{kind: "note", path}` → assigns an id
 - `POST /api/link` — `{source, target}` → `svc.link_entries()` adds the link, returns `{ok, source, target, resolves, updated, links}`
-- Service (`ptos_service.py`): `get_link_ids()`, `retro_id_record(filepath, lineno)` (0-based), `retro_id_todo(line_no)`, `link_entries(src, dst)` (raises `PTOSError` for unresolvable source or journal source); all call `_invalidate_history_cache()` after writes
+- Service (`ptos_service.py`): `get_link_ids()`, `retro_id_record(filepath, lineno)` (0-based), `retro_id_todo(line_no)`, `retro_id_note(rel_path)`, `link_entries(src, dst)` (raises `PTOSError` for unresolvable source or journal source); all call `_invalidate_history_cache()` after writes
 - `_iter_link_matches` (backlinks scanner) additionally yields `links=`/`links:` tokens split on commas, so `get_backlinks("type:id")` = the **Linked-from** list (records + todo groups)
 - **Todo page** (`todo.html`): quick-add + modal support `links:` (autocomplete prefix via `/api/link-ids`); edit modal has Id field + Generate button + Links field with autocomplete; each row shows `id:` badge and clickable `type:id` link badges (`/todo?linked_to=...`); 🔗 row button assigns an id if missing (`/api/retro-id`) then prompts for a target (`/api/link`); `/todo?linked_to=X` filters via `ptos_web.todo_page` (`selected_linked_to`)
 - **Records**: `add.html` and `edit.html` have Id (Generate button) + Links fields (datalist autocomplete); `add_post`/`edit_post` persist `id`/`links` into the record line; `edit.html` shows a **Linked from** panel for `rtype:id` via `initBacklinksPanel` (which now restores `display` when matches exist)
 - **Backlinks UI**: `_blRenderGroups` sets `container.style.display = ""` when items exist (was hide-only), enabling the Linked-from panel on `edit.html`
 
 ### Tests
-`tests/test_links.py` — generate_id format/alphabet/uniqueness; generate_unique_id collision-avoid/retry/sys-exit; split_link_target; resolve_link (record 0-based lineno, todo open/done, journal, whole-token match, missing); list_link_ids dedupe/sort; check_dangling_links (dangling record/todo, duplicate record/todo, clean); append_links merge/dedupe; append ids rewrite/raise/custom; todo parse-format-semantic round-trip, edit/batch id+links, filter linked_to, rewrite_line_by_number; validate_record accepts id/links; backlinks include `links=`/`links:`; backlink_refs find/empty/unrelated; `--add --link` resolve-warning via CLI main; `--add id=` duplicate rejection; `apply_set` id/links validation; `run_set` delete warning; todo done/delete/done-delete warnings; remove_type awareness message; service retro-id/link-entries (record + todo source, missing source, unknown target resolves=False); lint flags dangling links
+`tests/test_links.py` — generate_id format/alphabet/uniqueness; generate_unique_id collision-avoid/retry/sys-exit; split_link_target; resolve_link (record 0-based lineno, todo open/done, journal, whole-token match, missing); list_link_ids dedupe/sort; check_dangling_links (dangling record/todo, duplicate record/todo, clean); append_links merge/dedupe; append ids rewrite/raise/custom; todo parse-format-semantic round-trip, edit/batch id+links, filter linked_to, rewrite_line_by_number; validate_record accepts id/links; backlinks include `links=`/`links:`; backlink_refs find/empty/unrelated; `--add --link` resolve-warning via CLI main; `--add id=` duplicate rejection; `apply_set` id/links validation; `run_set` delete warning; todo done/delete/done-delete warnings; remove_type awareness message; service retro-id/link-entries (record + todo source, missing source, unknown target resolves=False); lint flags dangling links; `tests/test_notes.py` covers note id, resolve_link note, list_link_ids note, check_dangling_links note duplicate, delete backlinks
 
 ## Bracket cross-linking (`[[Target]]`)
 

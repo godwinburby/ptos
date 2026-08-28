@@ -7,6 +7,19 @@ Format: `[version or date] — description`
 
 ## 2026-08-28
 
+### Notes as link targets
+
+- Notes can now be link targets via `<!-- ptos-id: XXXXX -->` on line 1 (opt-in, never auto-generated)
+- `ensure_note_id(rel_path)` — generates and persists an id when a note is deliberately made a link target
+- `resolve_link("note:X")` — walks `NOTES_DIR`, matches first-line `ptos-id` comment, returns note location
+- `list_link_ids()` — third loop over notes, collects `note:XXXXX` targets for autocomplete/dedup
+- `check_dangling_links()` — duplicate id detection for notes alongside records/todos
+- `delete_note_entry()` — service layer checks for backlinks before deleting; returns `needs_confirm` with warning details
+- Web: **"Link to this note"** button on edit view — calls `ensure_note_id()`, copies `note:X` to clipboard
+- Web: **delete confirmation flow** — two-step: check backlinks → confirm → force delete
+- CLI: `--retro-id note` — assigns an id to an existing note via `--search TEXT`
+- 15 new tests covering all engine functions
+
 ### Notes File Explorer
 
 - **Replaced fixed two-level notes** (`category/slug.md`) with arbitrary filesystem browsing — folders can nest to any depth, files are user-named
