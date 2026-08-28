@@ -29,8 +29,8 @@
   {% for f in listing.folders %}
   <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-hover,#f5f5f5)'" onmouseout="this.style.background=''">
     <a href="/notes/browse/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128193; {{ f.name }}</a>
-    <button onclick="promptRename('{{ f.rel_path }}','{{ f.name }}')" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
-    <button onclick="confirmDelete('{{ f.rel_path }}','{{ f.name }}',true)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+    <button onclick="promptRename({{ f.rel_path|tojson }},{{ f.name|tojson }})" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
+    <button onclick="confirmDelete({{ f.rel_path|tojson }},{{ f.name|tojson }},true)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
   </div>
   {% endfor %}
 {% endif %}
@@ -39,8 +39,8 @@
   {% for f in listing.files %}
   <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-hover,#f5f5f5)'" onmouseout="this.style.background=''">
     <a href="/notes/edit/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128196; {{ f.name }}</a>
-    <button onclick="promptRename('{{ f.rel_path }}','{{ f.name }}')" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
-    <button onclick="confirmDelete('{{ f.rel_path }}','{{ f.name }}',false)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+    <button onclick="promptRename({{ f.rel_path|tojson }},{{ f.name|tojson }})" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
+    <button onclick="confirmDelete({{ f.rel_path|tojson }},{{ f.name|tojson }},false)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
   </div>
   {% endfor %}
 {% endif %}

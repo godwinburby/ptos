@@ -4499,7 +4499,7 @@ def list_dir(rel_path=""):
         raise PTOSError("Folder not found")
     folders, files = [], []
     for name in sorted(os.listdir(full)):
-        entry_rel = os.path.join(rel_path, name) if rel_path else name
+        entry_rel = (rel_path + "/" + name) if rel_path else name
         if os.path.isdir(os.path.join(full, name)):
             folders.append({"name": name, "rel_path": entry_rel})
         elif name.endswith(".md") and name != "template.md":
@@ -4535,8 +4535,10 @@ def rename_note(rel_path, new_name):
     """Rename a file or a folder. Works identically for both."""
     _validate_name(new_name)
     full = _safe_path(rel_path)
-    new_full = _safe_path(os.path.join(os.path.dirname(
-        os.path.relpath(full, NOTES_DIR)), new_name))
+    parent = os.path.relpath(os.path.dirname(full), NOTES_DIR)
+    if parent == ".":
+        parent = ""
+    new_full = _safe_path((parent + "/" + new_name) if parent else new_name)
     if os.path.exists(new_full):
         raise PTOSError(f"'{new_name}' already exists")
     os.rename(full, new_full)
