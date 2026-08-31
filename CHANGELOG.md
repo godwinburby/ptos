@@ -5,6 +5,15 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-08-31
+
+### Kernel boundary: promote internal helpers to public (Phase 1)
+
+- Promoted `_filters_to_expr` → `filters_to_expr`, `_journal_path` → `journal_path`, `_note_id_of` → `note_id_of` in `ptos.py`; old underscore names kept as thin internal aliases for one release
+- Updated external call sites: `ptos_cli.py` (filters/note-id), `ptos_web.py` (journal path — the one direct web→ptos call), `ptos_service.py` (filters/note-id wrappers)
+- This is step one of the kernel-boundary containment (see `ptos-kernel-boundary-audit.md`): pure, side-effect-free helpers may be called directly; side-effecting operations will route through `ptos_service.py` in later phases
+- No behavior change — full suite green retained
+
 ## 2026-08-28
 
 ### Dashboard grouping UX + rename/order

@@ -67,7 +67,7 @@ from ptos import (
     # Date helpers
     month_range, quarter_range, resolve_cycle,
     # Internal helpers used by CLI
-    _disp, _filters_to_expr, resolve_editor, _TIME_ALIASES, _glob_match,
+    _disp, filters_to_expr, resolve_editor, _TIME_ALIASES, _glob_match,
 )
 
 # --------------------------------------------------
@@ -362,7 +362,7 @@ def resolve_query_context(args, queries):
         raw_where = q.get("where")
         if isinstance(raw_where, list):
             # old array format — convert to single expression for apply_where
-            expr = _filters_to_expr(raw_where)
+            expr = filters_to_expr(raw_where)
             query_filters = [expr] if expr else []
         elif isinstance(raw_where, str) and raw_where.strip():
             query_filters = [raw_where]
@@ -1518,7 +1518,7 @@ def _handle_add_dashboard(args):
     def _norm(q):
         q = dict(q)
         if isinstance(q.get("where"), list):
-            q["where"] = ptos._filters_to_expr(q["where"])
+            q["where"] = ptos.filters_to_expr(q["where"])
         return q
 
     # Flat config keys are stored as "board.X" / "habit.X" / "calendar.X";
@@ -1683,7 +1683,7 @@ def _handle_retro_id(args):
         if not found:
             sys.exit(f"No note matching '{search}'.")
         fpath, rel = found
-        existing = ptos._note_id_of(fpath)
+        existing = ptos.note_id_of(fpath)
         if existing:
             sys.exit(f"Note already has id: note:{existing}")
         nid = ensure_note_id(rel)

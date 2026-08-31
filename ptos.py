@@ -4164,7 +4164,7 @@ def complete_record(schema, record, skip_optional=False, suggest_fn=None):
     return record, note
 
 
-def _filters_to_expr(filters):
+def filters_to_expr(filters):
     """Convert a list of filter conditions to a single expression string.
     Single expression strings are kept as-is.
     Multiple plain conditions are joined with AND.
@@ -4182,6 +4182,9 @@ def _filters_to_expr(filters):
         else:
             parts.append(f)
     return " AND ".join(parts)
+
+
+_filters_to_expr = filters_to_expr
 
 
 def save_query(name, args, extra_filters):
@@ -4540,9 +4543,12 @@ def get_journal_template_content(date_str):
     return get_note_template("daily", {"date": date_str})
 
 
-def _journal_path(date_str):
+def journal_path(date_str):
     """Return the file path for a journal date."""
     return os.path.join(JOURNAL_DIR, date_str[:4], date_str[5:7], f"{date_str}.md")
+
+
+_journal_path = journal_path
 
 
 def delete_journal(date_str):
@@ -4638,7 +4644,7 @@ def rename_note(rel_path, new_name):
     os.rename(full, new_full)
 
 
-def _note_id_of(fpath):
+def note_id_of(fpath):
     """Extract the ptos-id from a note file's first line comment.
     Returns the id string or None."""
     try:
@@ -4650,6 +4656,9 @@ def _note_id_of(fpath):
     except Exception:
         pass
     return None
+
+
+_note_id_of = note_id_of
 
 
 def ensure_note_id(rel_path):
