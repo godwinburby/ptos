@@ -30,6 +30,8 @@ notes/           → Markdown notes (arbitrary folder depth, browsable as file e
 ptos-backups/    → ZIP backups (sibling to ptos-data, outside sync scope)
 ```
 
+> **Shelved: modularizing `ptos.py`.** A split of the 5,411-line engine into domain modules is planned but **deferred** (see `ptos-modularization-shelved.md`; source specs: `ptos-modularization-spec.md`, `ptos-modularization-concerns.md`). Approved rule: do not start it without revisiting the decision. `ptos.py` stays a monolith for now.
+
 ## Tech stack
 
 - Python 3.11+ (uses `tomllib` from stdlib)
