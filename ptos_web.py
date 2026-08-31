@@ -2660,7 +2660,7 @@ def browse_run():
     if isinstance(where, str):
         where = [where] if where.strip() else []
     if expr and where:
-        combined = svc._filters_to_expr(where)
+        combined = ptos.filters_to_expr(where)
         filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
     elif expr:
         filters = [expr]
@@ -2697,7 +2697,7 @@ def browse_export():
     if isinstance(where, str):
         where = [where] if where.strip() else []
     if expr and where:
-        combined = svc._filters_to_expr(where)
+        combined = ptos.filters_to_expr(where)
         filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
     elif expr:
         filters = [expr]
@@ -3042,7 +3042,7 @@ def api_records_find():
     if isinstance(where, str):
         where = [where] if where.strip() else []
     if expr and where:
-        combined = svc._filters_to_expr(where)
+        combined = ptos.filters_to_expr(where)
         filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
     elif expr:
         filters = [expr]
@@ -3691,12 +3691,12 @@ def api_save_query():
     if isinstance(where, str):
         where = [where] if where.strip() else []
     if expr and where:
-        combined   = svc._filters_to_expr(where)
+        combined   = ptos.filters_to_expr(where)
         where_expr = f"({combined}) AND ({expr})" if combined else expr
     elif expr:
         where_expr = expr
     elif where:
-        where_expr = svc._filters_to_expr(where)
+        where_expr = ptos.filters_to_expr(where)
     else:
         where_expr = ""
     try:

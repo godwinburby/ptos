@@ -2954,11 +2954,6 @@ def safe_parse_line(line):
     return ptos.safe_parse_line(line)
 
 
-def _filters_to_expr(filters):
-    """Convert list of where clauses to expression string."""
-    return ptos.filters_to_expr(filters)
-
-
 def non_dimension_fields():
     """Get list of non-dimension field names."""
     return ptos.non_dimension_fields()
