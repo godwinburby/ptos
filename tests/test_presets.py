@@ -326,3 +326,45 @@ class TestInstantPresets:
         import tomllib
         data = tomllib.loads(Path(ptos.PRESETS_PATH).read_text(encoding="utf-8"))
         assert data["presets"]["snacks"].get("instant") is True
+
+
+class TestQuickPresetCount:
+    def _many_presets(self, tmp_path, monkeypatch):
+        presets_path = Path(ptos.PRESETS_PATH)
+        presets_path.parent.mkdir(parents=True, exist_ok=True)
+        lines = []
+        for i in range(12):
+            lines.append(f'[presets.p{i}]\ntype = "expense"\nuse_count = {12 - i}\n')
+        presets_path.write_text("\n".join(lines), encoding="utf-8")
+        ptos._invalidate("presets")
+
+    def _frequent_chips(self, html):
+        start = html.find('id="frequent-presets"')
+        end = html.find("id=\"remaining-presets\"", start)
+        section = html[start:end] if start != -1 else ""
+        return section.count('<span class="preset-chip-wrap">')
+
+    def test_home_shows_10_by_default(self, tmp_path, monkeypatch):
+        self._many_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        body = client.get("/").get_data(as_text=True)
+        assert self._frequent_chips(body) == 10
+
+    def test_add_shows_10_by_default(self, tmp_path, monkeypatch):
+        self._many_presets(tmp_path, monkeypatch)
+        from ptos_web import app
+        client = app.test_client()
+        body = client.get("/add").get_data(as_text=True)
+        assert self._frequent_chips(body) == 10
+
+    def test_home_respects_config_override(self, tmp_path, monkeypatch):
+        self._many_presets(tmp_path, monkeypatch)
+        import ptos_service
+        cfg = ptos_service.get_config()
+        cfg.setdefault("home", {})["quick_presets"] = 3
+        ptos_service.save_config(cfg)
+        from ptos_web import app
+        client = app.test_client()
+        body = client.get("/").get_data(as_text=True)
+        assert self._frequent_chips(body) == 3

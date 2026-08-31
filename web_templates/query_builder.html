@@ -139,6 +139,8 @@
   .dash-chip[draggable] { cursor:grab; }
   .dash-chip.dragging  { opacity:.4; }
   .dash-chip.drag-over { border-color:var(--accent);background:color-mix(in srgb,var(--accent) 15%,transparent); }
+  .dbg-handle { cursor:grab; }
+  .dbg-handle:active { cursor:grabbing; }
   .dbg-box {
     border:1.5px dashed var(--border);border-radius:8px;padding:8px 10px;
     margin-bottom:10px;transition:border-color .15s, background .15s;min-height:44px;
@@ -147,6 +149,11 @@
   .dbg-head { display:flex;align-items:center;justify-content:space-between;margin-bottom:4px; }
   .dbg-name { font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--sub); }
   .dbg-ungrouped .dbg-name { font-weight:600;color:var(--sub); }
+  .dbg-moverow { display:flex;gap:8px;align-items:center;margin-top:6px;flex-wrap:wrap; }
+  .dbg-moverow select {
+    flex:1;min-width:160px;padding:5px 8px;border-radius:6px;
+    border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;
+  }
   .qb-chip {
     display:inline-flex;align-items:center;gap:4px;padding:6px 12px;
     border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;
@@ -267,7 +274,7 @@ var _liveTimer = null;
     _st.metrics[k] = { kind, base, base2, derived, unit_field, unit_weights, _raw: raw };
   });
   Object.entries(q.dashboards||{}).forEach(function(e) {
-    _st.dashboards[e[0]] = { metrics: e[1].metrics||[], groups: Object.assign({}, e[1].groups)||{} };
+    _st.dashboards[e[0]] = { metrics: e[1].metrics||[], groups: Object.assign({}, e[1].groups)||{}, ungrouped_label: e[1].ungrouped_label||"" };
   });
   // Boards
   var _bkBoards = {{ boards | tojson }};
@@ -468,7 +475,7 @@ function addEntry() {
   else if (section==="thresholds")
     _st.thresholds[name] = {metric:"",agg:"sum",sum_field:"",value:"",direction:"max",time:"",unit:""};
   else
-    _st.dashboards[name] = {metrics:[], groups:{}};
+    _st.dashboards[name] = {metrics:[], groups:{}, ungrouped_label:""};
   renderTabs();
   select(section, name);
 }
@@ -1060,6 +1067,7 @@ function onMetricRawChange(val) {
 // DASHBOARD EDITOR
 // ══════════════════════════════════════════════════════════════════════════════
 var _dragDbItem = null;
+var _dragGroupOrder = null;
 function _buildDashEditor(name) {
   var db = _st.dashboards[name];
   var div = document.createElement("div");
@@ -1074,7 +1082,7 @@ function _buildDashEditor(name) {
     }).join("");
   card.innerHTML =
     '<label>Items</label>'+
-    '<div class="hint" style="margin-bottom:10px;">Choose queries and metrics to show on Home. Order matters — drag an item into a group to give it a section label; ungrouped items sit under their own header first.</div>'+
+    '<div class="hint" style="margin-bottom:10px;">Choose queries and metrics to show on Home. Grouped and ungrouped items can mix — ungrouped ones render under their own header first (renameable via its ✎). Drag an item into a group, use a group\'s + button to move items, or drag a group\'s ⠿ grip to reorder sections.</div>'+
     '<div id="db-groups"></div>'+
     '<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px;">'+
       '<select id="db-add-sel" style="flex:1;"><option value="">— add item —</option>'+opts+'</select>'+
@@ -1103,9 +1111,6 @@ function _renderDashBoxes(db) {
   }
   holder.innerHTML = "";
   var buckets = {};   // "" or group name -> [items]
-  var order = [];
-  if (!_groupHasItems(db)) order.push("");
-  for (var g in db.groups) order.push(g);
   function bucket(g) {
     if (!(g in buckets)) { buckets[g] = []; }
     return buckets[g];
@@ -1114,12 +1119,11 @@ function _renderDashBoxes(db) {
     var g = _groupOf(db, item);
     bucket(g === null ? "" : g).push(item);
   });
+  var order = [""].concat(Object.keys(db.groups));
   order.forEach(function(g) {
-    if (bucket(g).length) holder.appendChild(_buildDashBox(db, g, buckets[g]));
+    if (g === "" && !bucket("").length) return;
+    holder.appendChild(_buildDashBox(db, g, buckets[g] || []));
   });
-}
-function _groupHasItems(db) {
-  return db.metrics.some(function(item) { return _groupOf(db, item) !== null; });
 }
 function _buildDashBox(db, gname, items) {
   var boxEl = document.createElement("div");
@@ -1128,40 +1132,110 @@ function _buildDashBox(db, gname, items) {
   head.className = "dbg-head";
   var nameSpan = document.createElement("span");
   nameSpan.className = "dbg-name";
-  nameSpan.textContent = gname || "General (ungrouped)";
+  nameSpan.textContent = gname || db.ungrouped_label || "General (ungrouped)";
   head.appendChild(nameSpan);
+  var actions = document.createElement("span");
+  actions.style.display = "inline-flex"; actions.style.gap = "6px";
   if (gname) {
-    var actions = document.createElement("span");
-    actions.style.display = "inline-flex"; actions.style.gap = "6px";
-    var renameBtn = document.createElement("button");
-    renameBtn.className = "btn btn-ghost btn-sm"; renameBtn.textContent = "✎";
-    renameBtn.title = "Rename group";
-    renameBtn.addEventListener("click", function() { renameDbGroup(gname); });
-    var delBtn = document.createElement("button");
-    delBtn.className = "btn btn-ghost btn-sm"; delBtn.textContent = "×";
-    delBtn.title = "Remove group (items become ungrouped)";
-    delBtn.addEventListener("click", function() { deleteDbGroup(gname); });
-    actions.appendChild(renameBtn); actions.appendChild(delBtn);
-    head.appendChild(actions);
+    var grip = document.createElement("button");
+    grip.className = "btn btn-ghost btn-sm dbg-handle"; grip.textContent = "⠿";
+    grip.title = "Drag to reorder this group";
+    grip.draggable = true;
+    grip.addEventListener("dragstart", function(e) {
+      _dragGroupOrder = gname;
+      if (e.dataTransfer) e.dataTransfer.setData("text/plain", gname);
+    });
+    grip.addEventListener("dragend", function() {
+      _dragGroupOrder = null;
+      document.querySelectorAll(".dbg-box.drag-over").forEach(function(b) { b.classList.remove("drag-over"); });
+    });
+    actions.appendChild(grip);
+    var mvBtn = document.createElement("button");
+    mvBtn.className = "btn btn-ghost btn-sm"; mvBtn.textContent = "+";
+    mvBtn.title = "Move an item into this group";
+    mvBtn.addEventListener("click", function() { _toggleDbMoveRow(boxEl, gname); });
+    actions.appendChild(mvBtn);
+  } else {
+    var ulBtn = document.createElement("button");
+    ulBtn.className = "btn btn-ghost btn-sm"; ulBtn.textContent = "✎";
+    ulBtn.title = "Rename the ungrouped section label";
+    ulBtn.addEventListener("click", function() { renameUngrouped(); });
+    actions.appendChild(ulBtn);
   }
+  var renameBtn = document.createElement("button");
+  renameBtn.className = "btn btn-ghost btn-sm"; renameBtn.textContent = "✎";
+  renameBtn.title = "Rename group";
+  renameBtn.addEventListener("click", function() { renameDbGroup(gname); });
+  var delBtn = document.createElement("button");
+  delBtn.className = "btn btn-ghost btn-sm"; delBtn.textContent = "×";
+  delBtn.title = "Remove group (items become ungrouped)";
+  delBtn.addEventListener("click", function() { deleteDbGroup(gname); });
+  if (gname) { actions.appendChild(renameBtn); actions.appendChild(delBtn); }
+  head.appendChild(actions);
   boxEl.appendChild(head);
   var chips = document.createElement("div");
   chips.className = "chip-group";
   items.forEach(function(item) { chips.appendChild(_dbChip(db, item)); });
+  if (!items.length && gname) {
+    var hint = document.createElement("div");
+    hint.className = "hint";
+    hint.textContent = "Group is empty — drag items here or use the + button to move them in.";
+    chips.appendChild(hint);
+  }
   boxEl.appendChild(chips);
   boxEl.dataset.group = gname;
   boxEl.ondragover = function(e) {
     e.preventDefault();
-    if (_dragDbItem) boxEl.classList.add("drag-over");
+    if (_dragDbItem || _dragGroupOrder) boxEl.classList.add("drag-over");
   };
   boxEl.ondragleave = function() { boxEl.classList.remove("drag-over"); };
   boxEl.ondrop = function(e) {
     e.preventDefault();
     boxEl.classList.remove("drag-over");
-    if (_dragDbItem) moveDbItem(db, _dragDbItem, boxEl.dataset.group || "");
-    _dragDbItem = null;
+    if (_dragGroupOrder) {
+      reorderDbGroup(_dragGroupOrder, boxEl.dataset.group || "");
+    } else if (_dragDbItem) {
+      moveDbItem(db, _dragDbItem, boxEl.dataset.group || "");
+    }
+    _dragDbItem = null; _dragGroupOrder = null;
   };
   return boxEl;
+}
+function _toggleDbMoveRow(boxEl, gname) {
+  var cur = boxEl.querySelector(".dbg-moverow");
+  if (cur) { cur.remove(); return; }
+  if (!_cur) return;
+  var db = _st.dashboards[_cur.name];
+  var row = document.createElement("div");
+  row.className = "dbg-moverow";
+  var sel = document.createElement("select");
+  db.metrics.forEach(function(item) {
+    if (_groupOf(db, item) === gname) return;
+    var m = _st.metrics[item];
+    var tag = m ? (m.derived ? "derived" : "metric") : "query";
+    var opt = document.createElement("option");
+    opt.value = item;
+    opt.textContent = item + " (" + tag + ")";
+    sel.appendChild(opt);
+  });
+  row.appendChild(sel);
+  if (!sel.options.length) {
+    var empty = document.createElement("span");
+    empty.className = "hint";
+    empty.textContent = "Everything is already in this group.";
+    row.appendChild(empty);
+  } else {
+    var go = document.createElement("button");
+    go.className = "btn btn-ghost btn-sm";
+    go.textContent = "Move →";
+    go.addEventListener("click", function() {
+      if (!sel.value) return;
+      moveDbItem(db, sel.value, gname);
+    });
+    row.appendChild(go);
+    sel.focus();
+  }
+  boxEl.appendChild(row);
 }
 function _dbChip(db, item) {
   var chip = document.createElement("span");
@@ -1217,6 +1291,32 @@ function deleteDbGroup(name) {
   if (!_cur) return;
   var db = _st.dashboards[_cur.name];
   delete db.groups[name];
+  _renderDashBoxes(db);
+}
+function renameUngrouped() {
+  if (!_cur) return;
+  var db = _st.dashboards[_cur.name];
+  var label = prompt("Label for the ungrouped section (shown as a Home header; type a name or leave blank to keep it headerless):", db.ungrouped_label || "General (ungrouped)");
+  if (label === null) return;
+  label = label.trim();
+  db.ungrouped_label = (label === "General (ungrouped)") ? "" : label;
+  _renderDashBoxes(db);
+}
+function reorderDbGroup(src, target) {
+  if (!_cur || src === target) return;
+  var db = _st.dashboards[_cur.name];
+  var keys = Object.keys(db.groups);
+  var si = keys.indexOf(src), ti = keys.indexOf(target);
+  if (si === -1) return;
+  keys.splice(si, 1);
+  if (ti !== -1) {
+    keys.splice(ti, 0, src);
+  } else {
+    keys.push(src);
+  }
+  var out = {};
+  keys.forEach(function(k) { out[k] = db.groups[k]; });
+  db.groups = out;
   _renderDashBoxes(db);
 }
 function moveDbItem(db, item, gname) {

@@ -1458,11 +1458,16 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
     groups = None
     if has_groups:
         groups = []
+        unlabel = (dashdef.get("ungrouped_label") or "").strip()
         if group_map.get(""):
-            groups.append({"name": "", "items": group_map[""]})
+            groups.append({"name": unlabel, "items": group_map[""]})
         for g in group_order:
             if g != "":
                 groups.append({"name": g, "items": group_map[g]})
+    else:
+        unlabel = (dashdef.get("ungrouped_label") or "").strip()
+        if unlabel and group_map.get(""):
+            groups = [{"name": unlabel, "items": group_map[""]}]
 
     return {
         "name":   _disp(name),
@@ -2532,6 +2537,9 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
                     clean_groups[gname.strip()] = items
             if clean_groups:
                 entry["groups"] = clean_groups
+        unlabel = (db.get("ungrouped_label") or "").strip()
+        if unlabel:
+            entry["ungrouped_label"] = unlabel
         dashboards[name] = entry
     if dashboards:
         data["dashboards"] = dashboards

@@ -601,7 +601,8 @@ def home():
     
     cfg = svc.get_config()
     username = cfg.get("user", {}).get("name", "User")
-    freq, rem = svc.get_frequent_presets(6)
+    quick_n = cfg.get("home", {}).get("quick_presets", 10)
+    freq, rem = svc.get_frequent_presets(quick_n)
 
     try:
         threshold_data = svc.get_all_threshold_status(
@@ -943,7 +944,8 @@ def add_get():
     types   = schema.get("types", {}).get("allowed", [])
     presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
-    freq_presets, rem_presets = svc.get_frequent_presets(6)
+    quick_n = svc.get_config().get("home", {}).get("quick_presets", 10)
+    freq_presets, rem_presets = svc.get_frequent_presets(quick_n)
     multi_presets = _multi_presets()
     instant_presets = _instant_presets()
     selected_type = request.args.get("type", "")
@@ -1018,7 +1020,8 @@ def add_post():
     types  = schema.get("types", {}).get("allowed", [])
     presets = {k: v for k, v in svc.get_presets().items()
                if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
-    freq_presets, rem_presets = svc.get_frequent_presets(6)
+    quick_n = svc.get_config().get("home", {}).get("quick_presets", 10)
+    freq_presets, rem_presets = svc.get_frequent_presets(quick_n)
     rtype     = request.form.get("type","").strip()
     date_str  = request.form.get("date", dt.date.today().isoformat()).strip()
     note      = request.form.get("note","").strip() or None

@@ -72,3 +72,8 @@ priority_labels = { A = "Critical", B = "Important", C = "Moderate", D = "Low" }
 [pomodoro]
 # Pomodoro timer duration in minutes (default: 25)
 duration_minutes = 25
+
+[home]
+# Number of most-used quick-add presets shown on Home and Add Record
+# (default: 10); the rest appear under "Show all".
+quick_presets = 10

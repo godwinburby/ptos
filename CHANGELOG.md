@@ -7,6 +7,12 @@ Format: `[version or date] — description`
 
 ## 2026-08-28
 
+### Dashboard grouping UX + rename/order
+
+- Rename the **ungrouped** section: dashboard editor gets a ✎ on the ungrouped box → sets `ungrouped_label = "..."` in `[dashboards.NAME]`; Home and CLI render it as that section's header. Works on flat (no named groups) and grouped dashboards
+- **Reorder groups** by dragging a group's ⠿ grip onto another group box; the saved TOML order drives Home and CLI section order
+- Quick-add preset count is configurable: `[home] quick_presets` in `config.toml` (default **10**) controls how many most-used presets show on Home and Add Record (rest under "Show all")
+
 ### Dashboard metric grouping
 
 - Dashboards can now organize metrics into labeled groups on Home via an optional `groups = { "Name" = ["metric1", "metric2"] }` key in `[dashboards.NAME]` (`queries.toml`); `metrics` stays the flat union, so old dashboards are untouched
