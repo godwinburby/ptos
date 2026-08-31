@@ -1184,7 +1184,7 @@ def journal_get():
     date_str  = date.isoformat()
     prev_date = (date - dt.timedelta(days=1)).isoformat()
     next_date = (date + dt.timedelta(days=1)).isoformat()
-    path = ptos._journal_path(date_str)
+    path = ptos.journal_path(date_str)
     if os.path.exists(path):
         content = open(path, encoding="utf-8").read()
     else:

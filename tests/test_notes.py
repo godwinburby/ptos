@@ -420,17 +420,17 @@ class TestNoteId:
         path = os.path.join(ptos.NOTES_DIR, "sub", "test.md")
         with open(path, "w", encoding="utf-8") as f:
             f.write("<!-- ptos-id: k3f9a1 -->\n# Hello\nContent\n")
-        assert ptos._note_id_of(path) == "k3f9a1"
+        assert ptos.note_id_of(path) == "k3f9a1"
 
     def test_note_id_of_without_id(self):
         os.makedirs(os.path.join(ptos.NOTES_DIR, "sub"), exist_ok=True)
         path = os.path.join(ptos.NOTES_DIR, "sub", "plain.md")
         with open(path, "w", encoding="utf-8") as f:
             f.write("# Hello\nContent\n")
-        assert ptos._note_id_of(path) is None
+        assert ptos.note_id_of(path) is None
 
     def test_note_id_of_nonexistent(self):
-        assert ptos._note_id_of(os.path.join(ptos.NOTES_DIR, "nope.md")) is None
+        assert ptos.note_id_of(os.path.join(ptos.NOTES_DIR, "nope.md")) is None
 
     def test_ensure_note_id_generates(self):
         os.makedirs(os.path.join(ptos.NOTES_DIR, "sub"), exist_ok=True)

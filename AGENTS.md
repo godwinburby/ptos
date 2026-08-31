@@ -202,7 +202,7 @@ x 2026-07-12 2026-07-10 Completed task
 ### Key functions (in `ptos.py`)
 - `_safe_path(rel_path)` — resolve relative path under NOTES_DIR, reject escapes
 - `_validate_name(name)` — reject empty, `/`, `\`, `.`, `..`
-- `_note_id_of(fpath)` — extract `ptos-id` from a note's first-line HTML comment, or `None`
+- `note_id_of(fpath)` — extract `ptos-id` from a note's first-line HTML comment, or `None` (was `_note_id_of`; promoted to public — `_note_id_of` kept as an internal alias)
 - `ensure_note_id(rel_path)` — return note's id, generating+prepending `<!-- ptos-id: XXXXX -->` if absent (opt-in, never on creation)
 - `list_dir(rel_path="")` — return `{folders: [...], files: [...]}` for a directory
 - `create_folder(rel_path, name)` — mkdir under rel_path

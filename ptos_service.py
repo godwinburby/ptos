@@ -1611,7 +1611,7 @@ def run_query(name, time=None, from_date=None, to_date=None):
     raw_where = q.get("where")
     if isinstance(raw_where, list):
         # old array format — convert to single expression
-        expr = ptos._filters_to_expr(raw_where)
+        expr = ptos.filters_to_expr(raw_where)
         filters = [expr] if expr else []
     elif isinstance(raw_where, str) and raw_where.strip():
         filters = [raw_where]
@@ -2956,7 +2956,7 @@ def safe_parse_line(line):
 
 def _filters_to_expr(filters):
     """Convert list of where clauses to expression string."""
-    return ptos._filters_to_expr(filters)
+    return ptos.filters_to_expr(filters)
 
 
 def non_dimension_fields():
@@ -3019,14 +3019,14 @@ def check_note_delete_links(rel_path):
                 if fname == "template.md" or not fname.endswith(".md"):
                     continue
                 fpath = os.path.join(root, fname)
-                nid = ptos._note_id_of(fpath)
+                nid = ptos.note_id_of(fpath)
                 if nid:
                     bl = get_backlinks(f"note:{nid}")
                     if bl:
                         rel = os.path.relpath(fpath, ptos.NOTES_DIR).replace("\\", "/")
                         notes_to_check.append({"path": rel, "id": nid, "backlinks": bl})
     else:
-        nid = ptos._note_id_of(full)
+        nid = ptos.note_id_of(full)
         if nid:
             bl = get_backlinks(f"note:{nid}")
             if bl:
