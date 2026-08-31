@@ -565,8 +565,9 @@ groups = { "Revenue" = ["income_this_month", "total_income"],
 ```
 - Old dashboards with just `metrics` are untouched — groups are opt-in and `groups` falls back to `None`
 - Ungrouped leftovers render first (headerless), then each group under its own small uppercase label
+- Rename the ungrouped section via the editor's ✎ on the ungrouped box — sets `ungrouped_label = "..."` and shows it as that section's header on Home/CLI
 - Highlights (colors) still work per metric
-- Query Builder dashboard editor — drag chips between group boxes, `+ New group`, rename via ✎, remove via ×
+- Query Builder dashboard editor — drag chips between group boxes, `+ New group`, rename via ✎, remove via ×, drag a group's ⠿ grip to reorder sections
 - CLI — `--add-dashboard NAME --dash-group Group:metric1,metric2 Group2:metric3`
 - Share Schema preserves groups, filtering members to included queries/metrics
 
@@ -1007,6 +1008,10 @@ category = "staff_welfare"
 tag      = ["snacks"]
 # amount omitted — will be prompted each time
 ```
+
+The home page and Add Record show the top 10 most-used presets as Quick Add buttons;
+the rest collapse under "Show all". Configure the count with `[home] quick_presets`
+in `config.toml`.
 
 ### Preset aliases
 

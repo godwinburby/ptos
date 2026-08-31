@@ -322,6 +322,10 @@ x 2026-07-12 2026-07-10 Completed task
 - **Share Schema** — `export_schema_bundle()` preserves `groups`, filtering both `metrics` and each group list to included queries/metrics.
 - **Tests**: `tests/test_dashboards.py` (order + ungrouped-first, full partition, string-value normalization, groups-only config, highlights on grouped items, save round-trip, blank/empty stripping, no-groups metrics-only, home grouped/flat render via web client). `test_export.py` covers group preservation + member filtering in shares.
 
+### Quick-add preset count
+
+- Home and Add Record show the top N most-used single presets (default **10**), the rest collapse under "Show all"; configure via `[home] quick_presets` in `config.toml`. All web call sites read this config key (`ptos_web.py` home + add routes) and pass it to `get_frequent_presets(n)`. Read: the `[home]` section of `config.toml`; tests in `tests/test_presets.py` (`TestQuickPresetCount`).
+
 ## Stock tracking
 
 - **Schema** — two record types: `stock_unit` (serialized items: hearing aids with category, model, serial, status, date_sold) and `stock_txn` (movements: batteries, domes, receivers with category, model, qty, serial)

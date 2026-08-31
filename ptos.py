@@ -1268,6 +1268,9 @@ def export_schema_bundle(selected_types):
         entry = {}
         if refs:
             entry["metrics"] = refs
+        ulabel = (ddef.get("ungrouped_label") or "").strip()
+        if ulabel:
+            entry["ungrouped_label"] = ulabel
         groups = ddef.get("groups")
         if isinstance(groups, dict):
             clean_groups = {}
@@ -3480,6 +3483,7 @@ def run_dashboard(name, queries, start, end, cycles):
     dashdef = dashboards[name]
     group_defs = dashdef.get("groups") or {}
     has_groups = bool(group_defs)
+    unlabel = (dashdef.get("ungrouped_label") or "").strip() or None
     ordered = []
     if has_groups:
         grouped = set()
@@ -3487,17 +3491,21 @@ def run_dashboard(name, queries, start, end, cycles):
             if isinstance(gitems, str):
                 gitems = [gitems]
             for item in gitems:
-                ordered.append((gname, item))
                 grouped.add(item)
         for item in dashdef.get("metrics", []):
             if item not in grouped:
-                ordered.append((None, item))
+                ordered.append((unlabel, item))
+        for gname, gitems in group_defs.items():
+            if isinstance(gitems, str):
+                gitems = [gitems]
+            for item in gitems:
+                ordered.append((gname, item))
     else:
-        ordered = [(None, item) for item in dashdef.get("metrics", [])]
+        ordered = [(unlabel, item) for item in dashdef.get("metrics", [])]
     prev_group = None
     first = True
     for gname, item in ordered:
-        if has_groups and gname != prev_group:
+        if gname != prev_group and (has_groups or unlabel):
             if not first:
                 print()
             if gname:

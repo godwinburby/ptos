@@ -28,6 +28,15 @@ groups = { "Spend" = ["expenses"] }
 
 [dashboards.legacy]
 metrics = ["income", "expenses"]
+
+[dashboards.labelled]
+metrics = ["expenses", "income"]
+groups = { "Spend" = ["expenses"] }
+ungrouped_label = "Everything else"
+
+[dashboards.flatlabelled]
+metrics = ["income", "expenses"]
+ungrouped_label = "Cash flow"
 """
 
 
@@ -94,6 +103,27 @@ groups = { "Rev" = ["income"] }
         db = ptos_service.get_dashboard("fin")
         assert all(i["kind"] in ("metric", "query") for gp in db["groups"] for i in gp["items"])
 
+    def test_ungrouped_label_used_for_ungrouped_name(self):
+        db = ptos_service.get_dashboard("labelled")
+        names = [g["name"] for g in db["groups"]]
+        assert names == ["Everything else", "Spend"]
+        assert [i["raw_name"] for i in db["groups"][0]["items"]] == ["income"]
+
+    def test_blank_ungrouped_label_returns_empty(self):
+        _write_queries(QUERIES.replace('ungrouped_label = "Everything else"', 'ungrouped_label = ""'))
+        db = ptos_service.get_dashboard("labelled")
+        assert db["groups"][0]["name"] == ""
+
+    def test_flat_dashboard_with_ungrouped_label_returns_labeled_group(self):
+        db = ptos_service.get_dashboard("flatlabelled")
+        assert db["groups"] == [{"name": "Cash flow", "items": db["items"]}]
+        assert [g["name"] for g in db["groups"]] == ["Cash flow"]
+
+    def test_flat_dashboard_without_label_returns_none(self):
+        _write_queries(QUERIES.replace('ungrouped_label = "Cash flow"', ''))
+        db = ptos_service.get_dashboard("flatlabelled")
+        assert db["groups"] is None
+
 
 class TestHomeGroupedRender:
     @pytest.fixture(autouse=True)
@@ -115,6 +145,22 @@ class TestHomeGroupedRender:
         assert resp.status_code == 200
         body = resp.get_data(as_text=True)
         assert '<div class="stat-group-label">' not in body
+
+    def test_home_renders_ungrouped_label(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/?dashboard=labelled")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert '<div class="stat-group-label">Everything else</div>' in body
+
+    def test_home_renders_flat_dashboard_ungrouped_label(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/?dashboard=flatlabelled")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert '<div class="stat-group-label">Cash flow</div>' in body
 
 
 class TestSaveQueriesFullGroups:
@@ -150,6 +196,24 @@ class TestSaveQueriesFullGroups:
         )
         q = ptos.get_queries()
         assert q["dashboards"]["legacy"] == {"metrics": ["income"]}
+
+    def test_ungrouped_label_roundtrip(self):
+        ptos_service.save_queries_full(
+            {"income": {"where": "type=income", "time": "this-month", "sum": True}},
+            {},
+            {"d": {"metrics": ["income"], "groups": {"Rev": ["income"]}, "ungrouped_label": "Other"}},
+        )
+        q = ptos.get_queries()
+        assert q["dashboards"]["d"]["ungrouped_label"] == "Other"
+
+    def test_blank_ungrouped_label_not_written(self):
+        ptos_service.save_queries_full(
+            {"income": {"where": "type=income", "time": "this-month", "sum": True}},
+            {},
+            {"d": {"metrics": ["income"], "ungrouped_label": ""}},
+        )
+        q = ptos.get_queries()
+        assert "ungrouped_label" not in q["dashboards"]["d"]
 
     def test_string_group_value_normalized(self):
         ptos_service.save_queries_full(
