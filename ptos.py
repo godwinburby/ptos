@@ -1860,7 +1860,36 @@ def _tok_where(expr):
             if tok:
                 tokens.append(('COND', tok))
             i = j
-    return tokens
+    return _collapse_spaced_ops(tokens)
+
+
+_OP_TOKEN = re.compile(r"^(?P<op>!~|!=|>=|<=|~|=|>|<)$")
+_FIELD_TOKEN = re.compile(r"^[A-Za-z_]\w*$")
+
+
+def _collapse_spaced_ops(tokens):
+    """Merge three COND tokens that represent a spaced operator back into one.
+
+    e.g. ``tag != snacks`` tokenizes as COND(tag) COND(!=) COND(snacks);
+    recombine them as COND(tag!=snacks) so the parser keeps the operator+value.
+    """
+    out = []
+    i = 0
+    while i < len(tokens):
+        if (
+            i + 2 < len(tokens)
+            and tokens[i][0] == "COND"
+            and _FIELD_TOKEN.match(tokens[i][1])
+            and tokens[i + 1][0] == "COND"
+            and _OP_TOKEN.match(tokens[i + 1][1])
+            and tokens[i + 2][0] == "COND"
+        ):
+            out.append(("COND", tokens[i][1] + tokens[i + 1][1] + tokens[i + 2][1]))
+            i += 3
+        else:
+            out.append(tokens[i])
+            i += 1
+    return out
 
 
 def _eval_cond(kv, cond):
@@ -1882,13 +1911,13 @@ def _eval_cond(kv, cond):
     if op == "!~":
         return all(val.lower() not in v.lower() for v in cur_list)
 
+    if op == "=":
+        return key in kv and val in cur_list
+    if op == "!=":
+        return key not in kv or val not in cur_list
+
     if key not in kv:
         return False
-
-    if op == "=":
-        return val in cur_list
-    if op == "!=":
-        return val not in cur_list
 
     # ordered operators — coerce scalar
     # Try: numeric first (covers both schema numeric fields and derived int fields),
