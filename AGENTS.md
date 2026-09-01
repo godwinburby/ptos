@@ -30,7 +30,9 @@ notes/           → Markdown notes (arbitrary folder depth, browsable as file e
 ptos-backups/    → ZIP backups (sibling to ptos-data, outside sync scope)
 ```
 
-> **Shelved: modularizing `ptos.py`.** A split of the 5,411-line engine into domain modules is planned but **deferred** (see `ptos-modularization-shelved.md`; source specs: `ptos-modularization-spec.md`, `ptos-modularization-concerns.md`). Approved rule: do not start it without revisiting the decision. `ptos.py` stays a monolith for now.
+> **Shelved: modularizing `ptos.py`.** A split of the 5,411-line engine into domain modules was planned but **deferred** (see `ptos-modularization-shelved.md`). Approved rule: do not start it without revisiting the decision. `ptos.py` stays a monolith for now.
+>
+> **Deliberate property (do not break): CLI standalone portability.** `ptos.py` + `ptos_cli.py` are two standalone files (plus data files `schema.toml`/`config.toml`) that run the full engine with **no install step, no package manager, no dependency tree** — `ptos_cli.py` imports only `ptos` and the standard library. This is a valued property, not an accident; keep it intact in all future work. Any modularization must preserve it (e.g. via an amalgamation/reassembly step) or it is incomplete.
 
 ## Tech stack
 
@@ -96,6 +98,8 @@ python -m pytest tests/test_todo.py -k "test_name" -v  # specific test
 - Templates use `{{ variable }}` and `{% if %}` / `{% for %}`
 - Forms POST JSON, routes return JSON (`jsonify(ok=True/False, ...)`)
 - SSE: daemon thread polls data, broadcasts events, browser handles notifications; `sync-log` event streams rclone output line-by-line to Settings page; **pending notification cache** (`_pending_notifications`) stores due-todo tasks and replays to newly connected SSE clients (fixes startup race condition where notifications fire before browser connects)
+- **Record dates in web forms** — the date input in `add.html` and `edit.html` has **no `max` cap**, so past, present, and future dates can all be entered (the backend `add_post`/`edit_post` never restricted dates; only the HTML blocked future dates)
+- **Todo Overdue section** — collapsed by default in the timeline grouping (see Todo module specifics)
 
 ### Testing patterns
 - Tests in `tests/` mirror module names (`test_todo.py` → `ptos_todo.py`)
@@ -157,7 +161,7 @@ x 2026-07-12 2026-07-10 Completed task
 - **Form modal** (shared add+edit) — Priority as dropdown (None/A/B/C/D with labels from config), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
 - **Clickable todo chips** — project, context, and priority chips on each todo row link to filtered view; clicking an active filter chip removes that filter
 - **Project rail** — horizontal scroll filter with toggle behavior
-- **Overdue/Tomorrow/Today/Upcoming/Someday** bucket view with collapsible Done section; overdue visible by default, collapsible by clicking header; **Group by** toggle bar (Timeline / Priority / Project / Context) switches between grouping modes — timeline uses existing time buckets, priority groups by A-D with labels, project groups by `+Project`, context groups by `@Context`; todos with multiple projects/contexts appear in each section; URL param `groupby=timeline|priority|project|context`, preserves active filters; **Section sort** — sort button (↕) in groupby bar cycles through 4 modes: default (backend order), reverse name, most todos first, fewest todos first; state stored in `localStorage` per groupby mode (`ptos_todo_sort_{mode}`); within-section row order untouched (priority → due → description)
+- **Overdue/Tomorrow/Today/Upcoming/Someday** bucket view with collapsible Done section; **Overdue collapsed by default** (`sec_key == 'overdue'` renders `style="display:none"`, still toggleable by clicking the header); **Group by** toggle bar (Timeline / Priority / Project / Context) switches between grouping modes — timeline uses existing time buckets, priority groups by A-D with labels, project groups by `+Project`, context groups by `@Context`; todos with multiple projects/contexts appear in each section; URL param `groupby=timeline|priority|project|context`, preserves active filters; **Section sort** — sort button (↕) in groupby bar cycles through 4 modes: default (backend order), reverse name, most todos first, fewest todos first; state stored in `localStorage` per groupby mode (`ptos_todo_sort_{mode}`); within-section row order untouched (priority → due → description)
 - **Done tasks** — edit and delete buttons on each done row; edit opens the shared modal targeting `done.txt` (`/todo/edit-done`), delete removes permanently from `done.txt` (`/todo/delete-done`); undo (checkmark click) moves back to `todo.txt`
 - **Threshold todos** — Todos with `t > today` are hidden until their threshold date arrives (standard todo.txt behavior: `t` means "don't show until")
 - **Today progress** counter (done/total)
@@ -263,6 +267,13 @@ x 2026-07-12 2026-07-10 Completed task
 - Board cards (edit/delete buttons) pass `return_to=pathname+search` to preserve board context
 - Drag→edit flow and multi-preset add also pass `return_to` through to redirect back to board
 - `onParentChange` in edit.html preserves `return_to` in URL when reloading field cascades
+
+## Browse module (group-by / sort-by)
+
+- **Group by / Sort by dropdowns** — on `/browse`, `#b-group` and `#b-sort` are populated with **dimension fields**, not every schema field. Dimensions exclude `[fields].dimension=false` (via `non_dimension_fields()`) and int fields, and always include `date`/`day`/`month`/`year` — the same rule `api_type_fields` uses for its per-type `dimensions` list.
+- **Cross-type (no type selected)** — dropdowns show the global union computed server-side by `_global_dimensions(schema)` in `ptos_web.py` (`browse_get` passes it as `browse.html`'s `_globalDims`).
+- **Per-type narrowing** — when a single type is selected in the FilterBuilder, `_refreshGroupSortForType()` in `browse.html` populates the dropdowns from that type's `/api/type_fields/{type}` `dimensions` (cached per type in `_typeDimsCache`), so fields from other types never appear. It fires via the FilterBuilder's `onTypeFields` hook (which `filter_builder.js` calls after `_fetch` on cache-hit/success/error) and on every `runBrowse`, and resets the dropdown to placeholder-only immediately on type change (no cross-type flash). `onTypeFields` receives the fresh `dimensions` from the shared `_fetch` cache to avoid a duplicate API call.
+- **Static cache-busting** — `filter_builder.js` is included as `/static/js/filter_builder.js?v=2` in `browse.html`/`query_builder.html` (and the service worker cache is `ptos-v3`) so stale cached JS can't silently revert browse group/sort behavior; if group/sort looks wrong after a code change, hard-refresh the browser.
 
 ## Habits module (`/habits` heatmap + streak)
 
@@ -459,6 +470,7 @@ Each platform has a single unified script that handles both first-time setup and
 ## Commits
 
 - Write concise commit messages matching repo style
+- **Do not commit unless the user has tested the change.** The user tests first, then explicitly asks to commit. Don't pre-emptively commit just because tests pass or the change looks done. Exception: pure docs/infra commits the user explicitly asked to commit.
 - Only commit when explicitly asked
 - Stage only intended files, never commit secrets
 - Run `python -m pytest tests/ -v` before committing
