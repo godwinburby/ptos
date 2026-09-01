@@ -1,4 +1,4 @@
-const CACHE = "ptos-v2";
+const CACHE = "ptos-v3";
 const ASSETS = ["/", "/static/manifest.json"];
 
 self.addEventListener("install", (e) => {
