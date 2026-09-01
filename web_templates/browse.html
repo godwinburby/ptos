@@ -98,6 +98,7 @@
 // ── State ────────────────────────────────────────────────────────────────────
 var _types = {{ types | tojson }};
 var _fieldTypes = {{ field_types | tojson }};
+var _globalDims = {{ group_dimensions | tojson }};
 
 // ── FilterBuilder + RecordTable instances ────────────────────────────────────
 var _fb = null;
@@ -106,7 +107,8 @@ document.addEventListener("DOMContentLoaded", function() {
   _fb = new FilterBuilder({
     containerId: "browse-filter",
     types: _types,
-    onRun: function(expr) { runBrowse(); }
+    onRun: function(expr) { runBrowse(); },
+    onTypeFields: function(t, e) { _refreshGroupSortForType(t, e ? e.dimensions : null); }
   });
   _fb.init();
 
@@ -132,6 +134,8 @@ document.addEventListener("DOMContentLoaded", function() {
   RecordTable._bkPrev      =function(){ _rt._bkPrev(); };
   RecordTable._bkClear     =function(){ _rt._bkClear(); };
   RecordTable._bkFieldChange=function(){ _rt._bkFieldChange(); };
+
+  _populateGroupSort(true);
 
   // Reload when returning from bfcache (e.g. after edit redirect)
   window.addEventListener('pageshow', function(e) {
@@ -218,6 +222,66 @@ function debouncedBrowse() {
   _searchTimer = setTimeout(runBrowse, 500);
 }
 
+function _groupSortOptions(dims) {
+  var placeholder = '<option value="">— select —</option>';
+  return placeholder + dims.map(function(f) {
+    return '<option value="'+f+'">'+f+'</option>';
+  }).join("");
+}
+
+function _populateGroupSort(fromUrl, dims) {
+  var grp  = document.getElementById("b-group");
+  var sort = document.getElementById("b-sort");
+  if (!grp || !sort) return;
+  var prevG = grp.value, prevS = sort.value;
+  if (!dims) {
+    if (_fb && _fb._type) {
+      dims = [];
+    } else {
+      dims = _globalDims || ["date"];
+    }
+  }
+  var opts = _groupSortOptions(dims);
+  grp.innerHTML  = opts;
+  sort.innerHTML = opts;
+  var g = prevG, s = prevS;
+  if (fromUrl) {
+    var params = new URLSearchParams(window.location.search);
+    g = params.get("group") || "";
+    s = params.get("sort") || "";
+  }
+  if (g && grp.querySelector('option[value="'+g+'"]'))  grp.value  = g;
+  if (s && sort.querySelector('option[value="'+s+'"]')) sort.value = s;
+}
+
+var _typeDimsCache = {};
+var _curGroupType = null;
+
+function _refreshGroupSortForType(t, dims) {
+  if (!t) t = _fb && _fb._type;
+  if (!t) {
+    _curGroupType = null;
+    _populateGroupSort(false);
+    return;
+  }
+  if (t !== _curGroupType) {
+    _curGroupType = t;
+    _populateGroupSort(false, []);
+  }
+  if (dims) { _typeDimsCache[t] = dims; _populateGroupSort(false, dims); return; }
+  if (_typeDimsCache[t]) { _populateGroupSort(false, _typeDimsCache[t]); return; }
+  if (_typeDimsCache[t] === null) return;
+  _typeDimsCache[t] = null;
+  var url = "/api/type_fields/" + encodeURIComponent(t);
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      _typeDimsCache[t] = data.dimensions || [];
+      if (_fb && _fb._type === t) _populateGroupSort(false, _typeDimsCache[t]);
+    })
+    .catch(function() { _typeDimsCache[t] = ["date"]; if (_fb && _fb._type === t) _populateGroupSort(false, _typeDimsCache[t]); });
+}
+
 function _params() {
   let time = tp ? (tp.getTime() || "tm") : "tm";
   const search = document.getElementById("b-search") ? document.getElementById("b-search").value.trim() : "";
@@ -234,6 +298,7 @@ function _params() {
 }
 
 function runBrowse() {
+  _refreshGroupSortForType();
   const area = document.getElementById("result-area");
   area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
   fetch("/browse/run", {
@@ -384,6 +449,6 @@ document.getElementById("query-name-input").addEventListener("keydown", function
 });
 </script>
 {% block scripts %}
-<script src="/static/js/filter_builder.js"></script>
+<script src="/static/js/filter_builder.js?v=2"></script>
 {% endblock %}
 {% endblock %}

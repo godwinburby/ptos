@@ -144,7 +144,11 @@
     self._fetch = function(cb) {
       if (!self._type) { cb && cb({}); return; }
       var k = self._key();
-      if (self._cache[k]) { cb && cb(self._cache[k]); return; }
+      if (self._cache[k]) {
+        cb && cb(self._cache[k]);
+        if(self._opts.onTypeFields)self._opts.onTypeFields(self._type,self._cache[k]);
+        return;
+      }
       if (self._lru.length >= 20) delete self._cache[self._lru.shift()];
       var url = "/api/type_fields/" + encodeURIComponent(self._type);
       // API expects context as ?context=field:value,field:value
@@ -157,14 +161,17 @@
         .then(function(data) {
           var e = {
             fields:      (data.fields||[]).filter(function(f){return !f.is_int && f.name!=="type";}),
+            dimensions:  data.dimensions||[],
             history:     data.history_fields||{},
             historyTags: data.history_tags||[]
           };
           self._cache[k]=e; self._lru.push(k); cb&&cb(e);
+          if(self._opts.onTypeFields)self._opts.onTypeFields(self._type,e);
         })
         .catch(function() {
-          var e={fields:[],history:{},historyTags:[]};
+          var e={fields:[],dimensions:[],history:{},historyTags:[]};
           self._cache[k]=e; self._lru.push(k); cb&&cb(e);
+          if(self._opts.onTypeFields)self._opts.onTypeFields(self._type,e);
         });
     };
 

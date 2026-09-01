@@ -245,6 +245,28 @@ def _build_field_types(schema):
     _set("date", "date")
     return ft
 
+def _global_dimensions(schema):
+    """Union of dimension fields across all types (cross-type group/sort for Browse).
+
+    Mirrors api_type_fields' dimension rule: exclude non-dimension and int fields,
+    then always include date/day/month/year."""
+    bad = set(svc.non_dimension_fields())
+    dims = set()
+    fields = dict(schema.get("fields", {}))
+    for tdef in schema.get("type", {}).values():
+        for fname, fdef in tdef.get("fields", {}).items():
+            if isinstance(fdef, dict) and fname not in fields:
+                fields[fname] = fdef
+    for fname, fdef in fields.items():
+        if not isinstance(fdef, dict):
+            continue
+        if fname in bad or fdef.get("type") == "int":
+            continue
+        dims.add(fname)
+    for vf in ("date", "day", "month", "year"):
+        dims.add(vf)
+    return sorted(dims)
+
 def _build_field_defs(schema, rtype, current_record=None):
     if not rtype: return []
     type_schema  = schema.get("type", {}).get(rtype, {})
@@ -2624,13 +2646,16 @@ def browse_get():
         schema = svc.get_schema()
         types  = schema.get("types",{}).get("allowed",[])
         field_types = _build_field_types(schema)
+        group_dimensions = _global_dimensions(schema)
     except PTOSError:
         types = []
         field_types = {}
+        group_dimensions = ["date"]
     log_files = svc.get_log_files()
     return render_template("browse.html",
         tab="browse", title="Browse", now=_now_str(),
         types=types, field_types=field_types, log_files=log_files,
+        group_dimensions=group_dimensions,
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
         current_time=request.args.get("time", "tm"),
         custom_time=request.args.get("custom_time", ""),
