@@ -146,8 +146,8 @@ class TestGetBoardData:
         _write_queries({"b": {"columns": ["expense"], "time_window": "td"}})
         today = dt.date.today().isoformat()
         _write_record(today, f"{today} type=expense amount=1")
-        _write_record(dt.date.today().replace(day=1).isoformat(),
-                      f"{dt.date.today().replace(day=1).isoformat()} type=expense amount=2")
+        other = dt.date.today().replace(day=2) if dt.date.today().day == 1 else dt.date.today().replace(day=1)
+        _write_record(other.isoformat(), f"{other.isoformat()} type=expense amount=2")
         result = get_board_data("b")
         assert result["time_window"] == "td"
         amounts = [r["amount"] for r in result["data"].get("expense", [])]

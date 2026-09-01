@@ -1,7 +1,12 @@
 import pytest
 import os
+import datetime as dt
 import ptos
 import ptos_service as svc
+
+
+def _d(day):
+    return dt.date.today().replace(day=day).isoformat()
 
 
 def _write_queries(content):
@@ -43,7 +48,7 @@ def _write_schema():
 
 
 def _write_records(lines):
-    records_path = os.path.join(ptos.RECORDS_DIR, "2026.log")
+    records_path = os.path.join(ptos.RECORDS_DIR, f"{dt.date.today().year}.log")
     os.makedirs(os.path.dirname(records_path), exist_ok=True)
     with open(records_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n" if lines else "")
@@ -108,8 +113,8 @@ class TestResolveValue:
             'field = "amount"\n'
         )
         _write_records([
-            "2026-08-15 type=expense domain=self category=food amount=200",
-            "2026-08-16 type=expense domain=self category=food amount=300",
+            f"{_d(1)} type=expense domain=self category=food amount=200",
+            f"{_d(2)} type=expense domain=self category=food amount=300",
         ])
         val = svc._resolve_value("food_total", {}, "this-month")
         assert val == 500
@@ -121,8 +126,8 @@ class TestResolveValue:
             'time = "this-month"\n'
         )
         _write_records([
-            "2026-08-15 type=expense domain=self category=food amount=100",
-            "2026-08-16 type=expense domain=self category=food amount=200",
+            f"{_d(1)} type=expense domain=self category=food amount=100",
+            f"{_d(2)} type=expense domain=self category=food amount=200",
         ])
         val = svc._resolve_value("food_q", {"agg": "count"}, "this-month")
         assert val == 2
@@ -135,8 +140,8 @@ class TestResolveValue:
             'sum = true\n'
         )
         _write_records([
-            "2026-08-15 type=expense domain=self category=food amount=100",
-            "2026-08-16 type=expense domain=self category=food amount=200",
+            f"{_d(1)} type=expense domain=self category=food amount=100",
+            f"{_d(2)} type=expense domain=self category=food amount=200",
         ])
         val = svc._resolve_value("food_q", {"agg": "sum", "sum_field": "amount"}, "this-month")
         assert val == 300
@@ -150,7 +155,7 @@ class TestResolveValue:
 class TestGetThresholdStatus:
     def test_max_direction_ok(self):
         _write_queries(EXPENSE_THRESHOLD)
-        _write_records(["2026-08-15 type=expense domain=self category=food amount=2000"])
+        _write_records([f"{_d(1)} type=expense domain=self category=food amount=2000"])
         status = svc.get_threshold_status("food_spend")
         assert status["name"] == "food_spend"
         assert status["raw"] == 2000
@@ -161,35 +166,35 @@ class TestGetThresholdStatus:
 
     def test_max_direction_warning(self):
         _write_queries(EXPENSE_THRESHOLD)
-        _write_records(["2026-08-15 type=expense domain=self category=food amount=4200"])
+        _write_records([f"{_d(1)} type=expense domain=self category=food amount=4200"])
         status = svc.get_threshold_status("food_spend")
         assert status["status"] == "warning"
         assert status["pct"] == pytest.approx(84.0)
 
     def test_max_direction_over(self):
         _write_queries(EXPENSE_THRESHOLD)
-        _write_records(["2026-08-15 type=expense domain=self category=food amount=5500"])
+        _write_records([f"{_d(1)} type=expense domain=self category=food amount=5500"])
         status = svc.get_threshold_status("food_spend")
         assert status["status"] == "over"
         assert status["pct"] == pytest.approx(110.0)
 
     def test_min_direction_met(self):
         _write_queries(INCOME_THRESHOLD)
-        _write_records(["2026-08-15 type=income source=salary amount=12000"])
+        _write_records([f"{_d(1)} type=income source=salary amount=12000"])
         status = svc.get_threshold_status("income_target")
         assert status["status"] == "met"
         assert status["pct"] == pytest.approx(120.0)
 
     def test_min_direction_warning_below_50(self):
         _write_queries(INCOME_THRESHOLD)
-        _write_records(["2026-08-15 type=income source=salary amount=3000"])
+        _write_records([f"{_d(1)} type=income source=salary amount=3000"])
         status = svc.get_threshold_status("income_target")
         assert status["status"] == "warning"
         assert status["pct"] == pytest.approx(30.0)
 
     def test_min_direction_ok_above_50(self):
         _write_queries(INCOME_THRESHOLD)
-        _write_records(["2026-08-15 type=income source=salary amount=7000"])
+        _write_records([f"{_d(1)} type=income source=salary amount=7000"])
         status = svc.get_threshold_status("income_target")
         assert status["status"] == "ok"
         assert status["pct"] == pytest.approx(70.0)
@@ -228,8 +233,8 @@ class TestGetThresholdStatus:
             'time = "this-month"\n'
         )
         _write_records([
-            "2026-08-15 type=income source=salary amount=8000",
-            "2026-08-16 type=income source=freelance amount=2000",
+            f"{_d(1)} type=income source=salary amount=8000",
+            f"{_d(2)} type=income source=freelance amount=2000",
         ])
         status = svc.get_threshold_status("income_vs_last")
         assert status["raw"] == 10000
@@ -249,7 +254,7 @@ class TestGetAllThresholdStatus:
             'direction = "max"\n'
             'time = "this-month"\n'
         )
-        _write_records(["2026-08-15 type=expense domain=self category=food amount=100"])
+        _write_records([f"{_d(1)} type=expense domain=self category=food amount=100"])
         results = svc.get_all_threshold_status()
         names = {r["name"] for r in results}
         assert "food_spend" in names
