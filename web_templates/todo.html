@@ -719,7 +719,7 @@
     <div class="todo-section-title" style="color:{{ sec_color }};">{{ sec_label }}</div>
     <div class="todo-section-count">{{ sec_todos|length }}</div>
   </div>
-  <div id="sec-{{ sec_key }}">
+  <div id="sec-{{ sec_key }}"{% if sec_key == 'overdue' %} style="display:none"{% endif %}>
     {% for t in sec_todos %}{{ todo_row(t, sec_key) }}{% endfor %}
   </div>
 </div>
