@@ -4,16 +4,24 @@
 <style>
   .habits-header { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px; }
   .habits-header .page-title { margin:0; }
+  .hab-habit-count { font-size:13px;color:var(--sub); }
+  .hab-time-select { font-size:13px;padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--fg); }
   .habits-grid-list { display:flex;flex-direction:column;gap:16px; }
   .habit-card { background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px; }
   .habit-head { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px; }
   .habit-name { font-size:16px;font-weight:700; }
   .habit-streak { font-size:15px;font-weight:800;color:#fff;background:var(--accent);padding:3px 12px;border-radius:14px; }
   .habit-stats { font-size:12px;color:var(--sub); }
-  .habit-grid { display:flex;gap:3px;overflow-x:auto;padding:4px 0 8px; }
-  .habit-week { display:flex;flex-direction:column;gap:3px; }
+  .habit-months { display:flex;flex-direction:column;gap:16px;margin-top:4px; }
+  .habit-month { border:1px solid var(--border);border-radius:10px;padding:10px 12px;display:inline-block; }
+  .habit-month-name { font-size:13px;font-weight:700;margin-bottom:6px;color:var(--fg); }
+  .habit-month-days { display:flex;flex-direction:column;gap:2px; }
+  .habit-month-week-row { display:flex;gap:2px; }
+  .habit-weekday { width:13px;height:13px;font-size:9px;color:var(--sub);text-align:center;line-height:13px; }
   .habit-cell { width:13px;height:13px;border-radius:3px;background:var(--border); }
   .habit-cell.on { background:#2ECC71; }
+  .habit-cell.blank { background:transparent; }
+  .habit-cell.today { outline:2px solid var(--accent); }
   .habit-legend { display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub); }
   .habit-empty { text-align:center;padding:40px;color:var(--sub);font-size:14px; }
 </style>
@@ -21,9 +29,64 @@
 <div class="habits-header">
   <div class="page-title">Habits</div>
   {% if habits %}
-  <span style="font-size:13px;color:var(--sub);">{{ habits | length }} habit(s) configured</span>
+  <span class="hab-habit-count">{{ habits | length }} habit(s) configured</span>
+  <select class="hab-time-select" id="hab-time-select" onchange="onTimeChange(this.value)">
+    <option value="" {% if not time %}selected{% endif %}>Default (per habit)</option>
+    {% for label, code in time_options %}
+    <option value="{{ code }}" {% if code == time %}selected{% endif %}>{{ label }}</option>
+    {% endfor %}
+  </select>
+  {% with prefix="hab-" %}
+  {% include "_time_picker.html" %}
+  {% endwith %}
   {% endif %}
 </div>
+
+<script src="/static/js/time_picker.js"></script>
+<script>
+var tp;
+(function() {
+  tp = new TimePicker({
+    prefix: "hab-",
+    yearMin: {{ year_range[0] }},
+    yearMax: {{ year_range[-1] }},
+    onChange: function(code) { updateUrl(); }
+  });
+
+  function updateUrl() {
+    var time = document.getElementById('hab-time-select').value;
+    var params = new URLSearchParams();
+    if (time === '') {
+      // Default — each habit uses its configured weeks
+    } else if (time === 'year' || time === 'month' || time === 'date') {
+      var ct = tp.getTime();
+      if (ct) { params.set('time', time); params.set('custom_time', ct); }
+    } else if (time === 'range') {
+      var r = tp.getRange();
+      params.set('time', 'range');
+      if (r && r.from) params.set('from_date', r.from);
+      if (r && r.to)   params.set('to_date', r.to);
+    } else {
+      params.set('time', time);
+    }
+    window.location = '/habits' + (params.toString() ? '?' + params.toString() : '');
+  }
+  window.updateUrl = updateUrl;
+  window.onTimeChange = function(val) { tp.onSelectChange(val); };
+
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    var time = params.get('time');
+    if (time === 'year' || time === 'month' || time === 'date') {
+      tp.setTime(time, params.get('custom_time'));
+    } else if (time === 'range') {
+      tp.setTime('range', null, params.get('from_date'), params.get('to_date'));
+    } else if (time) {
+      tp.setTime(time);
+    }
+  })();
+})();
+</script>
 
 {% if not habits %}
 <div class="card" style="max-width:520px;padding:24px;margin:0 auto;">
@@ -44,22 +107,44 @@ weeks = 12</pre>
     <div class="habit-head">
       <span class="habit-name">{{ hname | replace('_',' ') }}</span>
       <span class="habit-streak">{{ h.streak }} day{{ '' if h.streak == 1 else 's' }}</span>
-      <span class="habit-stats">{{ h.days_done }} of {{ h.total_days }} days · last {{ h.weeks }} weeks</span>
+      <span class="habit-stats">{{ h.days_done }} of {{ h.total_days }} days · {{ h.range_label }}</span>
     </div>
-    <div class="habit-grid">
-      {% for week in h.grid | batch(7) %}
-      <div class="habit-week">
-        {% for cell in week %}
-        <div class="habit-cell {{ 'on' if cell.present }}" title="{{ cell.date }}"></div>
-        {% endfor %}
+    <div class="habit-months">
+      {% for m in h.months %}
+      <div class="habit-month">
+        <div class="habit-month-name">{{ m.name }}</div>
+        <div class="habit-month-week-row">
+          <span class="habit-weekday">M</span>
+          <span class="habit-weekday">T</span>
+          <span class="habit-weekday">W</span>
+          <span class="habit-weekday">T</span>
+          <span class="habit-weekday">F</span>
+          <span class="habit-weekday">S</span>
+          <span class="habit-weekday">S</span>
+        </div>
+        <div class="habit-month-days">
+          {% for week in m.days | batch(7) %}
+          <div class="habit-month-week-row">
+            {% for cell in week %}
+            {% if cell.date %}
+            <div class="habit-cell {{ 'on' if cell.present }} {{ 'today' if cell.is_today }}" title="{{ cell.date }}"></div>
+            {% else %}
+            <div class="habit-cell blank"></div>
+            {% endif %}
+            {% endfor %}
+          </div>
+          {% endfor %}
+        </div>
       </div>
       {% endfor %}
     </div>
     <div class="habit-legend">
-      <span>less</span>
+      <span>Less</span>
       <div class="habit-cell"></div>
       <div class="habit-cell on"></div>
-      <span>more</span>
+      <span>More</span>
+      <div class="habit-cell today"></div>
+      <span>Today</span>
       <span style="margin-left:auto;">{{ h.streak }} day streak</span>
     </div>
   </div>

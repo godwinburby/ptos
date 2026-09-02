@@ -2033,12 +2033,19 @@ def get_habit_names():
     return sorted(k.split(".", 1)[1] for k in queries if k.startswith("habit."))
 
 
-def get_habit_data(habit_name):
+def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
     """Return streak + weekly presence grid for a configured habit.
 
-    Cached per habit under key habit:{habit_name}; invalidated by
-    _invalidate_history_cache() on any record write."""
-    cache_key = f"habit:{habit_name}"
+    Grid columns are real calendar weeks starting Monday; today is the last
+    cell of the current (possibly partial) week. Window resolution:
+      - from_date/to_date → explicit inclusive range
+      - time → any resolve_time keyword or YYYY / YYYY-MM / YYYY-MM-DD literal
+      - neither → the habit's configured `weeks` ending today
+    Future days past today are never rendered. Cached per habit + window under
+    habit:{habit_name}:...; invalidated broadly by _invalidate_history_cache()
+    on any record write."""
+    time = time or None
+    cache_key = f"habit:{habit_name}:{time or 'default'}:{from_date or ''}:{to_date or ''}"
     cached = ptos._CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -2057,8 +2064,26 @@ def get_habit_data(habit_name):
     weeks = int(cfg.get("weeks", 12))
 
     today = dt.date.today()
-    start = today - dt.timedelta(days=weeks * 7 - 1)
-    matches = ptos.find_records_with_location(filters, start=start, end=today)
+
+    if from_date:
+        start = ptos.parse_from_to(from_date)
+        end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
+    elif time:
+        start, end = _resolve_time(time)
+    else:
+        monday = today - dt.timedelta(days=today.weekday())
+        start = monday - dt.timedelta(days=(weeks - 1) * 7)
+        end = today
+
+    end = min(end, today)
+    grid_start = start - dt.timedelta(days=start.weekday())
+    if grid_start < dt.date.min:
+        grid_start = dt.date.min
+    max_days = 260 * 7  # cap giant windows (e.g. "all time") at ~5 years of columns
+    while (end - grid_start).days + 1 > max_days:
+        grid_start += dt.timedelta(days=7)
+
+    matches = ptos.find_records_with_location(filters, start=grid_start, end=end)
 
     days_present = set()
     for _, _, line in matches:
@@ -2076,22 +2101,60 @@ def get_habit_data(habit_name):
         streak += 1
         cursor -= dt.timedelta(days=1)
 
-    grid = [
-        {"date": str(start + dt.timedelta(days=i)),
-         "present": (start + dt.timedelta(days=i)) in days_present}
-        for i in range((today - start).days + 1)
-    ]
+    grid = []
+    month_labels = []
+    months = []
+    cur_month = None
+    for i in range((end - grid_start).days + 1):
+        d = grid_start + dt.timedelta(days=i)
+        key = (d.year, d.month)
+        if key != cur_month:
+            cur_month = key
+            month_labels.append({
+                "label": dt.date(d.year, d.month, 1).strftime("%b"),
+                "column": i // 7,
+            })
+            # leading blanks align day 1 with its weekday column (Monday=0)
+            month = {
+                "name": d.strftime("%B %Y"),
+                "days": [{"date": None, "present": False, "is_today": False}]
+                        * d.weekday(),
+            }
+            months.append(month)
+        cell = {
+            "date": str(d),
+            "present": d in days_present,
+            "is_today": d == today,
+        }
+        months[-1]["days"].append(cell)
+        grid.append(cell)
+
+    for month in months:
+        pad = (-len(month["days"])) % 7
+        if pad:
+            month["days"].extend(
+                {"date": None, "present": False, "is_today": False} for _ in range(pad)
+            )
+
+    range_label = f"{_fmt_range(start)} \u2013 {_fmt_range(end)}, {end.year}"
 
     result = {
         "habit_name": habit_name,
         "streak": streak,
         "weeks": weeks,
         "grid": grid,
+        "months": months,
+        "month_labels": month_labels,
+        "range_label": range_label,
         "total_days": len(grid),
         "days_done": len(days_present),
     }
     ptos._CACHE[cache_key] = result
     return result
+
+
+def _fmt_range(d):
+    return f"{d.strftime('%b')} {d.day}"
 
 
 def get_calendar_names():

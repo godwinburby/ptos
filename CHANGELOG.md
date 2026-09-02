@@ -5,6 +5,36 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-02
+
+### Habits: calendar-style month blocks + time-window dropdown
+
+- Heatmap is now rendered as **per-month calendar blocks** — each month is its own bordered block with a "July 2026" name header, an M–T–W–T–F–S–S weekday row, and weeks as rows; leading blanks align the 1st under its weekday, trailing blanks pad each month to full weeks, today is outlined (`.habit-cell.today`), and a `range_label` caption ("Aug 11 – Sep 2, 2026") replaces the generic "last N weeks" text; legend gains a Today swatch
+- Grid presence per day is boolean; future days past today are never rendered; giant windows (e.g. "All time") are capped at 260 columns by trimming whole weeks from the front
+- **Time-window dropdown** (`_habit_time_options()`): This/Last month, quarter, year, All time, custom `[cycles]`, and Month/Date-range pickers — reused from the shared `_time_picker.html` component (prefix `hab-`), round-tripping `time`/`custom_time`/`from_date`/`to_date` URL params like `/thresholds`; tiny windows (today/yesterday/this,last week) excluded since they don't fit a week grid
+- `get_habit_data()` now accepts `time`/`from_date`/`to_date` (resolved via `_resolve_time`/`parse_from_to`; default still the habit's `weeks` ending today), returns per-month `months` blocks, and its cache key is per habit + window (`habit:{name}:{time}:{from}:{to}`), still invalidated on any record write
+- **`--habits [NAME]` CLI command** — `run_habits()` in `ptos_cli.py` prints the same per-month calendar blocks in text (`#` present, `.` miss, `^` today) with a streak/days-done/range header per habit; `--habits NAME` filters to one habit, unknown names exit with a friendly message, no habits configured prints the config hint
+- 12 new tests (`TestHabitWindow`, `TestHabitMonths`, `TestHabitCli`); habit test dates made year-robust (`_write_records` no longer hardcodes 2026)
+
+## 2026-09-01
+
+### Browse: group-by / sort-by dimension fields
+
+- Group by / Sort by dropdowns on `/browse` are populated with **dimension fields only** (fields flagged `dimension = false` and int fields excluded; `date`/`day`/`month`/`year` always included), the same rule `api_type_fields` uses
+- Cross-type (no type selected) view uses a server-side global dimension union; selecting a single type immediately narrows the dropdowns to that type's dimensions so fields from other types never appear
+- Cache-busted `filter_builder.js?v=2` + service worker cache bump to `ptos-v3` so stale cached JS can't silently revert the behavior
+
+### Record dates & Todo Overdue
+
+- Record forms (add/edit) accept past, present, and future dates — the HTML `max` cap that blocked future dates was removed (the backend never restricted dates)
+- Todo Overdue section in the timeline grouping is **collapsed by default** (still toggleable via the section header)
+
+### Filter expressions: spaced operators + missing-field semantics
+
+- `_tok_where` now collapses spaced `field op value` token triples, so `tag != snacks` parses identically to `tag!=snacks` and `NOT (tag=snacks)` (previously the spaced form was silently dropped)
+- `!=` / `!~` now match records **missing the field entirely** (NaN-like, equal to `NOT (field=x)`); `=` and ordered comparisons remain `False` for missing fields
+- 14 regression tests added (`TestSpacedOperators`, `TestNotEqualsMissingKey` in `tests/test_filters.py`); AGENTS.md documents the filter expression syntax
+
 ## 2026-08-31
 
 ### Kernel boundary: promote internal helpers to public (Phase 1)
