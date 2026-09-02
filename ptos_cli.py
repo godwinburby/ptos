@@ -197,6 +197,8 @@ def build_parser(cycles):
                      help="Show overdue records. Optional: named due config from queries.toml, or N days override")
     ana.add_argument("--thresholds",   nargs="?", const="__ALL__", metavar="TIME",
                      help="Show threshold status. Optional: time window override (default: this-month)")
+    ana.add_argument("--habits",       nargs="?", const="__ALL__", metavar="NAME",
+                     help="Show habit calendars. Optional: habit name from queries.toml")
     ana.add_argument("--sum-field", dest="sum_field", metavar="FIELD",
                      help="Field to sum instead of the default numeric field (e.g. advance, duration)")
     ana.add_argument("--table",        action="store_true", help="Show results as a table instead of raw lines")
@@ -691,6 +693,56 @@ def run_thresholds(time_arg):
               f"{pct:>{pct_col}.0f}% {sym:>{status_col}} {unit:<{unit_col}}")
 
     print(f"\n{len(results)} threshold(s)\n")
+
+
+def run_habits(habit_arg):
+    import ptos_service as svc
+    try:
+        names = svc.get_habit_names()
+    except Exception as e:
+        sys.exit(f"Error reading habits: {e}")
+    if habit_arg != "__ALL__":
+        if habit_arg not in names:
+            configured = ", ".join(names) or "none"
+            sys.exit(f"Habit '{habit_arg}' not found in queries.toml. Configured: {configured}")
+        names = [habit_arg]
+    if not names:
+        print("\nNo habits configured.\n")
+        print('Add a ["habit.meditation"] table to queries.toml:\n')
+        print('  ["habit.meditation"]')
+        print('  filters = ["type=habit", "name=meditation"]')
+        print('  weeks   = 12\n')
+        return
+
+    weekday_row = "M T W T F S S"
+    for name in names:
+        try:
+            data = svc.get_habit_data(name)
+        except Exception as e:
+            print(f"\n{name}: error: {e}\n")
+            continue
+        print(f"\n{name} - {data['streak']}-day streak - "
+              f"{data['days_done']} of {data['total_days']} days - "
+              f"{data['range_label'].replace(chr(0x2013), '-')}")
+        for month in data["months"]:
+            today_col = None
+            print(f"\n  {month['name']}")
+            print(f"  {weekday_row}")
+            for start in range(0, len(month["days"]), 7):
+                cells = []
+                for col, cell in enumerate(month["days"][start:start + 7]):
+                    if cell["date"] is None:
+                        cells.append(" ")
+                    elif cell["present"]:
+                        cells.append("#")
+                    else:
+                        cells.append(".")
+                    if cell["is_today"]:
+                        today_col = start + col
+                print("  " + " ".join(cells))
+            if today_col is not None:
+                print("  " + " " * (today_col * 2) + "^")
+        print("\n  '#' present, '.' miss, '^' today")
 
 
 # --------------------------------------------------
@@ -2010,6 +2062,11 @@ def main():
     # ---- thresholds mode ----
     if args.thresholds is not None:
         run_thresholds(args.thresholds)
+        return
+
+    # ---- habits mode ----
+    if args.habits is not None:
+        run_habits(args.habits)
         return
 
     if args.query:

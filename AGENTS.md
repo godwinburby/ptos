@@ -280,12 +280,13 @@ x 2026-07-12 2026-07-10 Completed task
 
 - **Data model** — a habit is just a record. Dedicated `type=habit name=X` (zero required fields beyond `name`) is the recommended model; existing types work too via per-habit `filters` (e.g. `filters = ["type=exercise"]` for "did I exercise today"). No new write path — logging reuses `append_record`/presets
 - **Config** — `[habit.NAME]` in `queries.toml` (quoted dotted key `["habit.NAME"]`, same as boards — the bare `[habit.NAME]` nested-table form does NOT load): `filters` (list of `field=value` strings, same syntax `find_records_with_location` takes), `weeks` (default 12). Multiple entries = multiple tracked habits on one page
-- **Service** (`ptos_service.py`): `get_habit_names()` lists configured habits; `get_habit_data(habit_name)` raises `PTOSError` if unconfigured/no filters, calls `find_records_with_location(filters, start, end)` over the last N weeks, builds `days_present` set (any matching record marks the day), computes streak walking back from today (yesterday if today not yet logged — "today isn't over yet" rule), returns `{habit_name, streak, weeks, grid:[{date,present}], total_days, days_done}`. Grid presence is boolean — logging twice in one day still = one present cell
-- **Caching** — `get_habit_data` cached under `habit:{name}`; `_invalidate_history_cache()` pops `habit:` keys alongside `history:`/`condsug:` so all 7 record-write paths already invalidate habits (no new call sites)
-- **Route** — `GET /habits` renders `habits.html` (one card per habit: streak badge, GitHub-style grid with weeks as columns / 7 day-rows, "X of Y days" summary); empty state shows the config snippet. Nav link in `base.html` next to Board (`icons/habits.html`)
+- **Service** (`ptos_service.py`): `get_habit_names()` lists configured habits; `get_habit_data(habit_name, time=None, from_date=None, to_date=None)` raises `PTOSError` if unconfigured/no filters, resolves the window (explicit `from_date`/`to_date` inclusive range → `time` keyword/literal via `_resolve_time` → else the habit's configured `weeks` ending today), floors the start to **Monday** so columns are real calendar weeks (grid always starts a week boundary; future days past today are never rendered; giant windows like `all` are capped at 260 columns by trimming whole weeks from the front), calls `find_records_with_location(filters, start, end)`, builds `days_present` set (any matching record marks the day), computes streak walking back from today (yesterday if today not yet logged — "today isn't over yet" rule), returns `{habit_name, streak, weeks, grid:[{date,present,is_today}], months:[{name, days:[{date|None,present,is_today}]}], month_labels, range_label, total_days, days_done}`. `months` renders as **per-month calendar blocks**: leading `None` (blank) cells align the 1st under its weekday (Monday=0), trailing blanks pad each month to full weeks; the current month never renders past today; `month_labels` keeps the legacy absolute-week-column form for tests/back-compat; `range_label` is "Aug 11 – Sep 2, 2026"-style (intent window, not floored grid start). Grid presence is boolean — logging twice in one day still = one present cell; `_fmt_range` helper formats the caption dates
+- **Caching** — `get_habit_data` cached per habit + window under `habit:{name}:{time|'default'}:{from_date}:{to_date}`; `_invalidate_history_cache()` pops `habit:` keys alongside `history:`/`condsug:` so all 7 record-write paths already invalidate habits (no new call sites)
+- **Route** — `GET /habits` renders `habits.html` (one card per habit: streak badge, **per-month calendar blocks** — each month is its own bordered block with a "July 2026" name header, M-T-W-T-F-S-S weekday row, weeks as rows, leading/trailing blanks, today outlined via `.habit-cell.today`, "X of Y days · range" summary, Less/More + Today legend); **time-window dropdown** — curated `_habit_time_options()` (This/Last month, This/Last quarter, This/Last year, All time + custom cycles + Month/Date range pickers reusing `_time_picker.html` with prefix `hab-` and `time_picker.js`); tiny windows (today/yesterday/this,last week) excluded since they break a week-grid view; select round-trips `time`/`custom_time`/`from_date`/`to_date` URL params like `/thresholds`; empty state shows the config snippet. Nav link in `base.html` next to Board (`icons/habits.html`)
+- **CLI** — `--habits [NAME]` (`ptos_cli.py` `run_habits()`, lazily imports `ptos_service`): prints the same per-month calendar blocks in text (`#` present, `.` miss, `^` today pointer) with a `streak / days-done / range` header; `--habits NAME` filters to one configured habit (missing name → friendly exit); no habits configured → prints the `["habit.meditation"]` config hint
 - **Query Builder** — "Habits" tab (mirrors Boards tab): name, filters (space-separated `field=value` text input), weeks; round-trips through `save_queries_full(raw_habits=...)` which validates a non-empty `filters` list and writes `["habit.NAME"]` keys
 - **Schema** — `type=habit` in `[types].allowed` + `[type.habit]` (`required = ["name"]`, `name` field options in `[type.habit.fields.name]`). Without the schema entry, `validate_record` rejects `type=habit`
-- **Tests**: `tests/test_habits.py` (streak consecutive/gap/today-missing, double-log single present, cache invalidation on append, no-rescan on repeat call, unconfigured raises)
+- **Tests**: `tests/test_habits.py` (streak consecutive/gap/today-missing, double-log single present, cache invalidation on append, no-rescan on repeat call, unconfigured raises; `TestHabitWindow` covers Monday-aligned grid, `is_today`, month-label columns, `time="tm"`, from/to range, past window no-today, all-time column cap; `TestHabitMonths` covers per-month block shape/alignment/padding; `TestHabitCli` covers `--habits` output, name filtering, missing-name exit, no-habits hint)
 
 ## Calendar module (`/calendar` month grid)
 
@@ -476,9 +477,16 @@ Each platform has a single unified script that handles both first-time setup and
 - Stage only intended files, never commit secrets
 - Run `python -m pytest tests/ -v` before committing
 
+### Changelog (mandatory, enforced)
+
+- Every commit that changes **product files** (ptos modules, `desktop_app.py`, `web_templates/`, `web_static/`, `starters/`, root `schema.toml`/`config.toml`) must include its **CHANGELOG.md entry in the same commit** — each entry correlates 1:1 with a commit.
+- **Exempt**: pure docs (README/AGENTS/meta) and test-only refactors (tests/ files are outside the product pattern, no entry needed).
+- Keep the existing format: `## YYYY-MM-DD` section (append to today's if present), `### Heading` per logical change, bullets with **bold lead-ins**.
+- The pre-commit hook enforces this: staging product files without a staged `CHANGELOG.md` change blocks the commit.
+
 ## Pre-commit hook
 
-A git pre-commit hook runs the test suite and blocks commits on failure.
+A git pre-commit hook runs the test suite, blocks commits on failure, and blocks commits that change product files without a staged CHANGELOG.md change.
 
 ```bash
 cp scripts/pre-commit .git/hooks/pre-commit

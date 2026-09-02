@@ -127,6 +127,20 @@ def _board_time_options():
     opts.insert(6, ("Last 3 months", "last-3-months"))
     return opts
 
+def _habit_time_options():
+    """Time window options for habits: monthly/quarterly/yearly/all + month/range pickers.
+    Excludes tiny windows (today/yesterday/this,last week) that look broken on a week grid."""
+    keep = {"tm", "lm", "tq", "lq", "ty", "ly", "all", "month", "range"}
+    opts = [(label, code) for label, code in _build_time_options() if code in keep]
+    try:
+        for name in svc.get_config().get("cycles", {}):
+            label = name.replace("_", " ").title()
+            opts.insert(-1, (label, name))
+            opts.insert(-1, (f"{label} -1", f"{name}-1"))
+    except Exception:
+        pass
+    return opts
+
 # module-level for templates — refreshed per-request in routes that need it
 TIME_OPTIONS = _build_time_options()
 _TIME_DICT   = dict(TIME_OPTIONS)
@@ -2200,6 +2214,17 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
 
 @app.route("/habits")
 def habits():
+    time_param = request.args.get("time", "")
+    custom_time = request.args.get("custom_time", "")
+    from_date = request.args.get("from_date") or None
+    to_date = request.args.get("to_date") or None
+    if from_date:
+        resolved_time = "range"
+    elif time_param in ("custom", "year", "month", "date") and custom_time \
+            and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
+        resolved_time = custom_time
+    else:
+        resolved_time = time_param or None
     try:
         names = svc.get_habit_names()
     except Exception:
@@ -2207,12 +2232,17 @@ def habits():
     data = {}
     for n in names:
         try:
-            data[n] = svc.get_habit_data(n)
+            data[n] = svc.get_habit_data(n, time=resolved_time,
+                                         from_date=from_date, to_date=to_date)
         except Exception:
             continue
     return render_template("habits.html",
         tab="habits", title="Habits",
-        now=_now_str(), habits=data)
+        now=_now_str(), habits=data,
+        time_options=_habit_time_options(),
+        time=time_param, custom_time=custom_time,
+        from_date=from_date or "", to_date=to_date or "",
+        year_range=_YEAR_RANGE)
 
 
 @app.route("/thresholds")

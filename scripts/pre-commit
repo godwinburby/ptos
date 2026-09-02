@@ -9,3 +9,13 @@ if [ $? -ne 0 ]; then
     echo "(only for genuinely unrelated pre-existing failures)."
     exit 1
 fi
+
+# Changelog gate: product-file changes require a staged CHANGELOG.md change
+if git diff --cached --name-only | grep -E '^(ptos[^/]*\.py|desktop_app\.py|web_templates/.+|web_static/.+|starters/.+|schema\.toml|config\.toml)$' > /dev/null; then
+    if ! git diff --cached --name-only | grep -q '^CHANGELOG\.md$'; then
+        echo ""
+        echo "CHANGELOG.md must be updated when product files change."
+        echo "Stage a CHANGELOG.md entry (see AGENTS.md 'Changelog'), or use --no-verify (not recommended)."
+        exit 1
+    fi
+fi
