@@ -2034,18 +2034,21 @@ def get_habit_names():
 
 
 def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
-    """Return streak + weekly presence grid for a configured habit.
+    """Return streak + presence grid/months for a configured habit.
 
     Grid columns are real calendar weeks starting Monday; today is the last
     cell of the current (possibly partial) week. Window resolution:
       - from_date/to_date → explicit inclusive range
-      - time → any resolve_time keyword or YYYY / YYYY-MM / YYYY-MM-DD literal
-      - neither → the habit's configured `weeks` ending today
-    Future days past today are never rendered. Cached per habit + window under
-    habit:{habit_name}:...; invalidated broadly by _invalidate_history_cache()
-    on any record write."""
+      - time → any resolve_time keyword (incl. "weeks" for the per-habit window)
+        or YYYY / YYYY-MM / YYYY-MM-DD literal
+      - neither → the app-wide default window (`tm`, this month)
+    The streak is computed independently over the habit's configured `weeks`
+    (default 12) ending today, so the badge never truncates to the display
+    window. Future days past today are never rendered. Cached per habit +
+    window under habit:{habit_name}:...; invalidated broadly by
+    _invalidate_history_cache() on any record write."""
     time = time or None
-    cache_key = f"habit:{habit_name}:{time or 'default'}:{from_date or ''}:{to_date or ''}"
+    cache_key = f"habit:{habit_name}:{time or 'tm'}:{from_date or ''}:{to_date or ''}"
     cached = ptos._CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -2068,12 +2071,14 @@ def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
     if from_date:
         start = ptos.parse_from_to(from_date)
         end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
-    elif time:
-        start, end = _resolve_time(time)
-    else:
+    elif time == "weeks":
         monday = today - dt.timedelta(days=today.weekday())
         start = monday - dt.timedelta(days=(weeks - 1) * 7)
         end = today
+    elif time:
+        start, end = _resolve_time(time)
+    else:
+        start, end = _resolve_time("tm")
 
     end = min(end, today)
     grid_start = start - dt.timedelta(days=start.weekday())
@@ -2083,27 +2088,36 @@ def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
     while (end - grid_start).days + 1 > max_days:
         grid_start += dt.timedelta(days=7)
 
-    matches = ptos.find_records_with_location(filters, start=grid_start, end=end)
+    # Streak span: the habit's configured weeks, decoupled from the display
+    # window so the badge isn't truncated by a narrow view (e.g. this month).
+    streak_monday = today - dt.timedelta(days=today.weekday())
+    streak_start = streak_monday - dt.timedelta(days=(weeks - 1) * 7)
+    scan_start = min(grid_start, streak_start)
+    if scan_start < dt.date.min:
+        scan_start = dt.date.min
 
-    days_present = set()
+    matches = ptos.find_records_with_location(filters, start=scan_start, end=end)
+
+    present_all = set()
     for _, _, line in matches:
         try:
             d, _, _ = ptos.parse_line(line)
-            days_present.add(d)
+            present_all.add(d)
         except Exception:
             continue
 
+    days_present = {d for d in present_all if grid_start <= d <= end}
+
     streak = 0
     cursor = today
-    if today not in days_present:
+    if today not in present_all:
         cursor = today - dt.timedelta(days=1)
-    while cursor in days_present:
+    while cursor in present_all:
         streak += 1
         cursor -= dt.timedelta(days=1)
 
     grid = []
     month_labels = []
-    months = []
     cur_month = None
     for i in range((end - grid_start).days + 1):
         d = grid_start + dt.timedelta(days=i)
@@ -2114,20 +2128,32 @@ def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
                 "label": dt.date(d.year, d.month, 1).strftime("%b"),
                 "column": i // 7,
             })
-            # leading blanks align day 1 with its weekday column (Monday=0)
-            month = {
-                "name": d.strftime("%B %Y"),
-                "days": [{"date": None, "present": False, "is_today": False}]
-                        * d.weekday(),
-            }
-            months.append(month)
-        cell = {
+        grid.append({
             "date": str(d),
             "present": d in days_present,
             "is_today": d == today,
-        }
-        months[-1]["days"].append(cell)
-        grid.append(cell)
+        })
+
+    months = []
+    cur_month = None
+    if start <= end:
+        for i in range((end - start).days + 1):
+            d = start + dt.timedelta(days=i)
+            key = (d.year, d.month)
+            if key != cur_month:
+                cur_month = key
+                # leading blanks align the first day under its weekday (Monday=0)
+                month = {
+                    "name": d.strftime("%B %Y"),
+                    "days": [{"date": None, "present": False, "is_today": False}]
+                            * d.weekday(),
+                }
+                months.append(month)
+            months[-1]["days"].append({
+                "date": str(d),
+                "present": d in days_present,
+                "is_today": d == today,
+            })
 
     for month in months:
         pad = (-len(month["days"])) % 7

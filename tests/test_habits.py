@@ -78,6 +78,18 @@ class TestHabitStreak:
         assert len(present_days) == 1
         assert present_days[0]["date"] == str(today)
 
+    def test_streak_independent_of_display_window(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=60)
+        today = dt.date.today()
+        lines = [(today - dt.timedelta(days=i)).isoformat() for i in range(21)]
+        _write_records([f"{d} type=habit name=meditation" for d in lines])
+        data = svc.get_habit_data("med")
+        assert data["streak"] == 21
+        grid_start = dt.date.fromisoformat(data["grid"][0]["date"])
+        assert data["days_done"] == (today - grid_start).days + 1
+        assert len(data["months"]) == 1
+
     def test_unconfigured_habit_raises(self):
         _clean_cache()
         with pytest.raises(svc.PTOSError):
@@ -93,7 +105,7 @@ class TestHabitDataBasics:
             f"{today} type=habit name=meditation",
             f"{(today - dt.timedelta(days=3))} type=habit name=meditation",
         ])
-        data = svc.get_habit_data("med")
+        data = svc.get_habit_data("med", time="weeks")
         monday = today - dt.timedelta(days=today.weekday())
         start = monday - dt.timedelta(days=(2 - 1) * 7)
         assert data["grid"][0]["date"] == str(start)
@@ -182,7 +194,7 @@ class TestHabitWindow:
         _clean_cache()
         _add_habit("med", ["type=habit", "name=meditation"], weeks=30)
         _write_records([])
-        data = svc.get_habit_data("med")
+        data = svc.get_habit_data("med", time="weeks")
         cols = [m["column"] for m in data["month_labels"]]
         assert len(cols) >= 2
         for a, b in zip(cols, cols[1:]):
@@ -201,6 +213,27 @@ class TestHabitWindow:
         assert first.weekday() == 0
         assert data["total_days"] == (today - first).days + 1
         assert data["range_label"].startswith(dt.date.today().strftime("%b"))
+
+    def test_default_window_is_this_month(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=30)
+        today = dt.date.today()
+        _write_records([])
+        data = svc.get_habit_data("med")
+        assert len(data["months"]) == 1
+        assert data["months"][0]["name"] == today.strftime("%B %Y")
+        assert dt.date.fromisoformat(data["grid"][-1]["date"]) == today
+
+    def test_weeks_code_uses_per_habit_window(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=30)
+        today = dt.date.today()
+        _write_records([])
+        data = svc.get_habit_data("med", time="weeks")
+        monday = today - dt.timedelta(days=today.weekday())
+        start = monday - dt.timedelta(days=(30 - 1) * 7)
+        assert dt.date.fromisoformat(data["grid"][0]["date"]) == start
+        assert len(data["months"]) >= 2
 
     def test_range_window(self):
         _clean_cache()
@@ -263,12 +296,8 @@ class TestHabitMonths:
                     break
             first = dt.date.fromisoformat(
                 next(c["date"] for c in m["days"] if c["date"]))
-            # blocks starting mid-month (window began inside the month) have no
-            # leading blanks; full months always start on the 1st under its weekday
-            if first.day == 1:
-                assert leading == first.weekday()
-            else:
-                assert leading == 0
+            # every block aligns its first real day under its weekday (Monday=0)
+            assert leading == first.weekday()
 
     def test_months_weeks_padded_to_multiple_of_7(self):
         data = self._data()

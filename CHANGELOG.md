@@ -7,12 +7,18 @@ Format: `[version or date] — description`
 
 ## 2026-09-02
 
+### Habits: default window follows the app-wide "this month"
+
+- The default view is now the **app-wide `this-month` window** (same as every other page), so `/habits` no longer surprises by defaulting to ~12 weeks back; the streak badge is **decoupled from the display window** and always counts over the habit's configured `weeks` (default 12) ending today, so a long streak shows fully even under a one-month view
+- Dropdown: "This month (default)" (empty value) + new **"Per-habit weeks"** option (`?time=weeks`) that restores the old per-habit `weeks` window; cache key for the default is now `habit:{name}:tm:` (shared with explicit `tm`), `weeks` config repurposed as streak-history span
+- 3 new tests (`test_default_window_is_this_month`, `test_streak_independent_of_display_window`, `test_weeks_code_uses_per_habit_window`); weeks-window assertions moved to explicit `time="weeks"` calls
+
 ### Habits: calendar-style month blocks + time-window dropdown
 
 - Heatmap is now rendered as **per-month calendar blocks** — each month is its own bordered block with a "July 2026" name header, an M–T–W–T–F–S–S weekday row, and weeks as rows; leading blanks align the 1st under its weekday, trailing blanks pad each month to full weeks, today is outlined (`.habit-cell.today`), and a `range_label` caption ("Aug 11 – Sep 2, 2026") replaces the generic "last N weeks" text; legend gains a Today swatch
 - Grid presence per day is boolean; future days past today are never rendered; giant windows (e.g. "All time") are capped at 260 columns by trimming whole weeks from the front
 - **Time-window dropdown** (`_habit_time_options()`): This/Last month, quarter, year, All time, custom `[cycles]`, and Month/Date-range pickers — reused from the shared `_time_picker.html` component (prefix `hab-`), round-tripping `time`/`custom_time`/`from_date`/`to_date` URL params like `/thresholds`; tiny windows (today/yesterday/this,last week) excluded since they don't fit a week grid
-- `get_habit_data()` now accepts `time`/`from_date`/`to_date` (resolved via `_resolve_time`/`parse_from_to`; default still the habit's `weeks` ending today), returns per-month `months` blocks, and its cache key is per habit + window (`habit:{name}:{time}:{from}:{to}`), still invalidated on any record write
+- `get_habit_data()` accepts `time`/`from_date`/`to_date` (resolved via `_resolve_time`/`parse_from_to`; `time="weeks"` for the per-habit window), returns per-month `months` blocks, and its cache key is per habit + window (`habit:{name}:{time}:{from}:{to}`), still invalidated on any record write
 - **`--habits [NAME]` CLI command** — `run_habits()` in `ptos_cli.py` prints the same per-month calendar blocks in text (`#` present, `.` miss, `^` today) with a streak/days-done/range header per habit; `--habits NAME` filters to one habit, unknown names exit with a friendly message, no habits configured prints the config hint
 - 12 new tests (`TestHabitWindow`, `TestHabitMonths`, `TestHabitCli`); habit test dates made year-robust (`_write_records` no longer hardcodes 2026)
 

@@ -31,7 +31,8 @@
   {% if habits %}
   <span class="hab-habit-count">{{ habits | length }} habit(s) configured</span>
   <select class="hab-time-select" id="hab-time-select" onchange="onTimeChange(this.value)">
-    <option value="" {% if not time %}selected{% endif %}>Default (per habit)</option>
+    <option value="" {% if not time %}selected{% endif %}>This month (default)</option>
+    <option value="weeks" {% if time == "weeks" %}selected{% endif %}>Per-habit weeks</option>
     {% for label, code in time_options %}
     <option value="{{ code }}" {% if code == time %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
@@ -57,7 +58,7 @@ var tp;
     var time = document.getElementById('hab-time-select').value;
     var params = new URLSearchParams();
     if (time === '') {
-      // Default — each habit uses its configured weeks
+      // Default — this month (app-wide default window)
     } else if (time === 'year' || time === 'month' || time === 'date') {
       var ct = tp.getTime();
       if (ct) { params.set('time', time); params.set('custom_time', ct); }
