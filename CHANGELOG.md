@@ -7,6 +7,21 @@ Format: `[version or date] — description`
 
 ## 2026-09-02
 
+### CLI parity: search, links, config, calendar, board (`--backlinks`/`--find`/`--link-ids`/`--config`/`--calendars`/`--board`)
+
+- `--backlinks SUBJECT` — prints every reference to a subject (note base name, `[[bracket]]` target, or `type:id`) grouped by notes/journal/todo/records, via `svc.get_backlinks()`; `--link-ids` lists all `type:id` targets from records/todos/notes; `--find TEXT` mirrors the web universal search (records, journal, todos incl. `done.*.txt`, notes, `template.md` excluded, glob `*`/`?` wildcards + ~160-char snippets)
+- `--get-config KEY` / `--set-config KEY VALUE` — dotted config paths (e.g. `todo.priority_labels.A`, `sync.remote_name`, `home.quick_presets`); `true`/`false` read as bool, pure numbers as int/float, missing sections auto-created; reads/writes `ptos.CONFIG_PATH` at call time so the tests' monkeypatching works, and `_invalidate_all()` runs after writes
+- `--calendars [NAME]` — ASCII month grid (`.` empty, `1-9` count, `#` 10+) for the global All-records view or a named `[calendar.*]`; `--board [NAME]` prints per-column counts + date/card-title/note lines (capped at 15 per lane) honoring the board's time window and limit
+- `--habits` now honors `-t/--time` (incl. `--time weeks` → per-habit weeks)
+- 25 new CLI tests (`tests/test_search_cli.py`, `tests/test_config_cli.py`, `tests/test_views_cli.py`); all thin wrappers in `ptos_cli.py`, zero `ptos.py` changes
+
+### Notes CLI (`--notes`) for 1:1 CLI/web parity
+
+- New `--notes ACTION...` entry point in `ptos_cli.py` (`_handle_notes`), a thin wrapper over existing engine/service functions (no new logic in `ptos.py`): `list [PATH]` (browse folders + `.md` files), `template PATH` (resolved new-note template), `new PATH --name N [--content C]` (templates applied, parent template prompts, non-TTY blanks), `read PATH` (content + backlinks summary), `edit PATH` (opens in configured editor, covers `template.md`), `delete PATH [--force]` (warns + confirms when the note has backlinks, refuses on non-TTY without `--force`), `id PATH` (print/generate `ptos-id`)
+- Backlink subject is the **file base name** (same key the web backlinks panel uses via breadcrumb label), stable across `--notes id` prepending a ptos-id comment
+- Folder create/rename/delete are deliberately **not** CLI actions (`mkdir`/`mv`/`rm` suffice); the path argument must follow the action directly
+- 24 new tests in `tests/test_notes_cli.py`; AGENTS.md Notes section documents the CLI and corrects the stale "template.md excluded from listings" claim (`list_dir`/web/CLI all show it — it's only skipped by bracket-scan)
+
 ### Habits: default window follows the app-wide "this month"
 
 - The default view is now the **app-wide `this-month` window** (same as every other page), so `/habits` no longer surprises by defaulting to ~12 weeks back; the streak badge is **decoupled from the display window** and always counts over the habit's configured `weeks` (default 12) ending today, so a long streak shows fully even under a one-month view
