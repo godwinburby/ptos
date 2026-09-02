@@ -11,6 +11,9 @@ Run:  python ptos_cli.py [args]
 
 import sys
 import os
+import fnmatch
+import json
+import tomllib
 import datetime as dt
 import json
 import csv
@@ -51,7 +54,7 @@ from ptos import (
     restore_data, restore_config,
     backup_data, backup_config, list_backups, delete_backup,
     doctor_check, print_doctor_results,
-    get_log_files, atomic_write, run_sync,
+    get_log_files, atomic_write, AtomicWrite, run_sync,
     # Output / rendering helpers
     group_results, pivot_results, detect_value_field,
     fmt_avg, render_group, render_pivot,
@@ -198,7 +201,12 @@ def build_parser(cycles):
     ana.add_argument("--thresholds",   nargs="?", const="__ALL__", metavar="TIME",
                      help="Show threshold status. Optional: time window override (default: this-month)")
     ana.add_argument("--habits",       nargs="?", const="__ALL__", metavar="NAME",
-                     help="Show habit calendars. Optional: habit name from queries.toml")
+                     help="Show habit calendars. Optional: habit name from queries.toml;\n"
+                          "  also honors -t/--time (and --habits ... --time weeks)")
+    ana.add_argument("--calendars",    nargs="?", const="__ALL__", metavar="NAME",
+                     help="Show a calendar month grid. Optional: named calendar from queries.toml")
+    ana.add_argument("--board",        nargs="?", const="__ALL__", metavar="NAME",
+                     help="Show board columns. Optional: board name from queries.toml")
     ana.add_argument("--sum-field", dest="sum_field", metavar="FIELD",
                      help="Field to sum instead of the default numeric field (e.g. advance, duration)")
     ana.add_argument("--table",        action="store_true", help="Show results as a table instead of raw lines")
@@ -259,6 +267,40 @@ def build_parser(cycles):
                      help="Open a journal file (default: today; accepts today/yesterday/YYYY-MM-DD)")
     utl.add_argument("-e", "--edit",    nargs="?", const="records", metavar="TARGET",
                      help="Edit a workspace file  (r s q c p d/j x)")
+    utl.add_argument("--notes", nargs="*", metavar=("ACTION", "PATH"),
+                     help="Notes ops (markdown + template CRUD; PATH follows right after ACTION):\n"
+                          "  list [PATH]                    browse a notes folder (default: root)\n"
+                          "  template PATH                  show the template a new note would use\n"
+                          "  new PATH --name N [--content C] create a note (templates applied)\n"
+                          "  read PATH                      print note content + its backlinks\n"
+                          "  edit PATH                      open a note in the editor\n"
+                          "  delete PATH [--force]          delete a note (confirms backlinks)\n"
+                          "  id PATH                        print / generate the note's ptos-id")
+    utl.add_argument("--name", dest="notes_name",
+                     help="File name for --notes new")
+    utl.add_argument("--content", dest="notes_content",
+                     help="Content for --notes new (default: resolved template / blank)")
+    utl.add_argument("--force", action="store_true",
+                     help="With --notes delete: skip the backlink confirmation")
+    utl.add_argument("--backlinks", metavar="SUBJECT",
+                     help="List every reference to SUBJECT across notes/journal/todo/records\n"
+                          "  (subject is a note file base name, a [[bracket]] target, or type:id)")
+    utl.add_argument("--find", metavar="TEXT",
+                     help="Universal search across records, journal, todos and notes\n"
+                          "  (supports * and ? glob wildcards, same as the web search)")
+    utl.add_argument("--link-ids", dest="link_ids", action="store_true",
+                     help="List all type:id targets (records, todos, notes)")
+    utl.add_argument("--get-config", dest="get_config_key", metavar="KEY",
+                     help="Print a config value for a dotted path, e.g.\n"
+                          "  todo.priority_labels.A     sync.remote_name\n"
+                          "  home.quick_presets         server.port\n"
+                          "  (lists the whole section when the path has no more subkeys)")
+    utl.add_argument("--set-config", dest="set_config", metavar=("KEY", "VALUE"),
+                     nargs=2,
+                     help="Set a config value via dotted path, e.g.\n"
+                          "  --set-config todo.priority_labels.A Critical\n"
+                          "  --set-config sync.remote_name my-mega\n"
+                          "  Interprets true/false as bool and pure numbers as int/float")
     utl.add_argument("--set",      nargs="+", metavar="KEY=VALUE",
                      help="Edit matched record(s)  (use with --where)\n"
                           "  key=value   replace field\n"
@@ -695,7 +737,7 @@ def run_thresholds(time_arg):
     print(f"\n{len(results)} threshold(s)\n")
 
 
-def run_habits(habit_arg):
+def run_habits(habit_arg, time_code=None):
     import ptos_service as svc
     try:
         names = svc.get_habit_names()
@@ -717,7 +759,7 @@ def run_habits(habit_arg):
     weekday_row = "M T W T F S S"
     for name in names:
         try:
-            data = svc.get_habit_data(name)
+            data = svc.get_habit_data(name, time=time_code)
         except Exception as e:
             print(f"\n{name}: error: {e}\n")
             continue
@@ -743,6 +785,520 @@ def run_habits(habit_arg):
             if today_col is not None:
                 print("  " + " " * (today_col * 2) + "^")
         print("\n  '#' present, '.' miss, '^' today")
+
+
+# --------------------------------------------------
+# Notes ops (markdown + template CRUD)
+# --------------------------------------------------
+
+def _yesno(prompt, default=False):
+    if not sys.stdin.isatty():
+        return default
+    try:
+        ans = input(prompt).strip().lower()
+    except (EOFError, KeyboardInterrupt):
+        return default
+    return ans in ("y", "yes")
+
+
+def _note_title(rel_path):
+    """Note subject for backlink matching: the file base name with no .md
+    extension — the same key the web backlinks panel uses (breadcrumb label)."""
+    return os.path.splitext(os.path.basename(rel_path))[0]
+
+
+def _print_backlinks(bl):
+    total = sum(len(v) for v in bl.values())
+    if not total:
+        print("\nNo backlinks.")
+        return
+    print(f"\nBacklinks ({total}):")
+    for kind in ("notes", "journal", "todo", "records"):
+        items = bl.get(kind, [])
+        if not items:
+            continue
+        print(f"  {kind}:")
+        for loc in items[:10]:
+            if kind == "notes":
+                print(f"    {loc['rel_path']}  ({loc['title']})")
+            elif kind == "journal":
+                print(f"    {loc['date']}")
+            elif kind == "todo":
+                print(f"    {loc['path']}:{loc['lineno']}  {loc['line'].strip()[:60]}")
+            else:
+                print(f"    {loc['filepath']}:{loc['lineno'] + 1}  [{loc['type']} {loc['field']}]  "
+                      f"{loc['snippet'][:60]}")
+        if len(items) > 10:
+            print(f"    …and {len(items) - 10} more")
+
+
+def _handle_notes(args):
+    """--notes ACTION ... — markdown + template operations (see --help)."""
+    import ptos_service as svc
+    acts = args.notes or []
+    if not acts:
+        sys.exit("Usage: ptos --notes list|template|new|read|edit|delete|id  (see --help)")
+    action, rest = acts[0], acts[1:]
+
+    def need(pos=0):
+        if pos >= len(rest):
+            sys.exit(f"--notes {action}: missing path argument")
+        return rest[pos]
+
+    if action == "list":
+        path = need() if rest else ""
+        try:
+            listing = ptos.list_dir(path)
+        except Exception as e:
+            sys.exit(str(e))
+        label = f"notes/{path}" if path else "notes (root)"
+        print(f"\n{label}\n")
+        if listing["folders"]:
+            print("Folders:")
+            for f in listing["folders"]:
+                print(f"  {f['name']}/")
+        if listing["files"]:
+            if listing["folders"]:
+                print()
+            print("Files:")
+            for f in listing["files"]:
+                print(f"  {f['name']}")
+        if not listing["folders"] and not listing["files"]:
+            print("  (empty)")
+        print()
+        return
+
+    if action == "template":
+        path = need()
+        try:
+            result = ptos.resolve_new_file_template(path)
+        except Exception as e:
+            sys.exit(str(e))
+        if result["source"] == "local":
+            print(f"\n{path or '.'}: local template.md\n")
+            print(result["content"])
+        elif result["source"] == "choice":
+            parent = result.get("parent")
+            if parent:
+                print(f"\nNo local template; nearest parent "
+                      f"'{parent['rel_path'] or '.'}' has template.md\n")
+                print(parent["content"])
+            else:
+                print("\nNo template found — new files start blank.\n")
+        return
+
+    if action == "new":
+        path = need()
+        if not args.notes_name:
+            sys.exit("--notes new needs a file name: --notes new PATH --name N [--content C]")
+        if args.notes_content is not None:
+            content = args.notes_content
+        else:
+            try:
+                tpl = ptos.resolve_new_file_template(path)
+            except Exception as e:
+                sys.exit(str(e))
+            if tpl["source"] == "local":
+                content = tpl["content"]
+            elif tpl["source"] == "choice" and tpl.get("parent"):
+                parent = tpl["parent"]
+                if _yesno(f"Use template from '{parent['rel_path'] or '.'}'? [y/N] "):
+                    content = parent["content"]
+                else:
+                    content = ""
+            else:
+                content = ""
+        try:
+            ptos.create_file(path, args.notes_name, content)
+        except Exception as e:
+            sys.exit(str(e))
+        rel = (path + "/" if path else "") + args.notes_name
+        if not rel.endswith(".md"):
+            rel += ".md"
+        print(f"Note created: {rel}")
+        return
+
+    if action == "read":
+        path = need()
+        try:
+            full = ptos._safe_path(path)
+        except Exception as e:
+            sys.exit(str(e))
+        if not os.path.isfile(full):
+            sys.exit(f"Note not found: {path}")
+        with open(full, encoding="utf-8") as f:
+            print(f.read().rstrip())
+        try:
+            _print_backlinks(svc.get_backlinks(_note_title(path)))
+        except Exception as e:
+            print(f"\n(backlinks unavailable: {e})")
+        return
+
+    if action == "edit":
+        path = need()
+        try:
+            full = ptos._safe_path(path)
+        except Exception as e:
+            sys.exit(str(e))
+        if not os.path.isfile(full):
+            sys.exit(f"Note not found: {path}")
+        editor = resolve_editor()
+        try:
+            subprocess.run(editor + [full])
+        except FileNotFoundError:
+            sys.exit(f"Editor '{editor[0]}' not found.\nSet [editor] command in config/config.toml or set $EDITOR.")
+        return
+
+    if action == "delete":
+        path = need()
+        try:
+            full = ptos._safe_path(path)
+        except Exception as e:
+            sys.exit(str(e))
+        if not os.path.exists(full):
+            sys.exit(f"Note not found: {path}")
+        backlinks = svc.get_backlinks(_note_title(path))
+        total = sum(len(v) for v in backlinks.values())
+        if total and not args.force:
+            print(f"Warning: {total} reference(s) link to this note:\n")
+            for kind, items in backlinks.items():
+                if items:
+                    print(f"  {kind}: {len(items)}")
+            if not _yesno("\nDelete anyway? [y/N] "):
+                sys.exit("Delete cancelled.")
+        try:
+            ptos.delete_note_entry(path)
+        except Exception as e:
+            sys.exit(str(e))
+        print(f"Deleted: {path}")
+        return
+
+    if action == "id":
+        path = need()
+        try:
+            full = ptos._safe_path(path)
+        except Exception as e:
+            sys.exit(str(e))
+        if not os.path.isfile(full):
+            sys.exit(f"Note not found: {path}")
+        try:
+            print(ptos.ensure_note_id(path))
+        except Exception as e:
+            sys.exit(str(e))
+        return
+
+    sys.exit(f"Unknown --notes action: {action}\n"
+             f"Actions: list | template | new | read | edit | delete | id")
+
+
+# --------------------------------------------------
+# Links & universal search (--backlinks / --find / --link-ids)
+# --------------------------------------------------
+
+def _snippet_around(text, query, context=80):
+    """~160-char window around the first query hit (mirrors the web search)."""
+    if "*" in query or "?" in query:
+        try:
+            regex = fnmatch.translate(query.lower()).replace(r"\Z", "")
+            m = re.search(regex, text.lower())
+        except re.error:
+            m = None
+        idx = m.start() if m else -1
+    else:
+        idx = text.lower().find(query.lower())
+    if idx == -1:
+        return text[: context * 2]
+    start = max(0, idx - context)
+    end = min(len(text), idx + len(query) + context)
+    out = text[start:end]
+    if start > 0:
+        out = "..." + out
+    if end < len(text):
+        out += "..."
+    return out
+
+
+def run_backlinks(subject):
+    import ptos_service as svc
+    _print_backlinks(svc.get_backlinks(subject))
+
+
+def run_find(query):
+    hits = 0
+    print("\nRecords:")
+    for fname in ptos.get_log_files():
+        path = os.path.join(ptos.RECORDS_DIR, fname)
+        try:
+            with open(path, encoding="utf-8") as f:
+                for i, line in enumerate(f, 1):
+                    if _glob_match(query, line):
+                        print(f"  {fname}:{i}: {line.rstrip()}")
+                        hits += 1
+        except Exception:
+            pass
+    print("\nJournal:")
+    try:
+        for root, _, fnames in os.walk(ptos.JOURNAL_DIR):
+            for fname in sorted(fnames):
+                if not fname.endswith(".md"):
+                    continue
+                path = os.path.join(root, fname)
+                try:
+                    with open(path, encoding="utf-8") as f:
+                        content = f.read()
+                    if _glob_match(query, content):
+                        rel = os.path.relpath(path, ptos.JOURNAL_DIR)
+                        print(f"  {rel}: {_snippet_around(content, query)}")
+                        hits += 1
+                except Exception:
+                    pass
+    except Exception:
+        pass
+    print("\nTodos:")
+    tpaths = []
+    for base in ("todo.txt", "done.txt"):
+        tp = os.path.join(ptos.TODO_DIR, base)
+        if os.path.exists(tp):
+            tpaths.append((base, tp))
+    try:
+        for name in sorted(os.listdir(ptos.TODO_DIR)):
+            if name.startswith("done.") and name.endswith(".txt"):
+                tpaths.append((name, os.path.join(ptos.TODO_DIR, name)))
+    except Exception:
+        pass
+    for base, tp in tpaths:
+        try:
+            with open(tp, encoding="utf-8") as f:
+                for i, line in enumerate(f, 1):
+                    if _glob_match(query, line):
+                        print(f"  {base}:{i}: {line.rstrip()}")
+                        hits += 1
+        except Exception:
+            pass
+    print("\nNotes:")
+    try:
+        for root, _, files in os.walk(ptos.NOTES_DIR):
+            for fname in sorted(files):
+                if fname == "template.md" or not fname.endswith(".md"):
+                    continue
+                fpath = os.path.join(root, fname)
+                try:
+                    with open(fpath, encoding="utf-8") as f:
+                        content = f.read()
+                except Exception:
+                    continue
+                if _glob_match(query, content):
+                    rel = os.path.relpath(fpath, ptos.NOTES_DIR)
+                    print(f"  {rel}: {_snippet_around(content, query)}")
+                    hits += 1
+    except Exception:
+        pass
+    print(f"\n{hits} result(s)")
+
+
+def run_link_ids():
+    ids = sorted(ptos.list_link_ids(), key=lambda d: d["target"])
+    if not ids:
+        print("No type:id targets found.")
+        return
+    for d in ids:
+        print(d["target"])
+
+
+# --------------------------------------------------
+# Calendar month grid (--calendars)
+# --------------------------------------------------
+
+def run_calendars(arg):
+    import ptos_service as svc
+    try:
+        names = svc.get_calendar_names()
+    except Exception as e:
+        sys.exit(f"Error reading calendars: {e}")
+    if arg != "__ALL__":
+        if arg not in names:
+            configured = ", ".join(names) or "none"
+            sys.exit(f"Calendar '{arg}' not found in queries.toml. Configured: {configured}")
+        names = [arg]
+    if not names:
+        print("\nNo named calendars configured — the global 'All records' view is always available.\n")
+        print('Add a ["calendar.NAME"] table to queries.toml:\n')
+        print('  ["calendar.work"]')
+        print('  filters     = ["type=log"]')
+        print('  time_window = "this-month"\n')
+        return
+
+    month_names = ["January", "February", "March", "April", "May", "June",
+                   "July", "August", "September", "October", "November", "December"]
+    weekday_row = "Mo Tu We Th Fr Sa Su"
+    for name in names:
+        try:
+            data = svc.get_calendar_data(name)
+        except Exception as e:
+            print(f"\n{name}: error: {e}\n")
+            continue
+        label = "All records" if name == "__all__" else name
+        print(f"\n{label} - {month_names[data['month'] - 1]} {data['year']} "
+              f"({data['total_records']} record(s))")
+        print(weekday_row)
+        today_col = None
+        today_str = str(dt.date.today())
+        for week in data["weeks"]:
+            cells = []
+            for cell in week:
+                if cell is None:
+                    cells.append(" .")
+                else:
+                    n = cell["count"]
+                    label_n = str(n) if 1 <= n < 10 else ("#" if n >= 10 else ".")
+                    cells.append(f"{label_n:>2}")
+            print(" ".join(cells))
+        print()
+
+    print("  '.' empty, 1-9 records, '#' 10+ records")
+
+
+# --------------------------------------------------
+# Board columns (--board)
+# --------------------------------------------------
+
+def run_board(arg):
+    import ptos_service as svc
+    try:
+        boards = svc.get_boards()
+    except Exception as e:
+        sys.exit(f"Error reading boards: {e}")
+    names = sorted(boards)
+    if arg != "__ALL__":
+        if arg not in names:
+            configured = ", ".join(names) or "none"
+            sys.exit(f"Board '{arg}' not found in queries.toml. Configured: {configured}")
+        names = [arg]
+    if not names:
+        print("\nNo boards configured.\n")
+        print('Add a ["board.NAME"] table to queries.toml:\n')
+        print('  ["board.work"]')
+        print('  columns     = ["expense", "income"]')
+        print('  time_window = "this-month"\n')
+        return
+
+    fallback = ["name", "client", "intent", "title", "subject"]
+    for name in names:
+        try:
+            data = svc.get_board_data(name)
+        except Exception as e:
+            print(f"\n{name}: error: {e}\n")
+            continue
+        titles = data.get("card_title_fields") or fallback
+        print(f"\nBoard: {name}  (window: {data['time_window']})")
+        for col in data["columns"]:
+            recs = data["data"].get(col, [])
+            total = data["counts"].get(col, 0)
+            shown = f"/{len(recs)}" if data["truncated"].get(col) else ""
+            print(f"  {col}: {total}{shown} record(s)")
+            for r in recs[:15]:
+                title = next((str(r[f]) for f in titles if r.get(f)), "")
+                note = (r.get("note") or "").replace("\n", " ")[:40]
+                print(f"    [{r.get('date', '')}]  {title}   {note}".rstrip())
+            if len(recs) > 15:
+                print(f"    ...and {len(recs) - 15} more")
+        print()
+
+
+# --------------------------------------------------
+# Config get/set (--get-config / --set-config)
+# --------------------------------------------------
+
+def _split_key(key):
+    if not key or key == ".":
+        return []
+    return key.split(".")
+
+
+def _walk_config(config, key):
+    for part in _split_key(key):
+        if not isinstance(config, dict):
+            return None
+        config = config.get(part)
+    return config
+
+
+def _config_paths(config, prefix=""):
+    """Yield leaf KEY=VALUE strings (list/dict leaves are JSON'd)."""
+    for k, v in config.items():
+        path = f"{prefix}.{k}" if prefix else k
+        if isinstance(v, dict):
+            yield from _config_paths(v, path)
+        elif isinstance(v, bool):
+            yield f"{path}={str(v).lower()}"
+        elif isinstance(v, list):
+            yield f"{path}={json.dumps(v)}"
+        else:
+            yield f"{path}={v}"
+
+
+def _coerce(value):
+    if value.lower() in ("true", "false"):
+        return value.lower() == "true"
+    try:
+        return int(value)
+    except (ValueError, TypeError):
+        pass
+    try:
+        return float(value)
+    except (ValueError, TypeError):
+        return value
+
+
+def _set_config_in_memory(cfg, key, value):
+    parts = _split_key(key)
+    if not parts:
+        sys.exit("Empty config key.")
+    node = cfg
+    for part in parts[:-1]:
+        nxt = node.get(part)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            node[part] = nxt
+        node = nxt
+    node[parts[-1]] = value
+
+
+def _set_config(key, value):
+    try:
+        import tomli_w
+    except ImportError:
+        sys.exit("tomli-w not installed: pip install tomli-w")
+    cfg_path = ptos.CONFIG_PATH
+    if not os.path.exists(cfg_path):
+        sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
+    with open(cfg_path, "rb") as f:
+        config = tomllib.load(f)
+    _set_config_in_memory(config, key, _coerce(value))
+    with AtomicWrite(cfg_path, "config") as w:
+        tomli_w.dump(config, w.stream)
+    ptos._invalidate_all()
+    print(f"Saved config: {key}={value}")
+    _get_config(key)
+
+
+def _get_config(key):
+    config = ptos.get_config()
+    value = _walk_config(config, key)
+    if isinstance(value, dict):
+        if not value:
+            print(f"{key} (empty section)")
+            return
+        for line in _config_paths(value, key):
+            print(line)
+    elif value is None:
+        print(f"{key} is not set.")
+    elif isinstance(value, bool):
+        print(f"{key}={str(value).lower()}")
+    elif isinstance(value, list):
+        print(f"{key}={json.dumps(value)}")
+    else:
+        print(f"{key}={value}")
 
 
 # --------------------------------------------------
@@ -1813,6 +2369,31 @@ def main():
         edit_target(args.edit)
         return
 
+    if args.notes is not None:
+        _handle_notes(args)
+        return
+
+    if args.backlinks:
+        run_backlinks(args.backlinks)
+        return
+
+    if args.find:
+        run_find(args.find)
+        return
+
+    if args.link_ids:
+        run_link_ids()
+        return
+
+    if args.set_config:
+        key, value = args.set_config
+        _set_config(key, value)
+        return
+
+    if args.get_config_key:
+        _get_config(args.get_config_key)
+        return
+
     # ---- todo commands ----
     if args.todo_add is not None:
         _handle_todo_add(args)
@@ -2066,7 +2647,17 @@ def main():
 
     # ---- habits mode ----
     if args.habits is not None:
-        run_habits(args.habits)
+        run_habits(args.habits, args.time)
+        return
+
+    # ---- calendars mode ----
+    if args.calendars is not None:
+        run_calendars(args.calendars)
+        return
+
+    # ---- board mode ----
+    if args.board is not None:
+        run_board(args.board)
         return
 
     if args.query:
