@@ -1190,7 +1190,10 @@ def run_board(arg):
             print(f"\n{name}: error: {e}\n")
             continue
         titles = data.get("card_title_fields") or fallback
+        match_field = data.get("match_field")
         print(f"\nBoard: {name}  (window: {data['time_window']})")
+        if match_field:
+            print(f"  match_field: {match_field}")
         for col in data["columns"]:
             recs = data["data"].get(col, [])
             total = data["counts"].get(col, 0)
@@ -1199,7 +1202,10 @@ def run_board(arg):
             for r in recs[:15]:
                 title = next((str(r[f]) for f in titles if r.get(f)), "")
                 note = (r.get("note") or "").replace("\n", " ")[:40]
-                print(f"    [{r.get('date', '')}]  {title}   {note}".rstrip())
+                line = f"    [{r.get('date', '')}]  {title}   {note}".rstrip()
+                if match_field and r.get("_link_color"):
+                    line += f"  \u001b[1m[{r['_link_color']} {match_field}={r['_link_group']}]\u001b[0m"
+                print(line)
             if len(recs) > 15:
                 print(f"    ...and {len(recs) - 15} more")
         print()

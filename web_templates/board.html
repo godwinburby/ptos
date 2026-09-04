@@ -31,6 +31,66 @@
   .lane-dropzone.drag-over { border-color:var(--accent);background:var(--accent-lt); }
   .board-empty { text-align:center;padding:30px;color:var(--sub);font-size:14px; }
   .board-toast { position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 20px;font-size:14px;box-shadow:0 4px 20px rgba(0,0,0,.12);z-index:200;display:none; }
+  .board-card.hl-accent { border-left:4px solid var(--accent);background:var(--accent-lt); }
+  .board-card.hl-purple { border-left:4px solid #8B5CF6;background:#F3EFFD; }
+  .board-card.hl-teal { border-left:4px solid #14B8A6;background:#E6FAF8; }
+  .board-card.hl-rose { border-left:4px solid #E11D78;background:#FDE8F1; }
+  .board-card.hl-slate { border-left:4px solid #64748B;background:#EFF2F6; }
+  .board-card.hl-warn { border-left:4px solid var(--warn);background:#FBF3E7; }
+  .board-card.hl-success { border-left:4px solid #2a9d4e;background:#E9F7EE; }
+  .board-card.hl-error { border-left:4px solid #d14343;background:#FDEBEB; }
+  .board-card.hl-indigo { border-left:4px solid #6366F1;background:#EEF0FD; }
+  .board-card.hl-cyan { border-left:4px solid #0891B2;background:#E0F4FA; }
+  .board-card.hl-lime { border-left:4px solid #65A30D;background:#F0F7E0; }
+  .board-card.hl-amber { border-left:4px solid #D97706;background:#FBF0DC; }
+  .board-card.hl-pink { border-left:4px solid #DB2777;background:#FDE6F0; }
+  .board-card.hl-brown { border-left:4px solid #8B5A2B;background:#F2E8DC; }
+  .board-card.hl-navy { border-left:4px solid #1E3A8A;background:#E3E8F6; }
+  .board-card.hl-olive { border-left:4px solid #5F6B2B;background:#EEF1E0; }
+  .board-card .match-dot { display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:4px;vertical-align:middle;background:var(--accent); }
+  .board-card .match-badge { display:inline-block;font-size:10px;font-weight:700;padding:1px 6px;border-radius:8px;margin-bottom:4px;margin-right:4px;color:var(--text); }
+  .board-card.hl-accent .match-dot { background:#4F6BED; }
+  .board-card.hl-purple .match-dot { background:#8B5CF6; }
+  .board-card.hl-teal .match-dot { background:#14B8A6; }
+  .board-card.hl-rose .match-dot { background:#E11D78; }
+  .board-card.hl-slate .match-dot { background:#64748B; }
+  .board-card.hl-warn .match-dot { background:#d1773a; }
+  .board-card.hl-success .match-dot { background:#2a9d4e; }
+  .board-card.hl-error .match-dot { background:#d14343; }
+  .board-card.hl-indigo .match-dot { background:#6366F1; }
+  .board-card.hl-cyan .match-dot { background:#0891B2; }
+  .board-card.hl-lime .match-dot { background:#65A30D; }
+  .board-card.hl-amber .match-dot { background:#D97706; }
+  .board-card.hl-pink .match-dot { background:#DB2777; }
+  .board-card.hl-brown .match-dot { background:#8B5A2B; }
+  .board-card.hl-navy .match-dot { background:#1E3A8A; }
+  .board-card.hl-olive .match-dot { background:#5F6B2B; }
+  /* ── view toggle ─────────────────────────────────────────────────────────── */
+  .view-toggle { display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden; }
+  .view-toggle button { padding:5px 14px;border:none;background:var(--card);color:var(--sub);font-size:12px;font-weight:600;cursor:pointer;border-right:1px solid var(--border);transition:background .15s,color .15s; }
+  .view-toggle button:last-child { border-right:none; }
+  .view-toggle button.active { background:var(--accent);color:#fff; }
+  .view-toggle button:hover:not(.active) { background:var(--bg); }
+  /* ── client grid (row-per-client: label + one cell per column) ──────────── */
+  .bg-grid { overflow-x:auto;padding:8px 4px 20px;min-height:70vh; }
+  .bg-table { display:grid;gap:8px 12px;min-width:max-content; }
+  .bg-head { font-weight:700;font-size:14px;padding:10px 12px 6px;color:var(--text);display:flex;align-items:center;gap:8px; }
+  .bg-rail-head { padding:10px 12px 6px; }
+  .bg-row { display:contents; }
+  .bg-label { padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;display:flex;align-items:flex-start;gap:6px;font-size:13px;font-weight:600;color:var(--text); }
+  .bg-label .match-dot { margin-top:4px;flex-shrink:0; }
+  .bg-cell .board-card { margin-bottom:0; }
+  .bg-cell .board-card + .board-card { margin-top:8px; }
+  .bg-cell.drag-over { outline:2px dashed var(--accent);outline-offset:-2px;border-radius:8px;background:color-mix(in srgb,var(--accent) 8%,transparent); }
+  .bg-placeholder { height:40px;border:1px dashed var(--border);border-radius:8px;opacity:.35; }
+  /* ── unmatched section ───────────────────────────────────────────────────── */
+  .bg-unmatched { margin-top:24px;padding-top:16px;border-top:2px solid var(--border); }
+  .bg-unmatched-title { font-size:13px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:12px;padding:0 4px; }
+  .bg-unmatched-lanes { display:flex;gap:14px;overflow-x:auto;padding:0 4px; }
+  .bg-unmatched-lane { flex:0 0 300px;min-width:260px;border-radius:8px; }
+  .bg-unmatched-lane.drag-over { outline:2px dashed var(--accent);outline-offset:-2px;background:color-mix(in srgb,var(--accent) 8%,transparent); }
+  .bg-unmatched-lane-title { font-size:12px;font-weight:700;color:var(--sub);padding:4px 8px; }
+  .bg-unmatched-lane .board-card { margin-bottom:8px; }
 </style>
 
 
@@ -42,15 +102,26 @@
     {% endfor %}
   </select>
   {% if board_data %}
-  <select class="board-select" id="board-time-window" onchange="setBoardTimeWindow(this.value)">
-    {% for label, code in board_time_options %}
-    <option value="{{ code }}" {% if code == board_data.time_window %}selected{% endif %}>{{ label }}</option>
+  <select class="board-select" id="brd-time-select" onchange="onTimeChange(this.value)">
+    <option value="" {% if not time %}selected{% endif %}>Default (per board)</option>
+    {% for label, code in time_options %}
+    <option value="{{ code }}" {% if code == time %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+  {% with prefix="brd-" %}
+  {% include "_time_picker.html" %}
+  {% endwith %}
+  {% endif %}
+  {% if board_data and board_data.match_field %}
+  <div class="view-toggle">
+    <button onclick="switchView('kanban')" class="{{ 'active' if view != 'grid' }}">Kanban</button>
+    <button onclick="switchView('grid')" class="{{ 'active' if view == 'grid' }}">Client grid</button>
+  </div>
   {% endif %}
 </div>
 
 {% if board_data %}
+{% if view != 'grid' %}
 <div class="board-lanes" id="board-lanes">
   {% for col_type in board_data.columns %}
   {% set records = board_data.data.get(col_type, []) %}
@@ -81,12 +152,15 @@
     <div class="lane-cards" ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
       {% if records %}
       {% for rec in records %}
-      <div class="board-card" draggable="true"
+      <div class="board-card{{ ' hl-' + rec._link_color if rec._link_color }}" draggable="true"
            ondragstart="onDragStart(event)"
            ondragend="onDragEnd(event)"
            data-filepath="{{ rec._filepath }}"
            data-line="{{ rec._line }}"
            data-lineno="{{ rec._lineno }}">
+        {% if rec._link_group %}
+        <div class="match-badge hl-{{ rec._link_color }}"><span class="match-dot hl-{{ rec._link_color }}"></span>{{ rec._link_group }}</div>
+        {% endif %}
         <div class="card-date">{{ rec.date }}</div>
         {% set title_fields = board_data.card_title_fields or ['name','client','intent','title','subject'] %}
         {% set card_title = [] %}
@@ -119,6 +193,140 @@
   {% endfor %}
 </div>
 {% else %}
+<div class="bg-grid">
+  {% set ncols = board_data.columns | length %}
+  <div class="bg-table" style="grid-template-columns:170px repeat({{ ncols }},290px);">
+    <div class="bg-head bg-rail-head">{{ active_board | replace('_',' ') }}</div>
+    {% for col_type in board_data.columns %}
+    <div class="bg-head">
+      <span>{{ col_type | replace('_',' ') }}</span>
+      <span style="display:flex;align-items:center;gap:6px;">
+        {% set records = board_data.data.get(col_type, []) %}
+        {% set truncated_total = board_data.truncated.get(col_type, 0) %}
+        {% if truncated_total %}
+        <span class="lane-count" title="{{ records|length }} of {{ truncated_total }}">{{ records|length }}/{{ truncated_total }}</span>
+        {% else %}
+        <span class="lane-count">{{ records | length }}</span>
+        {% endif %}
+        {% set rollup_val = board_data.rollups.get(col_type) %}
+        {% if rollup_val is not none %}
+        {% if board_data.rollup_op == 'sum' %}
+        <span class="lane-rollup" title="Rollup">{{ rollup_fmt(rollup_val) }}</span>
+        {% elif board_data.rollup_op == 'avg' %}
+        <span class="lane-rollup" title="Rollup">avg {{ rollup_avg_fmt(rollup_val) }}</span>
+        {% else %}
+        <span class="lane-rollup" title="Rollup">count {{ rollup_val }}</span>
+        {% endif %}
+        {% endif %}
+      </span>
+    </div>
+    {% endfor %}
+
+    {% if board_data.grid_rows %}
+    {% for row in board_data.grid_rows %}
+    <div class="bg-row" data-row="{{ row.value }}">
+      <div class="bg-label"><span class="match-dot hl-{{ row.color }}"></span>{{ row.value }}</div>
+      {% for col_type2 in board_data.columns %}
+      {% set cell = row.cells.get(col_type2, []) %}
+      <div class="bg-cell" data-col-type="{{ col_type2 }}"
+           ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+        {% if cell %}
+        {% for rec in cell %}
+        <div class="board-card{{ ' hl-' + rec._link_color if rec._link_color }}" draggable="true"
+             ondragstart="onDragStart(event)"
+             ondragend="onDragEnd(event)"
+             data-filepath="{{ rec._filepath }}"
+             data-line="{{ rec._line }}"
+             data-lineno="{{ rec._lineno }}">
+          {% if rec._link_group %}
+          <div class="match-badge hl-{{ rec._link_color }}"><span class="match-dot hl-{{ rec._link_color }}"></span>{{ rec._link_group }}</div>
+          {% endif %}
+          <div class="card-date">{{ rec.date }}</div>
+          {% set title_fields2 = board_data.card_title_fields or ['name','client','intent','title','subject'] %}
+          {% set card_title2 = [] %}
+          {% for f in title_fields2 %}
+          {% if rec.get(f) %}{% set _ = card_title2.append(rec[f]) %}{% endif %}
+          {% endfor %}
+          {% if card_title2 %}
+          <div class="card-title">{{ card_title2[:2] | join(' — ') }}</div>
+          {% endif %}
+          <div class="card-meta">
+            {% for k,v in rec.items() if not k.startswith('_') and k not in ('date','type','note') and k not in title_fields2 %}
+            <span><span class="meta-label">{{ k }}:</span> {{ v }}</span>
+            {% endfor %}
+          </div>
+          {% if rec.get('note') %}
+          <div class="card-note">{{ rec.note }}</div>
+          {% endif %}
+          <div class="card-actions">
+            <button class="edit-btn" onclick="editCard(this)" data-filepath="{{ rec._filepath }}" data-lineno="{{ rec._lineno }}" data-line="{{ rec._line | e }}">✎ Edit</button>
+            <button class="del-btn" onclick="deleteCard(this)" data-filepath="{{ rec._filepath }}" data-lineno="{{ rec._lineno }}" data-line="{{ rec._line | e }}">✕ Delete</button>
+          </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="bg-placeholder"></div>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="board-empty" style="grid-column:1 / -1;">No matched clients in this window</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if board_data.grid_rows %}
+<div class="bg-unmatched">
+  <div class="bg-unmatched-title">Unmatched</div>
+  <div class="bg-unmatched-lanes">
+    {% for col_type in board_data.columns %}
+    {% set lone = board_data.unmatched.get(col_type, []) %}
+    <div class="bg-unmatched-lane" data-col-type="{{ col_type }}"
+         ondrop="onDrop(event)" ondragover="onDragOver(event)" ondragleave="onDragLeave(event)">
+      <div class="bg-unmatched-lane-title">{{ col_type | replace('_',' ') }} ({{ lone|length }})</div>
+      {% if lone %}
+      {% for rec in lone %}
+      <div class="board-card" draggable="true"
+           ondragstart="onDragStart(event)"
+           ondragend="onDragEnd(event)"
+           data-filepath="{{ rec._filepath }}"
+           data-line="{{ rec._line }}"
+           data-lineno="{{ rec._lineno }}">
+        <div class="card-date">{{ rec.date }}</div>
+        {% set title_fields3 = board_data.card_title_fields or ['name','client','intent','title','subject'] %}
+        {% set card_title3 = [] %}
+        {% for f in title_fields3 %}
+        {% if rec.get(f) %}{% set _ = card_title3.append(rec[f]) %}{% endif %}
+        {% endfor %}
+        {% if card_title3 %}
+        <div class="card-title">{{ card_title3[:2] | join(' — ') }}</div>
+        {% endif %}
+        <div class="card-meta">
+          {% for k,v in rec.items() if not k.startswith('_') and k not in ('date','type','note') and k not in title_fields3 %}
+          <span><span class="meta-label">{{ k }}:</span> {{ v }}</span>
+          {% endfor %}
+        </div>
+        {% if rec.get('note') %}
+        <div class="card-note">{{ rec.note }}</div>
+        {% endif %}
+        <div class="card-actions">
+          <button class="edit-btn" onclick="editCard(this)" data-filepath="{{ rec._filepath }}" data-lineno="{{ rec._lineno }}" data-line="{{ rec._line | e }}">✎ Edit</button>
+          <button class="del-btn" onclick="deleteCard(this)" data-filepath="{{ rec._filepath }}" data-lineno="{{ rec._lineno }}" data-line="{{ rec._line | e }}">✕ Delete</button>
+        </div>
+      </div>
+      {% endfor %}
+      {% else %}
+      <div class="board-empty" style="padding:8px;">—</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endif %}
+{% else %}
 <div class="board-empty" style="margin-top:40px;">
   No board selected or no boards configured.
   {% if boards %}
@@ -131,9 +339,55 @@
 
 <div class="board-toast" id="board-toast"></div>
 
+<script src="/static/js/time_picker.js"></script>
 <script>
+var tp;
 var _dragData = null;
 var _boardToastTimer = null;
+
+(function() {
+  tp = new TimePicker({
+    prefix: "brd-",
+    yearMin: {{ year_range[0] }},
+    yearMax: {{ year_range[-1] }},
+    onChange: function(code) { updateUrl(); }
+  });
+
+  function updateUrl() {
+    var time = document.getElementById('brd-time-select').value;
+    var params = new URLSearchParams();
+    params.set('board', '{{ active_board }}');
+    {% if view == 'grid' %}params.set('view', 'grid');{% endif %}
+    if (time === '') {
+      // Default — per-board config window
+    } else if (time === 'year' || time === 'month' || time === 'date') {
+      var ct = tp.getTime();
+      if (ct) { params.set('time', time); params.set('custom_time', ct); }
+    } else if (time === 'range') {
+      var r = tp.getRange();
+      params.set('time', 'range');
+      if (r && r.from) params.set('from_date', r.from);
+      if (r && r.to)   params.set('to_date', r.to);
+    } else {
+      params.set('time', time);
+    }
+    window.location = '/board?' + params.toString();
+  }
+  window.updateUrl = updateUrl;
+  window.onTimeChange = function(val) { tp.onSelectChange(val); };
+
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    var time = params.get('time');
+    if (time === 'year' || time === 'month' || time === 'date') {
+      tp.setTime(time, params.get('custom_time'));
+    } else if (time === 'range') {
+      tp.setTime('range', null, params.get('from_date'), params.get('to_date'));
+    } else if (time) {
+      tp.setTime(time);
+    }
+  })();
+})();
 
 function switchBoard(name) {
   if (name) {
@@ -141,18 +395,53 @@ function switchBoard(name) {
   }
 }
 
+function switchView(v) {
+  var params = new URLSearchParams(window.location.search);
+  params.set('board', '{{ active_board }}');
+  params.set('view', v);
+  window.location = '/board?' + params.toString();
+}
+
 function addToColumn(type) {
   window.location.href = '/add?type=' + encodeURIComponent(type) +
     '&return_to=' + encodeURIComponent(window.location.pathname + window.location.search);
 }
 
+function _sourceType(card) {
+  var lane = card.closest('.board-lane');
+  if (lane) return lane.dataset.type;
+  var cell = card.closest('[data-col-type]');
+  if (cell) return cell.dataset.colType;
+  return null;
+}
+
+function _dropEl(e) {
+  var cell = e.target.closest('.bg-cell');
+  if (cell) return cell;
+  var lane = e.target.closest('.board-lane');
+  if (lane) return lane.querySelector('.lane-dropzone') || lane;
+  var ulane = e.target.closest('.bg-unmatched-lane');
+  if (ulane) return ulane;
+  return null;
+}
+
+function _dropType(e) {
+  var lane = e.target.closest('.board-lane');
+  if (lane) return lane.dataset.type;
+  var el = e.target.closest('[data-col-type]');
+  if (el) return el.dataset.colType;
+  return null;
+}
+
 function onDragStart(e) {
   var card = e.target.closest('.board-card');
   if (!card) return;
+  var row = card.closest('.bg-row');
   _dragData = {
     line: card.dataset.line,
     lineno: parseInt(card.dataset.lineno),
-    sourceType: card.closest('.board-lane').dataset.type,
+    sourceType: _sourceType(card),
+    srcRow: row ? row.dataset.row : null,
   };
   card.classList.add('dragging');
   e.dataTransfer.effectAllowed = 'move';
@@ -162,25 +451,30 @@ function onDragEnd(e) {
   document.querySelectorAll('.board-card.dragging').forEach(function(el) {
     el.classList.remove('dragging');
   });
-  document.querySelectorAll('.lane-dropzone.drag-over').forEach(function(el) {
+  document.querySelectorAll('.lane-dropzone.drag-over, .bg-cell.drag-over, .bg-unmatched-lane.drag-over').forEach(function(el) {
     el.classList.remove('drag-over');
   });
 }
 
 function onDragOver(e) {
+  var targetCell = e.target.closest('.bg-cell');
+  if (_dragData && _dragData.srcRow) {
+    // Matched card: only dropable within its own client row.
+    var row = targetCell ? targetCell.closest('.bg-row') : null;
+    if (!targetCell || !row || row.dataset.row !== _dragData.srcRow) {
+      return; // no preventDefault -> drop not allowed
+    }
+  }
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  var dropzone = e.target.closest('.lane-dropzone, .lane-cards');
-  if (dropzone) {
-    var target = dropzone.classList.contains('lane-cards') ? dropzone.querySelector('.lane-dropzone') : dropzone;
-    if (target) target.classList.add('drag-over');
-  }
+  var dropEl = _dropEl(e);
+  if (dropEl) dropEl.classList.add('drag-over');
 }
 
 function onDragLeave(e) {
-  var dropzone = e.target.closest('.lane-dropzone');
-  if (dropzone) {
-    dropzone.classList.remove('drag-over');
+  var dropEl = _dropEl(e);
+  if (dropEl) {
+    dropEl.classList.remove('drag-over');
   }
 }
 
@@ -196,13 +490,21 @@ function showToast(msg, isError) {
 
 function onDrop(e) {
   e.preventDefault();
-  document.querySelectorAll('.lane-dropzone.drag-over').forEach(function(el) {
+  document.querySelectorAll('.lane-dropzone.drag-over, .bg-cell.drag-over, .bg-unmatched-lane.drag-over').forEach(function(el) {
     el.classList.remove('drag-over');
   });
   if (!_dragData) return;
-  var lane = e.target.closest('.board-lane');
-  if (!lane) return;
-  var targetType = lane.dataset.type;
+  var targetCell = e.target.closest('.bg-cell');
+  if (_dragData.srcRow) {
+    // Matched card: only dropable within its own client row.
+    var row = targetCell ? targetCell.closest('.bg-row') : null;
+    if (!targetCell || !row || row.dataset.row !== _dragData.srcRow) {
+      showToast('Advanced cards must stay within the same client row', true);
+      return;
+    }
+  }
+  var targetType = _dropType(e);
+  if (!targetType) return;
   if (targetType === _dragData.sourceType) {
     showToast('Card is already in this column', true);
     return;
@@ -251,24 +553,6 @@ function onDrop(e) {
   .catch(function(err) {
     showToast('Network error', true);
   });
-}
-
-function setBoardTimeWindow(code) {
-  fetch('/api/board/time-window', {
-    method: 'POST',
-    headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({board: '{{ active_board }}', time_window: code}),
-  })
-  .then(function(r) { return r.json(); })
-  .then(function(resp) {
-    if (resp.ok) {
-      showToast('Time window updated');
-      setTimeout(function() { location.reload(); }, 400);
-    } else {
-      showToast(resp.error || 'Failed to update time window', true);
-    }
-  })
-  .catch(function() { showToast('Network error', true); });
 }
 
 function editCard(btn) {

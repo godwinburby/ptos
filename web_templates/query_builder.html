@@ -282,7 +282,7 @@ var _liveTimer = null;
     var name = e[0].replace(/^board\./, '');
     var rawCtf = e[1].card_title_fields || '';
     var ctfArr = typeof rawCtf === 'string' ? rawCtf.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : (Array.isArray(rawCtf) ? rawCtf : []);
-    _st.boards[name] = { columns: e[1].columns||[], time_window: e[1].time_window||'this-month', limit: e[1].limit||0, card_title_fields: ctfArr, rollup_field: e[1].rollup_field||'', rollup_op: e[1].rollup_op||'count' };
+    _st.boards[name] = { columns: e[1].columns||[], time_window: e[1].time_window||'this-month', limit: e[1].limit||0, card_title_fields: ctfArr, rollup_field: e[1].rollup_field||'', rollup_op: e[1].rollup_op||'count', match_field: e[1].match_field||'' };
   });
   // Habits
   var _bkHabits = {{ habits | tojson }};
@@ -1688,6 +1688,11 @@ function showBoardEditor() {
         '</select>'+
       '</div>'+
     '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Match Field <span style="font-weight:400;color:var(--sub);">(optional)</span></label>'+
+      '<input type="text" id="board-match-field" value="'+_esc(cfg.match_field||'')+'" oninput="onBoardMatchFieldChange()" placeholder="e.g. client_code" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+      '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Records across columns sharing this field value get the same color (only if it appears in 2+ columns).</div>'+
+    '</div>'+
     '<div id="board-title-area" style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Card Title Priority <span style="font-weight:400;color:var(--sub);">(drag to reorder)</span></div>'+
       '<div id="board-title-chips" class="chip-group"></div>'+
@@ -2196,6 +2201,12 @@ function onBoardRollupChange() {
   if (!cfg) return;
   cfg.rollup_field = document.getElementById("board-rollup-field").value;
   cfg.rollup_op = document.getElementById("board-rollup-op").value;
+}
+
+function onBoardMatchFieldChange() {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg) return;
+  cfg.match_field = document.getElementById("board-match-field").value.trim();
 }
 
 function onBoardNameChange() {

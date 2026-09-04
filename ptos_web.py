@@ -119,14 +119,6 @@ def _build_time_options():
 def _get_time_options():
     return _build_time_options()
 
-def _board_time_options():
-    """Time window options for boards: all named windows + last-3-months + custom cycles.
-    Excludes picker-style codes (year/month/date/range) since boards use fixed windows."""
-    skip = {"year", "month", "date", "range"}
-    opts = [(label, code) for label, code in _build_time_options() if code not in skip]
-    opts.insert(6, ("Last 3 months", "last-3-months"))
-    return opts
-
 def _habit_time_options():
     """Time window options for habits: monthly/quarterly/yearly/all + month/range pickers.
     Excludes tiny windows (today/yesterday/this,last week) that look broken on a week grid."""
@@ -2310,10 +2302,25 @@ def board():
     active_board = request.args.get("board")
     if not active_board and boards:
         active_board = list(boards.keys())[0]
+    view = request.args.get("view", "kanban")
+    if view not in ("kanban", "grid"):
+        view = "kanban"
+    time_param = request.args.get("time", "")
+    custom_time = request.args.get("custom_time", "")
+    from_date = request.args.get("from_date") or None
+    to_date = request.args.get("to_date") or None
+    if from_date:
+        resolved_time = "range"
+    elif time_param in ("custom", "year", "month", "date") and custom_time \
+            and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
+        resolved_time = custom_time
+    else:
+        resolved_time = time_param or None
     board_data = None
     if active_board and active_board in boards:
         try:
-            board_data = svc.get_board_data(active_board)
+            board_data = svc.get_board_data(active_board, time=resolved_time,
+                                            from_date=from_date, to_date=to_date)
         except Exception:
             pass
     return render_template("board.html",
@@ -2321,33 +2328,18 @@ def board():
         now=_now_str(), boards=boards,
         active_board=active_board,
         board_data=board_data,
-        board_time_options=_board_time_options(),
+        view=view,
+        time=time_param, custom_time=custom_time,
+        from_date=from_date or "", to_date=to_date or "",
+        time_options=_get_time_options(), year_range=_YEAR_RANGE,
         rollup_fmt=ptos.fmt,
         rollup_avg_fmt=ptos.fmt_avg)
-
-
-@app.route("/api/board/time-window", methods=["POST"])
-def board_time_window():
-    """Update a board's time_window config."""
-    data = request.get_json(silent=True) or {}
-    name = data.get("board", "")
-    window = data.get("time_window", "")
-    if not name or not window:
-        return jsonify(ok=False, error="Missing board or time_window")
-    try:
-        result = svc.update_board_time_window(name, window)
-        return jsonify(ok=True, data=result)
-    except PTOSError as e:
-        return jsonify(ok=False, error=str(e))
-    except Exception as e:
-        log.exception("Board time-window update failed")
-        return jsonify(ok=False, error=str(e))
 
 
 @app.route("/board/advance", methods=["POST"])
 def board_advance():
     """Advance (move) a record to another column.
-    Creates a new record with today's date and target type.
+    Creates a new record with the source record's date and target type.
     Source record stays. Returns new record info."""
     data = request.get_json(silent=True) or {}
     old_line = data.get("line", "")
@@ -2358,7 +2350,9 @@ def board_advance():
     if lineno < 0:
         return jsonify(ok=False, error="Invalid line number")
     try:
-        result = svc.advance_record(old_line, lineno, target)
+        result = svc.advance_record(
+            old_line, lineno, target,
+        )
         return jsonify(ok=True, data=result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
