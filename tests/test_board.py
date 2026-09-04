@@ -183,6 +183,50 @@ class TestGetBoardData:
         amounts = [r["amount"] for r in result["data"].get("expense", [])]
         assert amounts == ["1"]
 
+    def test_time_window_param_literal_year(self):
+        _write_queries({"b": {"columns": ["expense"], "time_window": "all"}})
+        year = str(dt.date.today().year - 1)
+        _write_record(f"{year}-06-01", f"{year}-06-01 type=expense amount=1")
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense amount=2")
+        result = get_board_data("b", time=year)
+        assert result["time_window"] == year
+        amounts = [r["amount"] for r in result["data"].get("expense", [])]
+        assert amounts == ["1"]
+
+    def test_time_window_param_literal_month(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        year, month = dt.date.today().year, str(dt.date.today().month).zfill(2)
+        key = f"{year}-{month}"
+        _write_record(f"{key}-01", f"{key}-01 type=expense amount=1")
+        from datetime import date as _date
+        other = (_date(year, 1, 1) + dt.timedelta(days=400)).isoformat() if month == "01" else f"{year}-01-01"
+        _write_record(other, f"{other} type=expense amount=2")
+        result = get_board_data("b", time=key)
+        assert result["time_window"] == key
+        amounts = [r["amount"] for r in result["data"].get("expense", [])]
+        assert "2" not in amounts
+
+    def test_time_window_param_from_date_to_date(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        _write_record("2026-06-01", "2026-06-01 type=expense amount=1")
+        _write_record("2026-06-10", "2026-06-10 type=expense amount=2")
+        _write_record("2026-07-01", "2026-07-01 type=expense amount=3")
+        result = get_board_data("b", from_date="2026-06-01", to_date="2026-06-30")
+        assert result["time_window"] == "range"
+        amounts = [r["amount"] for r in result["data"].get("expense", [])]
+        assert amounts == ["2", "1"]
+
+    def test_time_param_precedence_over_config(self):
+        _write_queries({"b": {"columns": ["expense"], "time_window": "all"}})
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense amount=1")
+        _write_record("2020-01-01", "2020-01-01 type=expense amount=2")
+        result = get_board_data("b", time="td")
+        assert result["time_window"] == "td"
+        amounts = [r["amount"] for r in result["data"].get("expense", [])]
+        assert amounts == ["1"]
+
     def test_limit_truncates(self):
         _write_queries({"b": {"columns": ["expense"], "limit": 1}})
         today = dt.date.today().isoformat()
@@ -292,7 +336,206 @@ class TestBoardRollup:
         assert result["rollups"]["expense"] == 10
 
 
-# ── save_queries_full board persistence ───────────────────────────────────────
+# ── board cross-column match highlight ────────────────────────────────────────
+
+class TestBoardMatchHighlight:
+    def _board(self, match_field="project", columns=("expense", "exercise"),
+               limit=None, extra=None):
+        cfg = {"columns": list(columns), "match_field": match_field}
+        if limit:
+            cfg["limit"] = limit
+        if extra:
+            cfg.update(extra)
+        _write_queries({"b": cfg})
+
+    def test_match_field_returned(self):
+        self._board()
+        result = get_board_data("b")
+        assert result["match_field"] == "project"
+
+    def test_no_match_field_returns_none(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        result = get_board_data("b")
+        assert result["match_field"] is None
+
+    def test_blank_match_field_returns_none(self):
+        _write_queries({"b": {"columns": ["expense"], "match_field": "   "}})
+        result = get_board_data("b")
+        assert result["match_field"] is None
+
+    def test_same_value_across_columns_same_color(self):
+        self._board()
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense project=alpha amount=1")
+        _write_record(today, f"{today} type=exercise project=alpha duration=10")
+        result = get_board_data("b")
+        exp = result["data"]["expense"][0]
+        exe = result["data"]["exercise"][0]
+        assert exp["_link_color"] == exe["_link_color"]
+        assert exp["_link_group"] == "alpha"
+        assert exe["_link_group"] == "alpha"
+
+    def test_lone_value_uncolored(self):
+        self._board()
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense project=beta amount=1")
+        result = get_board_data("b")
+        exp = result["data"]["expense"][0]
+        assert "_link_color" not in exp
+        assert "_link_group" not in exp
+
+    def test_empty_match_value_skipped(self):
+        self._board()
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense amount=1")
+        _write_record(today, f"{today} type=exercise duration=10")
+        result = get_board_data("b")
+        for r in result["data"]["expense"] + result["data"]["exercise"]:
+            assert "_link_color" not in r
+
+    def test_color_stable_for_value(self):
+        self._board()
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense project=alpha amount=1")
+        _write_record(today, f"{today} type=exercise project=alpha duration=10")
+        result1 = get_board_data("b")
+        result2 = get_board_data("b")
+        assert (result1["data"]["expense"][0]["_link_color"] ==
+                result2["data"]["expense"][0]["_link_color"])
+
+    def test_matching_over_full_set_before_limit(self):
+        # Matching counts siblings over the FULL per-column set before limit
+        # truncation (like rollups), so a value whose only sibling was truncated
+        # out of a column is still treated as matched on the visible cards.
+        self._board(limit=1, extra={"time_window": "all"})
+        _write_record("2024-01-01", "2024-01-01 type=expense project=alpha amount=1")
+        _write_record("2026-09-01", "2026-09-01 type=expense project=gamma amount=2")
+        _write_record("2026-09-01", "2026-09-01 type=exercise project=alpha duration=10")
+        result = get_board_data("b")
+        # expense is truncated to the newest 1 (gamma); alpha's record dropped
+        assert result["truncated"].get("expense") == 2
+        assert [r["project"] for r in result["data"]["expense"]] == ["gamma"]
+        exe = result["data"]["exercise"][0]
+        assert exe["_link_group"] == "alpha"
+        assert "_link_color" in exe
+
+    def test_two_values_same_color_per_group(self):
+        self._board()
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense project=alpha amount=1")
+        _write_record(today, f"{today} type=exercise project=alpha duration=10")
+        _write_record(today, f"{today} type=expense project=beta amount=2")
+        _write_record(today, f"{today} type=exercise project=beta duration=20")
+        result = get_board_data("b")
+        alpha = [r for r in result["data"]["expense"] if r["project"] == "alpha"][0]
+        beta = [r for r in result["data"]["expense"] if r["project"] == "beta"][0]
+        assert alpha["_link_color"] != beta["_link_color"]
+
+    def test_no_color_overlap_for_distinct_codes(self):
+        # Every distinct matched code gets its own color (up to the palette
+        # size), so different codes never share a color in one view.
+        self._board()
+        today = dt.date.today().isoformat()
+        for i in range(16):
+            code = f"c{i:02d}"
+            _write_record(today, f"{today} type=expense project={code} amount=1")
+            _write_record(today, f"{today} type=exercise project={code} duration=10")
+        result = get_board_data("b")
+        colors = {r["_link_group"]: r["_link_color"]
+                  for col in result["data"].values() for r in col
+                  if r.get("_link_color")}
+        assert len(colors) == 16
+        assert len(set(colors.values())) == 16
+        # two different codes never share a color
+        assert colors["c00"] != colors["c01"]
+        assert colors["c00"] != colors["c15"]
+
+
+# ── board client grid (row-per-matched-value) ─────────────────────────────────
+
+class TestBoardGrid:
+    def _board(self, match_field="project", columns=("expense", "exercise")):
+        _write_queries({"b": {"columns": list(columns),
+                               "match_field": match_field,
+                               "time_window": "all"}})
+
+    def test_grid_rows_built_for_shared_value(self):
+        self._board()
+        _write_record("2026-07-01", "2026-07-01 type=expense project=alpha amount=1")
+        _write_record("2026-07-02", "2026-07-02 type=expense project=alpha amount=2")
+        _write_record("2026-07-03", "2026-07-03 type=exercise project=alpha duration=10")
+        result = get_board_data("b")
+        assert result["has_matching"] is True
+        assert len(result["grid_rows"]) == 1
+        row = result["grid_rows"][0]
+        assert row["value"] == "alpha"
+        assert row["color"] == row["cells"]["expense"][0]["_link_color"]
+        # stacked in the cell, preserving per-column order (newest first)
+        assert [r["amount"] for r in row["cells"]["expense"]] == ["2", "1"]
+        assert len(row["cells"]["exercise"]) == 1
+        assert row["cells"]["exercise"][0]["duration"] == "10"
+
+    def test_cells_blank_where_no_record(self):
+        # Board with 3 columns; alpha is matched across expense+exercise but has
+        # no income record (blank income cell); beta is matched in all three.
+        _write_queries({"b": {"columns": ["expense", "exercise", "income"],
+                              "match_field": "project",
+                              "time_window": "all"}})
+        _write_record("2026-07-01", "2026-07-01 type=expense project=alpha amount=1")
+        _write_record("2026-07-03", "2026-07-03 type=exercise project=alpha duration=10")
+        _write_record("2026-07-04", "2026-07-04 type=expense project=beta amount=5")
+        _write_record("2026-07-05", "2026-07-05 type=exercise project=beta duration=20")
+        _write_record("2026-07-06", "2026-07-06 type=income project=beta source=salary")
+        result = get_board_data("b")
+        rows = {r["value"]: r for r in result["grid_rows"]}
+        assert set(rows) == {"alpha", "beta"}
+        # alpha has no income record -> blank income cell
+        assert rows["alpha"]["cells"]["income"] == []
+        assert len(rows["alpha"]["cells"]["expense"]) == 1
+        # beta has all three
+        assert len(rows["beta"]["cells"]["income"]) == 1
+
+    def test_lone_value_goes_to_unmatched(self):
+        self._board()
+        _write_record("2026-07-01", "2026-07-01 type=expense project=lone amount=1")
+        _write_record("2026-07-02", "2026-07-02 type=expense amount=9")
+        result = get_board_data("b")
+        # lone appears only in expense (no sibling) -> no matched row
+        assert result["grid_rows"] == []
+        assert result["has_matching"] is False
+        # both the lone and the missing-value records land in unmatched, per column
+        unmatched_exp = result["unmatched"]["expense"]
+        assert {r.get("project") for r in unmatched_exp} == {"lone", None}
+        unmatched_exp = result["unmatched"]["expense"]
+        assert {r.get("project") for r in unmatched_exp} == {"lone", None}
+
+    def test_no_matching_when_no_shared_value(self):
+        self._board()
+        _write_record("2026-07-01", "2026-07-01 type=expense project=only amount=1")
+        result = get_board_data("b")
+        assert result["has_matching"] is False
+        assert result["grid_rows"] == []
+        assert result["unmatched"]["expense"][0]["project"] == "only"
+
+    def test_no_match_field_disables_grid(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        _write_record("2026-07-01", "2026-07-01 type=expense project=alpha amount=1")
+        result = get_board_data("b")
+        assert result["grid_rows"] == []
+        assert result["unmatched"] == {}
+        assert result["has_matching"] is False
+
+    def test_grid_rows_sorted(self):
+        self._board()
+        _write_record("2026-07-01", "2026-07-01 type=expense project=zeta amount=1")
+        _write_record("2026-07-01", "2026-07-01 type=expense project=alpha amount=2")
+        _write_record("2026-07-01", "2026-07-01 type=exercise project=zeta duration=10")
+        _write_record("2026-07-01", "2026-07-01 type=exercise project=alpha duration=20")
+        result = get_board_data("b")
+        assert [r["value"] for r in result["grid_rows"]] == ["alpha", "zeta"]
+
+
+# ── board route time params ──────────────────────────────────────────────────
 
 class TestSaveQueriesFullBoard:
     def _save(self, boards):
@@ -340,6 +583,29 @@ class TestSaveQueriesFullBoard:
     def test_rejects_invalid_name(self):
         with pytest.raises(PTOSError, match="Invalid name"):
             self._save({"My Board": {"columns": ["expense"]}})
+
+    def test_persists_match_field(self):
+        self._save({"b": {"columns": ["expense"], "match_field": "client_code"}})
+        with open(ptos.QUERIES_PATH, "rb") as f:
+            import tomllib
+            data = tomllib.load(f)
+        assert data["board.b"]["match_field"] == "client_code"
+        result = get_board_data("b")
+        assert result["match_field"] == "client_code"
+
+    def test_omits_match_field_when_absent(self):
+        self._save({"b": {"columns": ["expense"]}})
+        with open(ptos.QUERIES_PATH, "rb") as f:
+            import tomllib
+            data = tomllib.load(f)
+        assert "match_field" not in data["board.b"]
+
+    def test_omits_blank_match_field(self):
+        self._save({"b": {"columns": ["expense"], "match_field": "   "}})
+        with open(ptos.QUERIES_PATH, "rb") as f:
+            import tomllib
+            data = tomllib.load(f)
+        assert "match_field" not in data["board.b"]
 
 
 # ── advance_record ────────────────────────────────────────────────────────────
@@ -439,30 +705,144 @@ class TestAdvanceRecord:
         assert result["ok"] is True
         assert "source" in result["missing_required"]
 
+    # ── advance date: always the source record's original date ──────────────
 
-# ── update_board_time_window ──────────────────────────────────────────────────
-
-class TestUpdateBoardTimeWindow:
-    def test_updates_time_window(self):
-        _write_queries({"b": {"columns": ["expense"], "time_window": "tm"}})
-        from ptos_service import update_board_time_window
-        result = update_board_time_window("b", "ly")
-        assert result["ok"] is True
-        assert result["time_window"] == "ly"
-        got = get_board_data("b")
-        assert got["time_window"] == "ly"
-
-    def test_unknown_board(self):
+    def test_advance_keeps_source_date(self):
+        # The new record always keeps the source record's original date, so an
+        # advanced card stays in the period it was dragged from (simple rule).
         _write_queries({})
-        from ptos_service import update_board_time_window
-        with pytest.raises(PTOSError):
-            update_board_time_window("nonexistent", "ly")
+        old_line = "2026-07-01 type=expense domain=self amount=50"
+        result = advance_record(old_line, 1, "income",
+                                target_ctx_fields={"source": "salary"})
+        assert result["new_line"].startswith("2026-07-01")
 
-    def test_invalid_time_window(self):
-        _write_queries({"b": {"columns": ["expense"], "time_window": "tm"}})
-        from ptos_service import update_board_time_window
-        with pytest.raises(PTOSError):
-            update_board_time_window("b", "bogus-window")
+
+# ── board route time params ──────────────────────────────────────────────────
+
+class TestBoardRouteTimeWindow:
+    def _get(self, path):
+        from ptos_web import app
+        client = app.test_client()
+        return client.get(path).get_data(as_text=True)
+
+    def test_board_route_uses_shared_time_select_id(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        html = self._get("/board?board=b")
+        assert 'id="brd-time-select"' in html
+        assert 'id="board-time-window"' not in html
+
+    def test_board_route_renders_default_when_no_time(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        html = self._get("/board?board=b")
+        assert "Default (per board)" in html
+
+    def test_board_route_renders_range_params(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        html = self._get("/board?board=b&time=range&from_date=2026-06-01&to_date=2026-06-30")
+        assert "Default (per board)" in html
+        assert 'value="range"' in html
+
+    def test_board_route_renders_custom_year(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        year = str(dt.date.today().year - 1)
+        html = self._get(f"/board?board=b&time=year&custom_time={year}")
+        assert 'value="year"' in html
+
+    def test_board_route_renders_specific_month(self):
+        _write_queries({"b": {"columns": ["expense"]}})
+        year, month = dt.date.today().year, str(dt.date.today().month).zfill(2)
+        html = self._get(f"/board?board=b&time=month&custom_time={year}-{month}")
+        assert '<option value="month" selected' in html
+        assert 'id="brd-month-block"' in html
+
+
+# ── board client-grid view route ─────────────────────────────────────────────
+
+class TestBoardGridView:
+    def _get(self, path):
+        from ptos_web import app
+        client = app.test_client()
+        return client.get(path).get_data(as_text=True)
+
+    def _board(self, match_field=True):
+        cfg = {"columns": ["expense", "exercise"]}
+        if match_field:
+            cfg["match_field"] = "project"
+        _write_queries({"b": cfg})
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense project=alpha amount=1")
+        _write_record(today, f"{today} type=exercise project=alpha duration=10")
+
+    def test_toggle_shown_when_match_field_set(self):
+        self._board()
+        html = self._get("/board?board=b")
+        assert "Client grid" in html
+        assert 'switchView(\'grid\')' in html
+
+    def test_toggle_hidden_without_match_field(self):
+        self._board(match_field=False)
+        html = self._get("/board?board=b")
+        assert "Client grid" not in html
+
+    def test_view_grid_renders_grid_markup(self):
+        self._board()
+        html = self._get("/board?board=b&view=grid")
+        assert "bg-table" in html
+        assert "Unmatched" in html
+
+    def test_view_grid_persists_board_and_view(self):
+        self._board()
+        html = self._get("/board?board=b&view=grid")
+        assert "switchView('kanban')" in html
+        assert "params.set('view', 'grid')" in html
+        assert "params.set('board'" in html
+
+    def test_grid_cards_are_draggable(self):
+        self._board()
+        html = self._get("/board?board=b&view=grid")
+        # matched card in a row is draggable with the standard handlers
+        assert 'class="board-card hl-' in html
+        assert 'draggable="true"' in html
+        assert 'ondragstart="onDragStart(event)"' in html
+        assert 'ondragend="onDragEnd(event)"' in html
+
+    def test_grid_cells_are_drop_targets(self):
+        self._board()
+        html = self._get("/board?board=b&view=grid")
+        assert 'data-col-type="expense"' in html
+        assert 'data-col-type="exercise"' in html
+        assert 'ondrop="onDrop(event)"' in html
+        assert 'ondragover="onDragOver(event)"' in html
+
+    def test_grid_rows_carry_client_identity(self):
+        self._board()
+        html = self._get("/board?board=b&view=grid")
+        assert 'class="bg-row" data-row="alpha"' in html
+
+    def test_unmatched_cards_draggable_and_lanes_droppable(self):
+        # A lone record (single column) goes to Unmatched; its card is draggable
+        # and the unmatched lane is a drop target. An alpha matched pair keeps
+        # grid_rows non-empty so the Unmatched section renders.
+        _write_queries({"b": {"columns": ["expense", "exercise"],
+                              "match_field": "project"}})
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense project=lone amount=1")
+        _write_record(today, f"{today} type=expense project=alpha amount=2")
+        _write_record(today, f"{today} type=exercise project=alpha duration=10")
+        html = self._get("/board?board=b&view=grid")
+        assert "Unmatched" in html
+        assert 'class="bg-unmatched-lane" data-col-type="expense"' in html
+        assert 'draggable="true"' in html
+        assert 'ondrop="onDrop(event)"' in html
+
+    def test_same_row_drag_guard_present(self):
+        self._board()
+        html = self._get("/board?board=b&view=grid")
+        # the JS enforces matched-drag stays within the same client row
+        assert "srcRow" in html
+        assert "stay within the same client row" in html
+        assert "_sourceType" in html
+        assert "_dropType" in html
 
 
 # ── board_field_overlap endpoint ──────────────────────────────────────────────

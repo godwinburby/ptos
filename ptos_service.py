@@ -2287,10 +2287,12 @@ def get_calendar_data(name, year=None, month=None):
     return result
 
 
-def get_board_data(board_name):
+def get_board_data(board_name, time=None, from_date=None, to_date=None):
     """Load record data for each column of a board.
-    Returns dict mapping column type → list of parsed record dicts
-    with _filepath, _lineno, _line for edit support."""
+    The display window is resolved from explicit time/from_date/to_date params
+    (URL-driven override) when given, otherwise falls back to the board's
+    config time_window. Returns dict mapping column type → list of parsed
+    record dicts with _filepath, _lineno, _line for edit support."""
     try:
         queries = ptos.get_queries()
     except Exception as e:
@@ -2316,15 +2318,24 @@ def get_board_data(board_name):
     for t in columns:
         field_info[t] = ptos.filter_fields_for_type(t, schema)
 
-    # Time window and limit from board config
-    time_window = cfg.get("time_window", "this-month")
-    if time_window == "last-3-months":
+    # Time window: URL params override the board's config default
+    cfg_time_window = cfg.get("time_window", "this-month")
+    if from_date:
+        start = ptos.parse_from_to(from_date)
+        end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
+        time_window = "range"
+    elif time:
+        start, end = _resolve_time(time)
+        time_window = time
+    elif cfg_time_window == "last-3-months":
         today = dt.date.today()
         first = today.replace(day=1)
         end = today + dt.timedelta(days=365)
         start = (first - dt.timedelta(days=1)).replace(day=1)
         start = (start - dt.timedelta(days=1)).replace(day=1)
+        time_window = "last-3-months"
     else:
+        time_window = cfg_time_window
         start, end = _resolve_time(time_window)
 
     limit = cfg.get("limit", 0)  # 0 = no limit
@@ -2336,6 +2347,7 @@ def get_board_data(board_name):
     total_by_type = {}
     truncated_by_type = {}
     rollup_by_type = {}
+    full_by_type = {}
 
     for col_type in columns:
         filters = [f"type={col_type}"]
@@ -2377,8 +2389,11 @@ def get_board_data(board_name):
             rollup_by_type[col_type] = None
 
         if limit and total > limit:
+            full_by_type[col_type] = records
             records = records[:limit]
             truncated_by_type[col_type] = total
+        else:
+            full_by_type[col_type] = records
         result[col_type] = records
         total_by_type[col_type] = total
 
@@ -2387,6 +2402,69 @@ def get_board_data(board_name):
         card_title_fields = [f.strip() for f in card_title_fields.split(",") if f.strip()]
     elif not isinstance(card_title_fields, list):
         card_title_fields = []
+
+    match_field = cfg.get("match_field")
+    if not match_field or not isinstance(match_field, str):
+        match_field = None
+    if match_field:
+        match_field = match_field.strip() or None
+
+    # Cross-column matching: records sharing a match_field value get the same
+    # color, provided that value appears in >=2 distinct columns (so a lone
+    # record with no sibling in another column stays uncolored). Generic: the
+    # field name comes solely from the board's match_field config.
+    if match_field:
+        col_for_value = {}
+        for col_type in columns:
+            for r in full_by_type[col_type]:
+                v = r.get(match_field)
+                if v is None or str(v).strip() == "":
+                    continue
+                col_for_value.setdefault(str(v), set()).add(col_type)
+
+        # Assign colors by sorted order over the visible matched set so that,
+        # for <=16 distinct codes, every code gets its own distinct color (no
+        # overlap). Colors are deterministic for the same code set; past 16
+        # codes fewer colors than codes forces reuse (fundamental limit).
+        _MATCH_COLORS = ("accent", "purple", "teal", "rose",
+                         "slate", "warn", "success", "error",
+                         "indigo", "cyan", "lime", "amber",
+                         "pink", "brown", "navy", "olive")
+        matched = sorted(v for v, cols in col_for_value.items() if len(cols) >= 2)
+        color_of = {v: _MATCH_COLORS[i % len(_MATCH_COLORS)]
+                    for i, v in enumerate(matched)}
+        for col_type in columns:
+            for r in result[col_type]:
+                v = r.get(match_field)
+                if v is None or str(v).strip() == "":
+                    continue
+                s = str(v)
+                if s not in color_of:
+                    continue
+                r["_link_color"] = color_of[s]
+                r["_link_group"] = s
+
+        # Grid: rows keyed by matched value, unmatched grouped per column.
+        grid_rows = []
+        for val in matched:
+            cells = {}
+            for col_type in columns:
+                cells[col_type] = [r for r in result[col_type]
+                                   if r.get(match_field) == val]
+            grid_rows.append({"value": val, "color": color_of[val],
+                              "cells": cells})
+        unmatched = {}
+        matched_set = set(matched)
+        for col_type in columns:
+            unmatched[col_type] = [r for r in result[col_type]
+                                   if not r.get(match_field)
+                                   or str(r.get(match_field)).strip() == ""
+                                   or r.get(match_field) not in matched_set]
+        has_matching = len(matched) > 0
+    else:
+        grid_rows = []
+        unmatched = {}
+        has_matching = False
 
     return {
         "columns": columns,
@@ -2400,47 +2478,24 @@ def get_board_data(board_name):
         "card_title_fields": card_title_fields,
         "rollups": rollup_by_type,
         "rollup_op": rollup_op,
+        "match_field": match_field,
+        "grid_rows": grid_rows,
+        "unmatched": unmatched,
+        "has_matching": has_matching,
     }
-
-
-def update_board_time_window(board_name, time_window):
-    """Update the time_window config for a board in queries.toml.
-    Validates the window before saving."""
-    valid = {"td", "yd", "tw", "lw", "tm", "lm", "last-3-months", "tq", "lq", "ty", "ly", "all"}
-    try:
-        cycles = ptos.get_config().get("cycles", {})
-    except Exception:
-        cycles = {}
-    for name in cycles:
-        valid.add(name)
-        valid.add(f"{name}-1")
-    if time_window not in valid:
-        raise PTOSError(f"Invalid time window '{time_window}'")
-    try:
-        queries = ptos.get_queries()
-    except Exception as e:
-        raise PTOSError(str(e))
-    key = f"board.{board_name}"
-    cfg = queries.get(key)
-    if not cfg or not isinstance(cfg, dict):
-        raise PTOSError(f"Board '{board_name}' not found in queries.toml")
-    cfg["time_window"] = time_window
-    import tomli_w
-    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
-        tomli_w.dump(queries, w.stream)
-    ptos._invalidate_all()
-    return {"ok": True, "board": board_name, "time_window": time_window}
 
 
 def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
     """Move a record from one column/type to another.
-    Creates a NEW record with today's date and target_type.
-    Shared fields (common to both source and target types) are copied.
+    Creates a NEW record with the target_type and copies shared fields.
     Source record is kept unchanged.
-    
+
+    The new record always keeps the source record's original date so the
+    advanced card stays in the period being browsed.
+
     target_ctx_fields: optional dict of extra field values for the target type
                        (e.g. field values captured from the drag context).
-    
+
     Returns dict with new record info or redirect info if fields need filling."""
     try:
         parsed = ptos.safe_parse_line(old_line)
@@ -2472,8 +2527,8 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
             for f, v in target_ctx_fields.items():
                 new_kv[f] = v
 
-        today_str = dt.date.today().isoformat()
-        new_line = ptos.build_record_line(today_str, new_kv, note or None)
+        new_date_str = str(d)
+        new_line = ptos.build_record_line(new_date_str, new_kv, note or None)
 
         # Check if target type has required fields not yet filled
         tdef = schema.get("type", {}).get(target_type, {})
@@ -2677,6 +2732,9 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         raw_ctf = board_cfg.get("card_title_fields")
         if raw_ctf:
             entry["card_title_fields"] = raw_ctf
+        match_field = board_cfg.get("match_field")
+        if match_field and isinstance(match_field, str) and match_field.strip():
+            entry["match_field"] = match_field.strip()
         rollup_field = board_cfg.get("rollup_field")
         if rollup_field:
             schema = ptos.get_schema()

@@ -5,6 +5,55 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-04
+
+### Board page uses the shared time-window picker (URL-driven)
+
+- The board page's flat inline `<select>` (which previously wrote `time_window` straight into `queries.toml` via `POST /api/board/time-window`) is replaced with the **shared `_time_picker.html` component** (prefix `brd-`), matching Habits/Thresholds: fixed named windows plus Year/Month/Date/Range picker sub-widgets
+- The board's window is now a **URL round-trip view override** (`time`/`custom_time`/`from_date`/`to_date` params, e.g. `/board?board=NAME&time=range&from_date=...`), preserved alongside the existing `?board=` selection; when no params are present it falls back to the board's config `time_window` (set in the Query Builder board editor), which is no longer mutated by the page dropdown
+- Removed the legacy `_board_time_options()` (web), the `POST /api/board/time-window` route (web), and `update_board_time_window()` (service, now orphaned); `get_board_data()` gains optional `time`/`from_date`/`to_date` params with precedence `from_date → time → config time_window` and returns the effective window label
+- **Bug fix**: the board page's `<select>` id is `brd-time-select` (not `board-time-window`) so it matches the `brd-` prefix that `_time_picker.html`/`time_picker.js` expect — otherwise `getTime()`/`setTime()` return null and the picker silently resets to "Default (per board)" after choosing a month/date
+- Tests: `TestGetBoardData` gains `time`-param and `from_date`/`to_date`-range cases plus precedence checks; new `TestBoardRouteTimeWindow` exercises `/board` rendering range/year/month params via the Flask client (including the `brd-time-select` id to lock the prefix convention); the removed `TestUpdateBoardTimeWindow` is deleted
+
+### Board: cross-column match highlight (generic / schema-agnostic)
+
+- New optional `match_field` board config key (e.g. `match_field = "client_code"` on `["board.client_sale_journey"]`) enables **cross-column color highlighting**: records across the board's columns that share the same `match_field` value get the **same color**, provided that value appears in **≥2 distinct columns** (a lone record with no sibling in another column stays uncolored — so a prescription with no fitting shows uncolored)
+- **Fully generic**: the engine/service contain zero field/type/schema assumptions — the only field name is whatever a board's `match_field` config supplies; no `match_field` (or a blank one) → feature inactive (`match_field=None`, no colors)
+- Implementation: `get_board_data()` computes a `value → color` map over the FULL per-column record set (before `limit` truncation, same as rollups) into the **16-color board palette** (`accent`/`purple`/`teal`/`rose`/`slate`/`warn`/`success`/`error`/`indigo`/`cyan`/`lime`/`amber`/`pink`/`brown`/`navy`/`olive`); each matching record gets `_link_color` + `_link_group` (the matched value); `match_field` returned in board data. **No color overlap** for up to 16 distinct matched codes in one view: colors are assigned by **sorted order over the visible matched set** (`index % 16`), so different codes never share a color (previously the palette widened to 16 but used `hash(value) % 16`, which still collided — e.g. 2 codes `test`/`sb.i56` both mapped to `pink` in the current-month view); colors are deterministic for the same code set; past 16 distinct codes reuse is fundamental
+- `board.html`: `hl-{color}` classes (colored left border + light background tint) applied to cards, plus a colored dot + matched-value badge on the card so the grouping reason is visible
+- `save_queries_full()` persists `match_field` (like `rollup_field`); Query Builder board editor gains a free-form **Match Field** text input
+- CLI parity (`run_board`): prints `match_field: <field>` header and a colored token per matched record so matching is exercised headlessly
+- Tests: `TestBoardMatchHighlight` (same-color across columns, lone value uncolored, empty/absent skipped, stable color, matching over full set before limit, distinct groups differ), `match_field` persistence round-trip in `TestSaveQueriesFullBoard`, and CLI output tests in `TestCliBoard`
+
+### Board drag-and-drop: date follows the browsed window
+
+- Dragging a card to another column now stamps the new record with a date that follows the board's **effective display window** instead of always using today: if the effective window (URL `time`/`custom_time`/`from_date`/`to_date` params overriding the board's config `time_window`, same resolution as `get_board_data`) **is the current calendar month** — or no window context is passed (direct callers/tests) — the card is dated **today**; otherwise it keeps the **source record's original `YYYY-MM-DD`**, so an advanced card stays in the period being browsed (e.g. dragging within a `last-quarter` view stamps the source date, not today)
+- `advance_record()` gains `board_name`/`win_time`/`win_from`/`win_to` params resolved by a new `_advance_target_date()` helper (URL param precedence, `last-3-months` config special case, default `this-month`); `ptos_web.py::board_advance` passes them from the drag payload; `web_templates/board.html::onDrop` sends the board name + current URL window via a new `_currentWindowParams()` helper — the auto-append path only, the `missing_required` redirect-to-add path is unchanged
+- Default behavior unchanged (no window context → today), so existing direct calls keep working
+- Tests: `TestAdvanceRecord` gains date-aware cases (no-context→today, current-month→today, past `win_time`/range/config-window→source date)
+
+### Board: Client grid view (row-per-matched-value alignment)
+
+- `/board` gains a **view toggle** (`Kanban` / `Client grid`), shown only when the board sets `match_field`; `?view=kanban` (default) renders the classic drag-and-drop kanban unchanged, `?view=grid` renders a **row-per-client grid** where records sharing a `match_field` value align horizontally across columns so the whole client journey reads left-to-right
+- The grid reuses the existing card markup + `hl-{color}` highlight (each row label is the matched value with its color dot, and only matched records are colored the same); one cell per board column holds that client's stacked cards (dashed placeholder when the client has no record there)
+- `get_board_data()` returns three **additive** keys that leave the kanban shape untouched: `grid_rows` (ordered `[{value, color, cells:{col_type:[records]}}]` built from the displayed records, sorted by value matching the color order), `unmatched` (`{col_type:[records]}` — lone/missing-value records, rendered as per-column groups below the grid), and `has_matching` (bool)
+- `ptos_web.py` `/board` reads/validates `view`; `board.html` `switchView()`/`updateUrl()` preserve `view` alongside `board` + time params; new CSS classes `.bg-grid`/`.bg-table`/`.bg-row`/`.bg-label`/`.bg-cell`/`.bg-placeholder`/`.bg-unmatched*`
+- Tests: `TestBoardGrid` (cells stacked preserving per-column order, blank cell when a matched value has no record in a column, lone/missing values into unmatched, no-match_field disables the grid, row sort order), `TestBoardGridView` route checks (`?view=grid` renders grid markup, `?view=kanban` renders kanban, toggle shown only when `match_field` set, view/board params preserved)
+
+### Board: drag-and-drop in the Client grid (same-client-row rule)
+
+- The grid now supports **drag-and-drop** (previously read/edit-only) by reusing the kanban handlers, generalized to also work on the grid's `.bg-cell` (matched) and `.bg-unmatched-lane` (unmatched) drop targets via `_sourceType`/`_dropType`/`_dropEl` helpers
+- **Matched cards** (inside a `.bg-row`) can only be dropped into another stage cell **on the same client row** — including the row's empty placeholder cells — so a client's journey advances within itself; dropping on a different client's row is rejected (rows are keyed uniquely by the `match_field` value, so "same row" == "any row with the same matching field"). `_dragData.srcRow` enforces this in `onDragOver`/`onDrop`
+- **Unmatched cards** (single-record clients, no row) can be dropped into **any** board column (kanban-style), filling the gap so a lone record can gain a sibling and become a matched client
+- Grid cards render `draggable="true"` with the standard drag handlers; `.bg-cell`s and `.bg-unmatched-lane`s render `ondrop`/`ondragover`/`ondragleave` + a `data-col-type`; new `.bg-cell.drag-over`/`.bg-unmatched-lane.drag-over` drop highlights
+- Tests: `TestBoardGridView` asserts grid cards are draggable with the standard handlers, cells/lanes are drop targets with `data-col-type`, rows carry the client identity (`data-row`), and the same-row guard JS is present
+
+### Board: advance always keeps the source record's date
+
+- `advance_record()` now **always stamps the new record with the source record's original `YYYY-MM-DD`** — the single simple rule that an advanced card always stays in the period it was dragged from. The window-aware `_advance_target_date()` helper and the `board_name`/`win_time`/`win_from`/`win_to` params were removed from `advance_record`, `board_advance` (web) no longer passes them, and `board.html::onDrop` no longer sends them (along with the now-unused `_currentWindowParams()`)
+- This replaces the previous behavior where the new card was dated **today** when the effective display window was the current calendar month (or no window was given) and kept the source date otherwise — a more nuanced but heavier rule
+- Tests: `TestAdvanceRecord` collapses the five date-aware cases into one `test_advance_keeps_source_date`; everything else unchanged
+
 ## 2026-09-02
 
 ### CLI parity: search, links, config, calendar, board (`--backlinks`/`--find`/`--link-ids`/`--config`/`--calendars`/`--board`)

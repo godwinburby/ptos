@@ -2,6 +2,7 @@ import os
 import datetime as dt
 import tomli_w
 import pytest
+import re
 import ptos
 import ptos_cli
 
@@ -94,3 +95,24 @@ class TestCliBoard:
         with pytest.raises(SystemExit) as exc:
             _run(monkeypatch, "--board", "nope")
         assert "not found" in str(exc.value.code)
+
+    def test_match_field_printed(self, monkeypatch, capsys):
+        _add_queries_table("board.work", {"columns": ["expense", "exercise"],
+                                          "match_field": "project"})
+        today = dt.date.today()
+        _write_records([f"{today} type=expense domain=self category=food amount=10 project=alpha",
+                        f"{today} type=exercise project=alpha duration=10"])
+        _run(monkeypatch, "--board", "work")
+        out = capsys.readouterr().out
+        assert "match_field: project" in out
+        assert re.search(r"\[(accent|purple|teal|rose|slate|warn|success|error|indigo|cyan|lime|amber|pink|brown|navy|olive) project=alpha\]", out)
+
+    def test_no_match_output_without_match_field(self, monkeypatch, capsys):
+        _add_queries_table("board.work", {"columns": ["expense", "exercise"]})
+        today = dt.date.today()
+        _write_records([f"{today} type=expense domain=self category=food amount=10 project=alpha",
+                        f"{today} type=exercise project=alpha duration=10"])
+        _run(monkeypatch, "--board", "work")
+        out = capsys.readouterr().out
+        assert "match_field" not in out
+        assert "project=alpha]" not in out
