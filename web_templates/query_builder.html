@@ -187,7 +187,7 @@
 
 <script src="/static/js/filter_builder.js?v=2"></script>
 <script src="/static/js/chips.js"></script>
-<script src="/static/js/record_table.js"></script>
+<script src="/static/js/record_table.js?v=2"></script>
 <script src="/static/js/time_picker.js"></script>
 <script src="/static/js/drag.js"></script>
 <script>
@@ -1483,8 +1483,10 @@ function _initQbRt() {
     returnTo: "/query-builder",
     enableBulk: true,
     fieldTypes: _qbFieldTypes,
+    exportName: "query_results",
     onRefresh: function() { triggerLivePreview(); }
   });
+  RecordTable._export   = function(){ _qbRt._export(); };
   RecordTable._sort    = function(th,col){ _qbRt._sort(th,col); };
   RecordTable._check   = function(cb){ _qbRt._check(cb); };
   RecordTable._selAll  = function(cb){ _qbRt._selAll(cb); };

@@ -5,6 +5,21 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-05
+
+### RecordTable: client-side CSV export on the shared component
+
+- New `RecordTable._export()` in `web_static/js/record_table.js`: downloads the currently-displayed records as a CSV blob (header from `_cols`, values via the same case-insensitive key lookup `_buildRows` uses, `""` escaping for quotes, all fields quoted) — no page navigation, honors the on-screen sort order
+- A **↓ CSV** button appears in the table's summary bar whenever `RecordTable` renders (count/total/avg/time-label row is now a flex row with the button); it only renders for the flat records view — group/trend/threshold result kinds still bypass `RecordTable` and get no button
+- Re-exposed on all **four** `RecordTable` consumer pages (browse.html, home.html, query_builder.html, queries.html), each passing a per-page `exportName`: `browse_results.csv`, `recent_records.csv`, `query_results.csv`
+- **Cache-busting**: `record_table.js` is now included as `...?v=2` on all four pages (service worker `ptos-v3` is cache-first keyed on full URL, so the `?v=` query busts the stale cached copy — same pattern as `filter_builder.js?v=2`, no SW version bump)
+- **Existing server-side `/browse/export` is untouched**: browse keeps its sidebar **↓ CSV** button (full fresh re-query, dynamic `{type}_{time_label}.csv` filename) alongside the new table-level one (exports what's on screen) — redundant when browse always loads the full uncapped result set, both are harmless today; revisit retiring the server route only if browse ever paginates
+
+### AGENTS.md: record_table export coverage
+- Documented the `RecordTable._export` button + `exportName` option + the four consumer pages
+
+---
+
 ## 2026-09-04
 
 ### Ratio metric: sum-metric operands (Query Builder + fix revenue_percent)
