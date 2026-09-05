@@ -360,6 +360,11 @@ x 2026-07-12 2026-07-10 Completed task
 - **CLI** — `run_dashboard()` reads highlights from config, applies bold ANSI colors; `run_metric()` accepts `color`/`reset` params; `--add-dashboard` supports `--highlight METRIC:COLOR` flag
 - **Settings page** — per-dashboard metric chips with color dot; drag a color onto a chip or click to cycle: none → blue → orange → green → red → purple → teal → rose → slate → none; same color can be assigned to multiple metrics
 
+## Ratio metric operands
+
+- A `ratio` metric's two operands resolve as: **plain base queries → record count**, **sum metrics → their summed total**, **avg metrics → mean**, and nested ratios (ptos.py `_resolve_ratio_operand`; ptos_service.py `get_metric` `_resolve`). So `ratio = ["total_revenue", "target_revenue"]` means actual-revenue ÷ revenue-target (a monetary ratio), whereas `ratio = ["fitting", "target"]` means `count(fitting) ÷ count(target)` (record counts) — the two are **not** interchangeable
+- **Query Builder metric editor** — both ratio operand dropdowns offer base queries **and** resolvable non-derived metrics (each labeled with its kind, e.g. `total_revenue (sum)`), so sum-vs-sum ratios (revenue ÷ target) are expressible from the UI; this closed the gap that previously forced count-vs-count ratios and silently mis-computed revenue percentages
+
 ## Dashboard grouping
 
 - **Config** — optional `groups` dict in `[dashboards.NAME]` (`queries.toml`): `groups = { "Revenue" = ["income_this_month"], "Assessment" = ["assessment", "assessment_pct"] }`. `metrics` remains the flat ordered union and is required for backward compat with old entries, but may be empty/absent — the highlight picker reads `metrics` then falls back to flattening `groups`. Order is TOML insertion order.

@@ -116,6 +116,30 @@ class TestRunMetric:
         out = capsys.readouterr().out
         assert "no data" in out
 
+    def test_ratio_sum_metrics(self, monkeypatch, capsys):
+        # A ratio whose operands are sum metrics must use their summed values,
+        # not record counts (e.g. revenue ÷ target-revenue, not fitting-count ÷ target-count).
+        def scan(*a, **kw):
+            filt = a[2] if len(a) > 2 else []
+            if any("type=fitting" in f for f in filt):
+                return ["2026-07-01 type=fitting amount=318200"], 318200
+            return ["2026-07-01 type=target"], 324000
+        queries = {
+            "fitting": {"where": "type=fitting", "time": "tm"},
+            "target": {"where": "type=target", "time": "tm"},
+            "metrics": {
+                "total_revenue": {"sum": "fitting", "field": "amount"},
+                "target_revenue": {"sum": "target", "field": "revenue_target"},
+                "revenue_percent": {"ratio": ["total_revenue", "target_revenue"]},
+            },
+        }
+        monkeypatch.setattr(ptos, "scan_records", scan)
+        start, end = dt.date(2026, 7, 1), dt.date(2026, 7, 31)
+        assert ptos.run_metric("revenue_percent", queries, start, end, {}) is True
+        out = capsys.readouterr().out
+        assert "98.2%" in out
+        assert "318200/324000" in out
+
     def test_max(self, monkeypatch, capsys):
         queries = {
             "base": {"where": "type=expense"},

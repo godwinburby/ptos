@@ -977,7 +977,7 @@ function _buildMetricEditor(name) {
     sum:"Total — sum of amount field",
     max:"Maximum — highest amount",
     min:"Minimum — lowest amount",
-    ratio:"Ratio — count(A) ÷ count(B) × 100%"
+    ratio:"Ratio — (A ÷ B) × 100% (plain queries count records; sum metrics use summed value)"
   };
   var kindOpts = Object.keys(kindMap).map(function(k){
     return '<option value="'+k+'"'+(k===m.kind?" selected":"")+'>'+kindMap[k]+'</option>';
@@ -989,21 +989,37 @@ function _buildMetricEditor(name) {
   var baseOpts = qNames.map(function(n){
     return '<option value="'+n+'"'+(n===m.base?" selected":"")+'>'+n+'</option>';
   }).join("");
-  var baseRow = _mkCard("Base query",
+  // Ratio operands: base queries (→ record count) plus resolvable sum/avg metrics (→ value),
+  // so ratios can compare monetary sums, not just record counts.
+  var mNames = Object.keys(_st.metrics).filter(function(n){
+    return n!==name && !_st.metrics[n].derived;
+  });
+  var mOpts = mNames.map(function(n){
+    var kind = _st.metrics[n].kind || "metric";
+    return '<option value="'+n+'"'+(n===m.base?" selected":"")+'>'+n+' ('+kind+')</option>';
+  }).join("");
+  var ratioOpts = baseOpts + mOpts;
+  var baseRow = _mkCard(m.kind==="ratio"?"First operand (ratio numerator)":"Base query",
     '<select id="m-base" onchange="_st.metrics[_cur.name].base=this.value">'+
-    '<option value="">— pick a query —</option>'+baseOpts+'</select>',
-    "Which base query to compute this metric on.");
+    '<option value="">— pick a query or metric —</option>'+(m.kind==="ratio"?ratioOpts:baseOpts)+'</select>',
+    m.kind==="ratio"
+      ? "Ratio numerator. A plain query counts matching records; a sum metric uses its summed value."
+      : "Which base query to compute this metric on.");
   baseRow.id = "base-row";
   div.appendChild(baseRow);
 
-  // Ratio: second query (denominator)
+  // Ratio: second operand (denominator)
   var base2Opts = qNames.map(function(n){
     return '<option value="'+n+'"'+(n===m.base2?" selected":"")+'>'+n+'</option>';
   }).join("");
-  var r2 = _mkCard("Second query (ratio denominator)",
+  var mOpts2 = mNames.map(function(n){
+    var kind = _st.metrics[n].kind || "metric";
+    return '<option value="'+n+'"'+(n===m.base2?" selected":"")+'>'+n+' ('+kind+')</option>';
+  }).join("");
+  var r2 = _mkCard("Second operand (ratio denominator)",
     '<select id="m-base2" onchange="_st.metrics[_cur.name].base2=this.value">'+
-    '<option value="">— pick a query —</option>'+base2Opts+'</select>',
-    "ratio = count(base query) ÷ count(second query) × 100%");
+    '<option value="">— pick a query or metric —</option>'+base2Opts+mOpts2+'</select>',
+    "ratio = first value ÷ second value × 100%. Plain queries count records; sum metrics use their summed value.");
   r2.id = "ratio2-row";
   r2.style.display = m.kind==="ratio"?"block":"none";
   div.appendChild(r2);

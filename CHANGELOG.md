@@ -7,6 +7,13 @@ Format: `[version or date] — description`
 
 ## 2026-09-04
 
+### Ratio metric: sum-metric operands (Query Builder + fix revenue_percent)
+
+- **Bug fix**: a `ratio` metric whose operands are **sum metrics** (e.g. `ratio = ["total_revenue", "target_revenue"]`) now correctly uses the summed values. Previously the UI could only pick base queries for ratio operands (each resolved as a **record count**), so a "revenue ÷ revenue-target" ratio silently became `count(fitting) ÷ count(target)` — e.g. `revenue_percent` showed **500% (5/1)** instead of the intended **98.2% (₹3,18,200/₹3,24,000)** for July 2026. The engine/service already resolved sum-metric operands to their total (ptos.py `_resolve_ratio_operand`, ptos_service.py `get_metric` `_resolve`); only the editor prevented setting them
+- **Query Builder metric editor**: the two ratio operand dropdowns now offer **base queries *and* resolvable (non-derived) metrics**, each labeled with its kind (e.g. `total_revenue (sum)`), so sum-vs-sum ratios like revenue ÷ target are expressible from the UI; the "Metric type" ratio description and operand help text now note that plain queries count records while sum metrics use their summed value
+- The workspace `revenue_percent` config was updated to `ratio = ["total_revenue", "target_revenue"]`, verified as `98.2% (318200/324000)` on both web (`get_metric`) and CLI (`run_metric`)
+- Tests: `test_metrics.py::TestRunMetric::test_ratio_sum_metrics` locks in sum-metric ratio resolution (318200/324000 → 98.2%)
+
 ### Board page uses the shared time-window picker (URL-driven)
 
 - The board page's flat inline `<select>` (which previously wrote `time_window` straight into `queries.toml` via `POST /api/board/time-window`) is replaced with the **shared `_time_picker.html` component** (prefix `brd-`), matching Habits/Thresholds: fixed named windows plus Year/Month/Date/Range picker sub-widgets
