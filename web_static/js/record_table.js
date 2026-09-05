@@ -20,6 +20,7 @@ function RecordTable(opts) {
   var enableBulk = opts.enableBulk !== false;
   var onRefresh  = opts.onRefresh || function(){};
   var _fieldTypes = opts.fieldTypes || {};
+  var exportName = opts.exportName || "export";
 
   // ── private state ──────────────────────────────────────────────────────────
   var _records  = [];
@@ -143,7 +144,7 @@ function RecordTable(opts) {
     if (d.avg_fmt)   p.push("<span>Avg: <strong>"+esc(d.avg_fmt)+"</strong></span>");
     if (d.time_label) p.push('<span style="color:var(--sub)">'+esc(d.time_label)+"</span>");
     return p.length
-      ? '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin-bottom:10px;">'+p.join("")+"</div>"
+      ? '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--sub);">'+p.join("")+"</div>"
       : "";
   }
 
@@ -232,7 +233,10 @@ function RecordTable(opts) {
 
     container.innerHTML =
       '<div class="card">' +
-        _summaryBar(d) +
+        '<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:10px;">' +
+          _summaryBar(d) +
+          '<button class="btn btn-ghost btn-sm" onclick="RecordTable._export()">↓ CSV</button>' +
+        '</div>' +
         '<div style="overflow-x:auto;">' +
           '<table class="data-table" id="rt-table">' +
             '<thead><tr>'+heads+'</tr></thead>' +
@@ -273,6 +277,26 @@ function RecordTable(opts) {
 
     var tbody = ge("rt-tbody");
     if (tbody) tbody.innerHTML = _buildRows(_records, _cols, opts.returnTo || window.location.pathname);
+  };
+
+  // ── CSV export ─────────────────────────────────────────────────────────────
+  self._export = function() {
+    if (!_records.length) return;
+    var q = function(v) {
+      return '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+    };
+    var lines = [_cols.map(q).join(",")];
+    _records.forEach(function(r) {
+      lines.push(_cols.map(function(c) {
+        var k = Object.keys(r).find(function(k){ return k.toLowerCase()===c.toLowerCase(); }) || c;
+        return q(r[k]);
+      }).join(","));
+    });
+    var blob = new Blob([lines.join("\n")], { type: "text/csv" });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = exportName + ".csv";
+    a.click();
   };
 
   // ── selection ──────────────────────────────────────────────────────────────

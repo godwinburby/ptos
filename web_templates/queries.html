@@ -61,7 +61,7 @@
 
 <div id="result-area"></div>
 
-<script src="/static/js/record_table.js"></script>
+<script src="/static/js/record_table.js?v=2"></script>
 <script src="/static/js/time_picker.js"></script>
 <script src="/static/js/chips.js"></script>
 <script>
@@ -375,8 +375,10 @@ var _rt = new RecordTable({
   containerId: "result-area",
   enableBulk: true,
   fieldTypes: _fieldTypes,
+  exportName: "query_results",
   onRefresh: function() { runQuery(); }
 });
+RecordTable._export   = function(){ _rt._export(); };
 RecordTable._sort    = function(th,col){ _rt._sort(th,col); };
 RecordTable._check   = function(cb){ _rt._check(cb); };
 RecordTable._selAll  = function(cb){ _rt._selAll(cb); };
