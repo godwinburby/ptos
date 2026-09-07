@@ -555,7 +555,10 @@
     <div class="chip-row" id="add-chips-rec">
       <button class="add-chip" data-token="rec:1d " onclick="toggleAddChip(this,'rec')">daily</button>
       <button class="add-chip" data-token="rec:1w " onclick="toggleAddChip(this,'rec')">weekly</button>
+      <button class="add-chip" data-token="rec:2w " onclick="toggleAddChip(this,'rec')">biweekly</button>
       <button class="add-chip" data-token="rec:1m " onclick="toggleAddChip(this,'rec')">monthly</button>
+      <button class="add-chip" data-token="rec:2m " onclick="toggleAddChip(this,'rec')">bimonthly</button>
+      <button class="add-chip" data-token="rec:3m " onclick="toggleAddChip(this,'rec')">quarterly</button>
       <button class="add-chip" data-token="rec:1y " onclick="toggleAddChip(this,'rec')">yearly</button>
     </div>
   </div>
@@ -576,7 +579,7 @@
       <tr><td><code style="color:#f0ad4e;">due:date</code></td><td>Due date — <code>today</code> <code>tomorrow</code> <code>fri</code> <code>this_week</code> <code>next_month</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
       <tr><td><code style="color:#f0ad4e;">due:date time</code></td><td>With time — <code>due:tomorrow 3pm</code> <code>due:2026-07-12T14:30</code></td></tr>
       <tr><td><code>t:date</code></td><td>Threshold date — surfaces when it arrives</td></tr>
-      <tr><td><code style="color:var(--sub);">rec:interval</code></td><td>Recurrence — <code>rec:1d</code> <code>rec:1w</code> <code>rec:1m</code> <code>rec:1y</code></td></tr>
+      <tr><td><code style="color:var(--sub);">rec:interval</code></td><td>Recurrence — <code>rec:1d</code> <code>rec:1w</code> <code>rec:2w</code> <code>rec:1m</code> <code>rec:2m</code> <code>rec:3m</code> <code>rec:1y</code></td></tr>
     </table>
   </div>
 </div>
@@ -1514,10 +1517,11 @@ var _acData = {
   'rec:': [
     {l:'1 day', v:'rec:1d '},
     {l:'1 week', v:'rec:1w '},
-    {l:'1 month', v:'rec:1m '},
-    {l:'1 year', v:'rec:1y '},
     {l:'2 weeks', v:'rec:2w '},
+    {l:'1 month', v:'rec:1m '},
     {l:'2 months', v:'rec:2m '},
+    {l:'3 months (quarterly)', v:'rec:3m '},
+    {l:'1 year', v:'rec:1y '},
     {l:'Strict +1 month', v:'rec:+1m '},
     {l:'Strict +1 week', v:'rec:+1w '},
     {l:'Clear', v:'__CLEARREC__'}
