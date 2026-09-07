@@ -1,0 +1,132 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .dl-header { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px; }
+  .dl-header .page-title { margin:0; }
+  .dl-nav { display:flex;align-items:center;gap:6px; }
+  .dl-nav a { text-decoration:none; font-size:20px; font-weight:700; color:var(--sub); background:var(--card); border:1px solid var(--border); border-radius:8px; width:34px; height:34px; display:inline-flex; align-items:center; justify-content:center; transition:all .15s; }
+  .dl-nav a:hover { color:var(--accent); border-color:var(--accent); }
+  .dl-nav .dl-label { font-size:16px; font-weight:800; min-width:165px; text-align:center; }
+  .dl-date-input { padding:6px 10px; border-radius:8px; border:1.5px solid var(--border); background:var(--card); color:var(--text); font-size:14px; }
+  .dl-section { margin-bottom:18px; }
+  .dl-section-title { font-weight:700; font-size:12px; text-transform:uppercase; letter-spacing:.04em; color:var(--sub); margin:0 0 8px; }
+  .dl-card { background:var(--card); border:1px solid var(--border); border-radius:10px; padding:12px 16px; }
+  .dl-none { color:var(--sub); font-size:13px; margin:4px 0; }
+  .dl-row { font-size:14px; color:var(--text); padding:5px 0; border-bottom:1px dashed var(--border); }
+  .dl-row:last-child { border-bottom:none; }
+  .dl-meta { color:var(--sub); font-size:12px; }
+  .dl-tag { font-weight:700; }
+  .dl-overdue { color:var(--warn); font-weight:700; }
+  .dl-sample { color:var(--sub); font-size:12px; }
+  .dl-habit { display:inline-block; background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:5px 10px; margin:0 8px 8px 0; font-size:13px; }
+  .dl-habit.today { border-color:var(--accent); }
+  .dl-journal { white-space:pre-wrap; font-size:13px; color:var(--text); background:var(--bg); border-radius:8px; padding:10px 12px; margin-top:6px; }
+  .dl-error { color:var(--error); font-size:14px; padding:20px; }
+</style>
+
+<div class="dl-header">
+  <div class="page-title">Daily</div>
+  {% if data or error %}
+  <div class="dl-nav">
+    {% if prev_date %}
+    <a href="/daily/{{ prev_date }}" title="Previous day">‹</a>
+    {% endif %}
+    <span class="dl-label">{{ data.date }} · {{ data.weekday }}</span>
+    {% if next_date %}
+    <a href="/daily/{{ next_date }}" title="Next day">›</a>
+    {% endif %}
+  </div>
+  <input type="date" class="dl-date-input" id="dl-date" value="{{ data.date if data else '' }}"
+         onchange="window.location.href='/daily/' + this.value;" title="Jump to date">
+  {% endif %}
+</div>
+
+{% if error %}
+<div class="card dl-error">{{ error }}</div>
+{% elif data %}
+
+<div class="dl-section">
+  <div class="dl-section-title">Records</div>
+  <div class="dl-card">
+    {% if data.records_by_type %}
+      {% for rt in data.records_by_type %}
+      <div class="dl-row">
+        <span class="dl-tag">{{ rt.type }}</span> — {{ rt.count }}
+        {% if rt.samples %}<span class="dl-sample">· {{ rt.samples | join(' · ') }}</span>{% endif %}
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="dl-none">No records.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="dl-section">
+  <div class="dl-section-title">Todos</div>
+  <div class="dl-card">
+    {% if data.todos.overdue or data.todos.due %}
+      {% for t in data.todos.overdue %}
+      <div class="dl-row">
+        <span class="dl-tag dl-overdue">OVERDUE</span>
+        <a href="/todo?search={{ t.description | urlencode }}" style="color:inherit;text-decoration:none;">
+          ({{ t.priority }})&nbsp;{{ t.description }}
+        </a>
+        <span class="dl-meta">#{{ t.line_no }}{% if t.projects %} {{ t.projects | join(' ') }}{% endif %}{% if t.contexts %} {{ t.contexts | join(' ') }}{% endif %}</span>
+      </div>
+      {% endfor %}
+      {% for t in data.todos.due %}
+      <div class="dl-row">
+        <span class="dl-tag">DUE</span>
+        <a href="/todo?search={{ t.description | urlencode }}" style="color:inherit;text-decoration:none;">
+          ({{ t.priority }})&nbsp;{{ t.description }}
+        </a>
+        <span class="dl-meta">#{{ t.line_no }}{% if t.projects %} {{ t.projects | join(' ') }}{% endif %}{% if t.contexts %} {{ t.contexts | join(' ') }}{% endif %}</span>
+      </div>
+      {% endfor %}
+    {% else %}
+      <div class="dl-none">Nothing overdue or due.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="dl-section">
+  <div class="dl-section-title">Captures (inbox)</div>
+  <div class="dl-card">
+    {% if data.captures %}
+      {% for c in data.captures %}
+      <div class="dl-row">{{ c.date }} <span class="dl-meta">·</span> {{ c.sample }}</div>
+      {% endfor %}
+    {% else %}
+      <div class="dl-none">No pending captures.</div>
+    {% endif %}
+  </div>
+</div>
+
+<div class="dl-section">
+  <div class="dl-section-title">Journal</div>
+  <div class="dl-card">
+    {% if data.journal %}
+      <a href="/journal?date={{ data.date }}" class="dl-meta" style="color:var(--accent);text-decoration:none;">{{ data.journal.path }}</a>
+      {% if data.journal.preview %}
+      <div class="dl-journal">{{ data.journal.preview }}</div>
+      {% endif %}
+    {% else %}
+      <div class="dl-none">No entry yet — <a href="/journal?date={{ data.date }}" style="color:var(--accent);text-decoration:none;">write one</a>.</div>
+    {% endif %}
+  </div>
+</div>
+
+{% if data.habits %}
+<div class="dl-section">
+  <div class="dl-section-title">Habits</div>
+  <div class="dl-card">
+    {% for h in data.habits %}
+    <span class="dl-habit {{ 'today' if h.today }}">{{ '✔' if h.today else '·' }} {{ h.name }} — {{ h.streak }}-day streak</span>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+
+{% endif %}
+{% endblock %}

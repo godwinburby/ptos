@@ -569,6 +569,7 @@
     <a href="/board" class="{% if tab=='board' %}active{% endif %}">{% include 'icons/board.html' ignore missing %} Board</a>
     <a href="/habits" class="{% if tab=='habits' %}active{% endif %}">{% include 'icons/habits.html' ignore missing %} Habits</a>
     <a href="/calendar" class="{% if tab=='calendar' %}active{% endif %}">{% include 'icons/calendar.html' ignore missing %} Calendar</a>
+    <a href="/daily" class="{% if tab=='daily' %}active{% endif %}">{% include 'icons/calendar.html' ignore missing %} Daily</a>
     <a href="/thresholds" class="{% if tab=='thresholds' %}active{% endif %}">{% include 'icons/thresholds.html' ignore missing %} Thresholds</a>
     <a href="/query-builder" class="{% if tab=='query_builder' %}active{% endif %}">{% include 'icons/query_builder.html' ignore missing %} Query Builder</a>
     <a href="/backup" class="{% if tab=='backup' %}active{% endif %}">{% include 'icons/backup.html' ignore missing %} Backup</a>
@@ -943,6 +944,10 @@
       {% include 'icons/calendar.html' ignore missing %}
       Calendar
     </a>
+    <a href="/daily" class="more-menu-item {% if tab=='daily' %}active{% endif %}">
+      {% include 'icons/calendar.html' ignore missing %}
+      Daily
+    </a>
     <a href="/browse" class="more-menu-item {% if tab=='browse' %}active{% endif %}">
       {% include 'icons/browse.html' ignore missing %}
       Browse
@@ -1249,6 +1254,7 @@ function toggleMoreMenu(e) {
     "g B": "/board",
     "g H": "/habits",
     "g C": "/calendar",
+    "g D": "/daily",
   };
 
   // Help overlay HTML
@@ -1924,6 +1930,7 @@ function initJournalBacklinks(container, content) {
   function _completePomo() {
     var s = _pomoState();
     var desc = s ? s.desc : 'Pomodoro';
+    var mins = s && s.minutes ? s.minutes : {{ pomo_minutes|default(25) }};
     _clearPomo();
     _updatePill();
     if ("Notification" in window && Notification.permission === "default") {
@@ -1933,11 +1940,20 @@ function initJournalBacklinks(container, content) {
       new Notification("Pomodoro complete!", {body: desc, icon: "/static/icon-192.png"});
     }
     _showTodoToast([{description: "\u23F0 " + desc + " \u2014 pomodoro complete!", due: "now", arrived: true}]);
+    {% if pomo_log %}
+    try {
+      fetch('/api/pomo-log', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({task: desc, minutes: mins})
+      });
+    } catch (e) {}
+    {% endif %}
   }
 
   window.startPomo = function(lineNo, desc, minutes) {
     var dur = (minutes || {{ pomo_minutes|default(25) }}) * 60 * 1000;
-    var s = {lineNo: lineNo, desc: desc, endTime: Date.now() + dur, paused: false, pausedRemain: 0, done: false};
+    var s = {lineNo: lineNo, desc: desc, minutes: (minutes || {{ pomo_minutes|default(25) }}), endTime: Date.now() + dur, paused: false, pausedRemain: 0, done: false};
     _savePomo(s);
     if (_pomoInterval) clearInterval(_pomoInterval);
     _pomoInterval = setInterval(_tickPomo, 1000);

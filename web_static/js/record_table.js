@@ -165,7 +165,8 @@ function RecordTable(opts) {
 
       var acts = r._line
         ? '<td style="white-space:nowrap;">' +
-          '<a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to='+encodeURIComponent(returnTo)+'">✎</a> ' +
+          '<a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to='+encodeURIComponent(returnTo)+'" title="Edit">✎</a> ' +
+          '<a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--warn);" href="/edit?convert=1&filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to='+encodeURIComponent(returnTo)+'" title="Convert to another type">⇄</a> ' +
           '<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row=\''+JSON.stringify(r).replace(/'/g,"&#39;")+'\' onclick="RecordTable._openDel(JSON.parse(this.dataset.row))">✕</button>' +
           '</td>'
         : "<td></td>";
