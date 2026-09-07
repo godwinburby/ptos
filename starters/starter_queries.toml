@@ -99,6 +99,12 @@ time  = "this-month"
 where = "type=learning"
 time  = "this-month"
 
+# ── INBOX (QUICK CAPTURE) ────────────────────────────────────────────────────
+
+[inbox]
+where = "type=capture"
+time  = "all"
+
 # ── TRENDS ───────────────────────────────────────────────────────────────────
 
 [monthly_trend]
@@ -168,6 +174,10 @@ weeks = 12
 
 ["habit.walk"]
 filters = ["type=habit", "name=walk"]
+weeks = 12
+
+["habit.pomodoro"]
+filters = ["type=pomodoro"]
 weeks = 12
 
 # ══════════════════════════════════════════════════════════════════════════════

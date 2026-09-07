@@ -29,10 +29,12 @@ log = logging.getLogger("ptos_web")
 @app.context_processor
 def _inject_globals():
     cfg = svc.get_config()
+    pomo = cfg.get("pomodoro", {})
     return {
         "frozen": bool(getattr(sys, "frozen", False)),
         "desktop_mode": os.environ.get("DESKTOP_MODE") == "1",
-        "pomo_minutes": cfg.get("pomodoro", {}).get("duration_minutes", 25),
+        "pomo_minutes": pomo.get("duration_minutes", 25),
+        "pomo_log": bool(pomo.get("log_sessions", True)),
     }
 
 def _wants_json():
@@ -2289,6 +2291,28 @@ def calendar_view(name=None):
         calendars=names, active=name or "__all__", data=data)
 
 
+@app.route("/daily")
+@app.route("/daily/<date>")
+def daily_view(date=None):
+    try:
+        data = svc.daily_digest(date)
+    except PTOSError as e:
+        return render_template("daily.html", tab="daily", title="Daily",
+                               now=_now_str(), error=str(e), data=None,
+                               prev=None, next=None)
+    except Exception as e:
+        log.exception("Daily digest failed")
+        return render_template("daily.html", tab="daily", title="Daily",
+                               now=_now_str(), error=str(e), data=None,
+                               prev=None, next=None)
+    d = dt.date.fromisoformat(data["date"])
+    return render_template("daily.html",
+        tab="daily", title="Daily",
+        now=_now_str(), data=data, error=None,
+        prev_date=(d - dt.timedelta(days=1)).isoformat(),
+        next_date=(d + dt.timedelta(days=1)).isoformat())
+
+
 @app.route("/board")
 def board():
     try:
@@ -2886,6 +2910,60 @@ def lint_run():
 # Edit Record (full form)
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _render_edit(filepath, lineno_int, old_line, return_to, rtype, field_values,
+                 msg=None, msg_type=None, title="Edit Record", **extra):
+    try:
+        schema = svc.get_schema()
+    except PTOSError:
+        schema = {}
+    field_defs = _build_field_defs(schema, rtype, field_values)
+    ts = schema.get("type", {}).get(rtype, {})
+    schema_tag_options = svc.resolve_tags(schema, ts, field_values)
+    current_tags = field_values.get("tag", [])
+    if isinstance(current_tags, str):
+        current_tags = [t.strip() for t in current_tags.split(",") if t.strip()]
+    tag_options = list(current_tags) + [t for t in schema_tag_options if t not in current_tags]
+    history_tags = []
+    try:
+        history_tags = svc.get_history_suggestions(rtype, field_values).get("filtered_tags", [])
+    except Exception:
+        pass
+    tag_context = svc.get_tag_context(rtype, field_values) if rtype else []
+    return render_template("edit.html",
+        tab="browse", title=title, now=_now_str(),
+        filepath=filepath, lineno=lineno_int, old_line=old_line,
+        return_to=return_to,
+        rtype=rtype, field_defs=field_defs,
+        global_field_defs=_build_global_field_defs(schema, field_values),
+        tag_options=tag_options, history_tags=history_tags,
+        tag_context=tag_context,
+        field_values=field_values,
+        today=dt.date.today().isoformat(),
+        msg=msg, msg_type=msg_type,
+        **extra)
+
+
+def _convert_render_kwargs(schema, source_rtype, note, target):
+    allowed = schema.get("types", {}).get("allowed", [])
+    try:
+        suggestions = svc.suggest_convert_type(note or "")
+    except Exception:
+        suggestions = []
+    pcts = {s["type"]: s["pct"] for s in suggestions}
+    try:
+        scrape = svc.scrape_convert_fields(note or "", target, schema)
+    except Exception:
+        scrape = {"fields": {}, "history_defaults": {}}
+    return {
+        "convert_mode": True,
+        "allowed_types": allowed,
+        "convert_source_type": source_rtype,
+        "convert_suggestions": suggestions,
+        "convert_pcts": pcts,
+        "convert_scrape": scrape,
+    }
+
+
 @app.route("/edit", methods=["GET"])
 def edit_get():
     filepath = request.args.get("filepath", "")
@@ -2906,6 +2984,53 @@ def edit_get():
         schema = svc.get_schema()
     except PTOSError:
         schema = {}
+    return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
+    if not return_to.startswith("/"):
+        app.logger.warning("edit_get: return_to '%s' is external, falling back to /browse", return_to)
+        return_to = url_for("browse_get")
+    app.logger.debug("edit_get: return_to=%s", return_to)
+
+    # ── convert mode: retype the source into a different record type ──
+    if request.args.get("convert") == "1":
+        allowed = schema.get("types", {}).get("allowed", [])
+        suggestions = svc.suggest_convert_type(note or "")
+        target = request.args.get("target_type", "").strip()
+        if not target or target not in allowed or target == rtype:
+            target = (next((s["type"] for s in suggestions if s["type"] != rtype), None)
+                      or next((t for t in allowed if t != rtype), None))
+        if not target:
+            return redirect(url_for("browse_get"))
+        try:
+            draft = svc.convert_draft(line, lineno_int, target)
+        except PTOSError:
+            return redirect(url_for("browse_get"))
+        field_values = {"type": target}
+        for k, v in draft["draft"].items():
+            if k == "tag":
+                field_values[k] = v if isinstance(v, list) else [v]
+            else:
+                field_values[k] = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
+        field_values["note"] = draft["note"]
+        field_values["date"] = draft["date"]
+        scrape = svc.scrape_convert_fields(note, target, schema)
+        for f, v in scrape["fields"].items():
+            if not field_values.get(f):
+                field_values[f] = ", ".join(v) if isinstance(v, list) else str(v)
+        for f, v in scrape["history_defaults"].items():
+            if not field_values.get(f):
+                field_values[f] = v
+        for key in request.args:
+            if key not in ("filepath", "lineno", "line", "return_to", "convert", "target_type"):
+                val = request.args.get(key, "")
+                if val:
+                    if key == "tag":
+                        field_values[key] = [t.strip() for t in val.split(",") if t.strip()]
+                    else:
+                        field_values[key] = val
+        kwargs = _convert_render_kwargs(schema, rtype, note, target)
+        return _render_edit(filepath, lineno_int, line, return_to, target,
+                            field_values, title="Convert Record", **kwargs)
+
     field_values = {"type": rtype}
     for k, v in kv.items():
         if k == "tag":
@@ -2915,51 +3040,14 @@ def edit_get():
     if note:
         field_values["note"] = note
     field_values["date"] = str(d)
-    
+
     # Override with URL params if present (supports cascade parent field changes)
     for key in request.args:
         if key not in ("filepath", "lineno", "line", "return_to"):
             val = request.args.get(key, "")
             if val:
                 field_values[key] = val
-    field_defs   = _build_field_defs(schema, rtype, field_values)
-    current_tags = field_values.get("tag", [])
-    if isinstance(current_tags, str):
-        current_tags = [t.strip() for t in current_tags.split(",") if t.strip()]
-    
-    # Get filtered history tags based on current field values (cascade context)
-    history_filtered_tags = []
-    if rtype:
-        try:
-            history_with_context = svc.get_history_suggestions(rtype, field_values)
-            history_filtered_tags = history_with_context.get("filtered_tags", [])
-        except Exception:
-            pass
-    
-    schema_tag_options = []
-    tag_context = []
-    if rtype:
-        ts = schema.get("type", {}).get(rtype, {})
-        schema_tag_options = svc.resolve_tags(schema, ts, field_values)
-        tag_context = svc.get_tag_context(rtype, field_values)
-    tag_options = list(current_tags) + [t for t in schema_tag_options if t not in current_tags]
-    return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
-    # Only allow internal paths — reject anything that could be javascript: or external
-    if not return_to.startswith("/"):
-        app.logger.warning("edit_get: return_to '%s' is external, falling back to /browse", return_to)
-        return_to = url_for("browse_get")
-    app.logger.debug("edit_get: return_to=%s", return_to)
-    return render_template("edit.html",
-        tab="browse", title="Edit Record", now=_now_str(),
-        filepath=filepath, lineno=lineno_int, old_line=line,
-        return_to=return_to,
-        rtype=rtype, field_defs=field_defs,
-        global_field_defs=_build_global_field_defs(schema, field_values),
-        tag_options=tag_options, history_tags=history_filtered_tags,
-        tag_context=tag_context,
-        field_values=field_values,
-        today=dt.date.today().isoformat(),
-        msg=None, msg_type=None)
+    return _render_edit(filepath, lineno_int, line, return_to, rtype, field_values)
 
 
 @app.route("/edit", methods=["POST"])
@@ -2980,6 +3068,85 @@ def edit_post():
         schema = svc.get_schema()
     except PTOSError:
         schema = {}
+
+    if request.form.get("convert") == "1":
+        return_to = request.form.get("return_to", "") or url_for("browse_get")
+        if not return_to.startswith("/"):
+            app.logger.warning("edit_post: return_to '%s' is external, falling back to /browse", return_to)
+            return_to = url_for("browse_get")
+        if not rtype:
+            source_type = ""
+            try:
+                _d, kv2, _ = svc.safe_parse_line(old_line)
+                source_type = (kv2 or {}).get("type", "")
+            except Exception:
+                pass
+            allowed = schema.get("types", {}).get("allowed", [])
+            fallback = next((t for t in allowed if t != source_type), None)
+            if fallback:
+                return redirect(url_for("edit_get", filepath=filepath, lineno=lineno,
+                                        line=old_line, return_to=return_to,
+                                        convert="1", target_type=fallback))
+            return redirect(return_to)
+        keep = request.form.get("remove_original", "1") != "1"
+        ov = {}
+        ts = schema.get("type", {}).get(rtype, {})
+        for fname in list(ts.get("required", [])) + list(ts.get("fields", {})) + list(ts.get("conditions", {})):
+            if fname == "tag":
+                continue
+            val = request.form.get(fname, "").strip()
+            if val:
+                ov[fname] = val.replace(" ", "_")
+        for fname in svc.get_global_fields(schema):
+            val = request.form.get(fname, "").strip()
+            if val:
+                ov[fname] = val.replace(" ", "_")
+        tags = request.form.getlist("tag") + [t.strip().replace(" ", "_")
+               for t in request.form.get("custom_tags", "").split(",") if t.strip()]
+        if tags:
+            ov["tag"] = tags
+        date_val = request.form.get("date", "").strip()
+        if date_val:
+            ov["date"] = date_val
+        note_val = request.form.get("note", "").strip()
+        if "note" in request.form:
+            ov["note"] = note_val or None
+        try:
+            res = svc.convert_record(filepath, old_line, lineno_int, rtype,
+                                     kv_overrides=ov, keep=keep)
+            app.logger.debug("edit_post convert ok: %s", res.get("new_line"))
+            return redirect(return_to)
+        except PTOSError as e:
+            source_rtype = ""
+            try:
+                d2, kv2, note2 = svc.safe_parse_line(old_line) or (None, {}, "")
+                source_rtype   = (kv2 or {}).get("type", "")
+            except Exception:
+                d2 = kv2 = None
+            field_values = {"type": rtype}
+            try:
+                draft = svc.convert_draft(old_line, lineno_int, rtype, kv_overrides=ov)
+                for k, v in draft["draft"].items():
+                    if k == "tag":
+                        field_values[k] = v if isinstance(v, list) else [v]
+                    else:
+                        field_values[k] = ", ".join(str(x) for x in v) if isinstance(v, list) else str(v)
+                field_values["note"] = draft["note"]
+                field_values["date"] = draft["date"]
+            except Exception:
+                for k, v in ov.items():
+                    if k in ("date", "note"):
+                        continue
+                    field_values[k] = ", ".join(v) if isinstance(v, list) else str(v)
+                field_values["date"] = request.form.get("date", "")
+                field_values["note"] = request.form.get("note", "")
+            field_values["tag"] = tags
+            kwargs = _convert_render_kwargs(schema, source_rtype,
+                                            note2 or "", rtype)
+            return _render_edit(filepath, lineno_int, old_line, return_to, rtype,
+                                field_values, msg=str(e), msg_type="error",
+                                title="Convert Record", **kwargs)
+
     ts    = schema.get("type", {}).get(rtype, {})
     all_f = list(ts.get("required", []))
     for f in ts.get("fields", {}):
@@ -3724,6 +3891,46 @@ def api_link():
         return jsonify(ok=False, error=str(e))
     except Exception as e:
         log.exception("link failed")
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/capture", methods=["POST"])
+def api_capture():
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    try:
+        if not text:
+            raise PTOSError("text is required")
+        result = svc.capture(
+            text,
+            date=(data.get("date") or None),
+            tag=(data.get("tag") or None),
+            links=(data.get("links") or None),
+        )
+        return jsonify(result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("capture failed")
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/pomo-log", methods=["POST"])
+def api_pomo_log():
+    data = request.get_json(silent=True) or {}
+    task = (data.get("task") or "").strip()
+    minutes = data.get("minutes")
+    try:
+        if not task:
+            raise PTOSError("task is required")
+        if minutes is None:
+            raise PTOSError("minutes is required")
+        result = svc.pomodoro_log(task, minutes, date=(data.get("date") or None))
+        return jsonify(result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("pomo-log failed")
         return jsonify(ok=False, error=str(e))
 
 

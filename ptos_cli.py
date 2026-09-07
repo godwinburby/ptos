@@ -164,6 +164,15 @@ def build_parser(cycles):
                           "  record to (generates its id). Standalone: link existing\n"
                           "  entries: --link SRC_TARGET TARGET\n"
                           "  (e.g. --link expense:k3f9a1 project:p91a)")
+    add.add_argument("--cap", nargs="+", metavar="TEXT",
+                     help="Capture a quick note as a type=capture record\n"
+                          "  (text goes in the | note; --date/--tag/--link apply)")
+    add.add_argument("--pomo-log", nargs=2, metavar=("TASK", "MINUTES"),
+                     help="Log a completed pomodoro session as a type=pomodoro\n"
+                          "  record (honors [pomodoro] log_sessions; --date applies)")
+    add.add_argument("--daily", nargs="?", const="yesterday", metavar="DATE",
+                     help="Print the daily digest (default: yesterday;\n"
+                          "  accepts today or YYYY-MM-DD)")
 
     qry = p.add_argument_group("Query")
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
@@ -310,6 +319,17 @@ def build_parser(cycles):
                      help="Replace the note on matched record(s)  (use with --where)")
     utl.add_argument("--delete",   action="store_true",
                      help="Delete matched record(s)  (use with --where)")
+    utl.add_argument("--convert", nargs="+", metavar="WHERE TARGET",
+                     help="Convert matched record(s) to another type.\n"
+                          "  --convert \"WHERE...\" TARGET [--set key=val]\n"
+                          "  e.g. --convert \"type=capture\" expense --set category=food\n"
+                          "  omit TARGET to suggest a type from the record's note text\n"
+                          "  the carried note is scrubbed of the scraped tokens\n"
+                          "  (source record is deleted unless --keep)")
+    utl.add_argument("--keep",    action="store_true",
+                     help="With --convert: keep the source record (default: delete it)")
+    utl.add_argument("--keep-note", action="store_true",
+                     help="With --convert: keep the source note verbatim (default: strip scraped tokens)")
     utl.add_argument("--all",      action="store_true",
                      help="Apply --set/--delete to all matched records without interactive pick")
     utl.add_argument("--fields", action="store_true", help="Show field discovery report")
@@ -735,6 +755,263 @@ def run_thresholds(time_arg):
               f"{pct:>{pct_col}.0f}% {sym:>{status_col}} {unit:<{unit_col}}")
 
     print(f"\n{len(results)} threshold(s)\n")
+
+
+def run_capture(args):
+    import ptos_service as svc
+    text = " ".join(args.cap).strip()
+    if not text:
+        sys.exit("Capture text is empty.")
+    extra = {}
+    if args.date:
+        extra["date"] = args.date
+    if args.tag:
+        extra["tag"] = args.tag[0] if len(args.tag) == 1 else list(args.tag)
+    if args.link:
+        if len(args.link) != 1:
+            sys.exit("With --cap, --link takes exactly one TARGET (e.g. --link type:id)")
+        extra["links"] = args.link[0]
+    try:
+        result = svc.capture(text, **extra)
+    except Exception as e:
+        sys.exit(str(e))
+    print(f"Captured: {result['line']}")
+
+
+def run_pomodoro_log(task, minutes, date=None):
+    import ptos_service as svc
+    try:
+        result = svc.pomodoro_log(task, minutes, date=date)
+    except Exception as e:
+        sys.exit(str(e))
+    if not result.get("ok"):
+        print(f"Skipped: {result.get('skipped', 'not logged')}")
+        return
+    print(f"Logged: {result['line']}")
+
+
+def run_daily(date_arg):
+    import ptos_service as svc
+    try:
+        data = svc.daily_digest(date_arg)
+    except Exception as e:
+        sys.exit(str(e))
+
+    print(f"\nDaily digest — {data['date']} ({data['weekday']})")
+
+    rbt = data["records_by_type"]
+    print("\nRecords:")
+    if rbt:
+        for rt in rbt:
+            label = f"  {rt['type']}: {rt['count']} record(s)"
+            if rt["samples"]:
+                label += "  ·  " + "  ·  ".join(rt["samples"])
+            print(label)
+    else:
+        print("  (none)")
+
+    todo = data["todos"]
+    print("\nTodos:")
+    if todo["overdue"] or todo["due"]:
+        for t in todo["overdue"]:
+            pri = f"({t['priority']}) " if t["priority"] else ""
+            print(f"  OVERDUE  {t['line_no']:>3}. {pri}{t['description']}")
+        for t in todo["due"]:
+            pri = f"({t['priority']}) " if t["priority"] else ""
+            print(f"  DUE      {t['line_no']:>3}. {pri}{t['description']}")
+    else:
+        print("  (none overdue or due)")
+
+    caps = data["captures"]
+    print("\nCaptures:")
+    if caps:
+        for c in caps:
+            print(f"  {c['date']}  {c['sample']}")
+    else:
+        print("  (none)")
+
+    j = data["journal"]
+    print("\nJournal:")
+    if j:
+        print(f"  {j['path']}")
+        if j["preview"]:
+            for line in j["preview"].splitlines()[:8]:
+                print(f"    {line}")
+    else:
+        print("  (no entry yet)")
+
+    hab = data["habits"]
+    if hab:
+        print("\nHabits:")
+        for h in hab:
+            mark = "X" if h["today"] else "-"
+            print(f"  {mark} {h['name']} — {h['streak']}-day streak ({h['days_done']} done)")
+    print()
+
+
+def _cli_input(prompt):
+    """input() that returns '' on EOF (piped/non-TTY) instead of crashing."""
+    try:
+        return input(prompt).strip()
+    except (EOFError, KeyboardInterrupt):
+        return ""
+
+
+def run_convert(convert_args, filters, start, end, set_args, keep, do_all, keep_note=False):
+    """--convert: turn matched record(s) into a new record of another type.
+    Shared schema fields copy; date + note carry; id/links never copy.
+    The source record is deleted after conversion unless --keep is passed.
+    The carried note is scrubbed of the scraped token spans unless --keep-note
+    is passed (an explicit --set note=... override is respected verbatim)."""
+    import ptos_service as svc
+
+    try:
+        schema = svc.get_schema()
+    except Exception:
+        schema = {}
+    allowed = schema.get("types", {}).get("allowed", [])
+
+    tokens = list(convert_args)
+    target = None
+    if len(tokens) > 1 and tokens[-1] in allowed:
+        target   = tokens[-1]
+        filters  = list(tokens[:-1])
+    elif len(tokens) == 1 and tokens[0] in allowed:
+        sys.exit('--convert needs a filter before the target type: --convert "WHERE..." TARGET')
+    else:
+        filters = list(tokens)
+
+    if not filters:
+        sys.exit("--convert requires at least one filter (--where, --type, or --tag).")
+
+    matches = find_records_with_location(filters, start=start, end=end)
+    if not matches:
+        print("\nNo records found matching the filter.\n")
+        return
+
+    # ---- suggestion mode (no target type given) ----
+    if target is None:
+        text = " ".join(parse_line(line)[2] or "" for _, _, line in matches)
+        suggestions = svc.suggest_convert_type(text)
+        if not suggestions:
+            sys.exit("Could not guess a target type from the note text. "
+                     'Specify one: --convert "WHERE..." TARGET')
+        print("\nType suggestions (from record text):\n")
+        for i, s in enumerate(suggestions[:5], 1):
+            print(f"  [{i}] {s['type']} ({s['pct']}%)")
+        print()
+        if not sys.stdin.isatty():
+            target = suggestions[0]["type"]
+        else:
+            raw = _cli_input("Pick a number to convert to, or Enter to cancel: ")
+            if not raw:
+                print("Cancelled.")
+                return
+            try:
+                target = suggestions[int(raw) - 1]["type"]
+            except (ValueError, IndexError):
+                sys.exit("Invalid selection.")
+
+    # ---- build key/value overrides from --set ----
+    ov       = {}
+    tag_add  = []
+    tag_del  = []
+    for item in set_args or []:
+        m = re.match(r"(\w+)(\+=|-=|=)(.*)", item)
+        if not m:
+            sys.exit(f"--set: expected key=value, key+=value, or key-=value — got '{item}'")
+        k, op, v = m.groups()
+        v = v.strip()
+        if op == "=":
+            if k in ("id", "links"):
+                sys.exit("--convert: id/links never carry over a conversion")
+            ov[k] = v
+        else:
+            if k != "tag":
+                sys.exit("--convert: += and -= are only supported for tag (e.g. tag+=snacks)")
+            (tag_add if op == "+=" else tag_del).append(v)
+
+    # ---- select targets ----
+    if do_all:
+        targets = matches
+    elif len(matches) == 1:
+        targets = matches
+    else:
+        print(f"\n{len(matches)} records matched:\n")
+        for i, (fp, ln, line) in enumerate(matches, 1):
+            print(f"  [{i}]  {line}")
+        print()
+        raw = _cli_input("Pick number(s) to convert (e.g. 1 or 1,3) or 'all' or Enter to cancel: ")
+        if not raw:
+            print("Cancelled.")
+            return
+        if raw.lower() == "all":
+            targets = matches
+        else:
+            try:
+                chosen = [int(x.strip()) for x in raw.replace(",", " ").split()]
+                targets = [matches[i - 1] for i in chosen]
+            except (ValueError, IndexError):
+                sys.exit("Invalid selection.")
+
+    # ---- build plans and confirm ----
+    plans = []
+    for filepath, lineno, old_line in targets:
+        try:
+            draft = svc.convert_draft(old_line, lineno, target,
+                                      kv_overrides=ov, tag_add=tag_add, tag_del=tag_del,
+                                      strip_note=not keep_note)
+        except Exception as e:
+            if len(targets) == 1:
+                sys.exit(str(e))
+            print(f"  Error: {e}")
+            continue
+        d, kv, _ = parse_line(old_line)
+        rid, rtype = kv.get("id"), kv.get("type")
+        if rid and rtype and not keep:
+            refs = ptos.backlink_refs(f"{rtype}:{rid}")
+            if refs:
+                n = len(refs)
+                print(f"Warning: {n} entr{'y' if n == 1 else 'ies'} link to "
+                      f"{rtype}:{rid} — they will become dangling.")
+        plans.append((filepath, lineno, old_line, draft))
+
+    if not plans:
+        print("\nNothing to convert.\n")
+        return
+
+    print()
+    for filepath, lineno, old_line, draft in plans:
+        print(f"  file : {os.path.basename(filepath)}")
+        print(f"  from : {old_line}")
+        if draft["missing_required"]:
+            print(f"  to   : [blocked] target type requires: {', '.join(draft['missing_required'])}")
+        else:
+            print(f"  to   : {draft['new_line']}")
+        print()
+
+    if any(d["missing_required"] for _, _, _, d in plans):
+        print("Some records could not be converted — fill the missing required "
+              "fields with --set KEY=VALUE and try again.\n")
+        return
+    if not keep:
+        print("  (source record will be deleted)")
+    confirm = _cli_input("Convert? [y/N]: ").lower()
+    if confirm != "y":
+        print("Cancelled.")
+        return
+
+    for filepath, lineno, old_line, draft in plans:
+        try:
+            res = svc.convert_record(filepath, old_line, lineno, target,
+                                     kv_overrides=ov, keep=keep,
+                                     tag_add=tag_add, tag_del=tag_del,
+                                     strip_note=not keep_note)
+            print(f"  Converted: {res['new_line']}"
+                  + ("" if keep else f"   (deleted: {old_line})"))
+        except Exception as e:
+            print(f"  Error: {e}")
+    print()
 
 
 def run_habits(habit_arg, time_code=None):
@@ -2548,6 +2825,19 @@ def main():
     # ---- add mode ----
     schema = get_schema()
 
+    if args.cap is not None:
+        run_capture(args)
+        return
+
+    if args.pomo_log is not None:
+        run_pomodoro_log(args.pomo_log[0], args.pomo_log[1],
+                         date=args.date)
+        return
+
+    if args.daily is not None:
+        run_daily(args.daily)
+        return
+
     if args.add is not None:
         if not args.add:
             interactive_add(schema, resolve_date(args.date), args.save_preset,
@@ -2704,6 +2994,20 @@ def main():
                 + (f"\nCustom cycles:\n{cycle_names}" if cycle_names else "")
             )
         time_label = _TIME_ALIASES.get(args.time, args.time)
+
+    # ---- convert mode (before --set/--delete: --convert also takes --set) ----
+    con_args = getattr(args, "convert", None)
+    if con_args is not None:
+        run_convert(
+            con_args,
+            final_filters,
+            start, end,
+            getattr(args, "set", None),
+            getattr(args, "keep", False),
+            getattr(args, "all", False),
+            getattr(args, "keep_note", False),
+        )
+        return
 
     # ---- edit / delete mode ----
     if getattr(args, "set", None) or getattr(args, "set_note", None) or getattr(args, "delete", False):

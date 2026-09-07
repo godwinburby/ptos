@@ -2287,6 +2287,207 @@ def get_calendar_data(name, year=None, month=None):
     return result
 
 
+def _iso_date(value, default=None):
+    """Resolve a date arg (today/yesterday/YYYY-MM-DD) to an ISO date string.
+    Raise PTOSError instead of SystemExit so web and CLI both handle it."""
+    try:
+        iso = ptos.resolve_date(value) if value else (
+            default if default else ptos.today().isoformat())
+    except SystemExit:
+        raise PTOSError(f"Invalid date '{value}'")
+    return iso
+
+
+def capture(text, date=None, tag=None, links=None):
+    """Write a quick capture as a type=capture record.
+
+    The captured text is stored in the trailing | note. Raises PTOSError
+    if the capture type is missing from the schema or the text is empty.
+    Returns {ok, line, filepath, lineno}."""
+    schema = ptos.get_schema()
+    allowed = schema.get("types", {}).get("allowed", [])
+    if "capture" not in allowed:
+        raise PTOSError("Type 'capture' is not in your schema — add it with: ptos --add-type capture")
+    text = (text or "").strip()
+    if not text:
+        raise PTOSError("Capture text is empty.")
+    record = {"type": "capture"}
+    if tag:
+        record["tag"] = tag if isinstance(tag, list) else [str(tag)]
+    if links:
+        record["links"] = links
+    date_str = _iso_date(date)
+    line = ptos.build_record_line(date_str, record, note=text)
+    filepath, lineno = ptos.append_record(line, return_position=True)
+    _invalidate_history_cache()
+    return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
+
+
+def pomodoro_log(task, minutes, date=None):
+    """Log a completed pomodoro session as a type=pomodoro record.
+
+    Silently no-ops (returns {"ok": False, "skipped": ...}) when
+    [pomodoro] log_sessions is false or the pomodoro type is missing from
+    the schema. Returns {ok, skipped?, line, filepath, lineno}."""
+    cfg = ptos.get_config().get("pomodoro", {})
+    if not cfg.get("log_sessions", True):
+        return {"ok": False, "skipped": "log_sessions is false in config.toml"}
+    schema = ptos.get_schema()
+    allowed = schema.get("types", {}).get("allowed", [])
+    if "pomodoro" not in allowed:
+        return {"ok": False, "skipped": "type 'pomodoro' is not in schema.toml"}
+    try:
+        minutes = int(minutes)
+    except (TypeError, ValueError):
+        raise PTOSError(f"minutes must be a whole number, got '{minutes}'")
+    if minutes < 1:
+        raise PTOSError("minutes must be at least 1")
+    record = {"type": "pomodoro", "task": str(task or "").strip(), "minutes": minutes}
+    if not record["task"]:
+        raise PTOSError("task is empty.")
+    date_str = _iso_date(date)
+    line = ptos.build_record_line(date_str, record)
+    filepath, lineno = ptos.append_record(line, return_position=True)
+    _invalidate_history_cache()
+    return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
+
+
+def _digest_sample(line):
+    """Compact one-line summary of a record line for the daily digest."""
+    p = _parse_record(line) or {}
+    if not p:
+        return line
+    note = str(p.pop("note", "") or "").strip()
+    p.pop("date", None)
+    p.pop("type", None)
+    parts = [f"{k}={v}" for k, v in p.items() if v not in (None, "")]
+    text = " ".join(parts)
+    return (text + " | " + note) if note else text
+
+
+def _digest_todo_dict(t):
+    return {
+        "line_no": t.line_no,
+        "priority": t.priority or "",
+        "description": t.description,
+        "projects": list(t.projects),
+        "contexts": list(t.contexts),
+        "due": t.due.isoformat() if t.due else "",
+        "due_time": t.due_time or "",
+    }
+
+
+def daily_digest(date=None):
+    """Compose the daily review for a date (default: yesterday).
+
+    Pure read of existing records, todos, journal, and habits — no writes.
+    Returns {date, weekday, records_by_type, todos, captures, journal, habits}.
+    records_by_type: [{type, count, samples}] (samples = up to 5 compact lines)
+    todos: {overdue, due} lists of todo dicts (threshold-hidden, capped)
+    captures: [{date, line, note, sample}] (recent first, capped)
+    journal: {path, date, exists, preview} or None
+    habits: [{name, streak, days_done, today, range_label}] or [] when none"""
+    date_obj = dt.date.fromisoformat(_iso_date(
+        date, default=(ptos.today() - dt.timedelta(days=1)).isoformat()))
+    date_str = date_obj.isoformat()
+
+    result = {
+        "date": date_str,
+        "weekday": date_obj.strftime("%A"),
+        "records_by_type": [],
+        "todos": {"overdue": [], "due": []},
+        "captures": [],
+        "journal": None,
+        "habits": [],
+    }
+
+    try:
+        raw, _ = ptos.scan_records(date_obj, date_obj, [], None)
+    except Exception:
+        raw = []
+    by_type = {}
+    for line in raw:
+        p = ptos.safe_parse_line(line)
+        if not p:
+            continue
+        d, kv, note = p
+        t = kv.get("type", "")
+        if isinstance(t, list):
+            t = t[0] if t else ""
+        by_type.setdefault(str(t) if t else "(none)", []).append(line)
+    for t in sorted(by_type, key=lambda x: (-len(by_type[x]), x)):
+        samples = [_digest_sample(l) for l in by_type[t][:5]]
+        result["records_by_type"].append({"type": t, "count": len(by_type[t]), "samples": samples})
+
+    try:
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+    except Exception:
+        todos = []
+    for t in todos:
+        if t.done or not t.due:
+            continue
+        if t.threshold and t.threshold > date_obj:
+            continue
+        if t.due < date_obj:
+            result["todos"]["overdue"].append(_digest_todo_dict(t))
+        elif t.due == date_obj:
+            result["todos"]["due"].append(_digest_todo_dict(t))
+        if len(result["todos"]["overdue"]) + len(result["todos"]["due"]) >= 60:
+            break
+
+    try:
+        matches = ptos.find_records_with_location(["type=capture"], start=dt.date.min, end=date_obj)
+    except Exception:
+        matches = []
+    sortable = sorted(matches, key=lambda m: (m[2][:10], m[1]), reverse=True)
+    for fp, idx, line in sortable[:10]:
+        p = _parse_record(line)
+        note = (p or {}).get("note", "") if p else ""
+        note = note if isinstance(note, str) else str(note or "")
+        result["captures"].append({
+            "date": line[:10],
+            "line": line,
+            "note": note,
+            "sample": _digest_sample(line),
+        })
+
+    jpath = ptos.journal_path(date_str)
+    if os.path.exists(jpath):
+        try:
+            with open(jpath, encoding="utf-8") as f:
+                content = f.read()
+        except Exception:
+            content = ""
+        lines = [l for l in content.splitlines() if l.strip()]
+        result["journal"] = {
+            "path": jpath,
+            "date": date_str,
+            "exists": True,
+            "preview": "\n".join(lines[:10])[:2000],
+        }
+
+    try:
+        names = get_habit_names()
+    except Exception:
+        names = []
+    for n in names:
+        try:
+            d = get_habit_data(n)
+        except Exception:
+            continue
+        today_present = next((c.get("present") for c in d.get("grid", [])
+                              if c.get("is_today")), False)
+        result["habits"].append({
+            "name": n,
+            "streak": d.get("streak", 0),
+            "days_done": d.get("days_done", 0),
+            "today": bool(today_present),
+            "range_label": d.get("range_label", ""),
+        })
+
+    return result
+
+
 def get_board_data(board_name, time=None, from_date=None, to_date=None):
     """Load record data for each column of a board.
     The display window is resolved from explicit time/from_date/to_date params
@@ -2558,6 +2759,387 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
         raise
     except Exception as e:
         raise PTOSError(str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Convert records (type → type) + rule-based suggestion engine
+# ══════════════════════════════════════════════════════════════════════════════
+
+def convert_draft(old_line, lineno, target_type, kv_overrides=None, tag_add=None, tag_del=None, strip_note=True):
+    """Build a conversion draft: a new record line with the target_type,
+    copying the shared fields from the source. Never writes anything.
+
+    Rules:
+      - date carries over (date stays the source's date)
+      - shared schema fields copy; id/links NEVER copy (no cross-link rewiring)
+      - tag always carries (tag is schema-free, universally allowed)
+      - kv_overrides overlay shared copies (blank-string values remove a field)
+      - tag_add / tag_del adjust the carried tag set without replacing it
+      - note carries over, scrubbed of the scraped tokens unless strip_note
+        is False; an explicit blank note override clears the note entirely
+    Returns a dict with source_type/target_type/date/note/draft/new_line/
+    missing_required. Raises PTOSError for unknown types and same-type.
+    """
+    try:
+        parsed = ptos.safe_parse_line(old_line)
+        if not parsed:
+            raise PTOSError("Could not parse source record")
+        d, kv, note = parsed
+        source_type = kv.get("type", "")
+        if not source_type:
+            raise PTOSError("Source record has no type")
+
+        schema = ptos.get_schema()
+        allowed = schema.get("types", {}).get("allowed", [])
+        if target_type not in allowed:
+            raise PTOSError(f"Target type '{target_type}' is not in schema")
+        if target_type == source_type:
+            raise PTOSError(f"Source and target types are the same ('{target_type}')")
+
+        ov = dict(kv_overrides or {})
+        new_date_str = str(ov.pop("date", None) or d)
+        note_override_present = "note" in ov
+        note_override = ov.pop("note", None)
+
+        source_fields = set(ptos.filter_fields_for_type(source_type, schema))
+        target_fields = set(ptos.filter_fields_for_type(target_type, schema))
+        shared = source_fields & target_fields
+
+        new_kv = {"type": target_type}
+        for f in shared:
+            if f in ("date", "type", "note", "id", "links"):
+                continue
+            if f in kv:
+                new_kv[f] = kv[f]
+
+        for f, v in ov.items():
+            if f == "tag":
+                continue
+            if v is None or (isinstance(v, str) and v == ""):
+                new_kv.pop(f, None)
+            else:
+                new_kv[f] = v
+
+        # tag handling: carried source tags → tag_add/del tweaks → full replace
+        raw_tag = kv.get("tag")
+        if isinstance(raw_tag, list):
+            tags = list(raw_tag)
+        elif raw_tag:
+            tags = [t.strip() for t in str(raw_tag).split(",") if t.strip()]
+        else:
+            tags = []
+        for t in (tag_add or []):
+            if t not in tags:
+                tags.append(t)
+        for t in (tag_del or []):
+            tags = [x for x in tags if x != t]
+        if "tag" in ov:
+            rep = ov["tag"]
+            tags = list(rep) if isinstance(rep, list) else ([rep] if rep else [])
+        if tags:
+            new_kv["tag"] = tags
+        else:
+            new_kv.pop("tag", None)
+
+        # note: explicit override (even blank = clear) wins; else strip scraps
+        if note_override_present:
+            final_note = note_override or None
+        elif strip_note and note:
+            final_note = strip_scraped_note(note, scrape_convert_fields(note, target_type, schema))
+        else:
+            final_note = note or None
+
+        new_line = ptos.build_record_line(new_date_str, new_kv, final_note)
+
+        tdef = schema.get("type", {}).get(target_type, {})
+        missing = [f for f in tdef.get("required", []) if f not in new_kv]
+
+        return {
+            "ok": True,
+            "source_type": source_type,
+            "target_type": target_type,
+            "date": new_date_str,
+            "note": final_note or "",
+            "draft": {k: v for k, v in new_kv.items() if k != "type"},
+            "new_line": new_line,
+            "missing_required": missing,
+        }
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def convert_record(filepath, old_line, lineno, target_type, kv_overrides=None, keep=False, tag_add=None, tag_del=None, strip_note=True):
+    """Convert a record to the target_type: append the new record line, then
+    delete the source (unless keep=True). Refuses while required target fields
+    are unfilled. Returns dict with the new record's file/line info."""
+    draft = convert_draft(old_line, lineno, target_type, kv_overrides,
+                          tag_add=tag_add, tag_del=tag_del, strip_note=strip_note)
+    if draft["missing_required"]:
+        raise PTOSError(
+            "Convert blocked — target type requires: " + ", ".join(draft["missing_required"]))
+    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+        raise PTOSError("Invalid filepath")
+    try:
+        new_filepath, new_lineno = ptos.append_record(draft["new_line"], return_position=True)
+    except Exception as e:
+        raise PTOSError(str(e))
+    if not keep:
+        delete_record(filepath, old_line, lineno=lineno)
+    _invalidate_history_cache()
+    return {
+        "ok": True,
+        "draft": draft,
+        "new_line": draft["new_line"],
+        "new_filepath": new_filepath,
+        "new_lineno": new_lineno,
+        "source_deleted": not keep,
+    }
+
+
+_CONVERT_STOPWORDS = frozenset({
+    "the", "a", "an", "and", "or", "of", "to", "in", "on", "for", "with",
+    "at", "from", "by", "is", "was", "are", "were", "it", "this", "that",
+    "my", "your", "me", "i", "we", "be", "as", "got", "get", "just", "bought",
+})
+
+def _convert_vocab_add(vocab, value):
+    """Add a schema option value / tag to a vocabulary set: the normalized
+    value itself plus every underscore fragment. All lowercase."""
+    if value is None:
+        return
+    s = str(value).lower()
+    vocab.add(s)
+    for part in s.replace("_", " ").split():
+        if len(part) > 1:
+            vocab.add(part)
+
+def _convert_word_tokens(text):
+    return [w for w in re.findall(r"[a-z0-9]+", (text or "").lower())
+            if len(w) > 1 and w not in _CONVERT_STOPWORDS]
+
+def _schema_type_vocab(schema, rtype):
+    """Word vocabulary a type is recognized by: its name plus every option
+    value / tag key (and tag option words) the schema defines for it.
+    Per-type fields only — global fields are shared by every type so they
+    add no discrimination."""
+    vocab = set()
+    tdef = schema.get("type", {}).get(rtype, {})
+    _convert_vocab_add(vocab, rtype)
+    for fdef in tdef.get("fields", {}).values():
+        if not isinstance(fdef, dict):
+            continue
+        opts = fdef.get("options")
+        if isinstance(opts, list):
+            for o in opts:
+                _convert_vocab_add(vocab, o)
+        elif isinstance(opts, dict):
+            for k, sub in opts.items():
+                _convert_vocab_add(vocab, k)
+                if isinstance(sub, dict):
+                    for v in sub.get("options", []):
+                        _convert_vocab_add(vocab, v)
+    for tag_def in tdef.get("tags", {}).values():
+        if not isinstance(tag_def, dict):
+            continue
+        sub = tag_def.get("options") or tag_def
+        if isinstance(sub, dict):
+            for k, opts in sub.items():
+                _convert_vocab_add(vocab, k)
+                for o in (opts if isinstance(opts, list) else []):
+                    _convert_vocab_add(vocab, o)
+    return vocab
+
+def _history_vocab(rtype):
+    """Vocabulary learned from past records of a type (cached per type):
+    tags plus previously-used values of free-text fields."""
+    vocab = set()
+    try:
+        hist = get_history_suggestions(rtype)
+    except Exception:
+        return vocab
+    for values in hist.get("field_values", {}).values():
+        for v in values:
+            _convert_vocab_add(vocab, v)
+    for tg in hist.get("tags", []):
+        _convert_vocab_add(vocab, tg)
+    return vocab
+
+def suggest_convert_type(text, source_kv=None, use_history=True):
+    """Rule-based offline type guesser for record conversion.
+
+    Scores every schema type by how many of its distinguishing vocabulary
+    words (type name + per-type option values + tag words) appear in the
+    text. When use_history, a small bonus is folded in for the strongest
+    candidates from the type's cached history vocabulary. Deterministic and
+    advisory-only — the caller chooses whether/how to convert.
+
+    Returns a sorted list of {"type", "score", "pct"} (pct = share of the
+    top score); empty list when nothing matches. source_kv is accepted for
+    API symmetry and currently unused.
+    """
+    del source_kv
+    try:
+        schema = ptos.get_schema()
+    except Exception:
+        return []
+    tokens = _convert_word_tokens(text or "")
+    if not tokens:
+        return []
+
+    scored = []
+    for rtype in schema.get("types", {}).get("allowed", []):
+        vocab = _schema_type_vocab(schema, rtype)
+        score = sum(1 for t in tokens if t in vocab)
+        if rtype in tokens:
+            score += 3
+        if use_history and score > 0:
+            score += 0.35 * sum(1 for t in tokens if t in _history_vocab(rtype))
+        if score > 0:
+            scored.append({"type": rtype, "score": score})
+
+    if not scored:
+        return []
+    scored.sort(key=lambda s: (-s["score"], s["type"]))
+    top = scored[0]["score"]
+    for s in scored:
+        s["pct"] = int(round(s["score"] / top * 100))
+    return scored
+
+
+_AMOUNT_CUR = re.compile(r"(?:[$€£₹]|\brs\b|\binr\b)\s*(\d+(?:[.,]\d+)?)", re.IGNORECASE)
+_AMOUNT_PLAIN = re.compile(r"(\d+(?:[.,]\d+)?)")
+_CONNECTOR_WORDS = frozenset({"for", "with", "at", "on", "in", "to", "of", "and", "or", "the", "a", "an"})
+
+
+def scrape_convert_fields(note, rtype, schema=None):
+    """Rule-based field scraper for conversion suggestions (advisory only).
+
+    Pulls evidence-based fills out of a free-text note for the target type:
+      - a currency/plain number → the type's amount field
+        (currency-prefixed rs/inr/$…/₹… is preferred over a bare number)
+      - tokens matching the target's schema option values → that field
+      - @tag / +tag / #tag tokens → tag list
+    Plus conservative history_defaults: the most common past value of option
+    fields the text didn't mention.
+
+    Every lifted token's character span is returned in "strip_spans" so the
+    note can be scrubbed of exactly what became a field.
+
+    Returns {"fields": {...}, "history_defaults": {...}, "strip_spans": [...]}.
+    """
+    try:
+        if schema is None:
+            schema = ptos.get_schema()
+        tdef    = schema.get("type", {}).get(rtype, {})
+        tfields = tdef.get("fields", {})
+        tnames  = set(tfields) | set(tdef.get("required", [])) | set(tdef.get("conditions", {}))
+    except Exception:
+        return {"fields": {}, "history_defaults": {}, "strip_spans": []}
+    if not tnames:
+        return {"fields": {}, "history_defaults": {}, "strip_spans": []}
+
+    result = {}
+    spans  = set()
+    ntext  = note or ""
+
+    # amount-like field (currency-prefixed first, bare number as fallback)
+    if "amount" in tnames:
+        m = _AMOUNT_CUR.search(ntext) or _AMOUNT_PLAIN.search(ntext)
+        if m:
+            result["amount"] = m.group(1).replace(",", "")
+            spans.add(m.span())
+
+    # tokens that are exactly a schema option value
+    option_map = {}
+    for fname in tnames:
+        resolved = resolve_options(schema, tdef, fname)
+        if resolved:
+            for o in resolved:
+                option_map.setdefault(str(o).lower().replace(" ", "_"), []).append(fname)
+        else:
+            fdef = tfields.get(fname, {})
+            nested = fdef.get("options", {})
+            if isinstance(nested, dict):
+                seen = set()
+                for v in nested.values():
+                    if isinstance(v, list):
+                        for o in v:
+                            k = str(o).lower().replace(" ", "_")
+                            if k not in seen:
+                                seen.add(k)
+                                option_map.setdefault(k, []).append(fname)
+    for m in re.finditer(r"[^\s|]+", ntext):
+        raw = m.group(0)
+        token_l = re.sub(r"[^a-z0-9_]", "", raw.lower())
+        if not token_l or token_l in result:
+            continue
+        fnames = option_map.get(token_l)
+        if fnames and len(set(fnames)) == 1:
+            result[fnames[0]] = token_l
+            spans.add(m.span())
+
+    # @tag / +tag / #tag → tag list
+    tags = []
+    for m in re.finditer(r"(?:[@+#])[A-Za-z0-9_]+", ntext):
+        tags.append(m.group(0)[1:].replace("_", " "))
+        spans.add(m.span())
+    if tags:
+        result["tag"] = tags
+
+    # history defaults for option fields the text left alone
+    history_defaults = {}
+    try:
+        field_defaults = get_history_suggestions(rtype).get("field_defaults", {})
+    except Exception:
+        field_defaults = {}
+    for fname, default in field_defaults.items():
+        if not default or fname in result:
+            continue
+        resolved = resolve_options(schema, tdef, fname) or []
+        if default in resolved:
+            history_defaults[fname] = default
+    return {"fields": result, "history_defaults": history_defaults, "strip_spans": sorted(spans)}
+
+
+_STRIP_MARK = "\ue000"
+
+
+def strip_scraped_note(note, scrape):
+    """Remove the scraped token spans from a note and collapse whitespace.
+
+    When a removal leaves two adjacent connector words (for/with/at/on/in/
+    to/of/and/or/the/a/an), both are dropped so "for rs 69 with" becomes a
+    plain gap instead of "for with". Returns the reduced note (whitespace-
+    collapsed) or None when nothing remains.
+    """
+    if not note or not scrape:
+        return note
+    spans = sorted((s, e) for s, e in scrape.get("strip_spans", []) if e > s)
+    if not spans:
+        return note
+    tokens = [(m.group(0), m.start(), m.end()) for m in re.finditer(r"\S+", note)]
+    removed = set()
+    for i, (tok, ts, te) in enumerate(tokens):
+        if any(ts < e and te > s for s, e in spans):
+            removed.add(i)
+    drop = set()
+    for ri in sorted(removed):
+        li = ri - 1
+        while li >= 0 and li in removed:
+            li -= 1
+        ri2 = ri + 1
+        while ri2 < len(tokens) and ri2 in removed:
+            ri2 += 1
+        left_tok  = tokens[li][0].lower()  if 0 <= li  < len(tokens) and li  not in removed else None
+        right_tok = tokens[ri2][0].lower() if 0 <= ri2 < len(tokens) and ri2 not in removed else None
+        if left_tok in _CONNECTOR_WORDS and right_tok in _CONNECTOR_WORDS:
+            drop.add(li)
+            drop.add(ri2)
+    keep = [tokens[i][0] for i in range(len(tokens)) if i not in removed and i not in drop]
+    reduced = " ".join(keep)
+    return reduced or None
 
 
 # ══════════════════════════════════════════════════════════════════════════════

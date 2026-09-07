@@ -25,7 +25,7 @@
 # --------------------------------------------------
 
 [types]
-allowed = ["expense", "income", "investment", "exercise", "sleep", "mood", "learning", "habit"]
+allowed = ["expense", "income", "investment", "exercise", "sleep", "mood", "learning", "habit", "capture", "pomodoro"]
 
 # --------------------------------------------------
 # GLOBAL FIELD METADATA
@@ -37,6 +37,11 @@ dimension    = false
 aggregatable = true
 
 [fields.duration]
+type         = "int"
+dimension    = false
+aggregatable = true
+
+[fields.minutes]
 type         = "int"
 dimension    = false
 aggregatable = true
@@ -254,3 +259,21 @@ options = [
     "meditation", "reading", "journaling", "exercise",
     "prayer", "wakeup", "walk", "water",
 ]
+
+# ----------------------
+# CAPTURE (quick inbox)
+# ----------------------
+
+[type.capture]
+# Zero required fields. The captured text lives in the trailing | note.
+# Logged with  ptos --cap "text"   or   the home page Capture box.
+
+# ----------------------
+# POMODORO
+# ----------------------
+
+[type.pomodoro]
+# Logged by the timer pill when [pomodoro] log_sessions = true.
+
+[type.pomodoro.fields.task]
+type = "string"
