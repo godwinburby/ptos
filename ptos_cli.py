@@ -1787,14 +1787,20 @@ def _handle_todo_add(args):
         text = " ".join(args.todo_add)
     else:
         # interactive mode
-        print("Enter todo (todo.txt format):")
-        print("  Example: (A) Call supplier +HearSpeechPro @phone due:tomorrow")
+        print("Enter todo (free text or todo.txt format):")
+        print("  Examples:")
+        print("    complete fitting for thomas tomorrow")
+        print("    (A) Call supplier +HearSpeechPro @phone due:tomorrow")
         text = input("  > ").strip()
         if not text:
             print("Cancelled.")
             return
 
-    text = ptos_todo.preprocess_todo_text(text)
+    todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+    done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+    projects = ptos_todo.get_projects(todos + done)
+    contexts = ptos_todo.get_contexts(todos + done)
+    text = ptos_todo.preprocess_todo_text(text, projects=projects, contexts=contexts)
     try:
         t = ptos_todo.add_todo(ptos.TODO_PATH, text)
         print(f"Added: {ptos_todo.format_line(t)}")

@@ -11,6 +11,7 @@ from ptos_todo import (
     batch_edit_todos, filter_todos, get_projects, get_contexts, bucket_todos,
     resolve_todo_date, preprocess_todo_text, get_due_todos,
     archive_done_todos, undo_todo,
+    scrape_todo_text,
     TodoParseError,
 )
 
@@ -1312,3 +1313,238 @@ class TestCliTodoArchive:
         old.completed_date = dt.date(2025, 1, 1)
         save_todos(str(tmp_path / "done.txt"), [old])
         ptos_cli._handle_todo_archive()
+
+
+class TestScrapeTodoText:
+    """Tests for free-text todo scraper."""
+
+    PROJECTS = ["fitting", "Home", "Amplifon", "HearSpeechPro"]
+    CONTEXTS = ["phone", "office", "errand"]
+
+    def _scrape(self, text, **kw):
+        projects = kw.get("projects", self.PROJECTS)
+        contexts = kw.get("contexts", self.CONTEXTS)
+        return scrape_todo_text(text, projects=projects, contexts=contexts)
+
+    def _pp(self, text, **kw):
+        projects = kw.get("projects", self.PROJECTS)
+        contexts = kw.get("contexts", self.CONTEXTS)
+        return preprocess_todo_text(text, projects=projects, contexts=contexts)
+
+    # ── priority ──────────────────────────────────────────────────────────
+
+    def test_high_priority(self):
+        assert self._pp("high priority meeting") == "(A) meeting"
+
+    def test_medium_priority(self):
+        assert self._pp("medium call") == "(B) call"
+
+    def test_low_priority(self):
+        assert self._pp("low review") == "(C) review"
+
+    def test_very_low_priority(self):
+        assert self._pp("very low cleanup") == "(D) cleanup"
+
+    def test_priority_after_desc(self):
+        s = self._scrape("meeting high priority")
+        assert s["priority"] == "A"
+
+    def test_priority_word_first(self):
+        s = self._scrape("priority high meeting")
+        assert s["priority"] == "A"
+
+    def test_no_priority(self):
+        s = self._scrape("buy milk")
+        assert "priority" not in s
+
+    # ── due date (explicit) ──────────────────────────────────────────────
+
+    def test_due_tomorrow(self):
+        result = self._pp("call supplier due tomorrow")
+        assert "due:" in result
+        assert "2026-09-08" in result
+
+    def test_due_to_friday(self):
+        s = self._scrape("meeting due to friday")
+        assert s["due"] is not None
+
+    def test_due_friday_with_time(self):
+        s = self._scrape("meeting due friday 3pm")
+        assert s["due"] is not None
+        assert s["due_time"] == "15:00"
+
+    def test_due_this_week(self):
+        s = self._scrape("report due this week")
+        assert s["due"] is not None
+
+    def test_due_next_month(self):
+        s = self._scrape("review due next month")
+        assert s["due"] is not None
+
+    def test_due_plus_days(self):
+        s = self._scrape("fix bug due +3d")
+        assert s["due"] is not None
+
+    def test_due_iso_date(self):
+        s = self._scrape("meeting due 2026-12-25")
+        assert s["due"] == "2026-12-25"
+
+    def test_due_to_fails_falls_back(self):
+        """'due to fitting' where fitting is not a date — falls back to desc."""
+        s = self._scrape("due to fitting meeting", projects=["fitting"])
+        assert "due" not in s
+        assert "fitting" not in s.get("description_parts", [])
+        assert "fitting" in s.get("projects", [])
+
+    # ── threshold / scheduled ─────────────────────────────────────────────
+
+    def test_scheduled_monday(self):
+        s = self._scrape("meeting scheduled monday")
+        assert s["threshold"] is not None
+
+    def test_scheduled_next_monday_with_time(self):
+        s = self._scrape("meeting scheduled next monday 2pm")
+        assert s["threshold"] is not None
+        assert s["threshold_time"] == "14:00"
+
+    def test_t_keyword(self):
+        s = self._scrape("review t next week")
+        assert s["threshold"] is not None
+
+    # ── recurrence ────────────────────────────────────────────────────────
+
+    def test_daily(self):
+        assert self._pp("daily standup") == "standup rec:1d"
+
+    def test_weekly(self):
+        s = self._scrape("weekly review")
+        assert s["rec"] == "1w"
+
+    def test_monthly(self):
+        s = self._scrape("monthly report")
+        assert s["rec"] == "1m"
+
+    def test_yearly(self):
+        s = self._scrape("yearly audit")
+        assert s["rec"] == "1y"
+
+    def test_biweekly(self):
+        s = self._scrape("biweekly status")
+        assert s["rec"] == "2w"
+
+    def test_bimonthly(self):
+        s = self._scrape("bimonthly budget")
+        assert s["rec"] == "2m"
+
+    def test_quarterly(self):
+        s = self._scrape("quarterly review")
+        assert s["rec"] == "3m"
+
+    # ── multi-token date (no keyword) ─────────────────────────────────────
+
+    def test_meeting_next_friday(self):
+        s = self._scrape("meeting next friday")
+        assert s["due"] is not None
+
+    def test_buy_milk_this_week(self):
+        result = self._pp("buy milk this week")
+        assert "due:" in result
+
+    def test_call_next_month(self):
+        s = self._scrape("call next month")
+        assert s["due"] is not None
+
+    # ── known project/context ─────────────────────────────────────────────
+
+    def test_known_project(self):
+        s = self._scrape("fitting for thomas")
+        assert "fitting" in s.get("projects", [])
+
+    def test_known_project_with_prefix(self):
+        s = self._scrape("+fitting for thomas")
+        assert "fitting" in s.get("projects", [])
+
+    def test_known_context(self):
+        s = self._scrape("call john at office")
+        assert "office" in s.get("contexts", [])
+
+    def test_known_context_with_prefix(self):
+        s = self._scrape("call john @phone")
+        assert "phone" in s.get("contexts", [])
+
+    def test_unknown_word_stays_desc(self):
+        s = self._scrape("buy milk")
+        assert "milk" in s.get("description_parts", [])
+
+    # ── implicit trailing date ────────────────────────────────────────────
+
+    def test_trailing_tomorrow(self):
+        s = self._scrape("buy milk tomorrow")
+        assert s["due"] is not None
+
+    def test_trailing_monday(self):
+        s = self._scrape("call john monday")
+        assert s["due"] is not None
+
+    def test_no_trailing_after_prep(self):
+        s = self._scrape("buy milk for tomorrow")
+        assert "due" not in s
+
+    def test_no_trailing_with_existing_due(self):
+        s = self._scrape("meeting due monday friday")
+        assert s["due"] is not None
+
+    # ── connector cleanup ─────────────────────────────────────────────────
+
+    def test_connector_cleanup(self):
+        s = self._scrape("meeting for with thomas")
+        desc = " ".join(s.get("description_parts", []))
+        assert "for with" not in desc
+
+    def test_no_cleanup_non_adjacent(self):
+        s = self._scrape("meeting for thomas")
+        desc = " ".join(s.get("description_parts", []))
+        assert "for" in desc
+
+    # ── integration: full sentences ───────────────────────────────────────
+
+    def test_full_sentence(self):
+        result = self._pp("complete fitting for thomas tomorrow")
+        assert "+fitting" in result
+        assert "due:" in result
+
+    def test_sentence_with_priority_and_project(self):
+        result = self._pp("high priority fitting meeting")
+        assert "(A)" in result
+        assert "+fitting" in result
+
+    def test_sentence_all_fields(self):
+        result = self._pp("high priority fitting for thomas rec:1d tomorrow")
+        assert "(A)" in result
+        assert "+fitting" in result
+        assert "due:" in result
+        assert "rec:1d" in result
+
+    def test_no_projects_no_contexts(self):
+        s = scrape_todo_text("buy milk tomorrow", projects=[], contexts=[])
+        assert s["due"] is not None
+        assert "buy" in s.get("description_parts", [])
+
+    # ── existing prefix syntax preserved ──────────────────────────────────
+
+    def test_existing_due_colon(self):
+        result = self._pp("meeting due:tomorrow")
+        assert "due:" in result
+        assert "2026-09-08" in result
+
+    def test_existing_pri(self):
+        result = self._pp("pri:a call supplier")
+        assert "(A)" in result
+
+    def test_existing_rec(self):
+        result = self._pp("rec:daily standup")
+        assert "rec:1d" in result
+
+    def test_existing_plus_project(self):
+        result = self._pp("call supplier +HearSpeechPro")
+        assert "+HearSpeechPro" in result

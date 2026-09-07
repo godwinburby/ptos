@@ -852,13 +852,315 @@ def bucket_todos(todos):
 
 # ── CLI preprocessing ──────────────────────────────────────────────────────
 
-def preprocess_todo_text(text):
+_PRIORITY_WORDS = {"high": "A", "medium": "B", "med": "B", "low": "C"}
+_REC_WORDS = {
+    "daily": "1d", "day": "1d",
+    "weekly": "1w", "week": "1w",
+    "monthly": "1m", "month": "1m",
+    "yearly": "1y", "year": "1y",
+    "biweekly": "2w", "bimonthly": "2m", "quarterly": "3m",
+}
+_CONNECTOR_WORDS = frozenset({
+    "for", "with", "at", "on", "in", "to", "of", "and", "or",
+    "the", "a", "an", "before", "after", "by",
+})
+_DATE_SINGLE = frozenset({
+    "today", "tomorrow", "yesterday",
+    "this_week", "next_week", "this_month", "next_month",
+})
+_TIME_RE = re.compile(
+    r'^(\d{1,2}:\d{2}(?:\s*[AaPp][Mm])?|\d{1,2}\s*[AaPp][Mm])$'
+)
+_PLUS_RE = re.compile(r'^\+\d+[dwm]$')
+
+
+def _is_date_token(tok):
+    """Return True if token looks like a resolvable date (single-token)."""
+    low = tok.lower()
+    if low in _DATE_SINGLE or low in _WEEKDAYS:
+        return True
+    if _PLUS_RE.match(low):
+        return True
+    try:
+        dt.date.fromisoformat(low)
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def _is_prep(tok):
+    """Return True if token is a preposition that blocks implicit date scraping."""
+    return tok.lower() in {
+        "for", "at", "on", "in", "to", "of", "with", "by",
+        "before", "after", "the", "a", "an",
+    }
+
+
+def scrape_todo_text(text, projects=None, contexts=None):
+    """Scrape free-text into structured todo.txt tokens.
+
+    Detects priority, due/threshold dates, recurrence, known projects/contexts,
+    and implicit trailing dates.  Returns a dict:
+      {priority, due, due_time, threshold, threshold_time, projects, contexts,
+       rec, description_parts}
+    Only populated fields are non-None/non-empty.
+    """
+    tokens = text.split()
+    known_proj = set(p.lower() for p in (projects or []))
+    known_ctx  = set(c.lower() for c in (contexts or []))
+
+    priority = None
+    due = None
+    due_time = None
+    threshold = None
+    threshold_time = None
+    rec = None
+    proj_found = []
+    ctx_found = []
+    desc = []
+
+    def _try_date(start, end=None):
+        """Try to resolve tokens[start:end] as a date. Returns (iso_str, time_str|None, consumed_count) or None."""
+        if end is None:
+            end = start + 1
+        # try underscore first (this_week, next_month, etc.)
+        combined = "_".join(tok.lower() for tok in tokens[start:end])
+        try:
+            d, tm = resolve_todo_date(combined)
+            return d.isoformat(), tm, end - start
+        except TodoParseError:
+            pass
+        # try space (friday 3pm, tomorrow 10am, etc.)
+        combined = " ".join(tokens[start:end])
+        try:
+            d, tm = resolve_todo_date(combined)
+            return d.isoformat(), tm, end - start
+        except TodoParseError:
+            pass
+        # for 2-token combos like "next friday", try just the second token
+        if end - start == 2 and tokens[start].lower() in ("next", "this"):
+            single = tokens[start + 1].lower()
+            if single in _WEEKDAYS:
+                try:
+                    d, tm = resolve_todo_date(single)
+                    return d.isoformat(), tm, 1
+                except TodoParseError:
+                    pass
+        return None
+
+    def _try_date_with_time(start):
+        """Try to resolve date at start, possibly followed by a time token."""
+        res = _try_date(start, start + 1)
+        if res and start + 1 < len(tokens) and _TIME_RE.match(tokens[start + 1]):
+            res2 = _try_date(start, start + 2)
+            if res2:
+                return res2
+            return res
+        return res
+
+    i = 0
+    while i < len(tokens):
+        tok = tokens[i]
+        low = tok.lower()
+
+        # ── 1. priority ──────────────────────────────────────────────────
+        if low == "very" and i + 1 < len(tokens) and tokens[i + 1].lower() == "low":
+            priority = "D"
+            i += 2
+            continue
+        if low in _PRIORITY_WORDS:
+            # consume optional trailing "priority"
+            if i + 1 < len(tokens) and tokens[i + 1].lower() == "priority":
+                priority = _PRIORITY_WORDS[low]
+                i += 2
+            else:
+                priority = _PRIORITY_WORDS[low]
+                i += 1
+            continue
+        if low == "priority" and i + 1 < len(tokens) and tokens[i + 1].lower() in _PRIORITY_WORDS:
+            priority = _PRIORITY_WORDS[tokens[i + 1].lower()]
+            i += 2
+            continue
+
+        # ── 2. due [to] DATE [TIME] ─────────────────────────────────────
+        if low == "due":
+            due_start = i + 1
+            if due_start < len(tokens) and tokens[due_start].lower() == "to":
+                due_start += 1
+            if due_start < len(tokens):
+                res = _try_date_with_time(due_start)
+                # fallback: 2-token date (next week, this friday, etc.) + optional time
+                if not res and due_start + 2 <= len(tokens):
+                    res = _try_date(due_start, due_start + 2)
+                    if res and due_start + 2 < len(tokens) and _TIME_RE.match(tokens[due_start + 2]):
+                        d2, _, _ = res
+                        res = (d2, _normalise_time_str(tokens[due_start + 2]), 3)
+                if res:
+                    due, due_time, consumed = res
+                    i = due_start + consumed
+                    continue
+            # date didn't resolve — fall through, "due" goes to desc
+            desc.append(tok)
+            i += 1
+            continue
+
+        # ── 3. threshold: scheduled / t DATE ─────────────────────────────
+        if low in ("scheduled", "t") and i + 1 < len(tokens):
+            res = _try_date_with_time(i + 1)
+            # fallback: 2-token date + optional time
+            if not res and i + 3 <= len(tokens):
+                res = _try_date(i + 1, i + 3)
+                if res and i + 3 < len(tokens) and _TIME_RE.match(tokens[i + 3]):
+                    d2, _, _ = res
+                    res = (d2, _normalise_time_str(tokens[i + 3]), 3)
+            if res:
+                threshold, threshold_time, consumed = res
+                i = i + 1 + consumed
+                continue
+
+        # ── 4. recurrence ────────────────────────────────────────────────
+        if low in _REC_WORDS:
+            rec = _REC_WORDS[low]
+            i += 1
+            continue
+
+        # ── 5. multi-token date (no keyword): "next/this" + week/month/weekday
+        if low in ("next", "this") and i + 1 < len(tokens) and not due:
+            nxt = tokens[i + 1].lower()
+            combined = f"{low}_{nxt}"
+            if combined in ("next_week", "this_week", "next_month", "this_month"):
+                res = _try_date(i, i + 2)
+                if res:
+                    due, due_time, _ = res
+                    i += 2
+                    continue
+            if nxt in _WEEKDAYS or nxt in _WEEKDAYS.values():
+                # "next friday" / "this mon" → resolve as just the weekday
+                res = _try_date(i + 1, i + 2)
+                if res:
+                    due, due_time, _ = res
+                    i += 2
+                    continue
+
+        # ── 6. known project (+ prefix optional) ─────────────────────────
+        cleaned = tok.lstrip("+")
+        if cleaned.lower() in known_proj and cleaned:
+            proj_found.append(cleaned)
+            i += 1
+            continue
+
+        # ── 7. known context (@ prefix optional) ─────────────────────────
+        cleaned = tok.lstrip("@")
+        if cleaned.lower() in known_ctx and cleaned:
+            ctx_found.append(cleaned)
+            i += 1
+            continue
+
+        # ── 8. implicit trailing date (single token, no prep before) ────
+        if (i == len(tokens) - 1 and not due
+                and _is_date_token(tok)):
+            prev_ok = (i == 0 or not _is_prep(tokens[i - 1]))
+            if prev_ok:
+                res = _try_date(i, i + 1)
+                if res:
+                    due, due_time, _ = res
+                    i += 1
+                    continue
+
+        # ── 9. description ───────────────────────────────────────────────
+        desc.append(tok)
+        i += 1
+
+    # ── connector sweep on description ───────────────────────────────────────
+    cleaned_desc = []
+    j = 0
+    while j < len(desc):
+        if (j + 1 < len(desc)
+                and desc[j].lower() in _CONNECTOR_WORDS
+                and desc[j + 1].lower() in _CONNECTOR_WORDS):
+            j += 2
+        else:
+            cleaned_desc.append(desc[j])
+            j += 1
+
+    result = {}
+    if priority:
+        result["priority"] = priority
+    if due:
+        result["due"] = due
+    if due_time:
+        result["due_time"] = due_time
+    if threshold:
+        result["threshold"] = threshold
+    if threshold_time:
+        result["threshold_time"] = threshold_time
+    if rec:
+        result["rec"] = rec
+    if proj_found:
+        result["projects"] = proj_found
+    if ctx_found:
+        result["contexts"] = ctx_found
+    if cleaned_desc:
+        result["description_parts"] = cleaned_desc
+    return result
+
+
+def _normalise_time_str(s):
+    """Normalise a time string like '3pm' or '3:30PM' to 'HH:MM' 24h."""
+    m = re.match(r'^(\d{1,2})(?::(\d{2}))?\s*([AaPp][Mm])?$', s)
+    if not m:
+        return s
+    hour = int(m.group(1))
+    minute = int(m.group(2) or 0)
+    ampm = m.group(3)
+    if ampm:
+        ampm = ampm.lower()
+        if ampm == "pm" and hour < 12:
+            hour += 12
+        elif ampm == "am" and hour == 12:
+            hour = 0
+    return f"{hour:02d}:{minute:02d}"
+
+
+def preprocess_todo_text(text, projects=None, contexts=None):
     """Preprocess a raw todo.txt input string.
 
-    Converts pri:x → (X) and resolves natural-language dates in due:/t:.
-    Handles two-token patterns like ``due:tomorrow 3pm`` by combining them.
+    When projects/contexts are provided, first scrapes free-text for priority,
+    due/threshold dates, recurrence, known projects/contexts, and implicit
+    trailing dates.  Then converts pri:x → (X) and resolves natural-language
+    dates in due:/t:.  Handles two-token patterns like ``due:tomorrow 3pm``
+    by combining them.
     """
     text = text.strip()
+
+    # ── step 0: scrape free-text when project/context lists available ────
+    if projects or contexts:
+        scraped = scrape_todo_text(text, projects=projects, contexts=contexts)
+        if scraped:
+            parts = []
+            if scraped.get("priority"):
+                parts.append(f"({scraped['priority']})")
+            desc_parts = scraped.get("description_parts", [])
+            parts.extend(desc_parts)
+            for p in scraped.get("projects", []):
+                parts.append(f"+{p}")
+            for c in scraped.get("contexts", []):
+                parts.append(f"@{c}")
+            if scraped.get("due"):
+                due_str = f"due:{scraped['due']}"
+                if scraped.get("due_time"):
+                    due_str += f" {scraped['due_time']}"
+                parts.append(due_str)
+            if scraped.get("threshold"):
+                t_str = f"t:{scraped['threshold']}"
+                if scraped.get("threshold_time"):
+                    t_str += f" {scraped['threshold_time']}"
+                parts.append(t_str)
+            if scraped.get("rec"):
+                parts.append(f"rec:{scraped['rec']}")
+            text = " ".join(parts).strip()
+            if not text:
+                return text
 
     # pri:x → (X)
     m = re.match(r'^pri:([a-zA-Z])\s+', text)

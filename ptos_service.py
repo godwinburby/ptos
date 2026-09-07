@@ -3905,9 +3905,16 @@ def get_todos_bucketed():
 
 
 def add_todo_line(text):
-    """Add a raw todo.txt line. Preprocesses pri:/due:/t: shortcuts."""
+    """Add a raw todo.txt line. Preprocesses pri:/due:/t: shortcuts.
+
+    When projects/contexts are available, scrapes free-text for priority,
+    due/threshold dates, recurrence, known projects/contexts, and implicit
+    trailing dates before resolving prefix syntax.
+    """
     try:
-        text = ptos_todo.preprocess_todo_text(text)
+        projects = get_todo_projects()
+        contexts = get_todo_contexts()
+        text = ptos_todo.preprocess_todo_text(text, projects=projects, contexts=contexts)
         t = ptos_todo.add_todo(TODO_PATH, text)
         return {"ok": True, "todo": dataclasses.asdict(t)}
     except Exception as e:

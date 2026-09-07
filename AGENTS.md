@@ -128,7 +128,8 @@ x 2026-07-12 2026-07-10 Completed task
 ### Key functions
 - `parse_todo_line(line)` — parses one line into Todo object
 - `format_line(todo)` — formats Todo back to todo.txt line
-- `preprocess_todo_text(text)` — converts `pri:a`, resolves NL dates, handles two-token time patterns
+- `preprocess_todo_text(text, projects, contexts)` — when projects/contexts lists provided, first runs `scrape_todo_text` for NLP-like extraction (priority words, due/threshold dates from `due`/`due to`/`scheduled` keywords + implicit trailing dates, bare recurrence words, known project/context names), then converts `pri:a`, resolves NL dates, handles two-token time patterns
+- `scrape_todo_text(text, projects, contexts)` — token-based free-text scraper; detects `high`/`medium`/`low`/`very low` + optional `priority` → A/B/C/D, `due [to] DATE [TIME]` / `scheduled DATE` / bare recurrence words (`daily`/`weekly`/`biweekly`/`monthly`/`bimonthly`/`quarterly`/`yearly`), multi-token dates (`next week`/`this friday`), known project/context names (exact match, with/without `+`/`@` prefix), implicit trailing `today`/`tomorrow`/weekday (blocked after prepositions); connector sweep drops adjacent connector words; returns dict of extracted fields
 - `resolve_todo_date(s)` — returns `(date, time_str|None)` tuple; supports `today`, `tomorrow`, `yesterday`, weekdays, `this_week`, `next_week`, `this_month`, `next_month`, `+Nd`, `+Nw`, `+Nm`, `YYYY-MM-DD`
 - `filter_todos(todos, project, context, priority, ...)` — filters by criteria; project/context/priority accept single value or list (OR within group, AND across groups)
 - `batch_edit_todos(todo_path, line_nos, updates)` — applies same updates to multiple todos (single load/save)
@@ -161,7 +162,7 @@ x 2026-07-12 2026-07-10 Completed task
 
 ### Web UI features
 - **Quick add bar** with autocomplete dropdown (prefix-aware: `+`, `@`, `due:`, `t:`, `(`); always visible at top of todo page (no collapsible)
-- **Quick pick chips** (collapsible) — Due shortcuts (with "pick date & time..." chip), Priority (A-D with labels from config), Projects, Contexts, Scheduled (with "pick date & time..." chip + "Now" chip), Repeat as toggle chips; open on input focus, close on blur (with 200ms delay to allow chip clicks); on mobile, groups stack vertically instead of scrolling horizontally
+- **Quick pick chips** (collapsible) — Due shortcuts (with "pick date & time..." chip), Priority (A-D with labels from config), Projects, Contexts, Scheduled (with "pick date & time..." chip + "Now" chip), Repeat (daily/weekly/biweekly/monthly/bimonthly/quarterly/yearly) as toggle chips; open on input focus, close on blur (with 200ms delay to allow chip clicks); on mobile, groups stack vertically instead of scrolling horizontally
 - **Filter chips** (collapsible) — Priority (A-D with labels), Due Range (overdue/today/tomorrow/upcoming/someday/none), Context — all toggle on click; on mobile, groups stack vertically
 - **Search** (always visible) — text input with glob wildcard `*`/`?` support and prefix autocomplete (same `+`/`@`/`pri:`/`(` prefixes as quick-add); filters todos by description; preserves other active filters; desktop sidebar has persistent search bar
 - **Form modal** (shared add+edit) — Priority as dropdown (None/A/B/C/D with labels from config), Projects and Contexts as clickable toggle chips with "+ New" for adding new ones
