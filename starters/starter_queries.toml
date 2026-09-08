@@ -179,6 +179,7 @@ weeks = 12
 ["habit.pomodoro"]
 filters = ["type=pomodoro"]
 weeks = 12
+toggleable = false
 
 # ══════════════════════════════════════════════════════════════════════════════
 # THRESHOLDS

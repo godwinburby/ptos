@@ -2233,10 +2233,28 @@ def habits():
     return render_template("habits.html",
         tab="habits", title="Habits",
         now=_now_str(), habits=data,
+        today_date=dt.date.today().isoformat(),
         time_options=_habit_time_options(),
         time=time_param, custom_time=custom_time,
         from_date=from_date or "", to_date=to_date or "",
         year_range=_YEAR_RANGE)
+
+
+@app.route("/api/habit/toggle", methods=["POST"])
+def habit_toggle():
+    data = request.get_json(silent=True) or {}
+    habit_name = data.get("habit_name", "")
+    date_str = data.get("date", "")
+    if not habit_name or not date_str:
+        return jsonify(ok=False, error="Missing habit_name or date")
+    try:
+        result = svc.toggle_habit_day(habit_name, date_str)
+        return jsonify(ok=True, **result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("Habit toggle failed")
+        return jsonify(ok=False, error=str(e))
 
 
 @app.route("/thresholds")
@@ -2517,6 +2535,7 @@ def query_builder():
             habits[name] = {
                 "filters": v.get("filters", []),
                 "weeks": v.get("weeks", 12),
+                "toggleable": v.get("toggleable", True),
             }
 
     calendars = {}
