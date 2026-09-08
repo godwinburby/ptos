@@ -86,27 +86,6 @@
   .groupby-sel:hover { color:var(--text); background:var(--bg); }
   .groupby-sel.active { color:var(--accent); font-weight:700; }
 
-  .todo-row {
-    display:flex; align-items:flex-start; gap:12px;
-    padding:10px 0; border-bottom:1px solid var(--border);
-    transition: opacity 0.3s;
-  }
-  .todo-row:last-child { border-bottom:none; }
-  .todo-row.completed { opacity:0.4; text-decoration:line-through; }
-  .todo-check {
-    width:22px; height:22px; border-radius:50%; border:2px solid var(--border);
-    cursor:pointer; flex-shrink:0; margin-top:2px;
-    display:flex; align-items:center; justify-content:center;
-    transition: all 0.2s;
-  }
-  .todo-check:hover { border-color:var(--accent); background:var(--accent-lt); }
-  .todo-check.checked {
-    border-color:var(--success); background:var(--success);
-  }
-  .todo-check.checked::after {
-    content:"\2713"; color:#fff; font-size:13px; font-weight:700;
-  }
-
   .sel-bar {
     display:none; align-items:center; gap:10px; padding:10px 16px;
     background:var(--card); border:1px solid var(--border); border-radius:10px;
@@ -138,67 +117,6 @@
     box-shadow:inset 3px 0 0 var(--accent);
   }
 
-  .todo-pri {
-    min-width:28px; height:24px; border-radius:6px; flex-shrink:0;
-    font-size:12px; font-weight:700; text-align:center; line-height:24px;
-    cursor:pointer;
-  }
-  .todo-pri.A { background:var(--error-lt); color:var(--error); }
-  .todo-pri.B { background:#FEF3E7; color:var(--warn); }
-  .todo-pri.C, .todo-pri.none { background:var(--accent-lt); color:var(--accent); }
-  .todo-pri.D { background:#E8EAED; color:#6c757d; }
-  .todo-pri.active { font-weight:700; box-shadow:0 0 0 2px currentColor; }
-  .todo-body { flex:1; min-width:0; }
-  .todo-desc { font-size:15px; color:var(--text); line-height:1.4; }
-  .todo-meta {
-    font-size:13px; color:var(--sub); margin-top:3px;
-    display:flex; gap:6px; align-items:center; flex-wrap:wrap;
-  }
-  .todo-due-badge {
-    font-size:12px; padding:2px 7px; border-radius:4px;
-    font-weight:600; cursor:pointer;
-  }
-  .todo-due-badge.overdue { background:var(--error-lt); color:var(--error); }
-  .todo-due-badge.today { background:#FEF3E7; color:var(--warn); }
-  .todo-due-badge.future { background:var(--accent-lt); color:var(--accent); }
-  .todo-link-badge {
-    font-size:11px; padding:2px 6px; border-radius:4px;
-    background:#E9E7FF; color:#5B52C7;
-    text-decoration:none; cursor:pointer; font-weight:600;
-  }
-  .todo-link-badge:hover { background:#D8D4FF; }
-  .todo-project {
-    font-size:12px; padding:2px 7px; border-radius:4px;
-    background:var(--bg); color:var(--sub);
-    text-decoration:none; cursor:pointer;
-    transition: background 0.15s, color 0.15s;
-  }
-  .todo-project:hover { background:var(--accent-lt); color:var(--accent); }
-  .todo-project.active { background:var(--accent-lt); color:var(--accent); font-weight:600; }
-  .todo-context {
-    font-size:12px; padding:2px 7px; border-radius:4px;
-    background:var(--bg); color:var(--sub);
-    text-decoration:none; cursor:pointer;
-    transition: background 0.15s, color 0.15s;
-  }
-  .todo-context:hover { background:var(--accent-lt); color:var(--accent); }
-  .todo-context.active { background:var(--accent-lt); color:var(--accent); font-weight:600; }
-  .todo-actions {
-    display:flex; gap:6px;
-  }
-  .todo-actions button {
-    background:none; border:none; cursor:pointer; padding:6px 10px;
-    font-size:18px; color:var(--sub); border-radius:6px; min-width:36px;
-    min-height:36px; display:flex; align-items:center; justify-content:center;
-  }
-  .todo-actions button:hover { background:var(--bg); }
-  .pomo-row-stop { display:none; }
-  .todo-row.pomo-active { background:var(--accent-lt); border-radius:6px; }
-  .todo-row.pomo-running { box-shadow:inset 3px 0 0 var(--success); }
-  .todo-row.pomo-paused { box-shadow:inset 3px 0 0 var(--warn); }
-  .todo-row.pomo-active .pomo-row-btn { color:var(--success); font-weight:700; }
-  .todo-row.pomo-paused .pomo-row-btn { color:var(--warn); }
-  .todo-row.pomo-active .pomo-row-stop { display:inline-flex; }
   .todo-progress {
     font-size:13px; color:var(--sub); text-align:center;
     margin-bottom:12px;
@@ -277,67 +195,6 @@
   .add-chip.pri-chip.pri-C.selected { background:var(--accent); border-color:var(--accent); }
   .add-chip.pri-chip.pri-D.selected { background:#6c757d; border-color:#6c757d; }
   .ac-more { display:none; }
-
-  /* Edit modal */
-  .modal-overlay {
-    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5);
-    z-index:1000; align-items:center; justify-content:center;
-  }
-  .modal-overlay.open { display:flex; }
-  .modal-box {
-    background:var(--card); border:1px solid var(--border); border-radius:14px;
-    padding:24px; width:90%; max-width:460px;
-    max-height:85vh; overflow-y:auto;
-  }
-  .modal-box h3 { margin:0 0 16px; font-size:16px; }
-  .modal-field { margin-bottom:12px; }
-  .modal-field label {
-    display:block; font-size:12px; font-weight:600; color:var(--sub);
-    margin-bottom:4px; text-transform:uppercase; letter-spacing:0.3px;
-  }
-  .modal-field input {
-    width:100%; padding:8px 10px; border:1px solid var(--border);
-    border-radius:8px; font-size:14px; background:var(--bg);
-    color:var(--text); box-sizing:border-box;
-  }
-  .modal-field input:focus { outline:none; border-color:var(--accent); }
-  .modal-row { display:flex; gap:10px; }
-  .modal-row .modal-field { flex:1; }
-  .modal-actions {
-    display:flex; gap:8px; justify-content:flex-end; margin-top:18px;
-  }
-  .modal-actions button {
-    padding:8px 18px; border-radius:8px; border:none;
-    font-size:13px; font-weight:600; cursor:pointer;
-  }
-  .btn-cancel { background:var(--bg); color:var(--sub); }
-  .btn-save { background:var(--accent); color:#fff; }
-  .modal-chips {
-    display:flex; flex-wrap:wrap; gap:6px; margin-bottom:4px;
-  }
-  .modal-chip {
-    font-size:12px; padding:4px 10px; border-radius:6px; cursor:pointer;
-    background:var(--bg); color:var(--sub); border:1px solid var(--border);
-    transition: background 0.15s, color 0.15s, border-color 0.15s;
-    user-select:none;
-  }
-  .modal-chip:hover { border-color:var(--accent); color:var(--accent); }
-  .modal-chip.selected { background:var(--accent-lt); color:var(--accent); border-color:var(--accent); font-weight:600; }
-  .modal-chip-other { border-style:dashed; color:var(--sub); }
-  .modal-chip-other:hover { color:var(--accent); border-color:var(--accent); }
-  .modal-other-input {
-    width:100%; padding:6px 10px; border:1px solid var(--border);
-    border-radius:8px; font-size:13px; background:var(--bg);
-    color:var(--text); box-sizing:border-box; margin-top:4px;
-  }
-  .modal-other-input:focus { outline:none; border-color:var(--accent); }
-  .modal-field select {
-    width:100%; padding:8px 10px; border:1px solid var(--border);
-    border-radius:8px; font-size:14px; background:var(--bg);
-    color:var(--text); box-sizing:border-box;
-  }
-  .modal-field select:focus { outline:none; border-color:var(--accent); }
-
 
 
   .todo-help-card {
@@ -445,23 +302,6 @@
     .todo-actions { flex-basis:100%; justify-content:flex-end; gap:4px; padding-top:2px; }
     .todo-actions button { min-width:30px; min-height:30px; font-size:15px; padding:4px 6px; }
   }
-  .field-popup {
-    position:fixed; z-index:400; background:var(--card); border:1px solid var(--border);
-    border-radius:10px; padding:8px; box-shadow:0 4px 16px rgba(0,0,0,0.12);
-    display:none; min-width:200px;
-  }
-  .field-popup.open { display:block; }
-  .field-popup .fp-row { display:flex; flex-wrap:wrap; gap:4px; }
-  .field-popup .fp-chip {
-    padding:5px 10px; border-radius:6px; font-size:12px; font-weight:600;
-    cursor:pointer; border:1px solid var(--border); background:var(--bg); color:var(--text);
-    transition:background 0.12s;
-  }
-  .field-popup .fp-chip:hover { background:var(--accent-lt); color:var(--accent); }
-  .field-popup .fp-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
-  .field-popup .fp-chip.clear { color:var(--error); border-color:var(--error-lt); }
-  .field-popup .fp-chip.pick-date { color:var(--accent); border-style:dashed; }
-  .field-popup .fp-label { font-size:11px; color:var(--sub); margin-bottom:4px; font-weight:600; }
 </style>
 
 <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:14px;">
