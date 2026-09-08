@@ -2943,7 +2943,7 @@ def _render_edit(filepath, lineno_int, old_line, return_to, rtype, field_values,
         **extra)
 
 
-def _convert_render_kwargs(schema, source_rtype, note, target):
+def _convert_render_kwargs(schema, source_rtype, note, target, source_kv=None):
     allowed = schema.get("types", {}).get("allowed", [])
     try:
         suggestions = svc.suggest_convert_type(note or "")
@@ -2954,6 +2954,15 @@ def _convert_render_kwargs(schema, source_rtype, note, target):
         scrape = svc.scrape_convert_fields(note or "", target, schema)
     except Exception:
         scrape = {"fields": {}, "history_defaults": {}}
+    new_type_sug = None
+    if not suggestions or all(s["pct"] < 50 for s in suggestions):
+        try:
+            new_type_sug = svc.suggest_new_type(note or "", schema)
+        except Exception:
+            new_type_sug = None
+    already_converted = None
+    if source_kv:
+        already_converted = source_kv.get("converted")
     return {
         "convert_mode": True,
         "allowed_types": allowed,
@@ -2961,6 +2970,8 @@ def _convert_render_kwargs(schema, source_rtype, note, target):
         "convert_suggestions": suggestions,
         "convert_pcts": pcts,
         "convert_scrape": scrape,
+        "convert_new_type_sug": new_type_sug,
+        "convert_already_converted": already_converted,
     }
 
 
@@ -3027,7 +3038,7 @@ def edit_get():
                         field_values[key] = [t.strip() for t in val.split(",") if t.strip()]
                     else:
                         field_values[key] = val
-        kwargs = _convert_render_kwargs(schema, rtype, note, target)
+        kwargs = _convert_render_kwargs(schema, rtype, note, target, source_kv=kv)
         return _render_edit(filepath, lineno_int, line, return_to, target,
                             field_values, title="Convert Record", **kwargs)
 
@@ -3088,7 +3099,7 @@ def edit_post():
                                         line=old_line, return_to=return_to,
                                         convert="1", target_type=fallback))
             return redirect(return_to)
-        keep = request.form.get("remove_original", "1") != "1"
+        keep = request.form.get("remove_original") != "1"
         ov = {}
         ts = schema.get("type", {}).get(rtype, {})
         for fname in list(ts.get("required", [])) + list(ts.get("fields", {})) + list(ts.get("conditions", {})):
@@ -3111,6 +3122,35 @@ def edit_post():
         note_val = request.form.get("note", "").strip()
         if "note" in request.form:
             ov["note"] = note_val or None
+
+        if request.form.get("create_and_convert") == "1":
+            try:
+                note_text = ov.get("note") or note_val or ""
+                new_sug = svc.suggest_new_type(note_text, schema)
+                if not new_sug:
+                    raise PTOSError("No type suggestion available")
+                source_rtype_val = ""
+                try:
+                    _d, kv2, _ = svc.safe_parse_line(old_line)
+                    source_rtype_val = (kv2 or {}).get("type", "")
+                except Exception:
+                    pass
+                result = svc.create_and_convert(
+                    note_text, filepath, old_line, lineno_int,
+                    new_sug["name"], new_sug, keep=keep, strip_note=True)
+                app.logger.debug("edit_post create_and_convert ok: %s",
+                                 result.get("new_line"))
+                return redirect(return_to)
+            except PTOSError as e:
+                return_to_err = request.form.get("return_to", "") or url_for("browse_get")
+                kwargs_err = _convert_render_kwargs(
+                    schema, source_rtype_val,
+                    ov.get("note") or note_val, "")
+                return _render_edit(
+                    filepath, lineno_int, old_line, return_to_err,
+                    rtype, {"type": rtype, "note": note_val, "date": dt.date.today().isoformat()},
+                    title="Convert Record", error=str(e), **kwargs_err)
+
         try:
             res = svc.convert_record(filepath, old_line, lineno_int, rtype,
                                      kv_overrides=ov, keep=keep)
@@ -3912,6 +3952,24 @@ def api_capture():
         return jsonify(ok=False, error=str(e))
     except Exception as e:
         log.exception("capture failed")
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/suggest-type", methods=["POST"])
+def api_suggest_type():
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    try:
+        schema = svc.get_schema()
+    except PTOSError:
+        schema = {}
+    try:
+        sug = svc.suggest_new_type(text, schema) if text else None
+        if sug:
+            return jsonify(ok=True, suggestion=sug)
+        return jsonify(ok=False, error="No suggestion")
+    except Exception as e:
+        log.exception("suggest-type failed")
         return jsonify(ok=False, error=str(e))
 
 

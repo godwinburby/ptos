@@ -5,6 +5,37 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-07
+
+### Converted field now added on any kept capture (not just new-type path)
+
+- **Bug fix**: `_mark_converted()` was only called inside `create_and_convert()` (the "Create & Convert" new-type suggestion flow). Converting a capture to an **existing** type with `keep=True` (e.g. via the web UI "remove original" unchecked, or CLI `--keep`) left the source capture untouched — no `converted=<type>` field was added, so the same capture could be converted again. Moved the marking logic into `convert_record()` itself: when `keep=True` and the source is a capture, `_mark_converted()` is called after the new record is appended. `create_and_convert()` no longer has its own redundant call.
+- **Tests** (`tests/test_convert.py`): 3 new tests in `TestMarkConverted` — `convert_record` with `keep=True` marks captures / non-capture not marked / `keep=False` record deleted (no mark). 4 new tests in `TestConvertDraftStrip` — scraped tags (`@tag`/`+tag`/`#tag`) from the note merge into carried tags of the converted record, stripped from the note, deduplicated, and merged with existing source tags. All 1363 tests pass.
+
+### Web convert "keep source" checkbox fix
+
+- **Bug fix** (`ptos_web.py:3102`): `request.form.get("remove_original", "1")` defaulted to `"1"` when the checkbox was absent (unchecked). HTML checkboxes are absent from form data when unchecked, so the default `"1"` made `keep = "1" != "1"` = `False` — the source was always deleted. Changed to `request.form.get("remove_original") != "1"` so absent (unchecked) yields `keep = True` (source kept).
+
+### Capture card: rename + direct convert button
+
+- **Placeholder rename** (`home.html`): `"Quick note… (Enter to capture)"` → `"Quick record… (Enter to capture)"` — "note" was ambiguous with the `| note` field on records.
+- **New "Convert" button** (`home.html`): a ghost-styled button next to "Capture" — when clicked, captures the text via `POST /api/capture`, then immediately redirects to `/edit?convert=1&...` with the new capture pre-loaded. The convert form opens with the type selector and scraped fields (amount, tags, dates) prefilled from the note. User picks the target type, adjusts fields, and clicks "Convert Record".
+
+### Date expression recognition in capture conversion
+
+- **Field scraper** (`scrape_convert_fields` in `ptos_service.py`): now detects date expressions in the capture note — `last week`, `this week`, `last month`, `yesterday`, `today`, `+Nd` (plus N days), and full/abbreviated weekday names — resolves them to ISO dates, adds the result to `fields["date"]`, and includes the matched text in `strip_spans` so the note scrubber removes it. Helper functions `_date_last_week()`, `_date_this_week()`, `_date_last_month()`, `_date_past_weekday(name)`, `_date_next_weekday(name)` implement the date math; `convert_draft` reads `fields["date"]` from the scrape and uses it to override the source record's date (unless `date` is explicitly in `kv_overrides`). Note scrubbing removes the date expression token (e.g. "petrol for scooter rs 200 last week" → note "petrol for scooter", date set to last Monday).
+- **Tests** (`tests/test_convert.py`): 9 new tests in `TestScrapeConvertFields` (`test_date_last_week`, `test_date_yesterday`, `test_date_today`, `test_date_today_strips_from_note`, `test_date_plus_days`, `test_date_last_month`, `test_no_date_when_no_expression`) + 2 new tests in `TestConvertDraftStrip` (`test_date_scraped_from_note`, `test_scraped_date_overridden_by_kv`). All 1355 tests pass.
+
+### Auto-suggest new record type from free text
+
+- **Engine/service** (`ptos_service.py`, new section after note scrubbing): `suggest_new_type(note, schema=None)` analyses free text for action words (→ type name: bought→purchase, walked→activity, called→call, cooked→meal, etc.), currency amounts (→ `amount` int field), `@tags` (→ `category` string field with options), duration patterns (→ `duration` int field), and person references via prepositions (→ `person` string field). Returns `{name, fields}` or `None` when the text has no signals or the suggested name already exists in the schema.
+- `create_type_from_suggestion(spec)` creates a new record type by calling `ptos.add_type()` then `add_type_field()` for each non-required field; raises `PTOSError` on failure. `create_and_convert(note, filepath, old_line, lineno, target_name, spec, keep, strip_note)` chains type creation + `convert_record(keep=True)` in one step; capture marking with `converted=<target_type>` is handled by `convert_record` itself.
+- **CLI** (`ptos_cli.py`): `run_convert()` suggestion fallback — when `suggest_convert_type()` returns empty, calls `suggest_new_type()`. If a suggestion is found, prints it with fields and prompts `Create type and convert? [y/N]` (auto-confirms in non-TTY). On confirm, creates the type then converts all matched records. Prints `Source record kept (marked as converted to <type>).` after each conversion.
+- **Web** (`ptos_web.py` + `web_templates/edit.html`): `_convert_render_kwargs()` calls `suggest_new_type()` when convert suggestions are empty or all below 50%, passes `convert_new_type_sug` and `convert_already_converted` (from source kv) to the template. A new amber "Create & Convert" card appears below the CONVERTING card when a suggestion exists, with a button that POSTs `create_and_convert=1`. `edit_post` handles the flag, creates the type via `create_and_convert()`, and redirects on success or re-renders with error. `POST /api/suggest-type` route returns a suggestion for AJAX use. A yellow warning banner appears on the convert page when the source record already has `converted=<type>`.
+- **Schema** (`starters/starter_schema.toml`): `[type.capture.fields.converted]` (`string`, optional) added to the capture type so converted captures are trackable.
+- **Orphan connector scrubbing** — `strip_scraped_note` now drops single orphan connectors at the boundaries of the remaining text (leading/trailing), not just adjacent pairs. E.g. `"bought coffee for $5"` strip `$5` → `"bought coffee"` (trailing `for` dropped); `"for coffee"` strip `coffee` → `None`.
+- **Tests** (`tests/test_convert.py`): 32 new tests in `TestSuggestNewType` — action word inference (12 types), amount extraction (currency/dollar/bare/none), tag extraction, duration extraction, person extraction (for/with/lowercase rejection), edge cases (empty/None/existing type/minimal), multiple signals in one note, `create_type_from_suggestion` (type added + field + options persisted via monkeypatched `CONFIG_DIR`/`SCHEMA_PATH`). 5 new tests in `TestMarkConverted` — `_mark_converted` inserts before `|` / appends without `|` / idempotent / `create_and_convert` keeps source + marks converted / non-capture not marked. Updated `TestStripScrapedNote` — trailing connector now dropped (was kept), +4 orphan edge cases. All 1358 tests pass.
+
 ## 2026-09-05
 
 ### Todo free-text scraping

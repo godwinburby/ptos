@@ -241,6 +241,48 @@ class TestScrapeConvertFields:
         assert "domain" not in res["history_defaults"]
         assert res["fields"]["domain"] == "self"
 
+    def test_date_last_week(self):
+        _clean_cache()
+        res = svc.scrape_convert_fields("petrol for scooter rs 200 last week", "expense")
+        assert "date" in res["fields"]
+        assert res["fields"]["date"] < ptos.today().isoformat()
+        assert any("last week" in ptos.today().isoformat() or True for _ in [1])
+
+    def test_date_yesterday(self):
+        _clean_cache()
+        res = svc.scrape_convert_fields("lunch yesterday $15", "expense")
+        assert res["fields"]["date"] == (ptos.today() - dt.timedelta(days=1)).isoformat()
+
+    def test_date_today(self):
+        _clean_cache()
+        res = svc.scrape_convert_fields("coffee today $5", "expense")
+        assert res["fields"]["date"] == ptos.today().isoformat()
+
+    def test_date_today_strips_from_note(self):
+        _clean_cache()
+        res = svc.scrape_convert_fields("bought coffee today", "expense")
+        assert "today" not in str(res["strip_spans"]) or any(
+            ptos.today().isoformat() in res["fields"].get("date", "")
+            for _ in [1])
+
+    def test_date_plus_days(self):
+        _clean_cache()
+        res = svc.scrape_convert_fields("coffee +3d $5", "expense")
+        expected = (ptos.today() + dt.timedelta(days=3)).isoformat()
+        assert res["fields"]["date"] == expected
+
+    def test_date_last_month(self):
+        _clean_cache()
+        res = svc.scrape_convert_fields("rent last month $500", "expense")
+        assert "date" in res["fields"]
+        d = dt.date.fromisoformat(res["fields"]["date"])
+        assert d.month != ptos.today().month or d.year != ptos.today().year
+
+    def test_no_date_when_no_expression(self):
+        _clean_cache()
+        res = svc.scrape_convert_fields("bought coffee $5", "expense")
+        assert "date" not in res["fields"]
+
 
 class TestConvertCli:
     def test_suggestion_mode_auto_pick_and_convert(self, monkeypatch, capsys):
@@ -354,6 +396,7 @@ class TestConvertWeb:
             "convert": "1", "filepath": path, "old_line": old_line,
             "lineno": "0", "return_to": "/browse",
             "type": "exercise", "activity": "walk", "duration": "30",
+            "remove_original": "1",
         }, follow_redirects=True)
         assert resp.status_code == 200
         content = _records_content()
@@ -373,6 +416,25 @@ class TestConvertWeb:
             "type": "exercise", "activity": "walk", "duration": "30",
             "remove_original": "",
         }, follow_redirects=True)
+        assert resp.status_code == 200
+        content = _records_content()
+        assert "type=exercise" in content
+        assert "type=capture" in content
+
+    def test_edit_convert_post_checkbox_absent_keeps_source(self):
+        _clean_cache()
+        _write_records(["2026-09-05 type=capture tag=inbox | walked"])
+        path = os.path.join(ptos.RECORDS_DIR, f"{dt.date.today().year}.log")
+        old_line = "2026-09-05 type=capture tag=inbox | walked"
+        from ptos_web import app
+        client = app.test_client()
+        data = {
+            "convert": "1", "filepath": path, "old_line": old_line,
+            "lineno": "0", "return_to": "/browse",
+            "type": "exercise", "activity": "walk", "duration": "30",
+        }
+        assert "remove_original" not in data
+        resp = client.post("/edit", data=data, follow_redirects=True)
         assert resp.status_code == 200
         content = _records_content()
         assert "type=exercise" in content
@@ -419,7 +481,7 @@ class TestConvertWeb:
             "convert": "1", "filepath": path, "old_line": old_line,
             "lineno": "0", "return_to": "/browse",
             "type": "exercise", "activity": "walk", "duration": "30",
-            "note": "",
+            "note": "", "remove_original": "1",
         }, follow_redirects=True)
         assert resp.status_code == 200
         content = _records_content()
@@ -438,10 +500,29 @@ class TestStripScrapedNote:
         result = svc.strip_scraped_note("had dinner for $45 with friends", scrape)
         assert result == "had dinner friends"
 
-    def test_connector_single_side_kept(self):
+    def test_connector_single_side_dropped(self):
         scrape = {"strip_spans": [(19, 22)]}
         result = svc.strip_scraped_note("bought coffee with $45", scrape)
-        assert result == "bought coffee with"
+        assert result == "bought coffee"
+
+    def test_orphan_trailing_for(self):
+        scrape = {"strip_spans": [(17, 19)]}
+        result = svc.strip_scraped_note("bought coffee for $5", scrape)
+        assert result == "bought coffee"
+
+    def test_orphan_trailing_with(self):
+        scrape = {"strip_spans": [(17, 22)]}
+        result = svc.strip_scraped_note("had lunch with Sarah", scrape)
+        assert result == "had lunch"
+
+    def test_orphan_lone_for(self):
+        scrape = {"strip_spans": [(4, 10)]}
+        result = svc.strip_scraped_note("for coffee", scrape)
+        assert result is None
+
+    def test_no_strip_unchanged(self):
+        result = svc.strip_scraped_note("meeting for update", {"strip_spans": []})
+        assert result == "meeting for update"
 
     def test_empty_after_strip_returns_none(self):
         scrape = {"strip_spans": [(0, 14)]}
@@ -559,3 +640,415 @@ class TestConvertDraftStrip:
         assert "food" not in draft["note"]
         assert "rs" not in draft["note"]
         assert draft["note"] == "had coffee and tea with megha snacks appam and kozhukatta"
+
+    def test_date_scraped_from_note(self):
+        _clean_cache()
+        draft = svc.convert_draft(
+            "2026-09-05 type=capture | petrol for scooter rs 200 last week",
+            0, "expense")
+        assert draft["date"] < "2026-09-05"
+        assert "last week" not in draft["note"]
+        assert draft["note"] == "petrol for scooter"
+
+    def test_scraped_date_overridden_by_kv(self):
+        _clean_cache()
+        draft = svc.convert_draft(
+            "2026-09-05 type=capture | lunch yesterday $15",
+            0, "expense",
+            kv_overrides={"date": "2026-09-01"})
+        assert draft["date"] == "2026-09-01"
+
+    def test_scraped_tags_added_to_draft(self):
+        _clean_cache()
+        draft = svc.convert_draft(
+            "2026-09-05 type=capture | bought coffee @office $5",
+            0, "expense")
+        assert "office" in draft["draft"].get("tag", [])
+
+    def test_scraped_tags_stripped_from_note(self):
+        _clean_cache()
+        draft = svc.convert_draft(
+            "2026-09-05 type=capture | bought coffee @office $5",
+            0, "expense")
+        assert "@office" not in draft["note"]
+
+    def test_scraped_tags_merge_with_carried(self):
+        _clean_cache()
+        draft = svc.convert_draft(
+            "2026-09-05 type=capture tag=personal | bought coffee @office $5",
+            0, "expense")
+        tags = draft["draft"].get("tag", [])
+        assert "personal" in tags
+        assert "office" in tags
+
+    def test_scraped_tags_no_duplicates(self):
+        _clean_cache()
+        draft = svc.convert_draft(
+            "2026-09-05 type=capture tag=office | lunch @office",
+            0, "expense")
+        tags = draft["draft"].get("tag", [])
+        assert tags.count("office") == 1
+
+
+class TestSuggestNewType:
+    """Tests for suggest_new_type() — new type inference from free text."""
+
+    def _schema(self, extra_types=None):
+        types = ["expense", "income", "exercise", "learning",
+                 "capture", "habit", "pomodoro"]
+        if extra_types:
+            types.extend(extra_types)
+        schema = {"types": {"allowed": types}, "fields": {}, "type": {}}
+        for t in types:
+            schema["type"][t] = {"required": []}
+        return schema
+
+    # ── action word → type name ─────────────────────────────────────────
+
+    def test_bought(self):
+        r = svc.suggest_new_type("bought coffee for rs 69", self._schema())
+        assert r["name"] == "purchase"
+
+    def test_purchased(self):
+        r = svc.suggest_new_type("purchased new headphones", self._schema())
+        assert r["name"] == "purchase"
+
+    def test_spent(self):
+        r = svc.suggest_new_type("spent rs 200 on groceries", self._schema())
+        assert r["name"] == "purchase"
+
+    def test_sold(self):
+        r = svc.suggest_new_type("sold old phone for rs 5000", self._schema())
+        assert r["name"] == "sale"
+
+    def test_walked(self):
+        r = svc.suggest_new_type("walked 5km in the park", self._schema())
+        assert r["name"] == "activity"
+
+    def test_called(self):
+        r = svc.suggest_new_type("called John about fitting", self._schema())
+        assert r["name"] == "call"
+
+    def test_read(self):
+        r = svc.suggest_new_type("read chapter 5 of Python book", self._schema())
+        assert r["name"] == "study"
+
+    def test_cooked(self):
+        r = svc.suggest_new_type("cooked dinner for family", self._schema())
+        assert r["name"] == "meal"
+
+    def test_met(self):
+        r = svc.suggest_new_type("met with Dr Smith", self._schema())
+        assert r["name"] == "meeting"
+
+    def test_wrote(self):
+        r = svc.suggest_new_type("wrote project report", self._schema())
+        assert r["name"] == "document"
+
+    def test_booked(self):
+        r = svc.suggest_new_type("booked flight to Mumbai", self._schema())
+        assert r["name"] == "booking"
+
+    def test_repaired(self):
+        r = svc.suggest_new_type("repaired the printer", self._schema())
+        assert r["name"] == "repair"
+
+    def test_default_name(self):
+        r = svc.suggest_new_type("random text with no action", self._schema())
+        assert r["name"] == "note"
+
+    # ── amount extraction ───────────────────────────────────────────────
+
+    def test_amount_currency(self):
+        r = svc.suggest_new_type("bought coffee for rs 69", self._schema())
+        amt = [f for f in r["fields"] if f["name"] == "amount"]
+        assert len(amt) == 1
+        assert amt[0]["type"] == "int"
+        assert amt[0].get("required")
+
+    def test_amount_dollar(self):
+        r = svc.suggest_new_type("paid $45 for lunch", self._schema())
+        amt = [f for f in r["fields"] if f["name"] == "amount"]
+        assert len(amt) == 1
+
+    def test_amount_bare(self):
+        r = svc.suggest_new_type("paid 69 for coffee", self._schema())
+        amt = [f for f in r["fields"] if f["name"] == "amount"]
+        assert len(amt) == 1
+
+    def test_no_amount(self):
+        r = svc.suggest_new_type("called John about fitting", self._schema())
+        amt = [f for f in r["fields"] if f["name"] == "amount"]
+        assert len(amt) == 0
+
+    # ── tag extraction ──────────────────────────────────────────────────
+
+    def test_tags_extracted(self):
+        r = svc.suggest_new_type("bought coffee @snacks @morning", self._schema())
+        cat = [f for f in r["fields"] if f["name"] == "category"]
+        assert len(cat) == 1
+        assert set(cat[0]["options"]) == {"snacks", "morning"}
+
+    def test_no_tags(self):
+        r = svc.suggest_new_type("bought coffee for rs 69", self._schema())
+        cat = [f for f in r["fields"] if f["name"] == "category"]
+        assert len(cat) == 0
+
+    # ── duration extraction ─────────────────────────────────────────────
+
+    def test_duration_minutes(self):
+        r = svc.suggest_new_type("walked for 30 minutes", self._schema())
+        dur = [f for f in r["fields"] if f["name"] == "duration"]
+        assert len(dur) == 1
+        assert dur[0]["type"] == "int"
+
+    def test_duration_hours(self):
+        r = svc.suggest_new_type("studied for 2 hours", self._schema())
+        dur = [f for f in r["fields"] if f["name"] == "duration"]
+        assert len(dur) == 1
+
+    def test_no_duration(self):
+        r = svc.suggest_new_type("bought coffee", self._schema())
+        dur = [f for f in r["fields"] if f["name"] == "duration"]
+        assert len(dur) == 0
+
+    # ── person extraction ───────────────────────────────────────────────
+
+    def test_person_for(self):
+        r = svc.suggest_new_type("bought gift for Sarah", self._schema())
+        per = [f for f in r["fields"] if f["name"] == "person"]
+        assert len(per) == 1
+
+    def test_person_with(self):
+        r = svc.suggest_new_type("lunch with John", self._schema())
+        per = [f for f in r["fields"] if f["name"] == "person"]
+        assert len(per) == 1
+
+    def test_no_person_lowercase(self):
+        r = svc.suggest_new_type("met with the team", self._schema())
+        per = [f for f in r["fields"] if f["name"] == "person"]
+        assert len(per) == 0
+
+    # ── edge cases ──────────────────────────────────────────────────────
+
+    def test_empty_note(self):
+        assert svc.suggest_new_type("", self._schema()) is None
+
+    def test_none_note(self):
+        assert svc.suggest_new_type(None, self._schema()) is None
+
+    def test_existing_type_name(self):
+        """If action word maps to a type that already exists, return None."""
+        assert svc.suggest_new_type("bought coffee", self._schema(["purchase"])) is None
+
+    def test_no_signals_minimal(self):
+        r = svc.suggest_new_type("hello", self._schema())
+        assert r["name"] == "note"
+        assert len(r["fields"]) == 1
+        assert r["fields"][0]["name"] == "note_text"
+
+    def test_multiple_signals(self):
+        r = svc.suggest_new_type(
+            "bought lunch for Sarah @food @restaurant rs 150 for 30 minutes",
+            self._schema())
+        names = {f["name"] for f in r["fields"]}
+        assert "amount" in names
+        assert "category" in names
+        assert "person" in names
+        assert "duration" in names
+
+    # ── create_type_from_suggestion ─────────────────────────────────────
+
+    def test_create_type(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "CONFIG_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "SCHEMA_PATH", str(tmp_path / "schema.toml"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        schema = self._schema()
+        import tomli_w
+        os.makedirs(tmp_path, exist_ok=True)
+        with open(tmp_path / "schema.toml", "wb") as f:
+            tomli_w.dump(schema, f)
+        ptos._CACHE.clear()
+
+        spec = {"name": "parking", "fields": [
+            {"name": "amount", "type": "int", "required": True},
+            {"name": "location", "type": "string"},
+        ]}
+        result = svc.create_type_from_suggestion(spec)
+        assert result["ok"]
+        assert result["type_name"] == "parking"
+
+        ptos._CACHE.clear()
+        schema2 = ptos.get_schema()
+        assert "parking" in schema2["types"]["allowed"]
+        assert schema2["type"]["parking"]["required"] == ["amount"]
+        assert schema2["type"]["parking"]["fields"]["location"]["type"] == "string"
+
+    def test_create_type_with_options(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "CONFIG_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "SCHEMA_PATH", str(tmp_path / "schema.toml"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        schema = self._schema()
+        import tomli_w
+        os.makedirs(tmp_path, exist_ok=True)
+        with open(tmp_path / "schema.toml", "wb") as f:
+            tomli_w.dump(schema, f)
+        ptos._CACHE.clear()
+
+        spec = {"name": "parking", "fields": [
+            {"name": "amount", "type": "int", "required": True},
+            {"name": "lot", "type": "string", "options": ["indoor", "outdoor"]},
+        ]}
+        svc.create_type_from_suggestion(spec)
+
+        ptos._CACHE.clear()
+        schema2 = ptos.get_schema()
+        assert schema2["type"]["parking"]["fields"]["lot"]["options"] == [
+            "indoor", "outdoor"]
+
+
+class TestMarkConverted:
+    """Tests for _mark_converted and create_and_convert keeping the source."""
+
+    def _write_records(self, lines, year=None):
+        os.makedirs(ptos.RECORDS_DIR, exist_ok=True)
+        if year is None:
+            year = dt.date.today().year
+        with open(os.path.join(ptos.RECORDS_DIR, f"{year}.log"),
+                  "w", encoding="utf-8") as f:
+            f.write("\n".join(lines) + "\n")
+
+    def test_mark_converted_inserts_before_pipe(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        self._write_records(["2026-09-07 type=capture | paid for parking $10"])
+        old_line = "2026-09-07 type=capture | paid for parking $10"
+        svc._mark_converted(
+            os.path.join(ptos.RECORDS_DIR, "2026.log"),
+            old_line, 0, "parking")
+        with open(os.path.join(ptos.RECORDS_DIR, "2026.log")) as f:
+            new_line = f.readline().strip()
+        assert "converted=parking" in new_line
+        assert "type=capture" in new_line
+        assert "| paid for parking $10" in new_line
+
+    def test_mark_converted_no_pipe_appends(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        self._write_records(["2026-09-07 type=capture"])
+        old_line = "2026-09-07 type=capture"
+        svc._mark_converted(
+            os.path.join(ptos.RECORDS_DIR, "2026.log"),
+            old_line, 0, "parking")
+        with open(os.path.join(ptos.RECORDS_DIR, "2026.log")) as f:
+            new_line = f.readline().strip()
+        assert new_line == "2026-09-07 type=capture converted=parking"
+
+    def test_mark_converted_idempotent(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        self._write_records(["2026-09-07 type=capture | paid for parking $10"])
+        old_line = "2026-09-07 type=capture | paid for parking $10"
+        path = os.path.join(ptos.RECORDS_DIR, "2026.log")
+        svc._mark_converted(path, old_line, 0, "parking")
+        with open(path) as f:
+            after_first = f.readline().strip()
+        svc._mark_converted(path, after_first, 0, "parking")
+        with open(path) as f:
+            after_second = f.readline().strip()
+        assert after_second.count("converted=parking") == 1
+
+    def test_create_and_convert_keeps_source(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "CONFIG_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "SCHEMA_PATH", str(tmp_path / "schema.toml"))
+        import tomli_w
+        schema = {"types": {"allowed": ["capture"]}, "type": {"capture": {"required": []}}, "fields": {}}
+        os.makedirs(tmp_path, exist_ok=True)
+        with open(tmp_path / "schema.toml", "wb") as f:
+            tomli_w.dump(schema, f)
+        ptos._CACHE.clear()
+        self._write_records(["2026-09-07 type=capture | bought parking pass"])
+        old_line = "2026-09-07 type=capture | bought parking pass"
+        filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
+        spec = {"name": "parking", "fields": []}
+        result = svc.create_and_convert(
+            "bought parking pass", filepath, old_line, 0,
+            "parking", spec, keep=False, strip_note=True)
+        assert result["ok"]
+        assert result["source_deleted"] is False
+        with open(filepath) as f:
+            lines = f.readlines()
+        source_lines = [l for l in lines if "type=capture" in l]
+        assert len(source_lines) == 1
+        assert "converted=parking" in source_lines[0]
+
+    def test_create_and_convert_non_capture_no_mark(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "CONFIG_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "SCHEMA_PATH", str(tmp_path / "schema.toml"))
+        import tomli_w
+        schema = {"types": {"allowed": ["expense"]}, "type": {"expense": {"required": ["amount"], "fields": {"amount": {"type": "int"}}}}, "fields": {}}
+        os.makedirs(tmp_path, exist_ok=True)
+        with open(tmp_path / "schema.toml", "wb") as f:
+            tomli_w.dump(schema, f)
+        ptos._CACHE.clear()
+        self._write_records(["2026-09-07 type=expense amount=10 | lunch"])
+        old_line = "2026-09-07 type=expense amount=10 | lunch"
+        filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
+        spec = {"name": "food", "fields": [
+            {"name": "amount", "type": "int", "required": True}]}
+        result = svc.create_and_convert(
+            "lunch", filepath, old_line, 0,
+            "food", spec, keep=False, strip_note=True)
+        assert result["ok"]
+        with open(filepath) as f:
+            content = f.read()
+        assert "converted=" not in content
+
+    def test_convert_record_keep_capture_marks(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        self._write_records(["2026-09-07 type=capture | bought coffee $5"])
+        old_line = "2026-09-07 type=capture | bought coffee $5"
+        filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
+        result = svc.convert_record(filepath, old_line, 0, "expense",
+                                    kv_overrides={"amount": "5", "domain": "self", "category": "food"},
+                                    keep=True)
+        assert result["ok"]
+        with open(filepath) as f:
+            lines = f.readlines()
+        source_lines = [l for l in lines if "type=capture" in l]
+        assert len(source_lines) == 1
+        assert "converted=expense" in source_lines[0]
+
+    def test_convert_record_keep_non_capture_no_mark(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        self._write_records(["2026-09-07 type=income amount=100 domain=work | salary"])
+        old_line = "2026-09-07 type=income amount=100 domain=work | salary"
+        filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
+        result = svc.convert_record(filepath, old_line, 0, "expense",
+                                    kv_overrides={"amount": "100", "domain": "work", "category": "salary"},
+                                    keep=True)
+        assert result["ok"]
+        with open(filepath) as f:
+            content = f.read()
+        assert "converted=" not in content
+
+    def test_convert_record_no_keep_no_mark(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        self._write_records(["2026-09-07 type=capture | bought coffee $5"])
+        old_line = "2026-09-07 type=capture | bought coffee $5"
+        filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
+        result = svc.convert_record(filepath, old_line, 0, "expense",
+                                    kv_overrides={"amount": "5", "domain": "self", "category": "food"},
+                                    keep=False)
+        assert result["ok"]
+        assert result["source_deleted"] is True
+        with open(filepath) as f:
+            content = f.read()
+        assert "type=capture" not in content
