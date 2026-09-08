@@ -17,11 +17,13 @@
   .habit-month-name { font-size:13px;font-weight:700;margin-bottom:6px;color:var(--fg); }
   .habit-month-days { display:flex;flex-direction:column;gap:2px; }
   .habit-month-week-row { display:flex;gap:2px; }
-  .habit-weekday { width:13px;height:13px;font-size:9px;color:var(--sub);text-align:center;line-height:13px; }
-  .habit-cell { width:13px;height:13px;border-radius:3px;background:var(--border); }
-  .habit-cell.on { background:#2ECC71; }
+  .habit-weekday { width:28px;height:28px;font-size:10px;font-weight:600;color:var(--sub);text-align:center;line-height:28px; }
+  .habit-cell { width:28px;height:28px;border-radius:5px;background:var(--border);font-size:11px;font-weight:500;text-align:center;line-height:28px;color:var(--fg); }
+  .habit-cell.on { background:#2ECC71;color:#fff; }
   .habit-cell.blank { background:transparent; }
   .habit-cell.today { outline:2px solid var(--accent); }
+  .habit-cell.clickable { cursor:pointer;transition:transform .1s,opacity .1s; }
+  .habit-cell.clickable:hover { transform:scale(1.15);opacity:.85; }
   .habit-legend { display:flex;align-items:center;gap:6px;font-size:11px;color:var(--sub); }
   .habit-empty { text-align:center;padding:40px;color:var(--sub);font-size:14px; }
 </style>
@@ -104,7 +106,7 @@ weeks = 12</pre>
 
 <div class="habits-grid-list">
   {% for hname, h in habits.items() %}
-  <div class="habit-card">
+  <div class="habit-card" data-streak="{{ h.streak }}" data-days-done="{{ h.days_done }}">
     <div class="habit-head">
       <span class="habit-name">{{ hname | replace('_',' ') }}</span>
       <span class="habit-streak">{{ h.streak }} day{{ '' if h.streak == 1 else 's' }}</span>
@@ -128,7 +130,10 @@ weeks = 12</pre>
           <div class="habit-month-week-row">
             {% for cell in week %}
             {% if cell.date %}
-            <div class="habit-cell {{ 'on' if cell.present }} {{ 'today' if cell.is_today }}" title="{{ cell.date }}"></div>
+            <div class="habit-cell {{ 'on' if cell.present }} {{ 'today' if cell.is_today }} {{ 'clickable' if h.toggleable }}"
+                 {% if h.toggleable %}data-date="{{ cell.date }}" data-habit="{{ hname }}"
+                 data-present="{{ 'true' if cell.present else 'false' }}"{% endif %}
+                 title="{{ cell.date }}">{{ cell.date[-2:] }}</div>
             {% else %}
             <div class="habit-cell blank"></div>
             {% endif %}
@@ -141,15 +146,53 @@ weeks = 12</pre>
     </div>
     <div class="habit-legend">
       <span>Less</span>
-      <div class="habit-cell"></div>
-      <div class="habit-cell on"></div>
+      <div class="habit-cell" style="width:28px;height:28px;"></div>
+      <div class="habit-cell on" style="width:28px;height:28px;"></div>
       <span>More</span>
-      <div class="habit-cell today"></div>
+      <div class="habit-cell today" style="width:28px;height:28px;"></div>
       <span>Today</span>
       <span style="margin-left:auto;">{{ h.streak }} day streak</span>
     </div>
   </div>
   {% endfor %}
 </div>
+
+<script>
+(function() {
+  var today = '{{ today_date }}';
+  document.addEventListener('click', function(e) {
+    var cell = e.target.closest('.habit-cell.clickable');
+    if (!cell) return;
+    var date = cell.dataset.date;
+    if (date > today) return;
+    var habit = cell.dataset.habit;
+    var card = cell.closest('.habit-card');
+    cell.style.pointerEvents = 'none';
+    fetch('/api/habit/toggle', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({habit_name: habit, date: date})
+    }).then(function(r) { return r.json(); }).then(function(res) {
+      cell.style.pointerEvents = '';
+      if (!res.ok) return;
+      if (res.present) {
+        cell.classList.add('on');
+      } else {
+        cell.classList.remove('on');
+      }
+      cell.dataset.present = res.present;
+      card.dataset.streak = res.streak;
+      card.dataset.daysDone = res.days_done;
+      card.querySelector('.habit-streak').textContent =
+        res.streak + ' day' + (res.streak === 1 ? '' : 's');
+      var stats = card.querySelector('.habit-stats');
+      var parts = stats.textContent.split(' days ');
+      if (parts.length === 2) {
+        stats.textContent = res.days_done + ' of ' + parts[0].split(' of ')[1] + ' days ' + parts[1];
+      }
+    });
+  });
+})();
+</script>
 
 {% endblock %}

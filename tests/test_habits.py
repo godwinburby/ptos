@@ -352,3 +352,143 @@ class TestHabitCli:
         ptos_cli.run_habits("__ALL__")
         out = capsys.readouterr().out
         assert '["habit.meditation"]' in out
+
+
+class TestHabitToggle:
+    def test_toggle_adds_record(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        today = dt.date.today()
+        _write_records([])
+        result = svc.toggle_habit_day("med", today.isoformat())
+        assert result["action"] == "added"
+        assert result["present"] is True
+        assert result["date"] == today.isoformat()
+        assert result["streak"] >= 1
+
+    def test_toggle_removes_record(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        today = dt.date.today()
+        _write_records([f"{today} type=habit name=meditation"])
+        result = svc.toggle_habit_day("med", today.isoformat())
+        assert result["action"] == "removed"
+        assert result["present"] is False
+        assert result["streak"] == 0
+
+    def test_toggle_unconfigured_habit_raises(self):
+        _clean_cache()
+        with pytest.raises(svc.PTOSError):
+            svc.toggle_habit_day("nope", dt.date.today().isoformat())
+
+    def test_toggle_future_date_raises(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        future = (dt.date.today() + dt.timedelta(days=3)).isoformat()
+        with pytest.raises(svc.PTOSError):
+            svc.toggle_habit_day("med", future)
+
+    def test_toggle_invalid_date_raises(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        with pytest.raises(svc.PTOSError):
+            svc.toggle_habit_day("med", "not-a-date")
+
+    def test_toggle_updates_streak(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        today = dt.date.today()
+        yesterday = today - dt.timedelta(days=1)
+        _write_records([f"{yesterday} type=habit name=meditation"])
+        data_before = svc.get_habit_data("med")
+        assert data_before["streak"] == 1
+        svc.toggle_habit_day("med", today.isoformat())
+        ptos._CACHE.clear()
+        data_after = svc.get_habit_data("med")
+        assert data_after["streak"] == 2
+
+    def test_toggle_double_add_is_idempotent(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        today = dt.date.today()
+        _write_records([])
+        svc.toggle_habit_day("med", today.isoformat())
+        result2 = svc.toggle_habit_day("med", today.isoformat())
+        assert result2["action"] == "removed"
+        assert result2["present"] is False
+
+    def test_toggle_web_route(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        today = dt.date.today()
+        _write_records([])
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/habit/toggle",
+                           json={"habit_name": "med", "date": today.isoformat()})
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["action"] == "added"
+        assert data["present"] is True
+
+    def test_toggle_web_missing_fields(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/habit/toggle", json={})
+        data = resp.get_json()
+        assert data["ok"] is False
+        assert "habit_name" in data["error"] or "date" in data["error"]
+
+    def test_toggle_web_unconfigured(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/habit/toggle",
+                           json={"habit_name": "nope", "date": "2026-01-01"})
+        data = resp.get_json()
+        assert data["ok"] is False
+
+    def test_get_habit_data_toggleable_default_true(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        data = svc.get_habit_data("med")
+        assert data["toggleable"] is True
+
+    def test_get_habit_data_toggleable_false(self):
+        _clean_cache()
+        queries = ptos.get_queries()
+        queries["habit.auto"] = {"filters": ["type=habit", "name=auto"],
+                                 "weeks": 4, "toggleable": False}
+        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+            tomli_w.dump(queries, w.stream)
+        ptos._invalidate_all()
+        data = svc.get_habit_data("auto")
+        assert data["toggleable"] is False
+
+    def test_toggle_non_toggleable_raises(self):
+        _clean_cache()
+        queries = ptos.get_queries()
+        queries["habit.auto"] = {"filters": ["type=habit", "name=auto"],
+                                 "weeks": 4, "toggleable": False}
+        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+            tomli_w.dump(queries, w.stream)
+        ptos._invalidate_all()
+        with pytest.raises(svc.PTOSError, match="not toggleable"):
+            svc.toggle_habit_day("auto", dt.date.today().isoformat())
+
+    def test_toggle_web_non_toggleable(self):
+        _clean_cache()
+        queries = ptos.get_queries()
+        queries["habit.auto"] = {"filters": ["type=habit", "name=auto"],
+                                 "weeks": 4, "toggleable": False}
+        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+            tomli_w.dump(queries, w.stream)
+        ptos._invalidate_all()
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/habit/toggle",
+                           json={"habit_name": "auto",
+                                 "date": dt.date.today().isoformat()})
+        data = resp.get_json()
+        assert data["ok"] is False
+        assert "not toggleable" in data["error"]

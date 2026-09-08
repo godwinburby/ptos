@@ -7,6 +7,14 @@ Format: `[version or date] — description`
 
 ## 2026-09-08
 
+### Habits: click-to-toggle day on calendar heatmap
+
+- **Service** (`ptos_service.py`): new `toggle_habit_day(habit_name, date_str)` — if no record exists for the given date+habit, appends one (built from the habit's configured filters); if a record exists, deletes it. Returns `{action, date, present, streak, days_done}`. Rejects future dates. Record line is constructed from the habit's filter `key=value` pairs (not the config key), so `["habit.med"]` with `filters = ["type=habit", "name=meditation"]` correctly writes `name=meditation`.
+- **Toggleable config** — optional `toggleable` boolean key in `[habit.*]` (default `true`). Non-toggleable habits (e.g. auto-logged `type=pomodoro`) show date numbers but are not clickable. `toggle_habit_day()` raises `PTOSError` for non-toggleable habits. `get_habit_data()` returns `toggleable` in the result dict. `save_queries_full()` preserves the key on round-trip. Starter config: `["habit.pomodoro"]` has `toggleable = false`.
+- **Route** (`ptos_web.py`): `POST /api/habit/toggle` accepts `{habit_name, date}`, returns `{ok, action, date, present, streak, days_done}`. Query Builder load/save round-trips `toggleable`.
+- **Template** (`habits.html`): calendar cells now show **visible date numbers** (28×28px cells with day number text) instead of tiny 13×13px blank squares. Each cell gets `data-date`, `data-habit`, `data-present` attributes and a conditional `clickable` class (only when `h.toggleable`). CSS hover effect (scale 1.15x). JS click handler POSTs to `/api/habit/toggle`, toggles `.on` class, and updates the streak badge and stats text in-place (no page reload). Future dates are not clickable. `today_date` ISO string passed from route for client-side date comparison.
+- **Tests** (`tests/test_habits.py`): 14 new tests in `TestHabitToggle` — add, remove, unconfigured error, future date error, invalid date error, streak update, double-toggle idempotency, web route (add + missing fields + unconfigured), toggleable default true, toggleable false in data, non-toggleable rejection (service + web). All 1377 tests pass.
+
 ### Daily digest page: interactive records, todos, and captures
 
 - **Records** (`daily.html`): the records section now uses the same `RecordTable` component as Home/Browse — sortable columns, inline edit (✎), convert (⇄), delete (✕), and bulk operations (checkbox + bulk delete/set). `daily_digest` in `ptos_service.py` now returns full parsed record dicts (`_filepath`, `_lineno`, `_line`) and a `columns` list alongside the existing `records_by_type` summary.

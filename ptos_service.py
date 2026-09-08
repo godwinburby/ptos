@@ -2174,9 +2174,91 @@ def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
         "range_label": range_label,
         "total_days": len(grid),
         "days_done": len(days_present),
+        "toggleable": cfg.get("toggleable", True),
     }
     ptos._CACHE[cache_key] = result
     return result
+
+
+def toggle_habit_day(habit_name, date_str):
+    """Toggle a habit record for a given date.
+
+    If no record exists for that date+habit, append one.
+    If a record exists, delete it.
+    Returns {action, date, present, streak, days_done} or raises PTOSError.
+    """
+    today = dt.date.today()
+    try:
+        target = dt.date.fromisoformat(date_str)
+    except (ValueError, TypeError):
+        raise PTOSError(f"Invalid date: {date_str}")
+    if target > today:
+        raise PTOSError("Cannot toggle a future date")
+
+    try:
+        queries = ptos.get_queries()
+    except Exception as e:
+        raise PTOSError(str(e))
+    cfg = queries.get(f"habit.{habit_name}")
+    if not cfg or not isinstance(cfg, dict):
+        raise PTOSError(f"Habit '{habit_name}' not found in queries.toml")
+    filters = cfg.get("filters", [])
+    if not filters:
+        raise PTOSError(f"Habit '{habit_name}' has no filters defined")
+
+    toggleable = cfg.get("toggleable", True)
+    if not toggleable:
+        raise PTOSError(f"Habit '{habit_name}' is not toggleable")
+
+    matches = ptos.find_records_with_location(
+        filters, start=target, end=target
+    )
+
+    if matches:
+        filepath, lineno, line = matches[0]
+        delete_record(filepath, line, lineno=lineno)
+        action = "removed"
+        present = False
+    else:
+        parts = [date_str]
+        for f in filters:
+            if "=" in f and not f.startswith(("!", "~")):
+                parts.append(f)
+        line = " ".join(parts)
+        append_record(line)
+        action = "added"
+        present = True
+
+    weeks = int(cfg.get("weeks", 12))
+    streak_start = today - dt.timedelta(days=today.weekday() + (weeks - 1) * 7)
+    all_matches = ptos.find_records_with_location(
+        filters, start=streak_start, end=today
+    )
+    present_all = set()
+    for _, _, ln in all_matches:
+        try:
+            d, _, _ = ptos.parse_line(ln)
+            present_all.add(d)
+        except Exception:
+            continue
+    streak = 0
+    cursor = today
+    if today not in present_all:
+        cursor = today - dt.timedelta(days=1)
+    while cursor in present_all:
+        streak += 1
+        cursor -= dt.timedelta(days=1)
+
+    days_done = len({d for d in present_all
+                     if streak_start <= d <= today})
+
+    return {
+        "action": action,
+        "date": date_str,
+        "present": present,
+        "streak": streak,
+        "days_done": days_done,
+    }
 
 
 def _fmt_range(d):
@@ -3638,6 +3720,8 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         entry = {"filters": hfilters}
         if habit_cfg.get("weeks"):
             entry["weeks"] = int(habit_cfg["weeks"])
+        if "toggleable" in habit_cfg:
+            entry["toggleable"] = bool(habit_cfg["toggleable"])
         data[f"habit.{bare}"] = entry
 
     # Calendars
