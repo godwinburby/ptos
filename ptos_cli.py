@@ -894,6 +894,36 @@ def run_convert(convert_args, filters, start, end, set_args, keep, do_all, keep_
         text = " ".join(parse_line(line)[2] or "" for _, _, line in matches)
         suggestions = svc.suggest_convert_type(text)
         if not suggestions:
+            new_sug = svc.suggest_new_type(text)
+            if new_sug:
+                fields_str = ", ".join(
+                    f"{f['name']} ({f['type']})"
+                    + (" *" if f.get("required") else "")
+                    for f in new_sug["fields"])
+                print(f"\nNo existing type matches. Suggested new type:\n")
+                print(f"  {new_sug['name']}  —  {fields_str}\n")
+                if not sys.stdin.isatty():
+                    confirm = "y"
+                else:
+                    confirm = _cli_input("Create type and convert? [y/N] ").strip().lower()
+                if confirm == "y":
+                    for mfilepath, mlineno, mline in matches:
+                        try:
+                            result = svc.create_and_convert(
+                                parse_line(mline)[2] or "",
+                                mfilepath, mline, mlineno,
+                                new_sug["name"], new_sug, keep=keep,
+                                strip_note=not keep_note)
+                            print(f"Converted: {result['new_line']}")
+                            if result.get("source_deleted"):
+                                print("  Source record deleted.")
+                            else:
+                                print(f"  Source record kept (marked as converted to {new_sug['name']}).")
+                        except Exception as e:
+                            print(f"Error: {e}")
+                    return
+                print("Cancelled.")
+                return
             sys.exit("Could not guess a target type from the note text. "
                      'Specify one: --convert "WHERE..." TARGET')
         print("\nType suggestions (from record text):\n")

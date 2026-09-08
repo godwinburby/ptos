@@ -140,10 +140,11 @@ var tp;
     <a href="/daily" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600;">Today's digest →</a>
   </div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <input id="cap-input" type="text" placeholder="Quick note… (Enter to capture)"
+    <input id="cap-input" type="text" placeholder="Quick record… (Enter to capture)"
            onkeydown="if(event.key==='Enter')doCapture()"
            style="flex:1;min-width:220px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
     <button onclick="doCapture()" class="btn btn-primary">Capture</button>
+    <button onclick="doCaptureConvert()" class="btn btn-ghost" title="Capture and convert to another record type">Convert</button>
   </div>
   <div id="cap-msg" style="font-size:13px;margin-top:8px;display:none;"></div>
 </div>
@@ -390,6 +391,34 @@ function doCapture() {
       msg.style.color = "var(--success)";
       msg.style.display = "block";
       setTimeout(() => { location.reload(); }, 700);
+    } else {
+      msg.textContent = d.error || "Capture failed";
+      msg.style.color = "var(--error)";
+      msg.style.display = "block";
+    }
+  })
+  .catch(e => {
+    msg.textContent = String(e);
+    msg.style.color = "var(--error)";
+    msg.style.display = "block";
+  });
+}
+
+function doCaptureConvert() {
+  const input = document.getElementById("cap-input");
+  const msg  = document.getElementById("cap-msg");
+  const text = input.value.trim();
+  if (!text) { msg.textContent = "Type something first"; msg.style.color = "var(--warn)"; msg.style.display = "block"; return; }
+  fetch("/api/capture", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({text: text})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      window.location.href = "/edit?convert=1&filepath=" + encodeURIComponent(d.filepath)
+        + "&lineno=" + d.lineno + "&line=" + encodeURIComponent(d.line) + "&return_to=" + encodeURIComponent("/");
     } else {
       msg.textContent = d.error || "Capture failed";
       msg.style.color = "var(--error)";

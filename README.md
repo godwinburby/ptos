@@ -273,6 +273,7 @@ under `[dashboard] default`.
 
 Features:
 - Personalized greeting with user name
+- **Quick Capture** — text input to instantly log a `type=capture` record (Enter or button). A **Convert** button next to it captures the text and immediately opens the convert form to pick a target type
 - Dashboard selector dropdown
 - Time window selector (presets + specific year/month/date/range)
 - Quick-add preset chips and multi-record preset buttons
@@ -366,6 +367,82 @@ Features:
 - Search integration — notes appear in universal search results
 - Backlinks panel — see which journal entries, todos, and records reference a note
 
+### Convert Records
+
+Convert a record from one type to another. Click the `⇄` button on any record
+row in Browse, Home, or Queries — or type something in the home Capture card
+and click **Convert** to capture first then immediately open the convert form.
+
+Features:
+- **Type selector** with rule-based suggestions — the note text is scored against
+  all schema types; top suggestions show with a confidence percentage
+- **Field scraping** — currency amounts (`$`, `₹`, `rs`), option values, `@tags`,
+  and date expressions (`last week`, `yesterday`, `+3d`) are extracted from the
+  note and prefilled into the form
+- **Note scrubbing** — scraped tokens (amount, option words, tags, dates) are
+  removed from the carried note so the converted record stays clean
+- **Tag extraction** — `@tag`, `+tag`, `#tag` tokens in the note become tags on
+  the converted record
+- **Shared fields carry over** — date, note, tag, and any fields shared between
+  source and target types copy automatically. `id` and `links` never copy
+- **Keep or delete source** — checkbox controls whether the original record stays
+  (kept captures are marked with `converted=<type>` to prevent double-conversion)
+- **New type creation** — if no schema type matches the note, the system suggests
+  a new type name and fields (action words → type name, amounts → int field,
+  `@tags` → category field, durations → int field, persons → string field).
+  Click "Create & Convert" to add the type to the schema and convert in one step
+- **CLI**: `ptos --convert "WHERE..." TARGET [--set key=value ...] [--keep] [--keep-note] [--all]`
+- **Web**: `/edit?convert=1&filepath=...&lineno=...&line=...`
+
+### Pomodoro Timer
+
+Built-in Pomodoro focus timer with configurable duration (default 25 minutes).
+Click the ▶ button on any todo row to start a countdown. A floating pill persists
+across all pages, showing the task name and MM:SS countdown.
+
+Features:
+- **Start/pause/resume/stop** controls on the floating pill
+- **Active row indicators** — green border glow when running, yellow when paused;
+  ▶ toggles to ⏸ and a ⏹ stop button appears on the active row
+- **Completion** — browser notification + toast when the timer finishes
+- **Session logging** — completed sessions can be logged as `type=pomodoro`
+  records (`[pomodoro] log_sessions = true` in config.toml). The web pill
+  auto-posts the session; CLI: `ptos --pomo-log TASK MINUTES`
+- **Configurable duration** — `[pomodoro] duration_minutes` in config.toml (default 25)
+
+### Daily Digest
+
+A snapshot of yesterday's activity (or any date). Pure read — no writes.
+
+- **Web**: `/daily` or `/daily/YYYY-MM-DD` with prev/next navigation
+- **CLI**: `ptos --daily [DATE]` (default: yesterday)
+- Shows: record counts grouped by type with sample lines, overdue and due
+  todos, recent captures, journal preview, and habit streaks
+
+### Habits
+
+GitHub-style contribution grid for tracking recurring activities. Configured in
+`queries.toml` under `["habit.NAME"]`. Features:
+- A habit is just a record (`type=habit name=X`) or any record matching a filter
+- Streak tracking — consecutive days with at least one matching record
+- `/habits` page — one card per habit with streak badge, per-month calendar grid,
+  and "X of Y days" summary
+- Configurable weeks (default 12) and filters (`field=value` list)
+- Time window picker (this month, per-habit weeks, custom ranges)
+- Query Builder — Habits tab for creating/editing habit entries
+- **CLI**: `ptos --habits [NAME]` — prints calendar grid in text
+
+### Calendar
+
+Month-grid view of all records. No configuration required for the global view;
+named filtered calendars via `["calendar.NAME"]` in `queries.toml`. Features:
+- `/calendar` — "All records" month grid (default)
+- `/calendar/<name>` — named filtered view
+- Click a day to expand its records inline with a "Open day in Browse" link
+- Switcher dropdown to toggle between global and named views
+- Prev/next navigation across months
+- **CLI**: `ptos --calendars [NAME]`
+
 ### Bracket Cross-linking (`[[Target]]`)
 
 Wiki-style `[[links]]` connect notes, journal entries, and todos. Type `[[`
@@ -435,6 +512,7 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - **Section sort** — click ↕ to cycle through sort modes: default, reverse name, most tasks, fewest tasks (remembers per groupby mode)
 - Priority badges (A=red, B=orange, C=blue, D=gray) with configurable labels, due date badges, project/context chips
 - Quick-add text input with todo.txt syntax (`(A) Task +Project @context due:tomorrow`)
+- **Free-text NLP** — type natural language and PTOS extracts structured fields: `call supplier due tomorrow` → priority, `due`, `t`, recurrence (`daily`/`weekly`/`monthly`/etc.), `@tags`, `+projects`, dates (`next week`, `this friday`). Known project/context names from existing todos are recognized automatically
 - **Autocomplete** — type `+s` to suggest `+service`, `@c` for `@clinic`, `due:t` for `due:today`, `t:t` for `t:today`, `(a` for `(A) Critical`. Arrow keys + Enter to select.
 - **Cross-record links** — 🔗 button on each row to link to another entry (assigns an `id:` if missing); rows show `id:` and clickable `type:id` link badges that filter the list; `links:` prefix in quick-add and the edit modal
 - **Quick pick chips** (collapsible) — click Due, Priority (with labels from config, e.g. "(A) Critical"), Projects, Contexts, or Threshold chips to insert into input. Due/Threshold include `this_week`, `next_week`, `this_month`, `next_month` shortcuts. On mobile, groups stack vertically instead of scrolling
@@ -570,26 +648,6 @@ groups = { "Revenue" = ["income_this_month", "total_income"],
 - Query Builder dashboard editor — drag chips between group boxes, `+ New group`, rename via ✎, remove via ×, drag a group's ⠿ grip to reorder sections
 - CLI — `--add-dashboard NAME --dash-group Group:metric1,metric2 Group2:metric3`
 - Share Schema preserves groups, filtering members to included queries/metrics
-
-### Habits
-
-GitHub-style contribution grid for tracking recurring activities. Configured in
-`queries.toml` under `["habit.NAME"]`. Features:
-- A habit is just a record (`type=habit name=X`) or any record matching a filter
-- Streak tracking — consecutive days with at least one matching record
-- `/habits` page — one card per habit with streak badge, grid, and "X of Y days" summary
-- Configurable weeks (default 12) and filters (`field=value` list)
-- Query Builder — Habits tab for creating/editing habit entries
-
-### Calendar
-
-Month-grid view of all records. No configuration required for the global view;
-named filtered calendars via `["calendar.NAME"]` in `queries.toml`. Features:
-- `/calendar` — "All records" month grid (default)
-- `/calendar/<name>` — named filtered view
-- Click a day to expand its records inline
-- Switcher dropdown to toggle between global and named views
-- Prev/next navigation across months
 
 ### Settings
 
@@ -1391,6 +1449,17 @@ ptos -y test -t td --delete --all
 | `--todo-contexts` | | List all contexts with counts |
 | `--todo-due [DAYS]` | | Show due/overdue todos (default: today+overdue, optional lookahead) |
 | `--todo-archive` | | Archive old done items to done.YYYY.txt |
+| `--cap TEXT...` | | Quick capture — writes `type=capture` record with text as note (`--date`/`--tag`/`--link` apply) |
+| `--pomo-log TASK MINUTES` | | Log a completed pomodoro session (`--date` applies) |
+| `--daily [DATE]` | | Show daily digest (default: yesterday; accepts `today`/`YYYY-MM-DD`) |
+| `--convert "WHERE..." TARGET [--set k=v ...] [--keep] [--keep-note] [--all]` | | Convert matched records to another type. Omit TARGET for type suggestion mode |
+| `--habits [NAME]` | | Show habit heatmap grid. No name = all configured habits |
+| `--calendars [NAME]` | | Show calendar month grid. No name = hint for the global view |
+| `--notes ACTION PATH [--name N] [--content C] [--force]` | | Browse/read/edit/delete notes (list, template, new, read, edit, delete, id) |
+| `--backlinks SUBJECT` | | Show what links to a `type:id` target |
+| `--find TEXT` | | Universal search across records, journal, todo, and notes (glob wildcards supported) |
+| `--link-ids` | | List all `type:id` targets in the system |
+| `--get-config KEY` / `--set-config KEY VALUE` | | Read/write config.toml values (dotted paths) |
 | `--doctor` | | Check PTOS installation health |
 | `--doctor --fix` | | Auto-fix issues found by --doctor |
 | `--check-schema` | | Validate schema.toml structure (missing types, bad refs, unknown field types) |

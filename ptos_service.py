@@ -2797,6 +2797,7 @@ def convert_draft(old_line, lineno, target_type, kv_overrides=None, tag_add=None
             raise PTOSError(f"Source and target types are the same ('{target_type}')")
 
         ov = dict(kv_overrides or {})
+        date_override_present = "date" in ov
         new_date_str = str(ov.pop("date", None) or d)
         note_override_present = "note" in ov
         note_override = ov.pop("note", None)
@@ -2845,7 +2846,19 @@ def convert_draft(old_line, lineno, target_type, kv_overrides=None, tag_add=None
         if note_override_present:
             final_note = note_override or None
         elif strip_note and note:
-            final_note = strip_scraped_note(note, scrape_convert_fields(note, target_type, schema))
+            scrape = scrape_convert_fields(note, target_type, schema)
+            final_note = strip_scraped_note(note, scrape)
+            scraped_date = scrape.get("fields", {}).get("date")
+            if scraped_date and not date_override_present:
+                new_date_str = scraped_date
+            scraped_tags = scrape.get("fields", {}).get("tag", [])
+            for t in (scraped_tags or []):
+                if t not in tags:
+                    tags.append(t)
+            if tags:
+                new_kv["tag"] = tags
+            else:
+                new_kv.pop("tag", None)
         else:
             final_note = note or None
 
@@ -2872,8 +2885,10 @@ def convert_draft(old_line, lineno, target_type, kv_overrides=None, tag_add=None
 
 def convert_record(filepath, old_line, lineno, target_type, kv_overrides=None, keep=False, tag_add=None, tag_del=None, strip_note=True):
     """Convert a record to the target_type: append the new record line, then
-    delete the source (unless keep=True). Refuses while required target fields
-    are unfilled. Returns dict with the new record's file/line info."""
+    delete the source (unless keep=True). When kept, capture records are marked
+    with ``converted=<target_type>`` so they are not converted again.
+    Refuses while required target fields are unfilled. Returns dict with the
+    new record's file/line info."""
     draft = convert_draft(old_line, lineno, target_type, kv_overrides,
                           tag_add=tag_add, tag_del=tag_del, strip_note=strip_note)
     if draft["missing_required"]:
@@ -2887,6 +2902,13 @@ def convert_record(filepath, old_line, lineno, target_type, kv_overrides=None, k
         raise PTOSError(str(e))
     if not keep:
         delete_record(filepath, old_line, lineno=lineno)
+    else:
+        try:
+            parsed = ptos.parse_line(old_line)
+            if parsed and parsed[1].get("type") == "capture":
+                _mark_converted(filepath, old_line, lineno, target_type)
+        except Exception:
+            pass
     _invalidate_history_cache()
     return {
         "ok": True,
@@ -3012,6 +3034,48 @@ _AMOUNT_CUR = re.compile(r"(?:[$€£₹]|\brs\b|\binr\b)\s*(\d+(?:[.,]\d+)?)", 
 _AMOUNT_PLAIN = re.compile(r"(\d+(?:[.,]\d+)?)")
 _CONNECTOR_WORDS = frozenset({"for", "with", "at", "on", "in", "to", "of", "and", "or", "the", "a", "an"})
 
+_WEEKDAY_NAMES = {
+    "monday": 0, "tuesday": 1, "wednesday": 2, "thursday": 3,
+    "friday": 4, "saturday": 5, "sunday": 6,
+}
+
+
+def _date_last_week(m=None):
+    today = ptos.today()
+    end = today - dt.timedelta(days=today.weekday() + 1)
+    return (end - dt.timedelta(days=6)).isoformat()
+
+
+def _date_this_week(m=None):
+    today = ptos.today()
+    start = today - dt.timedelta(days=today.weekday())
+    return start.isoformat()
+
+
+def _date_last_month(m=None):
+    today = ptos.today()
+    first = today.replace(day=1)
+    prev = first - dt.timedelta(days=1)
+    return prev.replace(day=1).isoformat()
+
+
+def _date_past_weekday(name):
+    today = ptos.today()
+    target = _WEEKDAY_NAMES[name.lower()]
+    diff = (today.weekday() - target) % 7
+    if diff == 0:
+        diff = 7
+    return (today - dt.timedelta(days=diff)).isoformat()
+
+
+def _date_next_weekday(name):
+    today = ptos.today()
+    target = _WEEKDAY_NAMES[name.lower()]
+    diff = (target - today.weekday()) % 7
+    if diff == 0:
+        diff = 7
+    return (today + dt.timedelta(days=diff)).isoformat()
+
 
 def scrape_convert_fields(note, rtype, schema=None):
     """Rule-based field scraper for conversion suggestions (advisory only).
@@ -3021,6 +3085,8 @@ def scrape_convert_fields(note, rtype, schema=None):
         (currency-prefixed rs/inr/$…/₹… is preferred over a bare number)
       - tokens matching the target's schema option values → that field
       - @tag / +tag / #tag tokens → tag list
+      - date expressions (today, yesterday, last week, last monday, etc.)
+        → the ``date`` field
     Plus conservative history_defaults: the most common past value of option
     fields the text didn't mention.
 
@@ -3088,6 +3154,30 @@ def scrape_convert_fields(note, rtype, schema=None):
     if tags:
         result["tag"] = tags
 
+    # date expressions → "date" field (only when the target type has a date)
+    if "date" in tnames or True:
+        _DATE_EXPRS = [
+            (r"last\s+week", _date_last_week),
+            (r"this\s+week", _date_this_week),
+            (r"last\s+month", _date_last_month),
+            (r"last\s+(monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
+             lambda m: _date_past_weekday(m.group(1))),
+            (r"(monday|tuesday|wednesday|thursday|friday|saturday|sunday)",
+             lambda m: _date_next_weekday(m.group(1))),
+            (r"yesterday", lambda m: (ptos.today() - dt.timedelta(days=1)).isoformat()),
+            (r"today", lambda m: ptos.today().isoformat()),
+            (r"\+(\d+)[dD]", lambda m: (ptos.today() + dt.timedelta(days=int(m.group(1)))).isoformat()),
+        ]
+        for pat, resolver in _DATE_EXPRS:
+            m = re.search(pat, ntext, re.IGNORECASE)
+            if m:
+                try:
+                    result["date"] = resolver(m)
+                    spans.add(m.span())
+                except Exception:
+                    pass
+                break
+
     # history defaults for option fields the text left alone
     history_defaults = {}
     try:
@@ -3111,8 +3201,9 @@ def strip_scraped_note(note, scrape):
 
     When a removal leaves two adjacent connector words (for/with/at/on/in/
     to/of/and/or/the/a/an), both are dropped so "for rs 69 with" becomes a
-    plain gap instead of "for with". Returns the reduced note (whitespace-
-    collapsed) or None when nothing remains.
+    plain gap instead of "for with".  A single orphan connector at the start
+    or end of the remaining text is also dropped.  Returns the reduced note
+    (whitespace-collapsed) or None when nothing remains.
     """
     if not note or not scrape:
         return note
@@ -3137,9 +3228,180 @@ def strip_scraped_note(note, scrape):
         if left_tok in _CONNECTOR_WORDS and right_tok in _CONNECTOR_WORDS:
             drop.add(li)
             drop.add(ri2)
+    changed = True
+    while changed:
+        changed = False
+        kept = [i for i in range(len(tokens))
+                if i not in removed and i not in drop]
+        if not kept:
+            break
+        first, last = kept[0], kept[-1]
+        if tokens[first][0].lower() in _CONNECTOR_WORDS:
+            drop.add(first)
+            changed = True
+        if tokens[last][0].lower() in _CONNECTOR_WORDS:
+            drop.add(last)
+            changed = True
     keep = [tokens[i][0] for i in range(len(tokens)) if i not in removed and i not in drop]
     reduced = " ".join(keep)
     return reduced or None
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# New type suggestion from free text (capture notes, etc.)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_ACTION_WORDS = {
+    "bought": "purchase", "purchased": "purchase", "paid": "purchase", "spent": "purchase",
+    "sold": "sale", "earned": "sale", "received": "sale",
+    "walked": "activity", "ran": "activity", "exercised": "activity", "swam": "activity",
+    "cycled": "activity", "jogged": "activity", "hiked": "activity",
+    "called": "call", "phoned": "call", "rang": "call",
+    "read": "study", "studied": "study", "learned": "study", "practised": "study",
+    "cooked": "meal", "ate": "meal", "drank": "meal", "had": "meal",
+    "met": "meeting", "attended": "meeting",
+    "wrote": "document", "drafted": "document", "sent": "document",
+    "delivered": "delivery", "shipped": "delivery",
+    "booked": "booking", "reserved": "booking", "ordered": "booking",
+    "repaired": "repair", "fixed": "repair", "serviced": "repair",
+}
+
+_PERSON_PREP = {"for", "with", "to", "from", "by", "of", "about"}
+
+_DURATION_RE = re.compile(
+    r"(\d+)\s*(minutes?|mins?|hours?|hrs?|days?|weeks?|months?)",
+    re.IGNORECASE,
+)
+
+
+def suggest_new_type(note, schema=None):
+    """Suggest a new record type from free text (e.g. a capture note).
+
+    Analyses the text for action words (→ type name), currency amounts
+    (→ amount field), @tags (→ category field), duration patterns
+    (→ duration field), and person references (→ person field).
+
+    Returns ``{name, fields: [{name, type, options?, required?}]}`` or None
+    when the text carries no useful signals or the suggested name already
+    exists in the schema.
+    """
+    if not note or not note.strip():
+        return None
+
+    try:
+        if schema is None:
+            schema = ptos.get_schema()
+    except Exception:
+        return None
+
+    existing = set(schema.get("types", {}).get("allowed", []))
+    tokens_raw = re.findall(r"[a-zA-Z0-9]+", note)
+    tokens_lower = [t.lower() for t in tokens_raw]
+
+    # ── 1. infer type name from action words ────────────────────────────
+    type_name = None
+    for tok in tokens_lower:
+        if tok in _ACTION_WORDS:
+            type_name = _ACTION_WORDS[tok]
+            break
+    if not type_name:
+        type_name = "note"
+
+    if type_name in existing:
+        return None
+
+    # ── 2. extract signals ──────────────────────────────────────────────
+    fields = []
+
+    # amount (currency-prefixed preferred, bare number fallback)
+    amt = _AMOUNT_CUR.search(note)
+    if not amt:
+        amt = _AMOUNT_PLAIN.search(note)
+    if amt:
+        fields.append({"name": "amount", "type": "int", "required": True})
+
+    # @tags → category field with options
+    tags = re.findall(r"@([a-zA-Z0-9_]+)", note)
+    unique_tags = list(dict.fromkeys(tags))
+    if unique_tags:
+        fields.append({"name": "category", "type": "string",
+                        "options": unique_tags})
+
+    # duration
+    dur = _DURATION_RE.search(note)
+    if dur:
+        fields.append({"name": "duration", "type": "int"})
+
+    # person (capitalised word after person-prepositions)
+    person = None
+    for i, tok in enumerate(tokens_raw):
+        if i > 0 and tokens_lower[i - 1] in _PERSON_PREP and tok[0:1].isupper():
+            # skip common false positives
+            if tok.lower() not in {"rs", "inr", "pm", "am", "the", "a"}:
+                person = tok
+                break
+    if person:
+        fields.append({"name": "person", "type": "string"})
+
+    # ── 3. build result ─────────────────────────────────────────────────
+    if not fields:
+        fields.append({"name": "note_text", "type": "string"})
+
+    return {"name": type_name, "fields": fields}
+
+
+def create_type_from_suggestion(spec):
+    """Create a new record type from a suggest_new_type() spec dict.
+
+    Returns ``{ok: True, type_name: "..."}`` or raises PTOSError.
+    """
+    name = spec["name"]
+    required = [f["name"] for f in spec["fields"] if f.get("required")]
+    try:
+        ptos.add_type(name, required)
+    except (SystemExit, Exception) as e:
+        raise PTOSError(str(e))
+    for f in spec["fields"]:
+        if f["name"] in required:
+            continue
+        try:
+            ptos.add_type_field(name, f["name"], f.get("type", "string"),
+                                f.get("options"))
+        except (SystemExit, Exception):
+            pass
+    _invalidate_history_cache()
+    return {"ok": True, "type_name": name}
+
+
+def create_and_convert(note, filepath, old_line, lineno, target_name,
+                       new_type_spec, keep=False, strip_note=True):
+    """Create a new type from a spec dict, then convert the source record.
+
+    The source is always kept (keep=True); ``convert_record`` handles marking
+    capture records with ``converted=<target_name>``.
+    """
+    create_type_from_suggestion(new_type_spec)
+    result = convert_record(filepath, old_line, lineno, target_name,
+                            keep=True, strip_note=strip_note)
+    return result
+
+
+def _mark_converted(filepath, old_line, lineno, target_type):
+    """Add ``converted=<target_type>`` to a record line in-place."""
+    line = old_line.rstrip()
+    token = f"converted={target_type}"
+    if token in line:
+        return
+    if "|" in line:
+        head, tail = line.split("|", 1)
+        new_line = head.rstrip() + " " + token + " |" + tail
+    else:
+        new_line = line + " " + token
+    try:
+        ptos.rewrite_line_in_file(filepath, old_line.rstrip("\n"),
+                                  new_line, lineno=lineno)
+    except Exception:
+        pass
 
 
 # ══════════════════════════════════════════════════════════════════════════════

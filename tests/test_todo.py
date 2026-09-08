@@ -1362,7 +1362,8 @@ class TestScrapeTodoText:
     def test_due_tomorrow(self):
         result = self._pp("call supplier due tomorrow")
         assert "due:" in result
-        assert "2026-09-08" in result
+        expected = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+        assert expected in result
 
     def test_due_to_friday(self):
         s = self._scrape("meeting due to friday")
@@ -1535,7 +1536,8 @@ class TestScrapeTodoText:
     def test_existing_due_colon(self):
         result = self._pp("meeting due:tomorrow")
         assert "due:" in result
-        assert "2026-09-08" in result
+        expected = (dt.date.today() + dt.timedelta(days=1)).isoformat()
+        assert expected in result
 
     def test_existing_pri(self):
         result = self._pp("pri:a call supplier")
