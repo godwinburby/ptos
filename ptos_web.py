@@ -2306,11 +2306,35 @@ def daily_view(date=None):
                                now=_now_str(), error=str(e), data=None,
                                prev=None, next=None)
     d = dt.date.fromisoformat(data["date"])
+
+    field_types = {}
+    projects = []
+    contexts = []
+    priority_labels = {}
+    try:
+        schema = svc.get_schema()
+        field_types = _build_field_types(schema)
+    except Exception:
+        pass
+    try:
+        projects = svc.get_todo_projects()
+        contexts = svc.get_todo_contexts()
+    except Exception:
+        pass
+    try:
+        todo_cfg = svc.get_config().get("todo", {})
+        priority_labels = todo_cfg.get("priority_labels", {})
+    except Exception:
+        pass
+
     return render_template("daily.html",
         tab="daily", title="Daily",
         now=_now_str(), data=data, error=None,
         prev_date=(d - dt.timedelta(days=1)).isoformat(),
-        next_date=(d + dt.timedelta(days=1)).isoformat())
+        next_date=(d + dt.timedelta(days=1)).isoformat(),
+        field_types=field_types,
+        projects=projects, contexts=contexts,
+        priority_labels=priority_labels)
 
 
 @app.route("/board")

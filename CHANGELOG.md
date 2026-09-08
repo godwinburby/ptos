@@ -5,6 +5,17 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-08
+
+### Daily digest page: interactive records, todos, and captures
+
+- **Records** (`daily.html`): the records section now uses the same `RecordTable` component as Home/Browse — sortable columns, inline edit (✎), convert (⇄), delete (✕), and bulk operations (checkbox + bulk delete/set). `daily_digest` in `ptos_service.py` now returns full parsed record dicts (`_filepath`, `_lineno`, `_line`) and a `columns` list alongside the existing `records_by_type` summary.
+- **Todos**: overdue/due todos render with the same row markup as the Todo page — priority badge (click to change), due badge (click to change), project/context chips, edit (✎) and delete (✕) buttons. Clicking the check circle completes the todo inline. The full edit modal (description, priority, due/threshold dates, recurrence, projects, contexts, id, links) is included.
+- **Captures**: each capture row has edit (✎) and delete (✕) buttons linking to the record editor.
+- **Shared todo CSS** moved from `todo.html` to `base.html` (`.todo-row`, `.todo-check`, `.todo-pri`, `.todo-body`, `.todo-desc`, `.todo-meta`, `.todo-due-badge`, `.todo-project`, `.todo-context`, `.todo-actions`, `.pomo-row-stop`, `.todo-row.pomo-*`) plus the modal overlay/box/chips CSS and field-popup CSS — reusable on any page without duplication.
+- **Route** (`ptos_web.py` `daily_view`): now passes `field_types`, `projects`, `contexts`, and `priority_labels` to the template.
+- **Tests**: all 1363 tests pass (20 digest tests unchanged — the new return keys are additive).
+
 ## 2026-09-07
 
 ### Converted field now added on any kept capture (not just new-type path)

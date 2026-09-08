@@ -2372,8 +2372,13 @@ def _digest_todo_dict(t):
         "description": t.description,
         "projects": list(t.projects),
         "contexts": list(t.contexts),
-        "due": t.due.isoformat() if t.due else "",
+        "due": t.due,
         "due_time": t.due_time or "",
+        "threshold": t.threshold,
+        "threshold_time": t.threshold_time or "",
+        "rec": t.rec or "",
+        "id": t.id or "",
+        "links": list(t.links) if t.links else [],
     }
 
 
@@ -2395,6 +2400,8 @@ def daily_digest(date=None):
         "date": date_str,
         "weekday": date_obj.strftime("%A"),
         "records_by_type": [],
+        "records": [],
+        "columns": [],
         "todos": {"overdue": [], "due": []},
         "captures": [],
         "journal": None,
@@ -2405,7 +2412,19 @@ def daily_digest(date=None):
         raw, _ = ptos.scan_records(date_obj, date_obj, [], None)
     except Exception:
         raw = []
+
+    loc_matches = []
+    try:
+        loc_matches = ptos.find_records_with_location(
+            [], search=None, start=date_obj, end=date_obj)
+    except Exception:
+        pass
+    line_to_filepath = {line: fp for fp, idx, line in loc_matches}
+    line_to_lineno = {line: idx for fp, idx, line in loc_matches}
+
     by_type = {}
+    col_seen = []
+    col_set = set()
     for line in raw:
         p = ptos.safe_parse_line(line)
         if not p:
@@ -2415,6 +2434,19 @@ def daily_digest(date=None):
         if isinstance(t, list):
             t = t[0] if t else ""
         by_type.setdefault(str(t) if t else "(none)", []).append(line)
+        row = _parse_record(line)
+        if not row:
+            continue
+        row["_line"] = line
+        row["_filepath"] = line_to_filepath.get(line, "")
+        row["_lineno"] = line_to_lineno.get(line, -1)
+        result["records"].append(row)
+        for k in row:
+            if k not in col_set and not k.startswith("_"):
+                col_seen.append(k)
+                col_set.add(k)
+    result["columns"] = col_seen
+
     for t in sorted(by_type, key=lambda x: (-len(by_type[x]), x)):
         samples = [_digest_sample(l) for l in by_type[t][:5]]
         result["records_by_type"].append({"type": t, "count": len(by_type[t]), "samples": samples})
@@ -2449,6 +2481,9 @@ def daily_digest(date=None):
             "line": line,
             "note": note,
             "sample": _digest_sample(line),
+            "_filepath": fp,
+            "_lineno": idx,
+            "_line": line,
         })
 
     jpath = ptos.journal_path(date_str)
