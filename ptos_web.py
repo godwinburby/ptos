@@ -28,13 +28,34 @@ log = logging.getLogger("ptos_web")
 
 @app.context_processor
 def _inject_globals():
-    cfg = svc.get_config()
+    try:
+        cfg = svc.get_config()
+    except Exception:
+        cfg = {}
     pomo = cfg.get("pomodoro", {})
     return {
         "frozen": bool(getattr(sys, "frozen", False)),
         "desktop_mode": os.environ.get("DESKTOP_MODE") == "1",
         "pomo_minutes": pomo.get("duration_minutes", 25),
         "pomo_log": bool(pomo.get("log_sessions", True)),
+        "more_menu_items": [
+            ("search",          "search",          "Search"),
+            ("due",             "due",             "Due List"),
+            ("journal",         "journal",         "Journal"),
+            ("notes",           "notes",           "Notes"),
+            ("board",           "board",           "Board"),
+            ("habits",          "habits",          "Habits"),
+            ("calendar",        "calendar",        "Calendar"),
+            ("daily",           "daily",           "Daily"),
+            ("thresholds",      "thresholds",      "Thresholds"),
+            ("query-builder",   "query_builder",   "Query Builder"),
+            ("schema-builder",  "schema_builder",  "Schema Builder"),
+            ("types",           "types",           "Record Types"),
+            ("backup",          "backup",          "Backup"),
+            ("editor",          "editor",          "Log Editor"),
+            ("lint",            "lint",            "Lint"),
+            ("settings",        "settings",        "Settings"),
+        ],
     }
 
 def _wants_json():
