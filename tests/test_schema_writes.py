@@ -365,6 +365,21 @@ class TestAddType:
         schema = self.saved[0]
         assert schema["type"]["book"]["fields"]["crop"] == {"type": "string"}
 
+    def test_succeeds_with_preexisting_issues_in_other_types(self, capsys):
+        broken = _valid_schema()
+        broken["types"]["allowed"].append("broken")
+        broken["type"]["broken"] = {"required": ["ghost"], "fields": {}}
+        monkeypatch_scope = None
+        import ptos as _ptos
+        orig = _ptos.get_schema
+        _ptos.get_schema = lambda: broken
+        try:
+            ptos.add_type("book")
+        finally:
+            _ptos.get_schema = orig
+        assert len(self.saved) == 1
+        assert "book" in self.saved[0]["types"]["allowed"]
+
 
 class TestAddTypeField:
     @pytest.fixture(autouse=True)
@@ -408,6 +423,20 @@ class TestAddTypeField:
         with pytest.raises(SystemExit):
             ptos.add_type_field("expense", "Bad Field", "string")
         assert self.saved == []
+
+    def test_succeeds_with_preexisting_issues_in_other_types(self, capsys):
+        broken = _valid_schema()
+        broken["types"]["allowed"].append("broken")
+        broken["type"]["broken"] = {"required": ["ghost"], "fields": {}}
+        import ptos as _ptos
+        orig = _ptos.get_schema
+        _ptos.get_schema = lambda: broken
+        try:
+            ptos.add_type_field("expense", "fuel", "string", ["diesel", "petrol"])
+        finally:
+            _ptos.get_schema = orig
+        assert len(self.saved) == 1
+        assert "fuel" in self.saved[0]["type"]["expense"]["fields"]
 
 
 class TestRemoveType:

@@ -3105,7 +3105,7 @@ def _history_vocab(rtype):
         _convert_vocab_add(vocab, tg)
     return vocab
 
-def suggest_convert_type(text, source_kv=None, use_history=True):
+def suggest_convert_type(text, source_kv=None, use_history=True, schema=None):
     """Rule-based offline type guesser for record conversion.
 
     Scores every schema type by how many of its distinguishing vocabulary
@@ -3120,7 +3120,8 @@ def suggest_convert_type(text, source_kv=None, use_history=True):
     """
     del source_kv
     try:
-        schema = ptos.get_schema()
+        if schema is None:
+            schema = ptos.get_schema()
     except Exception:
         return []
     tokens = _convert_word_tokens(text or "")
@@ -3218,9 +3219,10 @@ def scrape_convert_fields(note, rtype, schema=None):
         tdef    = schema.get("type", {}).get(rtype, {})
         tfields = tdef.get("fields", {})
         tnames  = set(tfields) | set(tdef.get("required", [])) | set(tdef.get("conditions", {}))
+        has_tags = bool(tdef.get("tags"))
     except Exception:
         return {"fields": {}, "history_defaults": {}, "strip_spans": []}
-    if not tnames:
+    if not tnames and not has_tags:
         return {"fields": {}, "history_defaults": {}, "strip_spans": []}
 
     result = {}
@@ -3268,6 +3270,40 @@ def scrape_convert_fields(note, rtype, schema=None):
     for m in re.finditer(r"(?:[@+#])[A-Za-z0-9_]+", ntext):
         tags.append(m.group(0)[1:].replace("_", " "))
         spans.add(m.span())
+
+    # bare words matching known tag options → tag list
+    # Only the last word of the note, if it matches a known tag option
+    # AND is preceded by a connector/preposition (for, with, on, etc.).
+    # This catches "spent 200 on snacks" but not "bought coffee" where
+    # "coffee" is the thing being described, not a category tag.
+    known_tags = set()
+    tag_section = tdef.get("tags", {})
+    for tag_def in tag_section.values():
+        if not isinstance(tag_def, dict):
+            continue
+        sub = tag_def.get("options") or tag_def
+        if isinstance(sub, dict):
+            for opts in sub.values():
+                if isinstance(opts, list):
+                    for o in opts:
+                        known_tags.add(str(o).lower().replace(" ", "_"))
+    if known_tags:
+        option_words = set(option_map.keys())
+        all_tokens = list(re.finditer(r"[^\s|]+", ntext))
+        if len(all_tokens) >= 2:
+            last = all_tokens[-1]
+            prev = all_tokens[-2]
+            raw = last.group(0)
+            token_l = re.sub(r"[^a-z0-9_]", "", raw.lower())
+            prev_l = re.sub(r"[^a-z0-9_]", "", prev.group(0).lower())
+            if (token_l and token_l not in result and last.span() not in spans
+                    and token_l in known_tags and token_l not in option_words
+                    and prev_l in _CONNECTOR_WORDS):
+                tags.append(token_l.replace("_", " "))
+                # NOTE: no spans.add() — bare word tags are prefilled only,
+                # not stripped from the note (the user may have meant it as
+                # prose, not an explicit tag).
+
     if tags:
         result["tag"] = tags
 
@@ -3415,6 +3451,18 @@ def suggest_new_type(note, schema=None):
     tokens_raw = re.findall(r"[a-zA-Z0-9]+", note)
     tokens_lower = [t.lower() for t in tokens_raw]
 
+    # ── 0. cross-check: does an existing type plausibly cover this? ───
+    # The convert gate is 50% — if suggest_convert_type found a match
+    # at or above that, don't offer to create a new type (the caller
+    # chose to ignore a strong existing match). But if convert only
+    # found weak matches (<50%), the new-type path is free to run.
+    try:
+        existing_check = suggest_convert_type(note, use_history=True, schema=schema)
+        if existing_check and existing_check[0]["pct"] >= 50:
+            return None
+    except Exception:
+        pass
+
     # ── 1. infer type name from action words ────────────────────────────
     type_name = None
     for tok in tokens_lower:
@@ -3484,23 +3532,72 @@ def create_type_from_suggestion(spec):
         try:
             ptos.add_type_field(name, f["name"], f.get("type", "string"),
                                 f.get("options"))
-        except (SystemExit, Exception):
-            pass
+        except (SystemExit, Exception) as e:
+            raise PTOSError(str(e))
     _invalidate_history_cache()
     return {"ok": True, "type_name": name}
 
 
 def create_and_convert(note, filepath, old_line, lineno, target_name,
-                       new_type_spec, keep=False, strip_note=True):
+                       new_type_spec, keep=False, strip_note=True,
+                       kv_overrides=None):
     """Create a new type from a spec dict, then convert the source record.
 
     The source is always kept (keep=True); ``convert_record`` handles marking
     capture records with ``converted=<target_name>``.
+    If the type already exists (e.g. from a prior failed attempt), creation is
+    skipped and the conversion proceeds directly.
     """
-    create_type_from_suggestion(new_type_spec)
+    try:
+        create_type_from_suggestion(new_type_spec)
+    except PTOSError as e:
+        if "already exists" not in str(e):
+            raise
     result = convert_record(filepath, old_line, lineno, target_name,
+                            kv_overrides=kv_overrides,
                             keep=True, strip_note=strip_note)
     return result
+
+
+def get_type_record_count(type_name):
+    """Return the number of records using the given type."""
+    recs = ptos.find_records_with_location([f"type={type_name}"])
+    return len(recs)
+
+
+def create_type_from_form(type_name, fields, original_name=None):
+    """Create or update a record type from web form data.
+    fields: list of {name, type, required, options}.
+    If original_name is set, this is an edit (rename + field replace).
+    Raises PTOSError on error."""
+    type_name = type_name.strip()
+    if not type_name:
+        raise PTOSError("Type name is required")
+    if not re.match(r"^[a-z][a-z0-9_]*$", type_name):
+        raise PTOSError("Type name: lowercase letters, digits, underscores only")
+
+    required = [f["name"] for f in fields if f.get("required")]
+    fields_dict = {}
+    for f in fields:
+        fname = f.get("name", "").strip()
+        if not fname:
+            continue
+        fdef = {"type": f.get("type", "string")}
+        opts = f.get("options")
+        if opts:
+            fdef["options"] = list(opts)
+        fields_dict[fname] = fdef
+
+    if original_name:
+        if original_name != type_name:
+            ptos.rename_type(original_name, type_name)
+        ptos.replace_type_fields(type_name, required, fields_dict)
+    else:
+        ptos.add_type(type_name, required)
+        for fname, fdef in fields_dict.items():
+            if fname not in (required or []):
+                ptos.add_type_field(type_name, fname, fdef.get("type", "string"),
+                                    fdef.get("options"))
 
 
 def _mark_converted(filepath, old_line, lineno, target_type):

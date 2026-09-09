@@ -5,7 +5,46 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-09
+
+### Record Types management page
+
+- **`/types` page** (`web_templates/types.html`, `ptos_web.py`): new dedicated page for creating, editing, and deleting record types. Horizontal scrollable chip bar for type selection, inline field editor with drag-and-drop reordering via shared `drag.js`, option chips with drag-and-drop, live record line preview, inline name validation. Edit mode pre-fills fields from existing type definition. Delete shows record count with warning and confirmation prompt.
+- **`rename_type()` / `replace_type_fields()`** (`ptos.py`): engine functions for type renaming and field replacement, used by the types page.
+- **`create_type_from_form()` / `get_type_record_count()`** (`ptos_service.py`): service functions that handle form-based type creation (with optional rename) and record count queries.
+- **`edit_get` redirect** (`ptos_web.py`): when a convert page is opened with `target_type=X` and X is not in `allowed`, redirects to `/types?name=X&return_to=...` instead of silently falling back to a different type.
+- **Inline new-type-card removed from `edit.html`**: the "Create & Convert" card on the convert page has been replaced by the dedicated `/types` page. The `doCreateAndConvert` JS function and card HTML are removed; `_convert_render_kwargs` no longer calls `suggest_new_type`.
+- **Nav links**: "Types" in sidebar (`base.html`), "Record Types" card with "+ New type" link on home page (`home.html`), "Don't see your type? Create one" link on add page (`add.html`), orange types icon (`icons/types.html`).
+
+### Fix create-and-convert dead end when type already exists
+
+- **`create_and_convert`** (`ptos_service.py`): if the target type already exists (e.g. from a prior failed attempt where the type was created but conversion failed), creation is now skipped and conversion proceeds directly — the user is no longer stuck with "Type already exists". Also accepts `kv_overrides` and forwards them to `convert_record` so form field values reach the conversion step.
+- **`edit_post`** (`ptos_web.py`): passes `kv_overrides=ov` to `create_and_convert` so user-entered field values are available during conversion.
+- **`edit_post`** (`ptos_web.py`): when `create_and_convert` fails with "Convert blocked" (missing required fields), redirects to the conversion page (`/edit?convert=1&target_type=NAME`) instead of showing an error — the type was already created, so the conversion page can render its fields and let the user fill them in manually.
+
+### Fix create-and-convert failing on pre-existing schema issues
+
+- **`add_type` / `add_type_field`** (`ptos.py`): validation via `validate_schema_structure` previously checked the **entire** schema — a pre-existing issue in any type (e.g. missing field definitions) would block adding a new type or field. Now only validates issues mentioning the new type name, so pre-existing problems don't gate new type creation.
+- **`doCreateAndConvert` JS** (`edit.html`): on server error, the handler did `window.location.reload()` which discarded the error message. Now parses the response HTML for the `.msg` element and shows it in an alert so users see why the operation failed.
+- **Schema data fix** (`schema.toml` in user data): added missing `[type.mgm.fields.coupon_code]` and `[type.mgm.fields.issued_to]` definitions that caused `validate_schema_structure` to fail.
+
+### Fix create-and-convert silently losing fields
+
+- **`create_type_from_suggestion`** (`ptos_service.py`): the `except (SystemExit, Exception): pass` around `add_type_field` was silently swallowing errors — if any field failed to add, the type was left partially created with no indication to the user. Now re-raises as `PTOSError` so the entire create-and-convert operation fails atomically with a clear error message.
+- **Error display** (`ptos_web.py`): the `edit_post` catch block for `create_and_convert` was passing `error=str(e)` but `_render_edit` expects `msg=`/`msg_type=` — the error went into `**extra` and was discarded. Fixed to `msg=str(e), msg_type="error"` so users actually see why the operation failed.
+
 ## 2026-09-08
+
+### Bare word tag scraping in convert note scrubber
+
+- **Field scraper** (`ptos_service.py`, `scrape_convert_fields`): after the existing `@tag`/`+tag`/`#tag` detection, bare words matching known tag option values are now also scraped as tags — but only when the word is the **last token** of the note **and** preceded by a connector/preposition (`for`, `with`, `on`, `in`, `at`, `to`, `of`, etc.). This catches the natural pattern "spent 200 on **snacks**" without false positives in the middle of a note. Bare-word-scraped tags are **prefill only** — they are NOT added to `strip_spans`, so the note keeps the word (the user may have meant it as prose, not an explicit tag). Only explicit `@tag`/`+tag`/`#tag` tokens get stripped. The connector check uses `_CONNECTOR_WORDS`. Words already matched by the option-value scraper are excluded. Early-return gate also loosened: the scraper now runs when the schema has tags defined even if no field/required/conditions are defined. 2 new tests: `test_bare_word_tag_after_connector` and `test_bare_word_tag_no_connector_no_match`.
+
+### New-type suggestion fixes (cross-check, editable form, safe non-interactive)
+
+- **Cross-check** (`ptos_service.py`): `suggest_new_type()` now calls `suggest_convert_type(note, use_history=True, schema=schema)` before offering a new type. If the convert guesser scores ≥50%, the new-type suggestion is suppressed — the existing type is a plausible match. The `schema` parameter was added to `suggest_convert_type()` so it can use the caller's schema (test-isolated) instead of always reading from `ptos.get_schema()`. Threshold is tunable (spec says 30% starting point, raised to 50% to match the convert gate).
+- **Editable form** (`edit.html`): the static "Suggested: purchase — amount (int)" card is now an editable form: text input for type name, rows per field with name/type dropdown/required checkbox/remove button, "+ Add field" button. JS handler collects edited values and sends `new_type_name` + `new_type_fields` JSON to the server. Server-side `edit_post` reads the submitted form data instead of re-running `suggest_new_type()`.
+- **CLI prompts** (`ptos_cli.py`): after showing the suggestion, prompts `Type name [suggested]:` (accept empty to keep), then per-field `Keep field 'name' (type)? [Y/n]`, then the existing `Create type and convert? [y/N]`. Non-interactive still skips with a message (Issue 3 from spec).
+- **Tests**: 117 convert tests pass. All 1377 tests pass.
 
 ### Habits: click-to-toggle day on calendar heatmap
 

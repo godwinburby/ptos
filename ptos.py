@@ -3814,7 +3814,7 @@ def _save_schema(schema):
 
 def add_type(name, required=None):
     """Add a new record type to schema.toml. sys.exit on invalid name or
-    a schema that would fail validate_schema_structure."""
+    a schema that would fail validate_schema_structure for the new type."""
     name = name.strip()
     if not name:
         sys.exit("Error: Type name cannot be empty.")
@@ -3838,8 +3838,9 @@ def add_type(name, required=None):
     schema.setdefault("type", {})[name] = type_entry
 
     issues = validate_schema_structure(schema)
-    if issues:
-        sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in issues))
+    new_issues = [i for i in issues if f"'{name}'" in i]
+    if new_issues:
+        sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in new_issues))
     _save_schema(schema)
     print(f"Added type '{name}' (required: {', '.join(req) if req else 'none'}).")
 
@@ -3847,7 +3848,7 @@ def add_type(name, required=None):
 def add_type_field(type_name, field_name, field_type="string", options=None):
     """Add a field to a record type in schema.toml.
     options is an optional flat list of valid values.
-    sys.exit on invalid input or a schema that would fail validation."""
+    sys.exit on invalid input or a schema that would fail validation for the type."""
     valid = {"int", "string", "datetime", "bool"}
     if field_type not in valid:
         sys.exit("Error: Unknown field type '%s' (expected %s)."
@@ -3870,8 +3871,9 @@ def add_type_field(type_name, field_name, field_type="string", options=None):
     fields[field_name] = field_def
 
     issues = validate_schema_structure(schema)
-    if issues:
-        sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in issues))
+    new_issues = [i for i in issues if f"'{type_name}'" in i]
+    if new_issues:
+        sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in new_issues))
     _save_schema(schema)
     print(f"Added field '{field_name}' (type={field_type}) to type '{type_name}'.")
 
@@ -3899,6 +3901,81 @@ def remove_type(name):
               f"(id set on {ids_count} of them); they are not modified but "
               "will fail schema validation from now on.")
     print(f"Removed type '{name}'.")
+
+
+def rename_type(old_name, new_name):
+    """Rename a record type in schema.toml. sys.exit on invalid input,
+    if the old name doesn't exist, or the new name is already taken."""
+    old_name = old_name.strip()
+    new_name = new_name.strip()
+    if not new_name:
+        sys.exit("Error: Type name cannot be empty.")
+    if not re.match(r"^[a-z][a-z0-9_]*$", new_name):
+        sys.exit("Error: Invalid type name '%s' — use lowercase letters, digits, underscores." % new_name)
+
+    schema = get_schema()
+    types_allowed = schema.setdefault("types", {}).setdefault("allowed", [])
+    if old_name not in types_allowed:
+        sys.exit(f"Error: Type '{old_name}' not found.")
+    if new_name in types_allowed:
+        sys.exit(f"Error: Type '{new_name}' already exists.")
+
+    idx = types_allowed.index(old_name)
+    types_allowed[idx] = new_name
+    type_def = schema.setdefault("type", {}).pop(old_name, {})
+    schema["type"][new_name] = type_def
+
+    issues = validate_schema_structure(schema)
+    new_issues = [i for i in issues if f"'{new_name}'" in i]
+    if new_issues:
+        sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in new_issues))
+    _save_schema(schema)
+    recs = find_records_with_location([f"type={old_name}"])
+    if recs:
+        print(f"{len(recs)} existing records still use type '{old_name}'; "
+              "they are not modified.")
+    print(f"Renamed type '{old_name}' → '{new_name}'.")
+
+
+def replace_type_fields(type_name, required, fields_dict):
+    """Replace all field definitions and required list for a type atomically.
+    sys.exit on invalid input or schema that would fail validation."""
+    type_name = type_name.strip()
+    valid_field_types = {"int", "string", "datetime", "bool"}
+    schema = get_schema()
+    types_allowed = schema.setdefault("types", {}).setdefault("allowed", [])
+    if type_name not in types_allowed:
+        sys.exit(f"Error: Type '{type_name}' not found.")
+
+    req = [r.strip() for r in (required or []) if r.strip()]
+    for r in req:
+        if not re.match(r"^[a-z][a-z0-9_]*$", r):
+            sys.exit(f"Error: Invalid required field name '{r}'.")
+
+    type_def = schema["type"].setdefault(type_name, {})
+    type_def["required"] = req
+    new_fields = {}
+    for fname, fdef in (fields_dict or {}).items():
+        fname = fname.strip()
+        if not fname or not re.match(r"^[a-z][a-z0-9_]*$", fname):
+            sys.exit(f"Error: Invalid field name '{fname}'.")
+        ft = fdef.get("type", "string")
+        if ft not in valid_field_types:
+            sys.exit(f"Error: Unknown field type '{ft}' for field '{fname}'.")
+        entry = {"type": ft}
+        opts = fdef.get("options")
+        if opts:
+            entry["options"] = list(opts)
+        new_fields[fname] = entry
+    type_def["fields"] = new_fields
+
+    issues = validate_schema_structure(schema)
+    new_issues = [i for i in issues if f"'{type_name}'" in i]
+    if new_issues:
+        sys.exit("Schema would be invalid:\n  " + "\n".join(f"  {i}" for i in new_issues))
+    _save_schema(schema)
+    print(f"Updated type '{type_name}' (required: {', '.join(req) if req else 'none'}, "
+          f"fields: {', '.join(new_fields.keys()) if new_fields else 'none'}).")
 
 
 def add_field_option(type_name, field_name, new_option, option_source,
