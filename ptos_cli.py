@@ -903,9 +903,21 @@ def run_convert(convert_args, filters, start, end, set_args, keep, do_all, keep_
                 print(f"\nNo existing type matches. Suggested new type:\n")
                 print(f"  {new_sug['name']}  —  {fields_str}\n")
                 if not sys.stdin.isatty():
-                    confirm = "y"
-                else:
-                    confirm = _cli_input("Create type and convert? [y/N] ").strip().lower()
+                    print("Skipping new-type creation: requires interactive "
+                          "confirmation (not available in a non-interactive "
+                          "context). Capture left unconverted for later review.")
+                    return
+                name_input = _cli_input(
+                    f"Type name [{new_sug['name']}]: ").strip()
+                if name_input:
+                    new_sug["name"] = name_input
+                for f in list(new_sug["fields"]):
+                    keep_field = _cli_input(
+                        f"  Keep field '{f['name']}' ({f['type']})? [Y/n] "
+                    ).strip().lower()
+                    if keep_field == "n":
+                        new_sug["fields"].remove(f)
+                confirm = _cli_input("Create type and convert? [y/N] ").strip().lower()
                 if confirm == "y":
                     for mfilepath, mlineno, mline in matches:
                         try:

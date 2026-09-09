@@ -212,6 +212,28 @@ class TestScrapeConvertFields:
         res = svc.scrape_convert_fields("+groceries #urgent", "expense")
         assert res["fields"]["tag"] == ["groceries", "urgent"]
 
+    def test_bare_word_tag_after_connector(self):
+        _clean_cache()
+        schema = {"types": {"allowed": ["expense"]},
+                  "fields": {},
+                  "type": {"expense": {"required": [],
+                          "tags": {"category": {"options": {"food": ["snacks", "lunch"]}}}}}}
+        res = svc.scrape_convert_fields("spent 200 on snacks", "expense", schema)
+        assert "snacks" in res["fields"].get("tag", [])
+        # bare word tags are prefilled only — NOT stripped from the note
+        assert all("snacks" not in note_text
+                   for s, e in res["strip_spans"]
+                   for note_text in ["spent 200 on snacks"[s:e]])
+
+    def test_bare_word_tag_no_connector_no_match(self):
+        _clean_cache()
+        schema = {"types": {"allowed": ["expense"]},
+                  "fields": {},
+                  "type": {"expense": {"required": [],
+                          "tags": {"category": {"options": {"food": ["snacks"]}}}}}}
+        res = svc.scrape_convert_fields("bought snacks", "expense", schema)
+        assert "tag" not in res["fields"]
+
     def test_fields_only_filled_when_found(self):
         _clean_cache()
         res = svc.scrape_convert_fields("totally unrelated words", "expense")

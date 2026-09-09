@@ -1,0 +1,311 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .type-chip-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:14px; align-items:center; }
+  .type-chip {
+    padding:6px 14px; border-radius:8px; font-size:13px; font-weight:600;
+    background:var(--card); border:1.5px solid var(--border); color:var(--text);
+    cursor:pointer; transition:all 0.15s;
+  }
+  .type-chip:hover { border-color:var(--accent); color:var(--accent); }
+  .type-chip.active { background:var(--accent-lt); border-color:var(--accent); color:var(--accent); }
+  .type-chip.new-chip { border-style:dashed; color:var(--sub); }
+  .type-chip.new-chip:hover { border-color:var(--accent); color:var(--accent); }
+  .field-row {
+    display:flex; gap:6px; align-items:center; padding:8px 10px; margin-bottom:6px;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    flex-wrap:wrap;
+  }
+  .field-row.dragging { opacity:.4; }
+  .field-row.drag-over { border-color:var(--accent); background:var(--accent-lt); }
+  .field-grip {
+    cursor:grab; color:var(--sub); font-size:14px; padding:0 2px; user-select:none;
+    flex-shrink:0;
+  }
+  .field-grip:active { cursor:grabbing; }
+  .field-name { flex:1; min-width:100px; }
+  .field-name input {
+    width:100%; padding:5px 8px; border:1px solid var(--border); border-radius:6px;
+    font-size:13px; background:var(--bg); color:var(--fg); box-sizing:border-box;
+  }
+  .field-type select {
+    padding:5px 6px; border:1px solid var(--border); border-radius:6px;
+    font-size:12px; background:var(--bg); color:var(--fg);
+  }
+  .field-req {
+    display:flex; align-items:center; gap:4px; font-size:12px; color:var(--sub);
+    white-space:nowrap;
+  }
+  .field-req input[type="checkbox"] { accent-color:var(--accent); }
+  .field-opts { flex:1; min-width:120px; display:flex; flex-wrap:wrap; gap:4px; align-items:center; }
+  .field-opts input {
+    padding:4px 6px; border:1px solid var(--border); border-radius:6px;
+    font-size:12px; background:var(--bg); color:var(--fg); width:100px;
+  }
+  .opt-chip {
+    display:inline-flex; align-items:center; gap:3px;
+    padding:3px 8px; border-radius:12px; font-size:12px; font-weight:600;
+    background:var(--accent-lt); color:var(--accent); border:1px solid var(--accent);
+  }
+  .opt-chip button {
+    background:none; border:none; color:var(--accent); cursor:pointer;
+    font-size:12px; padding:0; line-height:1; font-weight:700;
+  }
+  .opt-chip[draggable] { cursor:grab; }
+  .opt-chip.dragging { opacity:.4; }
+  .opt-chip.drag-over { background:color-mix(in srgb,var(--accent) 25%,transparent); }
+  .field-remove {
+    background:none; border:none; color:var(--error); cursor:pointer;
+    font-size:16px; padding:0 2px; flex-shrink:0;
+  }
+  .add-field-btn {
+    display:block; width:100%; padding:8px; border:2px dashed var(--border);
+    border-radius:10px; background:none; color:var(--sub); font-size:13px;
+    font-weight:600; cursor:pointer; text-align:center; margin-top:6px;
+  }
+  .add-field-btn:hover { border-color:var(--accent); color:var(--accent); }
+  .preview-box {
+    background:var(--bg); border:1px solid var(--border); border-radius:8px;
+    padding:10px 14px; font-family:monospace; font-size:12px; color:var(--sub);
+    word-break:break-all; margin-top:12px;
+  }
+  .preview-label { font-size:11px; font-weight:600; color:var(--sub); margin-bottom:4px; }
+  .name-status { font-size:12px; font-weight:600; margin-left:8px; }
+  .name-status.ok { color:var(--success); }
+  .name-status.err { color:var(--error); }
+  .adv-link {
+    display:block; padding:12px 16px; border:1px solid var(--border); border-radius:10px;
+    background:var(--card); text-decoration:none; color:var(--sub); font-size:13px;
+    margin-top:16px; text-align:center;
+  }
+  .adv-link:hover { border-color:var(--accent); color:var(--accent); }
+</style>
+
+<script src="/static/js/drag.js"></script>
+<script>
+var _existingTypes = {{ types | tojson }};
+var _editMode = {{ 'true' if edit_type else 'false' }};
+var _editOriginal = {{ edit_type | tojson }};
+var _fields = {{ fields_json | safe }};
+var _returnTo = {{ return_to | tojson }};
+var _recordCount = {{ record_count }};
+
+function renderFieldRows() {
+  var c = document.getElementById("fields-container");
+  c.innerHTML = "";
+  _fields.forEach(function(f, i) {
+    var row = document.createElement("div");
+    row.className = "field-row";
+    row.dataset.index = i;
+    var isStr = f.type === "string";
+    var optsHtml = "";
+    if (isStr && f.options && f.options.length) {
+      optsHtml = f.options.map(function(o, oi) {
+        return '<span class="opt-chip" data-fi="'+i+'" data-oi="'+oi+'">'+esc(o)+' <button onclick="removeOpt('+i+','+oi+')">&times;</button></span>';
+      }).join("");
+    }
+    row.innerHTML =
+      '<span class="field-grip" title="Drag to reorder">⠿</span>' +
+      '<div class="field-name"><input type="text" value="'+esc(f.name)+'" placeholder="field name" oninput="_fields['+i+'].name=this.value;updatePreview()"></div>' +
+      '<div class="field-type"><select onchange="_fields['+i+'].type=this.value;renderFieldRows()">' +
+        '<option value="string"'+(f.type==="string"?" selected":"")+'>string</option>' +
+        '<option value="int"'+(f.type==="int"?" selected":"")+'>int</option>' +
+        '<option value="datetime"'+(f.type==="datetime"?" selected":"")+'>datetime</option>' +
+        '<option value="bool"'+(f.type==="bool"?" selected":"")+'>bool</option>' +
+      '</select></div>' +
+      '<label class="field-req"><input type="checkbox"'+(f.required?" checked":'')+' onchange="_fields['+i+'].required=this.checked"> req</label>' +
+      (isStr ? '<div class="field-opts" id="opts-'+i+'">'+optsHtml+
+        '<input type="text" placeholder="add option" onkeydown="if(event.key===\'Enter\'){addOpt('+i+',this);event.preventDefault()}">' :
+        '') +
+      '</div>' +
+      '<button class="field-remove" onclick="removeField('+i+')" title="Remove field">&times;</button>';
+    c.appendChild(row);
+    _makeDraggable(row, _fields, i, renderFieldRows, ".field-row");
+  });
+  updatePreview();
+  renderTypeChips();
+}
+
+function renderTypeChips() {
+  var bar = document.getElementById("type-chips");
+  if (!bar) return;
+  var html = "";
+  _existingTypes.forEach(function(t) {
+    var cls = "type-chip" + (t === _editOriginal ? " active" : "");
+    html += '<span class="'+cls+'" onclick="loadType(\''+t+'\')">'+esc(t)+'</span>';
+  });
+  html += '<span class="type-chip new-chip" onclick="newType()">+ New</span>';
+  bar.innerHTML = html;
+}
+
+function loadType(name) {
+  window.location.href = "/types?edit=" + name + (_returnTo ? "&return_to=" + encodeURIComponent(_returnTo) : "");
+}
+
+function newType() {
+  window.location.href = "/types" + (_returnTo ? "?return_to=" + encodeURIComponent(_returnTo) : "");
+}
+
+function addField() {
+  _fields.push({name:"", type:"string", required:false, options:[]});
+  renderFieldRows();
+  var rows = document.querySelectorAll(".field-row");
+  if (rows.length) rows[rows.length-1].querySelector(".field-name input").focus();
+}
+
+function removeField(i) {
+  _fields.splice(i, 1);
+  renderFieldRows();
+}
+
+function addOpt(fi, inputEl) {
+  var v = inputEl.value.trim().replace(/\s+/g, "_");
+  if (!v) return;
+  if (!_fields[fi].options) _fields[fi].options = [];
+  _fields[fi].options.push(v);
+  inputEl.value = "";
+  renderFieldRows();
+}
+
+function removeOpt(fi, oi) {
+  if (_fields[fi].options) _fields[fi].options.splice(oi, 1);
+  renderFieldRows();
+}
+
+function updatePreview() {
+  var name = document.getElementById("type-name").value.trim();
+  var preview = document.getElementById("preview-line");
+  if (!name || !_fields.length) {
+    preview.textContent = "Type a name and add fields to see a preview";
+    return;
+  }
+  var parts = ["type=" + name];
+  _fields.forEach(function(f) {
+    if (!f.name) return;
+    var sample = f.type === "int" ? "0" : f.type === "datetime" ? "2026-09-09" : f.type === "bool" ? "true" : (f.options && f.options.length ? f.options[0] : f.name);
+    parts.push(f.name + "=" + sample.replace(/\s+/g, "-"));
+  });
+  var d = new Date();
+  var date = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  preview.textContent = date + " " + parts.join(" ");
+}
+
+function validateName() {
+  var v = document.getElementById("type-name").value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  var el = document.getElementById("name-status");
+  if (!v) { el.textContent = ""; el.className = "name-status"; return; }
+  if (!/^[a-z][a-z0-9_]*$/.test(v)) {
+    el.textContent = "lowercase, digits, underscores only";
+    el.className = "name-status err";
+    return;
+  }
+  var isEdit = _editMode && v === _editOriginal;
+  if (!isEdit && _existingTypes.indexOf(v) !== -1) {
+    el.textContent = "already exists";
+    el.className = "name-status err";
+    return;
+  }
+  el.textContent = "✓ available";
+  el.className = "name-status ok";
+}
+
+function submitForm() {
+  var name = document.getElementById("type-name").value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name) { alert("Type name is required"); return; }
+  if (!/^[a-z][a-z0-9_]*$/.test(name)) { alert("Type name: lowercase letters, digits, underscores only"); return; }
+  var isEdit = _editMode && name === _editOriginal;
+  if (!isEdit && _existingTypes.indexOf(name) !== -1) { alert("Type '" + name + "' already exists"); return; }
+  var validFields = _fields.filter(function(f) { return f.name.trim(); });
+  if (!validFields.length) { alert("Add at least one field"); return; }
+  document.getElementById("submit-original").value = _editOriginal || "";
+  document.getElementById("submit-fields").value = JSON.stringify(validFields);
+  document.getElementById("submit-return").value = _returnTo || (_editMode ? "/types?edit=" + name : "/add?type=" + name);
+  document.getElementById("types-form").submit();
+}
+
+function deleteType() {
+  if (!_editOriginal) return;
+  var msg = "Delete type '" + _editOriginal + "'?";
+  if (_recordCount > 0) {
+    msg += "\n\n" + _recordCount + " record" + (_recordCount > 1 ? "s" : "") + " use this type. They will NOT be deleted, but will fail schema validation from now on.";
+  }
+  msg += "\n\nAre you sure?";
+  if (!confirm(msg)) return;
+  document.getElementById("delete-name").value = _editOriginal;
+  document.getElementById("delete-form").submit();
+}
+
+function esc(s) { var d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+</script>
+
+<div class="page-title">Record Types</div>
+
+{% if msg %}
+<div class="msg msg-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+
+<!-- Type selector chips -->
+<div class="type-chip-bar" id="type-chips"></div>
+
+<!-- Main form -->
+<form method="POST" action="/types" id="types-form">
+  <input type="hidden" name="original_name" id="submit-original" value="{{ edit_type or '' }}">
+  <input type="hidden" name="fields_json" id="submit-fields" value="">
+  <input type="hidden" name="return_to" id="submit-return" value="{{ return_to or '' }}">
+
+  <div class="card" style="margin-bottom:14px;">
+    <label style="font-size:12px;color:var(--sub);font-weight:600;">TYPE NAME</label>
+    <div style="display:flex;align-items:center;flex-wrap:wrap;">
+      <input type="text" id="type-name" name="type_name"
+             value="{{ edit_type or prefilled_name or '' }}"
+             placeholder="e.g. bible, meditation, workout"
+             oninput="this.value=this.value.toLowerCase().replace(/[^a-z0-9_]/g,'_');validateName();updatePreview()"
+             style="font-size:16px;font-weight:700;padding:6px 10px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg);flex:1;min-width:160px;">
+      <span class="name-status" id="name-status"></span>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:14px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+      <label style="font-size:12px;color:var(--sub);font-weight:600;">FIELDS <span style="font-weight:400;">(drag ⠿ to reorder)</span></label>
+    </div>
+    <div id="fields-container"></div>
+    <button type="button" class="add-field-btn" onclick="addField()">+ Add field</button>
+  </div>
+
+  <!-- Preview -->
+  <div class="card" style="margin-bottom:14px;">
+    <div class="preview-label">RECORD LINE PREVIEW</div>
+    <div class="preview-box" id="preview-line">Type a name and add fields to see a preview</div>
+  </div>
+
+  <!-- Actions -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;">
+    <button type="button" class="btn btn-primary" onclick="submitForm()">
+      {% if edit_type %}Save Changes{% else %}Create{% endif %}
+    </button>
+    {% if edit_type %}
+    <button type="button" class="btn btn-ghost" style="color:var(--error);border-color:var(--error);"
+            onclick="deleteType()">
+      Delete Type{% if record_count %} ({{ record_count }} record{{ 's' if record_count != 1 }}){% endif %}
+    </button>
+    {% endif %}
+  </div>
+</form>
+
+<!-- Delete form (separate) -->
+<form method="POST" action="/types/delete" id="delete-form" style="display:none;">
+  <input type="hidden" name="type_name" id="delete-name" value="">
+</form>
+
+<!-- Advanced link -->
+<a href="/schema-builder" class="adv-link">
+  Need tags, derived fields, or advanced options? Open Schema Builder →
+</a>
+
+<script>
+  validateName();
+  renderFieldRows();
+  updatePreview();
+</script>
+{% endblock %}

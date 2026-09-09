@@ -667,7 +667,8 @@ def home():
         to_date=request.args.get("to_date", ""),
         recent_rows=recent_rows, recent_cols=recent_cols,
         field_types=field_types,
-        threshold_data=threshold_data)
+        threshold_data=threshold_data,
+        record_types=schema.get("types", {}).get("allowed", []))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1569,6 +1570,101 @@ def schema_builder_preview_lint():
         return jsonify(ok=True, data=result)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
+
+
+@app.route("/types")
+@app.route("/types/new")
+def types_page():
+    schema = svc.get_schema()
+    types = schema.get("types", {}).get("allowed", [])
+    edit_type = request.args.get("edit", "").strip()
+    return_to = request.args.get("return_to", "")
+    prefilled_name = request.args.get("name", "").strip()
+    note = request.args.get("note", "").strip()
+    fields_json = "[]"
+    edit_fields = []
+    record_count = 0
+
+    if edit_type:
+        type_def = schema.get("type", {}).get(edit_type, {})
+        req_set = set(type_def.get("required", []))
+        for fname, fdef in type_def.get("fields", {}).items():
+            opts = fdef.get("options", [])
+            edit_fields.append({
+                "name": fname,
+                "type": fdef.get("type", "string"),
+                "required": fname in req_set,
+                "options": list(opts) if opts else [],
+            })
+        fields_json = json.dumps(edit_fields)
+        record_count = svc.get_type_record_count(edit_type)
+    elif prefilled_name and note:
+        try:
+            sug = svc.suggest_new_type(note, schema)
+            if sug and sug["name"] == prefilled_name:
+                fields_json = json.dumps(sug.get("fields", []))
+            else:
+                fields_json = json.dumps([{"name": "note_text", "type": "string", "required": False, "options": []}])
+        except Exception:
+            fields_json = json.dumps([{"name": "note_text", "type": "string", "required": False, "options": []}])
+    elif prefilled_name:
+        fields_json = json.dumps([{"name": "", "type": "string", "required": False, "options": []}])
+
+    return render_template("types.html",
+        tab="types", title="Record Types",
+        types=types, edit_type=edit_type, prefilled_name=prefilled_name,
+        fields_json=fields_json, return_to=return_to,
+        record_count=record_count, msg=None, msg_type=None)
+
+
+@app.route("/types", methods=["POST"])
+def types_post():
+    schema = svc.get_schema()
+    types = schema.get("types", {}).get("allowed", [])
+    type_name = request.form.get("type_name", "").strip().lower().replace(" ", "_")
+    original_name = request.form.get("original_name", "").strip()
+    fields_json = request.form.get("fields_json", "[]")
+    return_to = request.form.get("return_to", "")
+    try:
+        fields = json.loads(fields_json)
+    except Exception:
+        fields = []
+
+    try:
+        svc.create_type_from_form(type_name, fields, original_name=original_name or None)
+        svc._invalidate_history_cache()
+    except PTOSError as e:
+        edit_fields = []
+        if original_name:
+            type_def = schema.get("type", {}).get(original_name, {})
+            req_set = set(type_def.get("required", []))
+            for fname, fdef in type_def.get("fields", {}).items():
+                opts = fdef.get("options", [])
+                edit_fields.append({"name": fname, "type": fdef.get("type", "string"),
+                                    "required": fname in req_set,
+                                    "options": list(opts) if opts else []})
+        return render_template("types.html",
+            tab="types", title="Record Types",
+            types=types, edit_type=original_name, prefilled_name=type_name,
+            fields_json=json.dumps(edit_fields if original_name else fields),
+            return_to=return_to, record_count=0,
+            msg=str(e), msg_type="error")
+
+    if not return_to:
+        return_to = f"/types?edit={type_name}" if original_name else f"/add?type={type_name}"
+    return redirect(return_to)
+
+
+@app.route("/types/delete", methods=["POST"])
+def types_delete():
+    type_name = request.form.get("type_name", "").strip()
+    if type_name:
+        try:
+            ptos.remove_type(type_name)
+            svc._invalidate_history_cache()
+        except SystemExit:
+            pass
+    return redirect("/types")
 
 
 @app.route("/settings")
@@ -2997,12 +3093,6 @@ def _convert_render_kwargs(schema, source_rtype, note, target, source_kv=None):
         scrape = svc.scrape_convert_fields(note or "", target, schema)
     except Exception:
         scrape = {"fields": {}, "history_defaults": {}}
-    new_type_sug = None
-    if not suggestions or all(s["pct"] < 50 for s in suggestions):
-        try:
-            new_type_sug = svc.suggest_new_type(note or "", schema)
-        except Exception:
-            new_type_sug = None
     already_converted = None
     if source_kv:
         already_converted = source_kv.get("converted")
@@ -3013,7 +3103,6 @@ def _convert_render_kwargs(schema, source_rtype, note, target, source_kv=None):
         "convert_suggestions": suggestions,
         "convert_pcts": pcts,
         "convert_scrape": scrape,
-        "convert_new_type_sug": new_type_sug,
         "convert_already_converted": already_converted,
     }
 
@@ -3049,7 +3138,12 @@ def edit_get():
         allowed = schema.get("types", {}).get("allowed", [])
         suggestions = svc.suggest_convert_type(note or "")
         target = request.args.get("target_type", "").strip()
-        if not target or target not in allowed or target == rtype:
+        if target and target not in allowed:
+            params = {"name": target, "return_to": request.url}
+            if note:
+                params["note"] = note
+            return redirect(url_for("types_page", **params))
+        if not target or target == rtype:
             target = (next((s["type"] for s in suggestions if s["type"] != rtype), None)
                       or next((t for t in allowed if t != rtype), None))
         if not target:
@@ -3169,9 +3263,18 @@ def edit_post():
         if request.form.get("create_and_convert") == "1":
             try:
                 note_text = ov.get("note") or note_val or ""
-                new_sug = svc.suggest_new_type(note_text, schema)
-                if not new_sug:
-                    raise PTOSError("No type suggestion available")
+                name = request.form.get("new_type_name", "").strip()
+                fields_json = request.form.get("new_type_fields", "[]")
+                if not name:
+                    raise PTOSError("Type name is required")
+                try:
+                    import json as _json
+                    fields = _json.loads(fields_json)
+                except Exception:
+                    raise PTOSError("Invalid field data")
+                if not isinstance(fields, list):
+                    raise PTOSError("Invalid field data")
+                new_sug = {"name": name, "fields": fields}
                 source_rtype_val = ""
                 try:
                     _d, kv2, _ = svc.safe_parse_line(old_line)
@@ -3180,11 +3283,16 @@ def edit_post():
                     pass
                 result = svc.create_and_convert(
                     note_text, filepath, old_line, lineno_int,
-                    new_sug["name"], new_sug, keep=keep, strip_note=True)
+                    new_sug["name"], new_sug, keep=keep, strip_note=True,
+                    kv_overrides=ov)
                 app.logger.debug("edit_post create_and_convert ok: %s",
                                  result.get("new_line"))
                 return redirect(return_to)
             except PTOSError as e:
+                if "Convert blocked" in str(e):
+                    return redirect(url_for("edit_get",
+                        filepath=filepath, lineno=lineno, line=old_line,
+                        return_to=return_to, convert="1", target_type=name))
                 return_to_err = request.form.get("return_to", "") or url_for("browse_get")
                 kwargs_err = _convert_render_kwargs(
                     schema, source_rtype_val,
@@ -3192,7 +3300,7 @@ def edit_post():
                 return _render_edit(
                     filepath, lineno_int, old_line, return_to_err,
                     rtype, {"type": rtype, "note": note_val, "date": dt.date.today().isoformat()},
-                    title="Convert Record", error=str(e), **kwargs_err)
+                    title="Convert Record", msg=str(e), msg_type="error", **kwargs_err)
 
         try:
             res = svc.convert_record(filepath, old_line, lineno_int, rtype,
