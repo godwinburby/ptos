@@ -918,75 +918,13 @@
   <div class="more-menu-overlay" onclick="toggleMoreMenu(event)"></div>
   <div class="more-menu-content">
     <div class="more-menu-header">More</div>
-    <a href="/search" class="more-menu-item {% if tab=='search' %}active{% endif %}">
-      {% include 'icons/search.html' ignore missing %}
-      Search
+    {% set _tab_map = {"search":"search","due":"due","journal":"journal","notes":"notes","board":"board","habits":"habits","calendar":"calendar","daily":"daily","thresholds":"thresholds","query-builder":"query_builder","schema-builder":"schema_builder","types":"types","backup":"backup","editor":"editor","lint":"lint","settings":"settings"} %}
+    {% for url_path, icon_name, label in more_menu_items %}
+    <a href="/{{ url_path }}" class="more-menu-item {% if tab==_tab_map.get(url_path,'') %}active{% endif %}">
+      {% include 'icons/' ~ icon_name ~ '.html' ignore missing %}
+      {{ label }}
     </a>
-    <a href="/due" class="more-menu-item {% if tab=='due' %}active{% endif %}">
-      {% include 'icons/due.html' ignore missing %}
-      Due List
-    </a>
-    <a href="/journal" class="more-menu-item {% if tab=='journal' %}active{% endif %}">
-      {% include 'icons/journal.html' ignore missing %}
-      Journal
-    </a>
-    <a href="/notes" class="more-menu-item {% if tab=='notes' %}active{% endif %}">
-      {% include 'icons/notes.html' ignore missing %}
-      Notes
-    </a>
-    <a href="/board" class="more-menu-item {% if tab=='board' %}active{% endif %}">
-      {% include 'icons/board.html' ignore missing %}
-      Board
-    </a>
-    <a href="/habits" class="more-menu-item {% if tab=='habits' %}active{% endif %}">
-      {% include 'icons/habits.html' ignore missing %}
-      Habits
-    </a>
-    <a href="/calendar" class="more-menu-item {% if tab=='calendar' %}active{% endif %}">
-      {% include 'icons/calendar.html' ignore missing %}
-      Calendar
-    </a>
-    <a href="/daily" class="more-menu-item {% if tab=='daily' %}active{% endif %}">
-      {% include 'icons/calendar.html' ignore missing %}
-      Daily
-    </a>
-    <a href="/browse" class="more-menu-item {% if tab=='browse' %}active{% endif %}">
-      {% include 'icons/browse.html' ignore missing %}
-      Browse
-    </a>
-    <a href="/queries" class="more-menu-item {% if tab=='queries' %}active{% endif %}">
-      {% include 'icons/query.html' ignore missing %}
-      Queries
-    </a>
-    <a href="/schema-builder" class="more-menu-item {% if tab=='schema_builder' %}active{% endif %}">
-      {% include 'icons/schema_builder.html' ignore missing %}
-      Schema Builder
-    </a>
-    <a href="/query-builder" class="more-menu-item {% if tab=='query_builder' %}active{% endif %}">
-      {% include 'icons/query_builder.html' ignore missing %}
-      Query Builder
-    </a>
-    <a href="/thresholds" class="more-menu-item {% if tab=='thresholds' %}active{% endif %}">
-      {% include 'icons/thresholds.html' ignore missing %}
-      Thresholds
-    </a>
-    <a href="/backup" class="more-menu-item {% if tab=='backup' %}active{% endif %}">
-      {% include 'icons/backup.html' ignore missing %}
-      Backup
-    </a>
-    <a href="/settings" class="more-menu-item {% if tab=='settings' %}active{% endif %}">
-      {% include 'icons/settings.html' ignore missing %}
-      Settings
-    </a>
-    <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
-    <a href="/editor" class="more-menu-item {% if tab=='editor' %}active{% endif %}">
-      {% include 'icons/editor.html' ignore missing %}
-      Log Editor
-    </a>
-    <a href="/lint" class="more-menu-item {% if tab=='lint' %}active{% endif %}">
-      {% include 'icons/lint.html' ignore missing %}
-      Lint
-    </a>
+    {% endfor %}
     <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
     <a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
