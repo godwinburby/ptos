@@ -223,3 +223,87 @@ class TestSaveQueriesFullGroups:
         )
         q = ptos.get_queries()
         assert q["dashboards"]["d"]["groups"] == {"Rev": ["income"]}
+
+
+class TestMergeBehavior:
+    def test_boards_survive_when_raw_boards_none(self):
+        ptos_service.save_queries_full(
+            {"income": {"where": "type=income", "time": "this-month"}},
+            {}, {},
+            raw_boards={"kanban": {"columns": ["task"], "time_window": "this-month"}},
+        )
+        ptos_service.save_queries_full(
+            {"income": {"where": "type=income", "time": "this-month"}},
+            {}, {},
+            raw_boards=None,
+        )
+        q = ptos.get_queries()
+        assert "board.kanban" in q
+        assert q["board.kanban"]["columns"] == ["task"]
+
+    def test_habits_survive_when_raw_habits_none(self):
+        ptos_service.save_queries_full(
+            {"income": {"where": "type=income", "time": "this-month"}},
+            {}, {},
+            raw_habits={"exercise": {"filters": ["type=habit"], "weeks": 8}},
+        )
+        ptos_service.save_queries_full(
+            {"income": {"where": "type=income", "time": "this-month"}},
+            {}, {},
+            raw_habits=None,
+        )
+        q = ptos.get_queries()
+        assert "habit.exercise" in q
+        assert q["habit.exercise"]["weeks"] == 8
+
+    def test_calendars_survive_when_raw_calendars_none(self):
+        ptos_service.save_queries_full(
+            {"income": {"where": "type=income", "time": "this-month"}},
+            {}, {},
+            raw_calendars={"exp": {"filters": ["type=expense"]}},
+        )
+        ptos_service.save_queries_full(
+            {"income": {"where": "type=income", "time": "this-month"}},
+            {}, {},
+            raw_calendars=None,
+        )
+        q = ptos.get_queries()
+        assert "calendar.exp" in q
+
+    def test_match_field_round_trip(self):
+        ptos_service.save_queries_full(
+            {"income": {"where": "type=income", "time": "this-month"}},
+            {}, {},
+            raw_boards={"kanban": {"columns": ["task"], "match_field": "client_code"}},
+        )
+        q = ptos.get_queries()
+        assert q["board.kanban"]["match_field"] == "client_code"
+
+    def test_unknown_fields_preserved_in_entry(self):
+        ptos_service.save_queries_full(
+            {}, {}, {},
+            raw_boards={"kanban": {"columns": ["task"]}},
+        )
+        ptos_service.save_queries_full(
+            {}, {}, {},
+            raw_boards={"kanban": {"columns": ["task"]}},
+        )
+        q = ptos.get_queries()
+        assert q["board.kanban"]["columns"] == ["task"]
+
+    def test_delete_does_not_wipe_boards(self):
+        ptos_service.save_queries_full(
+            {"exp": {"where": "type=expense", "time": "this-month"}},
+            {}, {},
+            raw_boards={"kanban": {"columns": ["task"]}},
+            raw_habits={"exercise": {"filters": ["type=habit"], "weeks": 8}},
+        )
+        ptos_service.save_queries_full(
+            {"exp": {"where": "type=expense", "time": "this-month"}},
+            {}, {},
+            raw_boards=None,
+            raw_habits=None,
+        )
+        q = ptos.get_queries()
+        assert "board.kanban" in q
+        assert "habit.exercise" in q

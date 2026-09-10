@@ -3625,24 +3625,39 @@ def _mark_converted(filepath, old_line, lineno, target_type):
 def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None, raw_calendars=None, raw_thresholds=None):
     """Build and write queries.toml using tomli-w with atomic write.
 
+    Merge-based: reads existing TOML first. Sections where the parameter is None
+    are preserved from the existing file (no data loss on partial saves). Sections
+    where the parameter is provided are rebuilt from the caller's data. Unknown
+    fields within each entry are preserved from the existing TOML.
+
     raw_queries:    {name: {where, time, group, search, sort, sum}}
     raw_metrics:    {name: {kind, base, base2, derived, unit_field, unit_weights, time, ...}}
     raw_dashboards: {name: {metrics: [...]}}
-    raw_aliases:    {name: {alias: target}}   (optional)
-    raw_due:        {config_name: {type, key, sort_by, days, exclude_results}} (optional)
-    raw_boards:     {name: {columns, time_window, limit, card_title_fields, rollup_field, rollup_op}} (optional)
-    raw_habits:     {name: {filters, weeks}}  (optional)
-    raw_calendars:  {name: {filters, time_window}}  (optional)
-    raw_thresholds: {name: {metric, agg, sum_field, value, direction, time, unit}}  (optional)
+    raw_aliases:    {name: {alias: target}}   (optional, None = preserve existing)
+    raw_due:        {config_name: {type, key, sort_by, days, exclude_results}} (optional, None = preserve existing)
+    raw_boards:     {name: {columns, time_window, limit, card_title_fields, match_field, rollup_field, rollup_op}} (optional, None = preserve existing)
+    raw_habits:     {name: {filters, weeks, toggleable}}  (optional, None = preserve existing)
+    raw_calendars:  {name: {filters, time_window}}  (optional, None = preserve existing)
+    raw_thresholds: {name: {metric, agg, sum_field, value, direction, time, unit}}  (optional, None = preserve existing)
 
     Raises:
         PTOSError on invalid names or write failure.
     """
     import re
     import tomli_w
+    import tomllib
 
     if raw_aliases is None:
         raw_aliases = {}
+
+    # Read existing TOML for merge-based writes
+    existing = {}
+    if os.path.exists(ptos.QUERIES_PATH):
+        try:
+            with open(ptos.QUERIES_PATH, "rb") as f:
+                existing = tomllib.load(f)
+        except Exception:
+            existing = {}
 
     def _clean_bare_name(n):
         if n.startswith("board."):
@@ -3655,6 +3670,14 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
 
     def _is_config_key(n):
         return any(n.startswith(p) for p in ("board.", "habit.", "calendar.", "due.", "threshold."))
+
+    def _merge_entry(existing_entry, new_entry):
+        """Merge new_entry on top of existing_entry, preserving unknown keys."""
+        if not isinstance(existing_entry, dict):
+            return new_entry
+        merged = dict(existing_entry)
+        merged.update(new_entry)
+        return merged
 
     all_names = [n for n in (list(raw_queries) + list(raw_metrics)
                              + list(raw_dashboards) + list(raw_aliases))
@@ -3670,6 +3693,7 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
 
     data = {}
 
+    # ── Queries ────────────────────────────────────────────────────────────────
     for name, q in raw_queries.items():
         if _is_config_key(name):
             continue
@@ -3686,9 +3710,15 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
             entry["search"] = q["search"] if isinstance(q["search"], str) else str(q["search"])
         if q.get("sum"):
             entry["sum"] = True
+        # preserve unknown query fields from existing
+        existing_q = existing.get(name, {})
+        if isinstance(existing_q, dict):
+            for ek, ev in existing_q.items():
+                if ek not in entry:
+                    entry[ek] = ev
         data[name] = entry
 
-    # Metrics
+    # ── Metrics ────────────────────────────────────────────────────────────────
     metrics = {}
     for name, m in raw_metrics.items():
         entry = {}
@@ -3717,11 +3747,17 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         if m.get("time"):
             entry["time"] = m["time"]
 
+        # preserve unknown metric fields from existing
+        existing_m = (existing.get("metrics") or {}).get(name, {})
+        if isinstance(existing_m, dict):
+            for ek, ev in existing_m.items():
+                if ek not in entry:
+                    entry[ek] = ev
         metrics[name] = entry
     if metrics:
         data["metrics"] = metrics
 
-    # Dashboards
+    # ── Dashboards ─────────────────────────────────────────────────────────────
     dashboards = {}
     for name, db in raw_dashboards.items():
         entry = {}
@@ -3742,11 +3778,17 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         unlabel = (db.get("ungrouped_label") or "").strip()
         if unlabel:
             entry["ungrouped_label"] = unlabel
+        # preserve unknown dashboard fields from existing
+        existing_db = (existing.get("dashboards") or {}).get(name, {})
+        if isinstance(existing_db, dict):
+            for ek, ev in existing_db.items():
+                if ek not in entry:
+                    entry[ek] = ev
         dashboards[name] = entry
     if dashboards:
         data["dashboards"] = dashboards
 
-    # Aliases
+    # ── Aliases ────────────────────────────────────────────────────────────────
     for name, a in (raw_aliases or {}).items():
         if _is_config_key(name):
             continue
@@ -3754,9 +3796,9 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         if alias:
             data[name] = {"alias": alias}
 
-    # Due configs
-    all_due = raw_due if raw_due else {}
-    if all_due and isinstance(all_due, dict):
+    # ── Due configs ────────────────────────────────────────────────────────────
+    if raw_due is not None:
+        all_due = raw_due
         due = {}
         for due_name, due_cfg in all_due.items():
             if not due_cfg or not isinstance(due_cfg, dict):
@@ -3772,87 +3814,146 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
                 entry["days"] = due_cfg["days"]
             if due_cfg.get("exclude_results") and isinstance(due_cfg["exclude_results"], list):
                 entry["exclude_results"] = due_cfg["exclude_results"]
+            # preserve unknown due fields from existing
+            existing_due = {k[4:]: v for k, v in existing.items() if k.startswith("due.") and isinstance(v, dict)}.get(due_name, {})
+            if isinstance(existing_due, dict):
+                for ek, ev in existing_due.items():
+                    if ek not in entry:
+                        entry[ek] = ev
             due[due_name] = entry
         if due:
             data["due"] = due
+    else:
+        # preserve existing due configs
+        for k, v in existing.items():
+            if k.startswith("due.") and isinstance(v, dict):
+                data[k] = v
 
-    # Boards
-    for name, board_cfg in (raw_boards or {}).items():
-        bare = _clean_bare_name(name)
-        cols = board_cfg.get("columns", [])
-        if not cols or not isinstance(cols, list):
-            raise PTOSError(f"Board '{name}' must have a non-empty columns list")
-        entry = {"columns": cols}
-        if board_cfg.get("time_window"):
-            entry["time_window"] = board_cfg["time_window"]
-        if board_cfg.get("limit"):
-            entry["limit"] = int(board_cfg["limit"])
-        raw_ctf = board_cfg.get("card_title_fields")
-        if raw_ctf:
-            entry["card_title_fields"] = raw_ctf
-        match_field = board_cfg.get("match_field")
-        if match_field and isinstance(match_field, str) and match_field.strip():
-            entry["match_field"] = match_field.strip()
-        rollup_field = board_cfg.get("rollup_field")
-        if rollup_field:
-            schema = ptos.get_schema()
-            fmeta = schema.get("fields", {}).get(rollup_field, {})
-            if not fmeta.get("aggregatable"):
-                raise PTOSError(
-                    f"Board '{name}': rollup_field '{rollup_field}' is not aggregatable in schema")
-            present = [t for t in cols if rollup_field in ptos.filter_fields_for_type(t, schema)]
-            if not present:
-                raise PTOSError(
-                    f"Board '{name}': rollup_field '{rollup_field}' does not apply to any column type")
-            entry["rollup_field"] = rollup_field
-            entry["rollup_op"] = board_cfg.get("rollup_op", "count")
-        data[f"board.{bare}"] = entry
+    # ── Boards ─────────────────────────────────────────────────────────────────
+    if raw_boards is not None:
+        for name, board_cfg in raw_boards.items():
+            bare = _clean_bare_name(name)
+            cols = board_cfg.get("columns", [])
+            if not cols or not isinstance(cols, list):
+                raise PTOSError(f"Board '{name}' must have a non-empty columns list")
+            entry = {"columns": cols}
+            if board_cfg.get("time_window"):
+                entry["time_window"] = board_cfg["time_window"]
+            if board_cfg.get("limit"):
+                entry["limit"] = int(board_cfg["limit"])
+            raw_ctf = board_cfg.get("card_title_fields")
+            if raw_ctf:
+                entry["card_title_fields"] = raw_ctf
+            match_field = board_cfg.get("match_field")
+            if match_field and isinstance(match_field, str) and match_field.strip():
+                entry["match_field"] = match_field.strip()
+            rollup_field = board_cfg.get("rollup_field")
+            if rollup_field:
+                schema = ptos.get_schema()
+                fmeta = schema.get("fields", {}).get(rollup_field, {})
+                if not fmeta.get("aggregatable"):
+                    raise PTOSError(
+                        f"Board '{name}': rollup_field '{rollup_field}' is not aggregatable in schema")
+                present = [t for t in cols if rollup_field in ptos.filter_fields_for_type(t, schema)]
+                if not present:
+                    raise PTOSError(
+                        f"Board '{name}': rollup_field '{rollup_field}' does not apply to any column type")
+                entry["rollup_field"] = rollup_field
+                entry["rollup_op"] = board_cfg.get("rollup_op", "count")
+            # preserve unknown board fields from existing
+            existing_board = existing.get(f"board.{bare}", {})
+            if isinstance(existing_board, dict):
+                for ek, ev in existing_board.items():
+                    if ek not in entry:
+                        entry[ek] = ev
+            data[f"board.{bare}"] = entry
+    else:
+        # preserve existing board configs
+        for k, v in existing.items():
+            if k.startswith("board.") and isinstance(v, dict):
+                data[k] = v
 
-    # Habits
-    for name, habit_cfg in (raw_habits or {}).items():
-        bare = _clean_bare_name(name)
-        hfilters = habit_cfg.get("filters", [])
-        if not hfilters or not isinstance(hfilters, list):
-            raise PTOSError(f"Habit '{name}' must have a non-empty filters list")
-        entry = {"filters": hfilters}
-        if habit_cfg.get("weeks"):
-            entry["weeks"] = int(habit_cfg["weeks"])
-        if "toggleable" in habit_cfg:
-            entry["toggleable"] = bool(habit_cfg["toggleable"])
-        data[f"habit.{bare}"] = entry
+    # ── Habits ─────────────────────────────────────────────────────────────────
+    if raw_habits is not None:
+        for name, habit_cfg in raw_habits.items():
+            bare = _clean_bare_name(name)
+            hfilters = habit_cfg.get("filters", [])
+            if not hfilters or not isinstance(hfilters, list):
+                raise PTOSError(f"Habit '{name}' must have a non-empty filters list")
+            entry = {"filters": hfilters}
+            if habit_cfg.get("weeks"):
+                entry["weeks"] = int(habit_cfg["weeks"])
+            if "toggleable" in habit_cfg:
+                entry["toggleable"] = bool(habit_cfg["toggleable"])
+            # preserve unknown habit fields from existing
+            existing_habit = existing.get(f"habit.{bare}", {})
+            if isinstance(existing_habit, dict):
+                for ek, ev in existing_habit.items():
+                    if ek not in entry:
+                        entry[ek] = ev
+            data[f"habit.{bare}"] = entry
+    else:
+        # preserve existing habit configs
+        for k, v in existing.items():
+            if k.startswith("habit.") and isinstance(v, dict):
+                data[k] = v
 
-    # Calendars
-    for name, cal_cfg in (raw_calendars or {}).items():
-        bare = _clean_bare_name(name)
-        cfilters = cal_cfg.get("filters", [])
-        if not cfilters or not isinstance(cfilters, list):
-            raise PTOSError(f"Calendar '{name}' must have a non-empty filters list")
-        entry = {"filters": cfilters}
-        if cal_cfg.get("time_window"):
-            entry["time_window"] = cal_cfg["time_window"]
-        data[f"calendar.{bare}"] = entry
+    # ── Calendars ──────────────────────────────────────────────────────────────
+    if raw_calendars is not None:
+        for name, cal_cfg in raw_calendars.items():
+            bare = _clean_bare_name(name)
+            cfilters = cal_cfg.get("filters", [])
+            if not cfilters or not isinstance(cfilters, list):
+                raise PTOSError(f"Calendar '{name}' must have a non-empty filters list")
+            entry = {"filters": cfilters}
+            if cal_cfg.get("time_window"):
+                entry["time_window"] = cal_cfg["time_window"]
+            # preserve unknown calendar fields from existing
+            existing_cal = existing.get(f"calendar.{bare}", {})
+            if isinstance(existing_cal, dict):
+                for ek, ev in existing_cal.items():
+                    if ek not in entry:
+                        entry[ek] = ev
+            data[f"calendar.{bare}"] = entry
+    else:
+        # preserve existing calendar configs
+        for k, v in existing.items():
+            if k.startswith("calendar.") and isinstance(v, dict):
+                data[k] = v
 
-    # Thresholds
-    for name, thr_cfg in (raw_thresholds or {}).items():
-        bare = _clean_bare_name(name)
-        if not thr_cfg.get("metric", "").strip():
-            raise PTOSError(f"Threshold '{name}' must have a metric")
-        entry = {"metric": thr_cfg["metric"].strip()}
-        if thr_cfg.get("agg", "").strip():
-            entry["agg"] = thr_cfg["agg"].strip()
-        if thr_cfg.get("sum_field", "").strip():
-            entry["sum_field"] = thr_cfg["sum_field"].strip()
-        raw_val = thr_cfg.get("value", "")
-        if isinstance(raw_val, (int, float)):
-            entry["value"] = raw_val
-        elif isinstance(raw_val, str) and raw_val.strip():
-            entry["value"] = raw_val.strip()
-        entry["direction"] = thr_cfg.get("direction", "max")
-        if thr_cfg.get("time", "").strip():
-            entry["time"] = thr_cfg["time"].strip()
-        if thr_cfg.get("unit", "").strip():
-            entry["unit"] = thr_cfg["unit"].strip()
-        data[f"threshold.{bare}"] = entry
+    # ── Thresholds ─────────────────────────────────────────────────────────────
+    if raw_thresholds is not None:
+        for name, thr_cfg in raw_thresholds.items():
+            bare = _clean_bare_name(name)
+            if not thr_cfg.get("metric", "").strip():
+                raise PTOSError(f"Threshold '{name}' must have a metric")
+            entry = {"metric": thr_cfg["metric"].strip()}
+            if thr_cfg.get("agg", "").strip():
+                entry["agg"] = thr_cfg["agg"].strip()
+            if thr_cfg.get("sum_field", "").strip():
+                entry["sum_field"] = thr_cfg["sum_field"].strip()
+            raw_val = thr_cfg.get("value", "")
+            if isinstance(raw_val, (int, float)):
+                entry["value"] = raw_val
+            elif isinstance(raw_val, str) and raw_val.strip():
+                entry["value"] = raw_val.strip()
+            entry["direction"] = thr_cfg.get("direction", "max")
+            if thr_cfg.get("time", "").strip():
+                entry["time"] = thr_cfg["time"].strip()
+            if thr_cfg.get("unit", "").strip():
+                entry["unit"] = thr_cfg["unit"].strip()
+            # preserve unknown threshold fields from existing
+            existing_thr = existing.get(f"threshold.{bare}", {})
+            if isinstance(existing_thr, dict):
+                for ek, ev in existing_thr.items():
+                    if ek not in entry:
+                        entry[ek] = ev
+            data[f"threshold.{bare}"] = entry
+    else:
+        # preserve existing threshold configs
+        for k, v in existing.items():
+            if k.startswith("threshold.") and isinstance(v, dict):
+                data[k] = v
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
         tomli_w.dump(data, w.stream)
