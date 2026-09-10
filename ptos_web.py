@@ -1631,11 +1631,13 @@ def types_page():
     elif prefilled_name:
         fields_json = json.dumps([{"name": "", "type": "string", "required": False, "options": []}])
 
+    saved = request.args.get("saved") == "1"
     return render_template("types.html",
         tab="types", title="Record Types",
         types=types, edit_type=edit_type, prefilled_name=prefilled_name,
         fields_json=fields_json, return_to=return_to,
-        record_count=record_count, msg=None, msg_type=None)
+        record_count=record_count, msg=None, msg_type=None,
+        show_saved=saved)
 
 
 @app.route("/types", methods=["POST"])
@@ -1676,6 +1678,9 @@ def types_post():
     if type_name and return_to.startswith("/edit") and "convert=1" in return_to:
         sep = "&" if "?" in return_to else "?"
         return_to = f"{return_to}{sep}target_type={type_name}"
+    elif return_to.startswith("/types"):
+        sep = "&" if "?" in return_to else "?"
+        return_to = f"{return_to}{sep}saved=1"
     return redirect(return_to)
 
 
