@@ -115,7 +115,8 @@ function renderFieldRows() {
       '</select></div>' +
       '<label class="field-req"><input type="checkbox"'+(f.required?" checked":'')+' onchange="_fields['+i+'].required=this.checked"> req</label>' +
       (isStr ? '<div class="field-opts" id="opts-'+i+'">'+optsHtml+
-        '<input type="text" placeholder="add option" onkeydown="if(event.key===\'Enter\'){addOpt('+i+',this);event.preventDefault()}">' :
+        '<input type="text" placeholder="add option" id="opt-input-'+i+'" onkeydown="if(event.key===\'Enter\'){addOpt('+i+',this);event.preventDefault()}">' +
+        '<button type="button" class="add-field-btn" style="margin:0;padding:2px 8px;font-size:11px;" onclick="addOpt('+i+',document.getElementById(\'opt-input-'+i+'\'))">Add</button>' :
         '') +
       '</div>' +
       '<button class="field-remove" onclick="removeField('+i+')" title="Remove field">&times;</button>';
@@ -242,6 +243,12 @@ function esc(s) { var d = document.createElement("div"); d.textContent = s; retu
 
 {% if msg %}
 <div class="msg msg-{{ msg_type }}">{{ msg }}</div>
+{% endif %}
+{% if show_saved %}
+<div class="msg msg-success" id="saved-msg" style="display:flex;align-items:center;gap:8px;">
+  <span>✓ Changes saved</span>
+</div>
+<script>setTimeout(function(){ var el = document.getElementById('saved-msg'); if (el) el.style.display = 'none'; }, 3000);</script>
 {% endif %}
 
 <!-- Type selector chips -->
