@@ -1673,6 +1673,9 @@ def types_post():
 
     if not return_to:
         return_to = f"/types?edit={type_name}" if original_name else f"/add?type={type_name}"
+    if type_name and return_to.startswith("/edit") and "convert=1" in return_to:
+        sep = "&" if "?" in return_to else "?"
+        return_to = f"{return_to}{sep}target_type={type_name}"
     return redirect(return_to)
 
 
@@ -3159,12 +3162,7 @@ def edit_get():
         allowed = schema.get("types", {}).get("allowed", [])
         suggestions = svc.suggest_convert_type(note or "")
         target = request.args.get("target_type", "").strip()
-        if target and target not in allowed:
-            params = {"name": target, "return_to": request.url}
-            if note:
-                params["note"] = note
-            return redirect(url_for("types_page", **params))
-        if not target or target == rtype:
+        if not target or target not in allowed or target == rtype:
             target = (next((s["type"] for s in suggestions if s["type"] != rtype), None)
                       or next((t for t in allowed if t != rtype), None))
         if not target:

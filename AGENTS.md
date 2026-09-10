@@ -346,7 +346,7 @@ x 2026-07-12 2026-07-10 Completed task
   - `POST /types` — save (create or rename+replace)
   - `POST /types/delete` — remove type from schema
 - **Template** (`web_templates/types.html`): horizontal chip bar for type selection, inline field rows with drag-and-drop reordering (via shared `drag.js`), option chips with drag-and-drop, inline name validation (live check against existing types), live record line preview box, `?note=` param for pre-filling from convert flow, `?edit=X` for edit mode, `?return_to=Y` for post-save redirect.
-- **Convert integration** — `edit_get` with `?convert=1&target_type=X` redirects to `/types?name=X&return_to=...` when X is not in `allowed` types, instead of silently falling back.
+- **Convert integration** — the target type `<select>` on the convert page has a "+ Create new type…" option at the bottom; selecting it redirects to `/types/new` with the source note and `return_to` back to the convert page. After type creation, `target_type=<name>` is appended to `return_to` so the new type is pre-selected on return.
 - **Removed** — inline "Create & Convert" card from `edit.html` (replaced by `/types` page); `_convert_render_kwargs` no longer calls `suggest_new_type`.
 - **Nav links** — sidebar (`base.html`), home page "Record Types" card with "+ New type" link, add page "Don't see your type? Create one" link.
 - **Schema Builder** — untouched (advanced editor for tags, derived fields, nested options, global fields). Types page links to Schema Builder for advanced needs.
