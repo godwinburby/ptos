@@ -8,7 +8,7 @@
 
 {% block content %}
 
-<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+<div id="qb-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
   <div class="page-title" style="margin:0;">Query Builder</div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <button onclick="addEntry()" class="btn btn-primary btn-sm">+ New</button>
@@ -288,7 +288,7 @@ var _liveTimer = null;
   var _bkHabits = {{ habits | tojson }};
   Object.entries(_bkHabits).forEach(function(e) {
     var name = e[0].replace(/^habit\./, '');
-    _st.habits[name] = { filters: e[1].filters||[], weeks: e[1].weeks||12 };
+    _st.habits[name] = { filters: e[1].filters||[], weeks: e[1].weeks||12, toggleable: e[1].toggleable !== false };
   });
   // Calendars
   var _bkCalendars = {{ calendars | tojson }};
@@ -317,7 +317,27 @@ var _liveTimer = null;
     var first = Object.keys(_st.queries)[0];
     if (first) select("queries", first);
   }
-})();
+  // Coverage gap banner — detect unknown sections in queries.toml
+  (function() {
+    var raw = {{ queries | tojson }};
+    var handledPrefixes = ["board.", "habit.", "calendar.", "due.", "threshold."];
+    var handledSections = ["metrics", "dashboards"];
+    var unknownKeys = Object.keys(raw).filter(function(k) {
+      if (handledSections.indexOf(k) !== -1) return false;
+      if (handledPrefixes.some(function(p) { return k.startsWith(p); })) return false;
+      if (typeof raw[k] === "object" && (raw[k].where !== undefined || raw[k].time !== undefined)) return false;
+      if (typeof raw[k] === "object" && "alias" in raw[k]) return false;
+      return typeof raw[k] === "object";
+    });
+    if (unknownKeys.length) {
+      var banner = document.createElement("div");
+      banner.style.cssText = "padding:8px 12px;background:var(--warn-lt);border:1px solid var(--warn);border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--text);";
+      banner.innerHTML = "<b>Some config sections are managed outside the Query Builder</b> and are preserved but not editable here: " +
+        unknownKeys.map(function(k) { return "<code>" + k + "</code>"; }).join(", ") +
+        ". Edit them directly in <code>queries.toml</code> or via the CLI.";
+      document.getElementById("qb-header").parentNode.insertBefore(banner, document.getElementById("qb-header").nextSibling);
+    }
+  })();
 
 // ── Parse simple where expression into chips + manual remainder ───────────────
 // Handles field=value AND field=value — anything else stays in manual expr box
@@ -469,7 +489,7 @@ function addEntry() {
   else if (section==="boards")
     _st.boards[name]   = {columns:[]};
   else if (section==="habits")
-    _st.habits[name]   = {filters:[],weeks:12};
+    _st.habits[name]   = {filters:[],weeks:12,toggleable:true};
   else if (section==="calendars")
     _st.calendars[name] = {filters:[],time_window:'this-month'};
   else if (section==="thresholds")

@@ -7,6 +7,14 @@ Format: `[version or date] — description`
 
 ## 2026-09-10
 
+### queries.toml data-loss fixes (merge-based writes)
+
+- **Merge-based `save_queries_full()`** (`ptos_service.py`): the Query Builder's save-all function now reads the existing `queries.toml` first and merges incoming data on top. When a section parameter is `None` (not passed), existing entries for that section are preserved — fixing the critical bug where deleting a single query/metric/dashboard via the QB UI would wipe all boards, habits, calendars, and due configs. Unknown fields within each entry (e.g. `toggleable` on habits, `match_field` on boards) are preserved from the existing TOML even when the QB UI doesn't send them.
+- **`match_field` round-trips through QB** (`ptos_web.py`): `query_builder_get` now passes `match_field` in the boards dict to the template, so boards with cross-column match highlighting survive a QB save-all.
+- **Habit `toggleable` preserved** (`query_builder.html`): the QB JS boot code now loads `toggleable` from the server-side habit config, so habits with `toggleable = false` don't silently revert to the default.
+- **Coverage gap banner** (`query_builder.html`): a yellow info banner appears at the top of the Query Builder when `queries.toml` contains sections that the QB doesn't manage (e.g. `pivot`, `count`, `trend` added via CLI or direct edit). The banner lists the unknown sections and notes they're preserved but not editable in the QB.
+- **Tests** (`test_dashboards.py`): 6 new `TestMergeBehavior` tests covering board/habit/calendar preservation with `None` params, `match_field` round-trip, unknown field preservation, and the delete-doesn't-wipe-boards scenario.
+
 ### Schema Builder UX improvements
 
 - **Inline field metadata** (`schema_builder.html`): the standalone "Field Metadata" section has been removed. Each field row now shows its metadata inline — Type dropdown (string/int/datetime), Unit input, Aggregatable checkbox, Dimension checkbox — below the options area. Metadata is global by field name, so the same field (e.g. `amount`) across multiple types shares the same metadata. When editing metadata in one type, all other types using that field see the updated values.
