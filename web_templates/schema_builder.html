@@ -12,13 +12,19 @@
     <button onclick="previewLint()" class="btn btn-warn btn-sm" id="lint-btn">🔍 Preview Lint</button>
     <button onclick="confirmSave()" class="btn btn-success btn-sm" id="save-btn">💾 Save Schema</button>
     <button onclick="addType()" class="btn btn-primary btn-sm">+ Add Type</button>
-    <div id="save-msg" style="font-size:13px;display:none;"></div>
   </div>
 </div>
+<div id="save-msg" style="font-size:13px;display:none;padding:8px 12px;border-radius:6px;margin-bottom:12px;background:var(--success-lt);color:var(--success);"></div>
 
 <!-- ── Type chip bar ── -->
 <div class="sb-type-bar">
   <div id="type-tabs" class="sb-type-strip"></div>
+  <span id="new-type-wrap" style="display:none;">
+    <input type="text" id="new-type-input" placeholder="type name"
+           style="font-size:14px;padding:5px 10px;border:2px solid var(--accent);border-radius:6px;width:140px;"
+           onkeydown="if(event.key==='Enter')confirmAddType();else if(event.key==='Escape')cancelAddType();"
+           onblur="cancelAddType()">
+  </span>
 </div>
 
 <!-- ── Type editor ── -->
@@ -41,25 +47,8 @@
       </div>
     </div>
 
-    <!-- required fields -->
-    <div class="card" style="margin-bottom:12px;">
-      <div class="chip-section" style="border-top:3px solid var(--accent);">
-        <div class="chip-section-header" onclick="toggleSection(this)">
-          <div class="chip-section-label" style="color:var(--accent);">Required fields</div>
-          <span class="chip-toggle">−</span>
-        </div>
-        <div class="hint" style="margin-bottom:10px;">
-          These fields must be present on every record of this type.
-        </div>
-        <div id="required-chips" class="chip-group" style="margin-bottom:10px;"></div>
-        <div style="display:flex;gap:8px;">
-          <input type="text" id="req-input" placeholder="field name"
-                 style="flex:1;font-size:14px;"
-                 onkeydown="if(event.key==='Enter') addRequired()">
-          <button onclick="addRequired()" class="btn btn-ghost btn-sm">Add</button>
-        </div>
-      </div>
-    </div>
+    <!-- record line preview -->
+    <div id="preview-line" style="font-size:12px;color:var(--sub);padding:8px 12px;border-radius:6px;background:var(--border-lt);margin-bottom:12px;font-family:monospace;white-space:pre;overflow-x:auto;">Type a name and add fields to see a preview</div>
 
     <!-- fields editor -->
     <div class="card" style="margin-bottom:12px;">
@@ -71,10 +60,10 @@
         <div class="hint" style="margin-bottom:10px;">
           Define what each field accepts. Leave options empty for free-text fields.
         </div>
-        <div id="fields-list"></div>
-        <button onclick="addField()" class="btn btn-ghost btn-sm" style="margin-top:8px;">
+        <button onclick="addField()" class="btn btn-ghost btn-sm" style="margin-bottom:8px;">
           + Add field
         </button>
+        <div id="fields-list"></div>
       </div>
     </div>
 
@@ -177,23 +166,6 @@
       Reusable option lists. Reference from a type field with <code>use = "shared.name"</code>.
     </div>
     <div id="shared-defs-list"></div>
-  </div>
-
-  <!-- Field Metadata -->
-  <div class="chip-section collapsed" style="border-top:3px solid var(--warn);">
-    <div class="chip-section-header" onclick="toggleSection(this)">
-      <div class="chip-section-label" style="color:var(--warn);">Field Metadata
-        <span style="font-size:11px;font-weight:400;color:var(--sub);margin-left:6px;">[fields.*]</span>
-      </div>
-      <span class="chip-toggle">+</span>
-    </div>
-    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
-      <button onclick="addFieldMeta()" class="btn btn-ghost btn-sm">+ Add</button>
-    </div>
-    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
-      Type, unit, and aggregation hints for named fields — used by the metrics engine.
-    </div>
-    <div id="field-meta-list"></div>
   </div>
 
 </div>
@@ -400,7 +372,6 @@ var _currentType = null;
   if (_state.types.length) selectType(_state.types[0]);
   renderGlobalFields();
   renderSharedDefs();
-  renderFieldMeta();
 })();
 
 // ── Type list ─────────────────────────────────────────────────────────────────
@@ -425,14 +396,30 @@ function selectType(tname) {
 }
 
 function addType() {
-  var name = prompt("New type name (lowercase, underscores):");
-  if (!name) return;
-  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
+  var wrap = document.getElementById("new-type-wrap");
+  var inp = document.getElementById("new-type-input");
+  wrap.style.display = "inline";
+  inp.value = "";
+  inp.focus();
+}
+
+function confirmAddType() {
+  var inp = document.getElementById("new-type-input");
+  var name = inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
+  document.getElementById("new-type-wrap").style.display = "none";
   if (!name) return;
   if (_state.types.includes(name)) { alert("Type already exists"); return; }
   _state.types.push(name);
   _state.type_schemas[name] = { required:[], fields:{}, tags:{}, derived_fields:{}, conditions:{} };
   selectType(name);
+  setTimeout(function() {
+    var el = document.getElementById("ed-type-name");
+    if (el) { el.focus(); el.select(); }
+  }, 50);
+}
+
+function cancelAddType() {
+  document.getElementById("new-type-wrap").style.display = "none";
 }
 
 function deleteCurrentType() {
@@ -459,6 +446,30 @@ function onTypeNameChange() {
   delete _state.type_schemas[_currentType];
   _currentType = newName;
   renderTypeList();
+  updatePreview();
+}
+
+function updatePreview() {
+  var el = document.getElementById("preview-line");
+  if (!el) return;
+  var name = _currentType;
+  var t = ts();
+  if (!name || !t || !Object.keys(t.fields).length) {
+    el.textContent = "Type a name and add fields to see a preview";
+    return;
+  }
+  var parts = ["type=" + name];
+  Object.keys(t.fields).forEach(function(fname) {
+    var f = t.fields[fname];
+    var sample;
+    if (f.is_int) sample = "0";
+    else if (f.options && f.options.length) sample = f.options[0];
+    else sample = fname;
+    parts.push(fname + "=" + sample.replace(/\s+/g, "-"));
+  });
+  var d = new Date();
+  var date = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");
+  el.textContent = date + " " + parts.join(" ");
 }
 
 // ── Editor ────────────────────────────────────────────────────────────────────
@@ -466,97 +477,90 @@ function renderEditor() {
   if (!_currentType) return;
   var ts = _state.type_schemas[_currentType];
   document.getElementById("ed-type-name").value = _currentType;
-  renderRequired(ts);
   renderFields(ts);
   renderTags(ts);
   renderDerivedFields(ts);
   renderConditions(ts);
+  updatePreview();
 }
 
 function ts() { return _state.type_schemas[_currentType]; }
-
-// ── Required ──────────────────────────────────────────────────────────────────
-function renderRequired(ts) {
-  var el = document.getElementById("required-chips");
-  el.innerHTML = "";
-  (ts.required || []).forEach(function(r, i) {
-    var chip = document.createElement("span");
-    chip.className = "opt-chip";
-    chip.innerHTML = r + ' <button onclick="removeRequired(' + i + ')">×</button>';
-    _makeDraggable(chip, ts.required, i, function() { renderRequired(ts()); }, ".opt-chip");
-    el.appendChild(chip);
-  });
-}
-
-function addRequired() {
-  var inp = document.getElementById("req-input");
-  var val = inp.value.trim().toLowerCase().replace(/\s+/g,"_");
-  if (!val) return;
-  var t = ts();
-  if (!t.required.includes(val)) { t.required.push(val); renderRequired(t); }
-  inp.value = "";
-}
-
-function removeRequired(idx) {
-  ts().required.splice(idx, 1);
-  renderRequired(ts());
-}
 
 // ── Fields ────────────────────────────────────────────────────────────────────
 function renderFields(ts) {
   var el = document.getElementById("fields-list");
   el.innerHTML = "";
-  Object.entries(ts.fields).forEach(function(entry) {
+  var entries = Object.entries(ts.fields);
+  var req = ts.required || [];
+  entries.sort(function(a, b) {
+    var ai = req.indexOf(a[0]), bi = req.indexOf(b[0]);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return 0;
+  });
+  entries.forEach(function(entry) {
     el.appendChild(makeFieldRow(entry[0], entry[1]));
   });
 }
 
 function addField() {
-  var name = prompt("Field name (lowercase):");
-  if (!name) return;
-  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
-  if (!name) return;
-  if (ts().fields[name]) { alert("Field already exists"); return; }
+  if (document.getElementById("new-field-row")) return;
+  var el = document.getElementById("fields-list");
+  var row = document.createElement("div");
+  row.className = "field-row";
+  row.id = "new-field-row";
+  row.style.borderLeft = "3px solid var(--accent)";
 
-  // check for parent candidates: flat-option fields in this type
-  var parentCandidates = Object.entries(ts().fields)
-    .filter(function(e) { return !e[1].is_int && !e[1].parent && !e[1].use && Array.isArray(e[1].options) && e[1].options.length > 0; })
-    .map(function(e) { return e[0]; });
+  var head = document.createElement("div");
+  head.className = "field-row-head";
+  head.innerHTML =
+    '<input type="text" id="nf-name" placeholder="field name" autofocus ' +
+    'style="flex:1;font-size:14px;font-weight:700;border:2px solid var(--accent);padding:4px 8px;border-radius:4px;" ' +
+    'onkeydown="if(event.key===\'Enter\')confirmAddField();else if(event.key===\'Escape\')cancelAddField();">' +
+    '<select id="nf-type" style="font-size:12px;padding:3px 6px;">' +
+      '<option value="string">string</option><option value="int">int</option>' +
+      '<option value="datetime">datetime</option><option value="bool">bool</option></select>' +
+    '<label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;" title="This field must be present on every record">' +
+      '<input type="checkbox" id="nf-req"> Req</label>' +
+    '<button onclick="confirmAddField()" class="btn btn-ghost btn-sm" style="color:var(--success);">✔</button>' +
+    '<button onclick="cancelAddField()" class="btn btn-ghost btn-sm" style="color:var(--error);">✕</button>';
+  row.appendChild(head);
+  el.appendChild(row);
+  setTimeout(function() { var inp = document.getElementById("nf-name"); if (inp) inp.focus(); }, 20);
+}
 
-  if (parentCandidates.length) {
-    var pick = prompt(
-      "Make this field depend on a parent field?\nEnter one of: " + parentCandidates.join(", ") +
-      "\n\n(Leave blank for standalone)"
-    );
-    if (pick && ts().fields[pick.trim()]) {
-      var parentName = pick.trim();
-      var parentOpts = ts().fields[parentName].options;
-      var byParent = {};
-      parentOpts.forEach(function(pval) { byParent[pval] = []; });
-      ts().fields[name] = { is_int: false, parent: parentName, options_by_parent: byParent };
-      renderFields(ts());
-      return;
-    }
+function confirmAddField() {
+  var nameEl = document.getElementById("nf-name");
+  var typeEl = document.getElementById("nf-type");
+  var reqEl  = document.getElementById("nf-req");
+  if (!nameEl) return;
+  var name = nameEl.value.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name) { cancelAddField(); return; }
+  if (ts().fields[name]) { alert("Field already exists"); nameEl.focus(); return; }
+  var ftype = typeEl ? typeEl.value : "string";
+  var isInt = (ftype === "int");
+  var isDatetime = (ftype === "datetime");
+  var isBool = (ftype === "bool");
+  ts().fields[name] = {
+    is_int: isInt,
+    is_datetime: isDatetime || undefined,
+    is_bool: isBool || undefined,
+    options: isInt || isBool ? undefined : [],
+    linkable: false
+  };
+  if (reqEl && reqEl.checked) {
+    var req = ts().required || (ts().required = []);
+    if (req.indexOf(name) === -1) req.push(name);
   }
-
-  // shared-definition option: options come from a [shared.*] list above
-  var sharedNames = Object.keys(_state.shared_defs);
-  if (sharedNames.length) {
-    var pick = prompt(
-      "Use options from a shared definition?\nEnter: shared.NAME (one of: " + sharedNames.join(", ") + ")" +
-      "\n\n(Leave blank for a standalone field)"
-    );
-    if (pick) {
-      var ref = pick.trim();
-      var sname = ref.indexOf("shared.") === 0 ? ref.slice(7) : ref;
-      if (!_state.shared_defs[sname]) { alert("Unknown shared definition: " + ref); return; }
-      ts().fields[name] = { is_int: false, options: [], use: "shared." + sname, linkable: false };
-      renderFields(ts());
-      return;
-    }
-  }
-  ts().fields[name] = { is_int: false, options: [], linkable: false };
+  cancelAddField();
   renderFields(ts());
+  updatePreview();
+}
+
+function cancelAddField() {
+  var row = document.getElementById("new-field-row");
+  if (row) row.remove();
 }
 
 function makeFieldRow(fname, fdef) {
@@ -652,23 +656,46 @@ function makeFieldRow(fname, fdef) {
   }
 
   // ── regular field (flat options) ──────────────────────────────────────────
+  var isRequired = (ts().required || []).indexOf(fname) !== -1;
+
+  // check parent candidates
+  var parentCandidates = Object.entries(ts().fields)
+    .filter(function(e) { return e[0] !== fname && !e[1].is_int && !e[1].parent && !e[1].use && Array.isArray(e[1].options) && e[1].options.length > 0; })
+    .map(function(e) { return e[0]; });
+  var sharedNames = Object.keys(_state.shared_defs);
+
+  // cross-type badge: which other types use this field name
+  var otherTypes = _state.types.filter(function(t) {
+    return t !== _currentType && _state.type_schemas[t] && _state.type_schemas[t].fields && _state.type_schemas[t].fields[fname];
+  });
+
+  // field metadata (global)
+  var fmeta = _state.field_meta[fname] || { type: fdef.is_int ? "int" : "string", aggregatable: false, dimension: true, unit: "", linkable: false };
+
   var head2 = document.createElement("div");
   head2.className = "field-row-head";
   head2.innerHTML =
-    '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
-    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
-      '<input type="checkbox" ' + (fdef.is_int ? "checked" : "") +
-      ' onchange="toggleInt(\'' + fname + '\',this.checked)"> Number field' +
+    '<span style="font-size:14px;font-weight:700;flex:1;">' + fname +
+      (otherTypes.length ? ' <span style="font-size:10px;font-weight:400;color:var(--sub);">Also in: ' + otherTypes.join(", ") + '</span>' : '') +
+    '</span>' +
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;" title="This field must be present on every record of this type">' +
+      '<input type="checkbox" ' + (isRequired ? "checked" : "") +
+      ' onchange="toggleRequired(\'' + fname + '\',this.checked)"> Req' +
     '</label>' +
-    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;" title="Allow cross-references via [[brackets]] in notes and journal">' +
       '<input type="checkbox" ' + (fdef.linkable ? "checked" : "") +
       ' onchange="setFieldLinkable(\'' + fname + '\',this.checked)"> Linkable' +
     '</label>' +
+    (parentCandidates.length ?
+      '<button onclick="convertToParentField(\'' + fname + '\')" class="btn btn-ghost btn-sm" style="font-size:11px;" title="Make this field depend on another field\'s options">↕ Parent</button>' : '') +
+    (sharedNames.length ?
+      '<button onclick="convertToSharedField(\'' + fname + '\')" class="btn btn-ghost btn-sm" style="font-size:11px;" title="Use options from a shared definition">🔗 Shared</button>' : '') +
     '<button onclick="deleteField(\'' + fname + '\')" ' +
     'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;' +
     'line-height:1;padding:0;">×</button>';
   div.appendChild(head2);
 
+  // options area (for non-int fields)
   if (!fdef.is_int) {
     var opts = document.createElement("div");
     opts.className = "opts-area";
@@ -699,17 +726,68 @@ function makeFieldRow(fname, fdef) {
     note.textContent = "Numeric — no options needed";
     div.appendChild(note);
   }
+
+  // inline metadata row
+  var metaRow = document.createElement("div");
+  metaRow.style.cssText = "display:flex;flex-wrap:wrap;gap:12px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border-lt);align-items:center;";
+  metaRow.innerHTML =
+    '<label style="font-size:11px;display:flex;align-items:center;gap:4px;">Type:' +
+      '<select onchange="setFieldMetaType(\'' + fname + '\',this.value)" style="font-size:11px;padding:2px 4px;">' +
+        '<option value="string"' + (fmeta.type === "string" ? " selected" : "") + '>string</option>' +
+        '<option value="int"'    + (fmeta.type === "int"    ? " selected" : "") + '>int</option>' +
+        '<option value="datetime"' + (fmeta.type === "datetime" ? " selected" : "") + '>datetime</option>' +
+      '</select></label>' +
+    '<label style="font-size:11px;display:flex;align-items:center;gap:4px;">Unit:' +
+      '<input type="text" value="' + escHtmlAttr(fmeta.unit || "") + '" ' +
+        'placeholder="₹ / min" ' +
+        'onchange="setFieldMeta(\'' + fname + '\',\'unit\',this.value)" ' +
+        'style="font-size:11px;width:50px;padding:2px 4px;"></label>' +
+    '<label style="font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer;" title="Can be summed/averaged in metrics">' +
+      '<input type="checkbox" ' + (fmeta.aggregatable ? "checked" : "") +
+      ' onchange="setFieldMeta(\'' + fname + '\',\'aggregatable\',this.checked)"> Agg</label>' +
+    '<label style="font-size:11px;display:flex;align-items:center;gap:3px;cursor:pointer;" title="Show in group-by/sort-by dropdowns">' +
+      '<input type="checkbox" ' + (fmeta.dimension !== false ? "checked" : "") +
+      ' onchange="setFieldMeta(\'' + fname + '\',\'dimension\',this.checked)"> Dim</label>';
+  div.appendChild(metaRow);
   return div;
 }
 
 function toggleInt(fname, val) {
   ts().fields[fname].is_int = val;
   if (val) ts().fields[fname].options = [];
+  ensureFieldMeta(fname);
+  _state.field_meta[fname].type = val ? "int" : "string";
   renderFields(ts());
+}
+
+function setFieldMetaType(fname, val) {
+  ensureFieldMeta(fname);
+  _state.field_meta[fname].type = val;
+  ts().fields[fname].is_int = (val === "int");
+  if (val === "int") ts().fields[fname].options = [];
+  renderFields(ts());
+}
+
+function ensureFieldMeta(fname) {
+  if (!_state.field_meta[fname]) {
+    _state.field_meta[fname] = { type: "string", aggregatable: false, dimension: true, unit: "", linkable: false };
+  }
+}
+
+function setFieldMeta(fname, key, val) {
+  ensureFieldMeta(fname);
+  _state.field_meta[fname][key] = val;
 }
 
 function setFieldLinkable(fname, val) {
   ts().fields[fname].linkable = val;
+}
+
+function toggleRequired(fname, val) {
+  var req = ts().required || (ts().required = []);
+  var idx = req.indexOf(fname);
+  if (val && idx === -1) req.push(fname);
+  else if (!val && idx !== -1) req.splice(idx, 1);
 }
 
 function updateFieldUse(fname, val) {
@@ -722,6 +800,32 @@ function deleteField(fname) {
   delete ts().tags[fname];
   delete ts().conditions[fname];
   renderFields(ts()); renderTags(ts()); renderConditions(ts());
+}
+
+function convertToParentField(fname) {
+  var parentCandidates = Object.entries(ts().fields)
+    .filter(function(e) { return e[0] !== fname && !e[1].is_int && !e[1].parent && !e[1].use && Array.isArray(e[1].options) && e[1].options.length > 0; })
+    .map(function(e) { return e[0]; });
+  if (!parentCandidates.length) { alert("No parent candidates — add a field with flat options first."); return; }
+  var pick = prompt("Depend on which parent field?\nOptions: " + parentCandidates.join(", "));
+  if (!pick || !ts().fields[pick.trim()]) return;
+  var parentName = pick.trim();
+  var parentOpts = ts().fields[parentName].options;
+  var byParent = {};
+  parentOpts.forEach(function(pval) { byParent[pval] = []; });
+  ts().fields[fname] = { is_int: false, parent: parentName, options_by_parent: byParent };
+  renderFields(ts());
+}
+
+function convertToSharedField(fname) {
+  var sharedNames = Object.keys(_state.shared_defs);
+  if (!sharedNames.length) { alert("No shared definitions — add one in the Shared Definitions section first."); return; }
+  var pick = prompt("Use which shared definition?\nOptions: " + sharedNames.join(", "));
+  if (!pick) return;
+  var sname = pick.trim();
+  if (!_state.shared_defs[sname]) { alert("Unknown shared definition: " + sname); return; }
+  ts().fields[fname] = { is_int: false, options: [], use: "shared." + sname, linkable: false };
+  renderFields(ts());
 }
 
 function addOption(fname) {
@@ -774,7 +878,12 @@ function addParentValue(fname) {
 function renderTags(ts) {
   var el = document.getElementById("tags-list");
   el.innerHTML = "";
-  Object.entries(ts.tags).forEach(function(entry) {
+  var entries = Object.entries(ts.tags);
+  if (!entries.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--sub);padding:8px 0;">No tag rules yet. Auto-tag records based on field values.</div>';
+    return;
+  }
+  entries.forEach(function(entry) {
     el.appendChild(makeTagRule(entry[0], entry[1]));
   });
 }
@@ -907,7 +1016,12 @@ function renderGlobalFields() {
   var el = document.getElementById("global-fields-list");
   if (!el) return;
   el.innerHTML = "";
-  Object.entries(_state.global_fields).forEach(function(entry) {
+  var entries = Object.entries(_state.global_fields);
+  if (!entries.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--sub);padding:8px 0;">No global fields yet. These appear on every record type.</div>';
+    return;
+  }
+  entries.forEach(function(entry) {
     el.appendChild(makeGlobalFieldRow(entry[0], entry[1]));
   });
 }
@@ -931,11 +1045,11 @@ function makeGlobalFieldRow(fname, fdef) {
   head.className = "field-row-head";
   head.innerHTML =
     '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
-    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;" title="Store numeric values — no dropdown options needed">' +
       '<input type="checkbox" ' + (fdef.is_int ? "checked" : "") +
       ' onchange="toggleGlobalInt(\'' + fname + '\',this.checked)"> Number field' +
     '</label>' +
-    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;">' +
+    '<label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer;" title="Allow cross-references via [[brackets]] in notes and journal">' +
       '<input type="checkbox" ' + (fdef.linkable ? "checked" : "") +
       ' onchange="setGlobalFieldLinkable(\'' + fname + '\',this.checked)"> Linkable' +
     '</label>' +
@@ -1019,7 +1133,12 @@ function renderDerivedFields(tschema) {
   var el = document.getElementById("derived-fields-list");
   if (!el) return;
   el.innerHTML = "";
-  Object.entries(tschema.derived_fields || {}).forEach(function(entry) {
+  var entries = Object.entries(tschema.derived_fields || {});
+  if (!entries.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--sub);padding:8px 0;">No derived fields yet. Computed from other fields or dates.</div>';
+    return;
+  }
+  entries.forEach(function(entry) {
     el.appendChild(makeDerivedRow(entry[0], entry[1]));
   });
 }
@@ -1095,7 +1214,12 @@ function renderSharedDefs() {
   var el = document.getElementById("shared-defs-list");
   if (!el) return;
   el.innerHTML = "";
-  Object.entries(_state.shared_defs).forEach(function(entry) {
+  var entries = Object.entries(_state.shared_defs);
+  if (!entries.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--sub);padding:8px 0;">No shared definitions yet. Reusable option lists referenced by type fields.</div>';
+    return;
+  }
+  entries.forEach(function(entry) {
     el.appendChild(makeSharedRow(entry[0], entry[1]));
   });
 }
@@ -1175,65 +1299,6 @@ function addSharedOption(sname) {
 function removeSharedOption(sname, idx) {
   _state.shared_defs[sname].options.splice(idx, 1);
   renderSharedDefs();
-}
-
-// ── Field Metadata ────────────────────────────────────────────────────────────
-function renderFieldMeta() {
-  var el = document.getElementById("field-meta-list");
-  if (!el) return;
-  el.innerHTML = "";
-  Object.entries(_state.field_meta).forEach(function(entry) {
-    el.appendChild(makeFieldMetaRow(entry[0], entry[1]));
-  });
-}
-function addFieldMeta() {
-  var name = prompt("Field name (e.g. amount, duration):");
-  if (!name) return;
-  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
-  if (!name) return;
-  if (_state.field_meta[name]) { alert("Already exists"); return; }
-  _state.field_meta[name] = { type: "string", aggregatable: false, dimension: true, unit: "", linkable: false };
-  renderFieldMeta();
-}
-function makeFieldMetaRow(fname, fmeta) {
-  var div = document.createElement("div");
-  div.className = "field-row";
-  var head = document.createElement("div");
-  head.className = "field-row-head";
-  head.innerHTML =
-    '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
-    '<button onclick="deleteFieldMeta(\'' + fname + '\')" ' +
-    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>';
-  div.appendChild(head);
-  var body = document.createElement("div");
-  body.style.cssText = "display:flex;flex-wrap:wrap;gap:14px;margin-top:4px;align-items:center;";
-  body.innerHTML =
-    '<label style="font-size:12px;display:flex;align-items:center;gap:6px;">Type:&nbsp;' +
-      '<select onchange="setFieldMeta(\'' + fname + '\',\'type\',this.value)" style="font-size:12px;padding:3px 6px;">' +
-      '<option value="string"' + (fmeta.type==="string" ? " selected":"") + '>string</option>' +
-      '<option value="int"'    + (fmeta.type==="int"    ? " selected":"") + '>int</option>' +
-      '</select></label>' +
-    '<label style="font-size:12px;display:flex;align-items:center;gap:6px;">Unit:&nbsp;' +
-      '<input type="text" value="' + escHtmlAttr(fmeta.unit) + '" ' +
-      'onchange="setFieldMeta(\'' + fname + '\',\'unit\',this.value)" ' +
-      'style="font-size:12px;width:60px;padding:3px 6px;" placeholder="₹ / min"></label>' +
-    '<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;">' +
-      '<input type="checkbox" ' + (fmeta.aggregatable ? "checked":"") +
-      ' onchange="setFieldMeta(\'' + fname + '\',\'aggregatable\',this.checked)"> Aggregatable</label>' +
-    '<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;">' +
-      '<input type="checkbox" ' + (fmeta.linkable ? "checked":"") +
-      ' onchange="setFieldMeta(\'' + fname + '\',\'linkable\',this.checked)"> Linkable</label>' +
-    '<label style="font-size:12px;display:flex;align-items:center;gap:5px;cursor:pointer;">' +
-      '<input type="checkbox" ' + (fmeta.dimension !== false ? "checked":"") +
-      ' onchange="setFieldMeta(\'' + fname + '\',\'dimension\',this.checked)"> Dimension</label>';
-  div.appendChild(body);
-  return div;
-}
-function setFieldMeta(fname, key, val) { _state.field_meta[fname][key] = val; }
-function deleteFieldMeta(fname) {
-  if (!confirm("Remove field metadata for '" + fname + "'?")) return;
-  delete _state.field_meta[fname];
-  renderFieldMeta();
 }
 
 // ── Conditions (per type, editable) ──────────────────────────────────────────
@@ -1377,18 +1442,23 @@ function saveSchema() {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     btn.disabled = false; btn.textContent = "💾 Save Schema";
-    msg.style.display = "inline";
+    msg.style.display = "block";
     if (d.ok) {
+      msg.style.background = "var(--success-lt)";
       msg.style.color = "var(--success)";
-      msg.textContent = "✔ Saved — restart Flask to reload schema in all sessions";
+      msg.textContent = "✔ Schema saved";
+      clearTimeout(msg._hideTimer);
+      msg._hideTimer = setTimeout(function() { msg.style.display = "none"; }, 3000);
     } else {
+      msg.style.background = "var(--error-lt)";
       msg.style.color = "var(--error)";
       msg.textContent = "✖ " + d.error;
     }
   })
   .catch(function(e) {
     btn.disabled = false; btn.textContent = "💾 Save Schema";
-    msg.style.display = "inline";
+    msg.style.display = "block";
+    msg.style.background = "var(--error-lt)";
     msg.style.color = "var(--error)";
     msg.textContent = "✖ " + e;
   });

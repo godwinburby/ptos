@@ -5,6 +5,26 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-10
+
+### Schema Builder UX improvements
+
+- **Inline field metadata** (`schema_builder.html`): the standalone "Field Metadata" section has been removed. Each field row now shows its metadata inline — Type dropdown (string/int/datetime), Unit input, Aggregatable checkbox, Dimension checkbox — below the options area. Metadata is global by field name, so the same field (e.g. `amount`) across multiple types shares the same metadata. When editing metadata in one type, all other types using that field see the updated values.
+- **Unified Type dropdown** (`schema_builder.html`): the "Number field" checkbox has been replaced with a Type dropdown (string/int/datetime) that sets both the per-type `is_int` flag and the global `field_meta[fname].type` simultaneously.
+- **Cross-type badge** (`schema_builder.html`): field names that appear in other types show an "Also in: income, transfer" badge next to the field name, making it clear that metadata changes are shared.
+- **Auto-populated metadata** (`schema_builder.html`): when creating a field with a name that already has metadata defined (e.g., `amount` in expense type, then adding `amount` to income), the metadata controls show pre-filled values from the shared global dict — no manual setup needed.
+- **Tooltips on advanced checkboxes** (`schema_builder.html`): Number field, Linkable, Aggregatable, and Dimension checkboxes now have `title` attributes explaining what each option does.
+- **Required fields merged into field rows** (`schema_builder.html`): the separate "Required fields" chip section has been removed. Each field row now has a "Req" checkbox in its header — toggling it adds/removes the field from `ts.required`.
+- **Better empty states** (`schema_builder.html`): collapsed sections now show helpful explanatory text when empty — Tags, Derived Fields, Global Fields, Shared Definitions.
+- **Save message improved** (`schema_builder.html`): the "✔ Saved — restart Flask to reload schema in all sessions" message is now a green "✔ Schema saved" banner that auto-hides after 3 seconds.
+- **Live record line preview** (`schema_builder.html`): a monospace preview box below the type name shows what a record of the current type would look like, updating live as fields are added/removed.
+- **Add Type: inline input replaces prompt()** (`schema_builder.html`): clicking "+ Add Type" now shows an inline text input in the type chip bar instead of a browser `prompt()` dialog.
+- **Add Field: inline row replaces prompt() chain** (`schema_builder.html`): clicking "+ Add Field" now inserts a temporary editing row with a focused name input, type dropdown, and Req checkbox. Parent dependency and shared definition conversion are available as buttons on existing field rows.
+- **`convertToParentField` / `convertToSharedField`** (`schema_builder.html`): new functions that convert a plain field to a parent-dependent or shared-definition field.
+- **Tests** (`test_schema_builder.py`): updated `TestSchemaBuilderCollapsible` (6 sections after removing Required and Field Metadata), renamed `test_add_field_offers_shared_prompt` to `test_add_field_offers_shared_conversion`.
+
+---
+
 ## 2026-09-09
 
 ### Record Types management page
