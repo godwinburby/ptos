@@ -2655,11 +2655,9 @@ def _handle_migrate_log_group(rtype):
                  f"  [{rtype}]\\nlog_group = \"{rtype}\"")
     fnames = ptos.get_log_files()
     moved = 0
-    skipped = 0
     source_files = set()
     for fname in fnames:
         fpath = os.path.join(ptos.RECORDS_DIR, fname)
-        # skip target group files
         if fname.startswith(log_group + "/"):
             continue
         with open(fpath, encoding="utf-8") as f:
@@ -2678,14 +2676,9 @@ def _handle_migrate_log_group(rtype):
             if kv.get("type") != rtype:
                 keep.append(line)
                 continue
-            # move this line to the target group file
-            year = stripped[:4]
-            target = os.path.join(ptos.RECORDS_DIR, log_group, f"{year}.log")
-            os.makedirs(os.path.dirname(target), exist_ok=True)
-            ptos.atomic_append(target, stripped)
+            ptos.append_record(stripped)
             moved += 1
             source_files.add(fpath)
-        # rewrite source file without the moved lines
         if len(keep) != len(lines):
             new_content = "".join(keep)
             if new_content.strip():
