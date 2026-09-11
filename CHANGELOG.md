@@ -7,10 +7,11 @@ Format: `[version or date] — description`
 
 ## 2026-09-10
 
-### Schema Builder: fix field type metadata loss on save
+### Schema Builder: fix field type metadata loss on save + unknown-key preservation
 
 - **JS boot code** (`schema_builder.html`): the Schema Builder now loads `is_datetime` and `is_bool` flags from the existing `type` string (e.g. `type = "datetime"`) when loading field definitions. Previously only `is_int` was loaded, so string/datetime/bool fields lost their type metadata on the first save.
 - **Python `_build_schema_dict`** (`ptos_web.py`): the field serializer now handles `is_datetime` and `is_bool` flags, and always writes `fd["type"]` (defaulting to `"string"`) so no field type is ever silently erased. Previously a string field without options produced an empty `{}` dict on save.
+- **Unknown-key preservation** (`schema_builder.html`, `ptos_web.py`): both the JS boot code and the Python serializer now preserve any unknown keys in `[fields.X]`, `[type.X.fields.Y]`, `[shared.X]`, and `[global_fields.X]` sections. This ensures properties like `derived`, `multi`, `labels`, and any future additions survive a Schema Builder save cycle.
 
 ### queries.toml data-loss fixes (merge-based writes)
 

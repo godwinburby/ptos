@@ -2175,6 +2175,7 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
             if isinstance(fmeta, dict):
                 fm_source[fname] = fmeta
     fields_out = {}
+    _known_meta = {"type", "aggregatable", "dimension", "unit", "linkable", "derived"}
     for fname, fmeta in fm_source.items():
         if not isinstance(fmeta, dict):
             continue
@@ -2185,12 +2186,16 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
         if "dimension"    in fmeta: fd["dimension"]    = fmeta["dimension"]
         if fmeta.get("unit"):       fd["unit"]         = fmeta["unit"]
         if fmeta.get("derived"):    fd["derived"]      = fmeta["derived"]
+        for k, v in fmeta.items():
+            if k not in _known_meta:
+                fd[k] = v
         fields_out[fname] = fd
     schema["fields"] = fields_out
 
     # ── [shared.*] ───────────────────────────────────────────────────────────
     sd_source = new_shared_defs if new_shared_defs is not None                 else old_schema.get("shared", {})
     shared_out = {}
+    _known_shared = {"type", "options", "is_int"}
     for sname, sdef in sd_source.items():
         if not isinstance(sdef, dict):
             continue
@@ -2198,12 +2203,16 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
         opts = sdef.get("options", [])
         if opts:
             sd["options"] = opts
+        for k, v in sdef.items():
+            if k not in _known_shared:
+                sd[k] = v
         shared_out[sname] = sd
     schema["shared"] = shared_out
 
     # ── [global_fields.*] ────────────────────────────────────────────────────
     gf_source = new_global_fields if new_global_fields is not None                 else old_schema.get("global_fields", {})
     gf_out = {}
+    _known_gf = {"type", "options", "linkable", "is_int"}
     for fname, fdef in gf_source.items():
         if not isinstance(fdef, dict):
             continue
@@ -2213,6 +2222,9 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
             gfd["options"] = opts
         if fdef.get("linkable"):
             gfd["linkable"] = True
+        for k, v in fdef.items():
+            if k not in _known_gf:
+                gfd[k] = v
         gf_out[fname] = gfd
     schema["global_fields"] = gf_out
 
@@ -2241,6 +2253,8 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
             if fn not in seen: seen.append(fn)
 
         fields_dict = {}
+        _known_field = {"use", "parent", "options_by_parent", "options",
+                        "is_int", "is_datetime", "is_bool", "type", "linkable"}
         for fname in seen:
             fdef_new     = fields_new.get(fname)
             fdef_old     = fields_old.get(fname, {})
@@ -2250,6 +2264,9 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
                 fd = {}
                 if fdef_derived.get("expr"):  fd["derived"] = fdef_derived["expr"]
                 if fdef_derived.get("type"):  fd["type"]    = fdef_derived["type"]
+                for k, v in fdef_derived.items():
+                    if k not in {"expr", "type"}:
+                        fd[k] = v
                 fields_dict[fname] = fd
             elif fdef_new is not None:
                 fd = {}
@@ -2274,6 +2291,9 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
                         fd["options"] = list(opts)
                 if fdef_new.get("linkable"):
                     fd["linkable"] = True
+                for k, v in fdef_new.items():
+                    if k not in _known_field and v is not None:
+                        fd[k] = v
                 fields_dict[fname] = fd
             else:
                 # preserve old field verbatim
