@@ -2263,7 +2263,12 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
                                          for pv, popts in by_parent.items()}
                 elif fdef_new.get("is_int"):
                     fd["type"] = "int"
+                elif fdef_new.get("is_datetime"):
+                    fd["type"] = "datetime"
+                elif fdef_new.get("is_bool"):
+                    fd["type"] = "bool"
                 else:
+                    fd["type"] = "string"
                     opts = fdef_new.get("options", [])
                     if opts:
                         fd["options"] = list(opts)
