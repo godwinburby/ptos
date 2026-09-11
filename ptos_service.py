@@ -1776,7 +1776,7 @@ def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
             old_year = _os.path.basename(filepath)[:4]
             new_year = changed_date[:4]
             _update_record_in_file(filepath, old_line, None, lineno=lineno)
-            new_path = _os.path.join(ptos.RECORDS_DIR, f"{new_year}.log")
+            new_path = ptos._resolve_record_path(new_line)
             # Read existing and append atomically
             existing = ""
             if _os.path.exists(new_path):

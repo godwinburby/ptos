@@ -5,6 +5,24 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-11
+
+### Per-type log files (`log_group` in schema)
+
+- **New `log_group` config key** (`schema.toml`): types can now set `log_group = "name"` in their `[type.X]` section to route records to a separate file: `records/<name>/<year>.log` instead of the default `records/<year>.log`. Types without `log_group` behave exactly as before — zero migration, zero risk to existing data. Multiple types can share a log group (e.g. two CRM types both using `log_group = "crm"`).
+- **`_resolve_record_path()` helper** (`ptos.py`): new function that parses `type=` from a record line and looks up `log_group` in schema. Called from `append_record()`, `run_set()` year-cross, and `lint_records()` error file tracking.
+- **`append_record()` routes by type** (`ptos.py`): records of a type with `log_group` set are written to `records/<group>/<year>.log`; all others go to `records/<year>.log` as before.
+- **`get_log_files()` walks subdirectories** (`ptos.py`): discovers `.log` files one level deep — both flat files in `records/` and files in immediate subdirectories. Returns relative paths from `RECORDS_DIR` (e.g. `2026.log`, `followup/2026.log`).
+- **Year-skip optimization preserved** (`ptos.py`): `scan_records()` and `find_records_with_location()` now use `os.path.basename(fname)[:4]` for year detection, so the early-skip optimization works correctly with both flat files and `group/2026.log` subdirectory paths.
+- **Year-cross moves** (`ptos.py`, `ptos_service.py`): `run_set()` and `edit_record()` now route moved records to the correct type-specific file when a date change crosses a year boundary.
+- **`--file` flag accepts subdirectory paths** (`ptos.py`): the CLI `--file` validation now allows relative paths with `/` separators (e.g. `--file followup/2026.log`), rejecting only absolute paths and `..` traversal.
+- **Schema Builder preserves `log_group`** (`ptos_web.py`): `_build_schema_dict()` now preserves unknown top-level keys in `[type.X]` sections, including `log_group`, so it survives a Schema Builder save cycle.
+- **`--migrate-log-group TYPE` CLI command** (`ptos_cli.py`): explicit one-time migration command that finds every `type=TYPE` line across `records/*.log`, removes it from the source file, and appends to `records/<group>/<year>.log`. Requires `log_group` to be set in schema. Does not run automatically.
+- **Browse page JS fix** (`browse.html`): the file year-extraction logic now uses the last path component, so `followup/2026.log` correctly resolves to year `2026`.
+- **Tests** (`test_log_group.py`): 24 new tests covering `_resolve_record_path`, `append_record` routing, `get_log_files` subdirectory discovery, year-skip with nested paths, year-cross moves, `--file` with subdirectory paths, `lint_records` error file tracking, `edit_record` year-cross in service layer, and `--migrate-log-group` migration.
+
+---
+
 ## 2026-09-10
 
 ### Schema Builder: fix field type metadata loss on save + unknown-key preservation
