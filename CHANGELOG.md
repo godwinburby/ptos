@@ -7,6 +7,11 @@ Format: `[version or date] — description`
 
 ## 2026-09-10
 
+### Schema Builder: fix field type metadata loss on save
+
+- **JS boot code** (`schema_builder.html`): the Schema Builder now loads `is_datetime` and `is_bool` flags from the existing `type` string (e.g. `type = "datetime"`) when loading field definitions. Previously only `is_int` was loaded, so string/datetime/bool fields lost their type metadata on the first save.
+- **Python `_build_schema_dict`** (`ptos_web.py`): the field serializer now handles `is_datetime` and `is_bool` flags, and always writes `fd["type"]` (defaulting to `"string"`) so no field type is ever silently erased. Previously a string field without options produced an empty `{}` dict on save.
+
 ### queries.toml data-loss fixes (merge-based writes)
 
 - **Merge-based `save_queries_full()`** (`ptos_service.py`): the Query Builder's save-all function now reads the existing `queries.toml` first and merges incoming data on top. When a section parameter is `None` (not passed), existing entries for that section are preserved — fixing the critical bug where deleting a single query/metric/dashboard via the QB UI would wipe all boards, habits, calendars, and due configs. Unknown fields within each entry (e.g. `toggleable` on habits, `match_field` on boards) are preserved from the existing TOML even when the QB UI doesn't send them.

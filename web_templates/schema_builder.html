@@ -302,14 +302,16 @@ var _currentType = null;
             byParent[e[0]] = Array.isArray(e[1]) ? e[1] : [];
           });
         }
-        fields[fname] = { is_int: false, parent: fdef.parent, options_by_parent: byParent };
+        fields[fname] = { is_int: false, is_datetime: false, is_bool: false, parent: fdef.parent, options_by_parent: byParent };
         return;
       }
       var opts = Array.isArray(fdef.options) ? fdef.options : [];
       fields[fname] = {
-        is_int:   fdef.type === "int",
-        options:  opts,
-        linkable: fdef.linkable === true,
+        is_int:      fdef.type === "int",
+        is_datetime: fdef.type === "datetime" || undefined,
+        is_bool:     fdef.type === "bool" || undefined,
+        options:     opts,
+        linkable:    fdef.linkable === true,
       };
     });
 
