@@ -278,6 +278,10 @@ var _currentType = null;
       unit:         fmeta.unit         || "",
       linkable:     fmeta.linkable     === true,
     };
+    var _knownMeta = new Set(["type","aggregatable","dimension","unit","linkable"]);
+    Object.keys(fmeta).forEach(function(k) {
+      if (!_knownMeta.has(k)) _state.field_meta[fname][k] = fmeta[k];
+    });
   });
 
   var old_types = schema.type || {};
@@ -291,10 +295,11 @@ var _currentType = null;
       if ("derived" in fdef) return;   // skip derived — handled separately
       if ("use" in fdef) {
         fields[fname] = { is_int: false, options: [], use: fdef.use };
+        var _kf = new Set(["use","options"]);
+        Object.keys(fdef).forEach(function(k) { if (!_kf.has(k)) fields[fname][k] = fdef[k]; });
         return;
       }
       if ("parent" in fdef) {
-        // parent-dependent field — options is a dict keyed by parent value
         var rawOpts = fdef.options;
         var byParent = {};
         if (rawOpts && typeof rawOpts === "object" && !Array.isArray(rawOpts)) {
@@ -303,6 +308,8 @@ var _currentType = null;
           });
         }
         fields[fname] = { is_int: false, is_datetime: false, is_bool: false, parent: fdef.parent, options_by_parent: byParent };
+        var _kf = new Set(["parent","options","options_by_parent"]);
+        Object.keys(fdef).forEach(function(k) { if (!_kf.has(k)) fields[fname][k] = fdef[k]; });
         return;
       }
       var opts = Array.isArray(fdef.options) ? fdef.options : [];
@@ -313,6 +320,8 @@ var _currentType = null;
         options:     opts,
         linkable:    fdef.linkable === true,
       };
+      var _kf = new Set(["type","options","linkable"]);
+      Object.keys(fdef).forEach(function(k) { if (!_kf.has(k)) fields[fname][k] = fdef[k]; });
     });
 
     // tags: only bring in flat tags (options.key = [...])
