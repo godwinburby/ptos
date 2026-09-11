@@ -81,11 +81,22 @@ class PTOSError(Exception):
 
 
 def get_log_files():
-    """Get list of log files from records/, excluding conflict files."""
+    """Get list of log files from records/, excluding conflict files.
+    Returns relative paths from RECORDS_DIR — flat files like '2026.log'
+    and one-level-deep type-grouped files like 'followup/2026.log'."""
     if not os.path.isdir(RECORDS_DIR):
         return []
-    return sorted(f for f in os.listdir(RECORDS_DIR)
-                  if f.endswith(".log") and "conflict" not in f.lower())
+    files = []
+    for entry in os.listdir(RECORDS_DIR):
+        full = os.path.join(RECORDS_DIR, entry)
+        if os.path.isfile(full) and entry.endswith(".log") and "conflict" not in entry.lower():
+            files.append(entry)
+        elif os.path.isdir(full):
+            for sub in os.listdir(full):
+                sub_full = os.path.join(full, sub)
+                if os.path.isfile(sub_full) and sub.endswith(".log") and "conflict" not in sub.lower():
+                    files.append(os.path.join(entry, sub))
+    return sorted(files)
 
 
 def get_backup_config():
@@ -2082,8 +2093,9 @@ def find_records_with_location(filters, search=None, start=None, end=None):
     matches = []
     fnames = get_log_files()
     for fname in fnames:
-        if fname[:4].isdigit():
-            year = int(fname[:4])
+        base = os.path.basename(fname)
+        if base[:4].isdigit():
+            year = int(base[:4])
             if year < start.year or year > end.year:
                 continue
         path = os.path.join(RECORDS_DIR, fname)
@@ -2327,7 +2339,7 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
             old_year = os.path.basename(filepath)[:4]
             new_year = changed_date[:4]
             rewrite_line_in_file(filepath, old_line, None, lineno=lineno)
-            new_path = os.path.join(RECORDS_DIR, f"{new_year}.log")
+            new_path = _resolve_record_path(new_line)
             atomic_append(new_path, new_line)
             moved = f" (moved {old_year}.log → {new_year}.log)" if old_year != new_year else ""
             print(f"  Updated{moved}: {new_line}")
@@ -2350,9 +2362,9 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
     results = []
     total   = 0
     if from_file:
-        # validate — no path separators, must exist in records/
-        if any(c in from_file for c in ("/", "\\", " ")):
-            sys.exit(f"--file: filename must not contain spaces or path separators: {from_file}")
+        # validate — relative path within records/, no traversal
+        if os.path.isabs(from_file) or ".." in from_file.replace("\\", "/").split("/"):
+            sys.exit(f"--file: path must be a relative filename within records/: {from_file}")
         fnames = [from_file]
         if not os.path.exists(os.path.join(RECORDS_DIR, from_file)):
             sys.exit(f"--file: '{from_file}' not found in records/ folder")
@@ -2360,8 +2372,9 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
         fnames = get_log_files()
     for fname in fnames:
         # skip files whose year cannot overlap the query window
-        if fname[:4].isdigit() and start is not None and end is not None:
-            year = int(fname[:4])
+        base = os.path.basename(fname)
+        if base[:4].isdigit() and start is not None and end is not None:
+            year = int(base[:4])
             if year < start.year or year > end.year:
                 continue
         path = os.path.join(RECORDS_DIR, fname)
@@ -2701,6 +2714,26 @@ def append_links_to_todo_line(line, new_links):
     return " ".join(parts)
 
 
+def _resolve_record_path(line):
+    """Return the filepath for a record line, respecting log_group in schema.
+    Types with log_group set write to records/<log_group>/<year>.log;
+    all others write to records/<year>.log (the default)."""
+    year = line[:4]
+    rtype = None
+    for part in line.split():
+        if part.startswith("type="):
+            rtype = part[5:]
+            break
+    if rtype:
+        schema = get_schema()
+        log_group = schema.get("type", {}).get(rtype, {}).get("log_group")
+        if log_group:
+            d = os.path.join(RECORDS_DIR, log_group, f"{year}.log")
+            os.makedirs(os.path.dirname(d), exist_ok=True)
+            return d
+    return os.path.join(RECORDS_DIR, f"{year}.log")
+
+
 def append_record(line, return_position=False):
     """Append a single log line to the correct yearly file.
     Extracts the year from the line's first 4 characters,
@@ -2710,8 +2743,7 @@ def append_record(line, return_position=False):
     If return_position=True, returns (filepath, lineno) of the
     newly appended line; otherwise returns None."""
     os.makedirs(RECORDS_DIR, exist_ok=True)
-    year = line[:4]
-    path = os.path.join(RECORDS_DIR, f"{year}.log")
+    path = _resolve_record_path(line)
     
     # Read existing content and prepare new content
     existing = ""
@@ -2980,7 +3012,7 @@ def lint_records(records, schema):
             for msg in anatomy_warnings:
                 print(f"  ⚠ {msg}"); total_warnings += 1
             if d != dt.date.min:
-                error_files.add(os.path.join(RECORDS_DIR, f"{d.year}.log"))
+                error_files.add(_resolve_record_path(line))
 
     type_summary = "  ".join(f"{t}:{n}" for t, n in sorted(type_counts.items()))
     print(f"\nChecked {total_checked} record(s) across {len(type_counts)} type(s)  [{type_summary}]")

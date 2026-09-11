@@ -169,7 +169,8 @@ var tp;
     } else if (time) {
       tp.setTime(time, params.get("custom_time"));
     } else if (file) {
-      var year = file.replace(".log", "");
+      var base = file.split("/").pop();
+      var year = base.replace(".log", "");
       if (/^\d{4}$/.test(year)) {
         tp.setTime("year", year);
       }

@@ -2347,6 +2347,16 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
         if conds_dict:
             tdict["conditions"] = conds_dict
 
+        # ── log_group and other unknown top-level type keys ──
+        _known_type_keys = {"required", "fields", "tags", "conditions"}
+        ts_old = old_types.get(tname, {})
+        for k, v in ts_old.items():
+            if k not in _known_type_keys and k not in tdict:
+                tdict[k] = v
+        for k, v in ts_new.items():
+            if k not in _known_type_keys:
+                tdict[k] = v
+
         types_out[tname] = tdict
 
     schema["type"] = types_out

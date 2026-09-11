@@ -355,6 +355,9 @@ def build_parser(cycles):
                      help="Assign an id to an existing entry so it can be linked to.\n"
                           "  Records: --retro-id expense --where \"amount=450 category=food\"\n"
                           "  Todo:    --retro-id todo --search \"call nair\"")
+    utl.add_argument("--migrate-log-group", dest="migrate_log_group", metavar="TYPE",
+                     help="Move all records of TYPE from records/*.log to records/<group>/<year>.log.\n"
+                          "Requires log_group to be set in schema for the type.")
     utl.add_argument("--doctor", action="store_true", help="Check PTOS installation health")
     utl.add_argument("--doctor-fix", dest="doctor_fix", action="store_true", help="With --doctor: fix any issues found")
     utl.add_argument("--check-schema", action="store_true", help="Validate schema.toml structure and report issues")
@@ -2643,6 +2646,60 @@ def _handle_retro_id(args):
     print(f"Added id={new_id} to {os.path.basename(filepath)}:{lineno}")
 
 
+def _handle_migrate_log_group(rtype):
+    """Move all records of TYPE from flat records/*.log to records/<group>/<year>.log."""
+    schema = ptos.get_schema()
+    log_group = schema.get("type", {}).get(rtype, {}).get("log_group")
+    if not log_group:
+        sys.exit(f"Type '{rtype}' has no log_group set in schema. Add it first:\n"
+                 f"  [{rtype}]\\nlog_group = \"{rtype}\"")
+    fnames = ptos.get_log_files()
+    moved = 0
+    skipped = 0
+    source_files = set()
+    for fname in fnames:
+        fpath = os.path.join(ptos.RECORDS_DIR, fname)
+        # skip target group files
+        if fname.startswith(log_group + "/"):
+            continue
+        with open(fpath, encoding="utf-8") as f:
+            lines = f.readlines()
+        keep = []
+        for line in lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                keep.append(line)
+                continue
+            try:
+                d, kv, _ = ptos.parse_line(stripped)
+            except (ValueError, IndexError):
+                keep.append(line)
+                continue
+            if kv.get("type") != rtype:
+                keep.append(line)
+                continue
+            # move this line to the target group file
+            year = stripped[:4]
+            target = os.path.join(ptos.RECORDS_DIR, log_group, f"{year}.log")
+            os.makedirs(os.path.dirname(target), exist_ok=True)
+            ptos.atomic_append(target, stripped)
+            moved += 1
+            source_files.add(fpath)
+        # rewrite source file without the moved lines
+        if len(keep) != len(lines):
+            new_content = "".join(keep)
+            if new_content.strip():
+                ptos.atomic_write(fpath, new_content)
+            else:
+                os.remove(fpath)
+    if moved == 0:
+        print(f"No records of type '{rtype}' found in flat log files.")
+    else:
+        print(f"Migrated {moved} record(s) of type '{rtype}' to records/{log_group}/")
+        for fp in sorted(source_files):
+            print(f"  cleaned: {os.path.relpath(fp, ptos.RECORDS_DIR)}")
+
+
 # --------------------------------------------------
 # Main
 # --------------------------------------------------
@@ -2938,6 +2995,11 @@ def main():
     # ---- retro-id ----
     if args.retro_id:
         _handle_retro_id(args)
+        return
+
+    # ---- migrate-log-group ----
+    if args.migrate_log_group:
+        _handle_migrate_log_group(args.migrate_log_group.strip().lower())
         return
 
     # ---- lint mode ----
