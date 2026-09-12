@@ -2434,177 +2434,6 @@ def pomodoro_log(task, minutes, date=None):
     return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
 
 
-def _digest_sample(line):
-    """Compact one-line summary of a record line for the daily digest."""
-    p = _parse_record(line) or {}
-    if not p:
-        return line
-    note = str(p.pop("note", "") or "").strip()
-    p.pop("date", None)
-    p.pop("type", None)
-    parts = [f"{k}={v}" for k, v in p.items() if v not in (None, "")]
-    text = " ".join(parts)
-    return (text + " | " + note) if note else text
-
-
-def _digest_todo_dict(t):
-    return {
-        "line_no": t.line_no,
-        "priority": t.priority or "",
-        "description": t.description,
-        "projects": list(t.projects),
-        "contexts": list(t.contexts),
-        "due": t.due,
-        "due_time": t.due_time or "",
-        "threshold": t.threshold,
-        "threshold_time": t.threshold_time or "",
-        "rec": t.rec or "",
-        "id": t.id or "",
-        "links": list(t.links) if t.links else [],
-    }
-
-
-def daily_digest(date=None):
-    """Compose the daily review for a date (default: yesterday).
-
-    Pure read of existing records, todos, journal, and habits — no writes.
-    Returns {date, weekday, records_by_type, todos, captures, journal, habits}.
-    records_by_type: [{type, count, samples}] (samples = up to 5 compact lines)
-    todos: {overdue, due} lists of todo dicts (threshold-hidden, capped)
-    captures: [{date, line, note, sample}] (recent first, capped)
-    journal: {path, date, exists, preview} or None
-    habits: [{name, streak, days_done, today, range_label}] or [] when none"""
-    date_obj = dt.date.fromisoformat(_iso_date(
-        date, default=(ptos.today() - dt.timedelta(days=1)).isoformat()))
-    date_str = date_obj.isoformat()
-
-    result = {
-        "date": date_str,
-        "weekday": date_obj.strftime("%A"),
-        "records_by_type": [],
-        "records": [],
-        "columns": [],
-        "todos": {"overdue": [], "due": []},
-        "captures": [],
-        "journal": None,
-        "habits": [],
-    }
-
-    try:
-        raw, _ = ptos.scan_records(date_obj, date_obj, [], None)
-    except Exception:
-        raw = []
-
-    loc_matches = []
-    try:
-        loc_matches = ptos.find_records_with_location(
-            [], search=None, start=date_obj, end=date_obj)
-    except Exception:
-        pass
-    line_to_filepath = {line: fp for fp, idx, line in loc_matches}
-    line_to_lineno = {line: idx for fp, idx, line in loc_matches}
-
-    by_type = {}
-    col_seen = []
-    col_set = set()
-    for line in raw:
-        p = ptos.safe_parse_line(line)
-        if not p:
-            continue
-        d, kv, note = p
-        t = kv.get("type", "")
-        if isinstance(t, list):
-            t = t[0] if t else ""
-        by_type.setdefault(str(t) if t else "(none)", []).append(line)
-        row = _parse_record(line)
-        if not row:
-            continue
-        row["_line"] = line
-        row["_filepath"] = line_to_filepath.get(line, "")
-        row["_lineno"] = line_to_lineno.get(line, -1)
-        result["records"].append(row)
-        for k in row:
-            if k not in col_set and not k.startswith("_"):
-                col_seen.append(k)
-                col_set.add(k)
-    result["columns"] = col_seen
-
-    for t in sorted(by_type, key=lambda x: (-len(by_type[x]), x)):
-        samples = [_digest_sample(l) for l in by_type[t][:5]]
-        result["records_by_type"].append({"type": t, "count": len(by_type[t]), "samples": samples})
-
-    try:
-        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
-    except Exception:
-        todos = []
-    for t in todos:
-        if t.done or not t.due:
-            continue
-        if t.threshold and t.threshold > date_obj:
-            continue
-        if t.due < date_obj:
-            result["todos"]["overdue"].append(_digest_todo_dict(t))
-        elif t.due == date_obj:
-            result["todos"]["due"].append(_digest_todo_dict(t))
-        if len(result["todos"]["overdue"]) + len(result["todos"]["due"]) >= 60:
-            break
-
-    try:
-        matches = ptos.find_records_with_location(["type=capture"], start=dt.date.min, end=date_obj)
-    except Exception:
-        matches = []
-    sortable = sorted(matches, key=lambda m: (m[2][:10], m[1]), reverse=True)
-    for fp, idx, line in sortable[:10]:
-        p = _parse_record(line)
-        note = (p or {}).get("note", "") if p else ""
-        note = note if isinstance(note, str) else str(note or "")
-        result["captures"].append({
-            "date": line[:10],
-            "line": line,
-            "note": note,
-            "sample": _digest_sample(line),
-            "_filepath": fp,
-            "_lineno": idx,
-            "_line": line,
-        })
-
-    jpath = ptos.journal_path(date_str)
-    if os.path.exists(jpath):
-        try:
-            with open(jpath, encoding="utf-8") as f:
-                content = f.read()
-        except Exception:
-            content = ""
-        lines = [l for l in content.splitlines() if l.strip()]
-        result["journal"] = {
-            "path": jpath,
-            "date": date_str,
-            "exists": True,
-            "preview": "\n".join(lines[:10])[:2000],
-        }
-
-    try:
-        names = get_habit_names()
-    except Exception:
-        names = []
-    for n in names:
-        try:
-            d = get_habit_data(n)
-        except Exception:
-            continue
-        today_present = next((c.get("present") for c in d.get("grid", [])
-                              if c.get("is_today")), False)
-        result["habits"].append({
-            "name": n,
-            "streak": d.get("streak", 0),
-            "days_done": d.get("days_done", 0),
-            "today": bool(today_present),
-            "range_label": d.get("range_label", ""),
-        })
-
-    return result
-
-
 def get_board_data(board_name, time=None, from_date=None, to_date=None):
     """Load record data for each column of a board.
     The display window is resolved from explicit time/from_date/to_date params
@@ -4481,6 +4310,45 @@ def get_todos_bucketed():
         return ptos_todo.bucket_todos(todos)
     except Exception as e:
         raise PTOSError(str(e))
+
+
+def get_todo_summary_counts():
+    """Return (overdue_count, due_today_count) without loading full todo dicts."""
+    try:
+        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        today = ptos.today()
+        overdue = 0
+        due_today = 0
+        for t in todos:
+            if t.done or not t.due:
+                continue
+            if t.threshold and t.threshold > today:
+                continue
+            if t.due < today:
+                overdue += 1
+            elif t.due == today:
+                due_today += 1
+        return overdue, due_today
+    except Exception:
+        return 0, 0
+
+
+def get_journal_preview(date_str=None):
+    """Return first line of journal entry for date, or None if no entry exists."""
+    if date_str is None:
+        date_str = ptos.today().isoformat()
+    path = ptos.journal_path(date_str)
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            for line in f:
+                stripped = line.strip()
+                if stripped:
+                    return stripped[:120]
+        return None
+    except Exception:
+        return None
 
 
 def add_todo_line(text):

@@ -596,7 +596,6 @@
     <a href="/search"  class="{% if tab=='search'  %}active{% endif %}">{% include 'icons/search.html'  ignore missing %} Search <kbd>F</kbd></a>
     <a href="/due"     class="{% if tab=='due'     %}active{% endif %}">{% include 'icons/due.html'     ignore missing %} Due List <kbd>G D</kbd></a>
     <a href="/browse"  class="{% if tab=='browse'  %}active{% endif %}">{% include 'icons/browse.html'  ignore missing %} Browse <kbd>B</kbd></a>
-    <a href="/daily"   class="{% if tab=='daily'   %}active{% endif %}">{% include 'icons/daily.html'   ignore missing %} Daily <kbd>G W</kbd></a>
     </div>
     <div class="sidebar-section" data-section="track">Track</div>
     <div class="sidebar-nav-group" data-group="track">
@@ -999,7 +998,7 @@
   <div class="more-menu-overlay" onclick="toggleMoreMenu(event)"></div>
   <div class="more-menu-content">
     <div class="more-menu-header">More</div>
-    {% set _tab_map = {"search":"search","due":"due","journal":"journal","notes":"notes","board":"board","habits":"habits","calendar":"calendar","daily":"daily","thresholds":"thresholds","query-builder":"query_builder","schema-builder":"schema_builder","types":"types","backup":"backup","editor":"editor","lint":"lint","settings":"settings"} %}
+    {% set _tab_map = {"search":"search","due":"due","journal":"journal","notes":"notes","board":"board","habits":"habits","calendar":"calendar","thresholds":"thresholds","query-builder":"query_builder","schema-builder":"schema_builder","types":"types","backup":"backup","editor":"editor","lint":"lint","settings":"settings"} %}
     {% for url_path, icon_name, label in more_menu_items %}
     <a href="/{{ url_path }}" class="more-menu-item {% if tab==_tab_map.get(url_path,'') %}active{% endif %}">
       {% include 'icons/' ~ icon_name ~ '.html' ignore missing %}
@@ -1275,7 +1274,6 @@ function toggleMoreMenu(e) {
     "g m": "/habits",
     "g y": "/calendar",
     "g r": "/thresholds",
-    "g w": "/daily",
     "g x": "/types",
   };
 
@@ -1326,7 +1324,6 @@ function toggleMoreMenu(e) {
           <tr><td><kbd>M</kbd></td><td>Habits</td></tr>
           <tr><td><kbd>Y</kbd></td><td>Calendar</td></tr>
           <tr><td><kbd>R</kbd></td><td>Thresholds</td></tr>
-          <tr><td><kbd>W</kbd></td><td>Daily</td></tr>
           <tr><td><kbd>X</kbd></td><td>Record Types</td></tr>
           <tr><td><kbd>U</kbd></td><td>Query Builder</td></tr>
           <tr><td><kbd>C</kbd></td><td>Schema Builder</td></tr>

@@ -7,6 +7,19 @@ Format: `[version or date] — description`
 
 ## 2026-09-12
 
+### Home page restructured into 4 sections
+
+- **Overview** — dashboard metrics + thresholds moved to top section
+- **Needs your attention** — Overdue Records (renamed from "Overdue" for clarity), Todos (new card with overdue/today count), Journal (new card with first-line preview)
+- **Quick add** — Capture card + single/multi preset chips
+- **Today** — today's records table
+- **Removed** — Record Types card from home page (sidebar covers it); "Today's digest" link from Capture card
+
+### Daily Digest fully removed
+
+- **Deleted** `daily.html`, `icons/daily.html`, `tests/test_digest.py`, `daily_digest()` + `_digest_sample()` + `_digest_todo_dict()` from `ptos_service.py`, `/daily` route + `more_menu_items` entry from `ptos_web.py`, `--daily` arg + `run_daily` handler from `ptos_cli.py`, sidebar link + `g w` shortcut + help overlay entry + tab map from `base.html`
+- **New service functions** — `get_todo_summary_counts()` returns `(overdue_count, due_today_count)` without loading full todo dicts; `get_journal_preview()` returns first line of today's journal entry (or None)
+
 ### Security: eval whitelist and Zip Slip protection
 
 - **Derived-field eval whitelist** (`ptos.py` `compute_derived()`): the date-aware `eval()` branch now validates the fully-substituted expression against a whitelist regex before evaluation. Only digits, arithmetic/comparison operators, and the identifiers `today`, `date`, `timedelta`, `.days` are allowed. Malicious expressions like `__class__`, `__import__()`, or attribute chains are rejected (field silently resolves to `None`). Also substitutes record field values into the expression before checking, matching the behavior of the non-date branch.
@@ -14,11 +27,10 @@ Format: `[version or date] — description`
 
 ### Grouped desktop sidebar with keyboard shortcuts
 
-- **4 labeled section groups** — desktop sidebar now organized into **Log** (Home, Add Record, Todo, Journal, Notes, Types), **Find** (Search, Due List, Browse, Daily), **Track** (Queries, Board, Habits, Calendar, Thresholds), **Setup** (Query Builder, Schema Builder, Log Editor, Lint, Backup, Settings). Sections collapsible with chevron indicator, state persisted to localStorage.
+- **4 labeled section groups** — desktop sidebar now organized into **Log** (Home, Add Record, Todo, Journal, Notes, Types), **Find** (Search, Due List, Browse), **Track** (Queries, Board, Habits, Calendar, Thresholds), **Setup** (Query Builder, Schema Builder, Log Editor, Lint, Backup, Settings). Sections collapsible with chevron indicator, state persisted to localStorage.
 - **Keyboard shortcut badges** — every sidebar link displays its shortcut key (`H`, `A`, `T`, `G O`, etc.) in a subtle monospace badge. Single-key shortcuts for core pages, `G X` chords for secondary pages.
-- **New shortcuts** — `F` → Search (single-key), `G O` → Board, `G M` → Habits, `G Y` → Calendar, `G R` → Thresholds, `G W` → Daily, `G X` → Record Types (all `G` chords).
-- **Bug fix** — 5 dead uppercase NAV entries (`g T/B/H/C/D`) were unreachable because the handler lowercases all keys; replaced with working lowercase versions (`g o/m/y/r/w`).
-- **Daily icon fix** — Daily page was using Calendar's icon; now uses its own `daily.html` icon.
+- **New shortcuts** — `F` → Search (single-key), `G O` → Board, `G M` → Habits, `G Y` → Calendar, `G R` → Thresholds, `G X` → Record Types (all `G` chords).
+- **Bug fix** — 5 dead uppercase NAV entries (`g T/B/H/C/D`) were unreachable because the handler lowercases all keys; replaced with working lowercase versions (`g o/m/y/r`).
 
 ## 2026-09-11
 

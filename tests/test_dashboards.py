@@ -144,7 +144,10 @@ class TestHomeGroupedRender:
         resp = client.get("/?dashboard=legacy")
         assert resp.status_code == 200
         body = resp.get_data(as_text=True)
-        assert '<div class="stat-group-label">' not in body
+        assert 'stat-group-label">Overview' in body
+        assert 'stat-group-label">Needs your attention' in body
+        assert 'stat-group-label">Quick add' in body
+        assert 'stat-group-label">Today' in body
 
     def test_home_renders_ungrouped_label(self):
         from ptos_web import app

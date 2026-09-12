@@ -105,6 +105,8 @@ var tp;
 </script>
 {% endif %}
 
+<div class="stat-group-label">Overview</div>
+
 <!-- stat cards - dashboard metrics (2 rows) -->
 {% if stat_groups %}
 {% for g in stat_groups %}
@@ -133,25 +135,83 @@ var tp;
 </div>
 {% endif %}
 
-<!-- record types -->
+{% if threshold_data %}
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;">
-    <div class="card-title" style="margin:0;">Record Types</div>
-    <a href="/types/new" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600;">+ New type</a>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div class="card-title" style="margin:0;">Thresholds</div>
+    <a href="/thresholds" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
   </div>
-  <div style="margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;">
-    {% for t in record_types %}
-    <a href="/types?edit={{ t }}" style="display:inline-block;padding:4px 10px;border-radius:6px;border:1px solid var(--border);background:var(--card);font-size:12px;color:var(--fg);text-decoration:none;">{{ t }}</a>
-    {% endfor %}
-  </div>
+  {% set compact = true %}
+  {% for t in threshold_data %}
+    {% include '_threshold_bar.html' with context %}
+  {% endfor %}
 </div>
+{% endif %}
+
+<div class="stat-group-label">Needs your attention</div>
+
+{% if due_configs %}
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div class="card-title" style="margin:0;">Overdue Records</div>
+    {% if due_configs|length > 1 %}
+    <select onchange="changeDue(this.value)" style="font-size:12px;padding:4px;">
+      {% for dc in due_configs %}
+      <option value="{{ dc }}" {% if dc == selected_due %}selected{% endif %}>{{ dc }}</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <a href="/due" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
+  </div>
+  {% if due_rows %}
+  {% for row in due_rows %}
+  <div class="due-row">
+    <div class="due-badge {{ row.heat }}">{{ row.days }}d</div>
+    <div>
+      <div class="due-name">{{ row.name }}</div>
+      <div class="due-meta">{{ row.status }}{% if row.note %} · {{ row.note[:50] }}{% if row.note|length > 50 %}…{% endif %}{% endif %}</div>
+    </div>
+  </div>
+  {% endfor %}
+  {% else %}
+  <div style="font-size:13px;color:var(--sub);">No overdue records</div>
+  {% endif %}
+</div>
+{% endif %}
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div class="card-title" style="margin:0;">Todos</div>
+    <a href="/todo" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
+  </div>
+  <a href="/todo" style="display:flex;align-items:center;gap:12px;text-decoration:none;">
+    <span style="font-size:14px;font-weight:600;color:var(--text);">
+      {% if overdue_count %}<span style="color:var(--error);">{{ overdue_count }} overdue</span>{% endif %}
+      {% if overdue_count and due_today_count %} · {% endif %}
+      {% if due_today_count %}<span style="color:var(--accent);">{{ due_today_count }} due today</span>{% endif %}
+      {% if not overdue_count and not due_today_count %}No todos due today{% endif %}
+    </span>
+    <span style="margin-left:auto;color:var(--sub);font-size:13px;">→</span>
+  </a>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
+    <div class="card-title" style="margin:0;">Journal</div>
+    <a href="/journal" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
+  </div>
+  <a href="/journal" style="display:block;text-decoration:none;">
+    <span style="font-size:14px;font-weight:600;color:var(--text);">
+      {% if journal_preview %}{{ journal_preview }}{% else %}No entry yet{% endif %}
+    </span>
+  </a>
+</div>
+
+<div class="stat-group-label">Quick add</div>
 
 <!-- capture — quick inbox -->
 <div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-    <div class="card-title" style="margin:0;">Capture</div>
-    <a href="/daily" style="font-size:12px;color:var(--accent);text-decoration:none;font-weight:600;">Today's digest →</a>
-  </div>
+  <div class="card-title" style="margin-bottom:10px;">Capture</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <input id="cap-input" type="text" placeholder="Quick record… (Enter to capture)"
            onkeydown="if(event.key==='Enter')doCapture()"
@@ -234,48 +294,7 @@ var tp;
 <div id="multi-msg-home" style="font-size:13px;display:none;"></div>
 {% endif %}
 
-<!-- due preview -->
-{% if due_configs %}
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <div class="card-title" style="margin:0;">Overdue</div>
-    {% if due_configs|length > 1 %}
-    <select onchange="changeDue(this.value)" style="font-size:12px;padding:4px;">
-      {% for dc in due_configs %}
-      <option value="{{ dc }}" {% if dc == selected_due %}selected{% endif %}>{{ dc }}</option>
-      {% endfor %}
-    </select>
-    {% endif %}
-    <a href="/due" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
-  </div>
-  {% if due_rows %}
-  {% for row in due_rows %}
-  <div class="due-row">
-    <div class="due-badge {{ row.heat }}">{{ row.days }}d</div>
-    <div>
-      <div class="due-name">{{ row.name }}</div>
-      <div class="due-meta">{{ row.status }}{% if row.note %} · {{ row.note[:50] }}{% if row.note|length > 50 %}…{% endif %}{% endif %}</div>
-    </div>
-  </div>
-  {% endfor %}
-  {% else %}
-  <div style="font-size:13px;color:var(--sub);">No overdue records</div>
-  {% endif %}
-</div>
-{% endif %}
-
-{% if threshold_data %}
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <div class="card-title" style="margin:0;">Thresholds</div>
-    <a href="/thresholds" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
-  </div>
-  {% set compact = true %}
-  {% for t in threshold_data %}
-    {% include '_threshold_bar.html' with context %}
-  {% endfor %}
-</div>
-{% endif %}
+<div class="stat-group-label">Today</div>
 
 <!-- recent records as table -->
 {% if recent_rows %}
