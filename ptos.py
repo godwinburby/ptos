@@ -1132,7 +1132,12 @@ def restore_data(zip_path):
     
     try:
         os.makedirs(temp_dir)
+        real_temp = os.path.realpath(temp_dir)
         with zipfile.ZipFile(zip_path, "r") as zf:
+            for info in zf.infolist():
+                member_path = os.path.realpath(os.path.join(temp_dir, info.filename))
+                if not member_path.startswith(real_temp + os.sep) and member_path != real_temp:
+                    raise Exception(f"Invalid backup: path traversal detected in {info.filename}")
             zf.extractall(temp_dir)
         
         folders_in_zip = {item for item in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, item))}
@@ -1176,7 +1181,12 @@ def restore_config(zip_path):
     
     try:
         os.makedirs(temp_dir)
+        real_temp = os.path.realpath(temp_dir)
         with zipfile.ZipFile(zip_path, "r") as zf:
+            for info in zf.infolist():
+                member_path = os.path.realpath(os.path.join(temp_dir, info.filename))
+                if not member_path.startswith(real_temp + os.sep) and member_path != real_temp:
+                    raise Exception(f"Invalid backup: path traversal detected in {info.filename}")
             zf.extractall(temp_dir)
         
         config_temp = os.path.join(temp_dir, "config")
@@ -1787,8 +1797,19 @@ def compute_derived(kv, record_date=None):
                     val = kv.get(token)
                     if val is not None:
                         if isinstance(val, list): val = val[0]
-                        try: namespace[token] = float(val)
+                        try:
+                            num = float(val)
+                            namespace[token] = num
+                            clean_expr = _re.sub(rf'\b{token}\b', str(num), clean_expr)
                         except (ValueError, TypeError): pass
+
+                _date_eval_re = _re.compile(
+                    r'^(?:[\d\s.+\-*/()><=!e]|today|date|timedelta|\.days)+$',
+                    _re.IGNORECASE,
+                )
+                if not _date_eval_re.match(clean_expr):
+                    results[out_key] = None
+                    continue
 
                 raw = eval(clean_expr, {"__builtins__": {}}, namespace)  # noqa: S307
 

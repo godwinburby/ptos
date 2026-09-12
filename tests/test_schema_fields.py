@@ -145,3 +145,78 @@ class TestComputeDerived:
         result = ptos.compute_derived({"type": "unknown", "amount": "50", "discount": "10"})
         assert result.get("net") == 40
         assert "expense.net" not in result
+
+
+class TestDerivedDateSecurity:
+    DATE_SCHEMA = {
+        "fields": {
+            "age_days": {"derived": "today - date"},
+            "senior": {"derived": "(today - date) > 30"},
+        },
+        "type": {}
+    }
+
+    def test_date_subtraction_works(self, monkeypatch):
+        import datetime as dt
+        monkeypatch.setattr(ptos, "get_schema", lambda: self.DATE_SCHEMA)
+        ptos._CACHE.clear()
+        result = ptos.compute_derived(
+            {"type": "test"}, record_date=dt.date(2026, 8, 1)
+        )
+        assert result.get("age_days") == 42
+
+    def test_date_comparison_works(self, monkeypatch):
+        import datetime as dt
+        monkeypatch.setattr(ptos, "get_schema", lambda: self.DATE_SCHEMA)
+        ptos._CACHE.clear()
+        result = ptos.compute_derived(
+            {"type": "test"}, record_date=dt.date(2026, 8, 1)
+        )
+        assert result.get("senior") == "true"
+
+    def test_malicious_dunder_class_rejected(self, monkeypatch):
+        import datetime as dt
+        evil = dict(self.DATE_SCHEMA)
+        evil = {"fields": {"bad": {"derived": "__class__"}}, "type": {}}
+        monkeypatch.setattr(ptos, "get_schema", lambda: evil)
+        ptos._CACHE.clear()
+        result = ptos.compute_derived(
+            {"type": "test"}, record_date=dt.date(2026, 8, 1)
+        )
+        assert result.get("bad") is None
+
+    def test_malicious_import_rejected(self, monkeypatch):
+        import datetime as dt
+        evil = {"fields": {"bad": {"derived": "__import__('os').system('x')"}}, "type": {}}
+        monkeypatch.setattr(ptos, "get_schema", lambda: evil)
+        ptos._CACHE.clear()
+        result = ptos.compute_derived(
+            {"type": "test"}, record_date=dt.date(2026, 8, 1)
+        )
+        assert result.get("bad") is None
+
+    def test_malicious_attribute_chain_rejected(self, monkeypatch):
+        import datetime as dt
+        evil = {"fields": {"bad": {"derived": "today.__class__.__bases__[0].__subclasses__()"}}, "type": {}}
+        monkeypatch.setattr(ptos, "get_schema", lambda: evil)
+        ptos._CACHE.clear()
+        result = ptos.compute_derived(
+            {"type": "test"}, record_date=dt.date(2026, 8, 1)
+        )
+        assert result.get("bad") is None
+
+    def test_date_with_field_arithmetic(self, monkeypatch):
+        import datetime as dt
+        schema = {"fields": {"age_days": {"derived": "today - date + days_active"}}, "type": {}}
+        monkeypatch.setattr(ptos, "get_schema", lambda: schema)
+        ptos._CACHE.clear()
+        result = ptos.compute_derived(
+            {"type": "test", "days_active": "5"}, record_date=dt.date(2026, 8, 1)
+        )
+        assert result.get("age_days") == 47
+
+    def test_no_date_record_returns_none(self, monkeypatch):
+        monkeypatch.setattr(ptos, "get_schema", lambda: self.DATE_SCHEMA)
+        ptos._CACHE.clear()
+        result = ptos.compute_derived({"type": "test"})
+        assert result.get("age_days") is None
