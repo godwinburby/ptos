@@ -7,6 +7,11 @@ Format: `[version or date] — description`
 
 ## 2026-09-12
 
+### Security: eval whitelist and Zip Slip protection
+
+- **Derived-field eval whitelist** (`ptos.py` `compute_derived()`): the date-aware `eval()` branch now validates the fully-substituted expression against a whitelist regex before evaluation. Only digits, arithmetic/comparison operators, and the identifiers `today`, `date`, `timedelta`, `.days` are allowed. Malicious expressions like `__class__`, `__import__()`, or attribute chains are rejected (field silently resolves to `None`). Also substitutes record field values into the expression before checking, matching the behavior of the non-date branch.
+- **Zip Slip protection** (`ptos.py` `restore_data()` and `restore_config()`): both functions now validate every ZIP member path before extraction, confirming it resolves inside the temp directory. ZIPs containing `../` traversal or absolute paths are rejected outright with no files extracted.
+
 ### Grouped desktop sidebar with keyboard shortcuts
 
 - **4 labeled section groups** — desktop sidebar now organized into **Log** (Home, Add Record, Todo, Journal, Notes, Types), **Find** (Search, Due List, Browse, Daily), **Track** (Queries, Board, Habits, Calendar, Thresholds), **Setup** (Query Builder, Schema Builder, Log Editor, Lint, Backup, Settings). Sections collapsible with chevron indicator, state persisted to localStorage.

@@ -205,3 +205,89 @@ class TestDeleteBackup:
         monkeypatch.setattr(ptos, "BACKUP_DIR", str(backup_dir))
         with pytest.raises(ValueError):
             ptos.delete_backup("random.zip")
+
+
+class TestZipSlipProtection:
+    def _make_zip(self, tmp_path, entries):
+        zip_path = tmp_path / "evil.zip"
+        with zipfile.ZipFile(str(zip_path), "w") as zf:
+            for name, content in entries:
+                zf.writestr(name, content)
+        return str(zip_path)
+
+    def test_traversal_in_full_restore_rejected(self, tmp_path, monkeypatch):
+        base = tmp_path / "ptos"
+        (base / "config").mkdir(parents=True)
+        (base / "config" / "schema.toml").write_text("x")
+        (base / "records").mkdir(parents=True)
+        backup_dir = base / "backups"
+        backup_dir.mkdir()
+
+        evil_zip = self._make_zip(tmp_path, [
+            ("config/schema.toml", "ok"),
+            ("../../evil.py", "import os; os.system('echo pwned')"),
+        ])
+
+        monkeypatch.setattr(ptos, "BASE_DIR", str(base))
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(backup_dir))
+
+        with pytest.raises(Exception, match="path traversal"):
+            ptos.restore_data(evil_zip)
+
+    def test_absolute_path_in_full_restore_rejected(self, tmp_path, monkeypatch):
+        base = tmp_path / "ptos"
+        (base / "config").mkdir(parents=True)
+        (base / "config" / "schema.toml").write_text("x")
+        (base / "records").mkdir(parents=True)
+        backup_dir = base / "backups"
+        backup_dir.mkdir()
+
+        evil_zip = self._make_zip(tmp_path, [
+            ("/etc/evil.txt", "pwned"),
+        ])
+
+        monkeypatch.setattr(ptos, "BASE_DIR", str(base))
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(backup_dir))
+
+        with pytest.raises(Exception, match="path traversal"):
+            ptos.restore_data(evil_zip)
+
+    def test_traversal_in_config_restore_rejected(self, tmp_path, monkeypatch):
+        base = tmp_path / "ptos"
+        (base / "config").mkdir(parents=True)
+        (base / "config" / "schema.toml").write_text("x")
+        backup_dir = base / "backups"
+        backup_dir.mkdir()
+
+        evil_zip = self._make_zip(tmp_path, [
+            ("config/schema.toml", "ok"),
+            ("../../evil.py", "import os"),
+        ])
+
+        monkeypatch.setattr(ptos, "BASE_DIR", str(base))
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(backup_dir))
+
+        with pytest.raises(Exception, match="path traversal"):
+            ptos.restore_config(evil_zip)
+
+    def test_valid_backup_restores_fine(self, tmp_path, monkeypatch):
+        base = tmp_path / "ptos"
+        (base / "config").mkdir(parents=True)
+        (base / "config" / "schema.toml").write_text("original")
+        (base / "records").mkdir(parents=True)
+        (base / "records" / "2026.log").write_text("orig line\n")
+        backup_dir = base / "backups"
+        backup_dir.mkdir()
+
+        good_zip = self._make_zip(tmp_path, [
+            ("config/schema.toml", "restored"),
+            ("records/2026.log", "new line\n"),
+        ])
+
+        monkeypatch.setattr(ptos, "BASE_DIR", str(base))
+        monkeypatch.setattr(ptos, "BACKUP_DIR", str(backup_dir))
+        monkeypatch.setattr(ptos, "_invalidate_all", lambda: None)
+
+        ptos.restore_data(good_zip)
+        assert (base / "config" / "schema.toml").read_text() == "restored"
+        assert (base / "records" / "2026.log").read_text() == "new line\n"
