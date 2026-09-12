@@ -4644,7 +4644,7 @@ def _iter_link_matches(linkable_fields):
     try:
         for root, _, files in os.walk(ptos.NOTES_DIR):
             for fname in sorted(files):
-                if fname == "template.md" or not fname.endswith(".md"):
+                if fname == "template.md" or not fname.endswith(".md") or "conflict" in fname.lower():
                     continue
                 fpath = os.path.join(root, fname)
                 rel = os.path.relpath(fpath, ptos.NOTES_DIR)
@@ -4665,6 +4665,8 @@ def _iter_link_matches(linkable_fields):
 
     try:
         for date_dir_path in sorted(glob.glob(os.path.join(ptos.JOURNAL_DIR, "*", "*", "*.md"))):
+            if "conflict" in os.path.basename(date_dir_path).lower():
+                continue
             date_str = os.path.splitext(os.path.basename(date_dir_path))[0]
             yield from _scan_brackets(
                 date_dir_path, "journal",

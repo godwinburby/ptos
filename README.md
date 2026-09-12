@@ -30,6 +30,7 @@ No database. No cloud. You own the data completely.
 ### Configuration
 - [Configuration](#configuration)
 - [Adding a new record type](#adding-a-new-record-type)
+- [Per-type log files](#per-type-log-files-log_group)
 - [Unit labels in schema](#unit-labels-in-schema)
 - [Queries reference](#queries-reference)
 - [Presets reference](#presets-reference)
@@ -41,6 +42,7 @@ No database. No cloud. You own the data completely.
   - [Built-in OneDrive sync (rclone bisync)](#built-in-onedrive-sync-rclone-bisync)
   - [Git](#git)
   - [Syncthing / Dropbox / iCloud](#syncthing--dropbox--icloud)
+  - [Conflict Resolution](#conflict-resolution)
 - [Ignore patterns](#ignore-patterns)
 
 ### Advanced — CLI Reference
@@ -481,6 +483,11 @@ or a todo linked to an expense.
 - `ptos --retro-id expense --where "amount=450"` / `ptos --retro-id todo --search "call"` — assigns an id to an existing entry
 - Or hand-type `id=...` / `id:...` in the file
 
+`--retro-id TYPE` finds exactly one matching entry and assigns a collision-checked id:
+- Records: `--retro-id expense --where "amount=450 category=food"` (filters must match one record)
+- Todos: `--retro-id todo --search "call supplier"` (matches one open todo by description)
+- Notes: `--retro-id note --search "appointment"` (matches one note file by name)
+
 Tool-generated ids are collision-checked against all existing ids before saving; an explicit `id=X` passed to `--add` or `--set` is rejected with `sys.exit` if the id is already in use. Hand-typed ids in `.log`/`todo.txt` files are never checked — that stays your responsibility (and `--lint` reports any duplicates it finds).
 
 **How to link:**
@@ -602,6 +609,15 @@ Kanban board view for tracking records across workflow stages. Configured in
 - **Board editor in Query Builder** — drag-reorderable column chips, time
   window/max cards fields, card title field chip picker with drag priority,
   rollup field/op dropdowns
+- **Match highlighting** (`match_field` config) — records across columns sharing
+  the same `match_field` value get the same color (16-color palette). Values
+  appearing in only one column stay uncolored. Useful for tracking a client or
+  entity across workflow stages
+- **Client grid view** (`?view=grid`) — toggle between Kanban and Grid in the
+  board header (only shown when `match_field` is set). Rows align by
+  `match_field` value so an entity's full journey is scannable left-to-right.
+  Unmatched records go to a separate section below the grid. Drag-and-drop in
+  grid view only allows drops within the same client row
 
 ### Thresholds
 
@@ -911,6 +927,44 @@ options = ["work", "home", "social", "health", "travel"]
 [mood_today]
 where = "type=mood"
 time  = "today"
+```
+
+---
+
+## Per-type log files (`log_group`)
+
+By default all records of every type go into `records/YYYY.log`. The `log_group`
+option routes records of a specific type into a separate subdirectory:
+`records/<group>/<year>.log`.
+
+```toml
+# schema.toml
+[type.followup]
+log_group = "followup"
+required = ["client", "intent"]
+```
+
+With this config, every `type=followup` record is appended to
+`records/followup/2026.log` instead of `records/2026.log`.
+
+**Why use it:** Keeps high-volume record types in their own files. The browse
+page, file explorer, and `--file` flag all scan subdirectories automatically.
+
+**Migration:** If you already have records of a type in the default log file,
+move them to the new subdirectory:
+
+```bash
+ptos --migrate-log-group followup
+```
+
+This reads all lines from `records/2026.log` (and other year files), moves
+matching `type=followup` lines to `records/followup/2026.log`, and removes them
+from the original file. Requires `log_group` to be set in the schema first.
+
+**CLI:** `--file` accepts subdirectory paths:
+```bash
+ptos --file followup/2026.log              # read from subdirectory
+ptos -y followup --file followup/2026.log  # filter by type from subdirectory
 ```
 
 ---
@@ -1252,6 +1306,44 @@ Commit `records/` after each session. Full history, diff-friendly.
 Sync the whole `ptos-data/` folder. On Android, data lives in
 `$HOME/storage/shared/ptos-data` — visible to Syncthing and file managers.
 
+### Conflict Resolution
+
+When two devices edit PTOS data offline before syncing, sync tools may create
+conflict files (e.g. `2026.sync-conflict-20260911-113533-XXXXX.log`). PTOS
+detects and helps resolve these for **records, todos, done.txt, journal, and
+notes** — regardless of which sync tool created them.
+
+**Detection:** Any file with `conflict` in the name (case-insensitive) under
+`records/`, `todo/`, `journal/`, or `notes/` is flagged. Patterns handled:
+Syncthing (`*.sync-conflict-*`), rclone (`.conflictN`), Nextcloud, and any
+generic `*conflict*` filename. Files matching `.trashed-*` or inside
+`.stversions/` directories are excluded.
+
+**CLI** (`--resolve-conflicts`):
+```bash
+ptos --resolve-conflicts           # resolve all conflicts
+ptos --resolve-conflicts --records # only record conflicts
+ptos --resolve-conflicts --todo    # only todo/done conflicts
+```
+Lists detected conflict files, then for each: shows unique lines and edit
+conflicts (same date+type, different content). Per-item choices:
+- **Records:** import unique lines from the conflict file, keep the original,
+  keep the conflict version, or open in editor for manual merge
+- **Todos:** side-by-side comparison with keep-original / keep-conflict / skip
+  per item; done.txt supersedes todo.txt (done items auto-resolve)
+- **Notes:** side-by-side content comparison with merge or keep options
+
+**Web UI** (`/sync/conflicts`):
+- Amber banner appears below the main content on every page when conflicts exist
+- Resolution page with per-record checkboxes, import-all button, side-by-side
+  todo comparison, note diff view, and save/delete actions
+
+**Doctor warning:** `ptos --doctor` detects conflict files and suggests running
+`--resolve-conflicts`.
+
+**Status dot:** The sidebar shows an orange/amber dot when conflicts are detected
+and a green dot once all conflicts are resolved.
+
 ---
 
 ## Ignore patterns
@@ -1427,6 +1519,8 @@ ptos -y test -t td --delete --all
 | `--sync` | | One-way push to remote (DELETES remote files not present locally — requires `--confirm-delete`) |
 | `--confirm-delete` | | Required alongside `--sync` to acknowledge remote file deletions |
 | `--resync` | | With `--bisync`: initialize bisync relationship (first-time setup) |
+| `--resolve-conflicts [--records] [--todo]` | | Review and merge sync conflict files interactively. Flags filter by type |
+| `--migrate-log-group TYPE` | | Move records of TYPE from `records/*.log` to `records/<group>/<year>.log` (requires `log_group` in schema) |
 | `--backup-full` | | Create full backup (records/, config/, templates/, journal/) |
 | `--backup-config` | | Create config-only backup (schema, queries, presets, config) |
 | `--restore-full [PATH]` | | Restore from full backup. Shows interactive list if no path given |

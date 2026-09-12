@@ -99,6 +99,216 @@ def get_log_files():
     return sorted(files)
 
 
+def find_sync_conflicts():
+    """Scan records/, todo/, journal/, notes/ for sync conflict files.
+    Detects any file with 'conflict' in the name (case-insensitive),
+    excluding .trashed-* prefix files and .stversions/ directories.
+    Works with any sync tool (Syncthing, rclone, Nextcloud, etc.).
+    Returns list of dicts with keys: original_path, conflict_path,
+    file_type (records|todo|done|notes|journal), device, detected_at."""
+    results = []
+    dirs_to_scan = [
+        (RECORDS_DIR, "records", {".log"}),
+        (TODO_DIR, "todo", {".txt"}),
+        (JOURNAL_DIR, "journal", {".md"}),
+        (NOTES_DIR, "notes", {".md"}),
+    ]
+    for scan_dir, file_type, extensions in dirs_to_scan:
+        if not os.path.isdir(scan_dir):
+            continue
+        for root, dirs, files in os.walk(scan_dir):
+            dirs[:] = [d for d in dirs if d != ".stversions"]
+            for fname in files:
+                if "conflict" not in fname.lower():
+                    continue
+                if fname.startswith(".trashed-"):
+                    continue
+                ext = os.path.splitext(fname)[1].lower()
+                # also accept rclone's .conflictN suffix (e.g. .conflict1, .conflict2)
+                is_conflict_ext = ext.startswith(".conflict") and ext[9:].isdigit()
+                if ext not in extensions and not is_conflict_ext:
+                    continue
+                fpath = os.path.join(root, fname)
+                rel = os.path.relpath(fpath, BASE_DIR).replace("\\", "/")
+                # derive the original filename by stripping the conflict pattern
+                orig_name = _strip_conflict_suffix(fname)
+                orig_path = os.path.relpath(
+                    os.path.join(root, orig_name), BASE_DIR
+                ).replace("\\", "/")
+                device, detected = _parse_conflict_meta(fname)
+                results.append({
+                    "original_path": orig_path,
+                    "conflict_path": rel,
+                    "file_type": _classify_conflict(file_type, fname),
+                    "device": device,
+                    "detected_at": detected,
+                })
+    return results
+
+
+def _strip_conflict_suffix(fname):
+    """Strip sync conflict markers from a filename to recover the original name.
+    Handles patterns: name.sync-conflict-YYYYMMDD-HHMMSS-DEVICEID.ext,
+    name (conflict YYYY-MM-DD-HH-MM-SS).ext, name.log.conflict1, name.txt.conflict2."""
+    # rclone: name.log.conflict1 — conflict suffix is the extension itself
+    # os.path.splitext("2026.log.conflict1") → ("2026.log", ".conflict1")
+    base, ext = os.path.splitext(fname)
+    if ext.lower().startswith(".conflict") and ext[9:].isdigit():
+        # The base still has the original extension (e.g. "2026.log")
+        return base
+    # Syncthing: name.sync-conflict-YYYYMMDD-HHMMSS-DEVICEID.ext
+    m = re.match(r'^(.+?)\.sync-conflict-\d{8}-\d{6}-\w+$', base)
+    if m:
+        return m.group(1) + ext
+    # Nextcloud: name (conflict YYYY-MM-DD-HH-MM-SS).ext
+    m = re.match(r'^(.+?) \(conflict \d{4}-\d{2}-\d{2}-\d{2}-\d{2}-\d{2}\)$', base)
+    if m:
+        return m.group(1) + ext
+    # fallback: strip anything after ".conflict"
+    m = re.match(r'^(.+?)\.conflict.*$', base)
+    if m:
+        return m.group(1) + ext
+    return fname
+
+
+def _parse_conflict_meta(fname):
+    """Best-effort parse of device ID and detection timestamp from conflict filename.
+    Returns (device, detected_at) tuple, either may be None."""
+    base = os.path.splitext(fname)[0]
+    # Syncthing: name.sync-conflict-YYYYMMDD-HHMMSS-DEVICEID
+    m = re.search(r'sync-conflict-(\d{8})-(\d{6})-(\w+)$', base)
+    if m:
+        date_str, time_str, device = m.groups()
+        try:
+            detected = f"{date_str[:4]}-{date_str[4:6]}-{date_str[6:]} " \
+                       f"{time_str[:2]}:{time_str[2:4]}:{time_str[4:]}"
+        except Exception:
+            detected = None
+        return device, detected
+    # Nextcloud: name (conflict YYYY-MM-DD-HH-MM-SS)
+    m = re.search(r'\(conflict (\d{4})-(\d{2})-(\d{2})-(\d{2})-(\d{2})-(\d{2})\)', base)
+    if m:
+        y, mo, d, h, mi, s = m.groups()
+        return None, f"{y}-{mo}-{d} {h}:{mi}:{s}"
+    # rclone: name.conflict1 — no metadata
+    return None, None
+
+
+def _classify_conflict(file_type, fname):
+    """Refine file_type for todo directory: done.sync-conflict-* → 'done'."""
+    if file_type == "todo" and fname.startswith("done"):
+        return "done"
+    return file_type
+
+
+def diff_records_conflict(original_path, conflict_path):
+    """Diff two record log files for conflict resolution.
+    Returns dict with:
+      lines_only_in_conflict: list of raw lines to import
+      lines_only_in_original: list of raw lines already present
+      edit_conflicts: list of (original_line, conflict_line) where same
+                      date+type exist but content differs
+    Paths are relative to BASE_DIR."""
+    orig_full = os.path.join(BASE_DIR, original_path)
+    conf_full = os.path.join(BASE_DIR, conflict_path)
+    orig_lines = set()
+    conf_lines = set()
+    try:
+        with open(orig_full, encoding="utf-8") as f:
+            for line in f:
+                orig_lines.add(line.rstrip("\n"))
+        with open(conf_full, encoding="utf-8") as f:
+            for line in f:
+                conf_lines.add(line.rstrip("\n"))
+    except Exception:
+        return {"lines_only_in_conflict": [], "lines_only_in_original": [],
+                "edit_conflicts": []}
+    only_conf = sorted(conf_lines - orig_lines)
+    only_orig = sorted(orig_lines - conf_lines)
+    # detect edit conflicts: same date+type prefix, different content
+    def _line_key(line):
+        m = re.match(r'(\d{4}-\d{2}-\d{2})\s+type=(\S+)', line)
+        return (m.group(1), m.group(2)) if m else None
+    orig_by_key = {}
+    for line in only_orig:
+        k = _line_key(line)
+        if k:
+            orig_by_key[k] = line
+    edit_conflicts = []
+    remaining_conf = []
+    for line in only_conf:
+        k = _line_key(line)
+        if k and k in orig_by_key:
+            edit_conflicts.append((orig_by_key.pop(k), line))
+        else:
+            remaining_conf.append(line)
+    return {
+        "lines_only_in_conflict": remaining_conf,
+        "lines_only_in_original": list(orig_by_key.values()),
+        "edit_conflicts": edit_conflicts,
+    }
+
+
+def diff_todos_conflict(original_path, conflict_path):
+    """Diff two todo.txt files for conflict resolution.
+    Returns dict with:
+      identical: list of Todo objects present in both (exact match)
+      edit_conflicts: list of (original_todo, conflict_todo) pairs
+      only_in_conflict: list of Todo objects unique to conflict
+      only_in_original: list of Todo objects unique to original
+    Paths are relative to BASE_DIR."""
+    from ptos_todo import parse_todo_line, format_line
+    orig_full = os.path.join(BASE_DIR, original_path)
+    conf_full = os.path.join(BASE_DIR, conflict_path)
+    orig_todos = []
+    conf_todos = []
+    try:
+        with open(orig_full, encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if line.strip():
+                    orig_todos.append(parse_todo_line(line))
+        with open(conf_full, encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if line.strip():
+                    conf_todos.append(parse_todo_line(line))
+    except Exception:
+        return {"identical": [], "edit_conflicts": [], "only_in_conflict": [],
+                "only_in_original": []}
+    def _desc_key(t):
+        return (t.description or "").strip().lower()
+    orig_by_desc = {}
+    for t in orig_todos:
+        k = _desc_key(t)
+        if k:
+            orig_by_desc[k] = t
+    conf_by_desc = {}
+    for t in conf_todos:
+        k = _desc_key(t)
+        if k:
+            conf_by_desc[k] = t
+    identical = []
+    edit_conflicts = []
+    for desc_key, conf_todo in conf_by_desc.items():
+        if desc_key in orig_by_desc:
+            orig_todo = orig_by_desc[desc_key]
+            if format_line(orig_todo) == format_line(conf_todo):
+                identical.append(orig_todo)
+            else:
+                edit_conflicts.append((orig_todo, conf_todo))
+    only_in_conflict = [t for t in conf_todos
+                        if _desc_key(t) not in orig_by_desc]
+    only_in_original = [t for t in orig_todos
+                        if _desc_key(t) not in conf_by_desc]
+    return {
+        "identical": identical,
+        "edit_conflicts": edit_conflicts,
+        "only_in_conflict": only_in_conflict,
+        "only_in_original": only_in_original,
+    }
+
+
 def get_backup_config():
     """Load backup configuration from config.toml."""
     try:
@@ -732,6 +942,19 @@ def doctor_check(verbose=False, fix=False, json_output=False):
     for folder, path in [("config", CONFIG_DIR), ("todo", TODO_DIR)]:
         if os.path.isdir(path) and not os.listdir(path):
             warnings.append(f"{folder}/ exists but is empty")
+
+    # Sync conflict check
+    try:
+        conflicts = find_sync_conflicts()
+        if conflicts:
+            by_type = {}
+            for c in conflicts:
+                by_type.setdefault(c["file_type"], []).append(c)
+            for ftype, files in sorted(by_type.items()):
+                warnings.append(f"{len(files)} sync conflict file(s) in {ftype}")
+            warnings.append("Run 'ptos --resolve-conflicts' to review and merge")
+    except Exception:
+        pass
     
     # Output results
     if json_output:
@@ -2484,7 +2707,7 @@ def resolve_link(target):
     if rtype == "note":
         for root, _, files in os.walk(NOTES_DIR):
             for fname in files:
-                if fname == "template.md" or not fname.endswith(".md"):
+                if fname == "template.md" or not fname.endswith(".md") or "conflict" in fname.lower():
                     continue
                 fpath = os.path.join(root, fname)
                 with open(fpath, encoding="utf-8") as f:
@@ -2532,7 +2755,7 @@ def list_link_ids():
                                     "date": "", "line": line.strip()})
     for root, _, files in os.walk(NOTES_DIR):
         for fname in sorted(files):
-            if fname == "template.md" or not fname.endswith(".md"):
+            if fname == "template.md" or not fname.endswith(".md") or "conflict" in fname.lower():
                 continue
             fpath = os.path.join(root, fname)
             nid = _note_id_of(fpath)
@@ -2605,7 +2828,7 @@ def check_dangling_links():
 
     for root, _, files in os.walk(NOTES_DIR):
         for fname in sorted(files):
-            if fname == "template.md" or not fname.endswith(".md"):
+            if fname == "template.md" or not fname.endswith(".md") or "conflict" in fname.lower():
                 continue
             fpath = os.path.join(root, fname)
             nid = _note_id_of(fpath)
@@ -4740,7 +4963,7 @@ def list_dir(rel_path=""):
         entry_rel = (rel_path + "/" + name) if rel_path else name
         if os.path.isdir(os.path.join(full, name)):
             folders.append({"name": name, "rel_path": entry_rel})
-        elif name.endswith(".md"):
+        elif name.endswith(".md") and "conflict" not in name.lower():
             files.append({"name": name, "rel_path": entry_rel})
     return {"folders": folders, "files": files}
 

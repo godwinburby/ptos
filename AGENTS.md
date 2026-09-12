@@ -547,6 +547,7 @@ Wiki-style `[[links]]` sit on top of existing project conventions — not a repl
 | Web UI patterns | `web_templates/base.html`, neighboring templates |
 | CLI flags | `ptos_cli.py`, `ptos.py` |
 | Config | `config/config.toml`, `starters/starter_config.toml` |
+| Feature additions/changes | `README.md` (document new features, CLI flags, web pages) |
 | Tests | `tests/test_*.py` |
 | Start scripts | `run_ptos.bat` (Windows), `run_ptos_linux.sh`, `run_ptos_android.sh` |
 

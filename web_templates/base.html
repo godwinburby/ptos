@@ -24,6 +24,7 @@
       --error:     #C0392B;
       --error-lt:  #FDECEA;
       --warn:      #E8803A;
+      --warn-lt:   #FFF3E0;
       --text:      #1A1D2E;
       --sub:       #6B7280;
       --nav-h:     60px;
@@ -203,7 +204,10 @@
     .sync-dot.sync-running { display:inline-block; background:#22c55e; animation: pulse 1s ease-in-out infinite; }
     .sync-dot.sync-ok { display:inline-block; background:#22c55e; }
     .sync-dot.sync-error { display:inline-block; background:var(--error); }
+    .sync-dot.sync-conflict { display:inline-block; background:var(--warn); }
     @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:0.3; } }
+    .msg-warn-banner { padding:10px 16px; border-radius:9px; font-size:14px; font-weight:500; background:var(--warn-lt); color:var(--warn); border:1px solid var(--warn); margin-bottom:10px; cursor:pointer; }
+    .msg-warn-banner a { color:var(--warn); font-weight:600; }
     .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 18px; margin-bottom: 14px; }
     .card-title { font-size: 11px; font-weight: 700; color: var(--sub); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 12px; }
 
@@ -587,6 +591,11 @@
 </aside>
 
 <main class="main">
+  {% if sync_conflict_count %}
+  <div class="msg-warn-banner" onclick="location.href='/sync/conflicts'">
+    ⚠ {{ sync_conflict_count }} sync conflict file{{ 's' if sync_conflict_count != 1 }} detected — <a href="/sync/conflicts">Resolve</a>
+  </div>
+  {% endif %}
   {% block content %}{% endblock %}
 </main>
 
@@ -1473,6 +1482,7 @@ function updateSyncDot(state) {
     if (state === 'running') d.classList.add('sync-running');
     else if (state === 'ok') d.classList.add('sync-ok');
     else if (state === 'error') d.classList.add('sync-error');
+    else if (state === 'conflict') d.classList.add('sync-conflict');
   });
 }
 (function(){
@@ -1547,6 +1557,9 @@ fetch("/sync/status").then(function(r){ return r.json(); }).then(function(d){
     setTimeout(function(){ updateSyncDot(""); }, 10000);
   }
 }).catch(function(){});
+{% if sync_conflict_count %}
+updateSyncDot("conflict");
+{% endif %}
 </script>
 {% endif %}
 

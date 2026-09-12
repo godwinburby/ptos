@@ -33,11 +33,17 @@ def _inject_globals():
     except Exception:
         cfg = {}
     pomo = cfg.get("pomodoro", {})
+    # sync conflict count for banner
+    try:
+        sync_conflict_count = len(ptos.find_sync_conflicts())
+    except Exception:
+        sync_conflict_count = 0
     return {
         "frozen": bool(getattr(sys, "frozen", False)),
         "desktop_mode": os.environ.get("DESKTOP_MODE") == "1",
         "pomo_minutes": pomo.get("duration_minutes", 25),
         "pomo_log": bool(pomo.get("log_sessions", True)),
+        "sync_conflict_count": sync_conflict_count,
         "more_menu_items": [
             ("search",          "search",          "Search"),
             ("due",             "due",             "Due List"),
@@ -1453,7 +1459,7 @@ def search_page():
     try:
         for dirpath, _, fnames in os.walk(svc.JOURNAL_DIR):
             for fname in sorted(fnames):
-                if not fname.endswith(".md"):
+                if not fname.endswith(".md") or "conflict" in fname.lower():
                     continue
                 path = os.path.join(dirpath, fname)
                 try:
@@ -1478,6 +1484,8 @@ def search_page():
             pass
     for dpath in sorted(glob.glob(os.path.join(svc.TODO_DIR, "done.*.txt"))):
         base = os.path.basename(dpath)
+        if "conflict" in base.lower():
+            continue
         try:
             with open(dpath, encoding="utf-8") as f:
                 for i, line in enumerate(f, 1):
@@ -1489,7 +1497,7 @@ def search_page():
     try:
         for root, _, files in os.walk(ptos.NOTES_DIR):
             for fname in sorted(files):
-                if fname == "template.md" or not fname.endswith(".md"):
+                if fname == "template.md" or not fname.endswith(".md") or "conflict" in fname.lower():
                     continue
                 fpath = os.path.join(root, fname)
                 rel = os.path.relpath(fpath, ptos.NOTES_DIR)
@@ -2131,6 +2139,176 @@ def sync_run():
 @app.route("/sync/status")
 def sync_status():
     return jsonify(running=_sync_busy, result=_sync_result)
+
+
+@app.route("/sync/conflicts")
+def sync_conflicts_page():
+    conflicts = ptos.find_sync_conflicts()
+    diffs = {}
+    for c in conflicts:
+        if c["file_type"] == "records":
+            diffs[c["conflict_path"]] = ptos.diff_records_conflict(
+                c["original_path"], c["conflict_path"])
+        elif c["file_type"] in ("todo", "done"):
+            diffs[c["conflict_path"]] = ptos.diff_todos_conflict(
+                c["original_path"], c["conflict_path"])
+        elif c["file_type"] == "notes":
+            note_data = {}
+            orig_full = os.path.join(ptos.BASE_DIR, c["original_path"])
+            conf_full = os.path.join(ptos.BASE_DIR, c["conflict_path"])
+            try:
+                with open(orig_full, encoding="utf-8") as f:
+                    note_data["orig"] = f.read()[:1000]
+            except Exception:
+                note_data["orig"] = ""
+            try:
+                with open(conf_full, encoding="utf-8") as f:
+                    note_data["conf"] = f.read()[:1000]
+            except Exception:
+                note_data["conf"] = ""
+            diffs[c["conflict_path"]] = note_data
+    return render_template("sync_conflicts.html",
+                           conflicts=conflicts, diffs=diffs)
+
+
+@app.route("/api/conflict/resolve", methods=["POST"])
+def api_conflict_resolve():
+    from ptos_todo import parse_todo_line, format_line, save_todos
+    data = request.get_json(force=True)
+    action = data.get("action")
+    conflict_path = data.get("conflict_path", "")
+    original_path = data.get("original_path", "")
+    conf_full = os.path.join(ptos.BASE_DIR, conflict_path)
+    orig_full = os.path.join(ptos.BASE_DIR, original_path)
+
+    if not os.path.exists(conf_full):
+        return jsonify(ok=False, error="Conflict file not found"), 404
+
+    try:
+        if action == "import_records":
+            lines = data.get("lines", [])
+            for line in lines:
+                ptos.atomic_append(orig_full, line)
+            os.remove(conf_full)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, remaining=remaining)
+
+        elif action == "import_all_records":
+            result = ptos.diff_records_conflict(original_path, conflict_path)
+            lines = result["lines_only_in_conflict"]
+            for orig_l, conf_l in result["edit_conflicts"]:
+                lines.append(conf_l)
+            for line in lines:
+                ptos.atomic_append(orig_full, line)
+            os.remove(conf_full)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, imported=len(lines), remaining=remaining)
+
+        elif action == "keep_original":
+            os.remove(conf_full)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, remaining=remaining)
+
+        elif action == "keep_conflict":
+            shutil.copy2(conf_full, orig_full)
+            os.remove(conf_full)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, remaining=remaining)
+
+        elif action == "edit_record":
+            line = data.get("line", "")
+            if line:
+                ptos.atomic_append(orig_full, line)
+            os.remove(conf_full)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, remaining=remaining)
+
+        elif action == "resolve_todo_choice":
+            choice = data.get("choice")  # "original" | "conflict" | "skip"
+            desc = data.get("description", "")
+            orig_todos = []
+            with open(orig_full, encoding="utf-8") as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    if line.strip():
+                        orig_todos.append(parse_todo_line(line))
+            if choice == "conflict":
+                conf_todos = []
+                with open(conf_full, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.rstrip("\n")
+                        if line.strip():
+                            conf_todos.append(parse_todo_line(line))
+                conf_by_desc = {t.description.strip().lower(): t for t in conf_todos}
+                for i, t in enumerate(orig_todos):
+                    if t.description.strip().lower() == desc.strip().lower():
+                        if desc.strip().lower() in conf_by_desc:
+                            orig_todos[i] = conf_by_desc[desc.strip().lower()]
+                        break
+                save_todos(orig_full, orig_todos)
+            # original/skip: original file is already correct, no save needed
+            # always delete the conflict file to resolve
+            if os.path.exists(conf_full):
+                os.remove(conf_full)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, remaining=remaining)
+
+        elif action == "add_todo":
+            todo_line = data.get("line", "")
+            if todo_line:
+                orig_todos = []
+                with open(orig_full, encoding="utf-8") as f:
+                    for line in f:
+                        line = line.rstrip("\n")
+                        if line.strip():
+                            orig_todos.append(parse_todo_line(line))
+                orig_todos.append(parse_todo_line(todo_line))
+                save_todos(orig_full, orig_todos)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, remaining=remaining)
+
+        elif action == "import_all_todos":
+            conf_todos = []
+            with open(conf_full, encoding="utf-8") as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    if line.strip():
+                        conf_todos.append(parse_todo_line(line))
+            orig_todos = []
+            with open(orig_full, encoding="utf-8") as f:
+                for line in f:
+                    line = line.rstrip("\n")
+                    if line.strip():
+                        orig_todos.append(parse_todo_line(line))
+            orig_descs = {t.description.strip().lower() for t in orig_todos}
+            added = 0
+            for t in conf_todos:
+                if t.description.strip().lower() not in orig_descs:
+                    orig_todos.append(t)
+                    added += 1
+            save_todos(orig_full, orig_todos)
+            os.remove(conf_full)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, added=added, remaining=remaining)
+
+        elif action == "save_merged_note":
+            content = data.get("content", "")
+            with open(orig_full, "w", encoding="utf-8") as f:
+                f.write(content)
+            os.remove(conf_full)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, remaining=remaining)
+
+        elif action == "remove_conflict":
+            os.remove(conf_full)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, remaining=remaining)
+
+        else:
+            return jsonify(ok=False, error=f"Unknown action: {action}"), 400
+
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)), 500
 
 
 def _toml_val(v):

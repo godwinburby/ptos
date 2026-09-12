@@ -377,6 +377,13 @@ def build_parser(cycles):
     utl.add_argument("--resync", action="store_true",
                      help="With --bisync: initialize bisync relationship\n"
                           "  (first-time setup or reset)")
+    utl.add_argument("--resolve-conflicts", dest="resolve_conflicts", action="store_true",
+                     help="Review and merge sync conflict files\n"
+                          "  Interactively resolves conflicts in records, todos, and notes")
+    utl.add_argument("--records", action="store_true",
+                     help="With --resolve-conflicts: only resolve record conflicts")
+    utl.add_argument("--todo", action="store_true",
+                     help="With --resolve-conflicts: only resolve todo conflicts")
 
     sch = p.add_argument_group("Schema")
     sch.add_argument("--add-type", dest="add_type", metavar="NAME",
@@ -1362,7 +1369,7 @@ def run_find(query):
     try:
         for root, _, fnames in os.walk(ptos.JOURNAL_DIR):
             for fname in sorted(fnames):
-                if not fname.endswith(".md"):
+                if not fname.endswith(".md") or "conflict" in fname.lower():
                     continue
                 path = os.path.join(root, fname)
                 try:
@@ -1384,7 +1391,7 @@ def run_find(query):
             tpaths.append((base, tp))
     try:
         for name in sorted(os.listdir(ptos.TODO_DIR)):
-            if name.startswith("done.") and name.endswith(".txt"):
+            if name.startswith("done.") and name.endswith(".txt") and "conflict" not in name.lower():
                 tpaths.append((name, os.path.join(ptos.TODO_DIR, name)))
     except Exception:
         pass
@@ -1401,7 +1408,7 @@ def run_find(query):
     try:
         for root, _, files in os.walk(ptos.NOTES_DIR):
             for fname in sorted(files):
-                if fname == "template.md" or not fname.endswith(".md"):
+                if fname == "template.md" or not fname.endswith(".md") or "conflict" in fname.lower():
                     continue
                 fpath = os.path.join(root, fname)
                 try:
@@ -2693,6 +2700,345 @@ def _handle_migrate_log_group(rtype):
             print(f"  cleaned: {os.path.relpath(fp, ptos.RECORDS_DIR)}")
 
 
+def _handle_resolve_conflicts(args):
+    """Review and merge sync conflict files interactively."""
+    import tempfile
+    from ptos_todo import parse_todo_line, format_line, save_todos
+
+    conflicts = ptos.find_sync_conflicts()
+    if not conflicts:
+        print("No sync conflict files found.")
+        return
+
+    # filter by type if requested
+    if args.records:
+        conflicts = [c for c in conflicts if c["file_type"] == "records"]
+    elif args.todo:
+        conflicts = [c for c in conflicts if c["file_type"] in ("todo", "done")]
+
+    if not conflicts:
+        print("No matching conflict files found.")
+        return
+
+    print(f"\nFound {len(conflicts)} conflict file(s):\n")
+    for i, c in enumerate(conflicts, 1):
+        device_str = f" (device: {c['device']})" if c["device"] else ""
+        date_str = f", {c['detected_at']}" if c["detected_at"] else ""
+        print(f"  {i}. {c['original_path']}")
+        print(f"     vs {os.path.basename(c['conflict_path'])}{device_str}{date_str}")
+
+    print()
+    choice = input("Resolve which? (number/all/skip): ").strip().lower()
+    if choice == "skip" or choice == "q":
+        print("Skipped.")
+        return
+    if choice == "all":
+        to_resolve = list(conflicts)
+    else:
+        try:
+            idx = int(choice) - 1
+            to_resolve = [conflicts[idx]]
+        except (ValueError, IndexError):
+            print("Invalid choice.")
+            return
+
+    total_imported = 0
+    total_skipped = 0
+    resolved_files = []
+
+    for c in to_resolve:
+        print(f"\n{'='*60}")
+        print(f"Resolving: {c['original_path']}")
+        print(f"  vs {os.path.basename(c['conflict_path'])}")
+        print()
+
+        orig_full = os.path.join(ptos.BASE_DIR, c["original_path"])
+        conf_full = os.path.join(ptos.BASE_DIR, c["conflict_path"])
+
+        if c["file_type"] == "records":
+            imported, skipped = _resolve_record_conflict(c, orig_full, conf_full)
+            total_imported += imported
+            total_skipped += skipped
+            if imported > 0 or skipped == 0:
+                resolved_files.append(c["conflict_path"])
+
+        elif c["file_type"] in ("todo", "done"):
+            imported, skipped = _resolve_todo_conflict(c, orig_full, conf_full)
+            total_imported += imported
+            total_skipped += skipped
+            if imported > 0 or skipped == 0:
+                resolved_files.append(c["conflict_path"])
+
+        elif c["file_type"] == "notes":
+            resolved = _resolve_notes_conflict(c, orig_full, conf_full)
+            if resolved:
+                resolved_files.append(c["conflict_path"])
+
+    # cleanup resolved conflict files
+    for conf_rel in resolved_files:
+        conf_full = os.path.join(ptos.BASE_DIR, conf_rel)
+        if os.path.exists(conf_full):
+            os.remove(conf_full)
+
+    print(f"\n{'='*60}")
+    print(f"Done. Imported {total_imported} record(s), skipped {total_skipped}.")
+    if resolved_files:
+        print(f"Removed {len(resolved_files)} conflict file(s).")
+
+
+def _resolve_record_conflict(c, orig_full, conf_full):
+    """Resolve a records conflict interactively. Returns (imported, skipped)."""
+    result = ptos.diff_records_conflict(c["original_path"], c["conflict_path"])
+    edit_conflicts = result["edit_conflicts"]
+    unique_conf = result["lines_only_in_conflict"]
+
+    imported = 0
+    skipped = 0
+
+    # handle edit conflicts first
+    if edit_conflicts:
+        print(f"  {len(edit_conflicts)} edit conflict(s) — same date+type, different content:\n")
+        for orig_line, conf_line in edit_conflicts:
+            print(f"    Original:  {orig_line}")
+            print(f"    Conflict:  {conf_line}")
+            ans = input("    [O]riginal / [C]onflict / [E]dit / [S]kip: ").strip().lower()
+            if ans == "o":
+                pass  # keep original, do nothing
+            elif ans == "c":
+                ptos.atomic_append(orig_full, conf_line)
+                imported += 1
+            elif ans == "e":
+                edited = _edit_line(conf_line)
+                if edited is not None:
+                    ptos.atomic_append(orig_full, edited)
+                    imported += 1
+                else:
+                    skipped += 1
+            else:
+                skipped += 1
+            print()
+
+    # handle unique conflict lines
+    if unique_conf:
+        print(f"  {len(unique_conf)} record(s) only in conflict file:\n")
+        for line in unique_conf:
+            print(f"    {line}")
+            ans = input("    [Y] Import / [N] Skip / [E] Edit / [A] All remaining / [Q] Quit: ").strip().lower()
+            if ans == "a":
+                # import all remaining
+                ptos.atomic_append(orig_full, "\n".join(unique_conf[unique_conf.index(line):]))
+                imported += len(unique_conf) - unique_conf.index(line)
+                break
+            elif ans == "q":
+                skipped += len(unique_conf) - unique_conf.index(line) - 1
+                break
+            elif ans == "e":
+                edited = _edit_line(line)
+                if edited is not None:
+                    ptos.atomic_append(orig_full, edited)
+                    imported += 1
+                else:
+                    skipped += 1
+            elif ans == "y" or ans == "":
+                ptos.atomic_append(orig_full, line)
+                imported += 1
+            else:
+                skipped += 1
+        print()
+
+    if imported == 0 and skipped == 0 and not edit_conflicts and not unique_conf:
+        print("  Files are identical. Conflict file can be safely removed.")
+
+    return imported, skipped
+
+
+def _resolve_todo_conflict(c, orig_full, conf_full):
+    """Resolve a todo conflict interactively. Returns (imported, skipped)."""
+    from ptos_todo import parse_todo_line, format_line, save_todos
+
+    result = ptos.diff_todos_conflict(c["original_path"], c["conflict_path"])
+    edit_conflicts = result["edit_conflicts"]
+    only_conf = result["only_in_conflict"]
+    only_orig = result["only_in_original"]
+
+    imported = 0
+    skipped = 0
+
+    # load originals for modification
+    orig_todos = []
+    try:
+        with open(orig_full, encoding="utf-8") as f:
+            for line in f:
+                line = line.rstrip("\n")
+                if line.strip():
+                    orig_todos.append(parse_todo_line(line))
+    except Exception as e:
+        print(f"  Error reading original: {e}")
+        return 0, 0
+
+    # handle edit conflicts
+    if edit_conflicts:
+        print(f"  {len(edit_conflicts)} edit conflict(s):\n")
+        for orig_t, conf_t in edit_conflicts:
+            print(f"    Task: \"{orig_t.description}\"")
+            print(f"      Original:  due={orig_t.due or 'none'}  pri={orig_t.priority or 'none'}")
+            print(f"      Conflict:  due={conf_t.due or 'none'}  pri={conf_t.priority or 'none'}")
+            ans = input("    [O]riginal / [C]onflict / [E]dit / [S]kip: ").strip().lower()
+            if ans == "o":
+                pass  # keep original
+            elif ans == "c":
+                # replace original with conflict version
+                for i, t in enumerate(orig_todos):
+                    if t.description.strip().lower() == orig_t.description.strip().lower():
+                        orig_todos[i] = conf_t
+                        break
+                imported += 1
+            elif ans == "e":
+                edited = _edit_todo_line(conf_t)
+                if edited is not None:
+                    for i, t in enumerate(orig_todos):
+                        if t.description.strip().lower() == orig_t.description.strip().lower():
+                            orig_todos[i] = edited
+                            break
+                    imported += 1
+                else:
+                    skipped += 1
+            else:
+                skipped += 1
+            print()
+
+    # handle unique conflict todos
+    if only_conf:
+        print(f"  {len(only_conf)} task(s) only in conflict file:\n")
+        for t in only_conf:
+            print(f"    {format_line(t)}")
+            ans = input("    [Y] Add / [N] Skip / [E] Edit / [A] All remaining / [Q] Quit: ").strip().lower()
+            if ans == "a":
+                orig_todos.extend(only_conf[only_conf.index(t):])
+                imported += len(only_conf) - only_conf.index(t)
+                break
+            elif ans == "q":
+                skipped += len(only_conf) - only_conf.index(t) - 1
+                break
+            elif ans == "e":
+                edited = _edit_todo_line(t)
+                if edited is not None:
+                    orig_todos.append(edited)
+                    imported += 1
+                else:
+                    skipped += 1
+            elif ans == "y" or ans == "":
+                orig_todos.append(t)
+                imported += 1
+            else:
+                skipped += 1
+        print()
+
+    # for done.txt superset: offer to remove conflict file
+    if c["file_type"] == "done" and not only_conf and not edit_conflicts:
+        print("  Current file is already complete. Conflict file can be safely removed.")
+        imported = 0  # nothing to import
+
+    # save if any changes were made
+    if imported > 0:
+        save_todos(orig_full, orig_todos)
+        print(f"  Saved {orig_full} ({len(orig_todos)} tasks)")
+
+    return imported, skipped
+
+
+def _resolve_notes_conflict(c, orig_full, conf_full):
+    """Resolve a notes conflict interactively. Returns True if resolved."""
+    try:
+        with open(orig_full, encoding="utf-8") as f:
+            orig_content = f.read()
+        with open(conf_full, encoding="utf-8") as f:
+            conf_content = f.read()
+    except Exception as e:
+        print(f"  Error reading files: {e}")
+        return False
+
+    if orig_content == conf_content:
+        print("  Files are identical. Conflict file can be safely removed.")
+        return True
+
+    print(f"  Original ({len(orig_content)} chars):")
+    for line in orig_content.split("\n")[:5]:
+        print(f"    {line}")
+    if orig_content.count("\n") > 5:
+        print(f"    ... ({orig_content.count(chr(10))} lines total)")
+
+    print(f"\n  Conflict ({len(conf_content)} chars):")
+    for line in conf_content.split("\n")[:5]:
+        print(f"    {line}")
+    if conf_content.count("\n") > 5:
+        print(f"    ... ({conf_content.count(chr(10))} lines total)")
+
+    print()
+    ans = input("  [O]riginal / [C]onflict / [E]dit merged / [S]kip: ").strip().lower()
+    if ans == "o":
+        return True  # keep original, remove conflict
+    elif ans == "c":
+        with open(orig_full, "w", encoding="utf-8") as f:
+            f.write(conf_content)
+        print(f"  Replaced with conflict version.")
+        return True
+    elif ans == "e":
+        merged = _edit_text(conf_content)
+        if merged is not None:
+            with open(orig_full, "w", encoding="utf-8") as f:
+                f.write(merged)
+            print(f"  Saved merged version.")
+            return True
+    return False
+
+
+def _edit_line(line):
+    """Open a line in $EDITOR and return the edited line, or None on cancel."""
+    editor = ptos.resolve_editor()
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False,
+                                     encoding="utf-8") as tmp:
+        tmp.write(line)
+        tmp_path = tmp.name
+    try:
+        subprocess.run(editor + [tmp_path])
+        with open(tmp_path, encoding="utf-8") as f:
+            edited = f.read().strip()
+        return edited if edited else None
+    except Exception:
+        return None
+    finally:
+        os.remove(tmp_path)
+
+
+def _edit_todo_line(todo):
+    """Open a todo line in $EDITOR and return the parsed Todo, or None on cancel."""
+    edited = _edit_line(format_line(todo))
+    if edited:
+        try:
+            return parse_todo_line(edited)
+        except Exception:
+            return None
+    return None
+
+
+def _edit_text(text):
+    """Open text in $EDITOR and return the edited text, or None on cancel."""
+    editor = ptos.resolve_editor()
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".md", delete=False,
+                                     encoding="utf-8") as tmp:
+        tmp.write(text)
+        tmp_path = tmp.name
+    try:
+        subprocess.run(editor + [tmp_path])
+        with open(tmp_path, encoding="utf-8") as f:
+            return f.read()
+    except Exception:
+        return None
+    finally:
+        os.remove(tmp_path)
+
+
 # --------------------------------------------------
 # Main
 # --------------------------------------------------
@@ -2993,6 +3339,11 @@ def main():
     # ---- migrate-log-group ----
     if args.migrate_log_group:
         _handle_migrate_log_group(args.migrate_log_group.strip().lower())
+        return
+
+    # ---- resolve-conflicts ----
+    if args.resolve_conflicts:
+        _handle_resolve_conflicts(args)
         return
 
     # ---- lint mode ----
