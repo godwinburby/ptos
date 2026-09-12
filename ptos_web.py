@@ -50,10 +50,9 @@ def _inject_globals():
             ("journal",         "journal",         "Journal"),
             ("notes",           "notes",           "Notes"),
             ("board",           "board",           "Board"),
-            ("habits",          "habits",          "Habits"),
-            ("calendar",        "calendar",        "Calendar"),
-            ("daily",           "daily",           "Daily"),
-            ("thresholds",      "thresholds",      "Thresholds"),
+             ("habits",          "habits",          "Habits"),
+             ("calendar",        "calendar",        "Calendar"),
+             ("thresholds",      "thresholds",      "Thresholds"),
             ("query-builder",   "query_builder",   "Query Builder"),
             ("schema-builder",  "schema_builder",  "Schema Builder"),
             ("types",           "types",           "Record Types"),
@@ -673,6 +672,9 @@ def home():
     except Exception:
         threshold_data = []
 
+    overdue_count, due_today_count = svc.get_todo_summary_counts()
+    journal_preview = svc.get_journal_preview()
+
     return render_template("home.html",
         tab="home", title="Home", now=_now_str(), greeting=_greeting(),
         username=username,
@@ -695,7 +697,10 @@ def home():
         recent_rows=recent_rows, recent_cols=recent_cols,
         field_types=field_types,
         threshold_data=threshold_data,
-        record_types=schema.get("types", {}).get("allowed", []))
+        record_types=schema.get("types", {}).get("allowed", []),
+        overdue_count=overdue_count,
+        due_today_count=due_today_count,
+        journal_preview=journal_preview)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2645,52 +2650,6 @@ def calendar_view(name=None):
         tab="calendar", title="Calendar",
         now=_now_str(), today=dt.date.today(),
         calendars=names, active=name or "__all__", data=data)
-
-
-@app.route("/daily")
-@app.route("/daily/<date>")
-def daily_view(date=None):
-    try:
-        data = svc.daily_digest(date)
-    except PTOSError as e:
-        return render_template("daily.html", tab="daily", title="Daily",
-                               now=_now_str(), error=str(e), data=None,
-                               prev=None, next=None)
-    except Exception as e:
-        log.exception("Daily digest failed")
-        return render_template("daily.html", tab="daily", title="Daily",
-                               now=_now_str(), error=str(e), data=None,
-                               prev=None, next=None)
-    d = dt.date.fromisoformat(data["date"])
-
-    field_types = {}
-    projects = []
-    contexts = []
-    priority_labels = {}
-    try:
-        schema = svc.get_schema()
-        field_types = _build_field_types(schema)
-    except Exception:
-        pass
-    try:
-        projects = svc.get_todo_projects()
-        contexts = svc.get_todo_contexts()
-    except Exception:
-        pass
-    try:
-        todo_cfg = svc.get_config().get("todo", {})
-        priority_labels = todo_cfg.get("priority_labels", {})
-    except Exception:
-        pass
-
-    return render_template("daily.html",
-        tab="daily", title="Daily",
-        now=_now_str(), data=data, error=None,
-        prev_date=(d - dt.timedelta(days=1)).isoformat(),
-        next_date=(d + dt.timedelta(days=1)).isoformat(),
-        field_types=field_types,
-        projects=projects, contexts=contexts,
-        priority_labels=priority_labels)
 
 
 @app.route("/board")

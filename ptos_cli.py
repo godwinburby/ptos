@@ -170,9 +170,6 @@ def build_parser(cycles):
     add.add_argument("--pomo-log", nargs=2, metavar=("TASK", "MINUTES"),
                      help="Log a completed pomodoro session as a type=pomodoro\n"
                           "  record (honors [pomodoro] log_sessions; --date applies)")
-    add.add_argument("--daily", nargs="?", const="yesterday", metavar="DATE",
-                     help="Print the daily digest (default: yesterday;\n"
-                          "  accepts today or YYYY-MM-DD)")
 
     qry = p.add_argument_group("Query")
     qry.add_argument("-q", "--query",  nargs="?", const="__LIST__", help="Run saved query (no name = list all)")
@@ -798,65 +795,6 @@ def run_pomodoro_log(task, minutes, date=None):
         print(f"Skipped: {result.get('skipped', 'not logged')}")
         return
     print(f"Logged: {result['line']}")
-
-
-def run_daily(date_arg):
-    import ptos_service as svc
-    try:
-        data = svc.daily_digest(date_arg)
-    except Exception as e:
-        sys.exit(str(e))
-
-    print(f"\nDaily digest — {data['date']} ({data['weekday']})")
-
-    rbt = data["records_by_type"]
-    print("\nRecords:")
-    if rbt:
-        for rt in rbt:
-            label = f"  {rt['type']}: {rt['count']} record(s)"
-            if rt["samples"]:
-                label += "  ·  " + "  ·  ".join(rt["samples"])
-            print(label)
-    else:
-        print("  (none)")
-
-    todo = data["todos"]
-    print("\nTodos:")
-    if todo["overdue"] or todo["due"]:
-        for t in todo["overdue"]:
-            pri = f"({t['priority']}) " if t["priority"] else ""
-            print(f"  OVERDUE  {t['line_no']:>3}. {pri}{t['description']}")
-        for t in todo["due"]:
-            pri = f"({t['priority']}) " if t["priority"] else ""
-            print(f"  DUE      {t['line_no']:>3}. {pri}{t['description']}")
-    else:
-        print("  (none overdue or due)")
-
-    caps = data["captures"]
-    print("\nCaptures:")
-    if caps:
-        for c in caps:
-            print(f"  {c['date']}  {c['sample']}")
-    else:
-        print("  (none)")
-
-    j = data["journal"]
-    print("\nJournal:")
-    if j:
-        print(f"  {j['path']}")
-        if j["preview"]:
-            for line in j["preview"].splitlines()[:8]:
-                print(f"    {line}")
-    else:
-        print("  (no entry yet)")
-
-    hab = data["habits"]
-    if hab:
-        print("\nHabits:")
-        for h in hab:
-            mark = "X" if h["today"] else "-"
-            print(f"  {mark} {h['name']} — {h['streak']}-day streak ({h['days_done']} done)")
-    print()
 
 
 def _cli_input(prompt):
@@ -3276,10 +3214,6 @@ def main():
     if args.pomo_log is not None:
         run_pomodoro_log(args.pomo_log[0], args.pomo_log[1],
                          date=args.date)
-        return
-
-    if args.daily is not None:
-        run_daily(args.daily)
         return
 
     if args.add is not None:

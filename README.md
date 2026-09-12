@@ -412,15 +412,6 @@ Features:
   auto-posts the session; CLI: `ptos --pomo-log TASK MINUTES`
 - **Configurable duration** — `[pomodoro] duration_minutes` in config.toml (default 25)
 
-### Daily Digest
-
-A snapshot of yesterday's activity (or any date). Pure read — no writes.
-
-- **Web**: `/daily` or `/daily/YYYY-MM-DD` with prev/next navigation
-- **CLI**: `ptos --daily [DATE]` (default: yesterday)
-- Shows: record counts grouped by type with sample lines, overdue and due
-  todos, recent captures, journal preview, and habit streaks
-
 ### Habits
 
 GitHub-style contribution grid for tracking recurring activities. Configured in
