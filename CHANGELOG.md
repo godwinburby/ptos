@@ -5,6 +5,16 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-12
+
+### Grouped desktop sidebar with keyboard shortcuts
+
+- **4 labeled section groups** — desktop sidebar now organized into **Log** (Home, Add Record, Todo, Journal, Notes, Types), **Find** (Search, Due List, Browse, Daily), **Track** (Queries, Board, Habits, Calendar, Thresholds), **Setup** (Query Builder, Schema Builder, Log Editor, Lint, Backup, Settings). Sections collapsible with chevron indicator, state persisted to localStorage.
+- **Keyboard shortcut badges** — every sidebar link displays its shortcut key (`H`, `A`, `T`, `G O`, etc.) in a subtle monospace badge. Single-key shortcuts for core pages, `G X` chords for secondary pages.
+- **New shortcuts** — `F` → Search (single-key), `G O` → Board, `G M` → Habits, `G Y` → Calendar, `G R` → Thresholds, `G W` → Daily, `G X` → Record Types (all `G` chords).
+- **Bug fix** — 5 dead uppercase NAV entries (`g T/B/H/C/D`) were unreachable because the handler lowercases all keys; replaced with working lowercase versions (`g o/m/y/r/w`).
+- **Daily icon fix** — Daily page was using Calendar's icon; now uses its own `daily.html` icon.
+
 ## 2026-09-11
 
 ### Per-type log files (`log_group` in schema)
