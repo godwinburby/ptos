@@ -5,6 +5,20 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-14
+
+### Performance optimizations — browse, forms, caching, pagination
+
+- **Eliminated double file scan in `get_records()`** — `scan_records()` gained a `return_locations` param that collects `(filepath, lineno, line)` in the same pass. `get_records()` uses the combined scan instead of calling both `scan_records()` and `find_records_with_location()` on the same data. Cuts browse I/O in half for large datasets.
+- **Scoped cache invalidation** — `_invalidate_history_cache()` gained an optional `rtype` param. Record writes (append/edit/delete/capture/pomodoro_log/advance) now pass the record type, invalidating only `history:{type}` and `condsug:{type}:*` caches instead of all types. Habit/calendar caches are always cleared (cheap to rebuild).
+- **Cached `get_log_files()`** — `os.listdir()` result stored in `_CACHE["log_files"]`, invalidated when a new year file is created via `append_record()`.
+- **Cached `find_records_with_location()`** — results stored under `frwl:` cache key, invalidated by `_invalidate_history_cache()`. Board pages with 4 columns now do 1 scan instead of 4.
+- **Visual-only pagination in RecordTable** — table renders 100 rows at a time with Prev/Next controls. All records stay in the JS `_records` array; pagination is display-only slicing. CSV export unchanged (exports all). Select-all operates on the current page. Cache buster bumped to `v=4`.
+- **Removed `location.reload()` from `addNewOption()`** — adding a new field option via the inline modal now appends the `<option>` to the DOM without a full page reload.
+- **AJAX parent field change** — new `/api/field-options/<rtype>/<parent>/<value>` endpoint returns child field options for parent-dependent selects. `onParentChange()` in add/edit forms fetches updated options via AJAX instead of serializing the form into URL params and reloading the page. Falls back to full reload for tag/condition triggers.
+- **Redundant CSV export removed** — deleted the `/browse/export` server-side route and the duplicate `↓ CSV` button from browse.html; client-side `RecordTable._export()` is the single export path.
+- **record_table.js cache buster** — bumped from `v=3` to `v=4` on browse, home, query_builder, and queries pages.
+
 ## 2026-09-12
 
 ### Home page restructured into 4 sections

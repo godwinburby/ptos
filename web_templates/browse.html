@@ -59,7 +59,6 @@
   </div>
 
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <button class="btn btn-success btn-sm" onclick="exportCSV()">↓ CSV</button>
     <button class="btn btn-primary btn-sm" onclick="showSaveQuery()">💾 Save as Query</button>
     <button class="btn btn-ghost btn-sm" onclick="clearBrowse()">✕ Clear</button>
   </div>
@@ -93,7 +92,7 @@
 
 <!-- Modals injected by RecordTable -->
 
-<script src="/static/js/record_table.js?v=3"></script>
+<script src="/static/js/record_table.js?v=4"></script>
 <script>
 // ── State ────────────────────────────────────────────────────────────────────
 var _types = {{ types | tojson }};
@@ -323,16 +322,6 @@ function runBrowse() {
   .catch(e => {
     area.innerHTML = errorCard(String(e));
   });
-}
-
-function exportCSV() {
-  const form  = document.createElement("form");
-  form.method = "POST"; form.action = "/browse/export";
-  const inp   = document.createElement("input");
-  inp.type = "hidden"; inp.name = "params";
-  inp.value = JSON.stringify(_params());
-  form.appendChild(inp);
-  document.body.appendChild(form); form.submit(); document.body.removeChild(form);
 }
 
 function clearBrowse() {

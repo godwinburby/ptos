@@ -433,8 +433,40 @@ function addSchemaTag(rtype) {
   .catch(e => alert("Error: " + e));
 }
 
-// when a parent field changes, reload page preserving all current values
+// when a parent field changes, update child fields via AJAX (or reload for triggers)
 function onParentChange(fieldName) {
+  const form = document.getElementById("add-form");
+  const rtype = form.querySelector('input[name="type"]').value;
+  const parentVal = form.querySelector('[name="' + fieldName + '"]').value;
+
+  fetch("/api/field-options/" + encodeURIComponent(rtype) + "/" + encodeURIComponent(fieldName) + "/" + encodeURIComponent(parentVal))
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) return;
+      const updatedFields = Object.keys(d.options);
+      // If no fields were updated (not a parent field), do a full reload
+      // (handles tag triggers, condition triggers, etc.)
+      if (!updatedFields.length) {
+        _fullReload(fieldName);
+        return;
+      }
+      updatedFields.forEach(fname => {
+        const sel = form.querySelector('[name="' + fname + '"]');
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">— select ' + esc(fname) + ' —</option>';
+        d.options[fname].forEach(opt => {
+          const o = document.createElement("option");
+          o.value = opt; o.textContent = opt;
+          if (opt === current) o.selected = true;
+          sel.appendChild(o);
+        });
+      });
+    })
+    .catch(() => _fullReload(fieldName));
+}
+
+function _fullReload(fieldName) {
   const form   = document.getElementById("add-form");
   const fd     = new FormData(form);
   const params = new URLSearchParams();
