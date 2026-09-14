@@ -445,23 +445,50 @@ function addSchemaTag(rtype) {
 }
 
 function onParentChange(fieldName) {
+  const form = document.getElementById("edit-form");
+  const rtype = form.querySelector('input[name="type"]') ? form.querySelector('input[name="type"]').value : '{{ rtype }}';
+  const parentEl = form.querySelector('[name="' + fieldName + '"]');
+  const parentVal = parentEl ? parentEl.value : '';
+
+  fetch("/api/field-options/" + encodeURIComponent(rtype) + "/" + encodeURIComponent(fieldName) + "/" + encodeURIComponent(parentVal))
+    .then(r => r.json())
+    .then(d => {
+      if (!d.ok) return;
+      const updatedFields = Object.keys(d.options);
+      if (!updatedFields.length) {
+        _fullReloadEdit(fieldName);
+        return;
+      }
+      updatedFields.forEach(fname => {
+        const sel = form.querySelector('[name="' + fname + '"]');
+        if (!sel) return;
+        const current = sel.value;
+        sel.innerHTML = '<option value="">— select ' + esc(fname) + ' —</option>';
+        d.options[fname].forEach(opt => {
+          const o = document.createElement("option");
+          o.value = opt; o.textContent = opt;
+          if (opt === current) o.selected = true;
+          sel.appendChild(o);
+        });
+      });
+    })
+    .catch(() => _fullReloadEdit(fieldName));
+}
+
+function _fullReloadEdit(fieldName) {
   const form   = document.getElementById("edit-form");
   const fd     = new FormData(form);
   const params = new URLSearchParams();
   params.set("filepath", fd.get("filepath"));
   params.set("lineno",   fd.get("lineno"));
   params.set("line",     fd.get("old_line"));
-  // Preserve all current form field values (like add.html does)
   for (const [k, v] of fd.entries()) {
     if (k !== "filepath" && k !== "lineno" && k !== "old_line" && v)
       params.append(k, v);
   }
-  // In convert mode, the <select name="type"> holds the target type
-  // but edit_get reads it from target_type param
   if (fd.get("convert") === "1" && fd.get("type")) {
     params.set("target_type", fd.get("type"));
   }
-  // Preserve return_to for onParentChange navigation
   var rt = fd.get("return_to");
   if (rt) params.set("return_to", rt);
   window.location = "/edit?" + params.toString();

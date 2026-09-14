@@ -1228,14 +1228,11 @@ async function confirmAddOption() {
         });
         const result = await resp.json();
         if (result.success) {
-            // Add new option to select
             const opt = document.createElement('option');
             opt.value = value;
             opt.textContent = value;
             opt.selected = true;
             select.appendChild(opt);
-            // Reload to refresh options
-            location.reload();
         } else {
             alert('Error: ' + (result.error || 'Failed to add option'));
         }

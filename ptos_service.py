@@ -114,17 +114,25 @@ def invalidate_cache(keys):
     invalidate(keys)
 
 
-def _invalidate_history_cache():
-    """Invalidate every history/conditional-suggestion/habit/calendar cache key.
+def _invalidate_history_cache(rtype=None):
+    """Invalidate history/conditional-suggestion/habit/calendar/record caches.
 
-    Called after any record write (or schema change) regardless of which
-    rtype changed — correctness over precision: writes are rare compared
-    to cascade reads, and selectively invalidating individual condsug keys
-    risks missing one and serving stale suggestions."""
+    When *rtype* is given, only that type's history/condsug caches are popped
+    (fast path). Habit, calendar, and record caches are always cleared since
+    they're cheap to rebuild and can match multiple types.  Pass ``None`` to
+    clear everything (schema changes, bulk ops)."""
     for key in list(ptos._CACHE.keys()):
-        if (key.startswith("history:") or key.startswith("condsug:")
-                or key.startswith("habit:") or key.startswith("calendar:")):
-            ptos._CACHE.pop(key, None)
+        if rtype:
+            if (key == f"history:{rtype}"
+                    or key.startswith(f"condsug:{rtype}:")
+                    or key.startswith("habit:") or key.startswith("calendar:")
+                    or key.startswith("frwl:")):
+                ptos._CACHE.pop(key, None)
+        else:
+            if (key.startswith("history:") or key.startswith("condsug:")
+                    or key.startswith("habit:") or key.startswith("calendar:")
+                    or key.startswith("frwl:")):
+                ptos._CACHE.pop(key, None)
 
 
 def _cycles():
@@ -234,7 +242,8 @@ def append_record(line):
     """
     try:
         result = ptos.append_record(line)
-        _invalidate_history_cache()
+        rtype = ptos.parse_line(line)
+        _invalidate_history_cache(rtype=rtype[1].get("type") if rtype else None)
         return result
     except Exception as e:
         raise PTOSError(str(e))
@@ -605,9 +614,10 @@ def get_records(filters, time="tm", search=None, sort=None,
         else:
             start, end = _resolve_time(time)
             time_label = ptos._TIME_ALIASES.get(time, time)
-        raw, total = ptos.scan_records(
+        raw, total, loc_matches = ptos.scan_records(
             start, end, filters, search,
-            from_file=from_file, sum_field=sum_field)
+            from_file=from_file, sum_field=sum_field,
+            return_locations=True)
     except PTOSError:
         raise
     except Exception as e:
@@ -615,12 +625,6 @@ def get_records(filters, time="tm", search=None, sort=None,
 
     # build line→filepath map for edit/delete support
     try:
-        if filters or search:
-            loc_matches = ptos.find_records_with_location(
-                filters, search=search, start=start, end=end)
-        else:
-            loc_matches = ptos.find_records_with_location(
-                [], search=None, start=start, end=end)
         line_to_filepath = {line: fp   for fp, idx, line in loc_matches}
         line_to_lineno   = {line: idx  for fp, idx, line in loc_matches}
     except Exception:
@@ -1791,7 +1795,7 @@ def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
     except Exception as e:
         raise PTOSError(str(e))
 
-    _invalidate_history_cache()
+    _invalidate_history_cache(rtype=ptos.parse_line(old_line)[1].get("type") if ptos.parse_line(old_line) else None)
     return {"old_line": old_line, "new_line": new_line,
             "changed_date": changed_date}
 
@@ -1807,7 +1811,7 @@ def delete_record(filepath, old_line, lineno=None):
         raise PTOSError(str(e))
     except Exception as e:
         raise PTOSError(str(e))
-    _invalidate_history_cache()
+    _invalidate_history_cache(rtype=ptos.parse_line(old_line)[1].get("type") if ptos.parse_line(old_line) else None)
     return {"deleted_line": old_line}
 
 
@@ -2401,7 +2405,7 @@ def capture(text, date=None, tag=None, links=None):
     date_str = _iso_date(date)
     line = ptos.build_record_line(date_str, record, note=text)
     filepath, lineno = ptos.append_record(line, return_position=True)
-    _invalidate_history_cache()
+    _invalidate_history_cache(rtype="capture")
     return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
 
 
@@ -2430,7 +2434,7 @@ def pomodoro_log(task, minutes, date=None):
     date_str = _iso_date(date)
     line = ptos.build_record_line(date_str, record)
     filepath, lineno = ptos.append_record(line, return_position=True)
-    _invalidate_history_cache()
+    _invalidate_history_cache(rtype="pomodoro")
     return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
 
 
@@ -2692,7 +2696,7 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
             }
 
         new_filepath, new_lineno = ptos.append_record(new_line, return_position=True)
-        _invalidate_history_cache()
+        _invalidate_history_cache(rtype=target_type)
         return {
             "ok": True,
             "new_line": new_line,
@@ -2855,6 +2859,8 @@ def convert_record(filepath, old_line, lineno, target_type, kv_overrides=None, k
                 _mark_converted(filepath, old_line, lineno, target_type)
         except Exception:
             pass
+    # Always invalidate: new record (target_type) was appended, and
+    # possibly an old record was deleted — full invalidation is cheapest.
     _invalidate_history_cache()
     return {
         "ok": True,

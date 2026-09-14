@@ -29,6 +29,8 @@ function RecordTable(opts) {
   var _sortCol  = null;
   var _sortAsc  = true;
   var _delRec   = null;
+  var _page     = 1;
+  var _pageSize = 100;
 
   // ── tiny helpers ───────────────────────────────────────────────────────────
   function ge(id)  { return document.getElementById(id); }
@@ -148,9 +150,37 @@ function RecordTable(opts) {
       : "";
   }
 
+  // ── pagination helper ──────────────────────────────────────────────────────
+  function _pageSlice(recs) {
+    if (_records.length <= _pageSize) return recs;
+    var start = (_page - 1) * _pageSize;
+    return recs.slice(start, start + _pageSize);
+  }
+
+  function _totalPages() {
+    return Math.ceil(_records.length / _pageSize);
+  }
+
+  function _updatePagination(container) {
+    var pag = ge("rt-pagination");
+    if (!pag) return;
+    var tp = _totalPages();
+    if (tp <= 1) { pag.innerHTML = ""; return; }
+    var start = (_page - 1) * _pageSize + 1;
+    var end = Math.min(_page * _pageSize, _records.length);
+    pag.innerHTML =
+      '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);">' +
+        '<button class="btn btn-ghost btn-sm" onclick="RecordTable._prevPage()" ' + (_page <= 1 ? 'disabled' : '') + '>← Prev</button>' +
+        '<span>' + start + '–' + end + ' of ' + _records.length + '</span>' +
+        '<button class="btn btn-ghost btn-sm" onclick="RecordTable._nextPage()" ' + (_page >= tp ? 'disabled' : '') + '>Next →</button>' +
+      '</div>';
+  }
+
   // ── row builder ────────────────────────────────────────────────────────────
-  function _buildRows(recs, cols, returnTo) {
+  function _buildRows(recs, cols, returnTo, globalOffset) {
+    var offset = globalOffset || 0;
     return recs.map(function(r, idx) {
+      var globalIdx = offset + idx;
       var cells = cols.map(function(c) {
         var k = Object.keys(r).find(function(k){ return k.toLowerCase()===c.toLowerCase(); }) || c;
         return "<td>"+esc(r[k]||"")+"</td>";
@@ -159,7 +189,7 @@ function RecordTable(opts) {
       var cb = "";
       if (enableBulk) {
         cb = r._line
-          ? '<td style="text-align:center;width:32px;"><input type="checkbox" class="rt-row-cb" data-idx="'+idx+'" onchange="RecordTable._check(this)"></td>'
+          ? '<td style="text-align:center;width:32px;"><input type="checkbox" class="rt-row-cb" data-idx="'+globalIdx+'" onchange="RecordTable._check(this)"></td>'
           : '<td style="width:32px;"></td>';
       }
 
@@ -218,9 +248,11 @@ function RecordTable(opts) {
     _selected = [];
     _sortCol  = null;
     _sortAsc  = true;
+    _page     = 1;
     _updateBar();
 
     var returnTo = opts.returnTo || window.location.pathname;
+    var pageRecs = _pageSlice(_records);
 
     var cbHead = enableBulk
       ? '<th style="width:32px;text-align:center;"><input type="checkbox" id="rt-select-all" onchange="RecordTable._selAll(this)" title="Select all"></th>'
@@ -238,13 +270,16 @@ function RecordTable(opts) {
           _summaryBar(d) +
           '<button class="btn btn-ghost btn-sm" onclick="RecordTable._export()">↓ CSV</button>' +
         '</div>' +
+        '<div id="rt-pagination"></div>' +
         '<div style="overflow-x:auto;">' +
           '<table class="data-table" id="rt-table">' +
             '<thead><tr>'+heads+'</tr></thead>' +
-            '<tbody id="rt-tbody">'+_buildRows(_records, _cols, returnTo)+'</tbody>' +
+            '<tbody id="rt-tbody">'+_buildRows(pageRecs, _cols, returnTo, (_page-1)*_pageSize)+'</tbody>' +
           '</table>' +
         '</div>' +
       '</div>';
+
+    _updatePagination();
   };
 
   self.clear = function() {
@@ -271,13 +306,15 @@ function RecordTable(opts) {
       return _cmp(a[ak], b[bk], asc);
     });
 
+    _page = 1;
     _selected = [];
     var sa = ge("rt-select-all");
     if (sa) sa.checked = false;
     _updateBar();
 
     var tbody = ge("rt-tbody");
-    if (tbody) tbody.innerHTML = _buildRows(_records, _cols, opts.returnTo || window.location.pathname);
+    if (tbody) tbody.innerHTML = _buildRows(_pageSlice(_records), _cols, opts.returnTo || window.location.pathname, (_page-1)*_pageSize);
+    _updatePagination();
   };
 
   // ── CSV export ─────────────────────────────────────────────────────────────
@@ -443,6 +480,29 @@ function RecordTable(opts) {
       else { msg.textContent = d.error || "Set failed"; msg.style.display = "block"; }
     }).catch(function(e){ msg.textContent = String(e); msg.style.display = "block"; });
   };
+
+  // ── pagination ─────────────────────────────────────────────────────────────
+  self._prevPage = function() {
+    if (_page <= 1) return;
+    _page--;
+    _refreshPage();
+  };
+
+  self._nextPage = function() {
+    if (_page >= _totalPages()) return;
+    _page++;
+    _refreshPage();
+  };
+
+  function _refreshPage() {
+    _selected = [];
+    var sa = ge("rt-select-all");
+    if (sa) sa.checked = false;
+    _updateBar();
+    var tbody = ge("rt-tbody");
+    if (tbody) tbody.innerHTML = _buildRows(_pageSlice(_records), _cols, opts.returnTo || window.location.pathname, (_page-1)*_pageSize);
+    _updatePagination();
+  }
 
   // ── expose on global RecordTable for inline onclick handlers ───────────────
   // (set by the page after instantiation — see usage note below)

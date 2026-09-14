@@ -84,7 +84,11 @@ def get_log_files():
     """Get list of log files from records/, excluding conflict files.
     Returns relative paths from RECORDS_DIR — flat files like '2026.log'
     and one-level-deep type-grouped files like 'followup/2026.log'."""
+    cached = _CACHE.get("log_files")
+    if cached is not None:
+        return cached
     if not os.path.isdir(RECORDS_DIR):
+        _CACHE["log_files"] = []
         return []
     files = []
     for entry in os.listdir(RECORDS_DIR):
@@ -96,7 +100,9 @@ def get_log_files():
                 sub_full = os.path.join(full, sub)
                 if os.path.isfile(sub_full) and sub.endswith(".log") and "conflict" not in sub.lower():
                     files.append(os.path.join(entry, sub))
-    return sorted(files)
+    result = sorted(files)
+    _CACHE["log_files"] = result
+    return result
 
 
 def find_sync_conflicts():
@@ -2331,9 +2337,14 @@ def apply_where(kv, filters):
 def find_records_with_location(filters, search=None, start=None, end=None):
     """Scan all log files and return list of (filepath, line_number, raw_line)
     for every record matching filters + optional date range + optional search.
+    Results are cached per (filters, search, start, end) for board/habit reuse.
     """
     if start is None: start = dt.date.min
     if end   is None: end   = dt.date.max
+    cache_key = f"frwl:{tuple(filters)}:{start}:{end}:{search}"
+    cached = _CACHE.get(cache_key)
+    if cached is not None:
+        return cached
     matches = []
     fnames = get_log_files()
     for fname in fnames:
@@ -2361,6 +2372,7 @@ def find_records_with_location(filters, search=None, start=None, end=None):
             if not apply_where(kv_with_date, filters):
                 continue
             matches.append((path, idx, line))
+    _CACHE[cache_key] = matches
     return matches
 
 
@@ -2598,13 +2610,17 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
 # Query engine
 # --------------------------------------------------
 
-def scan_records(start, end, filters, search, from_file=None, sum_field=None):
+def scan_records(start, end, filters, search, from_file=None, sum_field=None,
+                 return_locations=False):
     """Scan log files and return (matching_lines, numeric_total).
     from_file: if given, read only that file from records/ folder.
     sum_field: if given, sum this specific field instead of the first numeric field found.
+    return_locations: if True, return a 3-tuple (lines, total, locations)
+        where locations is a list of (filepath, 0-based lineno, raw_line).
     """
     results = []
     total   = 0
+    locations = [] if return_locations else None
     if from_file:
         # validate — relative path within records/, no traversal
         if os.path.isabs(from_file) or ".." in from_file.replace("\\", "/").split("/"):
@@ -2623,8 +2639,8 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
                 continue
         path = os.path.join(RECORDS_DIR, fname)
         with open(path, encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
+            for idx, raw in enumerate(f):
+                line = raw.strip()
                 if not line or line.startswith("#"):
                     continue
                 try:
@@ -2641,9 +2657,13 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None):
                 if not apply_where(kv_with_date, filters):
                     continue
                 results.append(line)
+                if return_locations:
+                    locations.append((path, idx, line))
                 val = numeric_value_for(kv, sum_field) if sum_field else numeric_value(kv)
                 if val is not None:
                     total += val
+    if return_locations:
+        return results, total, locations
     return results, total
 
 # --------------------------------------------------
@@ -2988,10 +3008,11 @@ def append_record(line, return_position=False):
     newly appended line; otherwise returns None."""
     os.makedirs(RECORDS_DIR, exist_ok=True)
     path = _resolve_record_path(line)
-    
+    file_existed = os.path.exists(path)
+
     # Read existing content and prepare new content
     existing = ""
-    if os.path.exists(path):
+    if file_existed:
         with open(path, "r", encoding="utf-8") as f:
             existing = f.read()
     
@@ -3005,6 +3026,8 @@ def append_record(line, return_position=False):
     # The appended line is the last physical line before the trailing ""
     lineno = len(new_content.split("\n")) - 2
     atomic_write(path, new_content)
+    if not file_existed:
+        _CACHE.pop("log_files", None)
     if return_position:
         return path, lineno
 

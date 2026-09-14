@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, glob, fnmatch, datetime as dt, json, csv, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil
+import sys, os, re, glob, fnmatch, datetime as dt, json, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
@@ -3098,47 +3098,6 @@ def browse_run():
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
-@app.route("/browse/export", methods=["POST"])
-def browse_export():
-    params = json.loads(request.form.get("params","{}"))
-    expr   = params.get("expr","").strip()
-    where  = params.get("where",[])
-    time   = params.get("time","tm")
-    search = params.get("search","") or None
-    file   = params.get("file","") or None
-    from_date = params.get("from_date") or None
-    to_date   = params.get("to_date") or None
-    if isinstance(where, str):
-        where = [where] if where.strip() else []
-    if expr and where:
-        combined = ptos.filters_to_expr(where)
-        filters  = [f"({combined}) AND ({expr})"] if combined else [expr]
-    elif expr:
-        filters = [expr]
-    elif where:
-        filters = where
-    else:
-        filters = []
-    try:
-        data    = svc.get_records(filters, time, search=search, from_file=file,
-                                  from_date=from_date, to_date=to_date)
-        records = data["records"]
-        cols    = [c for c in data["columns"] if not c.startswith("_")]
-        tl      = _TIME_DICT.get(time, time)
-        m = re.search(r'type=(\w+)', expr or " ".join(filters))
-        type_part = m.group(1) if m else "records"
-        filename  = f"{type_part}_{tl}.csv"
-        tmp = tempfile.NamedTemporaryFile(mode="w",suffix=".csv",delete=False,
-                                          encoding="utf-8",newline="")
-        writer = csv.DictWriter(tmp, fieldnames=cols, extrasaction="ignore")
-        writer.writeheader()
-        for row in records: writer.writerow(row)
-        tmp.close()
-        return send_file(tmp.name, as_attachment=True,
-                         download_name=filename, mimetype="text/csv")
-    except Exception as e:
-        return f"Export error: {e}", 500
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Log Editor
@@ -3849,6 +3808,31 @@ def api_field_suggest(rtype, field, value):
         return jsonify(ok=True, suggestions=suggestions)
     except Exception as e:
         return jsonify(ok=False, suggestions={}, error=str(e))
+
+
+@app.route("/api/field-options/<rtype>/<parent_field>/<path:parent_value>")
+def api_field_options(rtype, parent_field, parent_value):
+    """Return child field options for all fields dependent on parent_field."""
+    try:
+        schema = ptos.get_schema()
+        type_schema = schema.get("type", {}).get(rtype, {})
+        result = {}
+        for fname, fdef in type_schema.get("fields", {}).items():
+            if not isinstance(fdef, dict):
+                continue
+            opts = fdef.get("options")
+            if isinstance(opts, dict) and fdef.get("parent") == parent_field:
+                result[fname] = opts.get(parent_value, [])
+        # Also check global_fields
+        for fname, fdef in schema.get("global_fields", {}).items():
+            if not isinstance(fdef, dict):
+                continue
+            opts = fdef.get("options")
+            if isinstance(opts, dict) and fdef.get("parent") == parent_field:
+                result[fname] = opts.get(parent_value, [])
+        return jsonify(ok=True, options=result)
+    except Exception as e:
+        return jsonify(ok=False, options={}, error=str(e))
 
 
 @app.route("/api/thresholds/match", methods=["POST"])
