@@ -213,6 +213,10 @@ def build_parser(cycles):
                      help="Show a calendar month grid. Optional: named calendar from queries.toml")
     ana.add_argument("--board",        nargs="?", const="__ALL__", metavar="NAME",
                      help="Show board columns. Optional: board name from queries.toml")
+    ana.add_argument("--entity",       nargs="?", const="__PROMPT__", metavar="FIELD=VALUE",
+                     help="Show all records for a single entity (field=value).\n"
+                          "  Shows summary, type breakdown, and records.\n"
+                          "  Honors -t/--time for time window selection")
     ana.add_argument("--sum-field", dest="sum_field", metavar="FIELD",
                      help="Field to sum instead of the default numeric field (e.g. advance, duration)")
     ana.add_argument("--table",        action="store_true", help="Show results as a table instead of raw lines")
@@ -1458,10 +1462,27 @@ def run_board(arg):
             continue
         titles = data.get("card_title_fields") or fallback
         match_field = data.get("match_field")
+        columns = data["columns"]
         print(f"\nBoard: {name}  (window: {data['time_window']})")
         if match_field:
             print(f"  match_field: {match_field}")
-        for col in data["columns"]:
+
+        # Funnel strip
+        if len(columns) > 1:
+            total_all = 0
+            parts = []
+            for col in columns:
+                c = data["counts"].get(col, 0)
+                total_all += c
+                parts.append(f"{col.replace('_',' ')}: {c}")
+            funnel = "  →  ".join(parts)
+            print(f"  ╔{'═' * (len(funnel) + 2)}╗")
+            print(f"  ║ {funnel}  ║")
+            print(f"  ║ Total: {total_all}{' ' * (len(funnel) - 8 + 2)}║")
+            print(f"  ╚{'═' * (len(funnel) + 2)}╝")
+            print()
+
+        for col in columns:
             recs = data["data"].get(col, [])
             total = data["counts"].get(col, 0)
             shown = f"/{len(recs)}" if data["truncated"].get(col) else ""
@@ -1476,6 +1497,68 @@ def run_board(arg):
             if len(recs) > 15:
                 print(f"    ...and {len(recs) - 15} more")
         print()
+
+
+# --------------------------------------------------
+# Entity view (--entity)
+# --------------------------------------------------
+
+def run_entity(arg):
+    import ptos_service as svc
+    if arg == "__PROMPT__":
+        # Show cross-type field suggestions
+        try:
+            suggestions = svc.get_entity_suggestions()
+        except Exception:
+            suggestions = []
+        if suggestions:
+            print("\nCommon cross-type fields:")
+            for s in suggestions[:10]:
+                types_str = ", ".join(s["types"])
+                print(f"  {s['field']:20s}  {len(s['types'])} types, {s['count']} values  ({types_str})")
+            print()
+        field = input("Field name: ").strip()
+        value = input("Field value: ").strip()
+        if not field or not value:
+            sys.exit("Field and value are required.")
+    elif "=" not in arg:
+        sys.exit("Entity must be specified as field=value (e.g. client_code=vka7)")
+    else:
+        field, value = arg.split("=", 1)
+        field = field.strip()
+        value = value.strip()
+    if not field or not value:
+        sys.exit("Field and value are required.")
+
+    # Resolve time from parent args (global -t/--time)
+    import argparse
+    import sys as _sys
+    time_code = None
+    for i, a in enumerate(_sys.argv):
+        if a in ("-t", "--time") and i + 1 < len(_sys.argv):
+            time_code = _sys.argv[i + 1]
+            break
+
+    try:
+        data = svc.get_entity_data(field, value, time=time_code or "all")
+    except Exception as e:
+        sys.exit(f"Error: {e}")
+
+    print(f"\nEntity: {field}={value} ({data['label']})")
+    print(f"  {data['count']} record(s) across {len(data['types'])} type(s)  ·  {data['start']} → {data['end']}")
+    for t, c in sorted(data["types"].items()):
+        print(f"  {t}: {c}")
+    if data["total_amount"]:
+        print(f"  Total amount: {svc.ptos.fmt(data['total_amount'])}")
+    print()
+
+    fallback = ["name", "client", "intent", "title", "subject"]
+    for rec in data["records"]:
+        title = next((str(rec[f]) for f in fallback if rec.get(f)), "")
+        note = (rec.get("note") or "").replace("\n", " ")[:40]
+        line = f"  [{rec.get('date', '')}]  {rec.get('type', '?')}  {title}  {note}".rstrip()
+        print(line)
+    print()
 
 
 # --------------------------------------------------
@@ -3342,6 +3425,11 @@ def main():
     # ---- board mode ----
     if args.board is not None:
         run_board(args.board)
+        return
+
+    # ---- entity mode ----
+    if args.entity is not None:
+        run_entity(args.entity)
         return
 
     if args.query:

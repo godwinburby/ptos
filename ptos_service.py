@@ -2636,6 +2636,176 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
     }
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Entity view
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_entity_data(field, value, type_filter=None, time="all"):
+    """Fetch all records for a single field=value entity.
+
+    Returns dict with entity info, records, summary stats, and type breakdown.
+    Used by /entity (web) and --entity (CLI).
+    """
+    filters = [f"{field}={value}"]
+
+    # Always fetch ALL records first to get the full column union
+    result_all = get_records(filters, time, sort="date")
+
+    # Compute stable columns from ALL records (never changes with type filter)
+    all_columns = result_all["columns"]
+
+    if type_filter:
+        result = get_records(filters + [f"type={type_filter}"], time, sort="date")
+    else:
+        result = result_all
+
+    records = result["records"]
+    types_present = {}
+    total_amount = 0
+    name = None
+
+    for r in records:
+        t = r.get("type", "?")
+        types_present[t] = types_present.get(t, 0) + 1
+        amt = r.get("amount")
+        if amt:
+            try:
+                total_amount += int(float(str(amt).replace(",", "")))
+            except (ValueError, TypeError):
+                pass
+        if r.get("name") and not name:
+            name = r["name"]
+
+    # Detect entity label: use name if present, else just the value
+    label = name if name else value
+
+    # Detect total amounts by type
+    amount_by_type = {}
+    for r in records:
+        t = r.get("type", "?")
+        amt = r.get("amount")
+        if amt:
+            try:
+                amount_by_type[t] = amount_by_type.get(t, 0) + int(float(str(amt).replace(",", "")))
+            except (ValueError, TypeError):
+                pass
+
+    # Detect any numeric fields across all records for summary
+    numeric_fields = {}
+    for r in records:
+        for k, v in r.items():
+            if k.startswith("_") or k in ("type", "date", "note", "tag"):
+                continue
+            try:
+                numeric_fields[k] = numeric_fields.get(k, 0) + int(float(str(v).replace(",", "")))
+            except (ValueError, TypeError):
+                pass
+
+    return {
+        "field": field,
+        "value": value,
+        "label": label,
+        "records": records,
+        "columns": all_columns,
+        "count": result["count"],
+        "start": result["start"],
+        "end": result["end"],
+        "time_label": result["time_label"],
+        "types": types_present,
+        "total_amount": total_amount,
+        "amount_by_type": amount_by_type,
+        "numeric_fields": {k: v for k, v in numeric_fields.items() if v},
+        "type_filter": type_filter,
+    }
+
+
+def get_entity_suggestions(schema=None, time="ty"):
+    """Return cross-type field suggestions for the entity landing page.
+
+    Scans the schema to find fields appearing on 2+ types, then scans
+    records for the given time window to count distinct values per field.
+    Returns list of {field, types, count} sorted by type count desc.
+    """
+    if schema is None:
+        schema = ptos.get_schema()
+
+    allowed = set(schema.get("types", {}).get("allowed", []))
+
+    # Find cross-type fields (appear on 2+ types)
+    field_types = {}
+    for t in allowed:
+        for f in ptos.filter_fields_for_type(t, schema):
+            if f in ("date", "type", "note"):
+                continue
+            if f not in field_types:
+                field_types[f] = set()
+            field_types[f].add(t)
+
+    cross_type = {f: types for f, types in field_types.items() if len(types) >= 2}
+    if not cross_type:
+        return []
+
+    # Scan records for value counts
+    try:
+        start, end = _resolve_time(time)
+    except Exception:
+        start, end = _resolve_time("ty")
+
+    raw_lines, _ = ptos.scan_records(start, end, [], None)
+
+    value_counts = {f: set() for f in cross_type}
+    for line in raw_lines:
+        parsed = ptos.safe_parse_line(line)
+        if not parsed:
+            continue
+        _, kv, _ = parsed
+        for f in cross_type:
+            v = kv.get(f)
+            if v is not None and str(v).strip():
+                value_counts[f].add(str(v).strip())
+
+    # Build result sorted by type count desc, then field name
+    suggestions = []
+    for f, types in sorted(cross_type.items(), key=lambda x: (-len(x[1]), x[0])):
+        suggestions.append({
+            "field": f,
+            "types": sorted(types),
+            "count": len(value_counts.get(f, set())),
+        })
+
+    return suggestions
+
+
+def get_entity_field_values(field, time="ty"):
+    """Return top distinct values for a field across all records.
+
+    Returns (values: list[str], total: int) where values are the top 20
+    by frequency and total is the total distinct count.
+    """
+    from collections import Counter
+
+    try:
+        start, end = _resolve_time(time)
+    except Exception:
+        start, end = _resolve_time("ty")
+
+    raw_lines, _ = ptos.scan_records(start, end, [], None)
+
+    counts = Counter()
+    for line in raw_lines:
+        parsed = ptos.safe_parse_line(line)
+        if not parsed:
+            continue
+        _, kv, _ = parsed
+        v = kv.get(field)
+        if v is not None and str(v).strip():
+            counts[str(v).strip()] += 1
+
+    total = len(counts)
+    values = [v for v, _ in counts.most_common()]
+    return values, total
+
+
 def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
     """Move a record from one column/type to another.
     Creates a NEW record with the target_type and copies shared fields.

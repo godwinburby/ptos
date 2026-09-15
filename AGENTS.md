@@ -246,6 +246,44 @@ x 2026-07-12 2026-07-10 Completed task
 ### Concept tags
 - Notes `[[Target]]` tags reuse the bracket cross-linking infrastructure (see Bracket cross-linking section). `_iter_link_matches` scans `NOTES_DIR`; `template.md` is excluded.
 
+## Entity View module (`/entity` field=value cross-type lookup)
+
+### Data model
+- Purely a read-side view of existing records; no new write path. Shows all records matching a single `field=value` pair across all types.
+- Summary card: entity identity (`field=value`), auto-detected name, total records, distinct types, date range, aggregated numeric totals.
+- Type breakdown badges: clickable badges filter the table to a single type without page reload.
+- Two views: **Table** (RecordTable with full edit/delete/convert) and **Grid** (board-style columns, one per type, with edit/delete per card).
+
+### Service (`ptos_service.py`, section after `get_board_data`)
+- `get_entity_data(field, value, type_filter=None, time="all")` — calls `get_records([f"{field}={value}"], time)`, computes `types` (type→count), `total_amount`, `amount_by_type`, `numeric_fields` (all numeric fields summed), auto-detects `name` from first matching record. Returns `{field, value, label, records, columns, count, start, end, time_label, types, total_amount, amount_by_type, numeric_fields, type_filter}`.
+- `get_entity_suggestions(schema=None, time="ty")` — scans schema for fields appearing on 2+ types, scans records for distinct value counts. Returns `[{field, types, count}]` sorted by type count desc. Used by the entity landing form to show clickable chips.
+- `get_entity_field_values(field, time="ty")` — scans records for distinct values of a given field, returns `(values: list[str], total: int)` with top 20 by frequency. Used by the entity value panel.
+
+### Web routes (`ptos_web.py`)
+- `GET /entity?field=FIELD&value=VALUE[&type=TYPE][&time=...]` — renders `entity.html` with summary card, type badges, table+grid toggle.
+- `POST /api/entity/run` — AJAX endpoint `{field, value}` → `{ok, redirect}` for form submission.
+- `GET /api/entity/field-values/<field>?time=...` — returns `{field, values, total}` for the value panel (top 20 distinct values by frequency).
+
+### Template (`web_templates/entity.html`)
+- **Landing form** (no params): clickable chips for cross-type fields (schema-driven), each showing field name, type count, and distinct value count for this year. Tooltip lists types. Clicking a chip opens a **value panel** below: top 8 values as clickable chips (expandable to 20 via "Show all" link), plus a text input with datalist autocomplete. Clicking a value chip navigates directly to the entity. Form with Field + Value inputs and Look up button as fallback.
+- **Results view** (field=value provided): summary card, type filter badges, table+grid toggle.
+- Grid view: one column per type, cards with edit/delete buttons (same `.board-card` pattern as Board page).
+- Edit/delete JS: `editCard()` navigates to `/edit?filepath=...&lineno=...&line=...&return_to=/entity?...`, `deleteCard()` AJAX POSTs to `/api/records/delete`.
+
+### CLI (`--entity FIELD=VALUE`)
+- `--entity FIELD=VALUE` — prints summary + all matching records. Honors `-t/--time`. Interactive prompt if no arg.
+- Added in `ptos_cli.py` `run_entity()`, dispatched before query mode.
+
+### Keyboard shortcut
+- `G V` — Go to Entity page (NAV chord in `base.html`).
+
+### Sidebar nav
+- "Entity" link in Find group (after Browse), SVG icon at `web_templates/icons/entity.html`.
+- Also in mobile More menu.
+
+### Shared CSS
+- Card styles (`.board-card`, `.card-*`, `.card-actions`) and grid layout (`.bg-grid`, `.bg-table`, `.bg-row`, `.bg-cell`) moved from `board.html` to `web_static/css/components.css` for reuse by both Board and Entity pages.
+
 ## Board module specifics
 
 ### Config storage
@@ -281,7 +319,7 @@ x 2026-07-12 2026-07-10 Completed task
 - **Group by / Sort by dropdowns** — on `/browse`, `#b-group` and `#b-sort` are populated with **dimension fields**, not every schema field. Dimensions exclude `[fields].dimension=false` (via `non_dimension_fields()`) and int fields, and always include `date`/`day`/`month`/`year` — the same rule `api_type_fields` uses for its per-type `dimensions` list.
 - **Cross-type (no type selected)** — dropdowns show the global union computed server-side by `_global_dimensions(schema)` in `ptos_web.py` (`browse_get` passes it as `browse.html`'s `_globalDims`).
 - **Per-type narrowing** — when a single type is selected in the FilterBuilder, `_refreshGroupSortForType()` in `browse.html` populates the dropdowns from that type's `/api/type_fields/{type}` `dimensions` (cached per type in `_typeDimsCache`), so fields from other types never appear. It fires via the FilterBuilder's `onTypeFields` hook (which `filter_builder.js` calls after `_fetch` on cache-hit/success/error) and on every `runBrowse`, and resets the dropdown to placeholder-only immediately on type change (no cross-type flash). `onTypeFields` receives the fresh `dimensions` from the shared `_fetch` cache to avoid a duplicate API call.
-- **Static cache-busting** — `filter_builder.js` is included as `/static/js/filter_builder.js?v=2` in `browse.html`/`query_builder.html` (and the service worker cache is `ptos-v3`) so stale cached JS can't silently revert browse group/sort behavior; if group/sort looks wrong after a code change, hard-refresh the browser.
+- **Static cache-busting** — `filter_builder.js` is included as `/static/js/filter_builder.js?v=2` in `browse.html`/`query_builder.html` (and the service worker cache is `ptos-v4`) so stale cached JS can't silently revert browse group/sort behavior; if group/sort looks wrong after a code change, hard-refresh the browser.
 
 ## Habits module (`/habits` heatmap + streak)
 

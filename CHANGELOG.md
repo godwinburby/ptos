@@ -5,6 +5,32 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-15
+
+### Entity View page (`/entity` field=value cross-type lookup)
+
+- **New `/entity` page** — enter a `field=value` (e.g. `client_code=vka7`) and see all matching records across all types, with summary card, type filter badges, and two view modes: Table (RecordTable with full edit/delete/convert) and Grid (board-style columns, one per type, with edit/delete per card). Auto-detects the entity's name from the first matching record's `name` field.
+- **Entity landing form with field suggestions** — clicking Entity in the sidebar shows a form with clickable chips for cross-type fields (fields appearing on 2+ types in the schema). Each chip shows the field name, type count, and distinct value count for this year. Tooltip lists the types. Clicking a chip opens a **value panel** below: top 8 values shown as clickable chips (expandable to 20 via "Show all" link), plus a text input with datalist autocomplete for custom values. Clicking a value chip navigates directly to the entity. Schema-driven field discovery, data-driven value display.
+- **Summary card** — shows entity identity, name, record count, type count, date range, and total amount (sum of all numeric `amount` fields).
+- **Type filter badges** — clickable badges above the table filter by type without page reload (e.g. click "expense" to see only expense records).
+- **Grid view** — board-style card layout with one column per type; each card has edit/delete buttons. Columns auto-ordered by earliest record date per type (domain-agnostic, no config needed).
+- **CLI `--entity FIELD=VALUE`** — prints summary + all matching records. Honors `-t/--time`. Interactive prompt if no arg (prints field suggestions first).
+- **Sidebar nav** — "Entity" link in Find group (after Browse), SVG icon, keyboard shortcut `G V`.
+- **Mobile nav** — "Entity" added to More menu.
+- **`POST /api/entity/run`** — AJAX endpoint for form submission.
+- **Service `get_entity_data()`** — new function in `ptos_service.py` wraps `get_records()` and computes entity summary stats (types, amounts, name detection). No new engine code in `ptos.py`.
+- **Service `get_entity_suggestions()`** — scans schema for cross-type fields, scans records for distinct value counts. Returns `{field, types, count}` sorted by type count desc.
+- **Service `get_entity_field_values()`** — returns all distinct values for a field (uncapped) with total count, used by the value panel autocomplete.
+- **Stable entity table columns** — `get_entity_data()` always fetches all records first for a stable column union, then filters by type for display. Table headers stay permanent regardless of which type badge is clicked.
+- **Service worker excludes `/api/` paths** — all API endpoints bypass the SW cache, preventing stale data. Cache bumped to `ptos-v4`.
+- **Value panel race condition fix** — fetch uses `{cache: 'no-store'}` and clears chips immediately on field switch to prevent stale data from lingering.
+
+### Pipeline funnel strip on Board page
+
+- **Funnel strip** — when a board has >1 column, a visual funnel strip appears above the Kanban/Grid view showing the count per column type with arrow separators and a total badge. Columns are ordered as defined in the board config. Rollup values shown per stage when `rollup_field` is configured.
+- **CLI board funnel** — `--board` output now prints a box-drawn funnel summary above the per-column record listing.
+- **Shared card/grid CSS** — card styles (`.board-card`, `.card-*`, `.card-actions`) and grid layout (`.bg-grid`, `.bg-table`, `.bg-row`, `.bg-cell`) moved from `board.html`'s `<style>` to `web_static/css/components.css` for reuse by both Board and Entity pages.
+
 ## 2026-09-14
 
 ### Performance optimizations — browse, forms, caching, pagination

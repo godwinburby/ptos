@@ -1,0 +1,401 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .entity-header { display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:16px; }
+  .entity-header .page-title { margin:0; }
+  .entity-label { font-size:16px;color:var(--sub);font-weight:400; }
+  .entity-summary { display:flex;gap:16px;flex-wrap:wrap;margin-bottom:16px;padding:14px 18px;background:var(--card);border:1px solid var(--border);border-radius:12px; }
+  .entity-stat { display:flex;flex-direction:column;gap:2px; }
+  .entity-stat .stat-label { font-size:11px;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;font-weight:600; }
+  .entity-stat .stat-value { font-size:18px;font-weight:700;color:var(--text); }
+  .entity-stat .stat-value.accent { color:var(--accent); }
+  .entity-types { display:flex;gap:6px;flex-wrap:wrap;align-items:center; }
+  .entity-type-badge { display:inline-flex;align-items:center;gap:4px;padding:4px 10px;border-radius:8px;font-size:12px;font-weight:600;background:var(--bg);border:1px solid var(--border);cursor:pointer;text-decoration:none;color:var(--text);transition:background .15s,border-color .15s; }
+  .entity-type-badge:hover { background:var(--accent-lt);border-color:var(--accent);color:var(--accent); }
+  .entity-type-badge.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+  .entity-type-badge .count { opacity:.7; }
+  .entity-controls { display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:16px; }
+  .entity-empty { text-align:center;padding:40px;color:var(--sub);font-size:14px; }
+  .entity-amounts { display:flex;gap:12px;flex-wrap:wrap;margin-top:8px; }
+  .entity-amount { font-size:12px;color:var(--sub); }
+  .entity-amount strong { color:var(--text); }
+  .entity-chip {
+    display:inline-flex;flex-direction:column;align-items:flex-start;
+    padding:6px 12px;border-radius:8px;border:1px solid var(--border);
+    background:var(--bg);cursor:pointer;transition:all .15s;
+    text-align:left;line-height:1.3;
+  }
+  .entity-chip:hover { border-color:var(--accent);background:var(--accent-lt); }
+  .entity-chip.active { background:var(--accent);border-color:var(--accent);color:#fff; }
+  .entity-chip.active .entity-chip-meta { color:rgba(255,255,255,.7); }
+  .entity-chip-field { font-size:13px;font-weight:700;color:var(--text); }
+  .entity-chip-meta { font-size:10px;color:var(--sub); }
+  /* ── value panel ── */
+  .entity-val-panel { display:none;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:14px; }
+  .entity-val-panel.open { display:block; }
+  .entity-val-label { font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px; }
+  .entity-val-chips { display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px; }
+  .entity-val-chip { padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--text);transition:all .15s; }
+  .entity-val-chip:hover { border-color:var(--accent);color:var(--accent);background:var(--accent-lt); }
+  .entity-val-more { font-size:12px;color:var(--accent);cursor:pointer;border:none;background:none;font-weight:600;padding:0;margin-top:4px; }
+  .entity-val-more:hover { text-decoration:underline; }
+  .entity-val-input { display:flex;gap:8px;margin-top:8px; }
+  .entity-val-input input { flex:1;padding:6px 10px;border:1.5px solid var(--border);border-radius:6px;font-size:13px;background:var(--card);color:var(--text); }
+  .entity-val-input input:focus { border-color:var(--accent);outline:none; }
+  .entity-val-input button { padding:6px 14px;border:none;border-radius:6px;background:var(--accent);color:#fff;font-size:13px;font-weight:600;cursor:pointer; }
+  /* ── grid view ── */
+  .entity-grid-wrap { overflow-x:auto;padding:8px 4px 20px; }
+  .entity-grid { display:grid;gap:8px 12px; }
+  .entity-grid-head {
+    font-weight:700;font-size:14px;padding:10px 12px 6px;color:var(--text);
+    display:flex;align-items:center;justify-content:space-between;gap:8px;
+    border-bottom:2px solid var(--border);margin-bottom:4px;
+  }
+  .entity-grid-head .col-count {
+    font-size:11px;font-weight:600;color:var(--sub);background:var(--bg);
+    padding:2px 8px;border-radius:10px;flex-shrink:0;
+  }
+  .entity-grid-cell { min-width:0;overflow-y:auto;max-height:calc(100vh - 300px); }
+</style>
+
+{% if entity is none %}
+{# ── Landing form ──────────────────────────────────────────────────────── #}
+<div class="entity-header">
+  <h2 class="page-title">Entity</h2>
+</div>
+<div style="max-width:600px;padding:30px;background:var(--card);border:1px solid var(--border);border-radius:12px;">
+  <p style="font-size:14px;color:var(--sub);margin-bottom:16px;">Look up all records for a single entity by entering a field and value below.</p>
+  {% if suggestions %}
+  <div style="margin-bottom:16px;">
+    <div style="font-size:12px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Common fields</div>
+    <div id="entity-chips" class="entity-val-chips">
+      {% for s in suggestions %}
+      <button type="button" class="entity-chip" data-field="{{ s.field }}" onclick="toggleField('{{ s.field }}')"
+              title="{{ s.types | join(', ') }}">
+        <span class="entity-chip-field">{{ s.field }}</span>
+        <span class="entity-chip-meta">{{ s.types | length }} types &middot; {{ s.count }} values</span>
+      </button>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  <div id="entity-val-panel" class="entity-val-panel">
+    <div class="entity-val-label">VALUES FOR <span id="entity-val-field" style="color:var(--accent);"></span></div>
+    <div id="entity-val-chips" class="entity-val-chips"></div>
+    <button id="entity-val-more" class="entity-val-more" style="display:none;" onclick="toggleShowAll()">Show all <span id="entity-val-total"></span> values ↓</button>
+    <div class="entity-val-input">
+      <input id="entity-val-text" type="text" placeholder="type a value..." list="entity-val-datalist"
+             onkeydown="if(event.key==='Enter'){goWithValue(event.target.value);return false;}">
+      <datalist id="entity-val-datalist"></datalist>
+      <button onclick="goWithValue(document.getElementById('entity-val-text').value)">Go</button>
+    </div>
+  </div>
+
+  <form id="entity-form" onsubmit="return runEntity(event)">
+    <div style="display:flex;gap:8px;margin-bottom:12px;">
+      <input id="entity-field" type="text" placeholder="Field (e.g. client_code)" required
+             style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);color:var(--text);">
+      <input id="entity-value" type="text" placeholder="Value (e.g. vka7)" required
+             style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;font-size:14px;background:var(--bg);color:var(--text);">
+    </div>
+    <button type="submit" style="padding:8px 20px;border:none;border-radius:8px;background:var(--accent);color:#fff;font-size:14px;font-weight:600;cursor:pointer;">Look up</button>
+  </form>
+</div>
+<script>
+(function() {
+  var _activeField = null;
+  var _allValues = [];
+  var _showAll = false;
+
+  function toggleField(field) {
+    var panel = document.getElementById('entity-val-panel');
+    var chips = document.querySelectorAll('#entity-chips .entity-chip');
+
+    // Toggle off if same field
+    if (_activeField === field) {
+      _activeField = null;
+      panel.classList.remove('open');
+      chips.forEach(function(c) { c.classList.remove('active'); });
+      return;
+    }
+
+    _activeField = field;
+    _showAll = false;
+    document.getElementById('entity-field').value = field;
+    document.getElementById('entity-val-field').textContent = field;
+    document.getElementById('entity-val-text').value = '';
+
+    // Highlight active chip
+    chips.forEach(function(c) {
+      c.classList.toggle('active', c.dataset.field === field);
+    });
+
+    // Clear chips immediately
+    var vc = document.getElementById('entity-val-chips');
+    var dl = document.getElementById('entity-val-datalist');
+    if (vc) vc.innerHTML = '';
+    if (dl) dl.innerHTML = '';
+    document.getElementById('entity-val-more').style.display = 'none';
+
+    // Fetch values
+    fetch('/api/entity/field-values/' + encodeURIComponent(field) + '?t=' + Date.now(), {cache: 'no-store'})
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        _allValues = data.values || [];
+        renderValues(data.total || _allValues.length);
+        panel.classList.add('open');
+      })
+      .catch(function() {
+        _allValues = [];
+        renderValues(0);
+        panel.classList.add('open');
+      });
+  }
+  window.toggleField = toggleField;
+
+  function renderValues(total) {
+    var vc = document.getElementById('entity-val-chips');
+    var dl = document.getElementById('entity-val-datalist');
+    var moreBtn = document.getElementById('entity-val-more');
+    var totalSpan = document.getElementById('entity-val-total');
+    vc.innerHTML = '';
+    dl.innerHTML = '';
+
+    var show = _showAll ? _allValues : _allValues.slice(0, 8);
+    show.forEach(function(v) {
+      var b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'entity-val-chip';
+      b.textContent = v;
+      b.onclick = function() { goWithValue(v); };
+      vc.appendChild(b);
+
+      var opt = document.createElement('option');
+      opt.value = v;
+      dl.appendChild(opt);
+    });
+
+    if (_allValues.length > 8) {
+      moreBtn.style.display = '';
+      totalSpan.textContent = total;
+      moreBtn.textContent = _showAll
+        ? 'Show less ↑'
+        : 'Show all ' + total + ' values ↓';
+    } else {
+      moreBtn.style.display = 'none';
+    }
+  }
+
+  function toggleShowAll() {
+    _showAll = !_showAll;
+    renderValues(_allValues.length);
+  }
+  window.toggleShowAll = toggleShowAll;
+
+  function goWithValue(val) {
+    val = (val || '').trim();
+    if (!val || !_activeField) return;
+    window.location.href = '/entity?field=' + encodeURIComponent(_activeField) + '&value=' + encodeURIComponent(val);
+  }
+  window.goWithValue = goWithValue;
+
+  function runEntity(e) {
+    e.preventDefault();
+    var field = document.getElementById('entity-field').value.trim();
+    var value = document.getElementById('entity-value').value.trim();
+    if (field && value) window.location.href = '/entity?field=' + encodeURIComponent(field) + '&value=' + encodeURIComponent(value);
+    return false;
+  }
+  window.runEntity = runEntity;
+})();
+</script>
+
+{% else %}
+{# ── Entity results ────────────────────────────────────────────────────── #}
+<div class="entity-header">
+  <h2 class="page-title">{{ field }}={{ value }}</h2>
+  {% if entity.label != value %}
+  <span class="entity-label">{{ entity.label }}</span>
+  {% endif %}
+</div>
+
+{# ── Summary card ─────────────────────────────────────────────────────── #}
+<div class="entity-summary">
+  <div class="entity-stat">
+    <span class="stat-label">Records</span>
+    <span class="stat-value">{{ entity.count }}</span>
+  </div>
+  <div class="entity-stat">
+    <span class="stat-label">Types</span>
+    <span class="stat-value">{{ entity.types | length }}</span>
+  </div>
+  <div class="entity-stat">
+    <span class="stat-label">Date range</span>
+    <span class="stat-value" style="font-size:14px;">{{ entity.start }} → {{ entity.end }}</span>
+  </div>
+  {% if entity.total_amount %}
+  <div class="entity-stat">
+    <span class="stat-label">Total amount</span>
+    <span class="stat-value accent">{{ fmt(entity.total_amount) }}</span>
+  </div>
+  {% endif %}
+</div>
+
+{# ── Type badges ──────────────────────────────────────────────────────── #}
+<div class="entity-controls">
+  <div class="entity-types">
+    <a href="/entity?field={{ field }}&value={{ value }}{% if time %}&time={{ time }}{% endif %}"
+       class="entity-type-badge {{ 'active' if not entity.type_filter }}">All <span class="count">{{ entity.count }}</span></a>
+    {% for type_name, count in entity.types.items() | sort %}
+    <a href="/entity?field={{ field }}&value={{ value }}&type={{ type_name }}{% if time %}&time={{ time }}{% endif %}"
+       class="entity-type-badge {{ 'active' if entity.type_filter == type_name }}">{{ type_name | replace('_',' ') }} <span class="count">{{ count }}</span></a>
+    {% endfor %}
+  </div>
+
+  <div style="margin-left:auto;"></div>
+
+  <div class="view-toggle">
+    <button id="btn-table" class="active" onclick="setView('table')">Table</button>
+    <button id="btn-grid" onclick="setView('grid')">Grid</button>
+  </div>
+</div>
+
+{# ── Table view ───────────────────────────────────────────────────────── #}
+<div id="view-table">
+{% if entity.records %}
+<div id="record-table"></div>
+{% else %}
+<div class="entity-empty">No records found for {{ field }}={{ value }}.</div>
+{% endif %}
+</div>
+
+{# ── Grid view ────────────────────────────────────────────────────────── #}
+<div id="view-grid" style="display:none;">
+{% if entity.records %}
+<div class="entity-grid-wrap">
+  {% set ncols = entity.types | length %}
+  <div class="entity-grid" style="grid-template-columns:repeat({{ ncols }},1fr);">
+    {% for type_name in entity.types.keys() | sort %}
+    <div class="entity-grid-head">
+      <span>{{ type_name | replace('_',' ') }}</span>
+      <span class="col-count">{{ entity.types[type_name] }}</span>
+    </div>
+    {% endfor %}
+    {% for type_name in entity.types.keys() | sort %}
+    <div class="entity-grid-cell">
+      {% for rec in entity.records if rec.type == type_name %}
+      <div class="board-card"
+           data-filepath="{{ rec._filepath }}"
+           data-line="{{ rec._line }}"
+           data-lineno="{{ rec._lineno }}">
+        <div class="card-date">{{ rec.date }}</div>
+        {% set title_fields = ['name','client','intent','title','subject'] %}
+        {% set card_title = [] %}
+        {% for f in title_fields %}
+          {% if rec.get(f) %}{% set _ = card_title.append(rec[f]) %}{% endif %}
+        {% endfor %}
+        {% if card_title %}
+        <div class="card-title">{{ card_title[:2] | join(' — ') }}</div>
+        {% endif %}
+        <div class="card-meta">
+          {% for k,v in rec.items() if not k.startswith('_') and k not in ('date','type','note') and k not in title_fields %}
+          <span><span class="meta-label">{{ k }}:</span> {{ v }}</span>
+          {% endfor %}
+        </div>
+        {% if rec.get('note') %}
+        <div class="card-note">{{ rec.note }}</div>
+        {% endif %}
+        <div class="card-actions">
+          <button class="edit-btn" onclick="editCard(this)" data-filepath="{{ rec._filepath }}" data-lineno="{{ rec._lineno }}" data-line="{{ rec._line | e }}">✎ Edit</button>
+          <button class="del-btn" onclick="deleteCard(this)" data-filepath="{{ rec._filepath }}" data-lineno="{{ rec._lineno }}" data-line="{{ rec._line | e }}">✕ Delete</button>
+        </div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+</div>
+{% else %}
+<div class="entity-empty">No records found for {{ field }}={{ value }}.</div>
+{% endif %}
+</div>
+
+<script src="/static/js/record_table.js?v=5"></script>
+<script>
+(function() {
+  var _tbl = null;
+  var _view = 'table';
+
+  function setView(v) {
+    _view = v;
+    document.getElementById('view-table').style.display = v === 'table' ? '' : 'none';
+    document.getElementById('view-grid').style.display = v === 'grid' ? '' : 'none';
+    document.getElementById('btn-table').classList.toggle('active', v === 'table');
+    document.getElementById('btn-grid').classList.toggle('active', v === 'grid');
+  }
+  window.setView = setView;
+
+  function editCard(btn) {
+    var fp = btn.dataset.filepath;
+    var ln = btn.dataset.lineno;
+    var line = btn.dataset.line;
+    var params = new URLSearchParams({filepath:fp, lineno:ln, line:line, return_to:window.location.pathname + window.location.search});
+    window.location.href = '/edit?' + params.toString();
+  }
+  window.editCard = editCard;
+
+  function deleteCard(btn) {
+    if (!confirm('Delete this record?')) return;
+    var fp = btn.dataset.filepath;
+    var ln = btn.dataset.lineno;
+    var line = btn.dataset.line;
+    showToast('Deleting...');
+    fetch('/api/records/delete', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({filepath:fp, old_line:line, lineno:ln}),
+    })
+    .then(function(r){ return r.json(); })
+    .then(function(resp){
+      if (resp.ok) {
+        showToast('Deleted');
+        setTimeout(function(){ location.reload(); }, 400);
+      } else {
+        showToast(resp.error||'Delete failed', true);
+      }
+    })
+    .catch(function(){ showToast('Network error', true); });
+  }
+  window.deleteCard = deleteCard;
+
+  function showToast(msg, isErr) {
+    var t = document.getElementById('board-toast');
+    if (!t) {
+      t = document.createElement('div');
+      t.id = 'board-toast';
+      t.className = 'board-toast';
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.style.display = 'block';
+    t.style.borderColor = isErr ? 'var(--error)' : 'var(--border)';
+    if (!isErr) setTimeout(function(){ t.style.display = 'none'; }, 2000);
+  }
+  window.showToast = showToast;
+
+  {% if entity.records %}
+  var records = {{ entity.records | tojson }};
+  var cols = {{ entity.columns | tojson }};
+  _tbl = new RecordTable({
+    containerId: 'record-table',
+    returnTo: '/entity?field={{ field }}&value={{ value }}',
+    enableBulk: true,
+    exportName: 'entity_{{ field }}_{{ value }}',
+  });
+  _tbl.render({ records: records, columns: cols, count: {{ entity.count }} });
+  {% endif %}
+})();
+</script>
+{% endif %}
+{% endblock %}

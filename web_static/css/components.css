@@ -1,5 +1,5 @@
-/* ── Shared component styles (todo rows, modals, field popups) ──── */
-/* Included via <link> in base.html — used by todo.html, daily.html, and any page with todos/modals */
+/* ── Shared component styles (todo rows, modals, field popups, board cards) ──── */
+/* Included via <link> in base.html — used by todo.html, board.html, entity.html, and any page with cards/modals */
 
 /* ── Todo rows ─────────────────────────────────────────────────── */
 .todo-row {
@@ -144,3 +144,38 @@
 .field-popup .fp-chip.clear { color:var(--error); border-color:var(--error-lt); }
 .field-popup .fp-chip.pick-date { color:var(--accent); border-style:dashed; }
 .field-popup .fp-label { font-size:11px; color:var(--sub); margin-bottom:4px; font-weight:600; }
+
+/* ── Board cards (shared by board.html and entity.html) ──────── */
+.board-card { background:var(--bg);border-radius:10px;border:1px solid var(--border);padding:10px 12px;margin-bottom:8px;cursor:grab;transition:box-shadow .15s,transform .15s; }
+.board-card:hover { box-shadow:0 4px 12px rgba(0,0,0,.08);transform:translateY(-1px); }
+.board-card.dragging { opacity:.5; }
+.board-card .card-date { font-size:11px;color:var(--sub);margin-bottom:4px; }
+.board-card .card-title { font-size:14px;font-weight:600;margin-bottom:4px; }
+.board-card .card-meta { font-size:12px;color:var(--sub); }
+.board-card .card-meta span { display:inline-block;margin-right:6px; }
+.board-card .card-meta .meta-label { color:var(--text);opacity:.6; }
+.board-card .card-note { font-size:12px;color:var(--sub);margin-top:4px;padding-top:4px;border-top:1px solid var(--border); }
+.card-actions { display:flex;gap:6px;margin-top:6px;padding-top:6px;border-top:1px solid var(--border); }
+.card-actions button { background:none;border:none;font-size:12px;cursor:pointer;padding:2px 6px;border-radius:4px;color:var(--sub);transition:background .15s; }
+.card-actions button:hover { background:var(--border); }
+.card-actions .edit-btn { color:var(--accent); }
+.card-actions .del-btn { color:var(--error); }
+
+/* ── View toggle (shared by board.html and entity.html) ──────── */
+.view-toggle { display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden; }
+.view-toggle button { padding:5px 14px;border:none;background:var(--card);color:var(--sub);font-size:12px;font-weight:600;cursor:pointer;border-right:1px solid var(--border);transition:background .15s,color .15s; }
+.view-toggle button:last-child { border-right:none; }
+.view-toggle button.active { background:var(--accent);color:#fff; }
+.view-toggle button:hover:not(.active) { background:var(--bg); }
+
+/* ── Card grid layout (shared by board.html and entity.html) ── */
+.bg-grid { overflow-x:auto;padding:8px 4px 20px;min-height:70vh; }
+.bg-table { display:grid;gap:8px 12px;min-width:max-content; }
+.bg-head { font-weight:700;font-size:14px;padding:10px 12px 6px;color:var(--text);display:flex;align-items:center;gap:8px; }
+.bg-row { display:contents; }
+.bg-label { padding:10px 12px;background:var(--card);border:1px solid var(--border);border-radius:10px;display:flex;align-items:flex-start;gap:6px;font-size:13px;font-weight:600;color:var(--text); }
+.bg-label .match-dot { margin-top:4px;flex-shrink:0; }
+.bg-cell .board-card { margin-bottom:0; }
+.bg-cell .board-card + .board-card { margin-top:8px; }
+.bg-cell.drag-over { outline:2px dashed var(--accent);outline-offset:-2px;border-radius:8px;background:color-mix(in srgb,var(--accent) 8%,transparent); }
+.bg-placeholder { height:40px;border:1px dashed var(--border);border-radius:8px;opacity:.35; }
