@@ -53,6 +53,7 @@ def _inject_globals():
              ("habits",          "habits",          "Habits"),
              ("calendar",        "calendar",        "Calendar"),
              ("thresholds",      "thresholds",      "Thresholds"),
+            ("entity",          "entity",          "Entity"),
             ("query-builder",   "query_builder",   "Query Builder"),
             ("schema-builder",  "schema_builder",  "Schema Builder"),
             ("types",           "types",           "Record Types"),
@@ -2752,6 +2753,79 @@ def board_field_overlap():
                        aggregatable_all=aggregatable_all)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Entity view
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/entity")
+def entity_page():
+    """Show all records for a single entity (field=value), with table + grid toggle."""
+    field = request.args.get("field", "").strip()
+    value = request.args.get("value", "").strip()
+    if not field or not value:
+        try:
+            suggestions = svc.get_entity_suggestions()
+        except Exception:
+            suggestions = []
+        return render_template("entity.html",
+            tab="entity", title="Entity",
+            entity=None, field=field, value=value,
+            suggestions=suggestions,
+            time="", custom_time="",
+            from_date="", to_date="",
+            time_options=_get_time_options(), year_range=_YEAR_RANGE,
+            fmt=ptos.fmt)
+
+    type_filter = request.args.get("type") or None
+    time_param = request.args.get("time", "")
+    custom_time = request.args.get("custom_time", "")
+    from_date = request.args.get("from_date") or None
+    to_date = request.args.get("to_date") or None
+    if from_date:
+        resolved_time = "range"
+    elif time_param in ("custom", "year", "month", "date") and custom_time \
+            and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
+        resolved_time = custom_time
+    else:
+        resolved_time = time_param or "all"
+
+    try:
+        entity = svc.get_entity_data(field, value, type_filter=type_filter,
+                                     time=resolved_time)
+    except PTOSError as e:
+        return redirect(url_for("browse_get"))
+
+    return render_template("entity.html",
+        tab="entity", title=f"Entity: {value}",
+        entity=entity, field=field, value=value,
+        time=time_param, custom_time=custom_time,
+        from_date=from_date or "", to_date=to_date or "",
+        time_options=_get_time_options(), year_range=_YEAR_RANGE,
+        fmt=ptos.fmt)
+
+
+@app.route("/api/entity/run", methods=["POST"])
+def entity_run():
+    """Run an entity query via AJAX (used by the form)."""
+    data = request.get_json(silent=True) or {}
+    field = data.get("field", "").strip()
+    value = data.get("value", "").strip()
+    if not field or not value:
+        return jsonify(ok=False, error="Field and value are required")
+    return jsonify(ok=True, redirect=f"/entity?field={field}&value={value}")
+
+
+@app.route("/api/entity/field-values/<field>")
+def api_entity_field_values(field):
+    """Return top distinct values for a field across all records."""
+    time = request.args.get("time", "ty")
+    try:
+        values, total = svc.get_entity_field_values(field, time=time)
+    except Exception:
+        values, total = [], 0
+    return jsonify(field=field, values=values, total=total)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
