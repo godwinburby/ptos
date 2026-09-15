@@ -35,6 +35,73 @@
 </div>
 {% endif %}
 
+<!-- ── Paste from clipboard ── -->
+{% if not selected_type %}
+<div class="card" id="paste-card" style="border:1.5px dashed var(--accent);">
+  <div class="card-title" style="color:var(--accent);">Paste to Record</div>
+  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Paste a PTOS line to append directly, or free-form text to capture + convert.
+  </p>
+  <div style="display:flex;gap:8px;align-items:flex-start;">
+    <textarea id="paste-input" rows="2" placeholder="Paste from clipboard…"
+              style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;
+                     font-size:14px;font-family:monospace;background:var(--bg);color:var(--text);resize:vertical;"></textarea>
+  </div>
+  <div style="display:flex;gap:8px;margin-top:10px;align-items:center;">
+    <button type="button" class="btn btn-primary btn-sm" onclick="doPaste(false)">Add</button>
+    <button type="button" class="btn btn-ghost btn-sm" onclick="doPaste(true)">Dry run</button>
+    <span id="paste-clipboard-btn" style="margin-left:auto;">
+      <button type="button" class="btn btn-ghost btn-sm" onclick="doClipPaste()">📋 From clipboard</button>
+    </span>
+  </div>
+  <div id="paste-result" style="margin-top:10px;display:none;"></div>
+</div>
+<script>
+function doClipPaste() {
+  if (!navigator.clipboard) { alert('Clipboard API not available (HTTPS required)'); return; }
+  navigator.clipboard.readText().then(function(t) {
+    document.getElementById('paste-input').value = t;
+  }).catch(function() { alert('Clipboard permission denied'); });
+}
+function doPaste(dryRun) {
+  var text = document.getElementById('paste-input').value.trim();
+  if (!text) return;
+  var box = document.getElementById('paste-result');
+  box.style.display = '';
+  box.innerHTML = '<span style="color:var(--sub);font-size:13px;">Processing…</span>';
+  fetch('/api/paste', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({text: text, dry_run: dryRun}),
+    cache: 'no-store'
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (d.kind === 'line') {
+      if (d.ok) {
+        box.innerHTML = '<span style="color:var(--success);font-size:13px;">✔ ' +
+          (dryRun ? '[dry-run] ' : '') + 'Added: <code>' + esc(d.line) + '</code></span>';
+        if (!dryRun) document.getElementById('paste-input').value = '';
+      } else {
+        box.innerHTML = '<span style="color:var(--error);font-size:13px;">✘ Validation failed:<br>' +
+          (d.problems || []).map(function(p) { return '· ' + esc(p); }).join('<br>') + '</span>';
+      }
+    } else if (d.kind === 'capture') {
+      if (d.review_url) {
+        box.innerHTML = '<span style="color:var(--success);font-size:13px;">✔ Captured. ' +
+          '<a href="' + d.review_url + '" style="color:var(--accent);font-weight:600;">Review & convert →</a></span>';
+      } else {
+        box.innerHTML = '<span style="color:var(--success);font-size:13px;">✔ Captured (no type suggestion)</span>';
+      }
+    } else {
+      box.innerHTML = '<span style="font-size:13px;color:var(--sub);">' + esc(JSON.stringify(d)) + '</span>';
+    }
+  }).catch(function(e) {
+    box.innerHTML = '<span style="color:var(--error);font-size:13px;">Error: ' + esc(String(e)) + '</span>';
+  });
+}
+function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+</script>
+{% endif %}
+
 <!-- ── STEP 1: choose type (shown when no type selected) ── -->
 {% if not selected_type %}
 <div class="card">

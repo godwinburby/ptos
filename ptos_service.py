@@ -2402,11 +2402,61 @@ def capture(text, date=None, tag=None, links=None):
         record["tag"] = tag if isinstance(tag, list) else [str(tag)]
     if links:
         record["links"] = links
+    problems = ptos.validate_record(schema, record)
+    if problems:
+        raise PTOSError("Validation failed: " + "; ".join(problems))
     date_str = _iso_date(date)
     line = ptos.build_record_line(date_str, record, note=text)
     filepath, lineno = ptos.append_record(line, return_position=True)
     _invalidate_history_cache(rtype="capture")
     return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
+
+
+def paste_to_record(raw, date_override=None, dry_run=False):
+    """Paste pipeline: classify input, handle Kind A (validate+append) or
+    Kind B (capture+ suggestions).
+
+    Returns dict with:
+      kind: "line" or "capture"
+      For kind "line": ok, line, filepath, lineno (or ok=False, problems)
+      For kind "capture": ok, filepath, lineno, line, suggested_type,
+                          scraped_fields, review_url"""
+    kind, detail = ptos.classify_paste(raw)
+    if kind == "line":
+        result = ptos.validate_and_append_line(
+            date_override=date_override, dry_run=dry_run, _parsed=detail)
+        result["kind"] = "line"
+        return result
+    text = detail
+    if dry_run:
+        suggestions = suggest_convert_type(text)
+        scraped = {}
+        if suggestions:
+            scraped = scrape_convert_fields(text, suggestions[0]["type"])
+        return {"kind": "freeform", "ok": True, "dry_run": True,
+                "suggested_type": suggestions[0]["type"] if suggestions else None,
+                "scraped_fields": scraped.get("fields", {})}
+    cap_result = capture(text, date=date_override)
+    suggestions = suggest_convert_type(text)
+    scraped = {}
+    target_type = ""
+    if suggestions:
+        target_type = suggestions[0]["type"]
+        scraped = scrape_convert_fields(text, target_type)
+    review_url = ""
+    if target_type:
+        from urllib.parse import quote
+        review_url = (f"/edit?convert=1&filepath={cap_result['filepath']}"
+                      f"&lineno={cap_result['lineno']}"
+                      f"&line={quote(cap_result['line'])}"
+                      f"&target_type={target_type}")
+    return {"kind": "capture", "ok": True,
+            "filepath": cap_result["filepath"],
+            "lineno": cap_result["lineno"],
+            "line": cap_result["line"],
+            "suggested_type": target_type or None,
+            "scraped_fields": scraped.get("fields", {}),
+            "review_url": review_url}
 
 
 def pomodoro_log(task, minutes, date=None):

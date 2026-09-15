@@ -4361,6 +4361,30 @@ def api_capture():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/api/paste", methods=["POST"])
+def api_paste():
+    data = request.get_json(silent=True) or {}
+    text = (data.get("text") or "").strip()
+    if not text:
+        ct = request.content_type or ""
+        if "text/plain" in ct:
+            text = (request.get_data(as_text=True) or "").strip()
+    try:
+        if not text:
+            raise PTOSError("text is required")
+        result = svc.paste_to_record(
+            text,
+            date_override=(data.get("date") or None),
+            dry_run=bool(data.get("dry_run")),
+        )
+        return jsonify(result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("paste failed")
+        return jsonify(ok=False, error=str(e))
+
+
 @app.route("/api/suggest-type", methods=["POST"])
 def api_suggest_type():
     data = request.get_json(silent=True) or {}

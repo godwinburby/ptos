@@ -1412,6 +1412,36 @@ ptos --edit d        # today's journal
 | `--save-preset NAME` | | Save the record being added as a preset under this name |
 | `--delete-preset NAME` | | Delete a preset by name from `presets.toml` |
 
+### Paste
+
+| Flag | Description |
+|------|-------------|
+| `--paste [TEXT]` | Paste clipboard text. Valid PTOS lines are validated & appended directly; free-form text writes a `type=capture` record with type suggestions. |
+| `--dry-run` | Parse + classify only; don't write anything |
+
+```bash
+# Paste a valid record line — validates and appends
+ptos --paste "2026-09-15 type=expense domain=self category=food amount=200 tag=tea | chai"
+
+# Paste free-form text — writes capture, prints suggestions
+ptos --paste "rs200 auto to clinic"
+
+# Pipe from clipboard
+pbpaste | ptos --paste            # macOS
+Get-Clipboard | ptos --paste      # Windows
+xclip -o | ptos --paste           # Linux
+
+# Dry run — parse only, no write
+ptos --paste --dry-run "type=expense amount=200 | chai"
+```
+
+**Vocabulary tips for free-form text** (improves type suggestion accuracy):
+- Use your schema's option values naturally: `"rs150 auto to clinic"` (auto matches a tag)
+- Prefix amounts with currency: `"rs200"`, `"$15"`, `"₹500"` (more reliable than bare numbers)
+- Use `@tag` or `+project` for explicit tags: `"@tea for lunch"`
+- Dates: `today`, `yesterday`, `last monday` are recognized; omitting defaults to today
+- For zero-review deterministic results, paste a Kind A line (with `type=`) instead
+
 ### Query
 
 | Flag | Short | Description |
@@ -1535,6 +1565,7 @@ ptos -y test -t td --delete --all
 | `--todo-due [DAYS]` | | Show due/overdue todos (default: today+overdue, optional lookahead) |
 | `--todo-archive` | | Archive old done items to done.YYYY.txt |
 | `--cap TEXT...` | | Quick capture — writes `type=capture` record with text as note (`--date`/`--tag`/`--link` apply) |
+| `--paste [TEXT]` | `--dry-run` | Paste clipboard text — validates & appends valid PTOS lines; free-form text writes a capture with type suggestions. Pipe input via stdin. |
 | `--pomo-log TASK MINUTES` | | Log a completed pomodoro session (`--date` applies) |
 | `--daily [DATE]` | | Show daily digest (default: yesterday; accepts `today`/`YYYY-MM-DD`) |
 | `--convert "WHERE..." TARGET [--set k=v ...] [--keep] [--keep-note] [--all]` | | Convert matched records to another type. Omit TARGET for type suggestion mode |
