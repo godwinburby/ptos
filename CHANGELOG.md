@@ -7,6 +7,14 @@ Format: `[version or date] — description`
 
 ## 2026-09-15
 
+### Paste to Record (clipboard-first capture)
+
+- **New `--paste` CLI command** — pastes clipboard text and classifies it: valid PTOS lines (Kind A) are validated and appended directly; free-form text (Kind B) writes a `type=capture` anchor and prints type suggestions + scraped fields. Supports `--dry-run` for parse-only mode. Pipe input via stdin (`pbpaste | ptos --paste`).
+- **New `POST /api/paste` API** — JSON or text/plain input, returns `{kind, ok, ...}` with `review_url` for Kind B. Designed for iOS Shortcuts / Android Tasker / AHK scripts.
+- **Clipboard-first `/add` page** — "Paste to Record" card at top of Add page with textarea, Add/Dry-run buttons, and "From clipboard" button (`navigator.clipboard.readText()`). Kind A appends with inline feedback; Kind B shows a "Review & convert" link to the existing convert screen.
+- **`capture()` now validates** — retrofitted `validate_record` call into existing `capture()` function, so both `/api/capture` and the new paste path enforce schema validation.
+- **Shared pipeline** — `classify_paste()` + `validate_and_append_line()` in `ptos.py` (stdlib-only, CLI-safe); `paste_to_record()` in `ptos_service.py` adds the Kind B branch using existing `capture()`, `suggest_convert_type()`, `scrape_convert_fields()`.
+
 ### Entity View page (`/entity` field=value cross-type lookup)
 
 - **New `/entity` page** — enter a `field=value` (e.g. `client_code=vka7`) and see all matching records across all types, with summary card, type filter badges, and two view modes: Table (RecordTable with full edit/delete/convert) and Grid (board-style columns, one per type, with edit/delete per card). Auto-detects the entity's name from the first matching record's `name` field.

@@ -5805,6 +5805,56 @@ def get_column_field_overlap(types, schema=None):
     return sorted(common)
 
 
+def classify_paste(raw):
+    """Classify raw clipboard text as Kind A (valid PTOS line) or Kind B (free-form).
+
+    Returns (kind, detail) where kind is 'line' or 'freeform'.
+    For 'line': detail is (date, kv, note) tuple from safe_parse_line.
+    For 'freeform': detail is the stripped text.
+    Raises SystemExit on empty input or multi-line input."""
+    text = (raw or "").strip()
+    if not text:
+        sys.exit("Error: empty input")
+    if "\n" in text:
+        lines = [l for l in text.splitlines() if l.strip()]
+        if len(lines) > 1:
+            sys.exit("Error: multi-line input not supported in v1 (paste one line at a time)")
+    parsed = safe_parse_line(text)
+    if parsed and parsed[1].get("type"):
+        return "line", parsed
+    return "freeform", text
+
+
+def validate_and_append_line(date_override=None, dry_run=False, _parsed=None, _raw=None):
+    """Kind A: validate a parsed PTOS line and append if valid.
+
+    _parsed: optional (date, kv, note) tuple from safe_parse_line.
+    _raw: optional raw text to parse (used when _parsed is None).
+    Returns dict with ok, line, filepath, lineno (or problems on failure)."""
+    if _parsed is None:
+        if _raw is None:
+            sys.exit("Error: no input")
+        _parsed = safe_parse_line(_raw)
+        if _parsed is None:
+            sys.exit("Error: could not parse as a PTOS record line")
+    d, kv, note = _parsed
+    if not d:
+        d = str(dt.date.today()) if date_override is None else date_override
+    elif date_override:
+        d = date_override
+    else:
+        d = str(d)
+    schema = get_schema()
+    problems = validate_record(schema, kv)
+    if problems:
+        return {"ok": False, "problems": problems}
+    line = build_record_line(d, kv, note)
+    if dry_run:
+        return {"ok": True, "line": line, "dry_run": True}
+    filepath, lineno = append_record(line, return_position=True)
+    return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
+
+
 # --------------------------------------------------
 # Backward-compatible CLI entry point
 # --------------------------------------------------

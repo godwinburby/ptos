@@ -167,6 +167,12 @@ def build_parser(cycles):
     add.add_argument("--cap", nargs="+", metavar="TEXT",
                      help="Capture a quick note as a type=capture record\n"
                           "  (text goes in the | note; --date/--tag/--link apply)")
+    add.add_argument("--paste", nargs="?", const="__STDIN__", metavar="TEXT",
+                     help="Paste clipboard text — validates & appends if it's a\n"
+                          "  valid PTOS line, or writes a capture for convert-review\n"
+                          "  if it's free-form text. Pipe or provide TEXT argument.")
+    add.add_argument("--dry-run", action="store_true",
+                     help="Parse + validate only; don't write anything")
     add.add_argument("--pomo-log", nargs=2, metavar=("TASK", "MINUTES"),
                      help="Log a completed pomodoro session as a type=pomodoro\n"
                           "  record (honors [pomodoro] log_sessions; --date applies)")
@@ -787,6 +793,74 @@ def run_capture(args):
     except Exception as e:
         sys.exit(str(e))
     print(f"Captured: {result['line']}")
+
+
+def run_paste(args):
+    import ptos_service as svc
+    raw = None
+    if args.paste == "__STDIN__":
+        if sys.stdin.isatty():
+            sys.exit("Error: provide TEXT or pipe input on stdin\n"
+                     "  e.g. pbpaste | ptos --paste\n"
+                     "       Get-Clipboard | ptos --paste")
+        raw = sys.stdin.read().strip()
+    elif args.paste:
+        raw = args.paste.strip()
+    else:
+        sys.exit("Error: provide TEXT or pipe input on stdin")
+    if not raw:
+        sys.exit("Error: empty input")
+    dry_run = getattr(args, "dry_run", False)
+    if args.date:
+        try:
+            date_override = resolve_date(args.date)
+        except SystemExit:
+            date_override = None
+    else:
+        date_override = None
+    kind, detail = ptos.classify_paste(raw)
+    if kind == "line":
+        result = ptos.validate_and_append_line(
+            date_override=date_override, dry_run=dry_run, _parsed=detail)
+        if not result["ok"]:
+            print("Validation failed:")
+            for p in result["problems"]:
+                print(f"  - {p}")
+            sys.exit(1)
+        if result.get("dry_run"):
+            print(f"[dry-run] {result['line']}")
+        else:
+            print(f"Added: {result['line']}")
+        return
+    text = detail
+    if dry_run:
+        suggestions = svc.suggest_convert_type(text)
+        scraped = {}
+        if suggestions:
+            top = suggestions[0]["type"]
+            scraped = svc.scrape_convert_fields(text, top)
+        print(f"[dry-run] Kind B: free-form text")
+        print(f"  Suggested type: {suggestions[0]['type'] if suggestions else '(none)'}")
+        print(f"  Scraped fields: {scraped.get('fields', {})}")
+        return
+    try:
+        result = svc.capture(text, date=date_override)
+    except Exception as e:
+        sys.exit(str(e))
+    suggestions = svc.suggest_convert_type(text)
+    scraped = {}
+    target_type = ""
+    if suggestions:
+        target_type = suggestions[0]["type"]
+        scraped = svc.scrape_convert_fields(text, target_type)
+    print(f"Captured: {result['line']}")
+    if target_type:
+        print(f"Suggested type: {target_type}")
+        if scraped.get("fields"):
+            print(f"Scraped fields: {scraped['fields']}")
+        print(f"To convert, open the web UI and edit this capture with convert=1")
+    else:
+        print("No type suggestion found — convert manually from the capture inbox.")
 
 
 def run_pomodoro_log(task, minutes, date=None):
@@ -3292,6 +3366,10 @@ def main():
 
     if args.cap is not None:
         run_capture(args)
+        return
+
+    if args.paste is not None:
+        run_paste(args)
         return
 
     if args.pomo_log is not None:
