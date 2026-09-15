@@ -828,7 +828,7 @@ def run_paste(args):
                 print(f"  - {p}")
             sys.exit(1)
         if result.get("dry_run"):
-            print(f"[dry-run] {result['line']}")
+            print(f"[dry-run] Valid PTOS line: {result['line']}")
         else:
             print(f"Added: {result['line']}")
         return

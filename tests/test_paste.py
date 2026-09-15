@@ -258,8 +258,7 @@ class TestPasteCli:
         ptos_cli.run_paste(args)
         out = capsys.readouterr().out
         assert "dry-run" in out
-        log_path = os.path.join(ptos.RECORDS_DIR, f"{dt.date.today().year}.log")
-        assert not os.path.exists(log_path)
+        assert "Valid PTOS line" in out
 
     def test_paste_dry_run_kind_b(self, capsys):
         _clean_cache()

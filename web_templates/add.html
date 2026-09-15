@@ -78,7 +78,7 @@ function doPaste(dryRun) {
     if (d.kind === 'line') {
       if (d.ok) {
         box.innerHTML = '<span style="color:var(--success);font-size:13px;">✔ ' +
-          (dryRun ? '[dry-run] ' : '') + 'Added: <code>' + esc(d.line) + '</code></span>';
+          (dryRun ? '[dry-run] Valid PTOS line: ' : 'Added: ') + '<code>' + esc(d.line) + '</code></span>';
         if (!dryRun) document.getElementById('paste-input').value = '';
       } else {
         box.innerHTML = '<span style="color:var(--error);font-size:13px;">✘ Validation failed:<br>' +
