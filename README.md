@@ -585,6 +585,7 @@ advanced Schema Builder). Features:
 - Horizontal scrollable chip bar for type selection
 - Inline field editor with drag-and-drop reordering
 - Per-type fields (editable), global fields (read-only), derived fields (read-only with expression), and collapsible tag rules
+- **Shared fields** — fields linked to shared definitions (`use = "shared.X"`) are shown as read-only rows with a link icon and the shared definition name. Options come from the shared definition and are not editable here
 - Delete with record count warning
 - Link from the Add page ("Don't see your type? Create one")
 
