@@ -37,6 +37,11 @@ Format: `[version or date] — description`
 
 - **Dedicated section in Schema-wide settings** — global derived fields now have their own collapsible "Global Derived Fields" section in the Schema Builder's Schema-wide settings area, with full add/edit/delete support. Previously shown as read-only rows appended to each type's derived section.
 
+### Types page shared field preservation
+
+- **Shared fields displayed correctly** — fields using `use = "shared.X"` now show as read-only rows with a dashed border, a link icon, and the shared definition name (e.g. `shared.source`). Shared options are shown as read-only chips.
+- **Shared fields preserved on save** — editing a type via the Types page no longer silently destroys `use = "shared.X"` references. `replace_type_fields()` now preserves existing shared fields that weren't included in the POST. `add_type_field()` accepts an optional `use` parameter.
+
 ## 2026-09-15
 
 ### Paste to Record (clipboard-first capture)

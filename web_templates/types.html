@@ -91,13 +91,15 @@ var _returnTo = {{ return_to | tojson }};
 var _recordCount = {{ record_count }};
 
 var _tagRules = {{ tag_rules_json | safe }};
+var _sharedDefs = {{ shared_json | safe }};
 
 function renderFieldRows() {
   var c = document.getElementById("fields-container");
   c.innerHTML = "";
   var globals = _fields.filter(function(f) { return f.global; });
   var derived = _fields.filter(function(f) { return f.derived; });
-  var locals = _fields.filter(function(f) { return !f.global && !f.derived; });
+  var shared = _fields.filter(function(f) { return f.use && !f.global && !f.derived; });
+  var locals = _fields.filter(function(f) { return !f.global && !f.derived && !f.use; });
   locals.forEach(function(f, i) {
     var row = document.createElement("div");
     row.className = "field-row";
@@ -128,6 +130,30 @@ function renderFieldRows() {
     c.appendChild(row);
     _makeDraggable(row, _fields, i, renderFieldRows, ".field-row");
   });
+  if (shared.length) {
+    var sep = document.createElement("div");
+    sep.style.cssText = "font-size:11px;font-weight:600;color:var(--sub);padding:10px 0 4px;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border-lt);margin-top:8px;";
+    sep.textContent = "Shared fields (linked to shared definitions)";
+    c.appendChild(sep);
+    shared.forEach(function(f) {
+      var row = document.createElement("div");
+      row.className = "field-row";
+      row.style.opacity = "0.6";
+      row.style.borderStyle = "dashed";
+      var sharedName = f.use.replace("shared.", "");
+      var sharedDef = _sharedDefs[sharedName] || {};
+      var sharedOpts = sharedDef.options || [];
+      row.innerHTML =
+        '<span style="cursor:default;font-size:14px;padding:0 2px;" title="Shared field — options come from shared definition">\uD83D\uDD17</span>' +
+        '<div class="field-name"><input type="text" value="'+esc(f.name)+'" readonly style="opacity:0.7;font-weight:600;"></div>' +
+        '<div class="field-type"><select disabled><option value="'+esc(f.type)+'" selected>'+esc(f.type)+'</option></select></div>' +
+        '<code style="font-size:11px;color:var(--accent);background:var(--accent-lt);padding:2px 6px;border-radius:4px;white-space:nowrap;">shared.'+esc(sharedName)+'</code>' +
+        (sharedOpts.length ?
+          '<div class="field-opts">'+sharedOpts.map(function(o){return '<span class="opt-chip">'+esc(o)+'</span>';}).join("")+'</div>' : '') +
+        '<span style="font-size:11px;color:var(--sub);">shared</span>';
+      c.appendChild(row);
+    });
+  }
   if (globals.length) {
     var sep = document.createElement("div");
     sep.style.cssText = "font-size:11px;font-weight:600;color:var(--sub);padding:10px 0 4px;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border-lt);margin-top:8px;";
@@ -281,7 +307,7 @@ function updatePreview() {
   }
   var parts = ["type=" + name];
   _fields.forEach(function(f) {
-    if (!f.name) return;
+    if (!f.name || f.global || f.derived || f.use) return;
     var sample = f.type === "int" ? "0" : f.type === "datetime" ? "2026-09-09" : f.type === "bool" ? "true" : (f.options && f.options.length ? f.options[0] : f.name);
     parts.push(f.name + "=" + sample.replace(/\s+/g, "-"));
   });
@@ -315,7 +341,7 @@ function submitForm() {
   if (!/^[a-z][a-z0-9_]*$/.test(name)) { alert("Type name: lowercase letters, digits, underscores only"); return; }
   var isEdit = _editMode && name === _editOriginal;
   if (!isEdit && _existingTypes.indexOf(name) !== -1) { alert("Type '" + name + "' already exists"); return; }
-  var validFields = _fields.filter(function(f) { return !f.global && f.name.trim(); });
+  var validFields = _fields.filter(function(f) { return !f.global && !f.derived && !f.use && f.name.trim(); });
   if (!validFields.length) { alert("Add at least one field"); return; }
   document.getElementById("submit-original").value = _editOriginal || "";
   document.getElementById("submit-fields").value = JSON.stringify(validFields);
