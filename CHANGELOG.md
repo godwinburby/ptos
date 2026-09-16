@@ -5,6 +5,26 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-16
+
+### Schema field restoration and derived fields fix
+
+- **Restored per-type field declarations** — added `[type.X.fields.amount]` for expense, income, investment, prescription, fitting; `[type.X.fields.advance]` for prescription; `[type.X.fields.duration]` for exercise and conversation. Fields were lost from per-type sections by the Schema Builder's `ensureFieldMeta()` bug.
+- **Fixed Schema Builder `ensureFieldMeta()` bug** — per-type field metadata controls (Type dropdown, Agg/Dim checkboxes, Unit input) no longer create entries in `_state.field_meta`. Metadata is now stored on per-type field entries directly, preventing per-type fields from being promoted to global `[fields]` on save.
+- **New global derived field `days_since`** — `[fields.days_since]` with `derived = "(today - date).days"`, computed for every record. Replaces the per-type `is_overdue` boolean with a numeric field usable across all types (e.g. `days_since > 180` for overdue assessments).
+- **Fixed `derived_fields()` to read `[type.X.derived_fields]`** — the computation engine now reads from both `[type.X.fields.Y].derived` and `[type.X.derived_fields.Z].expr`, making the Schema Builder's derived_fields section actually work.
+- **Fixed `compute_derived()` regex** — the `today - date` normalizer no longer double-appends `.days` when the expression already includes it.
+- **Removed dead `is_overdue` field** from assessment and followup types (unused, inconsistent types across schemas).
+- **Removed duplicate `balance`** from `[type.prescription.fields]` (kept only in `derived_fields`).
+
+### Types page redesign
+
+- **Shows all field categories** — per-type fields (editable), global fields (read-only), derived fields (read-only with expression), and collapsible tag rules.
+- **Derived fields section** — read-only rows with ƒ icon, monospace expression display, and "computed" label. Global derived fields (like `days_since`) appear for every type.
+- **Global fields section** — read-only rows with 🌐 icon, rendered below type fields.
+- **Collapsible tag rules** — shows trigger field → value → tag chips. Collapsed by default with count summary.
+- **`types_page()` backend** — builds `fields_json` with `derived` and `global` flags; passes `tag_rules_json` for tag rule display.
+
 ## 2026-09-15
 
 ### Paste to Record (clipboard-first capture)

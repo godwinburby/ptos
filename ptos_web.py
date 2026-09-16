@@ -1619,11 +1619,15 @@ def types_page():
     fields_json = "[]"
     edit_fields = []
     record_count = 0
+    tag_rules = []
 
     if edit_type:
         type_def = schema.get("type", {}).get(edit_type, {})
         req_set = set(type_def.get("required", []))
+        derived_set = set(type_def.get("derived_fields", {}).keys())
         for fname, fdef in type_def.get("fields", {}).items():
+            if fname in derived_set:
+                continue
             opts = fdef.get("options", [])
             edit_fields.append({
                 "name": fname,
@@ -1631,7 +1635,56 @@ def types_page():
                 "required": fname in req_set,
                 "options": list(opts) if opts else [],
             })
+        for fname, fdef in type_def.get("fields", {}).items():
+            if "derived" in fdef:
+                edit_fields.append({
+                    "name": fname,
+                    "type": fdef.get("type", "string"),
+                    "required": False,
+                    "options": [],
+                    "derived": True,
+                    "expr": fdef.get("derived", ""),
+                })
+        for fname, fdef in type_def.get("derived_fields", {}).items():
+            if isinstance(fdef, dict) and "expr" in fdef:
+                if not any(f["name"] == fname for f in edit_fields):
+                    edit_fields.append({
+                        "name": fname,
+                        "type": fdef.get("type", "string"),
+                        "required": False,
+                        "options": [],
+                        "derived": True,
+                        "expr": fdef.get("expr", ""),
+                    })
+        for gfname, gfdef in schema.get("global_fields", {}).items():
+            if not isinstance(gfdef, dict):
+                continue
+            edit_fields.append({
+                "name": gfname,
+                "type": "int" if gfdef.get("is_int") else "string",
+                "required": False,
+                "options": list(gfdef.get("options", [])),
+                "global": True,
+            })
+        for fname, fdef in schema.get("fields", {}).items():
+            if isinstance(fdef, dict) and "derived" in fdef:
+                if not any(f["name"] == fname for f in edit_fields):
+                    edit_fields.append({
+                        "name": fname,
+                        "type": fdef.get("type", "string"),
+                        "required": False,
+                        "options": [],
+                        "derived": True,
+                        "expr": fdef.get("derived", ""),
+                    })
         fields_json = json.dumps(edit_fields)
+        tag_rules = []
+        for tag_field, tag_def in type_def.get("tags", {}).items():
+            if isinstance(tag_def, dict) and "options" in tag_def:
+                tag_rules.append({
+                    "field": tag_field,
+                    "options": tag_def["options"],
+                })
         record_count = svc.get_type_record_count(edit_type)
     elif prefilled_name and note:
         try:
@@ -1651,7 +1704,7 @@ def types_page():
         types=types, edit_type=edit_type, prefilled_name=prefilled_name,
         fields_json=fields_json, return_to=return_to,
         record_count=record_count, msg=None, msg_type=None,
-        show_saved=saved)
+        show_saved=saved, tag_rules_json=json.dumps(tag_rules) if edit_type else "[]")
 
 
 @app.route("/types", methods=["POST"])

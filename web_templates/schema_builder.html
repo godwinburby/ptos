@@ -313,12 +313,16 @@ var _currentType = null;
         return;
       }
       var opts = Array.isArray(fdef.options) ? fdef.options : [];
+      var _gmeta = (schema.fields || {})[fname] || {};
       fields[fname] = {
         is_int:      fdef.type === "int",
         is_datetime: fdef.type === "datetime" || undefined,
         is_bool:     fdef.type === "bool" || undefined,
         options:     opts,
         linkable:    fdef.linkable === true,
+        aggregatable: _gmeta.aggregatable === true,
+        dimension:    _gmeta.dimension !== false,
+        unit:         _gmeta.unit || "",
       };
       var _kf = new Set(["type","options","linkable"]);
       Object.keys(fdef).forEach(function(k) { if (!_kf.has(k)) fields[fname][k] = fdef[k]; });
@@ -558,7 +562,10 @@ function confirmAddField() {
     is_datetime: isDatetime || undefined,
     is_bool: isBool || undefined,
     options: isInt || isBool ? undefined : [],
-    linkable: false
+    linkable: false,
+    aggregatable: false,
+    dimension: true,
+    unit: "",
   };
   if (reqEl && reqEl.checked) {
     var req = ts().required || (ts().required = []);
@@ -680,8 +687,14 @@ function makeFieldRow(fname, fdef) {
     return t !== _currentType && _state.type_schemas[t] && _state.type_schemas[t].fields && _state.type_schemas[t].fields[fname];
   });
 
-  // field metadata (global)
-  var fmeta = _state.field_meta[fname] || { type: fdef.is_int ? "int" : "string", aggregatable: false, dimension: true, unit: "", linkable: false };
+  // field metadata — prefer per-type entry, fallback to global field_meta
+  var fmeta = {
+    type:         fdef.is_int ? "int" : (fdef.is_datetime ? "datetime" : "string"),
+    aggregatable: fdef.aggregatable || false,
+    dimension:    fdef.dimension !== false,
+    unit:         fdef.unit || "",
+    linkable:     fdef.linkable || false,
+  };
 
   var head2 = document.createElement("div");
   head2.className = "field-row-head";
@@ -766,15 +779,12 @@ function makeFieldRow(fname, fdef) {
 function toggleInt(fname, val) {
   ts().fields[fname].is_int = val;
   if (val) ts().fields[fname].options = [];
-  ensureFieldMeta(fname);
-  _state.field_meta[fname].type = val ? "int" : "string";
   renderFields(ts());
 }
 
 function setFieldMetaType(fname, val) {
-  ensureFieldMeta(fname);
-  _state.field_meta[fname].type = val;
   ts().fields[fname].is_int = (val === "int");
+  ts().fields[fname].is_datetime = (val === "datetime") || undefined;
   if (val === "int") ts().fields[fname].options = [];
   renderFields(ts());
 }
@@ -786,8 +796,8 @@ function ensureFieldMeta(fname) {
 }
 
 function setFieldMeta(fname, key, val) {
-  ensureFieldMeta(fname);
-  _state.field_meta[fname][key] = val;
+  ts().fields[fname][key] = val;
+  renderFields(ts());
 }
 
 function setFieldLinkable(fname, val) {

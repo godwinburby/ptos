@@ -1726,10 +1726,12 @@ def numeric_value_for(kv, field):
 
 def derived_fields():
     """Return dict of {field_name: {"expr": str, "rtype": str|None}}.
-    Reads both global [fields.X] and type-scoped [type.X.fields.Y] definitions.
+    Reads global [fields.X], type-scoped [type.X.fields.Y], and
+    [type.X.derived_fields] (Schema Builder convention).
 
     Global:  [fields.net]         derived = "amount - advance"
     Scoped:  [type.prescription.fields.net]  derived = "amount - advance"
+    Builder: [type.X.derived_fields.Z]       expr = "..."
 
     Type-scoped fields are only computed for records of that type.
     """
@@ -1746,6 +1748,11 @@ def derived_fields():
                 if isinstance(meta, dict) and "derived" in meta:
                     key = f"{rtype}.{f}"
                     result[key] = {"expr": meta["derived"], "rtype": rtype}
+            for f, meta in type_schema.get("derived_fields", {}).items():
+                if isinstance(meta, dict) and "expr" in meta:
+                    key = f"{rtype}.{f}"
+                    if key not in result:
+                        result[key] = {"expr": meta["expr"], "rtype": rtype}
         _CACHE["derived_fields"] = result
     return _CACHE["derived_fields"]
 
@@ -1787,7 +1794,7 @@ def compute_derived(kv, record_date=None):
                 # auto-convert (today - date) to .days for integer comparison
                 # handles both "(today - date)" and "today - date" (with word boundaries)
                 clean_expr = _re.sub(
-                    r'\(?\s*today\s*-\s*date\s*\)?(?!\s*\.)',
+                    r'(\(\s*today\s*-\s*date\s*\)|(?<!\()\btoday\s*-\s*date\b(?!\s*\)))(?:\.days)?',
                     '(today - date).days',
                     clean_expr
                 )
