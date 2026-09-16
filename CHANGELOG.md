@@ -25,6 +25,14 @@ Format: `[version or date] — description`
 - **Collapsible tag rules** — shows trigger field → value → tag chips. Collapsed by default with count summary.
 - **`types_page()` backend** — builds `fields_json` with `derived` and `global` flags; passes `tag_rules_json` for tag rule display.
 
+### Schema Builder improvements
+
+- **Derived field expression help** — expandable help card on each derived field row showing keywords (`today`, `date`, `timedelta`), common patterns (6 copyable examples), operators, and return types. Replaces the minimal one-line hint.
+- **Derived field validation** — three layers: real-time inline validation (red border + error text on input), client-side block on save (error list in save bar), and server-side validation in `_build_schema_dict()` and `validate_schema_structure()`. Empty/invalid/syntax-error expressions are caught before saving.
+- **Tags/Derived/Conditions sections always open** — these three per-type sections are now expanded by default (not collapsed). Schema-wide settings (Global Fields, Shared Definitions) remain collapsed.
+- **Fixed missing derived fields** — Schema Builder boot code now loads from both `[type.X.fields.Y].derived` and `[type.X.derived_fields.Z]` sections, so `balance` (prescription) and other `derived_fields` entries appear correctly.
+- **Global derived fields shown per-type** — global derived fields (like `days_since`) appear in every type's Derived fields section as read-only rows with a "global" label, so users can see what computed fields are available.
+
 ## 2026-09-15
 
 ### Paste to Record (clipboard-first capture)

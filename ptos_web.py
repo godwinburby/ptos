@@ -2386,6 +2386,45 @@ def _toml_val(v):
     return '"'  + str(v).replace("\\", "\\\\").replace('"'  , '\\"') + '"'
 
 
+import re as _re_validate
+
+_VALID_FIELD_TYPES = {"int", "string", "datetime", "bool"}
+_DATE_EVAL_RE = _re_validate.compile(
+    r'^(?:[\d\s.+\-*/()><=!e]|today|date|timedelta|\.days)+$',
+    _re_validate.IGNORECASE,
+)
+_NUM_EVAL_RE = _re_validate.compile(r'^[\d\s\.\+\-\*\/\(\)e]+$')
+_RESERVED_TOKENS = {"today", "date", "timedelta", "days"}
+
+def _validate_derived_expr(expr, fname, tname=None):
+    """Validate a derived field expression. Raises PTOSError on failure."""
+    prefix = f"[type.{tname}.fields.{fname}]" if tname else f"[fields.{fname}]"
+    if not expr or not expr.strip():
+        raise PTOSError(f"{prefix}: derived expression is empty")
+    s = expr.strip()
+    uses_date = bool(_re_validate.search(r'\b(today|date|timedelta)\b', s))
+    tokens = _re_validate.findall(r'\b[a-z][a-z0-9_]*\b', s, _re_validate.IGNORECASE)
+    replaced = s
+    for t in tokens:
+        tl = t.lower()
+        if tl in _RESERVED_TOKENS:
+            continue
+        replaced = _re_validate.sub(rf'\b{_re_validate.escape(t)}\b', '1', replaced)
+    # strip .days — engine handles via regex before eval
+    replaced = _re_validate.sub(r'\.days\b', '', replaced)
+    re_ = _DATE_EVAL_RE if uses_date else _NUM_EVAL_RE
+    if not re_.match(replaced):
+        raise PTOSError(f"{prefix}: derived expression '{s}' contains unsupported tokens or syntax")
+    try:
+        test_expr = replaced
+        if uses_date:
+            test_expr = _re_validate.sub(r'\b(today|date)\b', '1', test_expr)
+            test_expr = test_expr.replace('timedelta', '1')
+        eval(test_expr, {"__builtins__": {}})  # noqa: S307
+    except Exception as e:
+        raise PTOSError(f"{prefix}: derived expression syntax error: {e}")
+
+
 def _toml_kv(k, v):
     return f"{k} = {_toml_val(v)}"
 
@@ -2416,6 +2455,8 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
     for fname, fmeta in fm_source.items():
         if not isinstance(fmeta, dict):
             continue
+        if fmeta.get("derived"):
+            _validate_derived_expr(fmeta["derived"], fname)
         fd = {}
         fd["type"] = fmeta.get("type", "string")
         if "aggregatable" in fmeta: fd["aggregatable"] = fmeta["aggregatable"]
@@ -2496,6 +2537,9 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
             fdef_derived = derived_new.get(fname)
 
             if fdef_derived is not None:
+                expr = fdef_derived.get("expr", "")
+                if expr:
+                    _validate_derived_expr(expr, fname, tname)
                 fd = {}
                 if fdef_derived.get("expr"):  fd["derived"] = fdef_derived["expr"]
                 if fdef_derived.get("type"):  fd["type"]    = fdef_derived["type"]
