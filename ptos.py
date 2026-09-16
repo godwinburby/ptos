@@ -4219,9 +4219,10 @@ def add_type(name, required=None):
     print(f"Added type '{name}' (required: {', '.join(req) if req else 'none'}).")
 
 
-def add_type_field(type_name, field_name, field_type="string", options=None):
+def add_type_field(type_name, field_name, field_type="string", options=None, use=None):
     """Add a field to a record type in schema.toml.
     options is an optional flat list of valid values.
+    use is an optional shared reference (e.g. "shared.source").
     sys.exit on invalid input or a schema that would fail validation for the type."""
     valid = {"int", "string", "datetime", "bool"}
     if field_type not in valid:
@@ -4240,7 +4241,9 @@ def add_type_field(type_name, field_name, field_type="string", options=None):
         sys.exit(f"Error: Type '{type_name}' already has field '{field_name}'.")
 
     field_def = {"type": field_type}
-    if options:
+    if use:
+        field_def["use"] = use
+    elif options:
         field_def["options"] = list(options)
     fields[field_name] = field_def
 
@@ -4337,10 +4340,17 @@ def replace_type_fields(type_name, required, fields_dict):
         if ft not in valid_field_types:
             sys.exit(f"Error: Unknown field type '{ft}' for field '{fname}'.")
         entry = {"type": ft}
-        opts = fdef.get("options")
-        if opts:
-            entry["options"] = list(opts)
+        if fdef.get("use"):
+            entry["use"] = fdef["use"]
+        else:
+            opts = fdef.get("options")
+            if opts:
+                entry["options"] = list(opts)
         new_fields[fname] = entry
+    existing_fields = type_def.get("fields", {})
+    for fname, fdef in existing_fields.items():
+        if fname not in new_fields and fdef.get("use"):
+            new_fields[fname] = fdef
     type_def["fields"] = new_fields
 
     issues = validate_schema_structure(schema)

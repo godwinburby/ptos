@@ -1629,12 +1629,15 @@ def types_page():
             if fname in derived_set:
                 continue
             opts = fdef.get("options", [])
-            edit_fields.append({
+            field_entry = {
                 "name": fname,
                 "type": fdef.get("type", "string"),
                 "required": fname in req_set,
                 "options": list(opts) if opts else [],
-            })
+            }
+            if fdef.get("use"):
+                field_entry["use"] = fdef["use"]
+            edit_fields.append(field_entry)
         for fname, fdef in type_def.get("fields", {}).items():
             if "derived" in fdef:
                 edit_fields.append({
@@ -1699,12 +1702,14 @@ def types_page():
         fields_json = json.dumps([{"name": "", "type": "string", "required": False, "options": []}])
 
     saved = request.args.get("saved") == "1"
+    shared_defs = {k: {"options": list(v.get("options", []))} for k, v in schema.get("shared", {}).items() if isinstance(v, dict)}
     return render_template("types.html",
         tab="types", title="Record Types",
         types=types, edit_type=edit_type, prefilled_name=prefilled_name,
         fields_json=fields_json, return_to=return_to,
         record_count=record_count, msg=None, msg_type=None,
-        show_saved=saved, tag_rules_json=json.dumps(tag_rules) if edit_type else "[]")
+        show_saved=saved, tag_rules_json=json.dumps(tag_rules) if edit_type else "[]",
+        shared_json=json.dumps(shared_defs))
 
 
 @app.route("/types", methods=["POST"])
@@ -1730,15 +1735,20 @@ def types_post():
             req_set = set(type_def.get("required", []))
             for fname, fdef in type_def.get("fields", {}).items():
                 opts = fdef.get("options", [])
-                edit_fields.append({"name": fname, "type": fdef.get("type", "string"),
-                                    "required": fname in req_set,
-                                    "options": list(opts) if opts else []})
+                field_entry = {"name": fname, "type": fdef.get("type", "string"),
+                               "required": fname in req_set,
+                               "options": list(opts) if opts else []}
+                if fdef.get("use"):
+                    field_entry["use"] = fdef["use"]
+                edit_fields.append(field_entry)
+        shared_defs = {k: {"options": list(v.get("options", []))} for k, v in schema.get("shared", {}).items() if isinstance(v, dict)}
         return render_template("types.html",
             tab="types", title="Record Types",
             types=types, edit_type=original_name, prefilled_name=type_name,
             fields_json=json.dumps(edit_fields if original_name else fields),
             return_to=return_to, record_count=0,
-            msg=str(e), msg_type="error")
+            msg=str(e), msg_type="error",
+            shared_json=json.dumps(shared_defs))
 
     if not return_to:
         return_to = f"/types?edit={type_name}" if original_name else f"/add?type={type_name}"
