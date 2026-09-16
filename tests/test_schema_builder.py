@@ -12,12 +12,11 @@ class TestSchemaBuilderCollapsible:
         sections = re.findall(r'class="chip-section([^"]*)" style="border-top', html)
         assert len(sections) == 6
 
-        assert sections.count("") == 1
-        assert sections.count(" collapsed") == 5
+        assert sections.count("") == 4
+        assert sections.count(" collapsed") == 2
 
         assert re.search(r'class="chip-section" style="border-top:3px solid var\(--success\);"', html)
-        assert re.search(r'class="chip-section collapsed" style="border-top:3px solid var\(--accent\);"', html)
-        assert re.search(r'class="chip-section collapsed" style="border-top:3px solid var\(--success\);"', html)
+        assert re.search(r'class="chip-section collapsed" style="border-top:3px solid var\(--warn\);"', html)
 
         assert html.count('onclick="toggleSection(this)"') == 6
         assert "function toggleSection(el)" in html

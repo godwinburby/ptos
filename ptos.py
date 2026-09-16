@@ -3243,6 +3243,74 @@ def validate_schema_structure(schema):
                 if when_field not in type_fields and when_field not in all_known_fields:
                     issues.append(f"Type '{tname}': condition on '{cond_field}' references field '{when_field}' with no definition")
 
+        # derived fields: validate expressions
+        for fname, fdef in type_fields.items():
+            if not isinstance(fdef, dict):
+                continue
+            expr = fdef.get("derived")
+            if not expr:
+                continue
+            if not isinstance(expr, str) or not expr.strip():
+                issues.append(f"Type '{tname}': derived field '{fname}' has empty expression")
+                continue
+            uses_date = bool(re.search(r'\b(today|date|timedelta)\b', expr))
+            tokens = re.findall(r'\b[a-z][a-z0-9_]*\b', expr, re.IGNORECASE)
+            reserved = {"today", "date", "timedelta", "days"}
+            replaced = expr
+            for tok in tokens:
+                if tok.lower() in reserved:
+                    continue
+                replaced = re.sub(rf'\b{re.escape(tok)}\b', '1', replaced)
+            replaced = re.sub(r'\.days\b', '', replaced)
+            date_re = re.compile(r'^(?:[\d\s.+\-*/()><=!e]|today|date|timedelta|\.days)+$', re.IGNORECASE)
+            num_re = re.compile(r'^[\d\s\.\+\-\*\/\(\)e]+$')
+            check_re = date_re if uses_date else num_re
+            if not check_re.match(replaced):
+                issues.append(f"Type '{tname}': derived field '{fname}' expression '{expr}' contains unsupported tokens or syntax")
+            else:
+                try:
+                    test_expr = replaced
+                    if uses_date:
+                        test_expr = re.sub(r'\b(today|date)\b', '1', test_expr)
+                        test_expr = test_expr.replace('timedelta', '1')
+                    eval(test_expr, {"__builtins__": {}})  # noqa: S307
+                except Exception as e:
+                    issues.append(f"Type '{tname}': derived field '{fname}' expression syntax error: {e}")
+
+    # ── global [fields] derived expressions ──
+    for fname, fdef in schema.get("fields", {}).items():
+        if not isinstance(fdef, dict):
+            continue
+        expr = fdef.get("derived")
+        if not expr:
+            continue
+        if not isinstance(expr, str) or not expr.strip():
+            issues.append(f"[fields.{fname}]: derived expression is empty")
+            continue
+        uses_date = bool(re.search(r'\b(today|date|timedelta)\b', expr))
+        tokens = re.findall(r'\b[a-z][a-z0-9_]*\b', expr, re.IGNORECASE)
+        reserved = {"today", "date", "timedelta", "days"}
+        replaced = expr
+        for tok in tokens:
+            if tok.lower() in reserved:
+                continue
+            replaced = re.sub(rf'\b{re.escape(tok)}\b', '1', replaced)
+        replaced = re.sub(r'\.days\b', '', replaced)
+        date_re = re.compile(r'^(?:[\d\s.+\-*/()><=!e]|today|date|timedelta|\.days)+$', re.IGNORECASE)
+        num_re = re.compile(r'^[\d\s\.\+\-\*\/\(\)e]+$')
+        check_re = date_re if uses_date else num_re
+        if not check_re.match(replaced):
+            issues.append(f"[fields.{fname}]: derived expression '{expr}' contains unsupported tokens or syntax")
+        else:
+            try:
+                test_expr = replaced
+                if uses_date:
+                    test_expr = re.sub(r'\b(today|date)\b', '1', test_expr)
+                    test_expr = test_expr.replace('timedelta', '1')
+                eval(test_expr, {"__builtins__": {}})  # noqa: S307
+            except Exception as e:
+                issues.append(f"[fields.{fname}]: derived expression syntax error: {e}")
+
     return issues
 
 
