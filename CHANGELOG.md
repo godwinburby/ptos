@@ -33,6 +33,10 @@ Format: `[version or date] — description`
 - **Fixed missing derived fields** — Schema Builder boot code now loads from both `[type.X.fields.Y].derived` and `[type.X.derived_fields.Z]` sections, so `balance` (prescription) and other `derived_fields` entries appear correctly.
 - **Global derived fields shown per-type** — global derived fields (like `days_since`) appear in every type's Derived fields section as read-only rows with a "global" label, so users can see what computed fields are available.
 
+### Global Derived Fields section
+
+- **Dedicated section in Schema-wide settings** — global derived fields now have their own collapsible "Global Derived Fields" section in the Schema Builder's Schema-wide settings area, with full add/edit/delete support. Previously shown as read-only rows appended to each type's derived section.
+
 ## 2026-09-15
 
 ### Paste to Record (clipboard-first capture)

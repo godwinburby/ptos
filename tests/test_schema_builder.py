@@ -10,20 +10,22 @@ class TestSchemaBuilderCollapsible:
         html = resp.get_data(as_text=True)
 
         sections = re.findall(r'class="chip-section([^"]*)" style="border-top', html)
-        assert len(sections) == 6
+        assert len(sections) == 7
 
         assert sections.count("") == 4
-        assert sections.count(" collapsed") == 2
+        assert sections.count(" collapsed") == 3
 
         assert re.search(r'class="chip-section" style="border-top:3px solid var\(--success\);"', html)
         assert re.search(r'class="chip-section collapsed" style="border-top:3px solid var\(--warn\);"', html)
+        assert re.search(r'class="chip-section collapsed" style="border-top:3px solid var\(--success\);"', html)
 
-        assert html.count('onclick="toggleSection(this)"') == 6
+        assert html.count('onclick="toggleSection(this)"') == 7
         assert "function toggleSection(el)" in html
 
         for lid in ("fields-list", "tags-list",
                     "derived-fields-list", "conditions-list",
-                    "global-fields-list", "shared-defs-list"):
+                    "global-fields-list", "shared-defs-list",
+                    "global-derived-list"):
             assert f'id="{lid}"' in html
 
 

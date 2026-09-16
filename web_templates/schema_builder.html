@@ -168,6 +168,21 @@
     <div id="shared-defs-list"></div>
   </div>
 
+  <!-- Global Derived Fields -->
+  <div class="chip-section collapsed" style="border-top:3px solid var(--success);">
+    <div class="chip-section-header" onclick="toggleSection(this)">
+      <div class="chip-section-label" style="color:var(--success);">Global Derived Fields</div>
+      <span class="chip-toggle">+</span>
+    </div>
+    <div style="display:flex;justify-content:flex-end;margin-bottom:6px;">
+      <button onclick="addGlobalDerivedField()" class="btn btn-ghost btn-sm">+ Add</button>
+    </div>
+    <div style="font-size:12px;color:var(--sub);margin-bottom:10px;">
+      Computed for <strong>every</strong> record type. Use <code>today</code>, <code>date</code>, and numeric field names.
+    </div>
+    <div id="global-derived-list"></div>
+  </div>
+
 </div>
 
 <style>
@@ -397,6 +412,7 @@ var _currentType = null;
   if (_state.types.length) selectType(_state.types[0]);
   renderGlobalFields();
   renderSharedDefs();
+  renderGlobalDerived();
 })();
 
 // ── Type list ─────────────────────────────────────────────────────────────────
@@ -1165,30 +1181,13 @@ function renderDerivedFields(tschema) {
   if (!el) return;
   el.innerHTML = "";
   var entries = Object.entries(tschema.derived_fields || {});
-  // also collect global derived fields from field_meta
-  var fm = _state.field_meta || {};
-  var globalDerived = [];
-  for (var fname in fm) {
-    if (fm[fname].derived && !tschema.derived_fields[fname]) {
-      globalDerived.push([fname, {expr: fm[fname].derived, type: fm[fname].type || "", _global: true}]);
-    }
-  }
-  if (!entries.length && !globalDerived.length) {
+  if (!entries.length) {
     el.innerHTML = '<div style="font-size:12px;color:var(--sub);padding:8px 0;">No derived fields yet. Computed from other fields or dates.</div>';
     return;
   }
   entries.forEach(function(entry) {
     el.appendChild(makeDerivedRow(entry[0], entry[1]));
   });
-  if (globalDerived.length) {
-    var sep = document.createElement("div");
-    sep.style.cssText = "font-size:11px;color:var(--sub);padding:8px 0 4px;border-top:1px dashed var(--border);margin-top:4px;";
-    sep.textContent = "Global derived fields (from Schema-wide settings):";
-    el.appendChild(sep);
-    globalDerived.forEach(function(entry) {
-      el.appendChild(makeDerivedRow(entry[0], entry[1]));
-    });
-  }
 }
 
 function addDerivedField() {
@@ -1203,8 +1202,37 @@ function addDerivedField() {
   renderDerivedFields(t);
 }
 
-function makeDerivedRow(fname, ddef) {
-  var isGlobal = ddef._global;
+function renderGlobalDerived() {
+  var el = document.getElementById("global-derived-list");
+  if (!el) return;
+  el.innerHTML = "";
+  var fm = _state.field_meta || {};
+  var entries = [];
+  for (var fname in fm) {
+    if (fm[fname].derived) {
+      entries.push([fname, {expr: fm[fname].derived, type: fm[fname].type || ""}]);
+    }
+  }
+  if (!entries.length) {
+    el.innerHTML = '<div style="font-size:12px;color:var(--sub);padding:8px 0;">No global derived fields. Computed for every record type.</div>';
+    return;
+  }
+  entries.forEach(function(entry) {
+    el.appendChild(makeGlobalDerivedRow(entry[0], entry[1]));
+  });
+}
+
+function addGlobalDerivedField() {
+  var name = prompt("Global derived field name (lowercase):");
+  if (!name) return;
+  name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+  if (!name) return;
+  if (_state.field_meta[name]) { alert("Field '" + name + "' already exists"); return; }
+  _state.field_meta[name] = { type: "string", aggregatable: false, dimension: true, unit: "", linkable: false, derived: "" };
+  renderGlobalDerived();
+}
+
+function makeGlobalDerivedRow(fname, ddef) {
   var div = document.createElement("div");
   div.className = "field-row";
 
@@ -1212,10 +1240,86 @@ function makeDerivedRow(fname, ddef) {
   head.className = "field-row-head";
   head.innerHTML =
     '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
-    (isGlobal
-      ? '<span style="font-size:11px;color:var(--sub);">global</span>'
-      : '<button onclick="deleteDerivedField(\'' + fname + '\')" ' +
-        'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>');
+    '<button onclick="deleteGlobalDerivedField(\'' + fname + '\')" ' +
+    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>';
+  div.appendChild(head);
+
+  var body = document.createElement("div");
+  body.style.cssText = "display:flex;flex-wrap:wrap;gap:10px;margin-top:4px;align-items:center;";
+  body.innerHTML =
+    '<div style="display:flex;align-items:center;gap:6px;flex:1;min-width:200px;">' +
+      '<label style="font-size:12px;white-space:nowrap;">Expression:</label>' +
+      '<input type="text" value="' + escHtmlAttr(ddef.expr) + '" ' +
+      'placeholder="e.g. (today - date).days  or  amount - advance" ' +
+      'style="flex:1;font-size:12px;" ' +
+      'oninput="setGlobalDerivedField(\'' + fname + '\',\'expr\',this.value);validateDerivedInline(\'' + fname + '\',this)">' +
+    '</div>' +
+    '<div style="display:flex;align-items:center;gap:6px;">' +
+      '<label style="font-size:12px;">Returns:</label>' +
+      '<select onchange="setGlobalDerivedField(\'' + fname + '\',\'type\',this.value)" style="font-size:12px;padding:3px 6px;">' +
+      '<option value=""'      + (!ddef.type              ? " selected" : "") + '>auto</option>' +
+      '<option value="int"'   + (ddef.type==="int"       ? " selected" : "") + '>int</option>' +
+      '<option value="bool"'  + (ddef.type==="bool"      ? " selected" : "") + '>bool</option>' +
+      '<option value="string"'+ (ddef.type==="string"    ? " selected" : "") + '>string</option>' +
+      '</select>' +
+    '</div>';
+  div.appendChild(body);
+
+  var hint = document.createElement("div");
+  hint.style.cssText = "font-size:11px;color:var(--sub);margin-top:6px;";
+  hint.innerHTML = '<span style="cursor:pointer;color:var(--accent);" ' +
+    'onclick="var el=this.nextElementSibling;el.style.display=el.style.display===\'none\'?\'block\':\'none\'">' +
+    '▸ Expression help</span>' +
+    '<div style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px;line-height:1.6;">' +
+      '<div style="font-weight:600;margin-bottom:4px;">Keywords</div>' +
+      '<table style="border-collapse:collapse;width:100%;">' +
+        '<tr><td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap;"><code>today</code></td><td>Current date (e.g. 2026-09-16)</td></tr>' +
+        '<tr><td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap;"><code>date</code></td><td>The record\'s date field</td></tr>' +
+        '<tr><td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap;"><code>timedelta</code></td><td>Date duration — use as <code>timedelta(days=N)</code></td></tr>' +
+      '</table>' +
+      '<div style="font-weight:600;margin-top:6px;margin-bottom:4px;">Common patterns</div>' +
+      '<table style="border-collapse:collapse;width:100%;">' +
+        '<tr><td style="padding:1px 8px 1px 0;font-family:monospace;white-space:nowrap;">today - date</td><td>Days since record (returns int)</td></tr>' +
+        '<tr><td style="padding:1px 8px 1px 0;font-family:monospace;white-space:nowrap;">(today - date) > 30</td><td>Is overdue? (returns bool)</td></tr>' +
+        '<tr><td style="padding:1px 8px 1px 0;font-family:monospace;white-space:nowrap;">amount - advance</td><td>Net amount (field subtraction)</td></tr>' +
+      '</table>' +
+      '<div style="font-weight:600;margin-top:6px;margin-bottom:4px;">Operators</div>' +
+      '<code>+</code> <code>-</code> <code>*</code> <code>/</code> <code>()</code> <code>&gt;</code> <code>&lt;</code> <code>=</code> <code>&gt;=</code> <code>&lt;=</code>' +
+    '</div>';
+  div.appendChild(hint);
+
+  var errEl = document.createElement("div");
+  errEl.className = "derived-err";
+  errEl.style.cssText = "font-size:11px;color:var(--error);margin-top:4px;display:none;";
+  div.appendChild(errEl);
+
+  return div;
+}
+
+function setGlobalDerivedField(fname, key, val) {
+  if (!_state.field_meta[fname]) _state.field_meta[fname] = {};
+  _state.field_meta[fname][key] = val;
+}
+
+function deleteGlobalDerivedField(fname) {
+  if (!confirm("Remove global derived field '" + fname + "'?")) return;
+  delete _state.field_meta[fname].derived;
+  if (Object.keys(_state.field_meta[fname]).length <= 1 && _state.field_meta[fname].type) {
+    delete _state.field_meta[fname];
+  }
+  renderGlobalDerived();
+}
+
+function makeDerivedRow(fname, ddef) {
+  var div = document.createElement("div");
+  div.className = "field-row";
+
+  var head = document.createElement("div");
+  head.className = "field-row-head";
+  head.innerHTML =
+    '<span style="font-size:14px;font-weight:700;flex:1;">' + fname + '</span>' +
+    '<button onclick="deleteDerivedField(\'' + fname + '\')" ' +
+    'style="background:none;border:none;color:var(--error);cursor:pointer;font-size:18px;line-height:1;padding:0;">×</button>';
   div.appendChild(head);
 
   var body = document.createElement("div");
@@ -1225,14 +1329,12 @@ function makeDerivedRow(fname, ddef) {
       '<label style="font-size:12px;white-space:nowrap;">Expression:</label>' +
       '<input type="text" value="' + escHtmlAttr(ddef.expr) + '" ' +
       'placeholder="e.g. today - date  or  amount - advance  or  (today - date) > 30" ' +
-      'style="flex:1;font-size:12px;' + (isGlobal ? 'background:var(--bg);color:var(--sub);' : '') + '" ' +
-      (isGlobal ? 'readonly ' : '') +
+      'style="flex:1;font-size:12px;" ' +
       'oninput="setDerivedField(\'' + fname + '\',\'expr\',this.value);validateDerivedInline(\'' + fname + '\',this)">' +
     '</div>' +
     '<div style="display:flex;align-items:center;gap:6px;">' +
       '<label style="font-size:12px;">Returns:</label>' +
-      '<select onchange="setDerivedField(\'' + fname + '\',\'type\',this.value)" style="font-size:12px;padding:3px 6px;"' +
-      (isGlobal ? ' disabled' : '') + '>' +
+      '<select onchange="setDerivedField(\'' + fname + '\',\'type\',this.value)" style="font-size:12px;padding:3px 6px;">' +
       '<option value=""'      + (!ddef.type              ? " selected" : "") + '>auto</option>' +
       '<option value="int"'   + (ddef.type==="int"       ? " selected" : "") + '>int</option>' +
       '<option value="bool"'  + (ddef.type==="bool"      ? " selected" : "") + '>bool</option>' +
