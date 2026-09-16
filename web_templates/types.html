@@ -90,10 +90,15 @@ var _fields = {{ fields_json | safe }};
 var _returnTo = {{ return_to | tojson }};
 var _recordCount = {{ record_count }};
 
+var _tagRules = {{ tag_rules_json | safe }};
+
 function renderFieldRows() {
   var c = document.getElementById("fields-container");
   c.innerHTML = "";
-  _fields.forEach(function(f, i) {
+  var globals = _fields.filter(function(f) { return f.global; });
+  var derived = _fields.filter(function(f) { return f.derived; });
+  var locals = _fields.filter(function(f) { return !f.global && !f.derived; });
+  locals.forEach(function(f, i) {
     var row = document.createElement("div");
     row.className = "field-row";
     row.dataset.index = i;
@@ -105,7 +110,7 @@ function renderFieldRows() {
       }).join("");
     }
     row.innerHTML =
-      '<span class="field-grip" title="Drag to reorder">⠿</span>' +
+      '<span class="field-grip" title="Drag to reorder">\u2805</span>' +
       '<div class="field-name"><input type="text" value="'+esc(f.name)+'" placeholder="field name" oninput="_fields['+i+'].name=this.value;updatePreview()"></div>' +
       '<div class="field-type"><select onchange="_fields['+i+'].type=this.value;renderFieldRows()">' +
         '<option value="string"'+(f.type==="string"?" selected":"")+'>string</option>' +
@@ -123,8 +128,102 @@ function renderFieldRows() {
     c.appendChild(row);
     _makeDraggable(row, _fields, i, renderFieldRows, ".field-row");
   });
+  if (globals.length) {
+    var sep = document.createElement("div");
+    sep.style.cssText = "font-size:11px;font-weight:600;color:var(--sub);padding:10px 0 4px;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border-lt);margin-top:8px;";
+    sep.textContent = "Global fields (every type)";
+    c.appendChild(sep);
+    globals.forEach(function(f) {
+      var row = document.createElement("div");
+      row.className = "field-row";
+      row.style.opacity = "0.6";
+      row.style.borderStyle = "dashed";
+      row.innerHTML =
+        '<span style="cursor:default;font-size:14px;padding:0 2px;" title="Global field — appears on every type">\uD83C\uDF10</span>' +
+        '<div class="field-name"><input type="text" value="'+esc(f.name)+'" readonly style="opacity:0.7;font-weight:600;"></div>' +
+        '<div class="field-type"><select disabled><option value="'+esc(f.type)+'" selected>'+esc(f.type)+'</option></select></div>' +
+        '<span style="font-size:11px;color:var(--sub);">global</span>' +
+        (f.type==="string" && f.options && f.options.length ?
+          '<div class="field-opts">'+f.options.map(function(o){return '<span class="opt-chip">'+esc(o)+'</span>';}).join("")+'</div>' : '');
+      c.appendChild(row);
+    });
+  }
+  if (derived.length) {
+    var sep = document.createElement("div");
+    sep.style.cssText = "font-size:11px;font-weight:600;color:var(--sub);padding:10px 0 4px;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border-lt);margin-top:8px;";
+    sep.textContent = "Derived fields (computed)";
+    c.appendChild(sep);
+    derived.forEach(function(f) {
+      var row = document.createElement("div");
+      row.className = "field-row";
+      row.style.opacity = "0.6";
+      row.style.borderStyle = "dashed";
+      row.innerHTML =
+        '<span style="cursor:default;font-size:14px;padding:0 2px;" title="Derived field — computed from expression">\u0192</span>' +
+        '<div class="field-name"><input type="text" value="'+esc(f.name)+'" readonly style="opacity:0.7;font-weight:600;"></div>' +
+        '<div class="field-type"><select disabled><option value="'+esc(f.type)+'" selected>'+esc(f.type)+'</option></select></div>' +
+        '<code style="font-size:11px;color:var(--sub);background:var(--bg);padding:2px 6px;border-radius:4px;white-space:nowrap;">'+esc(f.expr||'')+'</code>' +
+        '<span style="font-size:11px;color:var(--sub);">computed</span>';
+      c.appendChild(row);
+    });
+  }
+  renderTagRules();
   updatePreview();
   renderTypeChips();
+}
+
+function renderTagRules() {
+  var el = document.getElementById("tag-rules-container");
+  if (!el) return;
+  el.innerHTML = "";
+  if (!_tagRules.length) return;
+  var totalTags = 0;
+  var ruleCount = _tagRules.length;
+  _tagRules.forEach(function(r) {
+    Object.values(r.options || {}).forEach(function(tags) {
+      if (Array.isArray(tags)) totalTags += tags.length;
+    });
+  });
+  var header = document.createElement("div");
+  header.style.cssText = "font-size:11px;font-weight:600;color:var(--sub);padding:10px 0 4px;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border-lt);margin-top:8px;cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none;";
+  header.innerHTML = '<span class="tag-toggle" style="font-size:10px;transition:transform 0.15s;">&#9654;</span>' +
+    'Tag rules <span style="font-weight:400;text-transform:none;letter-spacing:0;">(' + ruleCount + ' field' + (ruleCount > 1 ? 's' : '') + ', ' + totalTags + ' tags)</span>';
+  var body = document.createElement("div");
+  body.style.display = "none";
+  body.style.paddingBottom = "4px";
+  header.onclick = function() {
+    var open = body.style.display === "none";
+    body.style.display = open ? "block" : "none";
+    header.querySelector(".tag-toggle").style.transform = open ? "rotate(90deg)" : "";
+  };
+  el.appendChild(header);
+  _tagRules.forEach(function(r) {
+    var entries = Object.entries(r.options || {});
+    if (!entries.length) return;
+    var ruleDiv = document.createElement("div");
+    ruleDiv.style.cssText = "margin:4px 0 4px 12px;font-size:12px;";
+    var fieldLabel = document.createElement("div");
+    fieldLabel.style.cssText = "font-weight:600;color:var(--fg);margin-bottom:2px;";
+    fieldLabel.textContent = r.field;
+    ruleDiv.appendChild(fieldLabel);
+    entries.forEach(function(entry) {
+      var val = entry[0], tags = entry[1];
+      if (!Array.isArray(tags) || !tags.length) return;
+      var valRow = document.createElement("div");
+      valRow.style.cssText = "margin-left:8px;margin-bottom:2px;display:flex;flex-wrap:wrap;align-items:center;gap:4px;";
+      valRow.innerHTML = '<span style="color:var(--sub);font-size:11px;min-width:60px;">' + esc(val) + ' \u2192</span>';
+      tags.forEach(function(t) {
+        var chip = document.createElement("span");
+        chip.className = "opt-chip";
+        chip.style.cssText = "font-size:11px;padding:1px 6px;";
+        chip.textContent = t;
+        valRow.appendChild(chip);
+      });
+      ruleDiv.appendChild(valRow);
+    });
+    body.appendChild(ruleDiv);
+  });
+  el.appendChild(body);
 }
 
 function renderTypeChips() {
@@ -216,7 +315,7 @@ function submitForm() {
   if (!/^[a-z][a-z0-9_]*$/.test(name)) { alert("Type name: lowercase letters, digits, underscores only"); return; }
   var isEdit = _editMode && name === _editOriginal;
   if (!isEdit && _existingTypes.indexOf(name) !== -1) { alert("Type '" + name + "' already exists"); return; }
-  var validFields = _fields.filter(function(f) { return f.name.trim(); });
+  var validFields = _fields.filter(function(f) { return !f.global && f.name.trim(); });
   if (!validFields.length) { alert("Add at least one field"); return; }
   document.getElementById("submit-original").value = _editOriginal || "";
   document.getElementById("submit-fields").value = JSON.stringify(validFields);
@@ -277,6 +376,7 @@ function esc(s) { var d = document.createElement("div"); d.textContent = s; retu
       <label style="font-size:12px;color:var(--sub);font-weight:600;">FIELDS <span style="font-weight:400;">(drag ⠿ to reorder)</span></label>
     </div>
     <div id="fields-container"></div>
+    <div id="tag-rules-container"></div>
     <button type="button" class="add-field-btn" onclick="addField()">+ Add field</button>
   </div>
 
