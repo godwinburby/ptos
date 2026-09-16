@@ -22,6 +22,7 @@ No database. No cloud. You own the data completely.
 - [Web Interface](#web-interface)
 - [Pages reference](#pages-reference)
 - [Schema Builder](#schema-builder)
+- [Record Types](#record-types)
 - [Query Builder](#query-builder)
 - [Settings](#settings)
 - [Search](#search)
@@ -558,7 +559,34 @@ to correct a record that can't be fixed through Browse → Edit.
 ### Schema Builder
 
 Visual editor for `schema.toml`. Add, edit, and delete record types; define fields,
-types, and conditions. See [Adding a new record type](#adding-a-new-record-type).
+types, and conditions. Features:
+
+- Per-type fields editor with drag-and-drop reordering
+- **Tags, Derived fields, and Conditional fields** sections always open (not collapsed)
+- **Derived field expression help** — expandable help card on each derived field row
+  showing keywords (`today`, `date`, `timedelta`), common patterns, operators, and
+  return types
+- **Derived field validation** — real-time inline validation (red border + error text)
+  and save-time validation (server-side + client-side). Invalid expressions are caught
+  before saving
+- **Global Derived Fields** — dedicated section in Schema-wide settings for derived
+  fields that apply to every record type (e.g. `days_since`)
+- Schema-wide settings (Global Fields, Shared Definitions, Global Derived Fields)
+  remain collapsed by default
+- Reuse option lists via **Shared Definitions** (`[shared.*]`) with `use = "shared.name"`
+
+See [Adding a new record type](#adding-a-new-record-type) and [Derived fields](#derived-fields).
+
+### Record Types
+
+Simple UI for creating, editing, and deleting record types (alternative to the
+advanced Schema Builder). Features:
+
+- Horizontal scrollable chip bar for type selection
+- Inline field editor with drag-and-drop reordering
+- Per-type fields (editable), global fields (read-only), derived fields (read-only with expression), and collapsible tag rules
+- Delete with record count warning
+- Link from the Add page ("Don't see your type? Create one")
 
 ### Backup
 
@@ -720,9 +748,32 @@ Navigate to the **Schema Builder** tab in the web app to:
 - Add, edit, and delete record types
 - Define required and optional fields per type
 - Set field types (text, int, options)
-- Configure conditional fields and tags
+- Configure conditional fields, tags, and derived fields
 - Drag-and-drop reorder field options, shared options, and chips
 - Reuse option lists across fields: define a **Shared Definition** (`[shared.*]`) and create a type field that references it (`use = "shared.name"`) — when adding a field, the builder offers the shared definitions as an option
+
+### Derived fields in Schema Builder
+
+Each type has an always-open **Derived fields** section. Add a derived field with a name and expression:
+
+- **Expression help** — click "▸ Expression help" to see keywords, common patterns, and operators
+- **Validation** — expressions are validated in real-time (red border on invalid) and blocked from saving if invalid
+- **Keywords**: `today` (current date), `date` (record's date), `timedelta` (date duration)
+- **Common patterns**: `today - date` → days since record, `(today - date) > 30` → is overdue, `amount - advance` → net amount
+- **Operators**: `+` `-` `*` `/` `()` `>` `<` `=` `>=` `<=`
+- **Returns**: auto (inferred), int, bool (`true`/`false`), string
+
+### Global Derived Fields
+
+In Schema-wide settings, the **Global Derived Fields** section lets you define derived
+fields that apply to every record type. These appear automatically in browse, table,
+and filter output for all types.
+
+### Schema-wide settings
+
+The bottom of the Schema Builder page has collapsible sections for settings that
+apply across all types: **Global Optional Fields**, **Shared Definitions**, and
+**Global Derived Fields**.
 
 No need to edit `schema.toml` directly for most changes.
 
@@ -1776,22 +1827,53 @@ Fields whose values are computed from other fields or date arithmetic. Defined i
 
 ```toml
 [fields.days_since]
-derived = "today - date"
+derived = "(today - date).days"
 type    = "int"
 ```
 
 **Type-scoped derived fields** — apply only to a specific type:
 
 ```toml
-[type.expense.fields.days_since]
-derived = "(today - date) > 30"
-type    = "bool"
+[type.prescription.derived_fields.balance]
+expr = "amount - advance"
+type = "int"
 ```
 
 Valid field types for derived fields: `int`, `string`, `datetime`, `bool`.
 
-Expressions support: `today`, `date`, `today - date` (returns days as int), and any
-numeric field from the record. Boolean results display as `true`/`false`.
+### Expression syntax
+
+**Keywords:**
+
+| Token | Meaning |
+|-------|---------|
+| `today` | Current date (e.g. `2026-09-16`) |
+| `date` | The record's date field |
+| `timedelta` | Date duration — use as `timedelta(days=N)` |
+
+**Common patterns:**
+
+| Expression | Returns | Description |
+|-----------|---------|-------------|
+| `today - date` | int | Days since record |
+| `(today - date).days` | int | Explicit days integer |
+| `(today - date) > 30` | bool | Is overdue? |
+| `amount - advance` | int | Net amount |
+| `amount / quantity` | float | Per-unit cost |
+| `date + timedelta(days=30)` | date | Future date |
+
+**Operators:** `+` `-` `*` `/` `()` `>` `<` `=` `>=` `<=`
+
+Any alphabetic token in the expression is replaced with the matching field's numeric
+value at compute time. Boolean results display as `true`/`false`.
+
+### Validation
+
+Derived field expressions are validated at three levels:
+- **Client-side** — real-time inline validation (red border + error text on input)
+- **Save-time** — blocks save if any expression is invalid
+- **Server-side** — `_build_schema_dict()` validates before writing to schema.toml
+- **Schema structure** — `validate_schema_structure()` checks all derived expressions
 
 ---
 
