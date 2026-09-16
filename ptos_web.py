@@ -2431,8 +2431,6 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
         derived_new = ts_new.get("derived_fields", {})
 
         seen = list(fields_new.keys())
-        for fn in fields_old:
-            if fn not in seen: seen.append(fn)
         for fn in derived_new:
             if fn not in seen: seen.append(fn)
 
@@ -2491,8 +2489,6 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
         tags_new = ts_new.get("tags", {})
         tags_old = ts_old.get("tags", {})
         seen_tags = list(tags_new.keys())
-        for tf in tags_old:
-            if tf not in seen_tags: seen_tags.append(tf)
 
         tags_dict = {}
         for tfield in seen_tags:
@@ -2513,8 +2509,6 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
         conditions_new = ts_new.get("conditions", {})
         conditions_old = ts_old.get("conditions", {})
         all_cfields = list(conditions_new.keys())
-        for cf in conditions_old:
-            if cf not in all_cfields: all_cfields.append(cf)
 
         conds_dict = {}
         for cname in all_cfields:
