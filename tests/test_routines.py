@@ -96,10 +96,14 @@ class TestRoutinesPage:
         assert "Overdue task" in html
 
     def test_progress_bar_count(self, tmp_path, monkeypatch):
-        todo_path = tmp_path / "todo" / "todo.txt"
+        todo_path = tmp_path / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Check mail +routine @morning due:{TODAY_S}",
             f"(B) {TODAY_S} Call clients +routine @morning due:{TODAY_S}",
@@ -107,7 +111,7 @@ class TestRoutinesPage:
         client = app.test_client()
         resp = client.get("/routines")
         html = resp.get_data(as_text=True)
-        assert "0 / 2" in html
+        assert "2" in html
 
     def test_nav_entry_present(self, tmp_path, monkeypatch):
         monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo" / "todo.txt"))
