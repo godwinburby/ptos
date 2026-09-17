@@ -1018,9 +1018,10 @@ def routines_page():
     routine_todos = [t for t in all_open if "+routine" in t.projects]
     cards = {}
     for t in routine_todos:
-        raw = t.contexts[0] if t.contexts else "other"
-        key = raw.lstrip("@")
-        cards.setdefault(key, []).append(t)
+        contexts = t.contexts if t.contexts else ["other"]
+        for ctx in contexts:
+            key = ctx.lstrip("@")
+            cards.setdefault(key, []).append(t)
     for k in cards:
         cards[k].sort(key=lambda t: (t.due is None, t.due or today, t.priority or "Z", t.description))
     return render_template("routines.html", tab="routines",
