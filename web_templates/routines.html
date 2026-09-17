@@ -34,15 +34,24 @@
   .routine-item .todo-check { width:22px; height:22px; }
   .routine-desc {
     font-size:14px; font-weight:600; color:var(--text); flex:1;
-    transition: opacity 0.3s;
+    transition: opacity 0.3s; cursor:pointer;
   }
+  .routine-desc:hover { text-decoration:underline; }
   .routine-item.completed .routine-desc {
-    opacity:0.4; text-decoration:line-through;
+    opacity:0.4; text-decoration:line-through; cursor:default;
   }
   .routine-due {
     font-size:11px; color:var(--sub); white-space:nowrap;
   }
   .routine-due.overdue { color:var(--error); font-weight:600; }
+  .routine-add-btn {
+    display:flex; align-items:center; justify-content:center; gap:6px;
+    width:100%; padding:8px; margin-top:8px;
+    border:1px dashed var(--border); border-radius:8px;
+    background:none; color:var(--sub); font-size:13px; cursor:pointer;
+    transition: all 0.15s;
+  }
+  .routine-add-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-lt); }
   .routine-empty {
     text-align:center; padding:40px 20px; color:var(--sub); font-size:14px;
   }
@@ -90,8 +99,8 @@
   <div class="routine-help-title" style="margin-top:12px;">How it works</div>
   <ul>
     <li>Check items off here — they complete and auto-regenerate for tomorrow</li>
-    <li>Overdue items show a red label; today's items are due now</li>
-    <li>Edit or delete routines from the <a href="/todo?project=routine" style="color:var(--accent);">Todo page</a></li>
+    <li>Click an item's text to edit it</li>
+    <li>Use the "+ Add" button on each card to quickly add a routine to that context</li>
     <li>Each <code>@context</code> becomes a separate card — add as many groups as you need</li>
   </ul>
 </div>
@@ -116,7 +125,7 @@
       {% else %}
       <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
       {% endif %}
-      <span class="routine-desc">{{ t.description }}</span>
+      <span class="routine-desc" onclick="{% if not t.done %}openEdit({{ t.line_no }}, {{ t.description|tojson }}, '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}'){% endif %}">{{ t.description }}</span>
       {% if t.due %}
       <span class="routine-due {% if t.due < today %}overdue{% endif %}">
         {% if t.due < today %}overdue{% elif t.due == today %}today{% else %}{{ t.due.strftime('%d %b') }}{% endif %}
@@ -125,6 +134,9 @@
       {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
     </div>
     {% endfor %}
+    {% if context_name != 'other' %}
+    <button class="routine-add-btn" onclick="openAddRoutine('{{ context_name }}')">+ Add</button>
+    {% endif %}
   </div>
   {% endfor %}
 {% else %}
@@ -135,7 +147,20 @@
 </div>
 {% endif %}
 
+{% include '_todo_modal.html' %}
+
 <script>
+function openAddRoutine(context) {
+  openTodoModal('add');
+  _presetChip('modal-project-chips', 'routine');
+  _presetChip('modal-context-chips', context);
+  var dueSel = document.getElementById('modal-due');
+  if (dueSel) { dueSel.value = 'today'; }
+  var recSel = document.getElementById('modal-rec');
+  if (recSel) recSel.value = '1d';
+  document.getElementById('modal-desc').focus();
+}
+
 function completeTodo(lineNo, el) {
   el.classList.add('checked');
   const row = el.closest('.routine-item');

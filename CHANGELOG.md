@@ -5,6 +5,18 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-17
+
+### Editable routines
+
+- **Shared todo modal** — extracted `#todo-modal` markup and JS into `_todo_modal.html` partial; both `todo.html` and `routines.html` `{% include %}` it. No modal duplication between pages. New `_presetChip(containerId, value)` helper selects a chip by value or falls back to the "other" input.
+- **Edit routine items** — clicking a routine item's description opens the shared modal pre-filled with that item's values via `openEdit()`. Saving uses the existing `/todo/edit` route and reloads Routines (not Todo).
+- **Add routine per card** — each named card has a "+ Add" button that opens the modal pre-filled with `+routine` project, the card's `@context`, `due:today`, and `rec:1d`. The "Other" card (no context) has no button; empty state links to Todo page for first creation.
+- **Scope limited** — `/routines` now shows only overdue + today items (removed tomorrow + upcoming).
+- **Stale reference cleanup** — modal-related JS event listeners and functions consolidated in the shared partial instead of duplicated inline.
+
+---
+
 ## 2026-09-16
 
 ### Routines view
