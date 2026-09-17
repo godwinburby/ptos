@@ -1032,8 +1032,13 @@ def routines_page():
         except ValueError:
             return (1, 0, name)
     cards = dict(sorted(cards.items(), key=lambda kv: _section_sort_key(kv[0])))
+    done_todos, _ = svc.ptos_todo.load_todos(svc.DONE_PATH)
+    done_routines = [t for t in done_todos if "+routine" in t.projects]
+    done_routines.sort(key=lambda t: (t.completed_date or dt.date.min, t.description), reverse=True)
+    done_routines = done_routines[:20]
     return render_template("routines.html", tab="routines",
                            title="Routines", cards=cards, today=today,
+                           done_routines=done_routines,
                            projects=svc.get_todo_projects(),
                            contexts=svc.get_todo_contexts(),
                            priority_labels=svc.get_config().get("todo", {}).get("priority_labels", {}))

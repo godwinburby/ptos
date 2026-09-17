@@ -18,6 +18,7 @@ Format: `[version or date] — description`
 - **Sort by due_time** — routine items within each card now sort by due_time after due date, so 09:00 items appear before 20:00 items on the same day.
 - **Empty state add button** — empty routines page now shows a "+ New Routine" button that opens the modal pre-filled with `+routine @morning due:today rec:1d`, so users can create their first routine without leaving the page.
 - **Section ordering** — routine cards sort in a fixed order: morning → afternoon → evening → night → other contexts alphabetically → "other" last.
+- **Done section** — completed routines shown in a separate collapsible "Done" section at the bottom (up to 20 recent), not mixed into context cards. Progress bar removed (no longer applicable); cards show item count instead. Undo works from the Done section.
 
 ---
 
