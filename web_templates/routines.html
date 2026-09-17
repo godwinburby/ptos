@@ -125,7 +125,7 @@
       {% else %}
       <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
       {% endif %}
-      <span class="routine-desc" onclick="{% if not t.done %}openEdit({{ t.line_no }}, {{ t.description|tojson }}, '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}'){% endif %}">{{ t.description }}</span>
+      <span class="routine-desc" onclick="{% if not t.done %}openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}'){% endif %}">{{ t.description }}</span>
       {% if t.due %}
       <span class="routine-due {% if t.due < today %}overdue{% endif %}">
         {% if t.due < today %}overdue{% elif t.due == today %}today{% else %}{{ t.due.strftime('%d %b') }}{% endif %}
@@ -151,13 +151,9 @@
 
 <script>
 function openAddRoutine(context) {
-  openTodoModal('add');
-  _presetChip('modal-project-chips', 'routine');
-  _presetChip('modal-context-chips', context);
-  var dueSel = document.getElementById('modal-due');
-  if (dueSel) { dueSel.value = 'today'; }
-  var recSel = document.getElementById('modal-rec');
-  if (recSel) recSel.value = '1d';
+  var now = new Date();
+  var today = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');
+  openTodoModal('add', '', '', '', today, '', '', '', '+routine', '@' + context, '1d', '', '');
   document.getElementById('modal-desc').focus();
 }
 

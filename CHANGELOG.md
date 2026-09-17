@@ -14,6 +14,7 @@ Format: `[version or date] — description`
 - **Add routine per card** — each named card has a "+ Add" button that opens the modal pre-filled with `+routine` project, the card's `@context`, `due:today`, and `rec:1d`. The "Other" card (no context) has no button; empty state links to Todo page for first creation.
 - **Scope limited** — `/routines` now shows only overdue + today items (removed tomorrow + upcoming).
 - **Stale reference cleanup** — modal-related JS event listeners and functions consolidated in the shared partial instead of duplicated inline.
+- **Bugfix: modal onclick + defaults** — routine item description onclick now uses `'{{ t.description|e }}'` (single-quoted, HTML-escaped) matching todo.html's pattern; fixed `openAddRoutine` to pass `'+routine'` and `'@' + context` (todo projects include `+` prefix, contexts include `@`), so chips now pre-select correctly. Due date pre-selection uses computed ISO date instead of literal `'today'` string.
 
 ---
 
