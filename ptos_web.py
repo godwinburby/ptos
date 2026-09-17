@@ -1023,6 +1023,15 @@ def routines_page():
             cards.setdefault(key, []).append(t)
     for k in cards:
         cards[k].sort(key=lambda t: (t.due is None, t.due or today, t.due_time or "", t.priority or "Z", t.description))
+    _SECTION_ORDER = ["morning", "afternoon", "evening", "night"]
+    def _section_sort_key(name):
+        if name == "other":
+            return (2, 0, name)
+        try:
+            return (0, _SECTION_ORDER.index(name), name)
+        except ValueError:
+            return (1, 0, name)
+    cards = dict(sorted(cards.items(), key=lambda kv: _section_sort_key(kv[0])))
     return render_template("routines.html", tab="routines",
                            title="Routines", cards=cards, today=today,
                            projects=svc.get_todo_projects(),
