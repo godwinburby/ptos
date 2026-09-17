@@ -1022,7 +1022,7 @@ def routines_page():
             key = ctx.lstrip("@")
             cards.setdefault(key, []).append(t)
     for k in cards:
-        cards[k].sort(key=lambda t: (t.due is None, t.due or today, t.priority or "Z", t.description))
+        cards[k].sort(key=lambda t: (t.due is None, t.due or today, t.due_time or "", t.priority or "Z", t.description))
     return render_template("routines.html", tab="routines",
                            title="Routines", cards=cards, today=today,
                            projects=svc.get_todo_projects(),
