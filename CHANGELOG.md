@@ -7,6 +7,15 @@ Format: `[version or date] — description`
 
 ## 2026-09-16
 
+### Routines view
+
+- **`/routines` page** — checkbox cards over existing `+routine` todos, grouped by `@context` (e.g. `@morning` → "Morning" card). No new data model, config, or state file — uses the same todo completion/recurrence engine. Completing a routine item calls the existing `/todo/complete` endpoint, triggering `rec:1d` regeneration automatically.
+- **Empty state** — when no `+routine` todos exist, shows guidance with link to filtered Todo page.
+- **Progress bar** — per-card "N of M done" badge and progress bar, computed at render time.
+- **Overdue support** — overdue `+routine` todos appear in cards with red "overdue" label, same as the main Todo page.
+- **No `@context`** — todos tagged `+routine` but without a context tag go to an "Other" card.
+- **Nav entry** — "Routines" in the Log section of both desktop sidebar and mobile More menu (keyboard shortcut `G Z`).
+
 ### Single-source nav sections
 
 - **Unified navigation data** — all page links and their sections (Log, Find, Track, Setup) defined once in `ptos_web.py` context processor as `nav_sections`. Desktop sidebar and mobile More menu both render from this data. Adding a new page = one Python tuple.
