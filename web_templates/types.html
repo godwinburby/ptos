@@ -92,6 +92,7 @@ var _recordCount = {{ record_count }};
 
 var _tagRules = {{ tag_rules_json | safe }};
 var _sharedDefs = {{ shared_json | safe }};
+var _conditions = {{ conditions_json | safe }};
 
 function renderFieldRows() {
   var c = document.getElementById("fields-container");
@@ -194,6 +195,7 @@ function renderFieldRows() {
     });
   }
   renderTagRules();
+  renderConditions();
   updatePreview();
   renderTypeChips();
 }
@@ -248,6 +250,35 @@ function renderTagRules() {
       ruleDiv.appendChild(valRow);
     });
     body.appendChild(ruleDiv);
+  });
+  el.appendChild(body);
+}
+
+function renderConditions() {
+  var el = document.getElementById("conditions-container");
+  if (!el) return;
+  el.innerHTML = "";
+  if (!_conditions.length) return;
+  var header = document.createElement("div");
+  header.style.cssText = "font-size:11px;font-weight:600;color:var(--sub);padding:10px 0 4px;text-transform:uppercase;letter-spacing:0.5px;border-top:1px solid var(--border-lt);margin-top:8px;cursor:pointer;display:flex;align-items:center;gap:6px;user-select:none;";
+  header.innerHTML = '<span class="tag-toggle" style="font-size:10px;transition:transform 0.15s;">&#9654;</span>' +
+    'Conditions <span style="font-weight:400;text-transform:none;letter-spacing:0;">(' + _conditions.length + ')</span>';
+  var body = document.createElement("div");
+  body.style.display = "none";
+  body.style.paddingBottom = "4px";
+  header.onclick = function() {
+    var open = body.style.display === "none";
+    body.style.display = open ? "block" : "none";
+    header.querySelector(".tag-toggle").style.transform = open ? "rotate(90deg)" : "";
+  };
+  el.appendChild(header);
+  _conditions.forEach(function(c) {
+    var row = document.createElement("div");
+    row.style.cssText = "margin:4px 0 4px 12px;font-size:12px;color:var(--fg);display:flex;align-items:center;gap:6px;flex-wrap:wrap;";
+    row.innerHTML =
+      '<span style="font-size:14px;" title="Conditional field">\uD83D\uDD12</span>' +
+      '<span><strong>' + esc(c.field) + '</strong> is required when <code style="background:var(--bg);padding:1px 4px;border-radius:3px;font-size:11px;">' + esc(c.trigger_field) + '</code> = <code style="background:var(--bg);padding:1px 4px;border-radius:3px;font-size:11px;">' + esc(c.trigger_value) + '</code></span>';
+    body.appendChild(row);
   });
   el.appendChild(body);
 }
@@ -403,6 +434,7 @@ function esc(s) { var d = document.createElement("div"); d.textContent = s; retu
     </div>
     <div id="fields-container"></div>
     <div id="tag-rules-container"></div>
+    <div id="conditions-container"></div>
     <button type="button" class="add-field-btn" onclick="addField()">+ Add field</button>
   </div>
 

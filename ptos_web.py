@@ -1688,6 +1688,18 @@ def types_page():
                     "field": tag_field,
                     "options": tag_def["options"],
                 })
+        conditions = type_def.get("conditions", {})
+        conditions_list = []
+        for cfield, cdef in conditions.items():
+            if not isinstance(cdef, dict):
+                continue
+            when = cdef.get("when", {})
+            for trigger_field, trigger_value in when.items():
+                conditions_list.append({
+                    "field": cfield,
+                    "trigger_field": trigger_field,
+                    "trigger_value": str(trigger_value),
+                })
         record_count = svc.get_type_record_count(edit_type)
     elif prefilled_name and note:
         try:
@@ -1709,7 +1721,8 @@ def types_page():
         fields_json=fields_json, return_to=return_to,
         record_count=record_count, msg=None, msg_type=None,
         show_saved=saved, tag_rules_json=json.dumps(tag_rules) if edit_type else "[]",
-        shared_json=json.dumps(shared_defs))
+        shared_json=json.dumps(shared_defs),
+        conditions_json=json.dumps(conditions_list) if edit_type else "[]")
 
 
 @app.route("/types", methods=["POST"])
@@ -1742,13 +1755,27 @@ def types_post():
                     field_entry["use"] = fdef["use"]
                 edit_fields.append(field_entry)
         shared_defs = {k: {"options": list(v.get("options", []))} for k, v in schema.get("shared", {}).items() if isinstance(v, dict)}
+        conditions = type_def.get("conditions", {}) if original_name else {}
+        conditions_list = []
+        for cfield, cdef in conditions.items():
+            if not isinstance(cdef, dict):
+                continue
+            when = cdef.get("when", {})
+            for trigger_field, trigger_value in when.items():
+                conditions_list.append({
+                    "field": cfield,
+                    "trigger_field": trigger_field,
+                    "trigger_value": str(trigger_value),
+                })
         return render_template("types.html",
             tab="types", title="Record Types",
             types=types, edit_type=original_name, prefilled_name=type_name,
             fields_json=json.dumps(edit_fields if original_name else fields),
             return_to=return_to, record_count=0,
             msg=str(e), msg_type="error",
-            shared_json=json.dumps(shared_defs))
+            shared_json=json.dumps(shared_defs),
+            tag_rules_json=json.dumps([]),
+            conditions_json=json.dumps(conditions_list))
 
     if not return_to:
         return_to = f"/types?edit={type_name}" if original_name else f"/add?type={type_name}"
