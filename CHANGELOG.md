@@ -24,6 +24,7 @@ Format: `[version or date] — description`
 - **Global fields section** — read-only rows with 🌐 icon, rendered below type fields.
 - **Collapsible tag rules** — shows trigger field → value → tag chips. Collapsed by default with count summary.
 - **`types_page()` backend** — builds `fields_json` with `derived` and `global` flags; passes `tag_rules_json` for tag rule display.
+- **Collapsible conditions display** — read-only section showing conditional field requirements (e.g. "fit is required when outcome = prescribed"). Collapsed by default with count summary. Types without conditions show no section.
 
 ### Schema Builder improvements
 
