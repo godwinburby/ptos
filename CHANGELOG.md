@@ -17,6 +17,7 @@ Format: `[version or date] — description`
 - **Bugfix: modal onclick + defaults** — routine item description onclick now uses `'{{ t.description|e }}'` (single-quoted, HTML-escaped) matching todo.html's pattern; fixed `openAddRoutine` to pass `'+routine'` and `'@' + context` (todo projects include `+` prefix, contexts include `@`), so chips now pre-select correctly. Due date pre-selection uses computed ISO date instead of literal `'today'` string.
 - **Sort by due_time** — routine items within each card now sort by due_time after due date, so 09:00 items appear before 20:00 items on the same day.
 - **Empty state add button** — empty routines page now shows a "+ New Routine" button that opens the modal pre-filled with `+routine @morning due:today rec:1d`, so users can create their first routine without leaving the page.
+- **Section ordering** — routine cards sort in a fixed order: morning → afternoon → evening → night → other contexts alphabetically → "other" last.
 
 ---
 
