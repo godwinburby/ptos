@@ -1119,7 +1119,7 @@ function toggleModalChip(el) {
 function toggleOtherInput(chipEl, type) {
   var input = document.getElementById('modal-' + type + '-other');
   if (input.style.display === 'none') {
-    input.style.display = '';
+    input.style.display = 'block';
     input.focus();
   } else {
     var val = input.value.trim();
