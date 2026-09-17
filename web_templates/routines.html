@@ -142,8 +142,9 @@
 {% else %}
 <div class="routine-empty">
   <p>No routine todos found.</p>
-  <p style="margin-top:8px;">Add todos with <code>+routine @morning</code> (or any <code>@context</code>) to see them here as checklist cards.</p>
-  <p style="margin-top:12px;"><a href="/todo?project=routine" style="color:var(--accent);">Open in Todo →</a></p>
+  <p style="margin-top:8px;">Create your first routine:</p>
+  <button class="routine-add-btn" onclick="openAddRoutine('morning')" style="margin:12px auto; max-width:200px;">+ New Routine</button>
+  <p style="margin-top:8px;font-size:12px;color:var(--sub);">Default: +routine @morning, due today, repeats daily</p>
 </div>
 {% endif %}
 
