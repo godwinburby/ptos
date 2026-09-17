@@ -7,6 +7,13 @@ Format: `[version or date] — description`
 
 ## 2026-09-16
 
+### Single-source nav sections
+
+- **Unified navigation data** — all page links and their sections (Log, Find, Track, Setup) defined once in `ptos_web.py` context processor as `nav_sections`. Desktop sidebar and mobile More menu both render from this data. Adding a new page = one Python tuple.
+- **Desktop sidebar from data** — sidebar nav HTML replaced with Jinja2 loop over `nav_sections`, preserving all existing behavior: section headers, collapse/expand with localStorage persistence, active-state highlighting, keyboard shortcuts, sync-dot on Settings.
+- **Mobile More menu with section headers** — the flat item list replaced with a sectioned mirror of the sidebar. Four collapsible-section-style headers (Log, Find, Track, Setup) group 22 items, matching the desktop sidebar layout. Bottom nav items (Home, Queries, Todo, Browse) also appear in the More menu.
+- **New `.more-menu-section` CSS** — uppercase small-text section headers in the More menu, matching the desktop sidebar section style.
+
 ### Schema field restoration and derived fields fix
 
 - **Restored per-type field declarations** — added `[type.X.fields.amount]` for expense, income, investment, prescription, fitting; `[type.X.fields.advance]` for prescription; `[type.X.fields.duration]` for exercise and conversation. Fields were lost from per-type sections by the Schema Builder's `ensureFieldMeta()` bug.

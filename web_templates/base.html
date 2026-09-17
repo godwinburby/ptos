@@ -135,6 +135,12 @@
     .more-menu-item:hover svg, .more-menu-item.active svg {
       color: var(--accent);
     }
+    .more-menu-section {
+      font-size: 10px; font-weight: 700; text-transform: uppercase;
+      letter-spacing: 0.5px; color: var(--sub); padding: 14px 20px 4px;
+      border-top: 1px solid var(--border);
+    }
+    .more-menu-section:first-child { border-top: none; }
 
     /* ── Desktop layout ── */
     @media (min-width: 768px) {
@@ -582,39 +588,14 @@
     }, 0);
   </script>
   <nav class="sidebar-nav">
-    <div class="sidebar-section" data-section="log">Log</div>
-    <div class="sidebar-nav-group" data-group="log">
-    <a href="/"        class="{% if tab=='home'    %}active{% endif %}">{% include 'icons/home.html'    ignore missing %} Home <kbd>H</kbd></a>
-    <a href="/add"     class="{% if tab=='add'     %}active{% endif %}">{% include 'icons/add.html'     ignore missing %} Add Record <kbd>A</kbd></a>
-    <a href="/todo"    class="{% if tab=='todo'    %}active{% endif %}">{% include 'icons/todo.html'    ignore missing %} Todo <kbd>T</kbd></a>
-    <a href="/journal" class="{% if tab=='journal' %}active{% endif %}">{% include 'icons/journal.html' ignore missing %} Journal <kbd>J</kbd></a>
-    <a href="/notes"   class="{% if tab=='notes'   %}active{% endif %}">{% include 'icons/notes.html'   ignore missing %} Notes <kbd>N</kbd></a>
-    <a href="/types"   class="{% if tab=='types'   %}active{% endif %}">{% include 'icons/types.html'   ignore missing %} Types <kbd>G X</kbd></a>
+    {% for sec_id, sec_name, items in nav_sections %}
+    <div class="sidebar-section" data-section="{{ sec_id }}">{{ sec_name }}</div>
+    <div class="sidebar-nav-group" data-group="{{ sec_id }}">
+    {% for url_path, tab_name, icon_name, label, kbd in items %}
+    <a href="/{{ url_path }}" class="{% if tab==tab_name %}active{% endif %}">{% include 'icons/' ~ icon_name ~ '.html' ignore missing %} {{ label }} <kbd>{{ kbd }}</kbd>{% if tab_name == 'settings' %} <span id="sync-dot-sidebar" class="sync-dot"></span>{% endif %}</a>
+    {% endfor %}
     </div>
-    <div class="sidebar-section" data-section="find">Find</div>
-    <div class="sidebar-nav-group" data-group="find">
-    <a href="/search"  class="{% if tab=='search'  %}active{% endif %}">{% include 'icons/search.html'  ignore missing %} Search <kbd>F</kbd></a>
-    <a href="/due"     class="{% if tab=='due'     %}active{% endif %}">{% include 'icons/due.html'     ignore missing %} Due List <kbd>G D</kbd></a>
-    <a href="/browse"  class="{% if tab=='browse'  %}active{% endif %}">{% include 'icons/browse.html'  ignore missing %} Browse <kbd>B</kbd></a>
-    <a href="/entity"  class="{% if tab=='entity'  %}active{% endif %}">{% include 'icons/entity.html'  ignore missing %} Entity <kbd>G V</kbd></a>
-    </div>
-    <div class="sidebar-section" data-section="track">Track</div>
-    <div class="sidebar-nav-group" data-group="track">
-    <a href="/queries"   class="{% if tab=='queries'   %}active{% endif %}">{% include 'icons/query.html'        ignore missing %} Queries <kbd>Q</kbd></a>
-    <a href="/board"     class="{% if tab=='board'     %}active{% endif %}">{% include 'icons/board.html'        ignore missing %} Board <kbd>G O</kbd></a>
-    <a href="/habits"    class="{% if tab=='habits'    %}active{% endif %}">{% include 'icons/habits.html'       ignore missing %} Habits <kbd>G M</kbd></a>
-    <a href="/calendar"  class="{% if tab=='calendar'  %}active{% endif %}">{% include 'icons/calendar.html'     ignore missing %} Calendar <kbd>G Y</kbd></a>
-    <a href="/thresholds" class="{% if tab=='thresholds' %}active{% endif %}">{% include 'icons/thresholds.html' ignore missing %} Thresholds <kbd>G R</kbd></a>
-    </div>
-    <div class="sidebar-section" data-section="setup">Setup</div>
-    <div class="sidebar-nav-group" data-group="setup">
-    <a href="/query-builder" class="{% if tab=='query_builder' %}active{% endif %}">{% include 'icons/query_builder.html' ignore missing %} Query Builder <kbd>G U</kbd></a>
-    <a href="/schema-builder" class="{% if tab=='schema_builder' %}active{% endif %}">{% include 'icons/schema_builder.html' ignore missing %} Schema Builder <kbd>G C</kbd></a>
-    <a href="/editor"  class="{% if tab=='editor'  %}active{% endif %}">{% include 'icons/editor.html'  ignore missing %} Log Editor <kbd>G E</kbd></a>
-    <a href="/lint"    class="{% if tab=='lint'    %}active{% endif %}">{% include 'icons/lint.html'    ignore missing %} Lint <kbd>G L</kbd></a>
-    <a href="/backup"  class="{% if tab=='backup'  %}active{% endif %}">{% include 'icons/backup.html'  ignore missing %} Backup <kbd>G K</kbd></a>
-    <a href="/settings" class="{% if tab=='settings' %}active{% endif %}">{% include 'icons/settings.html' ignore missing %} Settings <kbd>S</kbd> <span id="sync-dot-sidebar" class="sync-dot"></span></a>
-    </div>
+    {% endfor %}
   </nav>
   <div class="sidebar-footer">
     <a href="https://github.com/godwinburby/ptos" target="_blank">⭐ github.com/godwinburby/ptos</a>
@@ -999,12 +980,14 @@
   <div class="more-menu-overlay" onclick="toggleMoreMenu(event)"></div>
   <div class="more-menu-content">
     <div class="more-menu-header">More</div>
-    {% set _tab_map = {"search":"search","due":"due","journal":"journal","notes":"notes","board":"board","habits":"habits","calendar":"calendar","thresholds":"thresholds","entity":"entity","query-builder":"query_builder","schema-builder":"schema_builder","types":"types","backup":"backup","editor":"editor","lint":"lint","settings":"settings"} %}
-    {% for url_path, icon_name, label in more_menu_items %}
-    <a href="/{{ url_path }}" class="more-menu-item {% if tab==_tab_map.get(url_path,'') %}active{% endif %}">
+    {% for sec_id, sec_name, items in nav_sections %}
+    <div class="more-menu-section">{{ sec_name }}</div>
+    {% for url_path, tab_name, icon_name, label, kbd in items %}
+    <a href="/{{ url_path }}" class="more-menu-item {% if tab==tab_name %}active{% endif %}">
       {% include 'icons/' ~ icon_name ~ '.html' ignore missing %}
       {{ label }}
     </a>
+    {% endfor %}
     {% endfor %}
     <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
     <a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
