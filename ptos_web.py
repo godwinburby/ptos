@@ -1013,8 +1013,7 @@ def todo_edit_done():
 def routines_page():
     buckets = svc.get_todos_bucketed()
     today = dt.date.today()
-    all_open = (buckets.get("overdue", []) + buckets.get("today", []) +
-                buckets.get("tomorrow", []) + buckets.get("upcoming", []))
+    all_open = buckets.get("overdue", []) + buckets.get("today", [])
     routine_todos = [t for t in all_open if "+routine" in t.projects]
     cards = {}
     for t in routine_todos:
@@ -1025,7 +1024,10 @@ def routines_page():
     for k in cards:
         cards[k].sort(key=lambda t: (t.due is None, t.due or today, t.priority or "Z", t.description))
     return render_template("routines.html", tab="routines",
-                           title="Routines", cards=cards, today=today)
+                           title="Routines", cards=cards, today=today,
+                           projects=svc.get_todo_projects(),
+                           contexts=svc.get_todo_contexts(),
+                           priority_labels=svc.get_config().get("todo", {}).get("priority_labels", {}))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
