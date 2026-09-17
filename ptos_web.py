@@ -52,6 +52,7 @@ def _inject_globals():
                 ("journal",     "journal", "journal",   "Journal",     "J"),
                 ("notes",       "notes",   "notes",     "Notes",       "N"),
                 ("types",       "types",   "types",     "Types",       "G X"),
+                ("routines",    "routines","routines",  "Routines",    "G Z"),
             ]),
             ("find", "Find", [
                 ("search",      "search",  "search",    "Search",      "F"),
@@ -1006,6 +1007,24 @@ def todo_edit_done():
         return jsonify(ok=True, todo=result["todo"])
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
+
+
+@app.route("/routines")
+def routines_page():
+    buckets = svc.get_todos_bucketed()
+    today = dt.date.today()
+    all_open = (buckets.get("overdue", []) + buckets.get("today", []) +
+                buckets.get("tomorrow", []) + buckets.get("upcoming", []))
+    routine_todos = [t for t in all_open if "+routine" in t.projects]
+    cards = {}
+    for t in routine_todos:
+        raw = t.contexts[0] if t.contexts else "other"
+        key = raw.lstrip("@")
+        cards.setdefault(key, []).append(t)
+    for k in cards:
+        cards[k].sort(key=lambda t: (t.due is None, t.due or today, t.priority or "Z", t.description))
+    return render_template("routines.html", tab="routines",
+                           title="Routines", cards=cards, today=today)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

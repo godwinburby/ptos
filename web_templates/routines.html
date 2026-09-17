@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .routine-card {
+    background:var(--card); border:1px solid var(--border); border-radius:12px;
+    padding:16px; margin-bottom:14px;
+  }
+  .routine-header {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:10px;
+  }
+  .routine-title {
+    font-size:16px; font-weight:700; color:var(--text); text-transform:capitalize;
+  }
+  .routine-badge {
+    font-size:12px; font-weight:600; color:var(--sub); background:var(--bg);
+    padding:3px 10px; border-radius:10px;
+  }
+  .routine-badge.done { color:var(--success); background:var(--success-lt); }
+  .routine-bar {
+    height:4px; border-radius:2px; background:var(--border); margin-bottom:12px;
+    overflow:hidden;
+  }
+  .routine-bar-fill {
+    height:100%; border-radius:2px; background:var(--accent);
+    transition: width 0.3s ease;
+  }
+  .routine-bar-fill.all-done { background:var(--success); }
+  .routine-item {
+    display:flex; align-items:center; gap:12px; padding:8px 0;
+    border-bottom:1px solid var(--border-lt);
+  }
+  .routine-item:last-child { border-bottom:none; }
+  .routine-item .todo-check { width:22px; height:22px; }
+  .routine-desc {
+    font-size:14px; font-weight:600; color:var(--text); flex:1;
+    transition: opacity 0.3s;
+  }
+  .routine-item.completed .routine-desc {
+    opacity:0.4; text-decoration:line-through;
+  }
+  .routine-due {
+    font-size:11px; color:var(--sub); white-space:nowrap;
+  }
+  .routine-due.overdue { color:var(--error); font-weight:600; }
+  .routine-empty {
+    text-align:center; padding:40px 20px; color:var(--sub); font-size:14px;
+  }
+  .routine-empty code {
+    background:var(--bg); padding:2px 6px; border-radius:4px; font-size:13px;
+  }
+</style>
+
+<div class="page-title">Routines</div>
+
+{% if cards %}
+  {% for context_name, todos in cards.items() %}
+  {% set done_count = todos|selectattr('done')|list|length %}
+  {% set total = todos|length %}
+  {% set pct = ((done_count / total) * 100)|int if total else 0 %}
+  <div class="routine-card">
+    <div class="routine-header">
+      <div class="routine-title">{{ context_name }}</div>
+      <span class="routine-badge {% if done_count == total and total %}done{% endif %}">{{ done_count }} / {{ total }}</span>
+    </div>
+    <div class="routine-bar">
+      <div class="routine-bar-fill {% if done_count == total and total %}all-done{% endif %}" style="width:{{ pct }}%"></div>
+    </div>
+    {% for t in todos %}
+    <div class="routine-item {% if t.done %}completed{% endif %}" data-line="{{ t.line_no }}">
+      {% if t.done %}
+      <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
+      {% else %}
+      <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
+      {% endif %}
+      <span class="routine-desc">{{ t.description }}</span>
+      {% if t.due %}
+      <span class="routine-due {% if t.due < today %}overdue{% endif %}">
+        {% if t.due < today %}overdue{% elif t.due == today %}today{% else %}{{ t.due.strftime('%d %b') }}{% endif %}
+      </span>
+      {% endif %}
+      {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
+{% else %}
+<div class="routine-empty">
+  <p>No routine todos found.</p>
+  <p style="margin-top:8px;">Add todos with <code>+routine @morning</code> (or any <code>@context</code>) to see them here as checklist cards.</p>
+  <p style="margin-top:12px;"><a href="/todo?project=routine" style="color:var(--accent);">Open in Todo →</a></p>
+</div>
+{% endif %}
+
+<script>
+function completeTodo(lineNo, el) {
+  el.classList.add('checked');
+  const row = el.closest('.routine-item');
+  setTimeout(() => { row.classList.add('completed'); }, 300);
+  fetch('/todo/complete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: lineNo})
+  })
+  .then(r => r.json())
+  .then(d => { if (d.ok) { setTimeout(() => window.location.reload(), 500); } else { alert(d.error || 'Failed'); window.location.reload(); } })
+  .catch(() => window.location.reload());
+}
+
+function undoTodo(lineNo, el) {
+  const row = el.closest('.routine-item');
+  row.style.opacity = '0';
+  fetch('/todo/undo', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: lineNo})
+  })
+  .then(r => r.json())
+  .then(d => { if (d.ok) { setTimeout(() => window.location.reload(), 300); } else { alert(d.error || 'Failed'); window.location.reload(); } })
+  .catch(() => window.location.reload());
+}
+</script>
+{% endblock %}
