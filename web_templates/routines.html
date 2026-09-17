@@ -49,9 +49,52 @@
   .routine-empty code {
     background:var(--bg); padding:2px 6px; border-radius:4px; font-size:13px;
   }
+  .routine-help {
+    display:none; margin:8px 0 16px; padding:14px 16px;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    font-size:13px; color:var(--text); line-height:1.7;
+  }
+  .routine-help.open { display:block; }
+  .routine-help-title { font-weight:700; font-size:12px; color:var(--sub); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px; }
+  .routine-help code { font-size:12px; background:var(--bg); padding:2px 6px; border-radius:4px; }
+  .routine-help ul { margin:6px 0; padding-left:20px; }
+  .routine-help li { margin-bottom:4px; }
+  .routine-help .routine-example {
+    margin:10px 0; padding:10px 14px; background:var(--bg); border-radius:8px;
+    font-family:monospace; font-size:12px; line-height:1.8; word-break:break-all;
+  }
+  .routine-help .routine-example .pri { color:var(--error); }
+  .routine-help .routine-example .proj { color:var(--accent); }
+  .routine-help .routine-example .ctx { color:var(--success); }
+  .routine-help .routine-example .due { color:#f0ad4e; }
+  .routine-help .routine-example .rec { color:var(--sub); }
 </style>
 
 <div class="page-title">Routines</div>
+
+<a onclick="document.getElementById('routine-help').classList.toggle('open');this.textContent=this.textContent==='Hide help'?'? Help':'Hide help'" style="font-size:12px;color:var(--sub);cursor:pointer;user-select:none;">? Help</a>
+<div id="routine-help" class="routine-help{% if cards %}{% else %} open{% endif %}">
+  <div class="routine-help-title">What are routines?</div>
+  <p>Routines are your daily recurring tasks — things you do every day that would clutter your main todo list. This page shows them as simple checkbox cards grouped by context (e.g. morning, evening).</p>
+  <div class="routine-help-title" style="margin-top:12px;">How to add a routine</div>
+  <p>Go to the <a href="/todo" style="color:var(--accent);">Todo page</a> and add a todo with:</p>
+  <ul>
+    <li><code>+routine</code> — the project tag that identifies it as a routine</li>
+    <li><code>@morning</code> (or any context) — becomes the card group on this page</li>
+    <li><code>rec:1d</code> — daily recurrence so it auto-regenerates after completion</li>
+    <li><code>due:today</code> — due date for today</li>
+  </ul>
+  <div class="routine-example">
+    <span class="pri">(A)</span> Check mail <span class="proj">+routine</span> <span class="ctx">@morning</span> <span class="due">due:today</span> <span class="rec">rec:1d</span>
+  </div>
+  <div class="routine-help-title" style="margin-top:12px;">How it works</div>
+  <ul>
+    <li>Check items off here — they complete and auto-regenerate for tomorrow</li>
+    <li>Overdue items show a red label; today's items are due now</li>
+    <li>Edit or delete routines from the <a href="/todo?project=routine" style="color:var(--accent);">Todo page</a></li>
+    <li>Each <code>@context</code> becomes a separate card — add as many groups as you need</li>
+  </ul>
+</div>
 
 {% if cards %}
   {% for context_name, todos in cards.items() %}
