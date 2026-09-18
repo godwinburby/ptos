@@ -24,6 +24,7 @@ import sys
 import os
 import re
 import glob
+import time
 import datetime as dt
 import dataclasses
 
@@ -2371,6 +2372,256 @@ def get_calendar_data(name, year=None, month=None):
     }
     ptos._CACHE[cache_key] = result
     return result
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Projects
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _iter_bracket_refs(search_dir, label):
+    """Yield (path, snippet) for files under search_dir containing [[label]]."""
+    needle = f"[[{label}]]"
+    if not os.path.isdir(search_dir):
+        return
+    for root, _, files in os.walk(search_dir):
+        for fname in files:
+            if not fname.endswith(".md"):
+                continue
+            fpath = os.path.join(root, fname)
+            try:
+                with open(fpath, encoding="utf-8") as f:
+                    for i, line in enumerate(f, 1):
+                        if needle in line:
+                            snippet = line.strip()[:80]
+                            yield (os.path.relpath(fpath, search_dir), snippet)
+                            break
+            except Exception:
+                continue
+
+
+def _folder_mtime(folder):
+    """Return the most recent mtime of any file under folder, or None."""
+    if not os.path.isdir(folder):
+        return None
+    latest = None
+    for root, _, files in os.walk(folder):
+        for fname in files:
+            try:
+                mtime = os.path.getmtime(os.path.join(root, fname))
+                if latest is None or mtime > latest:
+                    latest = mtime
+            except Exception:
+                continue
+    return latest
+
+
+def _iter_tag_filter_records(tag_filters):
+    """Yield (filepath, lineno, date, kv) for records matching tag_filters."""
+    start = dt.date.min
+    end = dt.date.max
+    matches = ptos.find_records_with_location(tag_filters, start=start, end=end)
+    for filepath, lineno, raw_line in matches:
+        try:
+            d, kv, _ = ptos.parse_line(raw_line)
+            yield (filepath, lineno, d, kv)
+        except (ValueError, IndexError):
+            continue
+
+
+def get_projects_overview():
+    """Compute drift signals for all configured ["project.*"] entries.
+
+    Returns a list of dicts sorted by staleness (coolest first):
+      {name, label, stale_days, heat, open_todos, done_todos, overdue_todos,
+       todo_added, todo_done, todo_delta, record_count, notes, journals,
+       board_stalls, has_board, link_target, drift}
+    heat: 'hot' (>30d stale), 'warm' (7-30d), 'cool' (<7d)
+    drift: 'ok', 'stale', 'stalled'
+    """
+    try:
+        projects = ptos.get_projects()
+    except Exception:
+        projects = {}
+    if not projects:
+        return []
+
+    today = dt.date.today()
+    now_ts = time.time()
+
+    # Load todos (open + done) once
+    todos_all = []
+    done_all = []
+    try:
+        todos_all, _ = ptos_todo.load_todos(TODO_PATH)
+    except Exception:
+        pass
+    try:
+        done_all, _ = ptos_todo.load_todos(DONE_PATH)
+    except Exception:
+        pass
+
+    # Month window for stall calculation
+    month_start = today.replace(day=1)
+
+    results = []
+    for name, cfg in projects.items():
+        label = cfg.get("label", name)
+        todo_project = cfg.get("todo_project", "")
+        tag_filters = cfg.get("tag_filters", [])
+        board_name = cfg.get("board", "")
+        notes_path = cfg.get("notes_path", "")
+
+        # ── Staleness (last touched) ──
+        last_date = None
+        last_source = None
+
+        # Records matching tag_filters
+        if tag_filters:
+            for filepath, lineno, d, kv in _iter_tag_filter_records(tag_filters):
+                if last_date is None or d > last_date:
+                    last_date = d
+                    last_source = "record"
+
+        # Todos matching todo_project
+        if todo_project:
+            proj_token = f"+{todo_project}"
+            for t in todos_all + done_all:
+                if proj_token in t.projects:
+                    tdate = t.completed_date if t.done else t.created_date
+                    if tdate and (last_date is None or tdate > last_date):
+                        last_date = tdate
+                        last_source = "todo"
+
+        # Notes folder mtime
+        if notes_path:
+            full_notes = os.path.join(ptos.NOTES_DIR, notes_path)
+            mt = _folder_mtime(full_notes)
+            if mt is not None:
+                note_date = dt.date.fromtimestamp(mt)
+                if last_date is None or note_date > last_date:
+                    last_date = note_date
+                    last_source = "notes"
+
+        # Journal references (scan all journal)
+        journal_refs = []
+        if label:
+            for rel, snippet in _iter_bracket_refs(ptos.JOURNAL_DIR, label):
+                journal_refs.append({"path": rel, "snippet": snippet})
+                # Try to extract date from journal path (YYYY/MM/YYYY-MM-DD.md)
+                try:
+                    jdate = dt.date.fromisoformat(rel.replace("\\", "/").split("/")[-1].replace(".md", ""))
+                    if last_date is None or jdate > last_date:
+                        last_date = jdate
+                        last_source = "journal"
+                except (ValueError, IndexError):
+                    pass
+
+        # Note references
+        note_refs = []
+        if label:
+            for rel, snippet in _iter_bracket_refs(ptos.NOTES_DIR, label):
+                note_refs.append({"path": rel, "snippet": snippet})
+
+        stale_days = (today - last_date).days if last_date else 999
+        heat = "hot" if stale_days > 30 else "warm" if stale_days > 7 else "cool"
+
+        # ── Todo stall (this month) ──
+        open_count = 0
+        done_count = 0
+        overdue_count = 0
+        added_count = 0
+        done_month_count = 0
+
+        if todo_project:
+            proj_token = f"+{todo_project}"
+            for t in todos_all:
+                if proj_token in t.projects:
+                    open_count += 1
+                    if t.due and t.due < today:
+                        overdue_count += 1
+                    if t.created_date and t.created_date >= month_start:
+                        added_count += 1
+            for t in done_all:
+                if proj_token in t.projects:
+                    done_count += 1
+                    if t.completed_date and t.completed_date >= month_start:
+                        done_month_count += 1
+
+        todo_delta = added_count - done_month_count
+
+        # ── Board stall ──
+        board_stalls = []
+        has_board = bool(board_name)
+        if board_name:
+            try:
+                board_data = get_board_data(board_name)
+                columns = board_data.get("columns", [])
+                for col_type, col_records in columns.items():
+                    oldest = None
+                    oldest_days = 0
+                    for rec in col_records:
+                        try:
+                            rd = ptos.parse_date(rec.get("date", ""))
+                            age = (today - rd).days
+                            if oldest is None or age > oldest_days:
+                                oldest = rd
+                                oldest_days = age
+                        except Exception:
+                            continue
+                    if oldest and oldest_days > 3:
+                        board_stalls.append({
+                            "column": col_type,
+                            "oldest_days": oldest_days,
+                        })
+            except Exception:
+                pass
+
+        # ── Record count ──
+        record_count = 0
+        if tag_filters:
+            for _ in _iter_tag_filter_records(tag_filters):
+                record_count += 1
+
+        # ── Link target ──
+        if has_board:
+            link_target = f"/board?board={board_name}"
+        elif todo_project:
+            link_target = f"/todo?project={todo_project}"
+        elif note_refs:
+            link_target = f"/notes/edit/{note_refs[0]['path']}"
+        else:
+            link_target = None
+
+        # ── Drift status ──
+        if stale_days > 60 and open_count > 0:
+            drift = "stalled"
+        elif overdue_count > 0 or stale_days > 30:
+            drift = "stale"
+        else:
+            drift = "ok"
+
+        results.append({
+            "name": name,
+            "label": label,
+            "stale_days": stale_days,
+            "heat": heat,
+            "open_todos": open_count,
+            "done_todos": done_count,
+            "overdue_todos": overdue_count,
+            "todo_added": added_count,
+            "todo_done": done_month_count,
+            "todo_delta": todo_delta,
+            "record_count": record_count,
+            "notes": note_refs,
+            "journals": journal_refs,
+            "board_stalls": board_stalls,
+            "has_board": has_board,
+            "link_target": link_target,
+            "drift": drift,
+        })
+
+    results.sort(key=lambda p: -p["stale_days"])
+    return results
 
 
 def _iso_date(value, default=None):

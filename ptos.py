@@ -1396,6 +1396,13 @@ def get_thresholds():
             if k.startswith("threshold.") and isinstance(v, dict)}
 
 
+def get_projects():
+    """Return {name: config_dict} for all ["project.*"] sections in queries.toml."""
+    q = get_queries()
+    return {k.split(".", 1)[1]: v for k, v in q.items()
+            if k.startswith("project.") and isinstance(v, dict)}
+
+
 def _query_refs_type(query, selected):
     """Check if a base query's where clause references any of the selected types."""
     where = query.get("where", "")
