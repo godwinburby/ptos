@@ -66,6 +66,7 @@ def _inject_globals():
                 ("habits",      "habits",  "habits",    "Habits",      "G M"),
                 ("calendar",    "calendar","calendar",  "Calendar",    "G Y"),
                 ("thresholds",  "thresholds","thresholds","Thresholds","G R"),
+                ("projects",    "projects","projects",  "Projects",    "G J"),
             ]),
             ("setup", "Setup", [
                 ("query-builder",  "query_builder",   "query_builder",   "Query Builder",  "G U"),
@@ -2828,6 +2829,19 @@ def calendar_view(name=None):
         tab="calendar", title="Calendar",
         now=_now_str(), today=dt.date.today(),
         calendars=names, active=name or "__all__", data=data)
+
+
+@app.route("/projects")
+def projects_page():
+    try:
+        projects = svc.get_projects_overview()
+    except Exception as e:
+        log.exception("Projects load failed")
+        projects = []
+    return render_template("projects.html",
+        tab="projects", title="Projects",
+        now=_now_str(), today=dt.date.today(),
+        projects=projects)
 
 
 @app.route("/board")

@@ -5,6 +5,19 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-18
+
+### Project Drift Review
+
+- **New `/projects` page** — dedicated drift review page showing all configured `["project.*"]` entries with staleness, todo stall, and board stall signals. Sorts by staleness (coolest first) by default. Nav entry in Track group (`G J`).
+- **Engine config** — `["project.NAME"]` sections in `queries.toml` (quoted dotted key, same pattern as boards/habits/thresholds). Each project declares `label` (required) plus any combination of `todo_project`, `tag_filters`, `board`, and `notes_path`. `get_projects()` in `ptos.py` reads the registry.
+- **Service layer** — `get_projects_overview()` in `ptos_service.py` computes per-project signals: staleness (last-touched date across records/todos/notes/journal), todo stall (added vs completed this month), board stall (oldest card age per column), record count, note/journal references via `[[label]]` bracket scan, and drift status (`ok`/`stale`/`stalled`).
+- **Heat tiers** — `hot` (>30d stale), `warm` (7-30d), `cool` (<7d) following the same convention as the Due page.
+- **Drift logic** — `stalled`: >60d stale AND open todos exist; `stale`: overdue >0 OR >30d stale; `ok`: active and on-track.
+- **Link-out design** — each project row links to the most relevant existing page (board, filtered todo, notes, or browse) rather than rebuilding detail views. Purely diagnostic.
+- **Starter config** — commented-out example project entry in `starters/starter_queries.toml`.
+- **18 tests** — `tests/test_projects.py`: config parsing, todo signals, record staleness, notes/journal bracket scan, heat tiers, drift logic, sort order, page rendering, nav entry.
+
 ## 2026-09-17
 
 ### Editable routines

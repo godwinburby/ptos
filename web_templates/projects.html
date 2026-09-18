@@ -1,0 +1,135 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .projects-header { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px; }
+  .projects-header .page-title { margin:0; }
+  .proj-count { font-size:13px;color:var(--sub); }
+  .proj-list { display:flex;flex-direction:column;gap:12px; }
+  .proj-card { background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;transition:border-color .15s; }
+  .proj-card:hover { border-color:var(--accent); }
+  .proj-card.stalled { border-left:4px solid var(--error); }
+  .proj-card.stale { border-left:4px solid var(--warn); }
+  .proj-card.ok { border-left:4px solid var(--success); }
+  .proj-top { display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px; }
+  .proj-name { font-size:16px;font-weight:700; }
+  .proj-name a { color:var(--fg);text-decoration:none; }
+  .proj-name a:hover { color:var(--accent); }
+  .proj-badge { font-size:11px;font-weight:700;padding:2px 10px;border-radius:12px;color:#fff; }
+  .proj-badge.hot { background:var(--error); }
+  .proj-badge.warm { background:var(--warn); }
+  .proj-badge.cool { background:var(--success); }
+  .proj-badge.ok { background:var(--success); }
+  .proj-badge.stale { background:var(--warn); }
+  .proj-badge.stalled { background:var(--error); }
+  .proj-stats { display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin-bottom:6px; }
+  .proj-stats span { display:flex;align-items:center;gap:4px; }
+  .proj-stall-row { font-size:12px;color:var(--warn);margin-top:4px; }
+  .proj-board-stall { display:inline-block;background:color-mix(in srgb, var(--warn) 12%, transparent);border:1px solid color-mix(in srgb, var(--warn) 30%, transparent);border-radius:6px;padding:1px 8px;font-size:11px;font-weight:600;margin-right:4px; }
+  .proj-links { display:flex;gap:6px;flex-wrap:wrap;margin-top:8px; }
+  .proj-link-btn { font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;background:var(--accent-lt);color:var(--accent);text-decoration:none;border:1px solid color-mix(in srgb, var(--accent) 25%, transparent);transition:background .12s; }
+  .proj-link-btn:hover { background:var(--accent);color:#fff; }
+  .proj-refs { font-size:12px;color:var(--sub);margin-top:6px; }
+  .proj-refs a { color:var(--accent);text-decoration:none; }
+  .proj-refs a:hover { text-decoration:underline; }
+  .proj-empty { text-align:center;padding:50px 20px;color:var(--sub);font-size:14px; }
+  .proj-empty code { background:var(--bg);padding:2px 8px;border-radius:4px;font-size:13px; }
+</style>
+
+<div class="projects-header">
+  <div class="page-title">Projects</div>
+  {% if projects %}
+  <span class="proj-count">{{ projects | length }} project(s)</span>
+  {% endif %}
+</div>
+
+{% if not projects %}
+<div class="proj-empty">
+  <p>No projects configured yet.</p>
+  <p>Add a project to <code>queries.toml</code>:</p>
+  <pre style="text-align:left;display:inline-block;background:var(--bg);padding:12px 16px;border-radius:8px;font-size:13px;margin-top:8px;">["project.jobsearch"]
+label        = "Find a Job"
+todo_project = "jobsearch"
+tag_filters  = ["project=jobsearch"]
+board        = "job_search"
+notes_path   = "Projects/Find a Job"</pre>
+</div>
+{% else %}
+
+<div class="proj-list">
+  {% for p in projects %}
+  <div class="proj-card {{ p.drift }}">
+    <div class="proj-top">
+      <span class="proj-name">
+        {% if p.link_target %}
+        <a href="{{ p.link_target }}">{{ p.label }}</a>
+        {% else %}
+        {{ p.label }}
+        {% endif %}
+      </span>
+      <span class="proj-badge {{ p.heat }}">{{ p.stale_days }}d ago</span>
+      <span class="proj-badge {{ p.drift }}">{{ p.drift }}</span>
+    </div>
+
+    <div class="proj-stats">
+      {% if p.todo_project %}
+      <span>Open: <strong>{{ p.open_todos }}</strong></span>
+      <span>Done: <strong>{{ p.done_todos }}</strong></span>
+      {% if p.overdue_todos > 0 %}
+      <span style="color:var(--error);">Overdue: <strong>{{ p.overdue_todos }}</strong></span>
+      {% endif %}
+      <span>Added/Done (month): <strong>{{ p.todo_added }}</strong>/<strong>{{ p.todo_done }}</strong></span>
+      {% if p.todo_delta > 0 %}
+      <span style="color:var(--warn);">+{{ p.todo_delta }} backlog</span>
+      {% endif %}
+      {% endif %}
+
+      {% if p.record_count > 0 %}
+      <span>Records: <strong>{{ p.record_count }}</strong></span>
+      {% endif %}
+      {% if p.notes %}
+      <span>Notes: <strong>{{ p.notes | length }}</strong></span>
+      {% endif %}
+      {% if p.journals %}
+      <span>Journal: <strong>{{ p.journals | length }}</strong></span>
+      {% endif %}
+    </div>
+
+    {% if p.board_stalls %}
+    <div class="proj-stall-row">
+      Board stalls:
+      {% for bs in p.board_stalls %}
+      <span class="proj-board-stall">{{ bs.column }}: {{ bs.oldest_days }}d</span>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if p.notes or p.journals %}
+    <div class="proj-refs">
+      {% for n in p.notes[:3] %}
+      <a href="/notes/edit/{{ n.path }}">📝 {{ n.path }}</a>
+      {% endfor %}
+      {% for j in p.journals[:2] %}
+      <a href="/journal?date={{ j.path.replace('.md','') }}">📅 {{ j.path }}</a>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="proj-links">
+      {% if p.todo_project %}
+      <a class="proj-link-btn" href="/todo?project={{ p.todo_project }}">Todos</a>
+      {% endif %}
+      {% if p.has_board %}
+      <a class="proj-link-btn" href="/board?board={{ p.name }}">Board</a>
+      {% endif %}
+      {% if p.record_count > 0 %}
+      <a class="proj-link-btn" href="/browse?where=project%3D{{ p.name }}">Records</a>
+      {% endif %}
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+{% endif %}
+
+{% endblock %}

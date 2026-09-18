@@ -193,4 +193,17 @@ value     = 5000
 direction = "max"
 time      = "this-month"
 
+# ══════════════════════════════════════════════════════════════════════════════
+# PROJECTS
+# ══════════════════════════════════════════════════════════════════════════════
+# At least one of todo_project / tag_filters / board / notes_path required.
+# label is required.
+
+# ["project.jobsearch"]
+# label        = "Find a Job"
+# todo_project = "jobsearch"
+# tag_filters  = ["project=jobsearch"]
+# board        = "job_search"
+# notes_path   = "Projects/Find a Job"
+
 
