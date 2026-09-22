@@ -1034,13 +1034,73 @@ def routines_page():
         except ValueError:
             return (1, 0, name)
     cards = dict(sorted(cards.items(), key=lambda kv: _section_sort_key(kv[0])))
+
+    def _time_to_min(ts):
+        parts = ts.split(":")
+        return int(parts[0]) * 60 + int(parts[1])
+
+    timed = [t for t in routine_todos if t.due_time]
+    timed.sort(key=lambda t: t.due_time)
+    untimed = [t for t in routine_todos if not t.due_time]
+    untimed.sort(key=lambda t: (t.priority or "Z", t.description))
+
+    _CTX_PALETTE = ["ctx-blue", "ctx-orange", "ctx-green", "ctx-purple", "ctx-teal", "ctx-rose"]
+    seen_ctxs = []
+    for t in routine_todos:
+        for c in (t.contexts or ["other"]):
+            cname = c.lstrip("@")
+            if cname not in seen_ctxs:
+                seen_ctxs.append(cname)
+    context_colors = {}
+    for i, name in enumerate(seen_ctxs):
+        context_colors[name] = _CTX_PALETTE[i % len(_CTX_PALETTE)]
+
+    now_min = _time_to_min(now_time)
+    hour_px = 60
+    block_data = []
+    first_hour = 6
+    last_hour = 23
+    if timed:
+        first_hour = max(6, _time_to_min(timed[0].due_time) // 60)
+        for i, t in enumerate(timed):
+            t_min = _time_to_min(t.due_time)
+            if i + 1 < len(timed):
+                gap = _time_to_min(timed[i + 1].due_time) - t_min
+                dur = min(max(gap, 15), 60)
+            else:
+                dur = 30
+            block_data.append({
+                "line_no": t.line_no, "description": t.description,
+                "due_time": t.due_time, "priority": t.priority or "",
+                "context": (t.contexts[0].lstrip("@") if t.contexts else "other"),
+                "color": context_colors.get(t.contexts[0].lstrip("@") if t.contexts else "other", "ctx-other"),
+                "top": (t_min - first_hour * 60), "height": dur,
+                "is_past": t_min < now_min,
+                "projects": t.projects, "contexts": t.contexts or [],
+                "due": t.due.isoformat() if t.due else "",
+                "threshold": t.threshold.isoformat() if t.threshold else "",
+                "threshold_time": t.threshold_time or "",
+                "rec": t.rec or "", "id": t.id or "",
+                "links": t.links if t.links else [],
+            })
+        last_hour = min(23, (_time_to_min(timed[-1].due_time) + 60) // 60)
+    total_height = (last_hour - first_hour + 1) * hour_px
+    now_top = now_min - first_hour * 60
+
     done_todos, _ = svc.ptos_todo.load_todos(svc.DONE_PATH)
     done_routines = [t for t in done_todos if "+routine" in t.projects]
     done_routines.sort(key=lambda t: (t.completed_date or dt.date.min, t.description), reverse=True)
     done_routines = done_routines[:20]
+
     return render_template("routines.html", tab="routines",
                            title="Routines", cards=cards, today=today,
                            now_time=now_time,
+                           timed=timed, untimed=untimed,
+                           block_data=block_data,
+                           context_colors=context_colors,
+                           first_hour=first_hour, last_hour=last_hour,
+                           hour_px=hour_px, total_height=total_height,
+                           now_top=now_top,
                            done_routines=done_routines,
                            projects=svc.get_todo_projects(),
                            contexts=svc.get_todo_contexts(),
