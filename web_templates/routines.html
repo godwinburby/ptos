@@ -107,7 +107,7 @@
   .rv-timeline {
     position:relative; display:grid; grid-template-columns:44px 1fr;
     background:var(--card); border:1px solid var(--border); border-radius:12px;
-    overflow-y:auto; max-height:75vh;
+    overflow-y:auto;
   }
   .rv-hours { position:relative; border-right:1px solid var(--border); }
   .rv-hour {
@@ -119,31 +119,34 @@
     transform:translateY(-6px); white-space:nowrap;
   }
   .rv-hour-line {
-    position:absolute; left:44px; right:0; top:0;
+    position:absolute; left:0; right:0; top:0;
     border-top:1px solid var(--border-lt);
   }
 
   .rv-blocks { position:relative; }
   .rv-block {
     position:absolute; left:6px; right:6px;
-    border-radius:8px; padding:6px 10px; cursor:pointer;
+    border-radius:6px; padding:2px 8px; cursor:pointer;
     overflow:hidden; border-left:3px solid;
     transition:opacity .3s;
   }
   .rv-block:hover { filter:brightness(0.95); }
   .rv-block.past { opacity:0.4; }
   .rv-block.past .rv-block-desc { text-decoration:line-through; }
-  .rv-block-time { font-size:10px; font-weight:700; opacity:0.7; }
+  .rv-block-head { display:flex; align-items:center; gap:4px; }
+  .rv-block-check {
+    width:12px; height:12px; border-radius:3px; cursor:pointer;
+    border:1.5px solid currentColor; opacity:0.6; transition:all .2s; flex-shrink:0;
+  }
+  .rv-block-check:hover { opacity:1; transform:scale(1.15); }
+  .rv-block-check.checked {
+    background:currentColor; opacity:0.8;
+  }
+  .rv-block-time { font-size:11px; font-weight:700; opacity:0.7; white-space:nowrap; }
   .rv-block-desc {
-    font-size:12px; font-weight:600; white-space:nowrap;
+    font-size:13px; font-weight:600; white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis;
   }
-  .rv-block-pri {
-    font-size:9px; font-weight:700; min-width:16px; height:14px;
-    line-height:14px; text-align:center; border-radius:3px;
-    margin-top:2px; display:inline-block;
-  }
-
   .ctx-blue    { background:#EEF1FB; border-color:#4F6BED; color:#1A1D2E; }
   .ctx-orange  { background:#FFF3E0; border-color:#E8803A; color:#1A1D2E; }
   .ctx-green   { background:#EBF5F0; border-color:#2E7D56; color:#1A1D2E; }
@@ -230,31 +233,31 @@
    ══════════════════════════════════════════════════════════════════════════════ #}
 <div id="view-cards">
 {% if cards %}
-  {% for context_name, todos in cards.items() %}
-  {% set total = todos|length %}
-  <div class="routine-card">
-    <div class="routine-header">
-      <div class="routine-title">{{ context_name }}</div>
-      <span class="routine-badge">{{ total }}</span>
-    </div>
-    {% for t in todos %}
-    <div class="routine-item" data-line="{{ t.line_no }}" data-time="{{ t.due_time or '' }}">
-      <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
-      <span class="routine-desc" onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
-      {% if t.due_time %}<span class="routine-time">{{ t.due_time }}</span>{% endif %}
-      {% if t.due %}
-      <span class="routine-due {% if t.due < today %}overdue{% endif %}">
-        {% if t.due < today %}overdue{% elif t.due == today %}today{% else %}{{ t.due.strftime('%d %b') }}{% endif %}
-      </span>
+    {% for context_name, todos in cards.items() %}
+    {% set total = todos|length %}
+    <div class="routine-card">
+      <div class="routine-header">
+        <div class="routine-title">{{ context_name }}</div>
+        <span class="routine-badge">{{ total }}</span>
+      </div>
+      {% for t in todos %}
+      <div class="routine-item" data-line="{{ t.line_no }}" data-time="{{ t.due_time or '' }}">
+        <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
+        <span class="routine-desc" onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
+        {% if t.due_time %}<span class="routine-time">{{ t.due_time }}</span>{% endif %}
+        {% if t.due %}
+        <span class="routine-due {% if t.due < today %}overdue{% endif %}">
+          {% if t.due < today %}overdue{% elif t.due == today %}today{% else %}{{ t.due.strftime('%d %b') }}{% endif %}
+        </span>
+        {% endif %}
+        {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
+      </div>
+      {% endfor %}
+      {% if context_name != 'other' %}
+      <button class="routine-add-btn" onclick="openAddRoutine('{{ context_name }}')">+ Add</button>
       {% endif %}
-      {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
     </div>
     {% endfor %}
-    {% if context_name != 'other' %}
-    <button class="routine-add-btn" onclick="openAddRoutine('{{ context_name }}')">+ Add</button>
-    {% endif %}
-  </div>
-  {% endfor %}
 {% else %}
 <div class="routine-empty">
   <p>No routine todos found.</p>
@@ -262,6 +265,20 @@
   <button class="routine-add-btn" onclick="openAddRoutine('morning')" style="margin:12px auto; max-width:200px;">+ New Routine</button>
   <p style="margin-top:8px;font-size:12px;color:var(--sub);">Default: +routine @morning, due today, repeats daily</p>
 </div>
+{% endif %}
+
+{% if done_routines %}
+<details class="routine-done">
+  <summary>Done ({{ done_routines|length }})</summary>
+  {% for t in done_routines %}
+  <div class="routine-item completed" data-line="{{ t.line_no }}">
+    <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
+    <span class="routine-desc">{{ t.description }}</span>
+    {% if t.completed_date %}<span class="routine-due">{{ t.completed_date.strftime('%d %b') }}</span>{% endif %}
+    {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
+  </div>
+  {% endfor %}
+</details>
 {% endif %}
 </div>
 
@@ -271,25 +288,26 @@
 <div id="view-day" style="display:none">
 {% if block_data %}
   <div class="rv-timeline" id="rv-timeline">
-    <div class="rv-hours">
+    <div class="rv-hours" style="height:{{ total_height }}px">
       {% for h in range(first_hour, last_hour + 1) %}
       <div class="rv-hour" style="top:{{ (h - first_hour) * hour_px }}px">
         <span class="rv-hour-label">{{ '%d:00'|format(h) }}</span>
       </div>
       {% endfor %}
+    </div>
+    <div class="rv-blocks" style="height:{{ total_height }}px">
       {% for h in range(first_hour, last_hour + 1) %}
       <div class="rv-hour-line" style="top:{{ (h - first_hour) * hour_px }}px"></div>
       {% endfor %}
-    </div>
-    <div class="rv-blocks" style="height:{{ total_height }}px">
       {% for b in block_data %}
       <div class="rv-block {{ b.color }}{% if b.is_past %} past{% endif %}"
            style="top:{{ b.top }}px; height:{{ b.height }}px"
-           data-time="{{ b.due_time }}" data-line="{{ b.line_no }}"
-           onclick="openEdit({{ b.line_no }}, '{{ b.description|e }}', '{{ b.priority }}', '{{ b.due }}', '{{ b.due_time }}', '{{ b.threshold }}', '{{ b.threshold_time }}', '{{ b.projects|join(' ') }}', '{{ b.contexts|join(' ') }}', '{{ b.rec }}', '{{ b.id }}', '{{ b.links|join(',') }}')">
-        <div class="rv-block-time">{{ b.due_time }}</div>
-        <div class="rv-block-desc">{{ b.description }}</div>
-        {% if b.priority %}<span class="rv-block-pri todo-pri {{ b.priority }}">{{ b.priority }}</span>{% endif %}
+           data-time="{{ b.due_time }}" data-line="{{ b.line_no }}">
+        <div class="rv-block-head">
+          <div class="rv-block-check" onclick="event.stopPropagation();completeTodo({{ b.line_no }}, this)"></div>
+          <span class="rv-block-time">{{ b.due_time }}</span>
+          <span class="rv-block-desc" onclick="event.stopPropagation();openEdit({{ b.line_no }}, '{{ b.description|e }}', '{{ b.priority }}', '{{ b.due }}', '{{ b.due_time }}', '{{ b.threshold }}', '{{ b.threshold_time }}', '{{ b.projects|join(' ') }}', '{{ b.contexts|join(' ') }}', '{{ b.rec }}', '{{ b.id }}', '{{ b.links|join(',') }}')">{{ b.description }}</span>
+        </div>
       </div>
       {% endfor %}
       <div class="rv-now" id="rv-now" style="top:{{ now_top }}px">
@@ -315,20 +333,6 @@
 </div>
 {% endif %}
 </div>
-
-{% if done_routines %}
-<details class="routine-done">
-  <summary>Done ({{ done_routines|length }})</summary>
-  {% for t in done_routines %}
-  <div class="routine-item completed" data-line="{{ t.line_no }}">
-    <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
-    <span class="routine-desc">{{ t.description }}</span>
-    {% if t.completed_date %}<span class="routine-due">{{ t.completed_date.strftime('%d %b') }}</span>{% endif %}
-    {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
-  </div>
-  {% endfor %}
-</details>
-{% endif %}
 
 {% include '_todo_modal.html' %}
 

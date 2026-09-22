@@ -1018,11 +1018,13 @@ def routines_page():
     all_open = buckets.get("overdue", []) + buckets.get("today", [])
     routine_todos = [t for t in all_open if "+routine" in t.projects]
     cards = {}
+    _VALID_CARDS = {"morning", "afternoon", "evening", "night"}
     for t in routine_todos:
         contexts = t.contexts if t.contexts else ["other"]
         for ctx in contexts:
             key = ctx.lstrip("@")
             cards.setdefault(key, []).append(t)
+    cards = {k: v for k, v in cards.items() if k in _VALID_CARDS or k == "other"}
     for k in cards:
         cards[k].sort(key=lambda t: (t.due_time is None, t.due_time or "99:99", t.due or today, t.priority or "Z", t.description))
     _SECTION_ORDER = ["morning", "afternoon", "evening", "night"]
@@ -1056,17 +1058,16 @@ def routines_page():
         context_colors[name] = _CTX_PALETTE[i % len(_CTX_PALETTE)]
 
     now_min = _time_to_min(now_time)
-    hour_px = 60
+    hour_px = 80
     block_data = []
-    first_hour = 6
+    first_hour = 0
     last_hour = 23
     if timed:
-        first_hour = max(6, _time_to_min(timed[0].due_time) // 60)
         for i, t in enumerate(timed):
             t_min = _time_to_min(t.due_time)
             if i + 1 < len(timed):
                 gap = _time_to_min(timed[i + 1].due_time) - t_min
-                dur = min(max(gap, 15), 60)
+                dur = min(gap, 60)
             else:
                 dur = 30
             block_data.append({
@@ -1074,7 +1075,7 @@ def routines_page():
                 "due_time": t.due_time, "priority": t.priority or "",
                 "context": (t.contexts[0].lstrip("@") if t.contexts else "other"),
                 "color": context_colors.get(t.contexts[0].lstrip("@") if t.contexts else "other", "ctx-other"),
-                "top": (t_min - first_hour * 60), "height": dur,
+                "top": int((t_min - first_hour * 60) * hour_px / 60), "height": max(int(dur * hour_px / 60), 18),
                 "is_past": t_min < now_min,
                 "projects": t.projects, "contexts": t.contexts or [],
                 "due": t.due.isoformat() if t.due else "",
@@ -1083,9 +1084,8 @@ def routines_page():
                 "rec": t.rec or "", "id": t.id or "",
                 "links": t.links if t.links else [],
             })
-        last_hour = min(23, (_time_to_min(timed[-1].due_time) + 60) // 60)
     total_height = (last_hour - first_hour + 1) * hour_px
-    now_top = now_min - first_hour * 60
+    now_top = int((now_min - first_hour * 60) * hour_px / 60)
 
     done_todos, _ = svc.ptos_todo.load_todos(svc.DONE_PATH)
     done_routines = [t for t in done_todos if "+routine" in t.projects]
