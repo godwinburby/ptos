@@ -2844,6 +2844,135 @@ def projects_page():
         projects=projects)
 
 
+@app.route("/projects/new", methods=["GET", "POST"])
+def project_new_page():
+    boards = []
+    try:
+        boards = list(svc.get_boards().keys())
+    except Exception:
+        pass
+    if request.method == "GET":
+        label = request.args.get("label", "")
+        key = svc._name_to_key(label) if label else ""
+        return render_template("project_form.html",
+            tab="projects", title="New Project",
+            mode="new", label=label, key=key,
+            todo_project=key, tag_filters=f"project={key}" if key else "",
+            board="", notes_path=f"Projects/{label}.md" if label else "",
+            boards=boards, error=None)
+    label = request.form.get("label", "").strip()
+    key = request.form.get("config_key", "").strip()
+    todo_project = request.form.get("todo_project", "").strip()
+    tag_raw = request.form.get("tag_filters", "").strip()
+    board = request.form.get("board", "").strip()
+    notes_path = request.form.get("notes_path", "").strip()
+    if not label:
+        return render_template("project_form.html",
+            tab="projects", title="New Project",
+            mode="new", label=label, key=key,
+            todo_project=todo_project, tag_filters=tag_raw,
+            board=board, notes_path=notes_path,
+            boards=boards, error="Label is required")
+    if not key:
+        key = svc._name_to_key(label)
+    tag_filters = [t.strip() for t in tag_raw.split(",") if t.strip()] if tag_raw else []
+    cfg = {"label": label, "todo_project": todo_project,
+           "tag_filters": tag_filters, "board": board, "notes_path": notes_path}
+    try:
+        svc.save_project(key, cfg)
+    except PTOSError as e:
+        return render_template("project_form.html",
+            tab="projects", title="New Project",
+            mode="new", label=label, key=key,
+            todo_project=todo_project, tag_filters=tag_raw,
+            board=board, notes_path=notes_path,
+            boards=boards, error=str(e))
+    note_path = notes_path.rstrip(".md") if notes_path else ""
+    if note_path:
+        try:
+            ptos.create_file(os.path.dirname(note_path) or "",
+                os.path.basename(note_path),
+                f"# {label}\n\n## Goal\n\n\n## Steps\n- [ ] \n\n## Notes\n\n")
+        except Exception:
+            pass
+    return redirect(f"/notes/edit/{note_path}") if note_path else redirect("/projects")
+
+
+@app.route("/projects/<name>/edit", methods=["GET", "POST"])
+def project_edit_page(name):
+    try:
+        projects = ptos.get_projects()
+    except Exception:
+        projects = {}
+    cfg = projects.get(name)
+    if not cfg:
+        raise PTOSError(f"Project '{name}' not found")
+    boards = []
+    try:
+        boards = list(svc.get_boards().keys())
+    except Exception:
+        pass
+    if request.method == "GET":
+        return render_template("project_form.html",
+            tab="projects", title=f"Edit: {cfg.get('label', name)}",
+            mode="edit", name=name,
+            label=cfg.get("label", ""), key=name,
+            todo_project=cfg.get("todo_project", ""),
+            tag_filters=", ".join(cfg.get("tag_filters", [])),
+            board=cfg.get("board", ""),
+            notes_path=cfg.get("notes_path", ""),
+            boards=boards, error=None)
+    label = request.form.get("label", "").strip()
+    todo_project = request.form.get("todo_project", "").strip()
+    tag_raw = request.form.get("tag_filters", "").strip()
+    board = request.form.get("board", "").strip()
+    notes_path = request.form.get("notes_path", "").strip()
+    if not label:
+        return render_template("project_form.html",
+            tab="projects", title=f"Edit: {name}",
+            mode="edit", name=name,
+            label=label, key=name,
+            todo_project=todo_project, tag_filters=tag_raw,
+            board=board, notes_path=notes_path,
+            boards=boards, error="Label is required")
+    tag_filters = [t.strip() for t in tag_raw.split(",") if t.strip()] if tag_raw else []
+    new_cfg = {"label": label, "todo_project": todo_project,
+               "tag_filters": tag_filters, "board": board, "notes_path": notes_path}
+    try:
+        svc.save_project(name, new_cfg)
+    except PTOSError as e:
+        return render_template("project_form.html",
+            tab="projects", title=f"Edit: {name}",
+            mode="edit", name=name,
+            label=label, key=name,
+            todo_project=todo_project, tag_filters=tag_raw,
+            board=board, notes_path=notes_path,
+            boards=boards, error=str(e))
+    return redirect("/projects")
+
+
+@app.route("/projects/<name>/delete", methods=["GET", "POST"])
+def project_delete_page(name):
+    try:
+        projects = ptos.get_projects()
+    except Exception:
+        projects = {}
+    cfg = projects.get(name)
+    if not cfg:
+        raise PTOSError(f"Project '{name}' not found")
+    if request.method == "GET":
+        return render_template("project_delete.html",
+            tab="projects", title=f"Delete: {cfg.get('label', name)}",
+            name=name, label=cfg.get("label", name), error=None)
+    try:
+        svc.delete_project(name)
+    except PTOSError as e:
+        return render_template("project_delete.html",
+            tab="projects", title=f"Delete: {cfg.get('label', name)}",
+            name=name, label=cfg.get("label", name), error=str(e))
+    return redirect("/projects")
+
+
 @app.route("/board")
 def board():
     try:

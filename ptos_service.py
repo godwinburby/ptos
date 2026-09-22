@@ -2640,6 +2640,69 @@ def get_projects_overview():
     return results
 
 
+def _name_to_key(label):
+    """Convert a project label to a config key: 'Find a Job' → 'find_a_job'."""
+    s = label.lower().strip()
+    s = re.sub(r'[^a-z0-9]+', '_', s)
+    s = s.strip('_')
+    return s
+
+
+def save_project(name, cfg):
+    """Write/update a single ["project.NAME"] entry in queries.toml.
+    Atomic write. Validates label is present."""
+    import tomli_w
+    import tomllib
+    label = cfg.get("label", "").strip()
+    if not label:
+        raise PTOSError("Project label is required")
+    name = name.strip()
+    if not name or not re.match(r'^[a-z][a-z0-9_]*$', name):
+        raise PTOSError("Config key: lowercase letters, digits, underscores only")
+    existing = {}
+    if os.path.exists(ptos.QUERIES_PATH):
+        try:
+            with open(ptos.QUERIES_PATH, "rb") as f:
+                existing = tomllib.load(f)
+        except Exception:
+            existing = {}
+    data = dict(existing)
+    entry = {"label": label}
+    for key in ("todo_project", "board", "notes_path"):
+        val = cfg.get(key, "").strip() if isinstance(cfg.get(key), str) else ""
+        if val:
+            entry[key] = val
+    tag_filters = cfg.get("tag_filters", [])
+    if tag_filters and isinstance(tag_filters, list):
+        entry["tag_filters"] = tag_filters
+    data[f"project.{name}"] = entry
+    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+        tomli_w.dump(data, w.stream)
+    return {"ok": True, "name": name}
+
+
+def delete_project(name):
+    """Remove a ["project.NAME"] entry from queries.toml. Atomic write."""
+    import tomli_w
+    import tomllib
+    name = name.strip()
+    key = f"project.{name}"
+    existing = {}
+    if os.path.exists(ptos.QUERIES_PATH):
+        try:
+            with open(ptos.QUERIES_PATH, "rb") as f:
+                existing = tomllib.load(f)
+        except Exception:
+            existing = {}
+    if key not in existing or not isinstance(existing[key], dict):
+        raise PTOSError(f"Project '{name}' not found")
+    data = dict(existing)
+    del data[key]
+    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+        tomli_w.dump(data, w.stream)
+    return {"ok": True, "name": name}
+
+
 def _iso_date(value, default=None):
     """Resolve a date arg (today/yesterday/YYYY-MM-DD) to an ISO date string.
     Raise PTOSError instead of SystemExit so web and CLI both handle it."""
@@ -3944,7 +4007,7 @@ def _mark_converted(filepath, old_line, lineno, target_type):
 # Query TOML management (full write)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None, raw_calendars=None, raw_thresholds=None):
+def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None, raw_calendars=None, raw_thresholds=None, raw_projects=None):
     """Build and write queries.toml using tomli-w with atomic write.
 
     Merge-based: reads existing TOML first. Sections where the parameter is None
@@ -3961,6 +4024,7 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
     raw_habits:     {name: {filters, weeks, toggleable}}  (optional, None = preserve existing)
     raw_calendars:  {name: {filters, time_window}}  (optional, None = preserve existing)
     raw_thresholds: {name: {metric, agg, sum_field, value, direction, time, unit}}  (optional, None = preserve existing)
+    raw_projects:   {name: {label, todo_project, tag_filters, board, notes_path}}  (optional, None = preserve existing)
 
     Raises:
         PTOSError on invalid names or write failure.
@@ -4275,6 +4339,33 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         # preserve existing threshold configs
         for k, v in existing.items():
             if k.startswith("threshold.") and isinstance(v, dict):
+                data[k] = v
+
+    # ── Projects ─────────────────────────────────────────────────────────────
+    if raw_projects is not None:
+        for name, proj_cfg in raw_projects.items():
+            bare = _clean_bare_name(name)
+            label = proj_cfg.get("label", "").strip()
+            if not label:
+                raise PTOSError(f"Project '{name}' must have a label")
+            entry = {"label": label}
+            for key in ("todo_project", "board", "notes_path"):
+                val = proj_cfg.get(key, "").strip() if isinstance(proj_cfg.get(key), str) else ""
+                if val:
+                    entry[key] = val
+            tag_filters = proj_cfg.get("tag_filters", [])
+            if tag_filters and isinstance(tag_filters, list):
+                entry["tag_filters"] = tag_filters
+            existing_proj = existing.get(f"project.{bare}", {})
+            if isinstance(existing_proj, dict):
+                for ek, ev in existing_proj.items():
+                    if ek not in entry:
+                        entry[ek] = ev
+            data[f"project.{bare}"] = entry
+    else:
+        # preserve existing project configs
+        for k, v in existing.items():
+            if k.startswith("project.") and isinstance(v, dict):
                 data[k] = v
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
