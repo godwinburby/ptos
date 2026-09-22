@@ -3408,6 +3408,54 @@ def query_builder_delete():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/api/query-builder/<kind>", methods=["POST"])
+def query_builder_item(kind):
+    """Scoped save/delete for a single query-builder section entry.
+
+    POST body: {name, cfg?, action: "save"|"delete"}
+    kind: query | metric | dashboard | alias | board | habit | calendar | threshold | due | project
+    """
+    _SAVE = {
+        "query": svc.save_query_entry,
+        "metric": svc.save_metric,
+        "dashboard": svc.save_dashboard,
+        "alias": svc.save_alias,
+        "board": svc.save_board,
+        "habit": svc.save_habit,
+        "calendar": svc.save_calendar,
+        "threshold": svc.save_threshold,
+        "due": svc.save_due,
+        "project": svc.save_project,
+    }
+    _DELETE = {
+        "query": svc.delete_query_entry,
+        "metric": svc.delete_metric,
+        "dashboard": svc.delete_dashboard,
+        "alias": svc.delete_alias,
+        "board": svc.delete_board,
+        "habit": svc.delete_habit,
+        "calendar": svc.delete_calendar,
+        "threshold": svc.delete_threshold,
+        "due": svc.delete_due,
+        "project": svc.delete_project,
+    }
+    if kind not in _SAVE:
+        return jsonify(ok=False, error=f"Unknown kind '{kind}'")
+    data = request.get_json(silent=True) or {}
+    name = data.get("name", "").strip()
+    if not name:
+        return jsonify(ok=False, error="No name provided")
+    try:
+        action = data.get("action", "save")
+        if action == "delete":
+            _DELETE[kind](name)
+        else:
+            _SAVE[kind](name, data.get("cfg", {}))
+        return jsonify(ok=True)
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Queries
 # ══════════════════════════════════════════════════════════════════════════════
