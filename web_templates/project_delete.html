@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .pd-box { max-width:480px;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:24px; }
+  .pd-title { font-size:18px;font-weight:700;margin:0 0 12px; }
+  .pd-name { color:var(--accent); }
+  .pd-warn { background:var(--warn-lt,#FEF3E7);border:1px solid color-mix(in srgb, var(--warn) 30%, transparent);border-radius:8px;padding:12px 14px;font-size:13px;color:var(--warn);margin:12px 0; }
+  .pd-detail { font-size:13px;color:var(--sub);margin:8px 0; }
+  .pd-error { background:var(--error-lt);color:var(--error);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px; }
+  .pd-actions { display:flex;gap:10px;margin-top:20px; }
+  .pd-btn { padding:8px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:background .12s; }
+  .pd-btn-danger { background:var(--error);color:#fff; }
+  .pd-btn-danger:hover { opacity:.85; }
+  .pd-btn-cancel { background:var(--bg);color:var(--sub);border:1px solid var(--border);text-decoration:none;display:inline-flex;align-items:center; }
+  .pd-btn-cancel:hover { color:var(--text); }
+</style>
+
+<div class="pd-box">
+  <div class="pd-title">Delete project <span class="pd-name">{{ label }}</span>?</div>
+
+  {% if error %}
+  <div class="pd-error">{{ error }}</div>
+  {% endif %}
+
+  <div class="pd-warn">
+    This will remove the <code>["project.{{ name }}"]</code> config entry from queries.toml.
+  </div>
+  <div class="pd-detail">Your todos, records, and notes are <strong>not</strong> deleted.</div>
+
+  <form method="POST" style="display:inline;">
+    <div class="pd-actions">
+      <button type="submit" class="pd-btn pd-btn-danger">Delete project</button>
+      <a href="/projects" class="pd-btn pd-btn-cancel">Cancel</a>
+    </div>
+  </form>
+</div>
+
+{% endblock %}

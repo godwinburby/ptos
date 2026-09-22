@@ -81,18 +81,13 @@
   {% if projects %}
   <span class="proj-count">{{ projects | length }} project(s)</span>
   {% endif %}
+  <a href="/projects/new" style="margin-left:auto;font-size:13px;font-weight:600;padding:5px 14px;border-radius:8px;background:var(--accent);color:#fff;text-decoration:none;">+ New Project</a>
 </div>
 
 {% if not projects %}
 <div class="proj-empty">
   <p>No projects configured yet.</p>
-  <p>Add a project to <code>queries.toml</code>:</p>
-  <pre style="text-align:left;display:inline-block;background:var(--bg);padding:12px 16px;border-radius:8px;font-size:13px;margin-top:8px;">["project.jobsearch"]
-label        = "Find a Job"
-todo_project = "jobsearch"
-tag_filters  = ["project=jobsearch"]
-board        = "job_search"
-notes_path   = "Projects/Find a Job"</pre>
+  <a href="/projects/new" style="color:var(--accent);font-weight:600;">Create your first project</a> or add one manually to <code>queries.toml</code>.
 </div>
 {% else %}
 
@@ -109,6 +104,10 @@ notes_path   = "Projects/Find a Job"</pre>
       </span>
       <span class="proj-badge {{ p.heat }}">{{ p.stale_days }}d ago</span>
       <span class="proj-badge {{ p.drift }}">{{ p.drift }}</span>
+      <span style="margin-left:auto;display:flex;gap:4px;">
+        <a href="/projects/{{ p.name }}/edit" style="font-size:12px;padding:3px 8px;border-radius:6px;background:var(--bg);color:var(--sub);text-decoration:none;border:1px solid var(--border);" title="Edit">✎</a>
+        <a href="/projects/{{ p.name }}/delete" style="font-size:12px;padding:3px 8px;border-radius:6px;background:var(--bg);color:var(--error);text-decoration:none;border:1px solid var(--border);" title="Delete">✕</a>
+      </span>
     </div>
 
     <div class="proj-stats">

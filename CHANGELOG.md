@@ -7,6 +7,17 @@ Format: `[version or date] — description`
 
 ## 2026-09-22
 
+### Project CRUD
+
+- **Create** — `GET/POST /projects/new` form with label, config key (auto-derived), todo project, record filters, board dropdown, notes path. Creates `["project.*"]` config entry and project note file with starter template (Goal/Steps/Notes). Redirects to the notes editor.
+- **Edit** — `GET/POST /projects/<name>/edit` form pre-filled with existing config. Config key is immutable (identity). Updates the `["project.*"]` entry.
+- **Delete** — `GET/POST /projects/<name>/delete` confirmation page. Removes config entry only — notes and todos are preserved.
+- **Service** — `save_project(name, cfg)` and `delete_project(name)` in `ptos_service.py`. Atomic TOML write with merge-based preservation of non-project sections. `_name_to_key(label)` converts labels to config keys (`Find a Job` → `find_a_job`).
+- **save_queries_full** — added `raw_projects` parameter (None = preserve existing, dict = rebuild). Fixes gap where project sections could be accidentally lost during Query Builder saves.
+- **Projects page** — "+ New Project" button in header, ✎ Edit and ✕ Delete buttons per project card.
+- **Templates** — `project_form.html` (shared create/edit with live key derivation), `project_delete.html` (confirmation).
+- **30 new tests** — `TestProjectNameDerivation` (5), `TestProjectCRUD` (8), `TestProjectWebCRUD` (12). Total: 48 project tests.
+
 ### Project Drift Review — inline data
 
 - **Collapsible detail sections** — each project card now shows the actual items inline: Todos (with priority badge, due date, project/context chips), Done todos (strikethrough), Records (date, type, fields, note), Notes (link + bracket snippet), and Journal entries (link + snippet). All sections collapsed by default for scan-down triage.

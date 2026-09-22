@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .pf-form { max-width:520px; }
+  .pf-field { margin-bottom:14px; }
+  .pf-field label { display:block;font-size:13px;font-weight:600;color:var(--text);margin-bottom:4px; }
+  .pf-field input, .pf-field select { width:100%;padding:8px 10px;border:1.5px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:14px;box-sizing:border-box; }
+  .pf-field input:focus, .pf-field select:focus { outline:none;border-color:var(--accent); }
+  .pf-field .hint { font-size:12px;color:var(--sub);margin-top:3px; }
+  .pf-actions { display:flex;gap:10px;margin-top:20px; }
+  .pf-btn { padding:8px 20px;border-radius:8px;font-size:14px;font-weight:600;cursor:pointer;border:none;transition:background .12s; }
+  .pf-btn-primary { background:var(--accent);color:#fff; }
+  .pf-btn-primary:hover { opacity:.85; }
+  .pf-btn-cancel { background:var(--bg);color:var(--sub);border:1px solid var(--border);text-decoration:none;display:inline-flex;align-items:center; }
+  .pf-btn-cancel:hover { color:var(--text); }
+  .pf-error { background:var(--error-lt);color:var(--error);padding:10px 14px;border-radius:8px;font-size:13px;margin-bottom:14px; }
+  .pf-divider { border:none;border-top:1px solid var(--border);margin:18px 0; }
+  .pf-section-label { font-size:12px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px; }
+</style>
+
+<div class="pf-form">
+  <h2 style="margin:0 0 16px;">{{ "New Project" if mode == "new" else "Edit: " + label }}</h2>
+
+  {% if error %}
+  <div class="pf-error">{{ error }}</div>
+  {% endif %}
+
+  <form method="POST">
+    <div class="pf-field">
+      <label>Label</label>
+      <input type="text" name="label" value="{{ label }}" placeholder="Find a Job" required
+             oninput="onLabelChange(this.value)">
+      <div class="hint">Display name for the project</div>
+    </div>
+
+    <div class="pf-field">
+      <label>Config key</label>
+      <input type="text" name="config_key" value="{{ key }}" placeholder="find_a_job"
+             pattern="[a-z][a-z0-9_]*" {{ 'readonly' if mode == 'edit' }}>
+      <div class="hint">Lowercase, underscores. {{ "Cannot be changed after creation." if mode == "edit" else "Auto-derived from label." }}</div>
+    </div>
+
+    <hr class="pf-divider">
+    <div class="pf-section-label">Data Sources</div>
+
+    <div class="pf-field">
+      <label>Todo project</label>
+      <input type="text" name="todo_project" value="{{ todo_project }}" placeholder="find_a_job">
+      <div class="hint">Matches <code>+{{ todo_project or "project_name" }}</code> todos</div>
+    </div>
+
+    <div class="pf-field">
+      <label>Record filters</label>
+      <input type="text" name="tag_filters" value="{{ tag_filters }}" placeholder="project=find_a_job">
+      <div class="hint">Comma-separated <code>field=value</code> filters for records</div>
+    </div>
+
+    <div class="pf-field">
+      <label>Board</label>
+      <select name="board">
+        <option value="">None</option>
+        {% for b in boards %}
+        <option value="{{ b }}" {% if board == b %}selected{% endif %}>{{ b }}</option>
+        {% endfor %}
+      </select>
+      <div class="hint">Optional board for stall detection</div>
+    </div>
+
+    <div class="pf-field">
+      <label>Notes path</label>
+      <input type="text" name="notes_path" value="{{ notes_path }}" placeholder="Projects/Find a Job">
+      <div class="hint">Path under <code>notes/</code> for project planning</div>
+    </div>
+
+    <div class="pf-actions">
+      <button type="submit" class="pf-btn pf-btn-primary">
+        {{ "Create" if mode == "new" else "Update" }}
+      </button>
+      <a href="/projects" class="pf-btn pf-btn-cancel">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+function onLabelChange(val) {
+  var keyInput = document.querySelector('input[name="config_key"]');
+  if (keyInput.readOnly) return;
+  var key = val.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+  keyInput.value = key;
+  var tpInput = document.querySelector('input[name="todo_project"]');
+  if (tpInput) tpInput.placeholder = key || 'project_name';
+  var tfInput = document.querySelector('input[name="tag_filters"]');
+  if (tfInput) tfInput.placeholder = 'project=' + (key || 'project_name');
+}
+</script>
+
+{% endblock %}

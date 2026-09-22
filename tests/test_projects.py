@@ -663,3 +663,263 @@ class TestProjectsInlineData:
         resp = client.get("/projects")
         html = resp.get_data(as_text=True)
         assert "<details" not in html
+
+
+class TestProjectNameDerivation:
+    def test_simple(self):
+        assert svc._name_to_key("Find a Job") == "find_a_job"
+
+    def test_already_key(self):
+        assert svc._name_to_key("find_a_job") == "find_a_job"
+
+    def test_special_chars(self):
+        assert svc._name_to_key("Project: Foo & Bar!") == "project_foo_bar"
+
+    def test_multiple_spaces(self):
+        assert svc._name_to_key("Find   a   Job") == "find_a_job"
+
+    def test_empty(self):
+        assert svc._name_to_key("") == ""
+
+
+class TestProjectCRUD:
+    def test_create_project(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        result = svc.save_project("myproj", {"label": "My Project"})
+        assert result["ok"]
+        projects = ptos.get_projects()
+        assert "myproj" in projects
+        assert projects["myproj"]["label"] == "My Project"
+
+    def test_create_with_all_fields(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        result = svc.save_project("jobsearch", {
+            "label": "Find a Job",
+            "todo_project": "jobsearch",
+            "tag_filters": ["project=jobsearch"],
+            "board": "job_board",
+            "notes_path": "Projects/Job Search",
+        })
+        assert result["ok"]
+        projects = ptos.get_projects()
+        assert projects["jobsearch"]["label"] == "Find a Job"
+        assert projects["jobsearch"]["todo_project"] == "jobsearch"
+        assert projects["jobsearch"]["tag_filters"] == ["project=jobsearch"]
+        assert projects["jobsearch"]["board"] == "job_board"
+        assert projects["jobsearch"]["notes_path"] == "Projects/Job Search"
+
+    def test_create_no_label_fails(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        with pytest.raises(Exception):
+            svc.save_project("myproj", {"label": ""})
+
+    def test_create_invalid_key_fails(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        with pytest.raises(Exception):
+            svc.save_project("INVALID KEY!", {"label": "Test"})
+
+    def test_update_project(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        svc.save_project("myproj", {"label": "Old Label"})
+        svc.save_project("myproj", {"label": "New Label", "board": "my_board"})
+        projects = ptos.get_projects()
+        assert projects["myproj"]["label"] == "New Label"
+        assert projects["myproj"]["board"] == "my_board"
+
+    def test_delete_project(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        svc.save_project("myproj", {"label": "To Delete"})
+        assert "myproj" in ptos.get_projects()
+        result = svc.delete_project("myproj")
+        assert result["ok"]
+        assert "myproj" not in ptos.get_projects()
+
+    def test_delete_nonexistent_fails(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        with pytest.raises(Exception):
+            svc.delete_project("no_such_project")
+
+    def test_preserves_other_projects(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        svc.save_project("proj1", {"label": "Project 1"})
+        svc.save_project("proj2", {"label": "Project 2"})
+        svc.delete_project("proj1")
+        projects = ptos.get_projects()
+        assert "proj1" not in projects
+        assert "proj2" in projects
+        assert projects["proj2"]["label"] == "Project 2"
+
+    def test_preserves_non_project_sections(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", '''
+            [my_query]
+            where = "type=expense"
+        ''')
+        svc.save_project("myproj", {"label": "Test"})
+        queries = ptos.get_queries()
+        assert "my_query" in queries
+        assert queries["my_query"]["where"] == "type=expense"
+        assert "project.myproj" in queries
+
+
+class TestProjectWebCRUD:
+    def test_new_form_renders(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        client = app.test_client()
+        resp = client.get("/projects/new")
+        assert resp.status_code == 200
+        html = resp.get_data(as_text=True)
+        assert "New Project" in html
+        assert "Label" in html
+
+    def test_create_via_post(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_queries(tmp_path / "queries.toml", "")
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        client = app.test_client()
+        resp = client.post("/projects/new", data={
+            "label": "Test Project",
+            "config_key": "test_project",
+            "todo_project": "test_project",
+            "tag_filters": "project=test_project",
+            "board": "",
+            "notes_path": "",
+        }, follow_redirects=False)
+        assert resp.status_code in (302, 200)
+        projects = ptos.get_projects()
+        assert "test_project" in projects
+        assert projects["test_project"]["label"] == "Test Project"
+
+    def test_edit_form_renders(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_queries(tmp_path / "queries.toml", "")
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        svc.save_project("myproj", {"label": "My Project"})
+        client = app.test_client()
+        resp = client.get("/projects/myproj/edit")
+        assert resp.status_code == 200
+        html = resp.get_data(as_text=True)
+        assert "My Project" in html
+
+    def test_edit_via_post(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_queries(tmp_path / "queries.toml", "")
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        svc.save_project("myproj", {"label": "Old"})
+        client = app.test_client()
+        resp = client.post("/projects/myproj/edit", data={
+            "label": "Updated",
+            "todo_project": "myproj",
+            "tag_filters": "",
+            "board": "",
+            "notes_path": "",
+        }, follow_redirects=False)
+        assert resp.status_code in (302, 200)
+        projects = ptos.get_projects()
+        assert projects["myproj"]["label"] == "Updated"
+
+    def test_delete_page_renders(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_queries(tmp_path / "queries.toml", "")
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        svc.save_project("myproj", {"label": "To Delete"})
+        client = app.test_client()
+        resp = client.get("/projects/myproj/delete")
+        assert resp.status_code == 200
+        html = resp.get_data(as_text=True)
+        assert "To Delete" in html
+
+    def test_delete_via_post(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_queries(tmp_path / "queries.toml", "")
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        svc.save_project("myproj", {"label": "To Delete"})
+        client = app.test_client()
+        resp = client.post("/projects/myproj/delete", follow_redirects=False)
+        assert resp.status_code in (302, 200)
+        assert "myproj" not in ptos.get_projects()
+
+    def test_projects_page_has_new_button(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_queries(tmp_path / "queries.toml", "")
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "New Project" in html
+
+    def test_projects_page_has_edit_delete(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_queries(tmp_path / "queries.toml", "")
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        svc.save_project("myproj", {"label": "Test"})
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "/projects/myproj/edit" in html
+        assert "/projects/myproj/delete" in html
