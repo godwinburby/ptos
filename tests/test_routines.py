@@ -295,3 +295,159 @@ class TestRoutinesTimeView:
         html = resp.get_data(as_text=True)
         assert "_insertNowLines" in html
         assert "routine-now" in html
+
+
+class TestRoutinesDayView:
+    def test_view_toggle_in_html(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert 'id="view-cards"' in html
+        assert 'id="view-day"' in html
+
+    def test_view_toggle_buttons(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert 'id="rv-cards"' in html
+        assert 'id="rv-day"' in html
+        assert "Cards" in html and "Day" in html
+
+    def test_timed_blocks_in_timeline(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
+            f"(B) {TODAY_S} Check mail +routine @morning due:{TODAY_S} due_time:09:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "rv-block" in html
+        assert 'data-time="06:00"' in html
+        assert 'data-time="09:00"' in html
+
+    def test_untimed_in_anytime_section(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Timed task +routine @morning due:{TODAY_S} due_time:09:00",
+            f"(B) {TODAY_S} Untimed task +routine @morning due:{TODAY_S}",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "rv-anytime" in html
+        assert "Untimed task" in html
+
+    def test_context_color_classes(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
+            f"(B) {TODAY_S} Tidy up +routine @evening due:{TODAY_S} due_time:20:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "ctx-blue" in html or "ctx-orange" in html or "ctx-green" in html
+
+    def test_block_heights_nonzero(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Early +routine @morning due:{TODAY_S} due_time:06:00",
+            f"(B) {TODAY_S} Late +routine @morning due:{TODAY_S} due_time:09:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        import re
+        heights = re.findall(r'height:(\d+)px', html)
+        assert any(int(h) > 0 for h in heights)
+
+    def test_now_line_in_day_view(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S} due_time:06:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert 'id="rv-now"' in html
+        assert "rv-now-label" in html
+
+    def test_past_blocks_marked(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S} due_time:00:01",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "past" in html
+
+    def test_hour_labels_present(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S} due_time:09:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "rv-hour-label" in html
+        assert "9:00" in html
+
+    def test_empty_day_view_message(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Untimed +routine @morning due:{TODAY_S}",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "No timed routines to show in day view" in html
+
+    def test_total_height_computed(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S} due_time:06:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "rv-blocks" in html
+        import re
+        heights = re.findall(r'height:(\d+)px', html)
+        assert any(int(h) >= 60 for h in heights)
