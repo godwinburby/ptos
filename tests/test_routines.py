@@ -66,6 +66,20 @@ class TestRoutinesPage:
         assert resp.status_code == 200
         assert "other" in html.lower()
 
+    def test_unknown_context_dropped_from_cards(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Custom ctx +routine @workout due:{TODAY_S}",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        cards_html = html.split('id="view-cards"')[1].split('id="view-day"')[0]
+        assert "workout" not in cards_html.lower()
+
     def test_only_routine_todos_shown(self, tmp_path, monkeypatch):
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))

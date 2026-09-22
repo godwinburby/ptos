@@ -30,12 +30,14 @@ Format: `[version or date] — description`
 ### Routines day view (Google Calendar-style)
 
 - **View toggle** — Cards/Day toggle bar in the page header. Persists preference in `localStorage`. Card view is the default (existing behavior preserved).
-- **Day view timeline** — vertical CSS Grid timeline with hour labels (left column) and positioned time blocks (right area). Blocks are colored by context using a 6-color palette (morning=blue, afternoon=orange, evening=green, etc.).
-- **Gap-based duration** — block height = gap to next routine's start time, capped at 60min, default 30min for the last item. Gives a natural calendar-like flow.
+- **Day view timeline** — vertical CSS Grid timeline with hour labels (left column) and positioned time blocks (right area). Blocks are colored by context using a 6-color palette (morning=blue, afternoon=orange, evening=green, etc.). Full day 12 AM to 12 PM (0–23), `hour_px=80` for readable text.
+- **Gap-based duration** — block height = gap to next routine's start time, capped at 60min, minimum 18px, default 30min for the last item.
 - **Now-line** — red horizontal line with dot and "Now HH:MM" label, positioned by current time. Auto-scrolls to the now-line on load.
 - **Past blocks** — blocks whose `due_time` has passed get class `past` (opacity 0.4, line-through desc).
+- **Compact block layout** — time and description on one line, 2px 8px padding, 12px checkbox. Removes priority badge from day view for more room.
 - **Untimed section** — routines without `due_time` appear in an "Anytime" section below the timeline.
-- **Empty state** — when no timed routines exist, shows "No timed routines to show in day view" message.
+- **Done section** — moved inside card view only (redundant in day view).
+- **Card view contexts** — only shows `morning`/`afternoon`/`evening`/`night` cards. Unknown contexts go to `other`. No-context defaults to `other`.
 - **Mobile responsive** — narrower hour labels (32px) and compact blocks on screens < 768px. Full scrollable timeline on all devices.
 - **Route computation** — `routines_page()` now computes `timed`/`untimed` lists, `block_data` (top/height/color per block), `context_colors`, `first_hour`/`last_hour`, `total_height`, `now_top`.
 - **11 new tests** — `TestRoutinesDayView`: view toggle presence, toggle buttons, timed blocks in timeline, untimed in anytime, context colors, block heights, now-line, past marking, hour labels, empty message, total height. Total: 28 routine tests.
