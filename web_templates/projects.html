@@ -5,7 +5,7 @@
   .projects-header { display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:16px; }
   .projects-header .page-title { margin:0; }
   .proj-count { font-size:13px;color:var(--sub); }
-  .proj-list { display:flex;flex-direction:column;gap:12px; }
+  .proj-list { display:flex;flex-direction:column;gap:14px; }
   .proj-card { background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;transition:border-color .15s; }
   .proj-card:hover { border-color:var(--accent); }
   .proj-card.stalled { border-left:4px solid var(--error); }
@@ -26,14 +26,54 @@
   .proj-stats span { display:flex;align-items:center;gap:4px; }
   .proj-stall-row { font-size:12px;color:var(--warn);margin-top:4px; }
   .proj-board-stall { display:inline-block;background:color-mix(in srgb, var(--warn) 12%, transparent);border:1px solid color-mix(in srgb, var(--warn) 30%, transparent);border-radius:6px;padding:1px 8px;font-size:11px;font-weight:600;margin-right:4px; }
-  .proj-links { display:flex;gap:6px;flex-wrap:wrap;margin-top:8px; }
+  .proj-links { display:flex;gap:6px;flex-wrap:wrap;margin-top:10px; }
   .proj-link-btn { font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;background:var(--accent-lt);color:var(--accent);text-decoration:none;border:1px solid color-mix(in srgb, var(--accent) 25%, transparent);transition:background .12s; }
   .proj-link-btn:hover { background:var(--accent);color:#fff; }
-  .proj-refs { font-size:12px;color:var(--sub);margin-top:6px; }
-  .proj-refs a { color:var(--accent);text-decoration:none; }
-  .proj-refs a:hover { text-decoration:underline; }
   .proj-empty { text-align:center;padding:50px 20px;color:var(--sub);font-size:14px; }
   .proj-empty code { background:var(--bg);padding:2px 8px;border-radius:4px;font-size:13px; }
+
+  /* Collapsible sections */
+  .proj-sections { margin-top:12px; }
+  .proj-section { border-top:1px solid var(--border); }
+  .proj-section summary { padding:8px 4px;font-size:13px;font-weight:600;color:var(--text);cursor:pointer;user-select:none;list-style:none;display:flex;align-items:center;gap:6px; }
+  .proj-section summary::-webkit-details-marker { display:none; }
+  .proj-section summary::before { content:"▸";font-size:11px;color:var(--sub);transition:transform .15s; }
+  .proj-section[open] summary::before { transform:rotate(90deg); }
+  .proj-section summary .count { font-weight:600;color:var(--sub);font-size:12px; }
+  .proj-section-body { padding:4px 0 10px; }
+
+  /* Inline todo rows (simplified from todo.html) */
+  .proj-todo-row { display:flex;align-items:flex-start;gap:8px;padding:4px 8px;border-radius:6px;transition:background .1s; }
+  .proj-todo-row:hover { background:var(--bg); }
+  .proj-todo-pri { font-size:11px;font-weight:700;min-width:18px;text-align:center;padding:1px 0;border-radius:4px; }
+  .proj-todo-pri.A { color:var(--error); }
+  .proj-todo-pri.B { color:var(--warn); }
+  .proj-todo-pri.C { color:var(--accent); }
+  .proj-todo-pri.D { color:var(--sub); }
+  .proj-todo-pri.none { color:var(--border); }
+  .proj-todo-desc { font-size:13px;color:var(--text);flex:1; }
+  .proj-todo-meta { display:flex;gap:4px;flex-wrap:wrap;flex-shrink:0; }
+  .proj-todo-due { font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;background:var(--accent-lt);color:var(--accent); }
+  .proj-todo-due.overdue { background:var(--error-lt);color:var(--error); }
+  .proj-todo-due.today { background:#FEF3E7;color:var(--warn); }
+  .proj-todo-proj { font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--accent); }
+  .proj-todo-ctx { font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;background:color-mix(in srgb, var(--sub) 10%, transparent);color:var(--sub); }
+  .proj-todo-done .proj-todo-desc { text-decoration:line-through;opacity:0.5; }
+
+  /* Record rows */
+  .proj-rec-row { display:flex;align-items:flex-start;gap:8px;padding:5px 8px;border-radius:6px;font-size:13px;transition:background .1s; }
+  .proj-rec-row:hover { background:var(--bg); }
+  .proj-rec-date { font-size:11px;color:var(--sub);min-width:60px;flex-shrink:0; }
+  .proj-rec-type { font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--accent);flex-shrink:0; }
+  .proj-rec-fields { color:var(--text);flex:1; }
+  .proj-rec-fields .meta-label { color:var(--sub); }
+  .proj-rec-note { color:var(--sub);font-style:italic; }
+
+  /* Note/journal rows */
+  .proj-ref-row { padding:4px 8px;font-size:13px; }
+  .proj-ref-row a { color:var(--accent);text-decoration:none;font-weight:500; }
+  .proj-ref-row a:hover { text-decoration:underline; }
+  .proj-ref-snippet { color:var(--sub);font-size:12px;margin-top:2px; }
 </style>
 
 <div class="projects-header">
@@ -104,16 +144,103 @@ notes_path   = "Projects/Find a Job"</pre>
     </div>
     {% endif %}
 
-    {% if p.notes or p.journals %}
-    <div class="proj-refs">
-      {% for n in p.notes[:3] %}
-      <a href="/notes/edit/{{ n.path }}">📝 {{ n.path }}</a>
-      {% endfor %}
-      {% for j in p.journals[:2] %}
-      <a href="/journal?date={{ j.path.replace('.md','') }}">📅 {{ j.path }}</a>
-      {% endfor %}
+    <div class="proj-sections">
+
+      {# ── Open Todos ── #}
+      {% if p.open_items %}
+      <details class="proj-section">
+        <summary>Todos <span class="count">({{ p.open_todos }})</span></summary>
+        <div class="proj-section-body">
+          {% for t in p.open_items %}
+          <div class="proj-todo-row">
+            <span class="proj-todo-pri {{ t.priority or 'none' }}">{{ t.priority or '—' }}</span>
+            <span class="proj-todo-desc">{{ t.description }}</span>
+            <span class="proj-todo-meta">
+              {% if t.due %}
+              <span class="proj-todo-due {% if t.due < today %}overdue{% elif t.due == today %}today{% endif %}">{{ t.due.strftime('%d %b') }}</span>
+              {% endif %}
+              {% for pr in t.projects %}<span class="proj-todo-proj">{{ pr }}</span>{% endfor %}
+              {% for c in t.contexts %}<span class="proj-todo-ctx">{{ c }}</span>{% endfor %}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+      {# ── Done Todos ── #}
+      {% if p.done_items %}
+      <details class="proj-section">
+        <summary>Done <span class="count">({{ p.done_todos }})</span></summary>
+        <div class="proj-section-body">
+          {% for t in p.done_items %}
+          <div class="proj-todo-row proj-todo-done">
+            <span class="proj-todo-pri none">x</span>
+            <span class="proj-todo-desc">{{ t.description }}</span>
+            <span class="proj-todo-meta">
+              {% if t.completed_date %}<span class="proj-todo-due">{{ t.completed_date.strftime('%d %b') }}</span>{% endif %}
+              {% for pr in t.projects %}<span class="proj-todo-proj">{{ pr }}</span>{% endfor %}
+            </span>
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+      {# ── Records ── #}
+      {% if p.record_items %}
+      <details class="proj-section">
+        <summary>Records <span class="count">({{ p.record_count }})</span></summary>
+        <div class="proj-section-body">
+          {% for r in p.record_items[:20] %}
+          <div class="proj-rec-row">
+            <span class="proj-rec-date">{{ r.date }}</span>
+            {% if r.type %}<span class="proj-rec-type">{{ r.type }}</span>{% endif %}
+            <span class="proj-rec-fields">
+              {% for k, v in r.items() if k not in ('date','type','note','_filepath','_lineno') %}
+              <span class="meta-label">{{ k }}:</span>{{ v }} {% endfor %}
+              {% if r.note %}<span class="proj-rec-note">| {{ r.note }}</span>{% endif %}
+            </span>
+          </div>
+          {% endfor %}
+          {% if p.record_count > 20 %}
+          <div style="padding:4px 8px;font-size:12px;color:var(--sub);">… and {{ p.record_count - 20 }} more</div>
+          {% endif %}
+        </div>
+      </details>
+      {% endif %}
+
+      {# ── Notes ── #}
+      {% if p.notes %}
+      <details class="proj-section">
+        <summary>Notes <span class="count">({{ p.notes | length }})</span></summary>
+        <div class="proj-section-body">
+          {% for n in p.notes %}
+          <div class="proj-ref-row">
+            <a href="/notes/edit/{{ n.path }}">📝 {{ n.path }}</a>
+            {% if n.snippet %}<div class="proj-ref-snippet">{{ n.snippet }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
+      {# ── Journal ── #}
+      {% if p.journals %}
+      <details class="proj-section">
+        <summary>Journal <span class="count">({{ p.journals | length }})</span></summary>
+        <div class="proj-section-body">
+          {% for j in p.journals %}
+          <div class="proj-ref-row">
+            <a href="/journal?date={{ j.path.replace('.md','') }}">📅 {{ j.path }}</a>
+            {% if j.snippet %}<div class="proj-ref-snippet">{{ j.snippet }}</div>{% endif %}
+          </div>
+          {% endfor %}
+        </div>
+      </details>
+      {% endif %}
+
     </div>
-    {% endif %}
 
     <div class="proj-links">
       {% if p.todo_project %}

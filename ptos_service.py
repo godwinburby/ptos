@@ -2416,14 +2416,14 @@ def _folder_mtime(folder):
 
 
 def _iter_tag_filter_records(tag_filters):
-    """Yield (filepath, lineno, date, kv) for records matching tag_filters."""
+    """Yield (filepath, lineno, date, kv, note) for records matching tag_filters."""
     start = dt.date.min
     end = dt.date.max
     matches = ptos.find_records_with_location(tag_filters, start=start, end=end)
     for filepath, lineno, raw_line in matches:
         try:
-            d, kv, _ = ptos.parse_line(raw_line)
-            yield (filepath, lineno, d, kv)
+            d, kv, note = ptos.parse_line(raw_line)
+            yield (filepath, lineno, d, kv, note)
         except (ValueError, IndexError):
             continue
 
@@ -2477,7 +2477,7 @@ def get_projects_overview():
 
         # Records matching tag_filters
         if tag_filters:
-            for filepath, lineno, d, kv in _iter_tag_filter_records(tag_filters):
+            for filepath, lineno, d, kv, _note in _iter_tag_filter_records(tag_filters):
                 if last_date is None or d > last_date:
                     last_date = d
                     last_source = "record"
@@ -2531,12 +2531,15 @@ def get_projects_overview():
         overdue_count = 0
         added_count = 0
         done_month_count = 0
+        open_items = []
+        done_items = []
 
         if todo_project:
             proj_token = f"+{todo_project}"
             for t in todos_all:
                 if proj_token in t.projects:
                     open_count += 1
+                    open_items.append(t)
                     if t.due and t.due < today:
                         overdue_count += 1
                     if t.created_date and t.created_date >= month_start:
@@ -2544,6 +2547,7 @@ def get_projects_overview():
             for t in done_all:
                 if proj_token in t.projects:
                     done_count += 1
+                    done_items.append(t)
                     if t.completed_date and t.completed_date >= month_start:
                         done_month_count += 1
 
@@ -2576,11 +2580,20 @@ def get_projects_overview():
             except Exception:
                 pass
 
-        # ── Record count ──
+        # ── Record count + items ──
         record_count = 0
+        record_items = []
         if tag_filters:
-            for _ in _iter_tag_filter_records(tag_filters):
+            for filepath, lineno, d, kv, rec_note in _iter_tag_filter_records(tag_filters):
                 record_count += 1
+                row = {"date": ptos.fmt_date(d) if hasattr(ptos, 'fmt_date') else str(d)}
+                for k, v in kv.items():
+                    row[k] = _disp(str(v))
+                if rec_note:
+                    row["note"] = rec_note
+                row["_filepath"] = filepath
+                row["_lineno"] = lineno
+                record_items.append(row)
 
         # ── Link target ──
         if has_board:
@@ -2611,7 +2624,10 @@ def get_projects_overview():
             "todo_added": added_count,
             "todo_done": done_month_count,
             "todo_delta": todo_delta,
+            "open_items": open_items,
+            "done_items": done_items,
             "record_count": record_count,
+            "record_items": record_items,
             "notes": note_refs,
             "journals": journal_refs,
             "board_stalls": board_stalls,
