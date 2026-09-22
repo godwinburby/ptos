@@ -83,16 +83,36 @@
 </div>
 
 <script>
-function onLabelChange(val) {
-  var keyInput = document.querySelector('input[name="config_key"]');
-  if (keyInput.readOnly) return;
-  var key = val.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
-  keyInput.value = key;
-  var tpInput = document.querySelector('input[name="todo_project"]');
-  if (tpInput) tpInput.placeholder = key || 'project_name';
-  var tfInput = document.querySelector('input[name="tag_filters"]');
-  if (tfInput) tfInput.placeholder = 'project=' + (key || 'project_name');
+var _auto = {
+  config_key: {{ 'false' if mode == 'edit' else 'true' }},
+  todo_project: {{ 'false' if mode == 'edit' else 'true' }},
+  tag_filters: {{ 'false' if mode == 'edit' else 'true' }},
+  notes_path: {{ 'false' if mode == 'edit' else 'true' }}
+};
+
+function _deriveKey(label) {
+  return label.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 }
+
+function onLabelChange(val) {
+  if (_auto.config_key) {
+    var key = _deriveKey(val);
+    document.querySelector('input[name="config_key"]').value = key;
+  }
+  if (_auto.todo_project) {
+    document.querySelector('input[name="todo_project"]').value = _deriveKey(val);
+  }
+  if (_auto.tag_filters) {
+    document.querySelector('input[name="tag_filters"]').value = 'project=' + _deriveKey(val);
+  }
+  if (_auto.notes_path) {
+    document.querySelector('input[name="notes_path"]').value = val.trim() ? 'Projects/' + val.trim() + '.md' : '';
+  }
+}
+
+document.querySelectorAll('input[name="config_key"], input[name="todo_project"], input[name="tag_filters"], input[name="notes_path"]').forEach(function(el) {
+  el.addEventListener('input', function() { _auto[this.name] = false; });
+});
 </script>
 
 {% endblock %}
