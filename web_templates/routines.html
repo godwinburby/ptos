@@ -31,6 +31,21 @@
     font-size:11px; color:var(--sub); white-space:nowrap;
   }
   .routine-due.overdue { color:var(--error); font-weight:600; }
+  .routine-time {
+    font-size:11px; font-weight:700; color:var(--accent);
+    background:var(--accent-lt); padding:1px 6px; border-radius:8px;
+    white-space:nowrap;
+  }
+  .routine-item.past { opacity:0.45; }
+  .routine-item.past .routine-desc { text-decoration:line-through; }
+  .routine-now {
+    display:flex; align-items:center; gap:8px;
+    font-size:11px; font-weight:700; color:var(--accent);
+    padding:6px 0; margin:2px 0; user-select:none;
+  }
+  .routine-now::before, .routine-now::after {
+    content:""; flex:1; border-top:2px solid var(--accent);
+  }
   .routine-add-btn {
     display:flex; align-items:center; justify-content:center; gap:6px;
     width:100%; padding:8px; margin-top:8px;
@@ -114,9 +129,10 @@
       <span class="routine-badge">{{ total }}</span>
     </div>
     {% for t in todos %}
-    <div class="routine-item" data-line="{{ t.line_no }}">
+    <div class="routine-item" data-line="{{ t.line_no }}" data-time="{{ t.due_time or '' }}">
       <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
       <span class="routine-desc" onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
+      {% if t.due_time %}<span class="routine-time">{{ t.due_time }}</span>{% endif %}
       {% if t.due %}
       <span class="routine-due {% if t.due < today %}overdue{% endif %}">
         {% if t.due < today %}overdue{% elif t.due == today %}today{% else %}{{ t.due.strftime('%d %b') }}{% endif %}
@@ -156,6 +172,39 @@
 {% include '_todo_modal.html' %}
 
 <script>
+var _nowTime = "{{ now_time }}";
+
+function _insertNowLines() {
+  document.querySelectorAll('.routine-card').forEach(function(card) {
+    var items = card.querySelectorAll('.routine-item:not(.completed)');
+    var inserted = false;
+    items.forEach(function(item) {
+      var time = item.getAttribute('data-time');
+      if (!inserted && time && time > _nowTime) {
+        var line = document.createElement('div');
+        line.className = 'routine-now';
+        line.textContent = 'Now: ' + _nowTime;
+        item.parentNode.insertBefore(line, item);
+        inserted = true;
+      }
+    });
+    if (!inserted && items.length > 0) {
+      items.forEach(function(item) { item.classList.add('past'); });
+    }
+    if (inserted) {
+      var prev = card.querySelector('.routine-now').previousElementSibling;
+      while (prev) {
+        if (prev.classList.contains('routine-item') && !prev.classList.contains('completed')) {
+          prev.classList.add('past');
+        }
+        prev = prev.previousElementSibling;
+      }
+    }
+  });
+}
+
+_insertNowLines();
+
 function openAddRoutine(context) {
   var now = new Date();
   var today = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0') + '-' + String(now.getDate()).padStart(2,'0');

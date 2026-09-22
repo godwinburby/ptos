@@ -18,6 +18,15 @@ Format: `[version or date] — description`
 - **Templates** — `project_form.html` (shared create/edit with live key derivation), `project_delete.html` (confirmation).
 - **30 new tests** — `TestProjectNameDerivation` (5), `TestProjectCRUD` (8), `TestProjectWebCRUD` (12). Total: 48 project tests.
 
+### Routines time-ordered day view
+
+- **Time-first sort** — routine todos within each context section now sort by `due_time` first (earliest → latest, no-time last), then due date, then priority, then description. Previously sorted by due date first.
+- **Due time displayed** — each routine row shows a `routine-time` badge with the `HH:MM` due time. Todos without a `due_time` show no badge.
+- **Now-line divider** — a styled "Now: HH:MM" divider appears between past and future todos in each context section, marking the current time position.
+- **Past item styling** — todos whose `due_time` has passed today get class `routine-past` (opacity 0.45, line-through description). Applied by JS `_insertNowLines()` on page load.
+- **`data-time` attribute** — each routine row carries `data-time="HH:MM"` for JS now-line insertion.
+- **7 new tests** — `TestRoutinesTimeView`: now_time passthrough, due_time badge, no-badge for untimed, time-first sort, no-time-after-timed, data-time attribute, now-line JS presence. Total: 17 routine tests.
+
 ### Project Drift Review — inline data
 
 - **Collapsible detail sections** — each project card now shows the actual items inline: Todos (with priority badge, due date, project/context chips), Done todos (strikethrough), Records (date, type, fields, note), Notes (link + bracket snippet), and Journal entries (link + snippet). All sections collapsed by default for scan-down triage.
