@@ -189,3 +189,109 @@ class TestRoutinesRecurrence:
             new_todo = f.read()
         assert "Check mail" in new_todo
         assert TOMORROW in new_todo
+
+
+class TestRoutinesTimeView:
+    def test_now_time_passed_to_template(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert resp.status_code == 200
+        assert "_nowTime" in html
+
+    def test_due_time_shown_in_row(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
+            f"(B) {TODAY_S} Check mail +routine @morning due:{TODAY_S} due_time:09:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "06:00" in html
+        assert "09:00" in html
+        assert "routine-time" in html
+
+    def test_no_due_time_no_time_badge(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Unsorted +routine @morning due:{TODAY_S}",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert '<span class="routine-time"' not in html
+
+    def test_time_first_sort_order(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Late task +routine @morning due:{TODAY_S} due_time:14:00",
+            f"(B) {TODAY_S} Early task +routine @morning due:{TODAY_S} due_time:06:00",
+            f"(C) {TODAY_S} Mid task +routine @morning due:{TODAY_S} due_time:09:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        early_pos = html.index("Early task")
+        mid_pos = html.index("Mid task")
+        late_pos = html.index("Late task")
+        assert early_pos < mid_pos < late_pos
+
+    def test_no_time_todos_after_timed(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Timed task +routine @morning due:{TODAY_S} due_time:09:00",
+            f"(B) {TODAY_S} Untimed task +routine @morning due:{TODAY_S}",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        timed_pos = html.index("Timed task")
+        untimed_pos = html.index("Untimed task")
+        assert timed_pos < untimed_pos
+
+    def test_data_time_attribute_on_rows(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert 'data-time="06:00"' in html
+
+    def test_now_line_js_present(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "_insertNowLines" in html
+        assert "routine-now" in html
