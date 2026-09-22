@@ -461,3 +461,205 @@ class TestProjectsPage:
         resp = client.get("/")
         html = resp.get_data(as_text=True)
         assert "projects" in html.lower()
+
+
+class TestProjectsInlineData:
+    def test_open_todos_shown(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.p1"]
+            label = "Project One"
+            todo_project = "p1"
+        ''')
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Apply online +p1 due:{TODAY_S}",
+            f"(B) {TODAY_S} Update resume +p1 due:{TOMORROW}",
+        ])
+        _write_todo(done_path, [])
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "Apply online" in html
+        assert "Update resume" in html
+        assert "Todos" in html
+
+    def test_done_todos_shown(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.p1"]
+            label = "Project One"
+            todo_project = "p1"
+        ''')
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [
+            f"x {TODAY_S} {YESTERDAY} Sent application +p1",
+        ])
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "Sent application" in html
+        assert "Done" in html
+
+    def test_records_shown(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.exp"]
+            label = "Expenses"
+            tag_filters = ["project=reno"]
+        ''')
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [])
+        record = f"{TODAY_S} type=expense project=reno amount=50 | paint supplies"
+        _write_record(os.path.join(str(tmp_path), "records", "2026.log"), record)
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "Records" in html
+        assert "paint supplies" in html
+
+    def test_notes_shown(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        notes_dir = tmp_path / "notes"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos, "NOTES_DIR", str(notes_dir))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.p1"]
+            label = "My Project"
+            todo_project = "p1"
+        ''')
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [])
+        notes_dir.mkdir(parents=True, exist_ok=True)
+        (notes_dir / "notes.md").write_text("some content", encoding="utf-8")
+        (notes_dir / "meeting.md").write_text("Meeting about [[My Project]] next week", encoding="utf-8")
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "Notes" in html
+        assert "meeting.md" in html
+
+    def test_journal_shown(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        journal_dir = tmp_path / "journal"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos, "JOURNAL_DIR", str(journal_dir))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.p1"]
+            label = "My Project"
+            todo_project = "p1"
+        ''')
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [])
+        journal_dir.mkdir(parents=True, exist_ok=True)
+        (journal_dir / "2026-09-15.md").write_text("Working on [[My Project]] today\n", encoding="utf-8")
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "Journal" in html
+        assert "2026-09-15.md" in html
+
+    def test_collapsible_sections_exist(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.p1"]
+            label = "Project One"
+            todo_project = "p1"
+        ''')
+        _write_todo(todo_path, [f"(A) {TODAY_S} Task +p1 due:{TODAY_S}"])
+        _write_todo(done_path, [f"x {TODAY_S} {TODAY_S} Done task +p1"])
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "<details" in html
+        assert "proj-section" in html
+
+    def test_todo_due_badge_overdue(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.p1"]
+            label = "Project"
+            todo_project = "p1"
+        ''')
+        _write_todo(todo_path, [f"(A) {OLD} Overdue task +p1 due:{YESTERDAY}"])
+        _write_todo(done_path, [])
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "overdue" in html.lower()
+
+    def test_no_items_no_sections(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.p1"]
+            label = "Empty Project"
+            todo_project = "p1"
+        ''')
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [])
+        client = app.test_client()
+        resp = client.get("/projects")
+        html = resp.get_data(as_text=True)
+        assert "<details" not in html

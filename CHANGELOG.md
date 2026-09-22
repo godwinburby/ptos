@@ -5,6 +5,13 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-22
+
+### Project Drift Review — inline data
+
+- **Collapsible detail sections** — each project card now shows the actual items inline: Todos (with priority badge, due date, project/context chips), Done todos (strikethrough), Records (date, type, fields, note), Notes (link + bracket snippet), and Journal entries (link + snippet). All sections collapsed by default for scan-down triage.
+- **Service layer** — `get_projects_overview()` now returns `open_items` (Todo objects), `done_items`, and `record_items` (parsed dicts) alongside existing counts. `_iter_tag_filter_records()` now yields the note field.
+
 ## 2026-09-18
 
 ### Project Drift Review
