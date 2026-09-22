@@ -7,6 +7,16 @@ Format: `[version or date] — description`
 
 ## 2026-09-22
 
+### Scoped config writes (Phase 1-2)
+
+- **Core guarantee** — touching one config section (query, metric, dashboard, board, habit, calendar, threshold, due, alias, project) no longer risks clobbering unrelated sections. New scoped save/delete functions write only their target key, leaving the rest of `queries.toml` untouched.
+- **New primitives** — `_load_queries_toml()` (flattens dotted-key sections like `board.X` to flat keys for consistent access), `_write_queries()` (atomic `.bak`+`.tmp`+rename), `_write_queries_toml_key()` (targeted write of a single key), `_validate_name()` (lowercase + no spaces), `_is_reserved_key()` (`metrics`, `dashboards`, `queries`), `_preserve_unknown()` (carries forward unrecognized fields on save), `_lookup_entry()`/`_has_entry()`/`_remove_entry()` (section-level read/delete).
+- **19 save/delete functions** — `save_query_entry`/`delete_query_entry`, `save_metric`/`delete_metric`, `save_dashboard`/`delete_dashboard`, `save_alias`/`delete_alias`, `save_board`/`delete_board`, `save_habit`/`delete_habit`, `save_calendar`/`delete_calendar`, `save_threshold`/`delete_threshold`, `save_due`/`delete_due`, `save_project`/`delete_project`. Each validates input, preserves unknown fields, and raises `PTOSError` on bad names or missing entries.
+- **TOML flat vs nested fix** — `tomli_w` writes `["board.kanban"]` (quoted flat key) which `tomllib` reads as flat, but hand-written `[board.kanban]` parses as nested `{"board": {"kanban": {...}}}`. `_load_queries_toml()` now flattens dotted-key prefixes (`board.X`, `habit.X`, `calendar.X`, `threshold.X`, `due.X`, `project.X`) to a consistent flat format while keeping `metrics` and `dashboards` nested (as `save_queries_full` and `get_metric` expect).
+- **Dispatch route** — `POST /api/query-builder/<kind>` accepts `{name, cfg, action}` and dispatches through type-specific save/delete maps. Supports all 10 section types. The existing `/query-builder/save` and `/query-builder/delete` routes remain unchanged.
+- **`save_queries_full` marked `# LEGACY`** — will be removed in Phase 3 after all web routes are migrated.
+- **62 new tests** — `tests/test_scoped_writes.py`: 10 isolation (save), 10 isolation (delete), 14 validation, 14 round-trip, 1 new-file, 3 preserve-unknown, 7 dispatch-route, 3 edge cases. Full suite: 1633 passed, 4 pre-existing date failures.
+
 ### Project CRUD
 
 - **Create** — `GET/POST /projects/new` form with label, config key (auto-derived), todo project, record filters, board dropdown, notes path. Creates `["project.*"]` config entry and project note file with starter template (Goal/Steps/Notes). Redirects to the notes editor.

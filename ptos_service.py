@@ -2648,61 +2648,6 @@ def _name_to_key(label):
     return s
 
 
-def save_project(name, cfg):
-    """Write/update a single ["project.NAME"] entry in queries.toml.
-    Atomic write. Validates label is present."""
-    import tomli_w
-    import tomllib
-    label = cfg.get("label", "").strip()
-    if not label:
-        raise PTOSError("Project label is required")
-    name = name.strip()
-    if not name or not re.match(r'^[a-z][a-z0-9_]*$', name):
-        raise PTOSError("Config key: lowercase letters, digits, underscores only")
-    existing = {}
-    if os.path.exists(ptos.QUERIES_PATH):
-        try:
-            with open(ptos.QUERIES_PATH, "rb") as f:
-                existing = tomllib.load(f)
-        except Exception:
-            existing = {}
-    data = dict(existing)
-    entry = {"label": label}
-    for key in ("todo_project", "board", "notes_path"):
-        val = cfg.get(key, "").strip() if isinstance(cfg.get(key), str) else ""
-        if val:
-            entry[key] = val
-    tag_filters = cfg.get("tag_filters", [])
-    if tag_filters and isinstance(tag_filters, list):
-        entry["tag_filters"] = tag_filters
-    data[f"project.{name}"] = entry
-    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
-        tomli_w.dump(data, w.stream)
-    return {"ok": True, "name": name}
-
-
-def delete_project(name):
-    """Remove a ["project.NAME"] entry from queries.toml. Atomic write."""
-    import tomli_w
-    import tomllib
-    name = name.strip()
-    key = f"project.{name}"
-    existing = {}
-    if os.path.exists(ptos.QUERIES_PATH):
-        try:
-            with open(ptos.QUERIES_PATH, "rb") as f:
-                existing = tomllib.load(f)
-        except Exception:
-            existing = {}
-    if key not in existing or not isinstance(existing[key], dict):
-        raise PTOSError(f"Project '{name}' not found")
-    data = dict(existing)
-    del data[key]
-    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
-        tomli_w.dump(data, w.stream)
-    return {"ok": True, "name": name}
-
-
 def _iso_date(value, default=None):
     """Resolve a date arg (today/yesterday/YYYY-MM-DD) to an ISO date string.
     Raise PTOSError instead of SystemExit so web and CLI both handle it."""
@@ -4004,7 +3949,550 @@ def _mark_converted(filepath, old_line, lineno, target_type):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Query TOML management (full write)
+# Query TOML management — scoped writes (preferred)
+# ══════════════════════════════════════════════════════════════════════════════
+
+_RESERVED_TOP_KEYS = ("metrics", "dashboards", "due")
+_DOTTED_PREFIXES = ("board.", "habit.", "calendar.", "due.", "threshold.", "project.")
+_NAME_RE = re.compile(r'^[a-z][a-z0-9_]*$')
+
+
+def _load_queries_toml():
+    """Load queries.toml as a plain dict.
+
+    ``tomllib`` sometimes reads ``[board.kanban]`` as nested
+    ``{"board": {"kanban": {...}}}`` and sometimes as flat
+    ``{"board.kanban": {...}}`` depending on how the TOML was written.
+    The scoped functions need flat dotted keys, so we flatten dotted-key
+    prefixes after loading to guarantee a consistent representation.
+
+    Sections like ``metrics`` and ``dashboards`` stay nested because
+    ``save_queries_full`` and ``get_metric`` write/read them that way.
+    """
+    import tomllib
+    _NESTED_SECTIONS = {"metrics", "dashboards"}
+    if not os.path.exists(ptos.QUERIES_PATH):
+        return {}
+    try:
+        with open(ptos.QUERIES_PATH, "rb") as f:
+            raw = tomllib.load(f)
+    except Exception:
+        return {}
+    flat = {}
+    for k, v in raw.items():
+        if isinstance(v, dict) and k not in _NESTED_SECTIONS:
+            sub = {}
+            nested_entries = {}
+            for sk, sv in v.items():
+                if isinstance(sv, dict):
+                    nested_entries[f"{k}.{sk}"] = sv
+                else:
+                    sub[sk] = sv
+            for fk, fv in nested_entries.items():
+                flat[fk] = fv
+            if sub:
+                flat[k] = sub
+        else:
+            flat[k] = v
+    return flat
+
+
+def _lookup_entry(existing, prefix, name):
+    """Look up ``[prefix.name]`` handling both flat and nested TOML layouts."""
+    flat_key = f"{prefix}.{name}"
+    if flat_key in existing:
+        return existing[flat_key]
+    section = existing.get(prefix)
+    if isinstance(section, dict):
+        return section.get(name, {})
+    return {}
+
+
+def _has_entry(existing, prefix, name):
+    """Check ``[prefix.name]`` exists, handling both flat and nested layouts."""
+    flat_key = f"{prefix}.{name}"
+    if flat_key in existing:
+        return True
+    section = existing.get(prefix)
+    return isinstance(section, dict) and name in section
+
+
+def _remove_entry(data, prefix, name):
+    """Remove ``[prefix.name]`` from *data*, handling both flat and nested."""
+    flat_key = f"{prefix}.{name}"
+    data.pop(flat_key, None)
+    section = data.get(prefix)
+    if isinstance(section, dict):
+        section.pop(name, None)
+        if not section:
+            data.pop(prefix, None)
+
+
+def _write_queries(data):
+    """Atomic-write a dict to queries.toml."""
+    import tomli_w
+    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+        tomli_w.dump(data, w.stream)
+
+
+def _write_queries_toml_key(key, value):
+    """Set ``data[key] = value`` (or delete if *value* is None) and write back.
+
+    Uses flat dict keys (e.g. ``"board.kanban"``) so ``tomllib`` reads them
+    back as flat dotted keys — preserving backward compatibility with
+    ``get_projects()`` and ``get_thresholds()`` which iterate ``q.items()``
+    looking for ``k.startswith("project.")`` / ``k.startswith("threshold.")``.
+
+    Also removes any nested counterpart (e.g. ``data["board"]["kanban"]``)
+    left over from hand-written TOML that ``tomllib`` parsed as nested dicts.
+    """
+    data = _load_queries_toml()
+    if "." in key:
+        prefix, subkey = key.split(".", 1)
+        section = data.get(prefix)
+        if isinstance(section, dict):
+            section.pop(subkey, None)
+            if not section:
+                data.pop(prefix, None)
+    if value is None:
+        data.pop(key, None)
+    else:
+        data[key] = value
+    _write_queries(data)
+
+
+def _validate_name(name):
+    """Return stripped name or raise PTOSError if invalid."""
+    name = name.strip()
+    if not name or not _NAME_RE.match(name):
+        raise PTOSError("Config key: lowercase letters, digits, underscores only")
+    return name
+
+
+def _is_reserved_key(name):
+    """True if *name* collides with a section key or a dotted-key prefix."""
+    if name in _RESERVED_TOP_KEYS:
+        return True
+    return any(name.startswith(p) for p in _DOTTED_PREFIXES)
+
+
+def _preserve_unknown(existing_entry, new_entry):
+    """Copy keys from *existing_entry* that are absent from *new_entry*."""
+    if not isinstance(existing_entry, dict):
+        return new_entry
+    merged = dict(existing_entry)
+    merged.update(new_entry)
+    return merged
+
+
+# ── Query ───────────────────────────────────────────────────────────────────
+
+def save_query_entry(name, cfg):
+    """Write/update a single bare-key query entry in queries.toml."""
+    name = _validate_name(name)
+    if _is_reserved_key(name):
+        raise PTOSError(f"Cannot use reserved name '{name}' as a query")
+    entry = {}
+    if cfg.get("where", "").strip():
+        entry["where"] = cfg["where"].strip()
+    entry["time"] = cfg.get("time", "tm")
+    group = cfg.get("group")
+    if group:
+        entry["group"] = group if isinstance(group, list) else [group.strip()]
+    if cfg.get("sort"):
+        entry["sort"] = cfg["sort"] if isinstance(cfg["sort"], str) else str(cfg["sort"])
+    if cfg.get("search"):
+        entry["search"] = cfg["search"] if isinstance(cfg["search"], str) else str(cfg["search"])
+    if cfg.get("sum"):
+        entry["sum"] = True
+    existing = _load_queries_toml()
+    entry = _preserve_unknown(existing.get(name, {}), entry)
+    _write_queries_toml_key(name, entry)
+    return {"ok": True, "name": name}
+
+
+def delete_query_entry(name):
+    """Remove a single bare-key query from queries.toml."""
+    name = _validate_name(name)
+    if _is_reserved_key(name):
+        raise PTOSError(f"Cannot use reserved name '{name}' as a query")
+    existing = _load_queries_toml()
+    if name not in existing:
+        raise PTOSError(f"Query '{name}' not found")
+    _write_queries_toml_key(name, None)
+    return {"ok": True, "name": name}
+
+
+# ── Metric ──────────────────────────────────────────────────────────────────
+
+def _build_metric_entry(cfg, existing_entry=None):
+    """Build a metric TOML entry from UI-style dict."""
+    entry = {}
+    kind = cfg.get("kind", "avg")
+    base = cfg.get("base", "").strip()
+    base2 = cfg.get("base2", "").strip()
+    derived = cfg.get("derived", "").strip()
+    unit_field = cfg.get("unit_field", "").strip()
+    unit_weights = cfg.get("unit_weights") or {}
+
+    if derived:
+        entry["derived"] = derived
+    elif kind == "ratio" and base and base2:
+        entry["ratio"] = [base, base2]
+    elif kind in ("avg", "sum", "max", "min") and base:
+        entry[kind] = base
+
+    if kind == "avg" and unit_field:
+        entry["unit_field"] = unit_field
+    if kind == "avg" and unit_weights:
+        entry["unit_weights"] = unit_weights
+
+    for k, v in (cfg.get("_raw") or {}).items():
+        entry[k] = v
+
+    if cfg.get("time"):
+        entry["time"] = cfg["time"]
+
+    if existing_entry:
+        entry = _preserve_unknown(existing_entry, entry)
+    return entry
+
+
+def save_metric(name, cfg):
+    """Write/update a single [metrics.NAME] entry in queries.toml."""
+    name = _validate_name(name)
+    data = _load_queries_toml()
+    metrics = dict(data.get("metrics") or {})
+    existing_entry = metrics.get(name, {})
+    metrics[name] = _build_metric_entry(cfg, existing_entry)
+    data["metrics"] = metrics
+    _write_queries(data)
+    return {"ok": True, "name": name}
+
+
+def delete_metric(name):
+    """Remove a single [metrics.NAME] entry from queries.toml."""
+    name = _validate_name(name)
+    data = _load_queries_toml()
+    metrics = data.get("metrics") or {}
+    if name not in metrics:
+        raise PTOSError(f"Metric '{name}' not found")
+    del metrics[name]
+    if metrics:
+        data["metrics"] = metrics
+    else:
+        data.pop("metrics", None)
+    _write_queries(data)
+    return {"ok": True, "name": name}
+
+
+# ── Dashboard ───────────────────────────────────────────────────────────────
+
+def _build_dashboard_entry(cfg, existing_entry=None):
+    """Build a dashboard TOML entry from UI-style dict."""
+    entry = {}
+    items = cfg.get("metrics", [])
+    if items:
+        entry["metrics"] = items
+    groups = cfg.get("groups")
+    if isinstance(groups, dict) and groups:
+        clean_groups = {}
+        for gname, gitems in groups.items():
+            if isinstance(gitems, str):
+                gitems = [gitems]
+            gitems = [str(i) for i in gitems if str(i)]
+            if gname.strip() and gitems:
+                clean_groups[gname.strip()] = gitems
+        if clean_groups:
+            entry["groups"] = clean_groups
+    unlabel = (cfg.get("ungrouped_label") or "").strip()
+    if unlabel:
+        entry["ungrouped_label"] = unlabel
+    if existing_entry:
+        entry = _preserve_unknown(existing_entry, entry)
+    return entry
+
+
+def save_dashboard(name, cfg):
+    """Write/update a single [dashboards.NAME] entry in queries.toml."""
+    name = _validate_name(name)
+    data = _load_queries_toml()
+    dashboards = dict(data.get("dashboards") or {})
+    existing_entry = dashboards.get(name, {})
+    dashboards[name] = _build_dashboard_entry(cfg, existing_entry)
+    data["dashboards"] = dashboards
+    _write_queries(data)
+    return {"ok": True, "name": name}
+
+
+def delete_dashboard(name):
+    """Remove a single [dashboards.NAME] entry from queries.toml."""
+    name = _validate_name(name)
+    data = _load_queries_toml()
+    dashboards = data.get("dashboards") or {}
+    if name not in dashboards:
+        raise PTOSError(f"Dashboard '{name}' not found")
+    del dashboards[name]
+    if dashboards:
+        data["dashboards"] = dashboards
+    else:
+        data.pop("dashboards", None)
+    _write_queries(data)
+    return {"ok": True, "name": name}
+
+
+# ── Alias ───────────────────────────────────────────────────────────────────
+
+def save_alias(name, cfg):
+    """Write/update a single alias entry in queries.toml."""
+    name = _validate_name(name)
+    if _is_reserved_key(name):
+        raise PTOSError(f"Cannot use reserved name '{name}' as an alias")
+    alias = cfg.get("alias", "").strip()
+    if not alias:
+        raise PTOSError("Alias target is required")
+    _write_queries_toml_key(name, {"alias": alias})
+    return {"ok": True, "name": name}
+
+
+def delete_alias(name):
+    """Remove a single alias entry from queries.toml."""
+    name = _validate_name(name)
+    existing = _load_queries_toml()
+    entry = existing.get(name, {})
+    if not isinstance(entry, dict) or "alias" not in entry:
+        raise PTOSError(f"Alias '{name}' not found")
+    _write_queries_toml_key(name, None)
+    return {"ok": True, "name": name}
+
+
+# ── Board ───────────────────────────────────────────────────────────────────
+
+def save_board(name, cfg):
+    """Write/update a single ["board.NAME"] entry in queries.toml."""
+    name = _validate_name(name)
+    cols = cfg.get("columns", [])
+    if not cols or not isinstance(cols, list):
+        raise PTOSError(f"Board '{name}' must have a non-empty columns list")
+    entry = {"columns": cols}
+    if cfg.get("time_window"):
+        entry["time_window"] = cfg["time_window"]
+    if cfg.get("limit"):
+        entry["limit"] = int(cfg["limit"])
+    raw_ctf = cfg.get("card_title_fields")
+    if raw_ctf:
+        entry["card_title_fields"] = raw_ctf
+    match_field = cfg.get("match_field")
+    if match_field and isinstance(match_field, str) and match_field.strip():
+        entry["match_field"] = match_field.strip()
+    rollup_field = cfg.get("rollup_field")
+    if rollup_field:
+        schema = ptos.get_schema()
+        fmeta = schema.get("fields", {}).get(rollup_field, {})
+        if not fmeta.get("aggregatable"):
+            raise PTOSError(
+                f"Board '{name}': rollup_field '{rollup_field}' is not aggregatable in schema")
+        present = [t for t in cols if rollup_field in ptos.filter_fields_for_type(t, schema)]
+        if not present:
+            raise PTOSError(
+                f"Board '{name}': rollup_field '{rollup_field}' does not apply to any column type")
+        entry["rollup_field"] = rollup_field
+        entry["rollup_op"] = cfg.get("rollup_op", "count")
+    existing = _load_queries_toml()
+    entry = _preserve_unknown(_lookup_entry(existing, "board", name), entry)
+    _write_queries_toml_key(f"board.{name}", entry)
+    return {"ok": True, "name": name}
+
+
+def delete_board(name):
+    """Remove a single ["board.NAME"] entry from queries.toml."""
+    name = _validate_name(name)
+    existing = _load_queries_toml()
+    if not _has_entry(existing, "board", name):
+        raise PTOSError(f"Board '{name}' not found")
+    _remove_entry(existing, "board", name)
+    _write_queries(existing)
+    return {"ok": True, "name": name}
+    _write_queries_toml_key(f"board.{name}", None)
+    return {"ok": True, "name": name}
+
+
+# ── Habit ───────────────────────────────────────────────────────────────────
+
+def save_habit(name, cfg):
+    """Write/update a single ["habit.NAME"] entry in queries.toml."""
+    name = _validate_name(name)
+    hfilters = cfg.get("filters", [])
+    if not hfilters or not isinstance(hfilters, list):
+        raise PTOSError(f"Habit '{name}' must have a non-empty filters list")
+    entry = {"filters": hfilters}
+    if cfg.get("weeks"):
+        entry["weeks"] = int(cfg["weeks"])
+    if "toggleable" in cfg:
+        entry["toggleable"] = bool(cfg["toggleable"])
+    existing = _load_queries_toml()
+    entry = _preserve_unknown(_lookup_entry(existing, "habit", name), entry)
+    _write_queries_toml_key(f"habit.{name}", entry)
+    return {"ok": True, "name": name}
+
+
+def delete_habit(name):
+    """Remove a single ["habit.NAME"] entry from queries.toml."""
+    name = _validate_name(name)
+    existing = _load_queries_toml()
+    if not _has_entry(existing, "habit", name):
+        raise PTOSError(f"Habit '{name}' not found")
+    _remove_entry(existing, "habit", name)
+    _write_queries(existing)
+    return {"ok": True, "name": name}
+    _write_queries_toml_key(f"habit.{name}", None)
+    return {"ok": True, "name": name}
+
+
+# ── Calendar ────────────────────────────────────────────────────────────────
+
+def save_calendar(name, cfg):
+    """Write/update a single ["calendar.NAME"] entry in queries.toml."""
+    name = _validate_name(name)
+    cfilters = cfg.get("filters", [])
+    if not cfilters or not isinstance(cfilters, list):
+        raise PTOSError(f"Calendar '{name}' must have a non-empty filters list")
+    entry = {"filters": cfilters}
+    if cfg.get("time_window"):
+        entry["time_window"] = cfg["time_window"]
+    existing = _load_queries_toml()
+    entry = _preserve_unknown(_lookup_entry(existing, "calendar", name), entry)
+    _write_queries_toml_key(f"calendar.{name}", entry)
+    return {"ok": True, "name": name}
+
+
+def delete_calendar(name):
+    """Remove a single ["calendar.NAME"] entry from queries.toml."""
+    name = _validate_name(name)
+    existing = _load_queries_toml()
+    if not _has_entry(existing, "calendar", name):
+        raise PTOSError(f"Calendar '{name}' not found")
+    _remove_entry(existing, "calendar", name)
+    _write_queries(existing)
+    return {"ok": True, "name": name}
+    _write_queries_toml_key(f"calendar.{name}", None)
+    return {"ok": True, "name": name}
+
+
+# ── Threshold ───────────────────────────────────────────────────────────────
+
+def save_threshold(name, cfg):
+    """Write/update a single ["threshold.NAME"] entry in queries.toml."""
+    name = _validate_name(name)
+    if not cfg.get("metric", "").strip():
+        raise PTOSError(f"Threshold '{name}' must have a metric")
+    entry = {"metric": cfg["metric"].strip()}
+    if cfg.get("agg", "").strip():
+        entry["agg"] = cfg["agg"].strip()
+    if cfg.get("sum_field", "").strip():
+        entry["sum_field"] = cfg["sum_field"].strip()
+    raw_val = cfg.get("value", "")
+    if isinstance(raw_val, (int, float)):
+        entry["value"] = raw_val
+    elif isinstance(raw_val, str) and raw_val.strip():
+        entry["value"] = raw_val.strip()
+    entry["direction"] = cfg.get("direction", "max")
+    if cfg.get("time", "").strip():
+        entry["time"] = cfg["time"].strip()
+    if cfg.get("unit", "").strip():
+        entry["unit"] = cfg["unit"].strip()
+    existing = _load_queries_toml()
+    entry = _preserve_unknown(_lookup_entry(existing, "threshold", name), entry)
+    _write_queries_toml_key(f"threshold.{name}", entry)
+    return {"ok": True, "name": name}
+
+
+def delete_threshold(name):
+    """Remove a single ["threshold.NAME"] entry from queries.toml."""
+    name = _validate_name(name)
+    existing = _load_queries_toml()
+    if not _has_entry(existing, "threshold", name):
+        raise PTOSError(f"Threshold '{name}' not found")
+    _remove_entry(existing, "threshold", name)
+    _write_queries(existing)
+    return {"ok": True, "name": name}
+    _write_queries_toml_key(f"threshold.{name}", None)
+    return {"ok": True, "name": name}
+
+
+# ── Due ─────────────────────────────────────────────────────────────────────
+
+def save_due(name, cfg):
+    """Write/update a single ["due.NAME"] entry in queries.toml."""
+    name = _validate_name(name)
+    entry = {}
+    if cfg.get("type"):
+        entry["type"] = cfg["type"]
+    if cfg.get("key"):
+        entry["key"] = cfg["key"]
+    if cfg.get("sort_by"):
+        entry["sort_by"] = cfg["sort_by"]
+    if cfg.get("days"):
+        entry["days"] = cfg["days"]
+    if cfg.get("exclude_results") and isinstance(cfg["exclude_results"], list):
+        entry["exclude_results"] = cfg["exclude_results"]
+    existing = _load_queries_toml()
+    entry = _preserve_unknown(_lookup_entry(existing, "due", name), entry)
+    _write_queries_toml_key(f"due.{name}", entry)
+    return {"ok": True, "name": name}
+
+
+def delete_due(name):
+    """Remove a single ["due.NAME"] entry from queries.toml."""
+    name = _validate_name(name)
+    existing = _load_queries_toml()
+    if not _has_entry(existing, "due", name):
+        raise PTOSError(f"Due config '{name}' not found")
+    _remove_entry(existing, "due", name)
+    _write_queries(existing)
+    return {"ok": True, "name": name}
+    _write_queries_toml_key(f"due.{name}", None)
+    return {"ok": True, "name": name}
+
+
+# ── Project ─────────────────────────────────────────────────────────────────
+
+def save_project(name, cfg):
+    """Write/update a single ["project.NAME"] entry in queries.toml.
+    Atomic write. Validates label is present."""
+    name = _validate_name(name)
+    label = cfg.get("label", "").strip()
+    if not label:
+        raise PTOSError("Project label is required")
+    entry = {"label": label}
+    for key in ("todo_project", "board", "notes_path"):
+        val = cfg.get(key, "").strip() if isinstance(cfg.get(key), str) else ""
+        if val:
+            entry[key] = val
+    tag_filters = cfg.get("tag_filters", [])
+    if tag_filters and isinstance(tag_filters, list):
+        entry["tag_filters"] = tag_filters
+    existing = _load_queries_toml()
+    entry = _preserve_unknown(_lookup_entry(existing, "project", name), entry)
+    _write_queries_toml_key(f"project.{name}", entry)
+    return {"ok": True, "name": name}
+
+
+def delete_project(name):
+    """Remove a single ["project.NAME"] entry from queries.toml. Atomic write."""
+    name = _validate_name(name)
+    existing = _load_queries_toml()
+    if not _has_entry(existing, "project", name):
+        raise PTOSError(f"Project '{name}' not found")
+    _remove_entry(existing, "project", name)
+    _write_queries(existing)
+    return {"ok": True, "name": name}
+    _write_queries_toml_key(f"project.{name}", None)
+    return {"ok": True, "name": name}
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Query TOML management (full write — LEGACY, prefer scoped functions above)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None, raw_calendars=None, raw_thresholds=None, raw_projects=None):
