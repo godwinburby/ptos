@@ -550,6 +550,31 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - `Arrow Up`/`Down` — navigate autocomplete suggestions
 - `Escape` — close modal or autocomplete dropdown
 
+### Routines
+
+Daily recurring tasks — any todo tagged `+routine` shows up here as a checkbox card
+grouped by `@context` (e.g. morning, evening). Checking a routine completes it and
+(recurring ones) auto-regenerate for tomorrow. Navigate with a single `R`.
+
+**Cards view** (default):
+- One card per `@context` (a `+routine` todo with no context lands in `other`), each
+  with a count badge and a `+ Add` button for that context
+- Check the circle to complete, click the text to edit, ✕ to delete
+- **Project colors** — each row carries its routine's first **non-`+routine` project**
+  color (e.g. `+gym`); routines without an extra project render neutral (`ctx-other`).
+  Same palette as the day view, shared legend below both views
+- Collapsible **Done** section lists recently completed routines with undo
+
+**Day view**:
+- Timeline (like a calendar day) of routines with a `due_time:HH:MM` — blocks are
+  sized and positioned by their time; the timeline is trimmed to the day's routine
+  span rather than the full 24h
+- Block colors follow the same project rule as cards
+- A red **Now** line marks the current time when it falls inside the timeline
+- Anytime section lists routines without a due time
+
+Add a routine as you would any todo: `(A) Check mail +routine @morning due:today due_time:09:00 rec:1d`.
+
 ### Log Editor
 
 View and edit any `.log` file in `records/` directly in the browser. File selector
@@ -598,16 +623,24 @@ for sharing. See [Backup & Restore](#backup--restore).
 
 ### Query Builder
 
-Visual builder for creating queries, metrics, and dashboards. Features:
-- **Multi-section interface** (Queries/Metrics/Dashboards)
+Visual builder for creating and managing **queries, metrics, dashboards, aliases,
+boards, habits, calendars, thresholds, due configs, and projects**. Features:
+- **Per-entry 💾 Save** — each editor has its own Save/Delete button saving only its
+  config key via `POST /api/query-builder/<kind>` (no bulk "Save All"; a rename is
+  delete-old + save-new). Touching one section never clobbers others
 - Type → field → value chip-based workflow
 - Tags section with schema-defined and historical tags
 - **WHERE expression builder with chips**
 - **Live records preview** (auto-updates as you build)
 - Advanced WHERE mode for raw expression editing
 - Granular time window (specific year, month, date, or date range) with month picker popup
-- **Dashboard editor** for managing dashboard metrics (drag-and-drop reorder items)
-- Save as Query or Metric
+- **Dashboard editor** for managing dashboard metrics (drag-and-drop reorder items, group boxes)
+- **Board editor** — drag-reorderable column chips, time window / max cards, card
+  title field picker, rollup field/op, match field, per-board config
+- **Habits / Calendars / Thresholds / Due / Projects editors** — name, filters
+  (space-separated `field=value`), weeks / initial month / metric+target / due lookahead
+- **Deep links** — Board, Thresholds, Habits, Calendar, Due pages have a **⚙ Configure**
+  header link back to the matching Query Builder section (`/query-builder?section=...&edit=...`)
 
 ### Board (Kanban)
 
@@ -639,6 +672,32 @@ Kanban board view for tracking records across workflow stages. Configured in
   `match_field` value so an entity's full journey is scannable left-to-right.
   Unmatched records go to a separate section below the grid. Drag-and-drop in
   grid view only allows drops within the same client row
+
+### Entity
+
+Cross-type lookup: view every record matching a single `field=value` pair across
+all record types at once. Navigate with `G V`. Features:
+- **Landing** — field chips (schema fields shared by 2+ types) with distinct-value
+  counts; pick a field, pick a value, or type your own
+- **Summary card** — identity (`field=value`), auto-detected name, total records,
+  distinct types, date range, aggregated numeric totals
+- **Type badges** — one per record type with counts; click to filter the table
+- **Table / Grid toggle** — RecordTable with full edit/delete/convert, or a
+  board-style grid with one column per type
+- **CLI** — `--entity FIELD=VALUE` prints the summary and all matches (honors `-t/--time`)
+
+### Projects
+
+Dedicated pages for managing named projects (distinct from the `project=` record
+field and legacy `--todo-projects`). Routes under `/projects`:
+- **List** (`/projects`) — all projects with a quick overview
+- **New / Edit** (`/projects/new`, `/projects/<name>/edit`) — label, config key
+  (auto-derived), todo project, record filters, board dropdown, notes path; saves
+  a `["project.*"]` entry in `queries.toml` and creates a project note file with a
+  starter template
+- **Delete** (`/projects/<name>/delete`) — confirmation page; removes the config
+  entry only, notes and todos are preserved
+- Configure links on the home/projects page open the Query Builder Projects section
 
 ### Thresholds
 
@@ -704,37 +763,48 @@ Settings are stored in `config.toml` and editable via the UI.
 
 ### Keyboard Shortcuts
 
-Press `?` from any page to view all shortcuts. Navigation uses a two-key chord: press `G` then the second key within 1.5 seconds.
+Press `?` from any page to view the full help overlay. Navigation is either a
+**single key** (Quick Navigation) or a **G-chord** — press `G` then the second key
+within 1.5 seconds (Extended Navigation). Keys are ignored while typing in any input.
 
-**Navigation:**
+**Quick Navigation (single keys):**
 | Shortcut | Page |
 |----------|------|
-| `G` `H` | [Home](#home) |
-| `G` `A` | [+ Add Record](#-add-record) |
-| `G` `B` | [Browse](#browse) |
-| `G` `Q` | [Queries](#queries) |
-| `G` `U` | [Query Builder](#query-builder) |
-| `G` `J` | [Journal](#journal) |
-| `G` `D` | [Due](#due) |
-| `G` `T` | [Thresholds](#thresholds) |
-| `G` `E` | [Log Editor](#log-editor) |
-| `G` `L` | [Lint](#lint) |
-| `G` `S` | [Settings](#settings) |
-| `G` `C` | [Schema Builder](#schema-builder) |
-| `G` `K` | [Backup](#backup--restore) |
-| `G` `F` | [Search](#search) |
+| `H` | Home |
+| `A` | Add Record |
+| `T` | Todo |
+| `J` | Journal |
+| `N` | Notes |
+| `F` | Search |
+| `R` | Routines |
+| `Y` | Record Types |
+| `B` | Browse |
+| `Q` | Queries |
+| `S` | Settings |
+
+**G-chords:**
+| Shortcut | Page |
+|----------|------|
+| `G` `D` | Due List |
+| `G` `O` | Board |
+| `G` `M` | Habits |
+| `G` `Y` | Calendar |
+| `G` `R` | Thresholds |
+| `G` `V` | Entity |
+| `G` `U` | Query Builder |
+| `G` `C` | Schema Builder |
+| `G` `E` | Log Editor |
+| `G` `L` | Lint |
+| `G` `K` | Backup |
 
 **Actions:**
 | Shortcut | Action |
 |----------|--------|
 | `?` | Show help overlay |
 | `Esc` | Close overlay / cancel |
-| `/` | Focus search/filter (Browse page, sidebar search) |
-| `Ctrl+K` | Focus topbar search (any page) |
-| `N` | New record (same as `G` `A`) |
-| `E` | New expense |
-| `I` | New income |
-| `T` | Todo list |
+| `/` | Focus search |
+| `E` | New expense (add page) |
+| `I` | New income (add page) |
 
 ### Lint
 
@@ -1538,6 +1608,11 @@ ptos --where type=expense --from 2026-01-01 --to 2026-03-31 --export q1_spend
 | `--sum-field FIELD` | | Sum a specific numeric field instead of auto-detecting |
 | `--trend [N]` | | Show last N periods side by side (default: 6) |
 | `--due [NAME\|DAYS]` | | Show overdue records. Optional: named due config or days override |
+| `--thresholds [TIME]` | | Show all thresholds with values/targets/status (or just one time window) |
+| `--habits [NAME]` | | Show habit heatmap grid. No name = all configured habits |
+| `--calendars [NAME]` | | Show calendar month grid. No name = hint for the global view |
+| `--board [NAME]` | | Show board kanban columns. No name = all configured boards |
+| `--entity FIELD=VALUE` | | Show all records matching a field=value pair across types |
 | `--table` | | Display results as a formatted table instead of raw lines |
 | `--export [FILENAME]` | | Export to CSV in `exports/`. Auto-named if no filename given |
 | `--fields` | | Field discovery report for current results |
@@ -1617,14 +1692,19 @@ ptos -y test -t td --delete --all
 | `--todo-contexts` | | List all contexts with counts |
 | `--todo-due [DAYS]` | | Show due/overdue todos (default: today+overdue, optional lookahead) |
 | `--todo-archive` | | Archive old done items to done.YYYY.txt |
+| `--project NAME` | | Filter `--todo-list` by +Project (repeatable) |
+| `--context NAME` | | Filter `--todo-list` by @Context (repeatable) |
+| `--priority P` | | Filter `--todo-list` by priority A-D (repeatable) |
+| `--due-range RANGE` | | Filter `--todo-list` by due range: `overdue` `today` `tomorrow` `upcoming` `someday` `none` |
+| `--todo-search TEXT` | | Glob search `--todo-list` by description |
 | `--cap TEXT...` | | Quick capture — writes `type=capture` record with text as note (`--date`/`--tag`/`--link` apply) |
 | `--paste [TEXT]` | `--dry-run` | Paste clipboard text — validates & appends valid PTOS lines; free-form text writes a capture with type suggestions. Pipe input via stdin. |
 | `--pomo-log TASK MINUTES` | | Log a completed pomodoro session (`--date` applies) |
-| `--daily [DATE]` | | Show daily digest (default: yesterday; accepts `today`/`YYYY-MM-DD`) |
+| `--link [SRC_TARGET] TARGET` | | Link entries: with `--add`, one TARGET links the new record (generates its id); standalone, link existing entries: `--link SRC_TARGET TARGET` |
+| `--retro-id TYPE` | | Assign an `id=` to an existing record/todo/note that lacks one (match via `--where`/`--search`) |
+| `--linked-to TYPE:ID` | | Filter query results to entries linked to the given target |
 | `--convert "WHERE..." TARGET [--set k=v ...] [--keep] [--keep-note] [--all]` | | Convert matched records to another type. Omit TARGET for type suggestion mode |
-| `--habits [NAME]` | | Show habit heatmap grid. No name = all configured habits |
-| `--calendars [NAME]` | | Show calendar month grid. No name = hint for the global view |
-| `--notes ACTION PATH [--name N] [--content C] [--force]` | | Browse/read/edit/delete notes (list, template, new, read, edit, delete, id) |
+| `--notes ACTION PATH [--name N] [--content C] [--force]` | | Notes management. Actions: `list`, `template`, `new`, `read`, `edit`, `delete`, `id`. `new` creates a `.md` file (template auto-applied); `delete` warns on backlinks unless `--force`; `id` prints/generates the note's `ptos-id` |
 | `--backlinks SUBJECT` | | Show what links to a `type:id` target |
 | `--find TEXT` | | Universal search across records, journal, todo, and notes (glob wildcards supported) |
 | `--link-ids` | | List all `type:id` targets in the system |
