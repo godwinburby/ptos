@@ -51,8 +51,8 @@ def _inject_globals():
                 ("todo",        "todo",    "todo",      "Todo",        "T"),
                 ("journal",     "journal", "journal",   "Journal",     "J"),
                 ("notes",       "notes",   "notes",     "Notes",       "N"),
-                ("types",       "types",   "types",     "Types",       "G X"),
-                ("routines",    "routines","routines",  "Routines",    "G Z"),
+                ("types",       "types",   "types",     "Types",       "Y"),
+                ("routines",    "routines","routines",  "Routines",    "R"),
             ]),
             ("find", "Find", [
                 ("search",      "search",  "search",    "Search",      "F"),
@@ -1010,11 +1010,15 @@ def todo_edit_done():
         return jsonify(ok=False, error=str(e))
 
 
+def _now_time_str():
+    return dt.datetime.now().strftime("%H:%M")
+
+
 @app.route("/routines")
 def routines_page():
     buckets = svc.get_todos_bucketed()
     today = dt.date.today()
-    now_time = dt.datetime.now().strftime("%H:%M")
+    now_time = _now_time_str()
     all_open = buckets.get("overdue", []) + buckets.get("today", [])
     routine_todos = [t for t in all_open if "+routine" in t.projects]
     cards = {}
@@ -1047,15 +1051,24 @@ def routines_page():
     untimed.sort(key=lambda t: (t.priority or "Z", t.description))
 
     _CTX_PALETTE = ["ctx-blue", "ctx-orange", "ctx-green", "ctx-purple", "ctx-teal", "ctx-rose"]
-    seen_ctxs = []
+
+    def _first_proj(t):
+        for p in t.projects:
+            if p != "+routine":
+                return p
+        return None
+
+    seen_projs = []
     for t in routine_todos:
-        for c in (t.contexts or ["other"]):
-            cname = c.lstrip("@")
-            if cname not in seen_ctxs:
-                seen_ctxs.append(cname)
-    context_colors = {}
-    for i, name in enumerate(seen_ctxs):
-        context_colors[name] = _CTX_PALETTE[i % len(_CTX_PALETTE)]
+        p = _first_proj(t)
+        if p and p not in seen_projs:
+            seen_projs.append(p)
+    project_colors = {}
+    for i, name in enumerate(seen_projs):
+        project_colors[name] = _CTX_PALETTE[i % len(_CTX_PALETTE)]
+    color_legend = [(name, project_colors[name]) for name in seen_projs]
+    color_legend.append(("other", "ctx-other"))
+    row_colors = {t.line_no: project_colors.get(_first_proj(t), "ctx-other") for t in routine_todos}
 
     now_min = _time_to_min(now_time)
     hour_px = 80
@@ -1063,6 +1076,9 @@ def routines_page():
     first_hour = 0
     last_hour = 23
     if timed:
+        first_hour = _time_to_min(timed[0].due_time) // 60
+        last_end_min = _time_to_min(timed[-1].due_time) + 30
+        last_hour = (last_end_min + 59) // 60
         for i, t in enumerate(timed):
             t_min = _time_to_min(t.due_time)
             if i + 1 < len(timed):
@@ -1074,7 +1090,7 @@ def routines_page():
                 "line_no": t.line_no, "description": t.description,
                 "due_time": t.due_time, "priority": t.priority or "",
                 "context": (t.contexts[0].lstrip("@") if t.contexts else "other"),
-                "color": context_colors.get(t.contexts[0].lstrip("@") if t.contexts else "other", "ctx-other"),
+                "color": project_colors.get(_first_proj(t), "ctx-other"),
                 "top": int((t_min - first_hour * 60) * hour_px / 60), "height": max(int(dur * hour_px / 60), 18),
                 "is_past": t_min < now_min,
                 "projects": t.projects, "contexts": t.contexts or [],
@@ -1086,6 +1102,7 @@ def routines_page():
             })
     total_height = (last_hour - first_hour + 1) * hour_px
     now_top = int((now_min - first_hour * 60) * hour_px / 60)
+    show_now = first_hour * 60 <= now_min <= (last_hour + 1) * 60
 
     done_todos, _ = svc.ptos_todo.load_todos(svc.DONE_PATH)
     done_routines = [t for t in done_todos if "+routine" in t.projects]
@@ -1097,10 +1114,10 @@ def routines_page():
                            now_time=now_time,
                            timed=timed, untimed=untimed,
                            block_data=block_data,
-                           context_colors=context_colors,
+                           color_legend=color_legend, row_colors=row_colors,
                            first_hour=first_hour, last_hour=last_hour,
                            hour_px=hour_px, total_height=total_height,
-                           now_top=now_top,
+                           now_top=now_top, show_now=show_now,
                            done_routines=done_routines,
                            projects=svc.get_todo_projects(),
                            contexts=svc.get_todo_contexts(),

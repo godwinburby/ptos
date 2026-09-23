@@ -89,6 +89,9 @@
       <div class="todo-ac-list" id="modal-links-ac"></div>
     </div>
     <div class="modal-actions">
+      {% if show_delete %}
+      <button class="btn-cancel" id="todo-modal-delete" onclick="deleteTodoFromModal()" style="color:var(--error);border-color:var(--error);display:none;">Delete</button>
+      {% endif %}
       <button class="btn-cancel" onclick="closeTodoModal()">Cancel</button>
       <button class="btn-save" id="todo-modal-save" onclick="saveTodoModal()">Add</button>
     </div>
@@ -100,6 +103,8 @@ function openTodoModal(mode, lineNo, desc, pri, due, dueTime, threshold, thresho
   const el = document.getElementById('todo-modal');
   document.getElementById('todo-modal-title').textContent = mode === 'edit' ? 'Edit Task' : 'New Task';
   document.getElementById('todo-modal-save').textContent = mode === 'edit' ? 'Save' : 'Add';
+  const delBtn = document.getElementById('todo-modal-delete');
+  if (delBtn) delBtn.style.display = (mode === 'edit' && lineNo) ? '' : 'none';
   document.getElementById('modal-line-no').value = mode === 'edit' ? lineNo : '';
   document.getElementById('modal-target').value = 'todo';
   document.getElementById('modal-desc').value = desc || '';
@@ -208,6 +213,25 @@ function pickLinksAC(idx) {
 function closeTodoModal() {
   document.getElementById('todo-modal').classList.remove('open');
   document.querySelectorAll('.modal-field-bulk-hide').forEach(function(f) { f.style.display = ''; });
+}
+
+function deleteTodoFromModal() {
+  var lineNo = document.getElementById('modal-line-no').value;
+  if (!lineNo) return;
+  if (!confirm('Delete this task?')) return;
+  var target = document.getElementById('modal-target').value || 'todo';
+  var url = target === 'done' ? '/todo/delete-done' : '/todo/delete';
+  fetch(url, {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: parseInt(lineNo)})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) { window.location.reload(); }
+    else { alert(d.error || 'Failed'); }
+  })
+  .catch(function() { alert('Network error'); });
 }
 
 function toggleModalChip(el) {
