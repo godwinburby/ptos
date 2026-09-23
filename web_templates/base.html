@@ -1255,7 +1255,6 @@ function toggleMoreMenu(e) {
     "g m": "/habits",
     "g y": "/calendar",
     "g r": "/thresholds",
-    "g x": "/types",
     "g v": "/entity",
   };
 
@@ -1285,6 +1284,8 @@ function toggleMoreMenu(e) {
           <tr><td><kbd>J</kbd></td><td>Journal</td></tr>
           <tr><td><kbd>N</kbd></td><td>Notes</td></tr>
           <tr><td><kbd>F</kbd></td><td>Search</td></tr>
+          <tr><td><kbd>R</kbd></td><td>Routines</td></tr>
+          <tr><td><kbd>Y</kbd></td><td>Record Types</td></tr>
           <tr><td><kbd>B</kbd></td><td>Browse</td></tr>
           <tr><td><kbd>Q</kbd></td><td>Queries</td></tr>
           <tr><td><kbd>S</kbd></td><td>Settings</td></tr>
@@ -1307,7 +1308,6 @@ function toggleMoreMenu(e) {
           <tr><td><kbd>Y</kbd></td><td>Calendar</td></tr>
           <tr><td><kbd>R</kbd></td><td>Thresholds</td></tr>
           <tr><td><kbd>V</kbd></td><td>Entity</td></tr>
-          <tr><td><kbd>X</kbd></td><td>Record Types</td></tr>
           <tr><td><kbd>U</kbd></td><td>Query Builder</td></tr>
           <tr><td><kbd>C</kbd></td><td>Schema Builder</td></tr>
           <tr><td><kbd>E</kbd></td><td>Log Editor</td></tr>
@@ -1462,6 +1462,20 @@ function toggleMoreMenu(e) {
     if (key === "f" && !_g) {
       e.preventDefault();
       window.location = "/search";
+      return;
+    }
+
+    // R — go to Routines page
+    if (key === "r" && !_g) {
+      e.preventDefault();
+      window.location = "/routines";
+      return;
+    }
+
+    // Y — go to Record Types page
+    if (key === "y" && !_g) {
+      e.preventDefault();
+      window.location = "/types";
       return;
     }
 

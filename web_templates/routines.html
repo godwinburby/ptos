@@ -31,13 +31,18 @@
     font-size:11px; color:var(--sub); white-space:nowrap;
   }
   .routine-due.overdue { color:var(--error); font-weight:600; }
+  .routine-del {
+    border:none; background:none; color:var(--sub); font-size:12px;
+    cursor:pointer; padding:2px 4px; border-radius:4px; line-height:1;
+    flex-shrink:0; transition:color .15s, background .15s;
+  }
+  .routine-del:hover { color:var(--error); background:var(--bg); }
   .routine-time {
     font-size:11px; font-weight:700; color:var(--accent);
     background:var(--accent-lt); padding:1px 6px; border-radius:8px;
     white-space:nowrap;
   }
   .routine-item.past { opacity:0.45; }
-  .routine-item.past .routine-desc { text-decoration:line-through; }
   .routine-now {
     display:flex; align-items:center; gap:8px;
     font-size:11px; font-weight:700; color:var(--accent);
@@ -132,7 +137,6 @@
   }
   .rv-block:hover { filter:brightness(0.95); }
   .rv-block.past { opacity:0.4; }
-  .rv-block.past .rv-block-desc { text-decoration:line-through; }
   .rv-block-head { display:flex; align-items:center; gap:4px; }
   .rv-block-check {
     width:12px; height:12px; border-radius:3px; cursor:pointer;
@@ -154,6 +158,26 @@
   .ctx-teal    { background:#E6FAF5; border-color:#14B8A6; color:#1A1D2E; }
   .ctx-rose    { background:#FDE7F3; border-color:#E11D78; color:#1A1D2E; }
   .ctx-other   { background:var(--bg); border-color:var(--sub); color:#1A1D2E; }
+
+  .routine-item.ctx-blue    { border-left:3px solid #4F6BED; border-bottom-color:var(--border-lt); }
+  .routine-item.ctx-orange  { border-left:3px solid #E8803A; border-bottom-color:var(--border-lt); }
+  .routine-item.ctx-green   { border-left:3px solid #2E7D56; border-bottom-color:var(--border-lt); }
+  .routine-item.ctx-purple  { border-left:3px solid #8B5CF6; border-bottom-color:var(--border-lt); }
+  .routine-item.ctx-teal    { border-left:3px solid #14B8A6; border-bottom-color:var(--border-lt); }
+  .routine-item.ctx-rose    { border-left:3px solid #E11D78; border-bottom-color:var(--border-lt); }
+  .routine-item.ctx-other   { border-left:none; border-bottom-color:var(--border-lt); }
+
+  .rv-legend {
+    display:flex; flex-wrap:wrap; gap:4px 14px;
+    margin-top:10px; padding:8px 12px;
+    background:var(--card); border:1px solid var(--border); border-radius:10px;
+    font-size:11px; color:var(--sub);
+  }
+  .rv-legend-item { display:inline-flex; align-items:center; gap:6px; white-space:nowrap; }
+  .rv-legend-chip {
+    width:10px; height:10px; border-radius:3px; display:inline-block;
+    border:1.5px solid currentColor;
+  }
 
   .rv-now {
     position:absolute; left:0; right:0; height:2px;
@@ -205,7 +229,7 @@
 
 <div id="routine-help" class="routine-help{% if cards %}{% else %} open{% endif %}">
   <div class="routine-help-title">What are routines?</div>
-  <p>Routines are your daily recurring tasks — things you do every day that would clutter your main todo list. This page shows them as simple checkbox cards grouped by context (e.g. morning, evening).</p>
+  <p>Routines are your daily recurring tasks — things you do every day that would clutter your main todo list. This page shows them as checkbox cards grouped by context (e.g. morning, evening); the day view is a timeline whose colors follow each routine's project.</p>
   <div class="routine-help-title" style="margin-top:12px;">How to add a routine</div>
   <p>Go to the <a href="/todo" style="color:var(--accent);">Todo page</a> and add a todo with:</p>
   <ul>
@@ -224,9 +248,17 @@
     <li>Click an item's text to edit it</li>
     <li>Use the "+ Add" button on each card to quickly add a routine to that context</li>
     <li>Switch to <strong>Day</strong> view to see your routine as a timeline with time blocks</li>
-    <li>Each <code>@context</code> becomes a separate card or color in the day view</li>
+    <li>Each <code>@context</code> becomes a separate card; colors follow the project (e.g. <code>+gym</code>) in both cards and the day view</li>
   </ul>
 </div>
+
+{% if color_legend and (cards or block_data) %}
+<div class="rv-legend">
+  {% for name, cls in color_legend %}
+  <span class="rv-legend-item"><span class="rv-legend-chip {{ cls }}"></span>{{ name | replace('+','') }}</span>
+  {% endfor %}
+</div>
+{% endif %}
 
 {# ══════════════════════════════════════════════════════════════════════════════
    CARD VIEW
@@ -241,7 +273,7 @@
         <span class="routine-badge">{{ total }}</span>
       </div>
       {% for t in todos %}
-      <div class="routine-item" data-line="{{ t.line_no }}" data-time="{{ t.due_time or '' }}">
+      <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}" data-line="{{ t.line_no }}" data-time="{{ t.due_time or '' }}">
         <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
         <span class="routine-desc" onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
         {% if t.due_time %}<span class="routine-time">{{ t.due_time }}</span>{% endif %}
@@ -251,6 +283,7 @@
         </span>
         {% endif %}
         {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
+        <button class="routine-del" onclick="deleteTodo({{ t.line_no }})" title="Delete routine">✕</button>
       </div>
       {% endfor %}
       {% if context_name != 'other' %}
@@ -307,13 +340,16 @@
           <div class="rv-block-check" onclick="event.stopPropagation();completeTodo({{ b.line_no }}, this)"></div>
           <span class="rv-block-time">{{ b.due_time }}</span>
           <span class="rv-block-desc" onclick="event.stopPropagation();openEdit({{ b.line_no }}, '{{ b.description|e }}', '{{ b.priority }}', '{{ b.due }}', '{{ b.due_time }}', '{{ b.threshold }}', '{{ b.threshold_time }}', '{{ b.projects|join(' ') }}', '{{ b.contexts|join(' ') }}', '{{ b.rec }}', '{{ b.id }}', '{{ b.links|join(',') }}')">{{ b.description }}</span>
+          <button class="routine-del" onclick="event.stopPropagation();deleteTodo({{ b.line_no }})" title="Delete routine">✕</button>
         </div>
       </div>
       {% endfor %}
+      {% if show_now %}
       <div class="rv-now" id="rv-now" style="top:{{ now_top }}px">
         <span class="rv-now-dot"></span>
         <span class="rv-now-label">Now {{ now_time }}</span>
       </div>
+      {% endif %}
     </div>
   </div>
 {% else %}
@@ -324,17 +360,18 @@
 <div class="rv-anytime">
   <div class="rv-anytime-title">Anytime</div>
   {% for t in untimed %}
-  <div class="routine-item" data-line="{{ t.line_no }}">
+  <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}" data-line="{{ t.line_no }}">
     <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
     <span class="routine-desc" onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
     {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
+    <button class="routine-del" onclick="deleteTodo({{ t.line_no }})" title="Delete routine">✕</button>
   </div>
   {% endfor %}
 </div>
 {% endif %}
 </div>
 
-{% include '_todo_modal.html' %}
+{% with show_delete=True %}{% include '_todo_modal.html' %}{% endwith %}
 
 <script>
 var _nowTime = "{{ now_time }}";
@@ -414,6 +451,21 @@ function completeTodo(lineNo, el) {
   .then(r => r.json())
   .then(d => { if (d.ok) { setTimeout(() => window.location.reload(), 500); } else { alert(d.error || 'Failed'); window.location.reload(); } })
   .catch(() => window.location.reload());
+}
+
+function deleteTodo(lineNo) {
+  if (!confirm('Delete this routine?')) return;
+  fetch('/todo/delete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({line_no: lineNo})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) { window.location.reload(); }
+    else { alert(d.error || 'Failed'); }
+  })
+  .catch(() => alert('Network error'));
 }
 
 function undoTodo(lineNo, el) {
