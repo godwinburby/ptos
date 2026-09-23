@@ -38,6 +38,11 @@
 
 <div class="cal-header">
   <div class="page-title">Calendar</div>
+  {% if active and active != '__all__' %}
+  <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=calendars&amp;edit={{ active }}" title="Edit this calendar in Query Builder">⚙ Configure</a>
+  {% else %}
+  <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=calendars" title="Edit calendars in Query Builder">⚙ Configure</a>
+  {% endif %}
   {% if data %}
   <select class="cal-select" onchange="goCalendar(this.value)">
     <option value="__all__" {% if active == '__all__' %}selected{% endif %}>All records</option>

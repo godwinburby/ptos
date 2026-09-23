@@ -511,3 +511,207 @@ class TestDispatchRoute:
         data = resp.get_json()
         assert data["ok"] is False
         assert "not found" in data["error"]
+
+    def test_save_metric_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/metric",
+                           json={"name": "snacks_total", "cfg": {"kind": "sum", "base": "expenses"},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert stored["metrics"]["snacks_total"]["sum"] == "expenses"
+
+    def test_delete_metric_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/metric",
+                           json={"name": "food_ratio", "action": "delete"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert "food_ratio" not in (stored.get("metrics") or {})
+
+    def test_save_dashboard_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/dashboard",
+                           json={"name": "snacks", "cfg": {"metrics": ["expenses"]},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert stored["dashboards"]["snacks"]["metrics"] == ["expenses"]
+
+    def test_delete_dashboard_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/dashboard",
+                           json={"name": "fin", "action": "delete"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert "fin" not in (stored.get("dashboards") or {})
+
+    def test_save_alias_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/alias",
+                           json={"name": "spend", "cfg": {"alias": "expenses"},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert stored["spend"]["alias"] == "expenses"
+
+    def test_delete_alias_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/alias",
+                           json={"name": "my_alias", "action": "delete"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert "my_alias" not in stored
+
+    def test_save_habit_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/habit",
+                           json={"name": "walk", "cfg": {"filters": ["type=exercise"],
+                                                         "weeks": 8, "toggleable": True},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert stored["habit.walk"]["filters"] == ["type=exercise"]
+        assert stored["habit.walk"]["weeks"] == 8
+
+    def test_save_habit_rejects_empty_filters_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/habit",
+                           json={"name": "empty_habit", "cfg": {"filters": []},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is False
+
+    def test_delete_habit_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/habit",
+                           json={"name": "meditation", "action": "delete"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert "habit.meditation" not in stored
+
+    def test_save_calendar_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/calendar",
+                           json={"name": "work", "cfg": {"filters": ["type=work"],
+                                                         "time_window": "last-month"},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert stored["calendar.work"]["filters"] == ["type=work"]
+        assert stored["calendar.work"]["time_window"] == "last-month"
+
+    def test_save_calendar_rejects_empty_filters_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/calendar",
+                           json={"name": "empty_cal", "cfg": {"filters": []},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is False
+
+    def test_delete_calendar_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/calendar",
+                           json={"name": "expenses", "action": "delete"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert "calendar.expenses" not in stored
+
+    def test_save_threshold_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/threshold",
+                           json={"name": "snack_budget", "cfg": {"metric": "expenses",
+                                                                 "agg": "sum", "sum_field": "amount",
+                                                                 "value": "100", "direction": "max"},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert stored["threshold.snack_budget"]["metric"] == "expenses"
+        assert stored["threshold.snack_budget"]["value"] == "100"
+
+    def test_save_threshold_rejects_empty_metric_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/threshold",
+                           json={"name": "no_metric", "cfg": {"metric": ""},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is False
+
+    def test_delete_threshold_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/threshold",
+                           json={"name": "spending", "action": "delete"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert "threshold.spending" not in stored
+
+    def test_save_due_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/due",
+                           json={"name": "tasks", "cfg": {"type": "task", "key": "due",
+                                                          "sort_by": "created", "days": 14},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert stored["due.tasks"]["key"] == "due"
+        assert stored["due.tasks"]["days"] == 14
+
+    def test_delete_due_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/due",
+                           json={"name": "tasks", "action": "delete"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert "due.tasks" not in stored
+
+    def test_save_project_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/project",
+                           json={"name": "jobsearch", "cfg": {"label": "New Label"},
+                                 "action": "save"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert stored["project.jobsearch"]["label"] == "New Label"
+
+    def test_delete_project_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/project",
+                           json={"name": "jobsearch", "action": "delete"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        stored = _read()
+        assert "project.jobsearch" not in stored

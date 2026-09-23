@@ -12,7 +12,6 @@
   <div class="page-title" style="margin:0;">Query Builder</div>
   <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
     <button onclick="addEntry()" class="btn btn-primary btn-sm">+ New</button>
-    <button onclick="saveAll()"  class="btn btn-success btn-sm" id="save-btn">💾 Save All</button>
     <button onclick="resetQuery()" class="btn btn-ghost btn-sm" id="reset-btn">Clear</button>
     <div id="save-msg" style="font-size:13px;display:none;"></div>
   </div>
@@ -219,6 +218,8 @@ Object.entries(_dueFromBackend).forEach(function(e) {
 var _fieldCache = {};   // {type: [{name, options, is_int}]}
 var _cacheSet  = [];    // maintain insertion order for eviction
 var _liveTimer = null;
+var _lastAllFields = [];
+var _lastAggFields = [];
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function() {
@@ -444,7 +445,7 @@ function renderDueTabs() {
 }
 
 function select(section, name) {
-  _cur = {section, name};
+  _cur = {section: section, name: name, origName: name};
   if (_curSection !== section) switchSection(section);
   renderTabs();
   document.getElementById("entry-editor").style.display = "block";
@@ -540,8 +541,9 @@ function renderEditor() {
         '<input type="text" id="ed-name" value="'+n+'" oninput="onNameChange()"' +
         ' style="font-size:16px;font-weight:700;"></div>' +
       '<div style="margin-top:18px;">' +
+        '<button id="save-current-btn" onclick="saveCurrent()" class="btn btn-success btn-sm">💾 Save</button>' +
         '<button onclick="askDelete()" class="btn btn-ghost btn-sm"' +
-        ' style="color:var(--error);border-color:var(--error);">Delete</button>' +
+        ' style="margin-left:6px;color:var(--error);border-color:var(--error);">Delete</button>' +
       '</div>' +
     '</div>' +
     '<div style="font-size:11px;color:var(--sub);margin-top:6px;">' +
@@ -720,13 +722,28 @@ function _buildAliasEditor(container, name) {
   var opts = qNames.map(function(n){
     return '<option value="'+n+'"'+(n===a.alias?" selected":"")+'>'+n+'</option>';
   }).join("");
+  var hdr = document.createElement("div");
+  hdr.className = "card"; hdr.style.marginBottom = "12px";
+  hdr.innerHTML =
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
+      '<div style="flex:1;"><label>Name</label>' +
+        '<input type="text" id="ed-name" value="'+_esc(name)+'" oninput="onNameChange()"' +
+        ' style="font-size:16px;font-weight:700;"></div>' +
+      '<div style="margin-top:18px;">' +
+        '<button id="save-current-btn" onclick="saveCurrent()" class="btn btn-success btn-sm">💾 Save</button>' +
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm"' +
+        ' style="margin-left:6px;color:var(--error);border-color:var(--error);">Delete</button>' +
+      '</div>' +
+    '</div>' +
+    '<div style="font-size:11px;color:var(--sub);margin-top:6px;">Alias — shortcut name for another query.</div>';
+  container.appendChild(hdr);
   var card = document.createElement("div");
   card.className = "card";
   card.innerHTML =
     '<div style="display:flex;align-items:center;gap:12px;padding:8px 0;">'+
       '<span style="font-size:28px;color:var(--accent);">↳</span>'+
       '<div style="flex:1;">'+
-        '<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">Alias — shortcut name for another query</div>'+
+        '<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">Target query</div>'+
         '<select id="alias-target" onchange="onAliasChange(this.value)" style="width:100%;font-size:14px;padding:8px;border-radius:8px;">'+
           '<option value="">— select a query —</option>'+opts+'</select>'+
       '</div>'+
@@ -1426,19 +1443,13 @@ function confirmDelete() {
   if (!_delPending) return;
   var s=_delPending.section, n=_delPending.name;
   closeDeleteModal();
-  // Due/Board configs have no individual backend delete endpoint — remove from state
-  // and immediately Save All so the deletion persists.
-  if (s === "due" || s === "boards" || s === "habits" || s === "calendars") {
-    delete _st[s][n]; _cur=null; renderTabs();
-    document.getElementById("entry-editor").style.display = "none";
-    document.getElementById("entry-empty").style.display  = "block";
-    saveAll();
-    return;
-  }
-  var kindMap = {queries:"query", metrics:"metric", aliases:"alias", dashboards:"dashboard"};
-  fetch("/query-builder/delete", {
+  var kindMap = {queries:"query", metrics:"metric", aliases:"alias", dashboards:"dashboard",
+                 boards:"board", habits:"habit", calendars:"calendar", thresholds:"threshold", due:"due"};
+  var kind = kindMap[s];
+  if (!kind) return;
+  fetch("/api/query-builder/"+kind, {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify({name:n, kind:kindMap[s]||"query"})
+    body:JSON.stringify({name:n, action:"delete"})
   })
   .then(function(r){ return r.json(); })
   .then(function(d) {
@@ -1453,33 +1464,133 @@ function confirmDelete() {
 }
 
 
-// ── Save all ──────────────────────────────────────────────────────────────────
-function saveAll() {
-  // sync all where expressions from chips before saving
-  Object.keys(_st.queries).forEach(function(n) {
-    _st.queries[n].where = _buildWhereExpr(_st.queries[n]);
-  });
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due };
-  Object.entries(_st.queries).forEach(function(e) {
-    var k=e[0],v=e[1];
-    payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
-  });
-  var btn = document.getElementById("save-btn");
-  btn.disabled=true; btn.textContent="Saving…";
-  fetch("/query-builder/save", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(payload)
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(d) {
-    btn.disabled=false; btn.textContent="💾 Save All";
-    if (d.ok) showMsg("✔ Saved to queries.toml",true);
-    else      showMsg("✖ "+d.error,false);
-  })
-  .catch(function(e){
-    btn.disabled=false; btn.textContent="💾 Save All";
-    showMsg("✖ "+e,false);
-  });
+// ── Save current entry ─────────────────────────────────────────────────────────
+var _sectionKindMap = {
+  queries:"query", metrics:"metric", dashboards:"dashboard", aliases:"alias",
+  boards:"board", habits:"habit", calendars:"calendar", thresholds:"threshold", due:"due"
+};
+
+function buildCfgForSection(name) {
+  var s = _cur.section;
+  if (s === "queries") {
+    var q = _st.queries[name];
+    q.where = _buildWhereExpr(q);
+    return {where:q.where, time:q.time, sum:q.sum, group:q.group, search:q.search, sort:q.sort};
+  }
+  if (s === "metrics") {
+    var m = _st.metrics[name];
+    var cfg = {kind:m.kind, base:m.base, base2:m.base2, derived:m.derived||"",
+               unit_field:m.unit_field||"", unit_weights:m.unit_weights||{}, _raw:m._raw||{}};
+    if (m.time) cfg.time = m.time;
+    return cfg;
+  }
+  if (s === "dashboards") {
+    var db = _st.dashboards[name];
+    return {metrics:db.metrics||[], groups:db.groups||{}, ungrouped_label:db.ungrouped_label||""};
+  }
+  if (s === "aliases") {
+    return {alias: _st.aliases[name].alias};
+  }
+  if (s === "boards") {
+    var b = _st.boards[name];
+    return {columns:b.columns||[], time_window:b.time_window||"this-month", limit:b.limit||0,
+            card_title_fields:b.card_title_fields||[], rollup_field:b.rollup_field||"",
+            rollup_op:b.rollup_op||"count", match_field:b.match_field||""};
+  }
+  if (s === "habits") {
+    var h = _st.habits[name];
+    return {filters:h.filters||[], weeks:h.weeks||12, toggleable:h.toggleable!==false};
+  }
+  if (s === "calendars") {
+    var c = _st.calendars[name];
+    return {filters:c.filters||[], time_window:c.time_window||"this-month"};
+  }
+  if (s === "thresholds") {
+    var t = _st.thresholds[name];
+    return {metric:t.metric||"", agg:t.agg||"", sum_field:t.sum_field||"",
+            value:t.value||"", direction:t.direction||"max", time:t.time||"", unit:t.unit||""};
+  }
+  if (s === "due") {
+    var d = _st.due[name];
+    return {type:d.type||"", key:d.key||"", sort_by:d.sort_by||"",
+            days:d.days||7, exclude_results:d.exclude_results||[]};
+  }
+  return {};
+}
+
+function validateForSave(name) {
+  var s = _cur.section;
+  if (s === "boards") {
+    var b = _st.boards[name];
+    if (!b || !b.columns || !b.columns.length) {
+      showMsg("✖ Board must have at least one column", false); return false;
+    }
+  }
+  if (s === "habits") {
+    var h = _st.habits[name];
+    if (!h || !h.filters || !h.filters.length) {
+      showMsg("✖ Habit must have at least one filter", false); return false;
+    }
+  }
+  if (s === "calendars") {
+    var c = _st.calendars[name];
+    if (!c || !c.filters || !c.filters.length) {
+      showMsg("✖ Calendar must have at least one filter", false); return false;
+    }
+  }
+  if (s === "thresholds") {
+    var t = _st.thresholds[name];
+    if (!t || !t.metric || !t.metric.trim()) {
+      showMsg("✖ Threshold must have a metric", false); return false;
+    }
+  }
+  if (s === "aliases") {
+    var a = _st.aliases[name];
+    if (!a || !a.alias) {
+      showMsg("✖ Alias must target a query", false); return false;
+    }
+  }
+  return true;
+}
+
+function saveCurrent() {
+  if (!_cur) return;
+  var s = _cur.section, n = _cur.name, origName = _cur.origName;
+  var kind = _sectionKindMap[s];
+  if (!kind) return;
+  if (s === "queries") {
+    var q = _st.queries[n];
+    if (q) q.where = _buildWhereExpr(q);
+  }
+  if (!validateForSave(n)) return;
+  var cfg = buildCfgForSection(n);
+  var btn = document.getElementById("save-current-btn");
+  if (btn) { btn.disabled=true; btn.textContent="Saving…"; }
+  function doSave(nameKey, cfgData) {
+    return fetch("/api/query-builder/"+kind, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name:nameKey, cfg:cfgData})
+    }).then(function(r){ return r.json(); });
+  }
+  function doDelete(nameKey) {
+    return fetch("/api/query-builder/"+kind, {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body:JSON.stringify({name:nameKey, action:"delete"})
+    }).then(function(r){ return r.json(); });
+  }
+  function finish(d) {
+    if (btn) { btn.disabled=false; btn.textContent="💾 Save"; }
+    if (d.ok) { showMsg("✔ Saved",true); _cur.origName = _cur.name; }
+    else showMsg("✖ "+d.error,false);
+  }
+  if (origName && origName !== n) {
+    doDelete(origName).then(function(d) {
+      if (!d.ok) { finish(d); return; }
+      doSave(n, cfg).then(finish).catch(function(e){ showMsg("✖ "+e,false); });
+    }).catch(function(e){ showMsg("✖ "+e,false); });
+  } else {
+    doSave(n, cfg).then(finish).catch(function(e){ showMsg("✖ "+e,false); });
+  }
 }
 
 function showMsg(text, ok) {
@@ -1581,82 +1692,6 @@ var _qbSortCol = null;
 var _qbSortAsc = true;
 
 
-// ── Save all ──────────────────────────────────────────────────────────────────
-function saveAll() {
-  // sync all where expressions from chips before saving
-  Object.keys(_st.queries).forEach(function(n) {
-    _st.queries[n].where = _buildWhereExpr(_st.queries[n]);
-  });
-  // validate boards client-side before POST
-  if (_st.boards) {
-    for (var bname in _st.boards) {
-      var cfg = _st.boards[bname];
-      if (!cfg.columns || !cfg.columns.length) {
-        showMsg("✖ Board '" + bname + "' must have at least one column", false);
-        return;
-      }
-    }
-  }
-  // validate habits client-side before POST
-  if (_st.habits) {
-    for (var hname in _st.habits) {
-      var hcfg = _st.habits[hname];
-      if (!hcfg.filters || !hcfg.filters.length) {
-        showMsg("✖ Habit '" + hname + "' must have at least one filter", false);
-        return;
-      }
-    }
-  }
-  // validate calendars client-side before POST
-  if (_st.calendars) {
-    for (var cname in _st.calendars) {
-      var ccfg = _st.calendars[cname];
-      if (!ccfg.filters || !ccfg.filters.length) {
-        showMsg("✖ Calendar '" + cname + "' must have at least one filter", false);
-        return;
-      }
-    }
-  }
-  // validate thresholds client-side before POST
-  if (_st.thresholds) {
-    for (var tname in _st.thresholds) {
-      var tcfg = _st.thresholds[tname];
-      if (!tcfg.metric || !tcfg.metric.trim()) {
-        showMsg("✖ Threshold '" + tname + "' must have a metric", false);
-        return;
-      }
-    }
-  }
-  var payload = { metrics:_st.metrics, dashboards:_st.dashboards, queries:{}, aliases:_st.aliases, due:_st.due, boards:_st.boards, habits:_st.habits, calendars:_st.calendars, thresholds:_st.thresholds };
-  Object.entries(_st.queries).forEach(function(e) {
-    var k=e[0],v=e[1];
-    payload.queries[k] = {where:v.where,time:v.time,sum:v.sum,group:v.group,search:v.search,sort:v.sort};
-  });
-  var btn = document.getElementById("save-btn");
-  btn.disabled=true; btn.textContent="Saving…";
-  fetch("/query-builder/save", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body:JSON.stringify(payload)
-  })
-  .then(function(r){ return r.json(); })
-  .then(function(d) {
-    btn.disabled=false; btn.textContent="💾 Save All";
-    if (d.ok) showMsg("✔ Saved to queries.toml",true);
-    else      showMsg("✖ "+d.error,false);
-  })
-  .catch(function(e){
-    btn.disabled=false; btn.textContent="💾 Save All";
-    showMsg("✖ "+e,false);
-  });
-}
-
-function showMsg(text, ok) {
-  var el = document.getElementById("save-msg");
-  el.textContent=text; el.style.color=ok?"var(--success)":"var(--error)";
-  el.style.display="inline";
-  if (ok) setTimeout(function(){ el.style.display="none"; },3000);
-}
-
 document.getElementById("del-modal").addEventListener("click", function(e) {
   if (e.target===this) closeDeleteModal();
 });
@@ -1678,8 +1713,8 @@ function showBoardEditor() {
         '<input type="text" id="board-name-input" value="'+_esc(_cur.name)+'" oninput="onBoardNameChange()"'+
         ' style="font-size:16px;font-weight:700;"></div>'+
       '<div style="margin-top:18px;">'+
-        '<button onclick="askDelete()" class="btn btn-ghost btn-sm"'+
-        ' style="color:var(--error);border-color:var(--error);">Delete</button>'+
+        '<button id="save-current-btn" onclick="saveCurrent()" class="btn btn-success btn-sm">💾 Save</button>'+
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm" style="margin-left:6px;color:var(--error);border-color:var(--error);">Delete</button>'+
       '</div>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
@@ -1758,8 +1793,8 @@ function showHabitEditor() {
         '<input type="text" id="habit-name-input" value="'+_esc(_cur.name)+'" oninput="onHabitNameChange()"'+
         ' style="font-size:16px;font-weight:700;"></div>'+
       '<div style="margin-top:18px;">'+
-        '<button onclick="askDelete()" class="btn btn-ghost btn-sm"'+
-        ' style="color:var(--error);border-color:var(--error);">Delete</button>'+
+        '<button id="save-current-btn" onclick="saveCurrent()" class="btn btn-success btn-sm">💾 Save</button>'+
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm" style="margin-left:6px;color:var(--error);border-color:var(--error);">Delete</button>'+
       '</div>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
@@ -1822,8 +1857,8 @@ function showCalendarEditor() {
         '<input type="text" id="calendar-name-input" value="'+_esc(_cur.name)+'" oninput="onCalendarNameChange()"'+
         ' style="font-size:16px;font-weight:700;"></div>'+
       '<div style="margin-top:18px;">'+
-        '<button onclick="askDelete()" class="btn btn-ghost btn-sm"'+
-        ' style="color:var(--error);border-color:var(--error);">Delete</button>'+
+        '<button id="save-current-btn" onclick="saveCurrent()" class="btn btn-success btn-sm">💾 Save</button>'+
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm" style="margin-left:6px;color:var(--error);border-color:var(--error);">Delete</button>'+
       '</div>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
@@ -1922,8 +1957,8 @@ function showThresholdEditor() {
         '<input type="text" id="thr-name-input" value="'+_esc(_cur.name)+'" oninput="onThrNameChange()"'+
         ' style="font-size:16px;font-weight:700;"></div>'+
       '<div style="margin-top:18px;">'+
-        '<button onclick="askDelete()" class="btn btn-ghost btn-sm"'+
-        ' style="color:var(--error);border-color:var(--error);">Delete</button>'+
+        '<button id="save-current-btn" onclick="saveCurrent()" class="btn btn-success btn-sm">💾 Save</button>'+
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm" style="margin-left:6px;color:var(--error);border-color:var(--error);">Delete</button>'+
       '</div>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
@@ -2115,9 +2150,6 @@ function onBoardLimitChange() {
   cfg.limit = val > 0 ? val : 0;
 }
 
-var _lastAllFields = [];
-var _lastAggFields = [];
-
 function _commonTitleFields(resp) {
   var overlap = resp.ok && resp.overlap ? resp.overlap : [];
   return overlap.filter(function(f) { return f !== "date" && f !== "type" && f !== "note"; });
@@ -2258,6 +2290,69 @@ function onBoardNameChange() {
   delete _st.boards[old];
   _cur.name = newName;
   renderTabs();
+}
+
+// ── Due editor ────────────────────────────────────────────────────────────────
+function showDueEditor() {
+  var ed = document.getElementById("entry-editor");
+  var empty = document.getElementById("entry-empty");
+  ed.style.display = "block";
+  empty.style.display = "none";
+
+  var cfg = _st.due[_cur.name] || {type:"", key:"", sort_by:"", days:7, exclude_results:[]};
+  var selectedType = cfg.type || "";
+
+  ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
+    '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
+      '<div style="flex:1;"><label>Name</label>'+
+        '<input type="text" id="due-name-input" value="'+_esc(_cur.name)+'" oninput="onDueNameChange()"'+
+        ' style="font-size:16px;font-weight:700;"></div>'+
+      '<div style="margin-top:18px;">'+
+        '<button id="save-current-btn" onclick="saveCurrent()" class="btn btn-success btn-sm">💾 Save</button>'+
+        '<button onclick="askDelete()" class="btn btn-ghost btn-sm" style="margin-left:6px;color:var(--error);border-color:var(--error);">Delete</button>'+
+      '</div>'+
+    '</div>'+
+    '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
+      'Due — a config that surfaces records whose field is due within N days.'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Record Type</div>'+
+      '<div id="due-type-chips" class="chip-group"></div>'+
+    '</div>'+
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-bottom:14px;">'+
+      '<div style="flex:1;min-width:120px;">'+
+        '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Due Field</div>'+
+        '<div id="due-key-chips" class="chip-group"></div>'+
+      '</div>'+
+      '<div style="flex:1;min-width:120px;">'+
+        '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Sort By</div>'+
+        '<div id="due-sort-chips" class="chip-group"></div>'+
+      '</div>'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Days Notice</label>'+
+      '<input type="number" id="due-days" value="'+(cfg.days||7)+'" onchange="onDueDaysChange()" min="1"'+
+      ' style="width:100px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+    '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Exclude Results <span style="font-weight:400;color:var(--sub);">(optional)</span></div>'+
+      '<div id="due-exclude-chips" class="chip-group"></div>'+
+      '<input type="text" id="due-exclude-input" placeholder="e.g. followup status=closed"'+
+      ' style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;margin-top:8px;"'+
+      ' onkeydown="if(event.key===\'Enter\'){addDueExclude();}">'+
+      '<button onclick="addDueExclude()" class="btn btn-ghost btn-sm" style="margin-top:6px;">Add</button>'+
+    '</div>'+
+  '</div>';
+
+  renderDueTypeChips(selectedType);
+  if (selectedType) fetchDueFieldsForType(selectedType);
+  else {
+    var keyEl = document.getElementById("due-key-chips");
+    var sortEl = document.getElementById("due-sort-chips");
+    if (keyEl) keyEl.innerHTML = '<span style="font-size:12px;color:var(--sub);">Pick a record type first.</span>';
+    if (sortEl) sortEl.innerHTML = '';
+  }
+  renderDueExcludeChips();
 }
 
 function renderDueTypeChips(selected) {

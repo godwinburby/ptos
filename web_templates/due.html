@@ -13,6 +13,7 @@
       {% endfor %}
     </div>
     {% endif %}
+    <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=due&amp;edit={{ selected_due }}" title="Edit this due config in Query Builder">⚙ Configure</a>
     <select id="days-select" onchange="reload()" style="width:auto;padding:8px 12px;font-size:13px;">
       <option value="0"  {% if days==0  %}selected{% endif %}>All</option>
       <option value="1"  {% if days==1  %}selected{% endif %}>1+ days</option>

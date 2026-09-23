@@ -30,6 +30,7 @@
 
 <div class="habits-header">
   <div class="page-title">Habits</div>
+  <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=habits" title="Edit habits in Query Builder">⚙ Configure</a>
   {% if habits %}
   <span class="hab-habit-count">{{ habits | length }} habit(s) configured</span>
   <select class="hab-time-select" id="hab-time-select" onchange="onTimeChange(this.value)">

@@ -5,6 +5,21 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-23
+
+### Scoped config writes (Phase 3) — Query Builder per-entry save
+
+- **Save All removed** — the Query Builder no longer rewrites the whole `queries.toml`. The bulk "💾 Save All" button and the legacy `POST /query-builder/save` route are gone. Every editor (query, metric, dashboard, alias, board, habit, calendar, threshold, due) now has a per-entry **💾 Save** button in its header backed by the scoped `POST /api/query-builder/<kind>` route. A rename is a delete-old + save-new sequence (`_origName` tracked at select time).
+- **Legacy delete route removed** — `POST /query-builder/delete` deleted; `confirmDelete()` now dispatches every section (queries/metrics/dashboards/aliases/boards/habits/calendars/thresholds/due) to the scoped per-kind endpoint.
+- **Due editor restored** — `showDueEditor()` was referenced but never defined (latent bug); it now renders a full editor (name, type chips, due field, sort-by, days notice, exclude chips) with Save/Delete.
+- **Deep-links** — Board, Thresholds, Habits, Calendar, and Due pages gain a **⚙ Configure** header link to the Query Builder section (`/query-builder?section=...&edit=...`), which already supports deep-linking via URL params. Named boards/calendars and the active due config deep-link to their specific entry; habits/thresholds use section-level links. The Queries page's threshold chip now also deep-links to the `thresholds` section instead of the generic landing page.
+- **CLI `--add-dashboard` migrated** — drops the `save_queries_full(...)` full-dict rebuild and calls `svc.save_dashboard(name, db_entry)` directly. Dead helpers `_metric_to_internal` and the per-handler board/habit/calendar/threshold extraction were removed.
+- **`save_queries_full` retired** — no production callers remain (web routes removed, CLI migrated); kept and re-flagged `# RETIRED` for test back-compat and direct tooling use.
+- **Duplicate template removed** — a stale root-level `query_builder.html` (old version referencing the deleted routes) was deleted; the app always uses `web_templates/query_builder.html`.
+- **19 new dispatch-route tests** — save/delete via route for metric, dashboard, alias, habit, calendar, threshold, due, project, plus empty-filters/empty-metric rejection paths. `tests/test_scoped_writes.py` now has 81 tests total. Full suite: 1652 passed, 4 pre-existing date failures.
+
+---
+
 ## 2026-09-22
 
 ### Scoped config writes (Phase 1-2)
