@@ -2523,32 +2523,6 @@ def _interactive_suggest(rtype, record):
     return defaults
 
 
-def _metric_to_internal(m):
-    """Convert a stored metrics.toml entry ({avg: base, ratio: [...]}) into
-    the internal {kind, base, base2, ...} form save_queries_full expects."""
-    m = dict(m)
-    internal = {}
-    for k in ("unit_field", "unit_weights", "time"):
-        if k in m:
-            internal[k] = m.pop(k)
-    if "derived" in m:
-        internal["derived"] = m.pop("derived")
-    elif "ratio" in m and isinstance(m.get("ratio"), list) and len(m["ratio"]) >= 2:
-        internal["kind"] = "ratio"
-        internal["base"], internal["base2"] = m.pop("ratio")[:2]
-    else:
-        for kind in ("avg", "sum", "max", "min"):
-            if kind in m:
-                internal["kind"] = kind
-                internal["base"] = m.pop(kind)
-                break
-        else:
-            internal["kind"] = "avg"
-    if m:
-        internal["_raw"] = m
-    return internal
-
-
 def _handle_add_dashboard(args):
     """Add a dashboard referencing metrics to queries.toml, preserving
     all other queries state (queries, metrics, aliases, due, boards,
@@ -2557,49 +2531,6 @@ def _handle_add_dashboard(args):
     queries = get_queries()
     if not isinstance(queries, dict):
         queries = {}
-    reserved = ("metrics", "dashboards", "due")
-
-    def _norm(q):
-        q = dict(q)
-        if isinstance(q.get("where"), list):
-            q["where"] = ptos.filters_to_expr(q["where"])
-        return q
-
-    # Flat config keys are stored as "board.X" / "habit.X" / "calendar.X";
-    # starter files may use [board.X] tables which tomllib nests under a
-    # bare "board" key. Extract both forms so round-trips never drop configs.
-    def _nested(container, is_cfg):
-        cfg = {}
-        if isinstance(queries.get(container), dict):
-            for k, v in queries[container].items():
-                if isinstance(v, dict) and is_cfg(v):
-                    cfg[k] = v
-        return cfg
-
-    boards    = {k[6:]: v for k, v in queries.items() if k.startswith("board.") and isinstance(v, dict)}
-    habits    = {k[6:]: v for k, v in queries.items() if k.startswith("habit.") and isinstance(v, dict)}
-    calendars = {k[9:]: v for k, v in queries.items() if k.startswith("calendar.") and isinstance(v, dict)}
-    boards.update(_nested("board", lambda v: "columns" in v))
-    habits.update(_nested("habit", lambda v: "filters" in v))
-    calendars.update(_nested("calendar", lambda v: "filters" in v))
-    nested_containers = {"board", "habit", "calendar"}
-
-    raw_q = {k: _norm(v) for k, v in queries.items()
-             if k not in reserved and k not in nested_containers
-             and isinstance(v, dict) and "alias" not in v
-             and not k.startswith(("board.", "habit.", "calendar.", "due.", "threshold."))}
-    raw_a = {k: v for k, v in queries.items()
-             if k not in reserved and k not in nested_containers
-             and isinstance(v, dict) and "alias" in v}
-    raw_due = {}
-    for k, v in queries.items():
-        if isinstance(v, dict):
-            if k.startswith("due."):
-                raw_due[k[4:]] = v
-            elif k == "due":
-                raw_due["default"] = v
-    thresholds = {k[10:]: v for k, v in queries.items() if k.startswith("threshold.") and isinstance(v, dict)}
-
     dashboards = dict(queries.get("dashboards", {}))
     if args.add_dashboard in dashboards:
         sys.exit(f"Dashboard '{args.add_dashboard}' already exists.")
@@ -2638,18 +2569,7 @@ def _handle_add_dashboard(args):
     dashboards[args.add_dashboard] = db_entry
 
     try:
-        ptos_service.save_queries_full(
-            raw_q,
-            {name: _metric_to_internal(m) for name, m in (queries.get("metrics") or {}).items()
-             if isinstance(m, dict)},
-            dashboards,
-            raw_a,
-            raw_due=raw_due,
-            raw_boards=boards,
-            raw_habits=habits,
-            raw_calendars=calendars,
-            raw_thresholds=thresholds,
-        )
+        ptos_service.save_dashboard(args.add_dashboard, db_entry)
     except ptos_service.PTOSError as e:
         sys.exit(str(e))
     except Exception as e:

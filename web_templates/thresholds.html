@@ -11,6 +11,7 @@
 
 <div class="thr-header">
   <div class="page-title">Thresholds</div>
+  <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=thresholds" title="Edit thresholds in Query Builder">⚙ Configure</a>
   <select class="thr-time-select" id="thr-time-select" onchange="onTimeChange(this.value)">
     <option value="" {% if not time %}selected{% endif %}>Default (per threshold)</option>
     {% for label, code in time_options %}

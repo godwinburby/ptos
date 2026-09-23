@@ -80,6 +80,7 @@
     <option value="{{ bname }}" {% if bname == active_board %}selected{% endif %}>{{ bname | replace('_',' ') }}</option>
     {% endfor %}
   </select>
+  <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=boards&amp;edit={{ active_board }}" title="Configure this board in Query Builder">⚙ Configure</a>
   {% if board_data %}
   <select class="board-select" id="brd-time-select" onchange="onTimeChange(this.value)">
     <option value="" {% if not time %}selected{% endif %}>Default (per board)</option>

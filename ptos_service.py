@@ -4492,7 +4492,7 @@ def delete_project(name):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Query TOML management (full write — LEGACY, prefer scoped functions above)
+# Query TOML management (full write — RETIRED, use scoped functions above)
 # ══════════════════════════════════════════════════════════════════════════════
 
 def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None, raw_calendars=None, raw_thresholds=None, raw_projects=None):

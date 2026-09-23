@@ -95,7 +95,7 @@ function _selectThreshold(name) {
     })
     .catch(function(e) { area.innerHTML = errorCard(String(e)); });
   var builderLink = document.getElementById("builder-link");
-  if (builderLink) builderLink.href = "/query-builder";
+  if (builderLink) builderLink.href = "/query-builder?section=thresholds";
 }
 
 function toggleSection(el) {
