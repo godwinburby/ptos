@@ -7,6 +7,16 @@ Format: `[version or date] — description`
 
 ## 2026-09-24
 
+### Board: status boards (filter lanes with `set_field`)
+
+- **Two board modes, one grammar** — board `columns` items are either a bare type string (type mode — the existing behavior: drag creates a new record via `advance_record`) or a dict `{label, where, set?}` (status mode, activated by a new optional `set_field` config key). In status mode every lane is a workflow stage filter (e.g. `Lead / Applied / Interview / Hired` over `set_field = "status"`) and dragging a card between lanes rewrites the record's `set_field` in place — one record stays one card, so the pipeline history is preserved instead of spawning a new record per stage.
+- **Lane grammar** — `label` (unique lane key + display name), `where` (a single condition or an explicit `AND`/`OR`/`NOT`/paren expression; space-separated conditions without `AND` do NOT parse), optional `set` (explicit drag value; otherwise derived from the lane's single plain `set_field=value`). Modes are mutually exclusive per board: a dict lane without `set_field` or a string lane with `set_field` both raise `PTOSError`. Lanes whose set value can't be resolved (multi-value `|`, `~` contains, comparisons) render but are not drop targets.
+- **`POST /board/move`** — new status-mode drag endpoint. The server resolves `set_field` and the target lane's `set_value` from queries.toml (never trusts the client) and rewrites the record in place via `svc.board_move_record()` (which uses `ptos.apply_set`); rejects non-status boards, unknown lanes, unresolvable lane set values, and paths escaping `RECORDS_DIR`. Returns `{ok, new_line}` and reloads.
+- **Query Builder board editor** — status mode replaces the column chips with a Status Field input plus per-lane label/where/set rows with ▲▼/✕ controls; type mode keeps the existing drag-reorderable chips. `set_field` round-trips through the Query Builder payload and `save_queries_full()`/`save_board()` (which validate lane structure and lock modes at save time). Rollup validation runs against the union of types named in lane `where`s.
+- **Board page & CLI** — lane headers and funnel labels use the lane `label`; the grid-view toggle is hidden for status boards; `+ Add` on a status lane prefills the add form with the lane's type + `set_field=set_value`. `--board` prints lane labels and shows `set_field` in the header.
+- **Live config** — `jobsearch` record type (`company`, `status`, `role`, `url`; required `company`+`status`) and a `board.jobsearch` status board (six stages across the pipeline) added to `schema.toml`/`queries.toml`.
+- **Tests** — `tests/test_board.py` gains `TestStatusBoardLanes`, `TestBoardMoveRecord`, `TestSaveStatusBoard`, and `TestBoardMoveRoute` (117 board tests total).
+
 ### Routines: completed routines stay in place
 
 - **Done section removed from cards view** — checking a routine no longer moves it into a collapsible "Done (N)" list. Today's completions stay in their `@context` card, rendered struck through with a ticked box (click the tick to undo). Older completions drop off entirely.

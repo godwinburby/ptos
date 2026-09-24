@@ -3141,6 +3141,30 @@ def board_advance():
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/board/move", methods=["POST"])
+def board_move():
+    """Move a card within a status board: rewrites the board's set_field to
+    the target lane's value in place. One record stays one card."""
+    data = request.get_json(silent=True) or {}
+    board_name = data.get("board", "")
+    filepath   = data.get("filepath", "")
+    old_line   = data.get("line", "")
+    lineno     = data.get("lineno")
+    target_lane = data.get("target_lane", "")
+    if not board_name or not filepath or not old_line or lineno is None or not target_lane:
+        return jsonify(ok=False, error="Missing required fields: board, filepath, line, lineno, target_lane")
+    if lineno < 0:
+        return jsonify(ok=False, error="Invalid line number")
+    try:
+        svc.board_move_record(board_name, filepath, old_line, lineno, target_lane)
+        return jsonify(ok=True)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("Board move failed")
+        return jsonify(ok=False, error=str(e))
+
+
 @app.route("/api/board/field-overlap", methods=["POST"])
 def board_field_overlap():
     """Return common fields shared by all given record types."""
@@ -3308,6 +3332,7 @@ def query_builder():
             if cols:
                 boards[name] = {
                     "columns": cols,
+                    "set_field": v.get("set_field", ""),
                     "time_window": v.get("time_window", "this-month"),
                     "limit": v.get("limit", 0),
                     "card_title_fields": v.get("card_title_fields", ""),

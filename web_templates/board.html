@@ -92,7 +92,7 @@
   {% include "_time_picker.html" %}
   {% endwith %}
   {% endif %}
-  {% if board_data and board_data.match_field %}
+  {% if board_data and board_data.match_field and not board_data.set_field %}
   <div class="view-toggle">
     <button onclick="switchView('kanban')" class="{{ 'active' if view != 'grid' }}">Kanban</button>
     <button onclick="switchView('grid')" class="{{ 'active' if view == 'grid' }}">Client grid</button>
@@ -112,7 +112,8 @@
     <div class="funnel-arrow">→</div>
     {% endif %}
     <div class="funnel-stage">
-      <div class="funnel-stage-name">{{ col_type | replace('_',' ') }}</div>
+      {% set lane = board_data.lanes.get(col_type, {}) %}
+      <div class="funnel-stage-name">{{ lane.get('label', col_type | replace('_',' ')) }}</div>
       <div class="funnel-stage-count">{{ count }}</div>
       {% set rollup_val = board_data.rollups.get(col_type) %}
       {% if rollup_val is not none %}
@@ -135,7 +136,8 @@
   {% set records = board_data.data.get(col_type, []) %}
   <div class="board-lane" data-type="{{ col_type }}">
     <div class="lane-header">
-      <span>{{ col_type | replace('_',' ') }}</span>
+      {% set lane = board_data.lanes.get(col_type, {}) %}
+      <span>{{ lane.get('label', col_type | replace('_',' ')) }}</span>
       <span style="display:flex;align-items:center;gap:8px;">
         <button class="lane-add-btn" onclick="addToColumn('{{ col_type }}')" title="Add record to this column">+ Add</button>
         {% set total_in_col = board_data.counts.get(col_type, 0) %}
@@ -207,7 +209,8 @@
     <div class="bg-head bg-rail-head">{{ active_board | replace('_',' ') }}</div>
     {% for col_type in board_data.columns %}
     <div class="bg-head">
-      <span>{{ col_type | replace('_',' ') }}</span>
+      {% set lane = board_data.lanes.get(col_type, {}) %}
+      <span>{{ lane.get('label', col_type | replace('_',' ')) }}</span>
       <span style="display:flex;align-items:center;gap:6px;">
         {% set records = board_data.data.get(col_type, []) %}
         {% set truncated_total = board_data.truncated.get(col_type, 0) %}
@@ -352,6 +355,8 @@
 var tp;
 var _dragData = null;
 var _boardToastTimer = null;
+var _boardSetField = {{ board_data.set_field | tojson if board_data else none }};
+var _boardLanes = {{ board_data.lanes | tojson if board_data else {} }};
 
 (function() {
   tp = new TimePicker({
@@ -411,8 +416,17 @@ function switchView(v) {
 }
 
 function addToColumn(type) {
-  window.location.href = '/add?type=' + encodeURIComponent(type) +
-    '&return_to=' + encodeURIComponent(window.location.pathname + window.location.search);
+  var lane = (_boardLanes && _boardLanes[type]) || null;
+  var params = new URLSearchParams();
+  if (lane && lane.set_value) {
+    var t = (lane.types || [])[0] || '';
+    if (t) params.set('type', t);
+    params.set(_boardSetField || 'status', lane.set_value);
+  } else {
+    params.set('type', type);
+  }
+  params.set('return_to', window.location.pathname + window.location.search);
+  window.location.href = '/add?' + params.toString();
 }
 
 function _sourceType(card) {
@@ -448,6 +462,7 @@ function onDragStart(e) {
   _dragData = {
     line: card.dataset.line,
     lineno: parseInt(card.dataset.lineno),
+    filepath: card.dataset.filepath,
     sourceType: _sourceType(card),
     srcRow: row ? row.dataset.row : null,
   };
@@ -520,6 +535,40 @@ function onDrop(e) {
 
   var btn = e.target.closest('button');
   if (btn) return;
+
+  if (_boardSetField) {
+    var tl = (_boardLanes && _boardLanes[targetType]) || null;
+    if (!tl || !tl.set_value) {
+      showToast('Cannot set status for this lane', true);
+      return;
+    }
+    var laneLabel = tl.label || targetType.replace(/_/g, ' ');
+    showToast('Moving card to ' + laneLabel + '...');
+    fetch('/board/move', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        board: {{ active_board | tojson }},
+        filepath: _dragData.filepath,
+        line: _dragData.line,
+        lineno: _dragData.lineno,
+        target_lane: targetType,
+      }),
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(resp) {
+      if (resp.ok) {
+        showToast('Card moved to ' + laneLabel);
+        setTimeout(function() { location.reload(); }, 600);
+      } else {
+        showToast(resp.error || 'Failed to move card', true);
+      }
+    })
+    .catch(function(err) {
+      showToast('Network error', true);
+    });
+    return;
+  }
 
   showToast('Moving card to ' + targetType.replace(/_/g, ' ') + '...');
 

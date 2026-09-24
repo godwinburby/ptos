@@ -2765,36 +2765,135 @@ def pomodoro_log(task, minutes, date=None):
     return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
 
 
-def get_board_data(board_name, time=None, from_date=None, to_date=None):
-    """Load record data for each column of a board.
-    The display window is resolved from explicit time/from_date/to_date params
-    (URL-driven override) when given, otherwise falls back to the board's
-    config time_window. Returns dict mapping column type → list of parsed
-    record dicts with _filepath, _lineno, _line for edit support."""
+def _get_board_cfg(board_name):
+    """Load a board's config dict from queries.toml, or raise PTOSError."""
     try:
         queries = ptos.get_queries()
     except Exception as e:
         raise PTOSError(str(e))
-
-    key = f"board.{board_name}"
-    cfg = queries.get(key)
+    cfg = queries.get(f"board.{board_name}")
     if not cfg or not isinstance(cfg, dict):
         raise PTOSError(f"Board '{board_name}' not found in queries.toml")
+    return cfg
 
+
+def _derive_lane_set_value(where, set_field):
+    """Derive a status lane's drag target value from its where expression.
+
+    Returns the single distinct plain `set_field=value` assignment in the
+    expression, or None when there is none / it is ambiguous (multi-value
+    with '|', '~' contains, comparisons, or multiple distinct values).
+    """
+    if not set_field or not where:
+        return None
+    vals = re.findall(
+        rf"\b{re.escape(set_field)}=(\"[^\"]*\"|'[^']*'|[^\s()]+)", where)
+    plain = [v.strip("\"'") for v in vals if "|" not in v and "~" not in v]
+    if plain and len(set(plain)) == 1:
+        return plain[0]
+    return None
+
+
+def _normalize_board_lanes(columns, set_field=None, schema=None):
+    """Normalize a board's columns list into lane dicts.
+
+    Each column item is either:
+      - a bare string  → type lane (where = type=X); type boards only
+      - a dict {label, where, set?} → filter lane; status boards only
+
+    Returns a list of lanes: {key, label, kind, where, set_value, types}.
+    key is the unique lane identifier (label for filter lanes, type name
+    for type lanes). set_value resolves the drag target value. types are
+    the type names named in the lane's where.
+    Raises PTOSError on structural/parse violations."""
+    lanes = []
+    for i, item in enumerate(columns or []):
+        if isinstance(item, str):
+            t = item.strip()
+            if not t:
+                raise PTOSError("Board has an empty type name column")
+            if set_field:
+                raise PTOSError(
+                    f"Status board (set_field configured) cannot have a bare type "
+                    f"column '{t}' — use {{label, where}} dicts")
+            if schema is not None:
+                allowed = set((schema.get("types", {}) or {}).get("allowed", []))
+                if t not in allowed:
+                    raise PTOSError(f"Type '{t}' is not in schema types")
+            lanes.append({"key": t, "label": t, "kind": "type",
+                          "where": f"type={t}", "set_value": None, "types": [t]})
+        elif isinstance(item, dict):
+            label = str(item.get("label", "")).strip()
+            where = str(item.get("where", "")).strip()
+            if not label:
+                raise PTOSError("Filter lane must have a non-empty 'label'")
+            if not where:
+                raise PTOSError(f"Filter lane '{label}' must have a non-empty 'where'")
+            if not set_field:
+                raise PTOSError(
+                    f"Filter lane '{label}' requires board set_field (status board); "
+                    "type boards take bare type names only")
+            try:
+                ptos.apply_where({}, [where])
+            except Exception as e:
+                raise PTOSError(f"Filter lane '{label}': invalid where '{where}': {e}")
+            sv = item.get("set")
+            if sv is not None and not isinstance(sv, str):
+                raise PTOSError(f"Filter lane '{label}': 'set' must be a string")
+            set_value = (str(sv).strip() if sv else "") or _derive_lane_set_value(where, set_field)
+            types = [tt for grp in re.findall(r"\btype=([A-Za-z_0-9]+)", where)
+                     for tt in grp.split("|") if tt]
+            lanes.append({"key": label, "label": label, "kind": "filter",
+                          "where": where, "set_value": set_value, "types": types,
+                          "raw": item})
+        else:
+            raise PTOSError(
+                f"Board column must be a type name string or a {{label, where}} "
+                f"dict, got {type(item).__name__}")
+    keys = [l["key"] for l in lanes]
+    if len(set(keys)) != len(keys):
+        dup = next(k for k in keys if keys.count(k) > 1)
+        raise PTOSError(f"Board lanes must have unique labels/keys; duplicate '{dup}'")
+    return lanes
+
+
+def get_board_data(board_name, time=None, from_date=None, to_date=None):
+    """Load record data for each column of a board.
+    The display window is resolved from explicit time/from_date/to_date params
+    (URL-driven override) when given, otherwise falls back to the board's
+    config time_window. Returns dict mapping lane key → list of parsed
+    record dicts with _filepath, _lineno, _line for edit support."""
+    cfg = _get_board_cfg(board_name)
+
+    set_field = cfg.get("set_field")
+    if set_field and isinstance(set_field, str):
+        set_field = set_field.strip() or None
     columns = cfg.get("columns", [])
     if not columns:
         raise PTOSError(f"Board '{board_name}' has no columns defined")
 
     schema = ptos.get_schema()
-    allowed = set(schema.get("types", {}).get("allowed", []))
-    for t in columns:
-        if t not in allowed:
-            raise PTOSError(f"Type '{t}' in board '{board_name}' is not in schema types")
+    allowed = set((schema.get("types", {}) or {}).get("allowed", []))
+    for item in columns:
+        if isinstance(item, str) and item not in allowed:
+            raise PTOSError(f"Type '{item}' in board '{board_name}' is not in schema types")
 
-    overlap = ptos.get_column_field_overlap(columns, schema)
+    lanes = _normalize_board_lanes(columns, set_field, schema)
+    lane_keys = [l["key"] for l in lanes]
+    lane_info = {l["key"]: {k: l[k] for k in ("label", "kind", "where", "set_value", "types")}
+                 for l in lanes}
+    types_used = sorted({t for l in lanes for t in l["types"]})
+
+    overlap = ptos.get_column_field_overlap(types_used, schema)
     field_info = {}
-    for t in columns:
-        field_info[t] = ptos.filter_fields_for_type(t, schema)
+    for l in lanes:
+        if l["kind"] == "type":
+            field_info[l["key"]] = set(ptos.filter_fields_for_type(l["types"][0], schema))
+        else:
+            merged = {"date", "type"}
+            for t in l["types"]:
+                merged |= set(ptos.filter_fields_for_type(t, schema))
+            field_info[l["key"]] = merged
 
     # Time window: URL params override the board's config default
     cfg_time_window = cfg.get("time_window", "this-month")
@@ -2827,8 +2926,9 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
     rollup_by_type = {}
     full_by_type = {}
 
-    for col_type in columns:
-        filters = [f"type={col_type}"]
+    for lane in lanes:
+        key = lane["key"]
+        filters = [lane["where"]]
         try:
             loc_matches = ptos.find_records_with_location(filters, start=start, end=end)
         except Exception:
@@ -2849,7 +2949,7 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
         total = len(records)
 
         # Rollup over the full matched set, before limit truncation
-        if rollup_field and rollup_field in field_info[col_type]:
+        if rollup_field and rollup_field in field_info[key]:
             vals = []
             for r in records:
                 raw = r.get(rollup_field)
@@ -2858,22 +2958,22 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
                 except (TypeError, ValueError):
                     continue
             if rollup_op == "sum":
-                rollup_by_type[col_type] = sum(vals)
+                rollup_by_type[key] = sum(vals)
             elif rollup_op == "avg":
-                rollup_by_type[col_type] = (sum(vals) / len(vals)) if vals else None
+                rollup_by_type[key] = (sum(vals) / len(vals)) if vals else None
             else:
-                rollup_by_type[col_type] = len(vals)
+                rollup_by_type[key] = len(vals)
         else:
-            rollup_by_type[col_type] = None
+            rollup_by_type[key] = None
 
         if limit and total > limit:
-            full_by_type[col_type] = records
+            full_by_type[key] = records
             records = records[:limit]
-            truncated_by_type[col_type] = total
+            truncated_by_type[key] = total
         else:
-            full_by_type[col_type] = records
-        result[col_type] = records
-        total_by_type[col_type] = total
+            full_by_type[key] = records
+        result[key] = records
+        total_by_type[key] = total
 
     card_title_fields = cfg.get("card_title_fields")
     if isinstance(card_title_fields, str):
@@ -2893,12 +2993,12 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
     # field name comes solely from the board's match_field config.
     if match_field:
         col_for_value = {}
-        for col_type in columns:
-            for r in full_by_type[col_type]:
+        for key in lane_keys:
+            for r in full_by_type[key]:
                 v = r.get(match_field)
                 if v is None or str(v).strip() == "":
                     continue
-                col_for_value.setdefault(str(v), set()).add(col_type)
+                col_for_value.setdefault(str(v), set()).add(key)
 
         # Assign colors by sorted order over the visible matched set so that,
         # for <=16 distinct codes, every code gets its own distinct color (no
@@ -2911,8 +3011,8 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
         matched = sorted(v for v, cols in col_for_value.items() if len(cols) >= 2)
         color_of = {v: _MATCH_COLORS[i % len(_MATCH_COLORS)]
                     for i, v in enumerate(matched)}
-        for col_type in columns:
-            for r in result[col_type]:
+        for key in lane_keys:
+            for r in result[key]:
                 v = r.get(match_field)
                 if v is None or str(v).strip() == "":
                     continue
@@ -2926,18 +3026,18 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
         grid_rows = []
         for val in matched:
             cells = {}
-            for col_type in columns:
-                cells[col_type] = [r for r in result[col_type]
-                                   if r.get(match_field) == val]
+            for key in lane_keys:
+                cells[key] = [r for r in result[key]
+                              if r.get(match_field) == val]
             grid_rows.append({"value": val, "color": color_of[val],
                               "cells": cells})
         unmatched = {}
         matched_set = set(matched)
-        for col_type in columns:
-            unmatched[col_type] = [r for r in result[col_type]
-                                   if not r.get(match_field)
-                                   or str(r.get(match_field)).strip() == ""
-                                   or r.get(match_field) not in matched_set]
+        for key in lane_keys:
+            unmatched[key] = [r for r in result[key]
+                              if not r.get(match_field)
+                              or str(r.get(match_field)).strip() == ""
+                              or r.get(match_field) not in matched_set]
         has_matching = len(matched) > 0
     else:
         grid_rows = []
@@ -2945,7 +3045,9 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
         has_matching = False
 
     return {
-        "columns": columns,
+        "columns": lane_keys,
+        "lanes": lane_info,
+        "set_field": set_field,
         "data": result,
         "counts": total_by_type,
         "truncated": truncated_by_type,
@@ -3206,6 +3308,60 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
         raise
     except Exception as e:
         raise PTOSError(str(e))
+
+
+def move_record(filepath, old_line, field, value, lineno=None):
+    """Rewrites one record's field=value in place — a status-board drag move.
+
+    The card stays one record and one row; no new record is created.
+    lineno: 0-based file line index for precise targeting (handles duplicates).
+    Returns {"old_line", "new_line"} or raises PTOSError."""
+    try:
+        new_line, _ = ptos.apply_set(old_line, [f"{field}={value}"], None)
+    except SystemExit as e:
+        raise PTOSError(str(e))
+    except Exception as e:
+        raise PTOSError(str(e))
+
+    if new_line == old_line:
+        raise PTOSError(f"Record is already {field}={value}")
+
+    try:
+        _update_record_in_file(filepath, old_line, new_line, lineno=lineno)
+    except ValueError as e:
+        raise PTOSError(str(e))
+    except Exception as e:
+        raise PTOSError(str(e))
+    _invalidate_history_cache(
+        rtype=ptos.parse_line(old_line)[1].get("type") if ptos.parse_line(old_line) else None)
+    return {"old_line": old_line, "new_line": new_line}
+
+
+def board_move_record(board_name, filepath, old_line, lineno, target_lane):
+    """Move a card within a status board: rewrites the board's set_field to
+    the target lane's resolved value, in place.
+
+    Resolves set_field and the target lane's set_value from board config
+    server-side — never trusts the client. Refuses paths that escape
+    RECORDS_DIR. Returns move_record's dict or raises PTOSError."""
+    cfg = _get_board_cfg(board_name)
+    set_field = cfg.get("set_field")
+    if not set_field or not isinstance(set_field, str) or not set_field.strip():
+        raise PTOSError(f"Board '{board_name}' is not a status board (no set_field)")
+    set_field = set_field.strip()
+
+    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+        raise PTOSError("Invalid filepath")
+
+    lanes = _normalize_board_lanes(cfg.get("columns", []), set_field)
+    target = next((l for l in lanes if l["key"] == target_lane), None)
+    if not target:
+        raise PTOSError(f"Board '{board_name}' has no lane '{target_lane}'")
+    if not target["set_value"]:
+        raise PTOSError(
+            f"Lane '{target_lane}' has no resolvable set value — add a 'set' key "
+            f"or a single {set_field}=value in its 'where'")
+    return move_record(filepath, old_line, set_field, target["set_value"], lineno=lineno)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4271,12 +4427,22 @@ def delete_alias(name):
 # ── Board ───────────────────────────────────────────────────────────────────
 
 def save_board(name, cfg):
-    """Write/update a single ["board.NAME"] entry in queries.toml."""
+    """Write/update a single ["board.NAME"] entry in queries.toml.
+
+    columns items are either bare type strings (type board) or
+    {label, where, set?} dicts (status board, requires set_field)."""
     name = _validate_name(name)
     cols = cfg.get("columns", [])
     if not cols or not isinstance(cols, list):
         raise PTOSError(f"Board '{name}' must have a non-empty columns list")
+    set_field = cfg.get("set_field")
+    if set_field and isinstance(set_field, str):
+        set_field = set_field.strip() or None
+    schema = ptos.get_schema()
+    _normalize_board_lanes(cols, set_field, None)
     entry = {"columns": cols}
+    if set_field:
+        entry["set_field"] = set_field
     if cfg.get("time_window"):
         entry["time_window"] = cfg["time_window"]
     if cfg.get("limit"):
@@ -4289,15 +4455,18 @@ def save_board(name, cfg):
         entry["match_field"] = match_field.strip()
     rollup_field = cfg.get("rollup_field")
     if rollup_field:
-        schema = ptos.get_schema()
         fmeta = schema.get("fields", {}).get(rollup_field, {})
         if not fmeta.get("aggregatable"):
             raise PTOSError(
                 f"Board '{name}': rollup_field '{rollup_field}' is not aggregatable in schema")
-        present = [t for t in cols if rollup_field in ptos.filter_fields_for_type(t, schema)]
-        if not present:
-            raise PTOSError(
-                f"Board '{name}': rollup_field '{rollup_field}' does not apply to any column type")
+        lanes = _normalize_board_lanes(cols, set_field, None)
+        types_used = sorted({t for l in lanes for t in l["types"]})
+        if types_used:
+            present = [t for t in types_used
+                       if rollup_field in ptos.filter_fields_for_type(t, schema)]
+            if not present:
+                raise PTOSError(
+                    f"Board '{name}': rollup_field '{rollup_field}' does not apply to any column type")
         entry["rollup_field"] = rollup_field
         entry["rollup_op"] = cfg.get("rollup_op", "count")
     existing = _load_queries_toml()
@@ -4541,7 +4710,7 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
     raw_dashboards: {name: {metrics: [...]}}
     raw_aliases:    {name: {alias: target}}   (optional, None = preserve existing)
     raw_due:        {config_name: {type, key, sort_by, days, exclude_results}} (optional, None = preserve existing)
-    raw_boards:     {name: {columns, time_window, limit, card_title_fields, match_field, rollup_field, rollup_op}} (optional, None = preserve existing)
+    raw_boards:     {name: {columns, set_field, time_window, limit, card_title_fields, match_field, rollup_field, rollup_op}} (optional, None = preserve existing); columns items are type strings or {label, where, set?} dicts
     raw_habits:     {name: {filters, weeks, toggleable}}  (optional, None = preserve existing)
     raw_calendars:  {name: {filters, time_window}}  (optional, None = preserve existing)
     raw_thresholds: {name: {metric, agg, sum_field, value, direction, time, unit}}  (optional, None = preserve existing)
@@ -4738,12 +4907,19 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
 
     # ── Boards ─────────────────────────────────────────────────────────────────
     if raw_boards is not None:
+        schema = ptos.get_schema()
         for name, board_cfg in raw_boards.items():
             bare = _clean_bare_name(name)
             cols = board_cfg.get("columns", [])
             if not cols or not isinstance(cols, list):
                 raise PTOSError(f"Board '{name}' must have a non-empty columns list")
+            set_field = board_cfg.get("set_field")
+            if set_field and isinstance(set_field, str):
+                set_field = set_field.strip() or None
+            _normalize_board_lanes(cols, set_field, None)
             entry = {"columns": cols}
+            if set_field:
+                entry["set_field"] = set_field
             if board_cfg.get("time_window"):
                 entry["time_window"] = board_cfg["time_window"]
             if board_cfg.get("limit"):
@@ -4756,15 +4932,18 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
                 entry["match_field"] = match_field.strip()
             rollup_field = board_cfg.get("rollup_field")
             if rollup_field:
-                schema = ptos.get_schema()
                 fmeta = schema.get("fields", {}).get(rollup_field, {})
                 if not fmeta.get("aggregatable"):
                     raise PTOSError(
                         f"Board '{name}': rollup_field '{rollup_field}' is not aggregatable in schema")
-                present = [t for t in cols if rollup_field in ptos.filter_fields_for_type(t, schema)]
-                if not present:
-                    raise PTOSError(
-                        f"Board '{name}': rollup_field '{rollup_field}' does not apply to any column type")
+                lanes = _normalize_board_lanes(cols, set_field, None)
+                types_used = sorted({t for l in lanes for t in l["types"]})
+                if types_used:
+                    present = [t for t in types_used
+                               if rollup_field in ptos.filter_fields_for_type(t, schema)]
+                    if not present:
+                        raise PTOSError(
+                            f"Board '{name}': rollup_field '{rollup_field}' does not apply to any column type")
                 entry["rollup_field"] = rollup_field
                 entry["rollup_op"] = board_cfg.get("rollup_op", "count")
             # preserve unknown board fields from existing
