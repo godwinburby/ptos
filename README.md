@@ -560,17 +560,26 @@ grouped by `@context` (e.g. morning, evening). Checking a routine completes it a
 - One card per `@context` (a `+routine` todo with no context lands in `other`), each
   with a count badge and a `+ Add` button for that context
 - Check the circle to complete, click the text to edit, ✕ to delete
+- Routines with a `due_time:HH:MM` show a time chip (e.g. `9:00 AM`); card text
+  matches the day view's larger type
 - **Project colors** — each row carries its routine's first **non-`+routine` project**
   color (e.g. `+gym`); routines without an extra project render neutral (`ctx-other`).
   Same palette as the day view, shared legend below both views
-- Collapsible **Done** section lists recently completed routines with undo
+- Completed routines stay in place — checking a routine strikes it through with a
+  ticked box; today's completions remain in their card (undo by clicking the tick),
+  older completions drop off. The card badge counts **open** routines only
 
 **Day view**:
 - Timeline (like a calendar day) of routines with a `due_time:HH:MM` — blocks are
   sized and positioned by their time; the timeline is trimmed to the day's routine
   span rather than the full 24h
+- Times render in 12-hour am/pm (block time, hour labels, and the Now line)
+- Blocks enforce a readable minimum height — routines close together (e.g. 15
+  minutes apart) are pushed down rather than allowed to overlap
 - Block colors follow the same project rule as cards
 - A red **Now** line marks the current time when it falls inside the timeline
+- Completed routines stay in place — today's completions render struck through with a
+  ticked box in their timeline slot (undo by clicking the tick); older completions drop off
 - Anytime section lists routines without a due time
 
 Add a routine as you would any todo: `(A) Check mail +routine @morning due:today due_time:09:00 rec:1d`.

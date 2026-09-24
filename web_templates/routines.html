@@ -23,7 +23,7 @@
   .routine-item:last-child { border-bottom:none; }
   .routine-item .todo-check { width:22px; height:22px; }
   .routine-desc {
-    font-size:14px; font-weight:600; color:var(--text); flex:1;
+    font-size:15px; font-weight:600; color:var(--text); flex:1;
     transition: opacity 0.3s; cursor:pointer;
   }
   .routine-desc:hover { text-decoration:underline; }
@@ -38,7 +38,7 @@
   }
   .routine-del:hover { color:var(--error); background:var(--bg); }
   .routine-time {
-    font-size:11px; font-weight:700; color:var(--accent);
+    font-size:13px; font-weight:700; color:var(--accent);
     background:var(--accent-lt); padding:1px 6px; border-radius:8px;
     white-space:nowrap;
   }
@@ -61,17 +61,6 @@
   .routine-add-btn:hover { border-color:var(--accent); color:var(--accent); background:var(--accent-lt); }
   .routine-item.completed { opacity:0.5; }
   .routine-item.completed .routine-desc { text-decoration:line-through; cursor:default; }
-  .routine-done {
-    margin-top:16px; padding:14px 16px;
-    background:var(--card); border:1px solid var(--border); border-radius:12px;
-  }
-  .routine-done summary {
-    cursor:pointer; font-weight:700; font-size:14px; color:var(--sub);
-    list-style:none;
-  }
-  .routine-done summary::-webkit-details-marker { display:none; }
-  .routine-done summary::before { content:"+ "; font-weight:700; }
-  .routine-done[open] summary::before { content:"- "; }
   .routine-empty {
     text-align:center; padding:40px 20px; color:var(--sub); font-size:14px;
   }
@@ -110,7 +99,7 @@
   .rv-toggle button:hover:not(.active) { background:var(--bg); }
 
   .rv-timeline {
-    position:relative; display:grid; grid-template-columns:44px 1fr;
+    position:relative; display:grid; grid-template-columns:62px 1fr;
     background:var(--card); border:1px solid var(--border); border-radius:12px;
     overflow-y:auto;
   }
@@ -120,7 +109,7 @@
     padding-right:6px; justify-content:flex-end;
   }
   .rv-hour-label {
-    font-size:10px; font-weight:600; color:var(--sub);
+    font-size:11px; font-weight:600; color:var(--sub);
     transform:translateY(-6px); white-space:nowrap;
   }
   .rv-hour-line {
@@ -131,24 +120,27 @@
   .rv-blocks { position:relative; }
   .rv-block {
     position:absolute; left:6px; right:6px;
-    border-radius:6px; padding:2px 8px; cursor:pointer;
+    border-radius:6px; padding:4px 8px; cursor:pointer;
     overflow:hidden; border-left:3px solid;
     transition:opacity .3s;
   }
   .rv-block:hover { filter:brightness(0.95); }
   .rv-block.past { opacity:0.4; }
-  .rv-block-head { display:flex; align-items:center; gap:4px; }
+  .rv-block.done { opacity:0.45; }
+  .rv-block.done .rv-block-desc { text-decoration:line-through; }
+  .rv-block.done .rv-block-check { opacity:0.9; }
+  .rv-block-head { display:flex; align-items:center; gap:6px; }
   .rv-block-check {
-    width:12px; height:12px; border-radius:3px; cursor:pointer;
+    width:14px; height:14px; border-radius:3px; cursor:pointer;
     border:1.5px solid currentColor; opacity:0.6; transition:all .2s; flex-shrink:0;
   }
   .rv-block-check:hover { opacity:1; transform:scale(1.15); }
   .rv-block-check.checked {
     background:currentColor; opacity:0.8;
   }
-  .rv-block-time { font-size:11px; font-weight:700; opacity:0.7; white-space:nowrap; }
+  .rv-block-time { font-size:13px; font-weight:700; opacity:0.7; white-space:nowrap; }
   .rv-block-desc {
-    font-size:13px; font-weight:600; white-space:nowrap;
+    font-size:15px; font-weight:600; white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis;
   }
   .ctx-blue    { background:#EEF1FB; border-color:#4F6BED; color:#1A1D2E; }
@@ -208,10 +200,11 @@
   }
 
   @media (max-width:767px) {
-    .rv-timeline { grid-template-columns:32px 1fr; }
+    .rv-timeline { grid-template-columns:52px 1fr; }
     .rv-hour-label { font-size:9px; }
     .rv-block { left:3px; right:3px; padding:4px 6px; }
-    .rv-block-desc { font-size:11px; }
+    .rv-block-time { font-size:11px; }
+    .rv-block-desc { font-size:13px; }
     .rv-now-label { font-size:9px; }
   }
 </style>
@@ -266,24 +259,34 @@
 <div id="view-cards">
 {% if cards %}
     {% for context_name, todos in cards.items() %}
-    {% set total = todos|length %}
+    {% set total = todos | rejectattr('done') | list | length %}
     <div class="routine-card">
       <div class="routine-header">
         <div class="routine-title">{{ context_name }}</div>
         <span class="routine-badge">{{ total }}</span>
       </div>
       {% for t in todos %}
-      <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}" data-line="{{ t.line_no }}" data-time="{{ t.due_time or '' }}">
+      <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}{% if t.done %} completed{% endif %}" data-line="{{ t.line_no }}" data-time="{{ t.due_time or '' }}">
+        {% if t.done %}
+        <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
+        {% else %}
         <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
-        <span class="routine-desc" onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
-        {% if t.due_time %}<span class="routine-time">{{ t.due_time }}</span>{% endif %}
+        {% endif %}
+        <span class="routine-desc" onclick="{% if t.done %}openEditDone{% else %}openEdit{% endif %}({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
+        {% if t.due_time %}<span class="routine-time">{{ fmt_ampm(t.due_time) }}</span>{% endif %}
+        {% if t.done %}
+        {% if t.completed_date %}<span class="routine-due">{{ t.completed_date.strftime('%d %b') }}</span>{% endif %}
+        {% else %}
         {% if t.due %}
         <span class="routine-due {% if t.due < today %}overdue{% endif %}">
           {% if t.due < today %}overdue{% elif t.due == today %}today{% else %}{{ t.due.strftime('%d %b') }}{% endif %}
         </span>
         {% endif %}
+        {% endif %}
         {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
+        {% if not t.done %}
         <button class="routine-del" onclick="deleteTodo({{ t.line_no }})" title="Delete routine">✕</button>
+        {% endif %}
       </div>
       {% endfor %}
       {% if context_name != 'other' %}
@@ -299,20 +302,6 @@
   <p style="margin-top:8px;font-size:12px;color:var(--sub);">Default: +routine @morning, due today, repeats daily</p>
 </div>
 {% endif %}
-
-{% if done_routines %}
-<details class="routine-done">
-  <summary>Done ({{ done_routines|length }})</summary>
-  {% for t in done_routines %}
-  <div class="routine-item completed" data-line="{{ t.line_no }}">
-    <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
-    <span class="routine-desc">{{ t.description }}</span>
-    {% if t.completed_date %}<span class="routine-due">{{ t.completed_date.strftime('%d %b') }}</span>{% endif %}
-    {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
-  </div>
-  {% endfor %}
-</details>
-{% endif %}
 </div>
 
 {# ══════════════════════════════════════════════════════════════════════════════
@@ -324,7 +313,7 @@
     <div class="rv-hours" style="height:{{ total_height }}px">
       {% for h in range(first_hour, last_hour + 1) %}
       <div class="rv-hour" style="top:{{ (h - first_hour) * hour_px }}px">
-        <span class="rv-hour-label">{{ '%d:00'|format(h) }}</span>
+        <span class="rv-hour-label">{{ fmt_ampm('%d:00'|format(h)) }}</span>
       </div>
       {% endfor %}
     </div>
@@ -333,21 +322,27 @@
       <div class="rv-hour-line" style="top:{{ (h - first_hour) * hour_px }}px"></div>
       {% endfor %}
       {% for b in block_data %}
-      <div class="rv-block {{ b.color }}{% if b.is_past %} past{% endif %}"
+      <div class="rv-block {{ b.color }}{% if b.done %} done{% elif b.is_past %} past{% endif %}"
            style="top:{{ b.top }}px; height:{{ b.height }}px"
            data-time="{{ b.due_time }}" data-line="{{ b.line_no }}">
         <div class="rv-block-head">
+          {% if b.done %}
+          <div class="rv-block-check checked" onclick="event.stopPropagation();undoTodo({{ b.line_no }}, this)"></div>
+          {% else %}
           <div class="rv-block-check" onclick="event.stopPropagation();completeTodo({{ b.line_no }}, this)"></div>
-          <span class="rv-block-time">{{ b.due_time }}</span>
-          <span class="rv-block-desc" onclick="event.stopPropagation();openEdit({{ b.line_no }}, '{{ b.description|e }}', '{{ b.priority }}', '{{ b.due }}', '{{ b.due_time }}', '{{ b.threshold }}', '{{ b.threshold_time }}', '{{ b.projects|join(' ') }}', '{{ b.contexts|join(' ') }}', '{{ b.rec }}', '{{ b.id }}', '{{ b.links|join(',') }}')">{{ b.description }}</span>
+          {% endif %}
+          <span class="rv-block-time">{{ fmt_ampm(b.due_time) }}</span>
+          <span class="rv-block-desc" onclick="event.stopPropagation();{% if b.done %}openEditDone{% else %}openEdit{% endif %}({{ b.line_no }}, '{{ b.description|e }}', '{{ b.priority }}', '{{ b.due }}', '{{ b.due_time }}', '{{ b.threshold }}', '{{ b.threshold_time }}', '{{ b.projects|join(' ') }}', '{{ b.contexts|join(' ') }}', '{{ b.rec }}', '{{ b.id }}', '{{ b.links|join(',') }}')">{{ b.description }}</span>
+          {% if not b.done %}
           <button class="routine-del" onclick="event.stopPropagation();deleteTodo({{ b.line_no }})" title="Delete routine">✕</button>
+          {% endif %}
         </div>
       </div>
       {% endfor %}
       {% if show_now %}
       <div class="rv-now" id="rv-now" style="top:{{ now_top }}px">
         <span class="rv-now-dot"></span>
-        <span class="rv-now-label">Now {{ now_time }}</span>
+        <span class="rv-now-label">Now {{ fmt_ampm(now_time) }}</span>
       </div>
       {% endif %}
     </div>
@@ -360,11 +355,17 @@
 <div class="rv-anytime">
   <div class="rv-anytime-title">Anytime</div>
   {% for t in untimed %}
-  <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}" data-line="{{ t.line_no }}">
+  <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}{% if t.done %} completed{% endif %}" data-line="{{ t.line_no }}">
+    {% if t.done %}
+    <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
+    {% else %}
     <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
-    <span class="routine-desc" onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
+    {% endif %}
+    <span class="routine-desc" onclick="{% if t.done %}openEditDone{% else %}openEdit{% endif %}({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
     {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
+    {% if not t.done %}
     <button class="routine-del" onclick="deleteTodo({{ t.line_no }})" title="Delete routine">✕</button>
+    {% endif %}
   </div>
   {% endfor %}
 </div>
@@ -375,6 +376,17 @@
 
 <script>
 var _nowTime = "{{ now_time }}";
+
+function fmtAmpm(t) {
+  if (!t) return '';
+  var parts = t.split(':');
+  if (parts.length < 2) return t;
+  var h = parseInt(parts[0], 10);
+  if (isNaN(h)) return t;
+  var p = h < 12 ? 'AM' : 'PM';
+  var h12 = h % 12 || 12;
+  return h12 + ':' + parts[1] + ' ' + p;
+}
 
 function setView(mode) {
   document.getElementById('view-cards').style.display = mode === 'cards' ? '' : 'none';
@@ -410,7 +422,7 @@ function _insertNowLines() {
       if (!inserted && time && time > _nowTime) {
         var line = document.createElement('div');
         line.className = 'routine-now';
-        line.textContent = 'Now: ' + _nowTime;
+        line.textContent = 'Now: ' + fmtAmpm(_nowTime);
         item.parentNode.insertBefore(line, item);
         inserted = true;
       }
