@@ -2600,6 +2600,8 @@ def get_projects_overview():
             link_target = f"/board?board={board_name}"
         elif todo_project:
             link_target = f"/todo?project={todo_project}"
+        elif notes_path:
+            link_target = f"/notes/edit/{notes_path}/index.md"
         elif note_refs:
             link_target = f"/notes/edit/{note_refs[0]['path']}"
         else:
@@ -4459,7 +4461,9 @@ def delete_due(name):
 
 def save_project(name, cfg):
     """Write/update a single ["project.NAME"] entry in queries.toml.
-    Atomic write. Validates label is present."""
+    Atomic write. Validates label is present.
+    When notes_path is set, ensures the project's notes folder and
+    index.md hub file exist (idempotent — never overwrites)."""
     name = _validate_name(name)
     label = cfg.get("label", "").strip()
     if not label:
@@ -4472,10 +4476,39 @@ def save_project(name, cfg):
     tag_filters = cfg.get("tag_filters", [])
     if tag_filters and isinstance(tag_filters, list):
         entry["tag_filters"] = tag_filters
+    notes_path = entry.get("notes_path", "")
+    if notes_path:
+        ptos._safe_path(notes_path)
     existing = _load_queries_toml()
     entry = _preserve_unknown(_lookup_entry(existing, "project", name), entry)
     _write_queries_toml_key(f"project.{name}", entry)
+    if notes_path:
+        _ensure_project_notes_hub(notes_path, label)
     return {"ok": True, "name": name}
+
+
+def _ensure_project_notes_hub(notes_path, label):
+    """Create a project's notes folder and index.md hub file if they don't
+    already exist. Idempotent + non-destructive: never overwrites an
+    existing index.md. Non-interactive (server-side): resolves the nearest
+    folder template automatically instead of prompting."""
+    full_dir = ptos._safe_path(notes_path)
+    os.makedirs(full_dir, exist_ok=True)
+    index_rel = os.path.join(notes_path, "index.md").replace("\\", "/")
+    full_index = ptos._safe_path(index_rel)
+    if os.path.exists(full_index):
+        return
+    tpl = ptos.resolve_new_file_template(notes_path)
+    if tpl and tpl.get("source") == "local":
+        content = tpl.get("content", "")
+    elif tpl and tpl.get("parent"):
+        content = tpl["parent"].get("content", "")
+    else:
+        content = ptos._load_starter("project_note") or f"# {label}\n\n"
+    today = dt.date.today().isoformat()
+    content = content.replace("{{ project name }}", label).replace("{{ date }}", today)
+    with ptos.AtomicWrite(full_index, "notes") as w:
+        w.stream.write(content.encode("utf-8"))
 
 
 def delete_project(name):

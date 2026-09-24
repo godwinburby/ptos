@@ -923,3 +923,205 @@ class TestProjectWebCRUD:
         html = resp.get_data(as_text=True)
         assert "/projects/myproj/edit" in html
         assert "/projects/myproj/delete" in html
+
+
+class TestProjectNotesHub:
+    def _hub_path(self, notes_path="Projects/Job Search"):
+        return os.path.join(ptos.NOTES_DIR, notes_path.replace("/", os.sep), "index.md")
+
+    def test_save_project_creates_folder_and_hub(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        svc.save_project("jobsearch", {
+            "label": "Find a Job",
+            "notes_path": "Projects/Job Search",
+        })
+        hub = self._hub_path()
+        assert os.path.isfile(hub)
+        with open(hub, encoding="utf-8") as f:
+            content = f.read()
+        assert "# Find a Job" in content
+        assert TODAY_S in content
+
+    def test_uses_ancestor_template(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "NOTES_DIR", str(tmp_path / "notes"))
+        _write_queries(tmp_path / "queries.toml", "")
+        projects_tpl = os.path.join(tmp_path / "notes", "Projects", "template.md")
+        os.makedirs(os.path.dirname(projects_tpl), exist_ok=True)
+        with open(projects_tpl, "w", encoding="utf-8") as f:
+            f.write("# {{ project name }}\n\n## Goal\n(custom)\n")
+        svc.save_project("jobsearch", {
+            "label": "Find a Job",
+            "notes_path": "Projects/Job Search",
+        })
+        with open(self._hub_path(), encoding="utf-8") as f:
+            content = f.read()
+        assert "# Find a Job" in content
+        assert "(custom)" in content
+
+    def test_local_template_beats_ancestor(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "NOTES_DIR", str(tmp_path / "notes"))
+        _write_queries(tmp_path / "queries.toml", "")
+        projects_tpl = os.path.join(tmp_path / "notes", "Projects", "template.md")
+        os.makedirs(os.path.dirname(projects_tpl), exist_ok=True)
+        with open(projects_tpl, "w", encoding="utf-8") as f:
+            f.write("ANCESTOR\n")
+        local_dir = os.path.join(tmp_path / "notes", "Projects", "Job Search")
+        os.makedirs(local_dir, exist_ok=True)
+        with open(os.path.join(local_dir, "template.md"), "w", encoding="utf-8") as f:
+            f.write("LOCAL {{ project name }}\n")
+        svc.save_project("jobsearch", {
+            "label": "Find a Job",
+            "notes_path": "Projects/Job Search",
+        })
+        with open(self._hub_path(), encoding="utf-8") as f:
+            content = f.read()
+        assert "LOCAL Find a Job" in content
+        assert "ANCESTOR" not in content
+
+    def test_never_overwrites_existing_hub(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        hub = self._hub_path()
+        os.makedirs(os.path.dirname(hub), exist_ok=True)
+        with open(hub, "w", encoding="utf-8") as f:
+            f.write("EXISTING CONTENT\n")
+        svc.save_project("jobsearch", {
+            "label": "Find a Job",
+            "notes_path": "Projects/Job Search",
+        })
+        with open(hub, encoding="utf-8") as f:
+            content = f.read()
+        assert content == "EXISTING CONTENT\n"
+
+    def test_resave_keeps_hub(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        svc.save_project("jobsearch", {
+            "label": "Find a Job",
+            "notes_path": "Projects/Job Search",
+        })
+        svc.save_project("jobsearch", {
+            "label": "Renamed",
+            "notes_path": "Projects/Job Search",
+        })
+        with open(self._hub_path(), encoding="utf-8") as f:
+            content = f.read()
+        assert "# Find a Job" in content
+        assert "Renamed" not in content.replace("# Find a Job", "")
+
+    def test_new_notes_path_creates_second_hub(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        svc.save_project("jobsearch", {
+            "label": "Find a Job",
+            "notes_path": "Projects/Job Search",
+        })
+        svc.save_project("jobsearch", {
+            "label": "Find a Job",
+            "notes_path": "Projects/New Folder",
+        })
+        assert os.path.isfile(self._hub_path("Projects/New Folder"))
+        assert os.path.isfile(self._hub_path("Projects/Job Search"))
+
+    def test_link_target_uses_notes_path(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.proj1"]
+            label = "Find a Job"
+            notes_path = "Projects/Find a Job"
+        ''')
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [])
+        notes_dir = ptos.NOTES_DIR
+        os.makedirs(notes_dir, exist_ok=True)
+        with open(os.path.join(notes_dir, "job-hunt.md"), "w", encoding="utf-8") as f:
+            f.write("# Job Hunt\nMeeting [[Find a Job]] next week\n")
+        result = svc.get_projects_overview()
+        assert len(result) == 1
+        assert result[0]["link_target"] == "/notes/edit/Projects/Find a Job/index.md"
+
+    def test_link_target_falls_back_to_note_refs(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.proj1"]
+            label = "Find a Job"
+        ''')
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [])
+        notes_dir = ptos.NOTES_DIR
+        os.makedirs(notes_dir, exist_ok=True)
+        with open(os.path.join(notes_dir, "job-hunt.md"), "w", encoding="utf-8") as f:
+            f.write("# Job Hunt\nMeeting [[Find a Job]] next week\n")
+        result = svc.get_projects_overview()
+        assert len(result) == 1
+        assert result[0]["link_target"] == "/notes/edit/job-hunt.md"
+
+    def test_path_traversal_rejected(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        _write_queries(tmp_path / "queries.toml", "")
+        with pytest.raises(Exception):
+            svc.save_project("jobsearch", {
+                "label": "Find a Job",
+                "notes_path": "../../etc",
+            })
+        assert not os.path.exists(os.path.join(tmp_path / "etc"))
+
+    def test_web_post_creates_hub_and_redirects(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_queries(tmp_path / "queries.toml", "")
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        client = app.test_client()
+        resp = client.post("/projects/new", data={
+            "label": "Web Project",
+            "config_key": "web_project",
+            "todo_project": "",
+            "tag_filters": "",
+            "board": "",
+            "notes_path": "Projects/Web Project",
+        }, follow_redirects=False)
+        assert resp.status_code in (302, 200)
+        if resp.status_code == 302:
+            from urllib.parse import unquote
+            assert "/notes/edit/Projects/Web Project/index.md" in unquote(resp.headers.get("Location", ""))
+        assert os.path.isfile(self._hub_path("Projects/Web Project"))
+
+    def test_new_form_defaults_to_folder(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
+        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
+        _write_todo(tmp_path / "todo.txt", [])
+        _write_todo(tmp_path / "done.txt", [])
+        client = app.test_client()
+        resp = client.get("/projects/new?label=Find a Job")
+        html = resp.get_data(as_text=True)
+        assert 'name="notes_path" value="Projects/Find a Job"' in html

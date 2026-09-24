@@ -5264,7 +5264,7 @@ def _load_starter(name):
     """Load starter content from starters/ folder.
     Falls back to a minimal stub if the file is missing."""
     base = STARTER_DIR
-    md_names = {"journal", "note", "book", "audiobook", "youtube"}
+    md_names = {"journal", "note", "book", "audiobook", "youtube", "project_note"}
     fname = f"starter_{name}.md" if name in md_names else f"starter_{name}.toml"
     path = os.path.join(base, fname)
     if os.path.exists(path):
@@ -5280,6 +5280,7 @@ def _load_starter(name):
         "book":    "---\ntitle: {{title}}\ndate: {{date}}\nauthor: \"\"\nrating: \"\"\ntags: \"\"\n---\n\n# {{title}}\n\n## Key Takeaways\n\n-\n\n## Favorite Quotes\n\n>\n\n## Would Recommend?\n\n## What I'll Apply\n",
         "audiobook": "---\ntitle: {{title}}\ndate: {{date}}\nauthor: \"\"\nnarrator: \"\"\nrating: \"\"\nduration: \"\"\nspeed: \"1x\"\ntags: \"\"\n---\n\n# {{title}}\n\n## Key Takeaways\n\n-\n\n## Favorite Quotes\n\n>\n\n## Would Recommend?\n\n## What I'll Apply\n",
         "youtube": "---\ntitle: {{title}}\ndate: {{date}}\nchannel: \"\"\nurl: \"\"\nduration: \"\"\ntags: \"\"\n---\n\n# {{title}}\n\n## Key Takeaways\n\n-\n\n## Key Timestamps\n\n- 00:00 —\n\n## Would Rewatch?\n",
+        "project_note": "# {{ project name }}\n\n## Goal\n(what does \"done\" or \"successful\" actually look like)\n\n## Why\n(why this, why now — the thing you'd forget under pressure)\n\n## Milestones\n- [ ] Milestone 1: ...\n  - [ ] step\n  - [ ] step\n- [ ] Milestone 2: ...\n- [ ] Milestone 3: ...\n\n## Review\n### {{ date }} — reviewing [current milestone]\n(how's it actually going — steps that stalled, what changed, what you learned)\n\n## Rapid Log\n- {{ date }} • (what happened, what you decided, what you're thinking)\n\n## Links\n- Records: \n- Todos: /todo?project=\n- Board: \n",
     }
     return stubs.get(name, "")
 
