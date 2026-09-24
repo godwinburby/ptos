@@ -5,7 +5,7 @@ import json
 import re
 import tomli_w
 import ptos
-from ptos_service import get_board_data, advance_record, save_queries_full, PTOSError
+from ptos_service import get_board_data, advance_record, save_queries_full, PTOSError, board_move_record, save_board
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -905,3 +905,237 @@ class TestQueryBuilderBoardsPayload:
         boards = json.loads(m.group(1))
         assert boards["b"]["rollup_field"] == ""
         assert boards["b"]["rollup_op"] == "count"
+
+
+# ── Status boards (set_field + filter lanes) ──────────────────────────────────
+
+class TestStatusBoardLanes:
+    def _cfg(self, columns=None, **kw):
+        cfg = {
+            "columns": columns or [
+                {"label": "Food", "where": "type=expense AND category=food"},
+                {"label": "Transport", "where": "type=expense AND category=transport"},
+            ],
+            "set_field": "category",
+            "time_window": "all",
+        }
+        cfg.update(kw)
+        return cfg
+
+    def test_board_loads_lanes_and_set_values(self):
+        _write_queries({"status": self._cfg()})
+        data = get_board_data("status")
+        assert data["set_field"] == "category"
+        assert data["columns"] == ["Food", "Transport"]
+        assert data["lanes"]["Food"]["set_value"] == "food"
+        assert data["lanes"]["Food"]["kind"] == "filter"
+        assert data["lanes"]["Transport"]["set_value"] == "transport"
+        assert data["lanes"]["Transport"]["types"] == ["expense"]
+
+    def test_records_bucket_into_lanes(self):
+        _write_queries({"status": self._cfg()})
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense domain=self category=food amount=10")
+        _write_record(today, f"{today} type=expense domain=self category=transport amount=20")
+        data = get_board_data("status")
+        assert {r["category"] for r in data["data"]["Food"]} == {"food"}
+        assert {r["category"] for r in data["data"]["Transport"]} == {"transport"}
+
+    def test_bare_type_lane_in_status_board_rejected(self):
+        _write_queries({"status": {"columns": ["expense", {"label": "Food", "where": "category=food"}],
+                                   "set_field": "category"}})
+        with pytest.raises(PTOSError):
+            get_board_data("status")
+
+    def test_dict_lane_without_set_field_rejected(self):
+        _write_queries({"status": {"columns": [{"label": "Food", "where": "category=food"}]}})
+        with pytest.raises(PTOSError):
+            get_board_data("status")
+
+    def test_non_dict_column_rejected(self):
+        _write_queries({"status": {"columns": [42], "set_field": "category"}})
+        with pytest.raises(PTOSError):
+            get_board_data("status")
+
+    def test_missing_label_rejected(self):
+        _write_queries({"status": {"columns": [{"where": "category=food"}], "set_field": "category"}})
+        with pytest.raises(PTOSError):
+            get_board_data("status")
+
+    def test_missing_where_rejected(self):
+        _write_queries({"status": {"columns": [{"label": "Food"}], "set_field": "category"}})
+        with pytest.raises(PTOSError):
+            get_board_data("status")
+
+    def test_ambiguous_lane_has_no_set_value(self):
+        _write_queries({"status": {"columns": [{"label": "Either", "where": "category=food|transport"}],
+                                   "set_field": "category"}})
+        data = get_board_data("status")
+        assert data["lanes"]["Either"]["set_value"] is None
+
+    def test_explicit_set_overrides_derived(self):
+        _write_queries({"status": {"columns": [{"label": "Either", "where": "category=food|transport", "set": "food"}],
+                                   "set_field": "category"}})
+        data = get_board_data("status")
+        assert data["lanes"]["Either"]["set_value"] == "food"
+
+    def test_duplicate_lane_labels_rejected(self):
+        _write_queries({"status": {"columns": [
+            {"label": "Food", "where": "category=food"},
+            {"label": "Food", "where": "category=transport"},
+        ], "set_field": "category"}})
+        with pytest.raises(PTOSError):
+            get_board_data("status")
+
+
+class TestBoardMoveRecord:
+    def _setup(self, columns=None):
+        _write_queries({"status": {
+            "columns": columns or [
+                {"label": "Food", "where": "type=expense AND category=food"},
+                {"label": "Transport", "where": "type=expense AND category=transport"},
+            ],
+            "set_field": "category",
+            "time_window": "all",
+        }})
+        today = dt.date.today().isoformat()
+        line = f"{today} type=expense domain=self category=food amount=10"
+        filepath, lineno = ptos.append_record(line, return_position=True)
+        return filepath, line, lineno
+
+    def test_move_rewrites_status_in_place(self):
+        filepath, line, lineno = self._setup()
+        res = board_move_record("status", filepath, line, lineno, "Transport")
+        assert "category=transport" in res["new_line"]
+        data = get_board_data("status")
+        assert len(data["data"]["Food"]) == 0
+        assert len(data["data"]["Transport"]) == 1
+
+    def test_move_to_same_value_is_error(self):
+        filepath, line, lineno = self._setup()
+        with pytest.raises(PTOSError):
+            board_move_record("status", filepath, line, lineno, "Food")
+
+    def test_unknown_lane_rejected(self):
+        filepath, line, lineno = self._setup()
+        with pytest.raises(PTOSError):
+            board_move_record("status", filepath, line, lineno, "Nope")
+
+    def test_non_status_board_rejected(self):
+        _write_queries({"typeboard": {"columns": ["expense"]}})
+        today = dt.date.today().isoformat()
+        line = f"{today} type=expense domain=self category=food amount=10"
+        filepath, lineno = ptos.append_record(line, return_position=True)
+        with pytest.raises(PTOSError):
+            board_move_record("typeboard", filepath, line, lineno, "expense")
+
+    def test_unresolvable_lane_rejected(self):
+        filepath, line, lineno = self._setup(columns=[{"label": "Either", "where": "category=food|transport"}])
+        with pytest.raises(PTOSError):
+            board_move_record("status", filepath, line, lineno, "Either")
+
+    def test_path_escape_rejected(self):
+        filepath, line, lineno = self._setup()
+        import tempfile
+        other = os.path.join(tempfile.gettempdir(), "outside.log")
+        with pytest.raises(PTOSError):
+            board_move_record("status", other, line, lineno, "Transport")
+
+
+class TestSaveStatusBoard:
+    def test_save_queries_full_round_trips_dict_lanes_and_set_field(self):
+        _write_queries({})
+        save_queries_full({}, {}, {}, raw_boards={"status": {
+            "columns": [
+                {"label": "Food", "where": "type=expense AND category=food"},
+                {"label": "Transport", "where": "type=expense AND category=transport"},
+            ],
+            "set_field": "category",
+            "time_window": "all",
+        }})
+        import tomllib
+        with open(ptos.QUERIES_PATH, "rb") as f:
+            entry = tomllib.load(f)["board.status"]
+        assert entry["set_field"] == "category"
+        assert entry["columns"][0]["label"] == "Food"
+        assert entry["columns"][0]["where"] == "type=expense AND category=food"
+        assert "set" not in entry["columns"][0]
+
+    def test_save_board_persists_set_field_and_lanes(self):
+        _write_queries({})
+        save_board("status", {
+            "columns": [{"label": "Food", "where": "category=food"}],
+            "set_field": "category",
+        })
+        import tomllib
+        with open(ptos.QUERIES_PATH, "rb") as f:
+            entry = tomllib.load(f)["board.status"]
+        assert entry["set_field"] == "category"
+        assert entry["columns"] == [{"label": "Food", "where": "category=food"}]
+
+    def test_save_board_rejects_bare_string_when_set_field(self):
+        _write_queries({})
+        with pytest.raises(PTOSError):
+            save_board("status", {"columns": ["expense"], "set_field": "category"})
+
+    def test_save_board_rejects_dict_lane_without_set_field(self):
+        _write_queries({})
+        with pytest.raises(PTOSError):
+            save_board("status", {"columns": [{"label": "Food", "where": "category=food"}]})
+
+    def test_save_queries_full_rejects_mixed_modes(self):
+        _write_queries({})
+        with pytest.raises(PTOSError):
+            save_queries_full({}, {}, {}, raw_boards={"status": {
+                "columns": ["expense", {"label": "Food", "where": "category=food"}],
+                "set_field": "category",
+            }})
+
+
+class TestBoardMoveRoute:
+    def test_move_via_route(self):
+        _write_queries({"status": {
+            "columns": [
+                {"label": "Food", "where": "type=expense AND category=food"},
+                {"label": "Transport", "where": "type=expense AND category=transport"},
+            ],
+            "set_field": "category",
+            "time_window": "all",
+        }})
+        today = dt.date.today().isoformat()
+        filepath, lineno = ptos.append_record(
+            f"{today} type=expense domain=self category=food amount=10", return_position=True)
+        with open(filepath, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/board/move", json={
+            "board": "status", "filepath": filepath, "line": lines[lineno],
+            "lineno": lineno, "target_lane": "Transport"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        got = get_board_data("status")
+        assert len(got["data"]["Transport"]) == 1
+        assert len(got["data"]["Food"]) == 0
+
+    def test_move_route_missing_fields(self):
+        _write_queries({"status": {"columns": [{"label": "Food", "where": "category=food"}],
+                                   "set_field": "category"}})
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/board/move", json={})
+        assert resp.get_json()["ok"] is False
+
+    def test_query_builder_payload_includes_set_field(self):
+        _write_queries({"status": {
+            "columns": [{"label": "Food", "where": "category=food"}],
+            "set_field": "category",
+        }})
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/query-builder")
+        html = resp.get_data(as_text=True)
+        m = re.search(r"var _bkBoards = (.*?);", html, re.S)
+        boards = json.loads(m.group(1))
+        assert boards["status"]["set_field"] == "category"
+        assert boards["status"]["columns"][0]["label"] == "Food"

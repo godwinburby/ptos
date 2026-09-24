@@ -681,6 +681,16 @@ Kanban board view for tracking records across workflow stages. Configured in
   `match_field` value so an entity's full journey is scannable left-to-right.
   Unmatched records go to a separate section below the grid. Drag-and-drop in
   grid view only allows drops within the same client row
+- **Status boards** (`set_field` config) — instead of typed columns, each lane
+  is a workflow stage as a filter (`{label, where, set?}` dict, e.g.
+  `Lead / Applied / Interview / Hired`) over a `set_field` like `status`.
+  Dragging a card between lanes rewrites its `set_field` in place — one record
+  stays one card (pipeline stays intact; you don't get a new record per stage).
+  Use `where = "type=jobsearch AND status=lead"` syntax (`AND` keyword
+  required, not spaces). Lanes with an ambiguous `where` (multi-value `|`,
+  `~` contains, comparisons) render but aren't drop targets. Configured in the
+  Query Builder board editor (Status Field input + per-lane label/where/set
+  rows), stored in `queries.toml` as `[board.NAME]` with `set_field`
 
 ### Entity
 

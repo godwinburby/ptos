@@ -283,7 +283,7 @@ var _lastAggFields = [];
     var name = e[0].replace(/^board\./, '');
     var rawCtf = e[1].card_title_fields || '';
     var ctfArr = typeof rawCtf === 'string' ? rawCtf.split(',').map(function(s){ return s.trim(); }).filter(Boolean) : (Array.isArray(rawCtf) ? rawCtf : []);
-    _st.boards[name] = { columns: e[1].columns||[], time_window: e[1].time_window||'this-month', limit: e[1].limit||0, card_title_fields: ctfArr, rollup_field: e[1].rollup_field||'', rollup_op: e[1].rollup_op||'count', match_field: e[1].match_field||'' };
+    _st.boards[name] = { columns: e[1].columns||[], set_field: e[1].set_field||'', time_window: e[1].time_window||'this-month', limit: e[1].limit||0, card_title_fields: ctfArr, rollup_field: e[1].rollup_field||'', rollup_op: e[1].rollup_op||'count', match_field: e[1].match_field||'' };
   });
   // Habits
   var _bkHabits = {{ habits | tojson }};
@@ -489,7 +489,7 @@ function addEntry() {
   else if (section==="due")
     _st.due[name]      = {type:"followup",key:"client",sort_by:"",days:7,exclude_results:[]};
   else if (section==="boards")
-    _st.boards[name]   = {columns:[]};
+    _st.boards[name]   = {columns:[],set_field:''};
   else if (section==="habits")
     _st.habits[name]   = {filters:[],weeks:12,toggleable:true};
   else if (section==="calendars")
@@ -1493,7 +1493,7 @@ function buildCfgForSection(name) {
   }
   if (s === "boards") {
     var b = _st.boards[name];
-    return {columns:b.columns||[], time_window:b.time_window||"this-month", limit:b.limit||0,
+    return {columns:b.columns||[], set_field:b.set_field||"", time_window:b.time_window||"this-month", limit:b.limit||0,
             card_title_fields:b.card_title_fields||[], rollup_field:b.rollup_field||"",
             rollup_op:b.rollup_op||"count", match_field:b.match_field||""};
   }
@@ -1718,12 +1718,15 @@ function showBoardEditor() {
       '</div>'+
     '</div>'+
     '<div style="font-size:11px;color:var(--sub);margin-top:6px;margin-bottom:14px;">'+
-      'Board — Kanban columns. Each column is a record type. Pick multiple types below.'+
+      'Board — Kanban pipeline. Leave the status field empty for a <b>type board</b> (each column = one record type, dragging creates a new record). '+
+      'Set a status field to make a <b>status board</b> (each column = a where-filter lane, dragging rewrites the card\'s status field in place).'+
     '</div>'+
     '<div style="margin-bottom:14px;">'+
-      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Column Types <span style="font-weight:400;color:var(--sub);">(select 2+)</span></div>'+
-      '<div id="board-col-chips" class="chip-group"></div>'+
+      '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Status Field <span style="font-weight:400;color:var(--sub);">(empty = type board)</span></div>'+
+      '<input type="text" id="board-set-field" value="'+_esc(cfg.set_field||'')+'" oninput="onBoardSetFieldChange()" placeholder="e.g. status" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+      '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Typing a field name switches this board to status mode. Each lane gets a label + a where filter; dragging a card writes the lane\'s set value (or its single field=value) to this field.</div>'+
     '</div>'+
+    '<div id="board-lanes-area" style="margin-bottom:14px;"></div>'+
     '<div id="board-overlap-area" style="margin-bottom:14px;display:none;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Shared Fields <span id="board-overlap-status"></span></div>'+
       '<div id="board-overlap-fields" style="font-size:12px;color:var(--sub);"></div>'+
@@ -1773,8 +1776,8 @@ function showBoardEditor() {
     '</div>'+
   '</div>';
 
-  renderBoardColChips(cols);
-  fetchBoardOverlap(cols);
+  renderBoardMode();
+  fetchBoardOverlap(boardLaneTypes(cols));
 }
 
 // ── Habit editor ──────────────────────────────────────────────────────────────
@@ -2135,6 +2138,96 @@ function removeBoardCol(idx) {
   cfg.columns.splice(idx, 1);
   renderBoardColChips(cfg.columns);
   fetchBoardOverlap(cfg.columns);
+}
+
+// ── Status-board lane editor ──────────────────────────────────────────────────
+function boardLaneTypes(cols) {
+  var types = [];
+  (cols || []).forEach(function(c) {
+    if (typeof c === "string") { if (c) types.push(c); return; }
+    var w = (c && c.where) || "";
+    var m = w.match(/\btype=([A-Za-z_0-9]+)/g) || [];
+    m.forEach(function(t) { types.push(t.slice(5)); });
+  });
+  return types.filter(function(t, i) { return t && types.indexOf(t) === i; });
+}
+
+function onBoardSetFieldChange() {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg) return;
+  cfg.set_field = document.getElementById("board-set-field").value.trim();
+  renderBoardMode();
+  fetchBoardOverlap(boardLaneTypes(cfg.columns));
+}
+
+function renderBoardMode() {
+  var cfg = _st.boards[_cur.name];
+  var area = document.getElementById("board-lanes-area");
+  if (!cfg || !area) return;
+  if (cfg.set_field) {
+    var lanes = cfg.columns || [];
+    var rows = lanes.map(function(l, idx) {
+      var label = typeof l === "string" ? l : ((l && l.label) || "");
+      var where = typeof l === "string" ? ("type=" + l) : ((l && l.where) || "");
+      var setv  = (typeof l === "object" && l && l.set) ? l.set : "";
+      return '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap;">'+
+        '<input type="text" value="'+_esc(label)+'" placeholder="Label" oninput="onBoardLaneInput('+idx+',\'label\',this.value)" style="flex:1;min-width:90px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+        '<input type="text" value="'+_esc(where)+'" placeholder="where (e.g. status=applied or type=jobsearch AND status=applied)" oninput="onBoardLaneInput('+idx+',\'where\',this.value)" style="flex:2;min-width:180px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+        '<input type="text" value="'+_esc(setv)+'" placeholder="set" oninput="onBoardLaneInput('+idx+',\'set\',this.value)" title="Optional explicit value written to the status field on drag (defaults to the lane\'s single field=value in where)" style="flex:0 0 60px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+        '<button onclick="moveBoardLane('+idx+',-1)" title="Move up" style="border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:6px;padding:4px 8px;cursor:pointer;">▲</button>'+
+        '<button onclick="moveBoardLane('+idx+',1)" title="Move down" style="border:1px solid var(--border);background:var(--card);color:var(--text);border-radius:6px;padding:4px 8px;cursor:pointer;">▼</button>'+
+        '<button onclick="removeBoardLane('+idx+')" title="Remove" style="border:1px solid var(--error);background:var(--card);color:var(--error);border-radius:6px;padding:4px 8px;cursor:pointer;">✕</button>'+
+      '</div>';
+    }).join("");
+    area.innerHTML = '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Status Lanes <span style="font-weight:400;color:var(--sub);">('+cfg.set_field+'  —  drag order matters)</span></div>'+
+      (rows || '<div style="font-size:12px;color:var(--sub);margin-bottom:6px;">No lanes yet — add one below.</div>')+
+      '<button onclick="addBoardLane()" style="border:1px dashed var(--border);background:var(--card);color:var(--text);border-radius:6px;padding:6px 10px;cursor:pointer;">+ Add status lane</button>';
+  } else {
+    area.innerHTML = '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Column Types <span style="font-weight:400;color:var(--sub);">(select 2+)</span></div>'+
+      '<div id="board-col-chips" class="chip-group"></div>';
+    renderBoardColChips(cfg.columns || []);
+  }
+}
+
+function onBoardLaneInput(idx, field, val) {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg) return;
+  cfg.columns = cfg.columns || [];
+  while (cfg.columns.length <= idx) cfg.columns.push({label:"",where:"",set:""});
+  var lane = cfg.columns[idx];
+  if (typeof lane === "string") {
+    lane = {label: lane, where:"type="+lane, set:""};
+    cfg.columns[idx] = lane;
+  }
+  lane[field] = val;
+}
+
+function addBoardLane() {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg) return;
+  cfg.columns = cfg.columns || [];
+  cfg.columns.push({label:"",where:"",set:""});
+  renderBoardMode();
+  fetchBoardOverlap(boardLaneTypes(cfg.columns));
+}
+
+function moveBoardLane(idx, dir) {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg || !cfg.columns) return;
+  var j = idx + dir;
+  if (j < 0 || j >= cfg.columns.length) return;
+  var tmp = cfg.columns[idx];
+  cfg.columns[idx] = cfg.columns[j];
+  cfg.columns[j] = tmp;
+  renderBoardMode();
+}
+
+function removeBoardLane(idx) {
+  var cfg = _st.boards[_cur.name];
+  if (!cfg || !cfg.columns) return;
+  cfg.columns.splice(idx, 1);
+  renderBoardMode();
+  fetchBoardOverlap(boardLaneTypes(cfg.columns));
 }
 
 function onBoardTimeWindowChange() {

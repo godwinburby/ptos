@@ -1536,10 +1536,18 @@ def run_board(arg):
             continue
         titles = data.get("card_title_fields") or fallback
         match_field = data.get("match_field")
+        set_field = data.get("set_field")
+        lanes = data.get("lanes") or {}
         columns = data["columns"]
         print(f"\nBoard: {name}  (window: {data['time_window']})")
         if match_field:
             print(f"  match_field: {match_field}")
+        if set_field:
+            print(f"  set_field: {set_field}")
+
+        def _lbl(col):
+            l = lanes.get(col)
+            return (l.get("label") if l and l.get("label") else col.replace('_', ' '))
 
         # Funnel strip
         if len(columns) > 1:
@@ -1548,7 +1556,7 @@ def run_board(arg):
             for col in columns:
                 c = data["counts"].get(col, 0)
                 total_all += c
-                parts.append(f"{col.replace('_',' ')}: {c}")
+                parts.append(f"{_lbl(col)}: {c}")
             funnel = "  →  ".join(parts)
             print(f"  ╔{'═' * (len(funnel) + 2)}╗")
             print(f"  ║ {funnel}  ║")
@@ -1560,7 +1568,7 @@ def run_board(arg):
             recs = data["data"].get(col, [])
             total = data["counts"].get(col, 0)
             shown = f"/{len(recs)}" if data["truncated"].get(col) else ""
-            print(f"  {col}: {total}{shown} record(s)")
+            print(f"  {_lbl(col)}: {total}{shown} record(s)")
             for r in recs[:15]:
                 title = next((str(r[f]) for f in titles if r.get(f)), "")
                 note = (r.get("note") or "").replace("\n", " ")[:40]
