@@ -5,6 +5,36 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-24
+
+### Routines: completed routines stay in place
+
+- **Done section removed from cards view** — checking a routine no longer moves it into a collapsible "Done (N)" list. Today's completions stay in their `@context` card, rendered struck through with a ticked box (click the tick to undo). Older completions drop off entirely.
+- **Same behavior in day view** — completed routines render struck through with a ticked checkbox in their timeline slot (and in the Anytime list); the timed/untimed grouping, project coloring, and trimming logic are unchanged.
+- **Badge counts open only** — the per-card count badge uses `todos | rejectattr('done')`, so completing every routine in a card shows `0` rather than inflating the count.
+- **Done rows keep project color** — completed rows retain their `ctx-*` project accent (previously faded to neutral); only the card/day CSS strikes them through.
+- **Tests** — reworked `test_done_rows_neutral` into `test_done_rows_stay_in_card` plus new coverage: done rows keep project color, yesterday's completions hidden, badge counts open only, day-view done block, Anytime done row.
+
+### Routines: 12-hour am/pm times
+
+- **Cards view time chips** — a routine's `due_time:HH:MM` now renders as 12-hour local time (`9:00 AM`, `2:30 PM`) instead of 24-hour. The raw `data-time` attributes and edit-modal values stay 24-hour so JS ordering and the time input are unaffected.
+- **Day view timeline** — block times, hour labels, and the Now line all render in am/pm (`6:00 AM`, `9:00 PM`). A shared `_fmt_ampm()` helper (Python, passed to the template) formats card + timeline; a matching `fmtAmpm()` JS helper formats the card-view Now lines.
+- **Tests** — am/pm covered in cards and day view (`6:00 AM`/`2:00 PM`/`12:05 AM`, block `8:15 PM`/`12:00 PM`), hour-label trimming converted to 12-hour assertions, and a regression fix so `routines_page` reads today's done routines from `ptos.DONE_PATH` (the conftest-isolated path) rather than `svc.DONE_PATH`.
+
+### Routines: readable day view with no overlapping blocks
+
+- **Bigger day-view type** — block descriptions bumped 13px→15px, block times 11px→13px, checkboxes 12→14px, and hour labels 10→11px (mobile scales to match). Block padding increased to 4px vertical.
+- **Roomier timeline** — `hour_px` raised 80→120 so each routine's block has more vertical space (a 15-minute gap now gets 30px instead of 20px).
+- **Overlap elimination** — blocks enforce a 30px minimum height and a collision pass pushes each block down past the previous one's bottom (2px gap), so routines minutes apart no longer overlap on the timeline. `total_height` grows to cover pushed-down blocks.
+- **Tests** — new coverage: close-gap (15-min) blocks never overlap in render, and 4-minute-apart blocks both keep the 30px minimum height.
+
+### Routines: day-view labels no longer cropped, card text matches
+
+- **Hour labels fit** — the day-view hour gutter widened 44px→62px (32px→52px on mobile) so labels like `11:00 PM` render in full instead of being clipped to `:00 PM` (the old right-aligned flex behavior clipped the left part of any label wider than the gutter).
+- **Card text matches day view** — routine descriptions bumped 14px→15px and the card time chips 11px→13px to align with the larger day-view type.
+
+---
+
 ## 2026-09-23
 
 ### Scoped config writes (Phase 3) — Query Builder per-entry save

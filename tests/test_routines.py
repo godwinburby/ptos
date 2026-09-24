@@ -233,9 +233,11 @@ class TestRoutinesTimeView:
         client = app.test_client()
         resp = client.get("/routines")
         html = resp.get_data(as_text=True)
-        assert "06:00" in html
-        assert "09:00" in html
+        assert "6:00 AM" in html
+        assert "9:00 AM" in html
         assert "routine-time" in html
+        assert 'data-time="06:00"' in html
+        assert 'data-time="09:00"' in html
 
     def test_no_due_time_no_time_badge(self, tmp_path, monkeypatch):
         todo_path = tmp_path / "todo" / "todo.txt"
@@ -352,6 +354,41 @@ class TestRoutinesDayView:
         assert 'data-time="06:00"' in html
         assert 'data-time="09:00"' in html
 
+    def test_ampm_times_rendered(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Morning task +routine @morning due:{TODAY_S} due_time:06:00",
+            f"(B) {TODAY_S} Afternoon task +routine @morning due:{TODAY_S} due_time:14:00",
+            f"(C) {TODAY_S} Midnight task +routine @morning due:{TODAY_S} due_time:00:05",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "6:00 AM" in html
+        assert "2:00 PM" in html
+        assert "12:05 AM" in html
+        assert "fmtAmpm" in html
+
+    def test_ampm_day_view_block_times(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Evening task +routine @morning due:{TODAY_S} due_time:20:15",
+            f"(B) {TODAY_S} Noon task +routine @morning due:{TODAY_S} due_time:12:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert 'data-time="20:15"' in html
+        assert 'data-time="12:00"' in html
+        assert "8:15 PM" in html
+        assert "12:00 PM" in html
+
     def test_untimed_in_anytime_section(self, tmp_path, monkeypatch):
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
@@ -463,6 +500,45 @@ class TestRoutinesDayView:
         heights = re.findall(r'height:(\d+)px', html)
         assert any(int(h) > 0 for h in heights)
 
+    def test_close_gap_blocks_do_not_overlap(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} First +routine @morning due:{TODAY_S} due_time:09:00",
+            f"(B) {TODAY_S} Second +routine @morning due:{TODAY_S} due_time:09:15",
+            f"(C) {TODAY_S} Third +routine @morning due:{TODAY_S} due_time:09:30",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        import re
+        blocks = re.findall(r'class="rv-block [^"]*"\s*style="top:(\d+)px; height:(\d+)px"', html)
+        assert len(blocks) == 3
+        for i in range(1, len(blocks)):
+            prev_top, prev_h = int(blocks[i - 1][0]), int(blocks[i - 1][1])
+            top = int(blocks[i][0])
+            assert top >= prev_top + prev_h
+
+    def test_close_gap_blocks_min_height(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} First +routine @morning due:{TODAY_S} due_time:09:00",
+            f"(B) {TODAY_S} Second +routine @morning due:{TODAY_S} due_time:09:04",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        import re
+        blocks = re.findall(r'class="rv-block [^"]*"\s*style="top:(\d+)px; height:(\d+)px"', html)
+        assert len(blocks) == 2
+        h0, h1 = int(blocks[0][1]), int(blocks[1][1])
+        assert h0 >= 30 and h1 >= 30
+
     def test_now_line_in_day_view(self, tmp_path, monkeypatch):
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
@@ -546,10 +622,10 @@ class TestRoutinesDayView:
         client = app.test_client()
         resp = client.get("/routines")
         html = resp.get_data(as_text=True)
-        assert ">6:00</span>" in html
-        assert ">21:00</span>" in html
-        assert ">0:00</span>" not in html
-        assert ">23:00</span>" not in html
+        assert ">6:00 AM</span>" in html
+        assert ">9:00 PM</span>" in html
+        assert ">12:00 AM</span>" not in html
+        assert ">11:00 PM</span>" not in html
 
     def test_now_line_hidden_out_of_range(self, tmp_path, monkeypatch):
         todo_path = tmp_path / "todo" / "todo.txt"
@@ -670,13 +746,13 @@ class TestRoutinesDayView:
         assert 'class="routine-item ctx-blue' in html or 'class="routine-item ctx-orange' in html
         assert 'class="routine-item ctx-other' in html
 
-    def test_done_rows_neutral(self, tmp_path, monkeypatch):
+    def test_done_rows_stay_in_card(self, tmp_path, monkeypatch):
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
         monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(done_path, [
-            f"x {TODAY_S} Completed gym +routine @morning",
+            f"x {TODAY_S} Completed idle +routine @morning",
         ])
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
@@ -688,9 +764,113 @@ class TestRoutinesDayView:
         client = app.test_client()
         resp = client.get("/routines")
         html = resp.get_data(as_text=True)
-        assert "routine-done" in html
-        assert 'class="routine-item completed"' in html
-        assert 'class="routine-item completed ctx-' not in html
+        assert "routine-done" not in html
+        assert 'class="routine-item ctx-other completed"' in html
+        assert 'class="todo-check checked"' in html
+        assert "Completed idle" in html
+
+    def test_done_rows_keep_project_color(self, tmp_path, monkeypatch):
+        done_path = tmp_path / "todo" / "done.txt"
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_todo(done_path, [
+            f"x {TODAY_S} Completed gym +routine +gym @morning",
+        ])
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert 'class="routine-item ctx-blue completed"' in html or 'class="routine-item ctx-orange completed"' in html
+
+    def test_old_done_routines_not_shown(self, tmp_path, monkeypatch):
+        done_path = tmp_path / "todo" / "done.txt"
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_todo(done_path, [
+            f"x {YESTERDAY} Old gym +routine +gym @morning",
+        ])
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "Old gym" not in html
+
+    def test_badge_counts_open_only(self, tmp_path, monkeypatch):
+        done_path = tmp_path / "todo" / "done.txt"
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_todo(done_path, [
+            f"x {TODAY_S} Completed gym +routine +gym @morning",
+        ])
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
+            f"(B) {TODAY_S} Stretch +routine +gym @morning due:{TODAY_S} due_time:07:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert 'class="routine-badge">2</span>' in html
+
+    def test_done_routine_renders_in_day_view(self, tmp_path, monkeypatch):
+        done_path = tmp_path / "todo" / "done.txt"
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_todo(done_path, [
+            f"x {TODAY_S} Completed gym +routine +gym @morning due:{TODAY_S} due_time:09:00",
+        ])
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert 'class="rv-block ctx-blue done' in html
+        assert "Completed gym" in html
+
+    def test_done_routine_in_anytime(self, tmp_path, monkeypatch):
+        done_path = tmp_path / "todo" / "done.txt"
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_todo(done_path, [
+            f"x {TODAY_S} Completed idle +routine @morning",
+        ])
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert "Completed idle" in html
+        assert 'class="todo-check checked"' in html
 
     def test_legend_visible_in_cards_view(self, tmp_path, monkeypatch):
         todo_path = tmp_path / "todo" / "todo.txt"

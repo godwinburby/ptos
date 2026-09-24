@@ -1014,6 +1014,20 @@ def _now_time_str():
     return dt.datetime.now().strftime("%H:%M")
 
 
+def _fmt_ampm(time_str):
+    if not time_str:
+        return ""
+    try:
+        h, m = time_str.split(":", 1)
+        hour = int(h)
+        int(m)
+    except (ValueError, AttributeError):
+        return time_str
+    period = "AM" if hour < 12 else "PM"
+    hour12 = hour % 12 or 12
+    return f"{hour12}:{m} {period}"
+
+
 @app.route("/routines")
 def routines_page():
     buckets = svc.get_todos_bucketed()
@@ -1021,9 +1035,13 @@ def routines_page():
     now_time = _now_time_str()
     all_open = buckets.get("overdue", []) + buckets.get("today", [])
     routine_todos = [t for t in all_open if "+routine" in t.projects]
+    done_todos, _ = svc.ptos_todo.load_todos(ptos.DONE_PATH)
+    done_routines = [t for t in done_todos
+                     if "+routine" in t.projects and t.completed_date == today]
+    routine_items = routine_todos + done_routines
     cards = {}
     _VALID_CARDS = {"morning", "afternoon", "evening", "night"}
-    for t in routine_todos:
+    for t in routine_items:
         contexts = t.contexts if t.contexts else ["other"]
         for ctx in contexts:
             key = ctx.lstrip("@")
@@ -1045,9 +1063,9 @@ def routines_page():
         parts = ts.split(":")
         return int(parts[0]) * 60 + int(parts[1])
 
-    timed = [t for t in routine_todos if t.due_time]
+    timed = [t for t in routine_items if t.due_time]
     timed.sort(key=lambda t: t.due_time)
-    untimed = [t for t in routine_todos if not t.due_time]
+    untimed = [t for t in routine_items if not t.due_time]
     untimed.sort(key=lambda t: (t.priority or "Z", t.description))
 
     _CTX_PALETTE = ["ctx-blue", "ctx-orange", "ctx-green", "ctx-purple", "ctx-teal", "ctx-rose"]
@@ -1059,7 +1077,7 @@ def routines_page():
         return None
 
     seen_projs = []
-    for t in routine_todos:
+    for t in routine_items:
         p = _first_proj(t)
         if p and p not in seen_projs:
             seen_projs.append(p)
@@ -1068,10 +1086,12 @@ def routines_page():
         project_colors[name] = _CTX_PALETTE[i % len(_CTX_PALETTE)]
     color_legend = [(name, project_colors[name]) for name in seen_projs]
     color_legend.append(("other", "ctx-other"))
-    row_colors = {t.line_no: project_colors.get(_first_proj(t), "ctx-other") for t in routine_todos}
+    row_colors = {t.line_no: project_colors.get(_first_proj(t), "ctx-other") for t in routine_items}
 
     now_min = _time_to_min(now_time)
-    hour_px = 80
+    hour_px = 120
+    _MIN_BLOCK_H = 30
+    _BLOCK_GAP = 2
     block_data = []
     first_hour = 0
     last_hour = 23
@@ -1091,8 +1111,10 @@ def routines_page():
                 "due_time": t.due_time, "priority": t.priority or "",
                 "context": (t.contexts[0].lstrip("@") if t.contexts else "other"),
                 "color": project_colors.get(_first_proj(t), "ctx-other"),
-                "top": int((t_min - first_hour * 60) * hour_px / 60), "height": max(int(dur * hour_px / 60), 18),
-                "is_past": t_min < now_min,
+                "top": int((t_min - first_hour * 60) * hour_px / 60),
+                "height": max(int(dur * hour_px / 60), _MIN_BLOCK_H),
+                "is_past": (not t.done) and t_min < now_min,
+                "done": t.done,
                 "projects": t.projects, "contexts": t.contexts or [],
                 "due": t.due.isoformat() if t.due else "",
                 "threshold": t.threshold.isoformat() if t.threshold else "",
@@ -1100,25 +1122,26 @@ def routines_page():
                 "rec": t.rec or "", "id": t.id or "",
                 "links": t.links if t.links else [],
             })
-    total_height = (last_hour - first_hour + 1) * hour_px
+        for i in range(1, len(block_data)):
+            prev_bottom = block_data[i - 1]["top"] + block_data[i - 1]["height"]
+            if block_data[i]["top"] < prev_bottom + _BLOCK_GAP:
+                block_data[i]["top"] = prev_bottom + _BLOCK_GAP
+    hour_span_px = (last_hour - first_hour + 1) * hour_px
+    last_bottom = block_data[-1]["top"] + block_data[-1]["height"] if block_data else 0
+    total_height = max(hour_span_px, last_bottom + 8)
     now_top = int((now_min - first_hour * 60) * hour_px / 60)
     show_now = first_hour * 60 <= now_min <= (last_hour + 1) * 60
-
-    done_todos, _ = svc.ptos_todo.load_todos(svc.DONE_PATH)
-    done_routines = [t for t in done_todos if "+routine" in t.projects]
-    done_routines.sort(key=lambda t: (t.completed_date or dt.date.min, t.description), reverse=True)
-    done_routines = done_routines[:20]
 
     return render_template("routines.html", tab="routines",
                            title="Routines", cards=cards, today=today,
                            now_time=now_time,
+                           fmt_ampm=_fmt_ampm,
                            timed=timed, untimed=untimed,
                            block_data=block_data,
                            color_legend=color_legend, row_colors=row_colors,
                            first_hour=first_hour, last_hour=last_hour,
                            hour_px=hour_px, total_height=total_height,
                            now_top=now_top, show_now=show_now,
-                           done_routines=done_routines,
                            projects=svc.get_todo_projects(),
                            contexts=svc.get_todo_contexts(),
                            priority_labels=svc.get_config().get("todo", {}).get("priority_labels", {}))
