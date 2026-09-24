@@ -2960,7 +2960,7 @@ def project_new_page():
             tab="projects", title="New Project",
             mode="new", label=label, key=key,
             todo_project=key, tag_filters=f"project={key}" if key else "",
-            board="", notes_path=f"Projects/{label}.md" if label else "",
+            board="", notes_path=f"Projects/{label}" if label else "",
             boards=boards, error=None)
     label = request.form.get("label", "").strip()
     key = request.form.get("config_key", "").strip()
@@ -2989,15 +2989,9 @@ def project_new_page():
             todo_project=todo_project, tag_filters=tag_raw,
             board=board, notes_path=notes_path,
             boards=boards, error=str(e))
-    note_path = notes_path.rstrip(".md") if notes_path else ""
-    if note_path:
-        try:
-            ptos.create_file(os.path.dirname(note_path) or "",
-                os.path.basename(note_path),
-                f"# {label}\n\n## Goal\n\n\n## Steps\n- [ ] \n\n## Notes\n\n")
-        except Exception:
-            pass
-    return redirect(f"/notes/edit/{note_path}") if note_path else redirect("/projects")
+    if notes_path:
+        return redirect(f"/notes/edit/{notes_path}/index.md")
+    return redirect("/projects")
 
 
 @app.route("/projects/<name>/edit", methods=["GET", "POST"])

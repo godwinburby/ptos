@@ -702,8 +702,11 @@ field and legacy `--todo-projects`). Routes under `/projects`:
 - **List** (`/projects`) — all projects with a quick overview
 - **New / Edit** (`/projects/new`, `/projects/<name>/edit`) — label, config key
   (auto-derived), todo project, record filters, board dropdown, notes path; saves
-  a `["project.*"]` entry in `queries.toml` and creates a project note file with a
-  starter template
+  a `["project.*"]` entry in `queries.toml`. The notes path is a **folder** (e.g.
+  `Projects/Find a Job`); saving a project with a notes path auto-creates the
+  folder and an `index.md` hub file from the nearest `template.md` (project-local
+  then ancestor, falling back to the shipped default) — existing hub files are
+  never overwritten. The `index.md` hub is the project's landing note.
 - **Delete** (`/projects/<name>/delete`) — confirmation page; removes the config
   entry only, notes and todos are preserved
 - Configure links on the home/projects page open the Query Builder Projects section

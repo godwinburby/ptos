@@ -33,6 +33,14 @@ Format: `[version or date] — description`
 - **Hour labels fit** — the day-view hour gutter widened 44px→62px (32px→52px on mobile) so labels like `11:00 PM` render in full instead of being clipped to `:00 PM` (the old right-aligned flex behavior clipped the left part of any label wider than the gutter).
 - **Card text matches day view** — routine descriptions bumped 14px→15px and the card time chips 11px→13px to align with the larger day-view type.
 
+### Project notes hub (folder + `index.md`)
+
+- **`notes_path` is now a folder, not a file** — the project landing note is always `{notes_path}/index.md`. `save_project()` creates the folder and the `index.md` hub file whenever `notes_path` is set and `index.md` is missing (idempotent — an existing hub is never overwritten). Content comes from the project's nearest `template.md` (project-local, then ancestor, then the shipped default), with `{{ project name }}`/`{{ date }}` placeholders substituted.
+- **Shipped default template** — new `starters/starter_project_note.md` serves as the fallback hub content; new-project web form and the project form JS now default `notes_path` to a folder (`Projects/Label`) instead of appending `.md`, and the new-project redirect lands on `/notes/edit/{notes_path}/index.md`.
+- **Link target fix** — project cards now link to `/notes/edit/{notes_path}/index.md` whenever `notes_path` is set, taking priority over bracket-reference scanning (spec-labelled `get_projects_overview` reorder).
+- **Path safety** — `notes_path` is validated against traversal before any filesystem work.
+- **Tests** — new `TestProjectNotesHub` class: hub creation with/without ancestor template, local-template precedence, no-overwrite, resave keeps hub, second notes-path creates second hub, link_target uses notes_path over bracket refs, traversal rejection, web POST creates hub + redirects, form default renders folder-style.
+
 ---
 
 ## 2026-09-23

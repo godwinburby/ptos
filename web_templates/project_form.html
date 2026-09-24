@@ -70,7 +70,7 @@
     <div class="pf-field">
       <label>Notes path</label>
       <input type="text" name="notes_path" value="{{ notes_path }}" placeholder="Projects/Find a Job">
-      <div class="hint">Path under <code>notes/</code> for project planning</div>
+      <div class="hint">Folder under <code>notes/</code> — an <code>index.md</code> hub is auto-created from the nearest template</div>
     </div>
 
     <div class="pf-actions">
@@ -106,7 +106,7 @@ function onLabelChange(val) {
     document.querySelector('input[name="tag_filters"]').value = 'project=' + _deriveKey(val);
   }
   if (_auto.notes_path) {
-    document.querySelector('input[name="notes_path"]').value = val.trim() ? 'Projects/' + val.trim() + '.md' : '';
+    document.querySelector('input[name="notes_path"]').value = val.trim() ? 'Projects/' + val.trim() : '';
   }
 }
 
