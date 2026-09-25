@@ -1127,6 +1127,44 @@ class TestFilterTodosLists:
             assert len(result) == 1
             assert result[0].description == "Task three"
 
+    def test_exclude_project_with_dash(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_todo(os.path.join(tmpdir, "todo.txt"), [
+                "(A) Task one +Home @errand",
+                "(B) Task two +Work @office",
+                "(C) Task three +Home @home",
+            ])
+            todos, _ = load_todos(path)
+            result = filter_todos(todos, project=["-Home"])
+            assert len(result) == 1
+            assert result[0].description == "Task two"
+
+    def test_exclude_mixed_with_include(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_todo(os.path.join(tmpdir, "todo.txt"), [
+                "(A) Task one +Home +Work",
+                "(B) Task two +Home",
+                "(C) Task three +Work",
+            ])
+            todos, _ = load_todos(path)
+            result = filter_todos(todos, project=["+Home", "-Work"])
+            assert len(result) == 1
+            assert result[0].description == "Task two"
+
+    def test_exclude_routine_drops_routine(self):
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmpdir:
+            path = _write_todo(os.path.join(tmpdir, "todo.txt"), [
+                "(A) Water plants +routine @morning rec:1w",
+                "(B) Call client +Work",
+            ])
+            todos, _ = load_todos(path)
+            result = filter_todos(todos, project=["-routine"])
+            assert len(result) == 1
+            assert result[0].description == "Call client"
+
 
 # ── undo todo ────────────────────────────────────────────────────────────────
 
@@ -1188,6 +1226,52 @@ class TestCliTodoContexts:
         ])
         save_todos(str(tmp_path / "done.txt"), [])
         ptos_cli._handle_todo_contexts()
+
+
+class TestCliTodoHideRoutines:
+    def _prepare(self, tmp_path, monkeypatch, config):
+        import ptos_cli
+        monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo.txt"))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
+        save_todos(str(tmp_path / "todo.txt"), [
+            parse_todo_line("(A) Water plants +routine @morning rec:1w"),
+            parse_todo_line("(B) Call client +Work"),
+        ])
+        save_todos(str(tmp_path / "done.txt"), [])
+        if config is not None:
+            monkeypatch.setattr(ptos, "get_config", lambda: config)
+        return ptos_cli
+
+    def _args(self, cli, argv):
+        return cli.build_parser({}).parse_args(["--todo-list"] + argv)
+
+    def test_hide_routines_flag(self, tmp_path, monkeypatch, capsys):
+        cli = self._prepare(tmp_path, monkeypatch, None)
+        cli._handle_todo_list(self._args(cli, ["--hide-routines"]))
+        out = capsys.readouterr().out
+        assert "Call client" in out
+        assert "Water plants" not in out
+
+    def test_project_negative_form(self, tmp_path, monkeypatch, capsys):
+        cli = self._prepare(tmp_path, monkeypatch, None)
+        cli._handle_todo_list(self._args(cli, ["--project=-routine"]))
+        out = capsys.readouterr().out
+        assert "Call client" in out
+        assert "Water plants" not in out
+
+    def test_config_default_hides(self, tmp_path, monkeypatch, capsys):
+        cli = self._prepare(tmp_path, monkeypatch, {"todo": {"hide_routines": True}})
+        cli._handle_todo_list(self._args(cli, []))
+        out = capsys.readouterr().out
+        assert "Call client" in out
+        assert "Water plants" not in out
+
+    def test_explicit_project_overrides_config(self, tmp_path, monkeypatch, capsys):
+        cli = self._prepare(tmp_path, monkeypatch, {"todo": {"hide_routines": True}})
+        cli._handle_todo_list(self._args(cli, ["--project", "+Work"]))
+        out = capsys.readouterr().out
+        assert "Call client" in out
+        assert "Water plants" not in out
 
 
 class TestCliTodoDue:

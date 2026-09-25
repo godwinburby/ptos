@@ -7,6 +7,17 @@ Format: `[version or date] — description`
 
 ## 2026-09-24
 
+### Routines: recurrence badge per row
+
+- **Recurrence shown on every routine** — each routine row now carries a small recurrence badge (`daily`, `weekly`, `biweekly`, `monthly`, `bimonthly`, `quarterly`, `yearly`, or generic `every N days/weeks/months`, with a `strict` prefix for `+rec`) with a "Repeats …" tooltip. Rendered in the cards view, the day-view timeline blocks, and the Anytime section; rows without a `rec:` show nothing.
+- **`fmt_rec()` helper** — new `ptos_web._fmt_rec(rec)` maps a `rec:` interval to its human label (known intervals named, others phrased as `every N <unit>`), passed to `routines.html` as `fmt_rec`. No engine changes.
+- **Tests** — `test_recurrence_badge_shown_per_routine` asserts the daily/weekly labels render and non-recurring rows stay bare.
+
+### Routines: any recurrence interval
+
+- **Copy no longer daily-only** — the routines help card, empty state, and README now describe routines as recurring on any interval. `rec:` examples cover `1d` daily, `1w` weekly, `2w` biweekly, and `1m` monthly; the example block and README gained a weekly routine (`@wednesday … rec:1w`).
+- **Recurrence already engine-supported** — no engine change: routines are todos, so `complete_todo()` recalculates the next occurrence for any `rec:` interval (daily → tomorrow, weekly → next week, monthly → next month). The `+ Add` quick-add keeps its sane `rec:1d @morning` default; Weekly/Monthly is set via the modal's Recurrence drop-down.
+
 ### Board: status boards (filter lanes with `set_field`)
 
 - **Two board modes, one grammar** — board `columns` items are either a bare type string (type mode — the existing behavior: drag creates a new record via `advance_record`) or a dict `{label, where, set?}` (status mode, activated by a new optional `set_field` config key). In status mode every lane is a workflow stage filter (e.g. `Lead / Applied / Interview / Hired` over `set_field = "status"`) and dragging a card between lanes rewrites the record's `set_field` in place — one record stays one card, so the pipeline history is preserved instead of spawning a new record per stage.
@@ -16,6 +27,21 @@ Format: `[version or date] — description`
 - **Board page & CLI** — lane headers and funnel labels use the lane `label`; the grid-view toggle is hidden for status boards; `+ Add` on a status lane prefills the add form with the lane's type + `set_field=set_value`. `--board` prints lane labels and shows `set_field` in the header.
 - **Live config** — `jobsearch` record type (`company`, `status`, `role`, `url`; required `company`+`status`) and a `board.jobsearch` status board (six stages across the pipeline) added to `schema.toml`/`queries.toml`.
 - **Tests** — `tests/test_board.py` gains `TestStatusBoardLanes`, `TestBoardMoveRecord`, `TestSaveStatusBoard`, and `TestBoardMoveRoute` (117 board tests total).
+
+### Todo reminders: routine exclusion + notification schedule control
+
+- **Routines no longer remind by default** — `_housekeeping_loop` (due-today) and `_reminder_loop` (due-soon) now skip `+routine` todos unless the new `[todo] notify_routines` config key is `true` (`settings` → Todo → "Include routines in reminders"). The exclusion is applied to both the OS notification and the browser SSE toast.
+- **`notify_interval = 0` is now off** — the Settings clamp (`settings_save`) changed from `max(1, …)` to `max(0, …)` and the Settings input min is `0`, so `0` disables due-todo polling entirely (the separate due-soon reminder still runs when `remind_before_minutes > 0`).
+- **Notify once on startup** — new `[todo] notify_once_on_startup` boolean (Settings → Todo → "Notify once on startup only"). When enabled, one due-today check runs at server boot and no periodic thread is started, regardless of `notify_interval`. `_start_reminder_thread`/thread-start now goes through testable `_start_housekeeping_thread()`, which returns the started thread or `None`.
+- **Refactor** — the per-iteration body of `_housekeeping_loop` moved into `_housekeeping_check(notified, notify_routines)` (returns `(current_keys, tasks, body)`), sharing `_notify_due_tasks()` for the boot-once and loop paths; due-soon routine filtering lives in `_due_soon_filtered()`.
+- **Tests** — `tests/test_reminder.py` gains `TestHousekeepingCheck` (routine exclusion default/on, dedupe), `TestDueSoonFiltered`, `TestStartHousekeepingThread` (interval 0, enabled, once-on-startup, missing config), and `TestSettingsSaveNotifier` (interval 0 saved, clamps, new flags round-trip through `/settings/save`).
+
+### Todo page: hide routines by default
+
+- **`[todo] hide_routines` config default** — new boolean (default `false`, Settings → Todo → "Hide routines on the todo page") that applies to the `/todo` page and `--todo-list`/`--todo-done-list`, so `+routine` todos drop out unless you opt in per visit.
+- **`-`-prefixed project filter** — `filter_todos` now treats `project=["-routine"]` as an exclusion (`+Home`-style values still include), so `?project=-routine` hides routines and `?project=+routine` drills into them. An explicit `project=` param overrides the config default, and an explicit `--project`/`--hide-routines` flag overrides the config on the CLI.
+- **Per-visit toggle** — the todo page Filters section gains a "Hide routines / Show routines" chip that round-trips `?project=`/`?project=-routine` with the other filters preserved (no persistence); an active "Routines hidden" chip appears in the filter summary bar. CLI gets a `--hide-routines` convenience flag.
+- **Tests** — `filter_todos` exclusion (dash-exclude, include+exclude mix, routines), CLI `--hide-routines`/`--project=-routine`/config-default parity, and web `/todo` client tests for the chip, negative param, config default, empty-param override, and `+routine` drill-in.
 
 ### Routines: completed routines stay in place
 

@@ -31,6 +31,10 @@
     font-size:11px; color:var(--sub); white-space:nowrap;
   }
   .routine-due.overdue { color:var(--error); font-weight:600; }
+  .routine-rec {
+    font-size:10px; color:var(--sub); background:var(--bg);
+    padding:1px 6px; border-radius:8px; white-space:nowrap;
+  }
   .routine-del {
     border:none; background:none; color:var(--sub); font-size:12px;
     cursor:pointer; padding:2px 4px; border-radius:4px; line-height:1;
@@ -222,22 +226,23 @@
 
 <div id="routine-help" class="routine-help{% if cards %}{% else %} open{% endif %}">
   <div class="routine-help-title">What are routines?</div>
-  <p>Routines are your daily recurring tasks — things you do every day that would clutter your main todo list. This page shows them as checkbox cards grouped by context (e.g. morning, evening); the day view is a timeline whose colors follow each routine's project.</p>
+  <p>Routines are your recurring tasks — daily, weekly, or monthly — that would clutter your main todo list. This page shows them as checkbox cards grouped by context (e.g. morning, evening); the day view is a timeline whose colors follow each routine's project.</p>
   <div class="routine-help-title" style="margin-top:12px;">How to add a routine</div>
   <p>Go to the <a href="/todo" style="color:var(--accent);">Todo page</a> and add a todo with:</p>
   <ul>
     <li><code>+routine</code> — the project tag that identifies it as a routine</li>
     <li><code>@morning</code> (or any context) — becomes the card group on this page</li>
-    <li><code>rec:1d</code> — daily recurrence so it auto-regenerates after completion</li>
+    <li><code>rec:1d</code> — repeat after completion: <code>1d</code> daily, <code>1w</code> weekly, <code>2w</code> biweekly, <code>1m</code> monthly</li>
     <li><code>due:today</code> — due date for today</li>
     <li><code>due_time:09:00</code> — start time for the day view timeline</li>
   </ul>
   <div class="routine-example">
-    <span class="pri">(A)</span> Check mail <span class="proj">+routine</span> <span class="ctx">@morning</span> <span class="due">due:today due_time:09:00</span> <span class="rec">rec:1d</span>
+    <span class="pri">(A)</span> Check mail <span class="proj">+routine</span> <span class="ctx">@morning</span> <span class="due">due:today due_time:09:00</span> <span class="rec">rec:1d</span><br>
+    <span class="pri">(B)</span> Water plants <span class="proj">+routine</span> <span class="ctx">@wednesday</span> <span class="due">due:wednesday due_time:09:00</span> <span class="rec">rec:1w</span>
   </div>
   <div class="routine-help-title" style="margin-top:12px;">How it works</div>
   <ul>
-    <li>Check items off here — they complete and auto-regenerate for tomorrow</li>
+    <li>Check items off here — they complete and auto-regenerate for their next due date (daily → tomorrow, weekly → next week, monthly → next month)</li>
     <li>Click an item's text to edit it</li>
     <li>Use the "+ Add" button on each card to quickly add a routine to that context</li>
     <li>Switch to <strong>Day</strong> view to see your routine as a timeline with time blocks</li>
@@ -274,6 +279,7 @@
         {% endif %}
         <span class="routine-desc" onclick="{% if t.done %}openEditDone{% else %}openEdit{% endif %}({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
         {% if t.due_time %}<span class="routine-time">{{ fmt_ampm(t.due_time) }}</span>{% endif %}
+        {% if t.rec %}<span class="routine-rec" title="Repeats {{ fmt_rec(t.rec) }}">{{ fmt_rec(t.rec) }}</span>{% endif %}
         {% if t.done %}
         {% if t.completed_date %}<span class="routine-due">{{ t.completed_date.strftime('%d %b') }}</span>{% endif %}
         {% else %}
@@ -299,7 +305,7 @@
   <p>No routine todos found.</p>
   <p style="margin-top:8px;">Create your first routine:</p>
   <button class="routine-add-btn" onclick="openAddRoutine('morning')" style="margin:12px auto; max-width:200px;">+ New Routine</button>
-  <p style="margin-top:8px;font-size:12px;color:var(--sub);">Default: +routine @morning, due today, repeats daily</p>
+  <p style="margin-top:8px;font-size:12px;color:var(--sub);">Default: +routine @morning, due today, daily — pick Weekly or Monthly in the Recurrence selector</p>
 </div>
 {% endif %}
 </div>
@@ -332,6 +338,7 @@
           <div class="rv-block-check" onclick="event.stopPropagation();completeTodo({{ b.line_no }}, this)"></div>
           {% endif %}
           <span class="rv-block-time">{{ fmt_ampm(b.due_time) }}</span>
+          {% if b.rec %}<span class="routine-rec" title="Repeats {{ fmt_rec(b.rec) }}">{{ fmt_rec(b.rec) }}</span>{% endif %}
           <span class="rv-block-desc" onclick="event.stopPropagation();{% if b.done %}openEditDone{% else %}openEdit{% endif %}({{ b.line_no }}, '{{ b.description|e }}', '{{ b.priority }}', '{{ b.due }}', '{{ b.due_time }}', '{{ b.threshold }}', '{{ b.threshold_time }}', '{{ b.projects|join(' ') }}', '{{ b.contexts|join(' ') }}', '{{ b.rec }}', '{{ b.id }}', '{{ b.links|join(',') }}')">{{ b.description }}</span>
           {% if not b.done %}
           <button class="routine-del" onclick="event.stopPropagation();deleteTodo({{ b.line_no }})" title="Delete routine">✕</button>
@@ -362,6 +369,7 @@
     <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
     {% endif %}
     <span class="routine-desc" onclick="{% if t.done %}openEditDone{% else %}openEdit{% endif %}({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
+    {% if t.rec %}<span class="routine-rec" title="Repeats {{ fmt_rec(t.rec) }}">{{ fmt_rec(t.rec) }}</span>{% endif %}
     {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
     {% if not t.done %}
     <button class="routine-del" onclick="deleteTodo({{ t.line_no }})" title="Delete routine">✕</button>

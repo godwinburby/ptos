@@ -265,11 +265,13 @@ def build_parser(cycles):
 
     tod_f = p.add_argument_group("Todo filters (use with --todo-list)")
     tod_f.add_argument("--project", action="append", metavar="NAME",
-                       help="Filter by +Project (repeatable)")
+                       help="Filter by +Project (repeatable; prefix with '-' to exclude, e.g. --project=-routine)")
     tod_f.add_argument("--context", action="append", metavar="NAME",
                        help="Filter by @context (repeatable)")
     tod_f.add_argument("--priority", action="append", metavar="P",
                        help="Filter by priority A-D (repeatable)")
+    tod_f.add_argument("--hide-routines", action="store_true",
+                       help="Exclude +routine todos (adds '-routine' project filter)")
     tod_f.add_argument("--due-range", dest="due_range",
                        choices=["overdue", "today", "tomorrow", "upcoming", "someday", "none"],
                        help="Filter by due range")
@@ -1976,9 +1978,20 @@ def _handle_todo_list(args):
         open_t = [t for t in todos if not t.done]
         display = list(open_t)
 
-    if getattr(args, "project", None):
-        proj = [("+" + p if not p.startswith("+") else p) for p in args.project]
-        display = ptos_todo.filter_todos(display, project=proj,
+    proj = list(getattr(args, "project", None) or [])
+    if getattr(args, "hide_routines", False):
+        proj.append("-routine")
+    if proj:
+        norm = []
+        for p in proj:
+            if p.startswith("-"):
+                norm.append(p)
+            else:
+                norm.append("+" + p if not p.startswith("+") else p)
+        display = ptos_todo.filter_todos(display, project=norm,
+                                          include_done=getattr(args, "all", False))
+    elif ptos.get_config().get("todo", {}).get("hide_routines", False):
+        display = ptos_todo.filter_todos(display, project=["-routine"],
                                           include_done=getattr(args, "all", False))
     if getattr(args, "context", None):
         ctx = [("@" + c if not c.startswith("@") else c) for c in args.context]
@@ -2280,9 +2293,17 @@ def _handle_todo_done_list(args):
 
     display = list(done)
 
-    if getattr(args, "project", None):
-        proj = [("+" + p if not p.startswith("+") else p) for p in args.project]
-        display = ptos_todo.filter_todos(display, project=proj, include_done=True)
+    proj = list(getattr(args, "project", None) or [])
+    if getattr(args, "hide_routines", False):
+        proj.append("-routine")
+    if proj:
+        norm = []
+        for p in proj:
+            if p.startswith("-"):
+                norm.append(p)
+            else:
+                norm.append("+" + p if not p.startswith("+") else p)
+        display = ptos_todo.filter_todos(display, project=norm, include_done=True)
     if getattr(args, "context", None):
         ctx = [("@" + c if not c.startswith("@") else c) for c in args.context]
         display = ptos_todo.filter_todos(display, context=ctx, include_done=True)

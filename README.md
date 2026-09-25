@@ -523,7 +523,7 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - Inline edit (pencil icon on hover) and delete for open and done tasks; done tasks also support undo (checkmark) to move back to todo.txt
 - Project rail for filtering by `+Project` with toggle behavior
 - Collapsible `? Help` reference card with priority labels
-- **System notifications** — native OS desktop notifications (Linux: `notify-send`, macOS: Notification Center, Windows: toast, Android: `termux-notification`) alongside browser notifications; works in PWA mode (service worker excludes SSE endpoint)
+- **System notifications** — native OS desktop notifications (Linux: `notify-send`, macOS: Notification Center, Windows: toast, Android: `termux-notification`) alongside browser notifications; works in PWA mode (service worker excludes SSE endpoint); `+routine` todos are excluded from reminders by default (`[todo] notify_routines`, via Settings → Todo); `notify_interval = 0` disables reminders outright; `notify_once_on_startup` fires a single check at boot and starts no periodic thread
 - Automatic archiving: done items older than 6 months move to `done.YYYY.txt` on startup
 
 <img src="images/ptos_todo.png" width="260" alt="Todo screen showing task list with priority badges, due dates, and quick-add">
@@ -552,9 +552,10 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 
 ### Routines
 
-Daily recurring tasks — any todo tagged `+routine` shows up here as a checkbox card
+Recurring tasks — any todo tagged `+routine` shows up here as a checkbox card
 grouped by `@context` (e.g. morning, evening). Checking a routine completes it and
-(recurring ones) auto-regenerate for tomorrow. Navigate with a single `R`.
+(recurring ones) auto-regenerate for their next due date: `rec:1d` daily, `rec:1w`
+weekly, `rec:2w` biweekly, `rec:1m` monthly. Navigate with a single `R`.
 
 **Cards view** (default):
 - One card per `@context` (a `+routine` todo with no context lands in `other`), each
@@ -582,7 +583,8 @@ grouped by `@context` (e.g. morning, evening). Checking a routine completes it a
   ticked box in their timeline slot (undo by clicking the tick); older completions drop off
 - Anytime section lists routines without a due time
 
-Add a routine as you would any todo: `(A) Check mail +routine @morning due:today due_time:09:00 rec:1d`.
+Add a routine as you would any todo: `(A) Check mail +routine @morning due:today due_time:09:00 rec:1d`
+or a weekly one: `(B) Water plants +routine @wednesday due:wednesday due_time:09:00 rec:1w`.
 
 ### Log Editor
 
@@ -777,7 +779,7 @@ Configure user profile and app preferences. Sections:
 - **Custom Cycles**: CRUD for billing cycles (day 1-31)
 - **Backup Folders**: core folders locked, custom folders editable
 - **Backup Settings**: auto backup on startup/shutdown triggers
-- **Todo**: reminder check interval (minutes) — how often PTOS checks for due todos; takes effect after restart
+- **Todo**: reminder check interval (minutes) — how often PTOS checks for due todos (`0` disables); include-routines toggle; notify-once-on-startup toggle; takes effect after restart
 - **Sync**: OneDrive bidirectional sync via rclone bisync. See [Sync section](#sharing-and-sync) for full details.
 - **Server** (config only): `[server]` section in `config.toml` with `host` and `port` — default `127.0.0.1:5000`. Set `host = "0.0.0.0"` to expose on LAN or Tailscale. Always set `[auth]` before exposing publicly.
 
@@ -990,7 +992,10 @@ auto_sync_on_shutdown   = false
 sync_interval_minutes   = 0      # periodic sync interval (0 = disabled)
 
 [todo]
-notify_interval         = 5      # background due-todo check interval (minutes)
+notify_interval         = 5      # background due-todo check interval (minutes; 0 = disabled)
+notify_routines         = false  # include +routine todos in due-today/due-soon reminders
+notify_once_on_startup  = false  # notify once at boot, then no periodic reminders
+hide_routines           = false  # hide +routine todos on the todo page / --todo-list by default
 archive_months          = 6      # months before done items are archived
 priority_labels         = { A = "Critical", B = "Important", C = "Moderate", D = "Low" }
 
@@ -1714,7 +1719,8 @@ ptos -y test -t td --delete --all
 | `--todo-contexts` | | List all contexts with counts |
 | `--todo-due [DAYS]` | | Show due/overdue todos (default: today+overdue, optional lookahead) |
 | `--todo-archive` | | Archive old done items to done.YYYY.txt |
-| `--project NAME` | | Filter `--todo-list` by +Project (repeatable) |
+| `--project NAME` | | Filter `--todo-list` by +Project (repeatable; `-`-prefixed name excludes, e.g. `--project=-routine`) |
+| `--hide-routines` | | Hide `+routine` todos (default fallback: `[todo] hide_routines` config) |
 | `--context NAME` | | Filter `--todo-list` by @Context (repeatable) |
 | `--priority P` | | Filter `--todo-list` by priority A-D (repeatable) |
 | `--due-range RANGE` | | Filter `--todo-list` by due range: `overdue` `today` `tomorrow` `upcoming` `someday` `none` |
