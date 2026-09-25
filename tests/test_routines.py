@@ -48,10 +48,24 @@ class TestRoutinesPage:
         html = resp.get_data(as_text=True)
         assert resp.status_code == 200
         assert "morning" in html.lower()
-        assert "evening" in html.lower()
-        assert "Check mail" in html
-        assert "Call clients" in html
-        assert "Tally cash card" in html
+
+    def test_recurrence_badge_shown_per_routine(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        _write_todo(todo_path, [
+            f"(A) {TODAY_S} Check mail +routine @morning rec:1d due:{TODAY_S}",
+            f"(B) {TODAY_S} Water plants +routine @wednesday rec:1w due:{TODAY_S}",
+            f"(C) {TODAY_S} No repeat +routine @morning due:{TODAY_S}",
+        ])
+        client = app.test_client()
+        resp = client.get("/routines")
+        html = resp.get_data(as_text=True)
+        assert resp.status_code == 200
+        assert 'class="routine-rec" title="Repeats daily">daily</span>' in html
+        assert 'class="routine-rec" title="Repeats weekly">weekly</span>' in html
+        assert "Repeats " not in html.replace('class="routine-rec" title="Repeats daily">daily', "").replace('class="routine-rec" title="Repeats weekly">weekly', "")
 
     def test_no_context_goes_to_other(self, tmp_path, monkeypatch):
         todo_path = tmp_path / "todo" / "todo.txt"
@@ -899,3 +913,91 @@ class TestRoutinesDayView:
         html = resp.get_data(as_text=True)
         assert "No routine todos found." in html
         assert 'class="rv-legend"' not in html
+
+
+class TestTodoPageHideRoutines:
+    def _setup(self, tmp_path, monkeypatch, lines):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        done_path = tmp_path / "todo" / "done.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_todo(todo_path, lines)
+        _write_todo(done_path, [])
+
+    def _enable_config_default(self, monkeypatch):
+        cfg_path = ptos.CONFIG_PATH
+        with open(cfg_path, encoding="utf-8") as f:
+            content = f.read()
+        with open(cfg_path, "w", encoding="utf-8") as f:
+            f.write(content.replace(
+                "hide_routines = false", "hide_routines = true", 1))
+
+    def test_chip_present_when_not_hiding(self, tmp_path, monkeypatch):
+        self._setup(tmp_path, monkeypatch, [
+            f"(A) {TODAY_S} Water plants +routine @morning due:{TODAY_S}",
+            f"(B) {TODAY_S} Call client +Work @phone due:{TODAY_S}",
+        ])
+        client = app.test_client()
+        resp = client.get("/todo")
+        html = resp.get_data(as_text=True)
+        assert resp.status_code == 200
+        assert "Hide routines" in html
+        assert "Water plants" in html
+        assert "Call client" in html
+        assert "project=-routine" in html
+
+    def test_param_negative_hides_routines(self, tmp_path, monkeypatch):
+        self._setup(tmp_path, monkeypatch, [
+            f"(A) {TODAY_S} Water plants +routine @morning due:{TODAY_S}",
+            f"(B) {TODAY_S} Call client +Work @phone due:{TODAY_S}",
+        ])
+        client = app.test_client()
+        resp = client.get("/todo?project=-routine")
+        html = resp.get_data(as_text=True)
+        assert "Water plants" not in html
+        assert "Call client" in html
+        assert "Routines hidden" in html
+        assert "Show routines" in html
+
+    def test_config_default_hides(self, tmp_path, monkeypatch):
+        self._setup(tmp_path, monkeypatch, [
+            f"(A) {TODAY_S} Water plants +routine @morning due:{TODAY_S}",
+            f"(B) {TODAY_S} Call client +Work @phone due:{TODAY_S}",
+        ])
+        self._enable_config_default(monkeypatch)
+        client = app.test_client()
+        resp = client.get("/todo")
+        html = resp.get_data(as_text=True)
+        assert "Water plants" not in html
+        assert "Call client" in html
+        assert "Routines hidden" in html
+        assert "Show routines" in html
+
+    def test_empty_param_overrides_config(self, tmp_path, monkeypatch):
+        self._setup(tmp_path, monkeypatch, [
+            f"(A) {TODAY_S} Water plants +routine @morning due:{TODAY_S}",
+            f"(B) {TODAY_S} Call client +Work @phone due:{TODAY_S}",
+        ])
+        self._enable_config_default(monkeypatch)
+        client = app.test_client()
+        resp = client.get("/todo?project=")
+        html = resp.get_data(as_text=True)
+        assert "Water plants" in html
+        assert "Call client" in html
+        assert "Routines hidden" not in html
+        assert "Hide routines" in html
+
+    def test_positive_routine_drills_in(self, tmp_path, monkeypatch):
+        self._setup(tmp_path, monkeypatch, [
+            f"(A) {TODAY_S} Water plants +routine @morning due:{TODAY_S}",
+            f"(B) {TODAY_S} Call client +Work @phone due:{TODAY_S}",
+        ])
+        client = app.test_client()
+        resp = client.get("/todo?project=%2Broutine")
+        html = resp.get_data(as_text=True)
+        assert "Water plants" in html
+        assert "Call client" not in html

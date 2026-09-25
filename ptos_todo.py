@@ -747,8 +747,13 @@ def filter_todos(todos, project=None, context=None, priority=None,
 
     project, context, priority can be a single value or a list.
     Matching is OR within a group, AND across groups.
+    Project values with a leading `-` EXCLUDE that project (e.g. '-routine'
+    drops '+routine' todos); can be mixed with includes in one list.
     linked_to is a 'type:id' target — matches todos whose links contain it.
     """
+    def _norm(p):
+        return p if p.startswith("+") else "+" + p
+
     result = []
     for t in todos:
         if not include_done and t.done:
@@ -759,7 +764,11 @@ def filter_todos(todos, project=None, context=None, priority=None,
                 continue
         if project:
             proj_list = project if isinstance(project, list) else [project]
-            if not any(p in t.projects for p in proj_list):
+            inc = [_norm(p[1:]) if p.startswith("-") else _norm(p) for p in proj_list if not p.startswith("-")]
+            exc = [_norm(p[1:]) for p in proj_list if p.startswith("-")]
+            if inc and not any(p in t.projects for p in inc):
+                continue
+            if exc and any(p in t.projects for p in exc):
                 continue
         if context:
             ctx_list = context if isinstance(context, list) else [context]

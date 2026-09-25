@@ -157,7 +157,8 @@ x 2026-07-12 2026-07-10 Completed task
 - `--todo-archive` — archive old done items to done.YYYY.txt
 
 ### Filter flags (use with --todo-list)
-- `--project NAME` — filter by +Project (repeatable)
+- `--project NAME` — filter by +Project (repeatable; a `-`-prefixed name excludes, e.g. `--project=-routine`)
+- `--hide-routines` — hide `+routine` todos via the `[todo] hide_routines` config default (both honored without an explicit `--project`)
 - `--context NAME` — filter by @context (repeatable)
 - `--priority P` — filter by priority A-D (repeatable)
 - `--due-range` — overdue/today/tomorrow/upcoming/someday/none
@@ -169,6 +170,7 @@ x 2026-07-12 2026-07-10 Completed task
 - **Quick add bar** with prefix-aware autocomplete (`+`, `@`, `due:`, `t:`, `(`); always visible
 - **Quick pick chips** (collapsible) — Due, Priority, Projects, Contexts, Scheduled, Repeat toggles; open on focus, close on blur
 - **Filter chips** (collapsible) — Priority, Due Range, Context toggles
+- **Hide-routines chip** — Filters section "Hide routines / Show routines" per-visit toggle (`?project=-routine` / `?project=`), preserving other filters; the `[todo] hide_routines` config default (Settings → Todo, also honored by CLI `--todo-list`) applies when no `project` param is given, and an explicit empty `project=` param overrides it
 - **Search** — glob wildcard `*`/`?` support with same prefix autocomplete; preserves other active filters
 - **Form modal** (shared add+edit) — Priority dropdown, Projects/Contexts toggle chips with "+ New"
 - **Clickable todo chips** — project/context/priority chips link to filtered view; clicking active filter removes it
@@ -178,7 +180,7 @@ x 2026-07-12 2026-07-10 Completed task
 - **Threshold todos** — `t > today` hidden until threshold date arrives
 - **Help card** — annotated todo.txt example with priority labels from config
 - **Inline field popups** — click due/threshold badges for date picker, priority badge for priority picker
-- **System notifications** — native OS notifications (Linux/macOS/Windows/Android) via background thread; repeats every `notify_interval` min (default 5); **due-time reminders** — separate thread fires when `due_time` is within `remind_before_minutes`; broadcasts `todo-reminder` SSE event
+- **System notifications** — native OS notifications (Linux/macOS/Windows/Android) via background thread; repeats every `notify_interval` min (default 5; `0` disables due-todo notifications entirely); **[todo] `notify_routines`** (default `false`) excludes `+routine` todos from both the due-today and due-soon reminders; **[todo] `notify_once_on_startup`** (default `false`) runs a single due-today check at boot and starts no periodic thread; **due-time reminders** — separate thread fires when `due_time` is within `remind_before_minutes`; broadcasts `todo-reminder` SSE event
 - **Pomodoro timer** — per-todo play button starts configurable countdown; floating pill persists across pages; row indicators for active task; duration from `[pomodoro] duration_minutes` config
 - **Selection mode** — bulk edit priority/due/threshold/recurrence across selected tasks; CLI: `--todo-bulk-edit LINE_NOS key=value`
 - **Service worker** — caches static GETs, excludes SSE endpoint; POST always network

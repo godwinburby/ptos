@@ -769,13 +769,17 @@ def due_page():
 
 @app.route("/todo")
 def todo_page():
-    project = request.args.get("project", None)
+    has_prj_param = "project" in request.args
+    project = request.args.get("project") or None
     context = request.args.get("context", None)
     pri = request.args.get("priority", None)
     due_filter = request.args.get("due", None)
     search = request.args.get("search", None)
     linked_to = request.args.get("linked_to", None)
     groupby = request.args.get("groupby", "timeline")
+    todo_cfg = svc.get_config().get("todo", {})
+    hide_routines_cfg = bool(todo_cfg.get("hide_routines", False))
+    hide_routines = (project and project.startswith("-")) or (not has_prj_param and hide_routines_cfg)
 
     try:
         buckets = svc.get_todos_bucketed()
@@ -792,7 +796,14 @@ def todo_page():
     def _filter_list(todos):
         result = todos
         if project:
-            result = [t for t in result if project in t.projects]
+            if project.startswith("-"):
+                exc = "+" + project[1:]
+                result = [t for t in result if exc not in t.projects]
+            else:
+                inc = project if project.startswith("+") else "+" + project
+                result = [t for t in result if inc in t.projects]
+        elif not has_prj_param and hide_routines_cfg:
+            result = [t for t in result if "+routine" not in t.projects]
         if context:
             result = [t for t in result if context in t.contexts]
         if pri:
@@ -835,7 +846,6 @@ def todo_page():
     all_todos_flat = buckets["overdue"] + buckets["today"] + buckets["upcoming"] + buckets["someday"]
     all_priorities = sorted(set(t.priority for t in all_todos_flat if t.priority))
 
-    todo_cfg = svc.get_config().get("todo", {})
     priority_labels = todo_cfg.get("priority_labels", {})
 
     # Build grouped sections for the selected groupby mode
@@ -898,6 +908,8 @@ def todo_page():
         error=error, selected_project=project, selected_context=context,
         selected_priority=pri, selected_due=due_filter, selected_search=search,
         selected_linked_to=linked_to,
+        hide_routines=hide_routines, hide_routines_param=has_prj_param,
+        hide_routines_cfg=hide_routines_cfg,
         done_today=done_today, total_today=total_today, done_recent=done_recent,
         all_priorities=all_priorities, priority_labels=priority_labels,
         grouped=grouped, groupby=groupby)
@@ -1008,6 +1020,28 @@ def todo_edit_done():
         return jsonify(ok=True, todo=result["todo"])
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
+
+
+_REC_LABELS = {
+    "1d": "daily", "1w": "weekly", "2w": "biweekly",
+    "1m": "monthly", "2m": "bimonthly", "3m": "quarterly", "1y": "yearly",
+}
+_UNIT_SUFFIX = {"d": "days", "w": "weeks", "m": "months", "y": "years"}
+
+
+def _fmt_rec(rec):
+    if not rec:
+        return ""
+    strict = rec.startswith("+")
+    val = rec.lstrip("+")
+    prefix = "strict " if strict else ""
+    label = _REC_LABELS.get(val)
+    if label:
+        return prefix + label
+    m = re.match(r"^(\d+)([dwmy])$", val)
+    if m:
+        return prefix + f"every {m.group(1)} {_UNIT_SUFFIX[m.group(2)]}"
+    return rec
 
 
 def _now_time_str():
@@ -1136,6 +1170,7 @@ def routines_page():
                            title="Routines", cards=cards, today=today,
                            now_time=now_time,
                            fmt_ampm=_fmt_ampm,
+                           fmt_rec=_fmt_rec,
                            timed=timed, untimed=untimed,
                            block_data=block_data,
                            color_legend=color_legend, row_colors=row_colors,
@@ -2063,7 +2098,12 @@ def settings_save():
         if "max_config_backups" in data:
             cfg.setdefault("backup", {})["max_config_backups"] = max(1, min(100, int(data["max_config_backups"])))
         if "notify_interval" in data:
-            cfg.setdefault("todo", {})["notify_interval"] = max(1, min(120, int(data["notify_interval"])))
+            cfg.setdefault("todo", {})["notify_interval"] = max(0, min(120, int(data["notify_interval"])))
+        if "notify_routines" in data or "notify_once_on_startup" in data:
+            cfg.setdefault("todo", {})["notify_routines"] = bool(data.get("notify_routines"))
+            cfg.setdefault("todo", {})["notify_once_on_startup"] = bool(data.get("notify_once_on_startup"))
+        if "hide_routines" in data:
+            cfg.setdefault("todo", {})["hide_routines"] = bool(data.get("hide_routines"))
         if "remind_before_minutes" in data:
             cfg.setdefault("todo", {})["remind_before_minutes"] = max(0, min(120, int(data["remind_before_minutes"])))
         if "reminder_check_interval" in data:
@@ -4522,54 +4562,71 @@ def _system_notify(title, body):
     except Exception:
         log.exception("_system_notify failed")
 
-def _housekeeping_loop(interval_minutes=5):
-    """Background thread: check due todos, broadcast via SSE."""
+def _exclude_routine(t, notify_routines):
+    return "+routine" in t.projects and not notify_routines
+
+
+def _housekeeping_check(notified, notify_routines=False):
+    """One due-today check. Returns (current_keys, tasks, body) or (None, None, None)."""
     import datetime as _dt
     import ptos_todo as _todo_mod
+    try:
+        todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
+        due = _todo_mod.get_due_todos(todos, lookahead_days=1)
+        today = _dt.date.today()
+        due = [t for t in due if t.due == today and not _exclude_routine(t, notify_routines)]
+        current = {(t.line_no, str(t.due), t.due_time) for t in due}
+        new = [t for t in due if (t.line_no, str(t.due), t.due_time) not in notified]
+        if not new:
+            return current, None, None
+        now = _dt.datetime.now()
+        tasks = []
+        for t in new:
+            arrived = False
+            if t.due_time and t.due:
+                due_dt = _dt.datetime.combine(t.due, _dt.time.fromisoformat(t.due_time))
+                arrived = due_dt <= now
+            tasks.append({"line_no": t.line_no, "description": t.description,
+                          "priority": t.priority, "due": str(t.due),
+                          "due_time": t.due_time, "arrived": arrived})
+        arrived_tasks = [t for t in tasks if t["arrived"]]
+        if len(new) == 1:
+            t = new[0]
+            p = f"({t.priority}) " if t.priority else ""
+            body = f"{p}{t.description} (due {t.due})"
+        elif arrived_tasks:
+            t = arrived_tasks[0]
+            p = f"({t['priority']}) " if t["priority"] else ""
+            extra = len(new) - 1
+            body = f"{p}{t['description']} (due now)"
+            if extra:
+                body += f" — plus {extra} more due today"
+        else:
+            body = f"{len(new)} tasks due today/tomorrow"
+        return current, tasks, body
+    except Exception:
+        log.exception("housekeeping error")
+        return None, None, None
+
+
+def _notify_due_tasks(tasks, body):
+    with _sse_lock:
+        _pending_notifications.clear()
+        _pending_notifications.append(tasks)
+    _sse_broadcast("todo-due", tasks)
+    _system_notify("Todo due", body)
+
+
+def _housekeeping_loop(interval_minutes=5, notify_routines=False):
+    """Background thread: check due todos, broadcast via SSE."""
     notified = set()
     while True:
         # ── todo notifications ──
-        try:
-            todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
-            due = _todo_mod.get_due_todos(todos, lookahead_days=1)
-            today = _dt.date.today()
-            due = [t for t in due if t.due == today]
-            current = {(t.line_no, str(t.due), t.due_time) for t in due}
-            new = [t for t in due if (t.line_no, str(t.due), t.due_time) not in notified]
-
-            if new:
-                now = _dt.datetime.now()
-                tasks = []
-                for t in new:
-                    arrived = False
-                    if t.due_time and t.due:
-                        due_dt = _dt.datetime.combine(t.due, _dt.time.fromisoformat(t.due_time))
-                        arrived = due_dt <= now
-                    tasks.append({"line_no": t.line_no, "description": t.description,
-                                  "priority": t.priority, "due": str(t.due),
-                                  "due_time": t.due_time, "arrived": arrived})
-                with _sse_lock:
-                    _pending_notifications.clear()
-                    _pending_notifications.append(tasks)
-                _sse_broadcast("todo-due", tasks)
-                arrived_tasks = [t for t in tasks if t["arrived"]]
-                if len(new) == 1:
-                    t = new[0]
-                    p = f"({t.priority}) " if t.priority else ""
-                    body = f"{p}{t.description} (due {t.due})"
-                elif arrived_tasks:
-                    t = arrived_tasks[0]
-                    p = f"({t['priority']}) " if t["priority"] else ""
-                    extra = len(new) - 1
-                    body = f"{p}{t['description']} (due now)"
-                    if extra:
-                        body += f" — plus {extra} more due today"
-                else:
-                    body = f"{len(new)} tasks due today/tomorrow"
-                _system_notify("Todo due", body)
+        current, tasks, body = _housekeeping_check(notified, notify_routines)
+        if tasks:
+            _notify_due_tasks(tasks, body)
+        if current is not None:
             notified = current
-        except Exception:
-            log.exception("housekeeping error")
         time.sleep(interval_minutes * 60)
 
 
@@ -4590,6 +4647,11 @@ def _due_soon(todos, now, remind_before):
     return due_soon
 
 
+def _due_soon_filtered(todos, now, remind_before, notify_routines=False):
+    return [(t, m) for t, m in _due_soon(todos, now, remind_before)
+            if not _exclude_routine(t, notify_routines)]
+
+
 def _reminder_loop(check_interval_minutes=2):
     """Background thread: fire a 'due soon' notice when due_time is close.
     Independent of _housekeeping_loop's due-today interval."""
@@ -4600,10 +4662,11 @@ def _reminder_loop(check_interval_minutes=2):
         try:
             todo_cfg = svc.get_config().get("todo", {})
             remind_before = todo_cfg.get("remind_before_minutes", 0)
+            notify_routines = todo_cfg.get("notify_routines", False)
             if remind_before > 0:
                 todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
                 now = _dt.datetime.now()
-                for t, mins_until in _due_soon(todos, now, remind_before):
+                for t, mins_until in _due_soon_filtered(todos, now, remind_before, notify_routines):
                     key = _reminder_key(t)
                     if key in time_notified:
                         continue
@@ -4981,14 +5044,31 @@ if __name__ == "__main__":
 
     # Start housekeeping background thread
     try:
-        todo_cfg = svc.get_config().get("todo", {})
-        notify_min = todo_cfg.get("notify_interval", 5)
-        if notify_min > 0:
-            _t = threading.Thread(target=_housekeeping_loop, args=(notify_min,), daemon=True)
-            _t.start()
-            print(f"Todo notifications enabled (every {notify_min} min) [{_notify_platform or 'browser-only'}]")
+        _start_housekeeping_thread()
     except Exception:
         pass
+
+def _start_housekeeping_thread():
+    """Start due-todo notifications. Returns the started thread or None.
+    notify_once_on_startup runs a single check and starts no periodic thread."""
+    try:
+        todo_cfg = svc.get_config().get("todo", {})
+        notify_min = todo_cfg.get("notify_interval", 5)
+        notify_routines = todo_cfg.get("notify_routines", False)
+        if todo_cfg.get("notify_once_on_startup"):
+            _, tasks, body = _housekeeping_check(set(), notify_routines)
+            if tasks:
+                _notify_due_tasks(tasks, body)
+            print(f"Todo notifications: once on startup [{_notify_platform or 'browser-only'}]")
+            return None
+        if notify_min > 0:
+            _t = threading.Thread(target=_housekeeping_loop, args=(notify_min, notify_routines), daemon=True)
+            _t.start()
+            print(f"Todo notifications enabled (every {notify_min} min) [{_notify_platform or 'browser-only'}]")
+            return _t
+        return None
+    except Exception:
+        return None
 
 def _start_reminder_thread():
     """Start the due-time proximity reminder thread if enabled. Returns the thread or None."""

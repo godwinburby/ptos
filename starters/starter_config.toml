@@ -60,6 +60,12 @@ sync_interval_minutes = 0
 [todo]
 # Background notification check interval in minutes (0 = disabled)
 notify_interval = 5
+# Include +routine todos in due-today / due-soon reminders
+notify_routines = false
+# Notify once at server boot and start no periodic reminder thread
+notify_once_on_startup = false
+# Exclude +routine todos from the todo page / --todo-list by default
+hide_routines = false
 # Advance warning before due_time in minutes (0 = disabled). Requires a due_time on the todo.
 remind_before_minutes = 0
 # How often the due-soon proximity check runs (independent of notify_interval)
