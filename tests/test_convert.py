@@ -57,9 +57,28 @@ class TestConvertDraft:
         assert "activity=walk" in draft["new_line"]
         assert "duration=30" in draft["new_line"]
 
-    def test_same_type_raises(self):
-        with pytest.raises(svc.PTOSError):
-            self._draft("2026-09-05 type=capture | x", "capture")
+    def test_same_type_duplicates(self):
+        draft = self._draft("2026-09-05 type=capture tag=inbox id=ab12 links=expense:cd34 | x",
+                            "capture")
+        assert draft["source_type"] == "capture"
+        assert draft["target_type"] == "capture"
+        assert draft["missing_required"] == []
+        assert draft["date"] == "2026-09-05"
+        assert draft["note"] == "x"
+        # fields copy; id/links never copy
+        assert "id=" not in draft["new_line"]
+        assert "links=" not in draft["new_line"]
+        assert "tag=inbox" in draft["new_line"]
+        assert draft["new_line"].startswith("2026-09-05 type=capture")
+
+    def test_same_type_scrape_scrubs_note(self):
+        draft = self._draft("2026-09-05 type=expense domain=self category=food "
+                            "amount=50 | groceries $50",
+                            "expense")
+        assert draft["draft"].get("amount") == "50"
+        assert "category=food" in draft["new_line"]
+        assert "domain=self" in draft["new_line"]
+        assert draft["note"] == "groceries"
 
     def test_unknown_type_raises(self):
         with pytest.raises(svc.PTOSError):
@@ -140,10 +159,23 @@ class TestConvertRecord:
         assert "type=exercise" not in content
         assert content.count("\n") == 1
 
-    def test_same_type_blocked(self):
+    def test_same_type_deletes_source_by_default(self):
         path, line, lineno = self._source()
-        with pytest.raises(svc.PTOSError):
-            svc.convert_record(path, line, lineno, "capture")
+        res = svc.convert_record(path, line, lineno, "capture")
+        assert res["ok"] is True
+        assert res["source_deleted"] is True
+        content = _records_content()
+        assert content.count("\n") == 1
+        assert "type=capture" in content
+
+    def test_same_type_keep_true_duplicates(self):
+        path, line, lineno = self._source()
+        res = svc.convert_record(path, line, lineno, "capture", keep=True)
+        assert res["source_deleted"] is False
+        content = _records_content()
+        assert content.count("\n") == 2
+        assert "type=capture" in content
+        assert "walked 30 min" in content
 
     def test_invalid_filepath_rejected(self):
         _clean_cache()
@@ -335,6 +367,28 @@ class TestConvertCli:
         assert "type=exercise" in content
         assert "type=capture" in content
 
+    def test_same_type_target_duplicates(self, monkeypatch, capsys):
+        _clean_cache()
+        _write_records(["2026-09-05 type=capture tag=inbox | walked"])
+        _convert(["--convert", "type=capture", "capture", "--keep"], monkeypatch)
+        out = capsys.readouterr().out
+        assert "Converted:" in out
+        content = _records_content()
+        assert content.count("\n") == 2
+        assert content.count("type=capture") == 2
+        assert "| walked" in content
+
+    def test_same_type_target_deletes_source_without_keep(self, monkeypatch, capsys):
+        _clean_cache()
+        _write_records(["2026-09-05 type=capture tag=inbox | walked"])
+        _convert(["--convert", "type=capture", "capture"], monkeypatch)
+        out = capsys.readouterr().out
+        assert "Converted:" in out
+        content = _records_content()
+        assert content.count("\n") == 1
+        assert content.count("type=capture") == 1
+        assert "| walked" in content
+
     def test_missing_required_blocks_before_write(self, monkeypatch, capsys):
         _clean_cache()
         _write_records(["2026-09-05 type=capture | walked"])
@@ -406,6 +460,57 @@ class TestConvertWeb:
         assert 'value="expense"' in data
         assert 'name="convert"' in data and 'value="1"' in data
         assert 'name="remove_original"' in data
+
+    def test_edit_convert_get_same_type_shows_duplicate(self):
+        _clean_cache()
+        _write_records(["2026-09-05 type=capture tag=inbox | bought coffee $45"])
+        path = os.path.join(ptos.RECORDS_DIR, f"{dt.date.today().year}.log")
+        line = "2026-09-05 type=capture tag=inbox | bought coffee $45"
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/edit?convert=1&target_type=capture&filepath=" + quote(path)
+                          + "&lineno=0&line=" + quote(line) + "&return_to=/")
+        assert resp.status_code == 200
+        data = resp.get_data(as_text=True)
+        assert "DUPLICATING CAPTURE" in data
+        assert 'value="capture" selected' in data
+        assert "capture · duplicate" in data
+        assert 'name="remove_original" value="1"' in data
+        assert 'name="remove_original" value="1" checked' not in data
+
+    def test_edit_convert_post_same_type_keeps_source_by_default(self):
+        _clean_cache()
+        _write_records(["2026-09-05 type=capture tag=inbox | bought coffee"])
+        path = os.path.join(ptos.RECORDS_DIR, f"{dt.date.today().year}.log")
+        old_line = "2026-09-05 type=capture tag=inbox | bought coffee"
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/edit", data={
+            "convert": "1", "filepath": path, "old_line": old_line,
+            "lineno": "0", "return_to": "/browse",
+            "type": "capture",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        content = _records_content()
+        assert content.count("\n") == 2
+        assert "bought coffee" in content
+
+    def test_edit_convert_post_same_type_remove_original(self):
+        _clean_cache()
+        _write_records(["2026-09-05 type=capture tag=inbox | bought coffee"])
+        path = os.path.join(ptos.RECORDS_DIR, f"{dt.date.today().year}.log")
+        old_line = "2026-09-05 type=capture tag=inbox | bought coffee"
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/edit", data={
+            "convert": "1", "filepath": path, "old_line": old_line,
+            "lineno": "0", "return_to": "/browse",
+            "type": "capture", "remove_original": "1",
+        }, follow_redirects=True)
+        assert resp.status_code == 200
+        content = _records_content()
+        assert content.count("\n") == 1
+        assert "bought coffee" in content
 
     def test_edit_convert_post_default_removes_source(self):
         _clean_cache()

@@ -3818,9 +3818,10 @@ def edit_get():
         allowed = schema.get("types", {}).get("allowed", [])
         suggestions = svc.suggest_convert_type(note or "")
         target = request.args.get("target_type", "").strip()
-        if not target or target not in allowed or target == rtype:
+        if not target or target not in allowed:
             target = (next((s["type"] for s in suggestions if s["type"] != rtype), None)
-                      or next((t for t in allowed if t != rtype), None))
+                      or next((t for t in allowed if t != rtype), None)
+                      or rtype)
         if not target:
             return redirect(url_for("browse_get"))
         try:

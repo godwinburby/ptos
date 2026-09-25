@@ -16,6 +16,13 @@ Format: `[version or date] — description`
 - **Tests** — `TestBoardMoveStampField` (atomic dual-field write, no-stamp single write, `move_record()` default and explicit stamp kwargs, same-status re-stamps, `save_board` persistence) and three `TestProjectsOverview` board-stall tests (stamp drives the signal, record-date fallback, today card with stale stamp ignored on a non-stamp board).
 - **Deliberate deviation from spec** — `source` stays **optional** (spec had it required) because exactly one jobsearch record already exists without it; making it required would fail validation on that record's next edit. Reconsider once leads are entered with `source=`.
 
+### Convert: duplicate a record via same-type conversion
+
+- **Same-type convert target = duplicate** — `convert_draft()` no longer rejects a target equal to the source type. Converting a record to its own type duplicates it: date, note, tag, and every field of that type copy through the normal grammar (`id`/`links` still never copy). Unknown types remain errors; CLI `--convert "WHERE..." SAME_TYPE` uses the usual `--keep` rule (`--keep` keeps the original line, omitting it deletes the source).
+- **Web convert form** — the target dropdown now shows the source type as "· duplicate"; selecting it renders a "DUPLICATING X" banner instead of "CONVERTING X → Y"; the `remove_original` checkbox (Delete the original) **defaults unchecked** for a same-type target so the original survives — the true-duplicate case. Different-type conversions still default to checked (move semantics), unchanged.
+- **CLI help** — `--convert` argparse text notes that a TARGET equal to the source type duplicates the record and suggests `--keep` to retain the original.
+- **Tests** — `test_same_type_raises`/`test_same_type_blocked` replaced with same-type draft tests (field copy, id/links stripping, note scrub), `convert_record` keep/delete tests, CLI `--keep`/plain duplicate tests, and web tests covering the duplicate dropdown marker, DUPLICATING banner, unchecked-by-default checkbox, and POST with/without `remove_original`.
+
 ## 2026-09-24
 
 ### Routines: recurrence badge per row

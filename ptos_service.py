@@ -3405,7 +3405,9 @@ def convert_draft(old_line, lineno, target_type, kv_overrides=None, tag_add=None
       - note carries over, scrubbed of the scraped tokens unless strip_note
         is False; an explicit blank note override clears the note entirely
     Returns a dict with source_type/target_type/date/note/draft/new_line/
-    missing_required. Raises PTOSError for unknown types and same-type.
+    missing_required. Raises PTOSError for unknown types. A same-type target
+    is allowed and duplicates the record: every field of that type copies
+    (id/links still never copy), with date/note/tag carried as usual.
     """
     try:
         parsed = ptos.safe_parse_line(old_line)
@@ -3420,8 +3422,6 @@ def convert_draft(old_line, lineno, target_type, kv_overrides=None, tag_add=None
         allowed = schema.get("types", {}).get("allowed", [])
         if target_type not in allowed:
             raise PTOSError(f"Target type '{target_type}' is not in schema")
-        if target_type == source_type:
-            raise PTOSError(f"Source and target types are the same ('{target_type}')")
 
         ov = dict(kv_overrides or {})
         date_override_present = "date" in ov
