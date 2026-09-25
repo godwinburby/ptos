@@ -5,6 +5,17 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-25
+
+### Board: status-change stamp field (`stamp_field`)
+
+- **`stamp_field` board config key** — new optional key on any `["board.NAME"]` status board (e.g. `["board.jobsearch"]` gains `stamp_field = "status_changed"`). When set, every card drag between lanes writes the field to today's date **in the same atomic write** as the `set_field` change — one `apply_set()` call and one `_update_record_in_file()` write, so a crash can never leave the status moved but the timestamp stale (or vice versa). Boards without `stamp_field` behave exactly as before (single-field write).
+- **Engine** — `move_record()` accepts new optional `stamp_field`/`stamp_value` kwargs and appends the stamp assignment to the same `apply_set()` call; `board_move_record()` reads `stamp_field` from board config and resolves `stamp_value` via `ptos.resolve_date(None)`. No field name is hardcoded — the engine stays schema-agnostic like `set_field`. `get_board_data()` returns `stamp_field`; `save_board()`/`save_queries_full()` persist it.
+- **Project Drift Review board-stall fix** — the stall calculation in `get_projects_overview()` was silently dead code: it called `.items()` on the board `columns` *list* (AttributeError swallowed by `try/except pass`), so no board-stall signal ever fired. Now it iterates lanes correctly, and when the board defines `stamp_field` it ages cards from that field's value, falling back to the record's own date otherwise (still never reading the display-formatted date, which can't be re-parsed).
+- **Live config** — `status_changed` (datetime), `source`, `offer_amount`, and `rejection_reason` (conditionally required only when `status=rejected` via `[type.jobsearch.conditions.rejection_reason.when]`) added to `[type.jobsearch]` in `schema.toml`; `stamp_field = "status_changed"` added to `["board.jobsearch"]` and `board = "jobsearch"` wired onto `["project.jobsearch"]` in `queries.toml` so the drift review's stall signal is active for the job hunt.
+- **Tests** — `TestBoardMoveStampField` (atomic dual-field write, no-stamp single write, `move_record()` default and explicit stamp kwargs, same-status re-stamps, `save_board` persistence) and three `TestProjectsOverview` board-stall tests (stamp drives the signal, record-date fallback, today card with stale stamp ignored on a non-stamp board).
+- **Deliberate deviation from spec** — `source` stays **optional** (spec had it required) because exactly one jobsearch record already exists without it; making it required would fail validation on that record's next edit. Reconsider once leads are entered with `source=`.
+
 ## 2026-09-24
 
 ### Routines: recurrence badge per row

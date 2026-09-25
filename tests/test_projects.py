@@ -405,6 +405,109 @@ class TestProjectsOverview:
         assert p["drift"] == "ok"
         assert p["heat"] == "cool"
 
+    def test_board_stall_uses_stamp_field(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [])
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.leadboard"]
+            label = "Lead Board"
+            board = "leadboard"
+            tag_filters = ["project=job"]
+            ["board.leadboard"]
+            set_field = "status"
+            stamp_field = "status_changed"
+            time_window = "all"
+            columns = [
+                { label = "Applied", where = "type=expense AND status=applied" },
+                { label = "Rejected", where = "type=expense AND status=rejected" },
+            ]
+        ''')
+        record = (f"{TODAY_S} type=expense project=job status=applied amount=10 "
+                  f"status_changed={(TODAY - dt.timedelta(days=5)).isoformat()} | applied")
+        _write_record(os.path.join(str(tmp_path), "records", "2026.log"), record)
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        result = svc.get_projects_overview()
+        p = result[0]
+        assert p["has_board"] is True
+        assert p["board_stalls"][0]["oldest_days"] == 5
+
+    def test_board_stall_without_stamp_uses_record_date(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [])
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.leadboard"]
+            label = "Lead Board"
+            board = "leadboard"
+            tag_filters = ["project=job"]
+            ["board.leadboard"]
+            set_field = "status"
+            time_window = "all"
+            columns = [
+                { label = "Applied", where = "type=expense AND status=applied" },
+            ]
+        ''')
+        record = (f"{(TODAY - dt.timedelta(days=5)).isoformat()} "
+                  f"type=expense project=job status=applied amount=10 | applied")
+        _write_record(os.path.join(str(tmp_path), "records", "2026.log"), record)
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        result = svc.get_projects_overview()
+        p = result[0]
+        assert p["has_board"] is True
+        assert p["board_stalls"][0]["oldest_days"] == 5
+
+    def test_board_stall_without_stamp_ignores_stale_today_record(self, tmp_path, monkeypatch):
+        # A board without stamp_field ages by record date: a card dated today
+        # with an old status_changed value must NOT stall.
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
+        _write_todo(todo_path, [])
+        _write_todo(done_path, [])
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.leadboard"]
+            label = "Lead Board"
+            board = "leadboard"
+            tag_filters = ["project=job"]
+            ["board.leadboard"]
+            set_field = "status"
+            time_window = "all"
+            columns = [
+                { label = "Applied", where = "type=expense AND status=applied" },
+            ]
+        ''')
+        record = (f"{TODAY_S} type=expense project=job status=applied amount=10 "
+                  f"status_changed={(TODAY - dt.timedelta(days=5)).isoformat()} | applied")
+        _write_record(os.path.join(str(tmp_path), "records", "2026.log"), record)
+        monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
+        result = svc.get_projects_overview()
+        p = result[0]
+        assert p["has_board"] is True
+        assert p["board_stalls"] == []
+
 
 class TestProjectsPage:
     def test_empty_state(self, tmp_path, monkeypatch):

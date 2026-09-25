@@ -2559,13 +2559,19 @@ def get_projects_overview():
         if board_name:
             try:
                 board_data = get_board_data(board_name)
-                columns = board_data.get("columns", [])
-                for col_type, col_records in columns.items():
+                lane_keys = board_data.get("columns", [])
+                records_by_lane = board_data.get("data", {})
+                lanes_info = board_data.get("lanes", {})
+                stamp_field = board_data.get("stamp_field")
+                for lane in lane_keys:
                     oldest = None
                     oldest_days = 0
-                    for rec in col_records:
+                    for rec in records_by_lane.get(lane, []):
                         try:
-                            rd = ptos.parse_date(rec.get("date", ""))
+                            if stamp_field and rec.get(stamp_field):
+                                rd = ptos.parse_date(rec[stamp_field])
+                            else:
+                                rd = ptos.parse_line(rec.get("_line", ""))[0]
                             age = (today - rd).days
                             if oldest is None or age > oldest_days:
                                 oldest = rd
@@ -2574,7 +2580,8 @@ def get_projects_overview():
                             continue
                     if oldest and oldest_days > 3:
                         board_stalls.append({
-                            "column": col_type,
+                            "column": lane,
+                            "label": (lanes_info.get(lane, {}) or {}).get("label") or lane,
                             "oldest_days": oldest_days,
                         })
             except Exception:
@@ -2868,6 +2875,9 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
     set_field = cfg.get("set_field")
     if set_field and isinstance(set_field, str):
         set_field = set_field.strip() or None
+    stamp_field = cfg.get("stamp_field")
+    if stamp_field and isinstance(stamp_field, str):
+        stamp_field = stamp_field.strip() or None
     columns = cfg.get("columns", [])
     if not columns:
         raise PTOSError(f"Board '{board_name}' has no columns defined")
@@ -3048,6 +3058,7 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
         "columns": lane_keys,
         "lanes": lane_info,
         "set_field": set_field,
+        "stamp_field": stamp_field,
         "data": result,
         "counts": total_by_type,
         "truncated": truncated_by_type,
@@ -3310,14 +3321,21 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
         raise PTOSError(str(e))
 
 
-def move_record(filepath, old_line, field, value, lineno=None):
+def move_record(filepath, old_line, field, value, lineno=None,
+                stamp_field=None, stamp_value=None):
     """Rewrites one record's field=value in place — a status-board drag move.
 
     The card stays one record and one row; no new record is created.
     lineno: 0-based file line index for precise targeting (handles duplicates).
+    stamp_field/stamp_value: optional second field=value written atomically in
+    the same operation as the primary field (e.g. a 'last moved' timestamp) —
+    not a separate write.
     Returns {"old_line", "new_line"} or raises PTOSError."""
     try:
-        new_line, _ = ptos.apply_set(old_line, [f"{field}={value}"], None)
+        set_args = [f"{field}={value}"]
+        if stamp_field:
+            set_args.append(f"{stamp_field}={stamp_value}")
+        new_line, _ = ptos.apply_set(old_line, set_args, None)
     except SystemExit as e:
         raise PTOSError(str(e))
     except Exception as e:
@@ -3361,7 +3379,13 @@ def board_move_record(board_name, filepath, old_line, lineno, target_lane):
         raise PTOSError(
             f"Lane '{target_lane}' has no resolvable set value — add a 'set' key "
             f"or a single {set_field}=value in its 'where'")
-    return move_record(filepath, old_line, set_field, target["set_value"], lineno=lineno)
+    stamp_field = cfg.get("stamp_field")
+    if stamp_field and isinstance(stamp_field, str):
+        stamp_field = stamp_field.strip() or None
+    stamp_value = ptos.resolve_date(None) if stamp_field else None
+    return move_record(filepath, old_line, set_field, target["set_value"],
+                       lineno=lineno, stamp_field=stamp_field,
+                       stamp_value=stamp_value)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -4453,6 +4477,9 @@ def save_board(name, cfg):
     match_field = cfg.get("match_field")
     if match_field and isinstance(match_field, str) and match_field.strip():
         entry["match_field"] = match_field.strip()
+    stamp_field = cfg.get("stamp_field")
+    if stamp_field and isinstance(stamp_field, str) and stamp_field.strip():
+        entry["stamp_field"] = stamp_field.strip()
     rollup_field = cfg.get("rollup_field")
     if rollup_field:
         fmeta = schema.get("fields", {}).get(rollup_field, {})
@@ -4930,6 +4957,9 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
             match_field = board_cfg.get("match_field")
             if match_field and isinstance(match_field, str) and match_field.strip():
                 entry["match_field"] = match_field.strip()
+            stamp_field = board_cfg.get("stamp_field")
+            if stamp_field and isinstance(stamp_field, str) and stamp_field.strip():
+                entry["stamp_field"] = stamp_field.strip()
             rollup_field = board_cfg.get("rollup_field")
             if rollup_field:
                 fmeta = schema.get("fields", {}).get(rollup_field, {})
