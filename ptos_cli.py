@@ -329,12 +329,14 @@ def build_parser(cycles):
     utl.add_argument("--delete",   action="store_true",
                      help="Delete matched record(s)  (use with --where)")
     utl.add_argument("--convert", nargs="+", metavar="WHERE TARGET",
-                     help="Convert matched record(s) to another type.\n"
-                          "  --convert \"WHERE...\" TARGET [--set key=val]\n"
-                          "  e.g. --convert \"type=capture\" expense --set category=food\n"
-                          "  omit TARGET to suggest a type from the record's note text\n"
-                          "  the carried note is scrubbed of the scraped tokens\n"
-                          "  (source record is deleted unless --keep)")
+                      help="Convert matched record(s) to another type.\n"
+                           "  --convert \"WHERE...\" TARGET [--set key=val]\n"
+                           "  e.g. --convert \"type=capture\" expense --set category=food\n"
+                           "  omit TARGET to suggest a type from the record's note text\n"
+                           "  a TARGET equal to the source type duplicates the record\n"
+                           "  (use --keep to keep the original)\n"
+                           "  the carried note is scrubbed of the scraped tokens\n"
+                           "  (source record is deleted unless --keep)")
     utl.add_argument("--keep",    action="store_true",
                      help="With --convert: keep the source record (default: delete it)")
     utl.add_argument("--keep-note", action="store_true",

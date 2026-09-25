@@ -388,6 +388,11 @@ Features:
   the converted record
 - **Shared fields carry over** — date, note, tag, and any fields shared between
   source and target types copy automatically. `id` and `links` never copy
+- **Duplicate a record** — choosing the record's own type as the target converts
+  in place and duplicates it: every field of that type copies, and the original
+  is kept by default (the delete checkbox is unchecked). Unchecking-equivalent
+  CLI: `--convert "..." SAME_TYPE --keep` keeps the original; omitting `--keep`
+  deletes it
 - **Keep or delete source** — checkbox controls whether the original record stays
   (kept captures are marked with `converted=<type>` to prevent double-conversion)
 - **New type creation** — if no schema type matches the note, the system suggests
@@ -1736,7 +1741,7 @@ ptos -y test -t td --delete --all
 | `--link [SRC_TARGET] TARGET` | | Link entries: with `--add`, one TARGET links the new record (generates its id); standalone, link existing entries: `--link SRC_TARGET TARGET` |
 | `--retro-id TYPE` | | Assign an `id=` to an existing record/todo/note that lacks one (match via `--where`/`--search`) |
 | `--linked-to TYPE:ID` | | Filter query results to entries linked to the given target |
-| `--convert "WHERE..." TARGET [--set k=v ...] [--keep] [--keep-note] [--all]` | | Convert matched records to another type. Omit TARGET for type suggestion mode |
+| `--convert "WHERE..." TARGET [--set k=v ...] [--keep] [--keep-note] [--all]` | | Convert matched records to another type. Omit TARGET for type suggestion mode; a TARGET equal to the source type duplicates the record (original kept only with `--keep`) |
 | `--notes ACTION PATH [--name N] [--content C] [--force]` | | Notes management. Actions: `list`, `template`, `new`, `read`, `edit`, `delete`, `id`. `new` creates a `.md` file (template auto-applied); `delete` warns on backlinks unless `--force`; `id` prints/generates the note's `ptos-id` |
 | `--backlinks SUBJECT` | | Show what links to a `type:id` target |
 | `--find TEXT` | | Universal search across records, journal, todo, and notes (glob wildcards supported) |
