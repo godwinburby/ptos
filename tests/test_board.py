@@ -5,7 +5,8 @@ import json
 import re
 import tomli_w
 import ptos
-from ptos_service import get_board_data, advance_record, save_queries_full, PTOSError, board_move_record, save_board
+from ptos_service import (get_board_data, advance_record, save_queries_full,
+                          PTOSError, board_move_record, save_board, move_record)
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1040,6 +1041,77 @@ class TestBoardMoveRecord:
         other = os.path.join(tempfile.gettempdir(), "outside.log")
         with pytest.raises(PTOSError):
             board_move_record("status", other, line, lineno, "Transport")
+
+
+class TestBoardMoveStampField:
+    def _setup(self, stamp_field=None):
+        cfg = {
+            "status": {
+                "columns": [
+                    {"label": "Food", "where": "type=expense AND category=food"},
+                    {"label": "Transport", "where": "type=expense AND category=transport"},
+                ],
+                "set_field": "category",
+                "time_window": "all",
+            }
+        }
+        if stamp_field:
+            cfg["status"]["stamp_field"] = stamp_field
+        _write_queries(cfg)
+        today = dt.date.today().isoformat()
+        line = f"{today} type=expense domain=self category=food amount=10"
+        filepath, lineno = ptos.append_record(line, return_position=True)
+        return filepath, line, lineno
+
+    def test_move_writes_set_and_stamp_in_one_line(self):
+        filepath, line, lineno = self._setup("status_changed")
+        res = board_move_record("status", filepath, line, lineno, "Transport")
+        nl = res["new_line"]
+        assert "category=transport" in nl
+        assert f"status_changed={dt.date.today().isoformat()}" in nl
+        with open(filepath, encoding="utf-8") as f:
+            txt = f.read()
+        assert "category=transport" in txt
+        assert f"status_changed={dt.date.today().isoformat()}" in txt
+
+    def test_no_stamp_field_single_write(self):
+        filepath, line, lineno = self._setup()
+        res = board_move_record("status", filepath, line, lineno, "Transport")
+        assert "category=transport" in res["new_line"]
+        assert "status_changed" not in res["new_line"]
+
+    def test_move_record_default_no_stamp(self):
+        filepath, line, lineno = self._setup()
+        res = move_record(filepath, line, "category", "transport", lineno=lineno)
+        assert "category=transport" in res["new_line"]
+        assert "status_changed" not in res["new_line"]
+
+    def test_move_record_with_stamp_kwargs(self):
+        filepath, line, lineno = self._setup()
+        res = move_record(filepath, line, "category", "transport", lineno=lineno,
+                          stamp_field="status_changed", stamp_value="2026-09-01")
+        assert "category=transport" in res["new_line"]
+        assert "status_changed=2026-09-01" in res["new_line"]
+
+    def test_same_status_rejects_only_when_nothing_changes(self):
+        filepath, line, lineno = self._setup("status_changed")
+        res = board_move_record("status", filepath, line, lineno, "Food")
+        # status is already food but the stamp is new → re-stamps, not an error
+        assert "status_changed=" in res["new_line"]
+        with pytest.raises(PTOSError):
+            board_move_record("status", filepath, line, lineno, "Food")
+
+    def test_save_board_persists_stamp_field(self):
+        _write_queries({})
+        save_board("status", {
+            "columns": [{"label": "Food", "where": "category=food"}],
+            "set_field": "category",
+            "stamp_field": "status_changed",
+        })
+        import tomllib
+        with open(ptos.QUERIES_PATH, "rb") as f:
+            entry = tomllib.load(f)["board.status"]
+        assert entry["stamp_field"] == "status_changed"
 
 
 class TestSaveStatusBoard:

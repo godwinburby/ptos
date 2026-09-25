@@ -692,7 +692,12 @@ Kanban board view for tracking records across workflow stages. Configured in
   required, not spaces). Lanes with an ambiguous `where` (multi-value `|`,
   `~` contains, comparisons) render but aren't drop targets. Configured in the
   Query Builder board editor (Status Field input + per-lane label/where/set
-  rows), stored in `queries.toml` as `[board.NAME]` with `set_field`
+  rows), stored in `queries.toml` as `[board.NAME]` with `set_field`.
+  A status board may also set `stamp_field` (e.g. `stamp_field = "status_changed"`):
+  dragging a card then writes that field to today's date in the same atomic
+  write as the status change, giving each card a "when did this last move"
+  timestamp — used by Project Drift Review's board-stall signal so a lead
+  parked in a stage stalls from its stage entry date, not its record date
 
 ### Entity
 
