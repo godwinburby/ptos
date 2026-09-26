@@ -164,6 +164,29 @@ class TestDemoSeed:
         for it in data["items"]:
             assert it.get("name"), f"unnamed dashboard item: {it}"
 
+    def test_dashboard_balance_is_derived_metric(self, demo_home):
+        _seed()
+        queries = ptos.get_queries()
+        assert "balance" not in queries, "balance must not be a base query"
+        assert "balance" in queries.get("metrics", {})
+        data = svc.get_dashboard("default", time="all")
+        bal = next(it for it in data["items"] if it["name"] == "balance")
+        assert bal["kind"] == "metric"
+        expected = (svc.get_metric("total_income")["raw"]
+                    - svc.get_metric("total_expenses")["raw"])
+        assert bal["raw"] == pytest.approx(expected)
+
+    def test_no_expense_record_has_category_equal_to_domain(self, demo_home):
+        _seed()
+        year = ptos.today().year
+        demo_log = demo_home / "records" / "demo" / f"{year}.log"
+        for line in demo_log.read_text(encoding="utf-8").splitlines():
+            if not line.strip():
+                continue
+            kv = ptos.parse_line(line)[1]
+            if kv.get("type") == "expense":
+                assert kv.get("category") != kv.get("domain"), line
+
     def test_todo_lines_fully_resolved(self, demo_home):
         _seed()
         todos, _ = ptos_todo.load_todos(str(demo_home / "todo" / "todo.txt"))

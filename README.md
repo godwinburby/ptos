@@ -961,7 +961,7 @@ the starters are used again.
 |------|----------|
 | `starter_config.toml` | User, editor, display, cycles, dashboard, auth, backup, todo settings |
 | `starter_schema.toml` | 11 record types: expense, income, investment, exercise, sleep, mood, learning, habit, capture, pomodoro, jobsearch — with parent-dependent fields, tags, global optional fields (context, project) |
-| `starter_queries.toml` | 18 base queries + 6 metrics (savings_rate, food_ratio, avg_spend, total_income, total_expenses, avg_mood) + 2 dashboards (default, health) + 1 status board (job_search) |
+| `starter_queries.toml` | 17 base queries + 6 metrics (balance, food_ratio, avg_spend, total_income, total_expenses, avg_mood) + 2 dashboards (default, health) + 1 status board (job_search) |
 | `starter_presets.toml` | 21 presets with short aliases — coffee, lunch, dinner, groceries, restaurant, auto, bus, metro, petrol, rapido, recharge, broadband, electricity, salary, sip, rd, walk, gym, run, read, course |
 | `starter_demo.toml` | Sample demo data (records, todos, journal, notes) seeded by `--init` on a brand-new workspace so every page has content after install — dates are relative to install day via `{{today}}`/`{{-Nd}}`/`{{+Nd}}` tokens |
 

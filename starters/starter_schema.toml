@@ -98,7 +98,7 @@ options.self = [
 options.home = [
     "food", "grocery", "rent", "utilities", "household",
     "maintenance", "clothing", "medical", "gift",
-    "entertainment", "child", "other",
+    "entertainment", "child", "transport", "other",
 ]
 options.work = [
     "supplies", "travel", "meals", "equipment",
