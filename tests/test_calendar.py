@@ -21,6 +21,14 @@ def _add_calendar(name, filters, time_window="this-month"):
     ptos._invalidate_all()
 
 
+def _clear_calendars():
+    queries = {k: v for k, v in ptos.get_queries().items()
+               if not k.startswith("calendar.")}
+    with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+        tomli_w.dump(queries, w.stream)
+    ptos._invalidate_all()
+
+
 def _clean_cache():
     ptos._CACHE.clear()
 
@@ -245,6 +253,7 @@ class TestCalendarCaching:
 class TestCalendarWeb:
     def test_calendar_page_renders_empty_state(self):
         _clean_cache()
+        _clear_calendars()
         from ptos_web import app
         client = app.test_client()
         resp = client.get("/calendar")

@@ -7,8 +7,10 @@ The core guarantee: touching one entry leaves every other section untouched.
 import os
 import pytest
 import textwrap
+import datetime as dt
 
 import ptos
+import ptos_cli
 import ptos_service as svc
 from ptos import PTOSError
 
@@ -58,7 +60,7 @@ metric = "expenses"
 direction = "max"
 time = "this-month"
 
-[due.tasks]
+["due.tasks"]
 type = "todo"
 key = "due"
 
@@ -715,3 +717,116 @@ class TestDispatchRoute:
         assert data["ok"] is True
         stored = _read()
         assert "project.jobsearch" not in stored
+
+
+class TestDueRead:
+    """get_due must resolve the default config in every documented format,
+    including the ["due.default"] dotted-key form written by save_due."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self, tmp_path, monkeypatch):
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        os.makedirs(ptos.RECORDS_DIR, exist_ok=True)
+        old = (ptos.today() - dt.timedelta(days=30)).isoformat()
+        with open(os.path.join(ptos.RECORDS_DIR, f"{ptos.today().year}.log"),
+                  "w", encoding="utf-8") as f:
+            f.write(f"{old} type=expense name=foo amount=10 | groceries\n")
+        ptos._invalidate_all()
+
+    def _rows(self):
+        return svc.get_due()["rows"]
+
+    def test_default_dotted_key(self):
+        _write_queries('["due.default"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        rows = self._rows()
+        assert rows and rows[0]["name"] == "foo"
+
+    def test_default_nested_child_not_supported(self):
+        _write_queries('[due]\n\n[due.default]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        with pytest.raises(PTOSError):
+            svc.get_due()
+
+    def test_default_root_keys_not_supported(self):
+        _write_queries('[due]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        with pytest.raises(PTOSError):
+            svc.get_due()
+
+    def test_missing_section_still_errors(self):
+        _write_queries('[expenses]\nwhere = "type=expense"\n')
+        with pytest.raises(PTOSError):
+            svc.get_due()
+
+    def test_save_due_default_roundtrip_reads(self):
+        svc.save_due("default", {"type": "expense", "key": "name", "days": 7})
+        rows = self._rows()
+        assert rows and rows[0]["name"] == "foo"
+
+    def test_save_queries_full_writes_dotted_keys(self):
+        svc.save_queries_full({}, {}, {},
+                              raw_due={"default": {"type": "expense", "key": "name", "days": 7}})
+        data = _read()
+        assert "due.default" in data
+        assert "due" not in data
+        rows = self._rows()
+        assert rows and rows[0]["name"] == "foo"
+
+    def test_due_page_route_renders_dotted_default(self):
+        _write_queries('["due.default"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/due")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "No [due] section" not in body
+        assert "No [\"due.default\"] section" not in body
+        assert "groceries" in body
+        assert "href=\"/edit?filepath=" in body
+        assert "lineno=0" in body
+
+    def test_rows_include_record_location(self):
+        _write_queries('["due.default"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        row = self._rows()[0]
+        assert row["lineno"] == 0
+        assert row["filepath"].endswith(".log")
+        assert "name=foo" in row["line"]
+
+    def test_due_page_no_config_renders_empty_state(self):
+        _write_queries('[expenses]\nwhere = "type=expense"\n')
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/due")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "No Due section configured" in body
+        assert "Query Builder \u2192 Due" in body
+        assert "No [\"due.default\"] section" not in body
+        assert "All clear" not in body
+
+    def test_query_builder_no_config_seed_is_generic(self):
+        _write_queries('[expenses]\nwhere = "type=expense"\n')
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/query-builder")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "fix_appointment" not in body
+        assert "deceased" not in body
+        assert '"type": "expense"' in body
+        assert '"key": "name"' in body
+
+    def test_cli_due_default_dotted(self, capsys):
+        _write_queries('["due.default"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        ptos_cli.run_due(None)
+        out = capsys.readouterr().out
+        assert "foo" in out and "groceries" in out
+
+    def test_cli_due_named_dotted(self, capsys):
+        _write_queries('["due.tasks"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        ptos_cli.run_due("tasks")
+        out = capsys.readouterr().out
+        assert "foo" in out
+
+    def test_cli_due_missing_default_exits(self):
+        _write_queries('[expenses]\nwhere = "type=expense"\n')
+        with pytest.raises(SystemExit):
+            ptos_cli.run_due(None)

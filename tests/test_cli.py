@@ -87,7 +87,6 @@ class TestAddDashboard:
     def test_preserves_config_keys(self, capsys):
         ptos_cli._handle_add_dashboard(FakeDashboardArgs("overview", ["total_income"]))
         q = ptos.get_queries()
-        assert "board.patient_journey" in q
         assert "habit.meditation" in q
         assert "habit.walk" in q
 

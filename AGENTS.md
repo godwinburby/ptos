@@ -15,7 +15,7 @@ ptos_todo.py     → Todo module (todo.txt parser, CRUD, archiving, notification
 web_templates/   → Jinja2 HTML templates
 web_static/      → CSS, JS, icons
 tests/           → pytest test suite
-starters/        → Starter configs shipped with project (7 types, 15 queries, 15 presets)
+starters/        → Starter configs shipped with project (11 types, 18 queries, 21 presets, demo data spec)
 ```
 
 Data lives in a separate `ptos-data/` directory (sibling to repo):
@@ -37,6 +37,8 @@ ptos-backups/    → ZIP backups (sibling to ptos-data, outside sync scope)
 > **CLI-first development rule.** New features and fixes are implemented in the CLI first (when feasible), with the web UI following — never the other way around — so the CLI and web stay at feature parity and the data layer is exercised headlessly. Exceptions (documented, not silent): features that are **inherently UI** (drag-and-drop, autocomplete dropdowns, SSE live streaming, OS notifications, pomodoro pill) and features whose CLI implementation would require **meaningful new logic in `ptos.py`** (it stays a monolith — don't bloat it). In both cases the engine/service function still lands with tests, and `ptos_cli.py` gets a thin wrapper where practical. When in doubt, prefer the CLI.
 >
 > **CLI backfilled for web parity** (thin wrappers, no `ptos.py` changes): `--notes` (see Notes module), `--backlinks SUBJECT`, `--find TEXT` (records/journal/todo/notes with glob wildcards), `--link-ids`, `--get-config KEY` / `--set-config KEY VALUE` (dotted paths; `true`/`false` and pure numbers coerced), `--calendars [NAME]`, `--board [NAME]`, and `--habits` honoring `-t/--time`. Config setters read/write via `ptos.CONFIG_PATH` at call time (never the import-time value — tests monkeypatch `ptos.CONFIG_PATH`; see the `--set-config` regression tests).
+>
+> **Starter-parity rule.** Every feature or fix that changes how a fresh install looks must keep the starter files in sync in the same change. Check `starters/` when a change touches schema record types or fields, config sections (`queries.toml` queries/metrics/dashboards/boards/habits/calendars/due/thresholds/projects), `config.toml` keys with visible defaults, CLI flags/behaviour a first-time user hits, presets, or post-install demo content. The starter must never reference a type/field that the starter schema doesn't define (validated by tests — `test_demo.py` seeds a fresh workspace from `starter_schema.toml` + `starter_queries.toml` and asserts every demo record passes `validate_record`, and `tests/conftest.py` copies starter configs into every test). When starter content changes, re-check the seeded-demo story (demo records should map to starter types/queries; due/board/calendar/habits/projects/dashboard readers keep working) and update the README starter counts (types/queries/presets). `--remove-demo-data` must stay able to cleanly remove whatever `starter_demo.toml` seeds. New starter files (e.g. `starter_demo.toml`) must not break `test_init.py`, which monkeypatches `STARTER_DIR` to an empty dir — seed code must skip when the demo spec is missing.
 
 ## Tech stack
 
@@ -556,7 +558,8 @@ Wiki-style `[[links]]` sit on top of existing project conventions — not a repl
 | Web UI patterns | `web_templates/base.html`, neighboring templates |
 | CLI flags | `ptos_cli.py`, `ptos.py` |
 | Config | `config/config.toml`, `starters/starter_config.toml` |
-| Feature additions/changes | `README.md` (document new features, CLI flags, web pages) |
+| Starter / demo data | `starters/starter_demo.toml` (seeded by `--init` on fresh workspaces; removed by `--remove-demo-data`), `ptos.py` (`_seed_demo_data`/`remove_demo_data`/`_demo_fresh`), `tests/test_demo.py` |
+| Feature additions/changes | `README.md` (document new features, CLI flags, web pages), `starters/` (see Starter-parity rule) |
 | Tests | `tests/test_*.py` |
 | Start scripts | `run_ptos.bat` (Windows), `run_ptos_linux.sh`, `run_ptos_android.sh` |
 

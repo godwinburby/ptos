@@ -64,6 +64,11 @@ class TestCliCalendars:
         assert "Mo Tu We Th Fr Sa Su" in out
 
     def test_no_named_calendars_hint(self, monkeypatch, capsys):
+        queries = ptos.get_queries()
+        queries = {k: v for k, v in queries.items() if not k.startswith("calendar.")}
+        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+            tomli_w.dump(queries, w.stream)
+        ptos._invalidate_all()
         _run(monkeypatch, "--calendars")
         out = capsys.readouterr().out
         assert "All records" in out
@@ -87,6 +92,11 @@ class TestCliBoard:
         assert today.strftime("%d/%m/%Y") in out
 
     def test_no_boards_hint(self, monkeypatch, capsys):
+        queries = ptos.get_queries()
+        queries = {k: v for k, v in queries.items() if not k.startswith("board.")}
+        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+            tomli_w.dump(queries, w.stream)
+        ptos._invalidate_all()
         _run(monkeypatch, "--board")
         out = capsys.readouterr().out
         assert '["board.work"]' in out

@@ -263,10 +263,12 @@ class TestEntitySuggestions:
         ])
         suggestions = svc.get_entity_suggestions()
         by_field = {s["field"]: s for s in suggestions}
+        from ptos import get_schema
+        n_types = len(get_schema()["types"]["allowed"])
         # amount on expense+income+investment = 3 types
         assert len(by_field["amount"]["types"]) == 3
-        # project is global = all 10 allowed types
-        assert len(by_field["project"]["types"]) == 10
+        # project is global = all allowed types
+        assert len(by_field["project"]["types"]) == n_types
 
     def test_value_count(self):
         _clean_cache()

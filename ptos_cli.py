@@ -49,6 +49,7 @@ from ptos import (
     # Misc
     resolve_time, resolve_date, parse_date, today,
     edit_target, init_ptos, set_home, set_user_name, set_date_format,
+    remove_demo_data,
     set_currency, add_cycle, set_auth,
     add_type, add_type_field, remove_type,
     restore_data, restore_config,
@@ -345,6 +346,8 @@ def build_parser(cycles):
                      help="Apply --set/--delete to all matched records without interactive pick")
     utl.add_argument("--fields", action="store_true", help="Show field discovery report")
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
+    utl.add_argument("--remove-demo-data", dest="remove_demo_data", action="store_true",
+                     help="Remove seeded demo data (records/demo, demo todos/journal)")
     utl.add_argument("--set-name", dest="set_name", metavar="NAME",
                      help="Set user name in config")
     utl.add_argument("--set-date-format", dest="set_date_format", metavar="FORMAT",
@@ -607,9 +610,9 @@ def run_trend(filters, time_keyword, n, cycles):
 def run_due(arg):
     """Show records whose most recent entry per key is older than N days.
     arg can be:
-      None / '__DEFAULT__'  → use [due] block
-      a named string        → use [due.NAME] block
-      a digit string        → use [due] block with days overridden
+      None / '__DEFAULT__'  → use ["due.default"] block
+      a named string        → use ["due.NAME"] block
+      a digit string        → use ["due.default"] block with days overridden
     Priority order derived from schema field options — no hardcoding."""
 
     queries = get_queries()
@@ -617,26 +620,22 @@ def run_due(arg):
     # resolve which due config block to use and whether days is overridden
     days_override = None
     if arg is None or arg == "__DEFAULT__":
-        due_cfg = queries.get("due")
+        due_cfg = queries.get("due.default")
         if not due_cfg:
-            sys.exit("[due] section not found in queries.toml\n"
+            sys.exit('["due.default"] section not found in queries.toml\n'
                      "Add it to enable --due. See README for details.")
     elif str(arg).isdigit():
-        due_cfg = queries.get("due")
+        due_cfg = queries.get("due.default")
         if not due_cfg:
-            sys.exit("[due] section not found in queries.toml\n"
+            sys.exit('["due.default"] section not found in queries.toml\n'
                      "Add it to enable --due. See README for details.")
         days_override = int(arg)
     else:
-        # named config: look for [due.NAME] in queries.toml
-        named = queries.get("due", {})
-        if isinstance(named, dict) and arg in named:
-            due_cfg = named[arg]
-        else:
-            # also allow a top-level [due_NAME] block as fallback
-            due_cfg = queries.get(f"due_{arg}")
+        # named config: look for ["due.NAME"] in queries.toml
+        due_cfg = queries.get(f"due.{arg}")
         if not due_cfg:
-            available = [k for k in queries.get("due", {}) if isinstance(queries["due"].get(k), dict)]
+            available = [k[4:] for k in queries
+                         if k.startswith("due.") and isinstance(queries[k], dict)]
             hint = f"  Available: {', '.join(available)}" if available else ""
             sys.exit(f"Due config '{arg}' not found in queries.toml.{hint}\n"
                      f"Define it as [due.{arg}] with type, key, and days.")
@@ -644,8 +643,8 @@ def run_due(arg):
     rec_type = due_cfg.get("type")
     key_field = due_cfg.get("key")
     if not rec_type or not key_field:
-        sys.exit("[due] section in queries.toml is missing 'type' or 'key'.\n"
-                 "Example:\n  [due]\n  type = \"followup\"\n  key  = \"client\"\n  days = 7")
+        sys.exit('["due.default"] section in queries.toml is missing type or key.\n'
+                 "Example:\n  [\"due.default\"]\n  type = \"followup\"\n  key  = \"client\"\n  days = 7")
     sort_field      = due_cfg.get("sort_by")
     exclude_results = due_cfg.get("exclude_results", [])
     days = days_override if days_override is not None else due_cfg.get("days", 7)
@@ -3097,6 +3096,10 @@ def main():
     # ---- early exits (no data needed) ----
     if args.init:
         init_ptos()
+        return
+
+    if args.remove_demo_data:
+        remove_demo_data()
         return
 
     if args.set_home:

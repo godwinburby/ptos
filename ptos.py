@@ -5292,6 +5292,292 @@ def _write_if_missing(path, content, label):
             f.write(content)
         print(f"  created  {label}")
 
+# --------------------------------------------------
+# Demo data
+# --------------------------------------------------
+
+_DEMO_TOKENS = {"today", "next_week", "last_week", "yesterday"}
+
+def _load_demo_spec():
+    """Load starter_demo.toml, or None when the file is missing."""
+    path = os.path.join(STARTER_DIR, "starter_demo.toml")
+    if not os.path.exists(path):
+        return None
+    with open(path, "rb") as f:
+        return tomllib.load(f)
+
+
+def _resolve_demo_text(text, base=None):
+    """Replace {{today}}/{{-Nd}}/{{+Nd}}/weekday tokens with ISO dates."""
+    if base is None:
+        base = today()
+    result = []
+    i = 0
+    pattern = re.compile(r"\{\{([^}]+)\}\}")
+    for m in pattern.finditer(text):
+        result.append(text[i:m.start()])
+        i = m.end()
+        tok = m.group(1).strip()
+        date = base
+        if tok in _DEMO_TOKENS:
+            if tok == "today":
+                pass
+            elif tok == "yesterday":
+                date = base - dt.timedelta(days=1)
+            elif tok == "next_week":
+                date = base + dt.timedelta(days=7)
+            elif tok == "last_week":
+                date = base - dt.timedelta(days=7)
+        else:
+            delta = _demo_parse_delta(tok)
+            if delta is None:
+                result.append(m.group(0))
+                continue
+            date = base + dt.timedelta(days=delta)
+        result.append(date.isoformat())
+    result.append(text[i:])
+    return "".join(result)
+
+
+def _demo_parse_delta(tok):
+    """Parse +Nd / -Nd / Nd offsets, else None."""
+    m = re.fullmatch(r"([+-]?)(\d{1,4})d", tok)
+    if not m:
+        return None
+    delta = int(m.group(2))
+    return delta if m.group(1) != "-" else -delta
+
+
+def _demo_fresh():
+    """True when the workspace looks brand new and is safe to seed."""
+    year_file = os.path.join(RECORDS_DIR, f"{today().year}.log")
+    if os.path.exists(year_file):
+        try:
+            if open(year_file, "rb").read().strip():
+                return False
+        except OSError:
+            return False
+    else:
+        for f in os.listdir(RECORDS_DIR):
+            if f.endswith(".log"):
+                return False
+    if os.path.isdir(os.path.join(RECORDS_DIR, "demo")):
+        return False
+    if os.path.isdir(TODO_DIR):
+        for f in os.listdir(TODO_DIR):
+            if f.endswith(".txt"):
+                if open(os.path.join(TODO_DIR, f), "rb").read().strip():
+                    return False
+    if os.path.isdir(JOURNAL_DIR):
+        if os.listdir(JOURNAL_DIR):
+            return False
+    if os.path.isdir(NOTES_DIR):
+        if os.listdir(NOTES_DIR):
+            return False
+    return True
+
+
+def _seed_temp_demo(spec, base):
+    """Write demo content into an isolated temp tree positioned over the data dirs."""
+    tempdir = tempfile.mkdtemp(prefix="ptos_demo_")
+    records = os.path.join(tempdir, "records", "demo")
+    cut_yr = f"{base.year}.log"
+    def _sorted(txt):
+        return sorted(line.strip() for line in txt.strip().splitlines() if line.strip())
+    try:
+        os.makedirs(records)
+        rec_lines = [
+            _resolve_demo_text(line, base)
+            for line in spec.get("records", {}).get("lines", [])
+        ]
+        problems = []
+        for line in rec_lines:
+            problems.extend(validate_record(get_schema(), parse_line(line)[1]))
+        if problems:
+            raise ValueError(
+                "starter_demo.toml records fail schema validation:\n  - "
+                + "\n  - ".join(problems))
+        with open(os.path.join(records, cut_yr), "w", encoding="utf-8") as f:
+            f.write("\n".join(rec_lines) + "\n")
+        todo = spec.get("todo", {})
+        todo_dir = os.path.join(tempdir, "todo")
+        os.makedirs(todo_dir)
+        with open(os.path.join(todo_dir, "todo.txt"), "w", encoding="utf-8") as f:
+            f.write("\n".join(_sorted(
+                "\n".join(_resolve_demo_text(line, base)
+                          for line in todo.get("open", [])))) + "\n")
+        with open(os.path.join(todo_dir, "done.txt"), "w", encoding="utf-8") as f:
+            f.write("\n".join(_sorted(
+                "\n".join(_resolve_demo_text(line, base)
+                          for line in todo.get("done", [])))) + "\n")
+        journal = os.path.join(tempdir, "journal", str(base.year), f"{base.month:02d}")
+        os.makedirs(journal)
+        for entry in spec.get("journal", []):
+            date = _resolve_demo_text(str(entry["date"]), base)
+            body = _resolve_demo_text(entry["body"], base)
+            with open(os.path.join(journal, f"{date}.md"), "w", encoding="utf-8") as f:
+                f.write(body)
+        notes = os.path.join(tempdir, "notes")
+        for rel, content in spec.get("notes", {}).items():
+            path = os.path.join(notes, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(_resolve_demo_text(content, base))
+    except Exception:
+        shutil.rmtree(tempdir, ignore_errors=True)
+        raise
+    return tempdir
+
+
+def _install_demo(tempdir):
+    """Install seeded demo content from the temp tree into the data dirs."""
+    if os.path.isdir(os.path.join(RECORDS_DIR, "demo")):
+        shutil.rmtree(os.path.join(RECORDS_DIR, "demo"))
+    for src in os.listdir(tempdir):
+        dst = os.path.join(BASE_DIR, src)
+        os.makedirs(dst, exist_ok=True)
+        for item in os.listdir(os.path.join(tempdir, src)):
+            s = os.path.join(tempdir, src, item)
+            d = os.path.join(dst, item)
+            if os.path.isdir(s):
+                if os.path.isdir(d):
+                    shutil.rmtree(d)
+                shutil.copytree(s, d)
+            else:
+                with open(s, "rb") as fi, open(d, "wb") as fo:
+                    fo.write(fi.read())
+    shutil.rmtree(tempdir, ignore_errors=True)
+
+
+def _line_count(path):
+    """Number of non-empty lines in a file, or 0 when missing."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return sum(1 for line in f if line.strip())
+    except OSError:
+        return 0
+
+
+def _count_seeded():
+    counts = {}
+    demo_dir = os.path.join(RECORDS_DIR, "demo")
+    counts["records"] = 0
+    if os.path.isdir(demo_dir):
+        for f in os.listdir(demo_dir):
+            if f.endswith(".log"):
+                with open(os.path.join(demo_dir, f), encoding="utf-8") as fh:
+                    counts["records"] += sum(1 for line in fh if line.strip())
+    counts["todos"] = _line_count(os.path.join(TODO_DIR, "todo.txt"))
+    counts["done"] = _line_count(os.path.join(TODO_DIR, "done.txt"))
+    counts["journal"] = sum(len(files) for _, _, files in os.walk(JOURNAL_DIR))
+    counts["notes"] = sum(len(files) for _, _, files in os.walk(NOTES_DIR))
+    return counts
+
+
+def _seed_demo_data():
+    """Seed starter demo content into a fresh workspace. No-op otherwise."""
+    spec = _load_demo_spec()
+    if spec is None:
+        return
+    base = today()
+    if not _demo_fresh():
+        return
+    print("\nSeeding demo data...")
+    tempdir = _seed_temp_demo(spec, base)
+    _install_demo(tempdir)
+    counts = _count_seeded()
+    print(f"  records  {counts.get('records', 0)}"
+          f"  todos  {counts.get('todos', 0)}"
+          f"  done  {counts.get('done', 0)}"
+          f"  journal  {counts.get('journal', 0)}"
+          f"  notes  {counts.get('notes', 0)}")
+    print("  Remove anytime with:  ptos --remove-demo-data")
+
+
+def _demo_line_sets(spec):
+    """Build {record-lines, todo-open, todo-done} matched against resolved tokens."""
+    base = today()
+    records = {_resolve_demo_text(line, base) for line in spec.get("records", {}).get("lines", [])}
+    open_lines = {_resolve_demo_text(line) for line in spec.get("todo", {}).get("open", [])}
+    done_lines = {_resolve_demo_text(line) for line in spec.get("todo", {}).get("done", [])}
+    return records, open_lines, done_lines
+
+
+def _file_demo_match(path, spec):
+    """True when every non-empty line of a file matches the demo spec.
+
+    A conservative whole-line check means the file is only ever removed
+    when it contains demo content and nothing else — any user addition
+    (even a single line) keeps the file alive.
+    """
+    try:
+        with open(path, encoding="utf-8") as f:
+            lines = [ln.rstrip("\n") for ln in f.read().splitlines()]
+    except OSError:
+        return False
+    records, open_lines, done_lines = _demo_line_sets(spec)
+    known = records | open_lines | done_lines
+    return all(ln and ln in known for ln in lines)
+
+
+def _file_equals(path, text):
+    """True when a file's contents exactly match the given text."""
+    try:
+        with open(path, encoding="utf-8") as f:
+            return f.read() == text
+    except OSError:
+        return False
+
+
+def remove_demo_data():
+    """Remove seeded demo content that no longer matches the starter spec.
+
+    - records/demo/ is removed when every log line is still a demo line
+    - demo todo/done lines are removed line-by-line (other user lines stay)
+    - demo journal files (date files whose content came from the spec) are
+      deleted when the whole file still matches the spec
+    - notes remain untouched — notes/ is user space
+    """
+    spec = _load_demo_spec()
+    if spec is None:
+        return
+    records, open_lines, done_lines = _demo_line_sets(spec)
+    demo_dir = os.path.join(RECORDS_DIR, "demo")
+    if os.path.isdir(demo_dir):
+        clean = True
+        for f in os.listdir(demo_dir):
+            if f.endswith(".log") and not _file_demo_match(
+                    os.path.join(demo_dir, f), spec):
+                clean = False
+                break
+        if clean:
+            shutil.rmtree(demo_dir)
+            print("Removed records/demo/ — seeded sample records")
+        else:
+            print("Kept records/demo/ — it contains records you added")
+    for key, path in [("open", os.path.join(TODO_DIR, "todo.txt")),
+                      ("done", os.path.join(TODO_DIR, "done.txt"))]:
+        demo_lines = open_lines if key == "open" else done_lines
+        if not demo_lines or not os.path.exists(path):
+            continue
+        with open(path, encoding="utf-8") as f:
+            remaining = [line for line in f if line.rstrip("\n") not in demo_lines]
+        with open(path, "w", encoding="utf-8") as f:
+            f.writelines(remaining)
+        print(f"Removed demo lines from {os.path.relpath(path, BASE_DIR)}")
+    base = today()
+    for entry in spec.get("journal", []):
+        date = _resolve_demo_text(str(entry["date"]), base)
+        body = _resolve_demo_text(entry["body"], base)
+        path = os.path.join(JOURNAL_DIR, str(base.year),
+                            f"{base.month:02d}", f"{date}.md")
+        if os.path.exists(path) and _file_equals(path, body):
+            os.remove(path)
+            print(f"Removed demo journal entry {date}.md")
+    _invalidate_all()
+    print("Demo data removed.")
+
+
 def init_ptos():
     """Initialize PTOS directory structure and config files.
     Creates config/, records/, journal/, templates/ directories and
@@ -5354,6 +5640,9 @@ def init_ptos():
     # Initialize version tracking
     init_version()
     print("Version tracked.")
+
+    # Seed demo data on a brand-new workspace so every page has content
+    _seed_demo_data()
 
 
 def set_home(path):
