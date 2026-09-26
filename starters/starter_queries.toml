@@ -73,12 +73,6 @@ where = "type=investment"
 time  = "this-month"
 group = "instrument"
 
-# ── BALANCE ──────────────────────────────────────────────────────────────────
-
-[balance]
-where = "type=income OR type=expense"
-time  = "this-month"
-
 # ── HEALTH QUERIES ───────────────────────────────────────────────────────────
 
 [exercise_this_month]
@@ -129,6 +123,9 @@ sum = "expenses_this_month"
 
 [metrics.avg_mood]
 avg = "mood_this_month"
+
+[metrics.balance]
+derived = "income_this_month - expenses_this_month"
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DASHBOARDS

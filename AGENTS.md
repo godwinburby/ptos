@@ -15,7 +15,7 @@ ptos_todo.py     → Todo module (todo.txt parser, CRUD, archiving, notification
 web_templates/   → Jinja2 HTML templates
 web_static/      → CSS, JS, icons
 tests/           → pytest test suite
-starters/        → Starter configs shipped with project (11 types, 18 queries, 21 presets, demo data spec)
+starters/        → Starter configs shipped with project (11 types, 17 queries, 21 presets, demo data spec)
 ```
 
 Data lives in a separate `ptos-data/` directory (sibling to repo):

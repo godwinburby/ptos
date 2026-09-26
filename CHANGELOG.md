@@ -27,6 +27,11 @@ Format: `[version or date] — description`
 - **`ptos --remove-demo-data`** — removes only demo content: `records/demo/` (deleted only while every line still matches the spec), demo todo/done lines are subtracted line-by-line (user lines survive), demo journal files are deleted only on verbatim match, notes stay untouched. Any user addition keeps the file alive.
 - **Tests** — `tests/test_demo.py` (37 tests): seeding + fresh-guard, schema validation of every demo record, due/board/habits/calendar/projects/dashboard read paths, token resolution units, `--remove-demo-data` CLI + protective keep-edits cases, and a 15-route web smoke test (home/browse/board/due/habits/calendar(entity/projects/todo/journal/notes/thresholds/query-builder/types). The calendar empty-state CLI/web tests now strip `calendar.*` keys to keep covering the hint while the starter ships `calendar.personal`.
 
+### Starter fixes: balance metric + realistic demo expenses
+
+- **`balance` is now a derived metric** — the starter's `[balance]` base query (which rendered as a record count on the dashboard) was replaced with `[metrics.balance]` `derived = "income_this_month - expenses_this_month"`, so the home card shows the real income-minus-expenses delta. Starter counts drop from 18 to 17 base queries (6 metrics unchanged in number). README/AGENTS count lines corrected.
+- **Realistic demo expense split** — the demo expense records were rebalanced off the all-`self`/food-heavy set onto the multi-domain spread (self/home/work: transport, food, grocery, utilities, household, meals, entertainment, personal, child) matching typical real usage, and `transport` was added to the starter's home category options so every demo record still validates. Explicit regression guard: no demo expense record may have `category == domain` (the artifact seen in real data as `domain=child category=child`), asserted in `tests/test_demo.py`.
+
 ### Docs
 
 - **Starter-parity rule** — codified in `AGENTS.md`: any change that alters a fresh install must keep `starters/` in sync, keep the seeded-demo story readable, validate demo records against the starter schema, and preserve `--remove-demo-data` semantics.
