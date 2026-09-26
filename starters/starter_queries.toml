@@ -157,12 +157,18 @@ metrics = [
 # BOARDS
 # ══════════════════════════════════════════════════════════════════════════════
 
-[board.patient_journey]
-columns = ["followup", "assessment", "prescription", "fitting"]
-time_window = "this-month"
-limit = 50
-
-# ══════════════════════════════════════════════════════════════════════════════
+["board.job_search"]
+columns = [
+    { label = "Applied",   where = "status=applied" },
+    { label = "Interview", where = "status=interview" },
+    { label = "Offer",     where = "status=offer" },
+    { label = "Rejected",  where = "status=rejected" },
+    { label = "Accepted",  where = "status=accepted" },
+]
+set_field         = "status"
+card_title_fields = ["position", "company"]
+time_window       = "this-month"
+limit             = 50
 
 # ══════════════════════════════════════════════════════════════════════════════
 # HABITS
@@ -194,16 +200,37 @@ direction = "max"
 time      = "this-month"
 
 # ══════════════════════════════════════════════════════════════════════════════
+# CALENDARS
+# ══════════════════════════════════════════════════════════════════════════════
+
+["calendar.personal"]
+filters     = ["type=income OR type=expense OR type=exercise"]
+time_window = "this-month"
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DUE
+# ══════════════════════════════════════════════════════════════════════════════
+# The default due view reads ["due.default"]. Tracks job applications by position
+# and surfaces ones untouched for more than `days` (newest record per position).
+
+["due.default"]
+type            = "jobsearch"
+key             = "position"
+sort_by         = "status"
+days            = 7
+exclude_results = ["accepted", "rejected", "no_response"]
+
+# ══════════════════════════════════════════════════════════════════════════════
 # PROJECTS
 # ══════════════════════════════════════════════════════════════════════════════
 # At least one of todo_project / tag_filters / board / notes_path required.
 # label is required.
 
-# ["project.jobsearch"]
-# label        = "Find a Job"
-# todo_project = "jobsearch"
-# tag_filters  = ["project=jobsearch"]
-# board        = "job_search"
-# notes_path   = "Projects/Find a Job"
+["project.jobsearch"]
+label        = "Find a Job"
+todo_project = "jobsearch"
+tag_filters  = ["project=jobsearch"]
+board        = "job_search"
+notes_path   = "Projects/Find a Job"
 
 

@@ -568,37 +568,10 @@ def home():
     
     try:
         queries = svc.get_queries()
-        due_section = queries.get("due", {})
-        if not isinstance(due_section, dict):
-            due_section = {}
-        
-        # Root-level keys = default config
-        if due_section.get("type"):
-            due_configs["default"] = {
-                "type": due_section.get("type", "followup"),
-                "key": due_section.get("key", "client"),
-                "sort_by": due_section.get("sort_by", ""),
-                "days": due_section.get("days", 7),
-                "exclude_results": due_section.get("exclude_results", [])
-            }
-        
-        # Read nested configs from [due] section
-        for name, cfg in due_section.items():
-            if isinstance(cfg, dict) and cfg.get("type"):
-                due_configs[name] = cfg
-        
-        # Also check for separate [due.*] or [due_*] sections (backup)
+        # Due configs are stored as ["due.NAME"] dotted keys
         for k, v in queries.items():
-            if not isinstance(v, dict):
-                continue
-            if k.startswith("due."):
-                name = k[4:]
-                if name not in due_configs:
-                    due_configs[name] = v
-            elif k.startswith("due_"):
-                name = k[4:]
-                if name not in due_configs:
-                    due_configs[name] = v
+            if k.startswith("due.") and isinstance(v, dict):
+                due_configs[k[4:]] = v
     except Exception:
         log.exception("Failed to load queries for due configs on home page")
         queries = {}
@@ -733,34 +706,29 @@ def due_page():
     due_configs = {}
     try:
         queries = svc.get_queries()
-        due_section = queries.get("due", {})
-        if isinstance(due_section, dict):
-            for name in ["default", "followup", "assessment", "investment"]:
-                if name in due_section and isinstance(due_section[name], dict):
-                    due_configs[name] = due_section[name]
         for k, v in queries.items():
-            if not isinstance(v, dict):
-                continue
-            if k == "due":
-                if "default" not in due_configs:
-                    due_configs["default"] = v
-            elif k.startswith("due."):
-                due_configs[k[4:]] = v
-            elif k.startswith("due_"):
+            if k.startswith("due.") and isinstance(v, dict):
                 due_configs[k[4:]] = v
     except Exception:
         log.exception("Failed to load queries for due page")
     
-    try:
-        data = svc.get_due(config_name=due_name if due_name and due_name != "default" else None, days_override=days_int)
-        rows = data["rows"]
-        days_used = data["days"]
-        error = None
-    except PTOSError as e:
-        rows = []; days_used = 7; error = str(e)
+    no_config = False
+    if not due_configs:
+        no_config = True
+        rows = []; days_used = 7; error = None
+    else:
+        try:
+            data = svc.get_due(config_name=due_name if due_name and due_name != "default" else None, days_override=days_int)
+            rows = data["rows"]
+            days_used = data["days"]
+            error = None
+        except PTOSError as e:
+            rows = []; days_used = 7; error = str(e)
+    return_to = "/due" + (f"?{request.query_string.decode()}" if request.query_string else "")
     return render_template("due.html", tab="due", title="Due List",
         now=_now_str(), rows=rows, days=days_used, error=error,
-        due_configs=list(due_configs.keys()), selected_due=due_name or "default")
+        due_configs=list(due_configs.keys()), selected_due=due_name or "default",
+        no_config=no_config, return_to=return_to)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3324,44 +3292,20 @@ def query_builder():
         types   = []
         field_types = {}
     
-    # Collect all due configs from nested [due] section or separate [due.*] sections
+    # Collect all due configs from ["due.NAME"] dotted keys
     all_due_configs = {}
-    due_section = queries.get("due", {})
-    if isinstance(due_section, dict):
-        # Root-level keys = default config (type, key, sort_by are strings at root)
-        if due_section.get("type"):
-            all_due_configs["default"] = {
-                "type": due_section.get("type", "followup"),
-                "key": due_section.get("key", "client"),
-                "sort_by": due_section.get("sort_by", ""),
-                "days": due_section.get("days", 7),
-                "exclude_results": due_section.get("exclude_results", [])
-            }
-        # Nested configs (followup, assessment, investment are dicts)
-        for name, cfg in due_section.items():
-            if isinstance(cfg, dict) and cfg.get("type"):
-                all_due_configs[name] = cfg
-    
     for k, v in queries.items():
-        if not isinstance(v, dict):
-            continue
-        if k.startswith("due."):
-            name = k[4:]
-            if name not in all_due_configs:
-                all_due_configs[name] = v
-        elif k.startswith("due_"):
-            name = k[4:]
-            if name not in all_due_configs:
-                all_due_configs[name] = v
+        if k.startswith("due.") and isinstance(v, dict):
+            all_due_configs[k[4:]] = v
     
     # Ensure at least default exists
     if not all_due_configs:
         all_due_configs = {"default": {
-            "type": "followup",
-            "key": "client",
-            "sort_by": "intent",
+            "type": types[0] if types else "",
+            "key": "name",
+            "sort_by": "",
             "days": 7,
-            "exclude_results": ["fix_appointment", "deceased", "not_relevant", "another_provider"]
+            "exclude_results": []
         }}
     
     boards = {}

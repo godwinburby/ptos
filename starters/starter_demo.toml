@@ -1,0 +1,382 @@
+# --------------------------------------------------
+# PTOS DEMO DATA — Seeded into a fresh workspace by `ptos --init`.
+# --------------------------------------------------
+#
+# Purpose: after installation every page should have something to show —
+# records, todos, journal entries, and notes, so the project can be
+# explored as a whole. Everything here is sample data and can be removed
+# at any time with:  ptos --remove-demo-data
+#
+# Date tokens are relative to install day and resolve to ISO dates:
+#   {{today}}   -> today
+#   {{-3d}}     -> three days ago
+#   {{+2d}}     -> in two days
+# Dates keep landing in the current month/year so this-month dashboards,
+# calendars, and habits always have data.
+#
+# Seeding only happens on a FRESH workspace (empty records year file, no
+# undoing: re-running --init on a workspace that already has data never
+# touches it).
+
+# --------------------------------------------------
+# RECORDS  →  records/demo/YYYY.log
+# --------------------------------------------------
+# One record per line (key=value fields, trailing `| note`).
+# Only fields defined in starter_schema.toml are used.
+
+[records]
+lines = [
+  # ── Today ─────────────────────────────────────────────────────────────
+  "{{today}} type=expense domain=self category=food amount=120 tag=lunch | Team lunch with snacks",
+  "{{today}} type=expense domain=self category=transport amount=45 | Metro + auto fare",
+  "{{today}} type=income source=salary amount=42000 tag=monthly | September salary",
+  "{{today}} type=exercise activity=walk duration=40 | Morning walk",
+  "{{today}} type=sleep quality=4 duration=7 | Solid 7 hours",
+  "{{today}} type=mood rating=4 context=work | Productive, steady day",
+  "{{today}} type=learning topic=coding source=video domain=self | Python structural pattern matching",
+  "{{today}} type=habit name=meditation | 10 minutes, morning sit",
+  "{{today}} type=habit name=reading | Evening reading, 20 pages",
+  "{{today}} type=pomodoro task=Prep for Acme round 3 minutes=25",
+  "{{today}} type=pomodoro task=Deep work on report minutes=25",
+  "{{today}} type=capture | Order hearing-aid accessories online",
+
+  # ── Finances this month (dashboard + food_spend threshold ~58%) ────────
+  "{{-1d}} type=expense domain=self category=food amount=160 tag=snacks | Quick groceries + chai",
+  "{{-2d}} type=expense domain=home category=grocery amount=850 | Monthly groceries",
+  "{{-4d}} type=expense domain=self category=food amount=450 tag=restaurant | Dinner out with family",
+  "{{-6d}} type=expense domain=self category=food amount=180 tag=dinner | Home-cooked ordering splurge",
+  "{{-9d}} type=expense domain=self category=food amount=130 | Breakfast supplies",
+  "{{-12d}} type=expense domain=home category=grocery amount=720 | Grocery restock",
+  "{{-15d}} type=expense domain=self category=food amount=220 tag=dinner | Takeout",
+  "{{-18d}} type=expense domain=self category=food amount=90 tag=tea | Chai with friends",
+  "{{-3d}} type=expense domain=self category=transport amount=90 | Auto + metro",
+  "{{-5d}} type=expense domain=home category=utilities amount=1100 | Electricity bill",
+  "{{-7d}} type=expense domain=self category=entertainment amount=500 tag=book | New workbook",
+  "{{-6d}} type=income source=freelance amount=15000 tag=project | Small consulting gig",
+  "{{-10d}} type=investment instrument=rd provider=bank amount=5000 | Recurring deposit",
+  "{{-10d}} type=investment instrument=mutual_fund provider=app amount=3000 tag=sip | Index fund SIP",
+
+  # ── Health / habits across ~2 weeks (heatmaps + streaks) ───────────────
+  "{{-1d}} type=exercise activity=run duration=25 | Evening run",
+  "{{-3d}} type=exercise activity=strength duration=45 | Gym session",
+  "{{-5d}} type=exercise activity=cycle duration=30 | Stationary ride",
+  "{{-8d}} type=exercise activity=yoga duration=20 | Morning flow",
+  "{{-10d}} type=exercise activity=walk duration=35 | Brisk walk",
+  "{{-12d}} type=exercise activity=stretch duration=15 | Mobility",
+  "{{-15d}} type=exercise activity=swim duration=40 | Pool laps",
+  "{{-1d}} type=sleep quality=3 duration=6 | Woke up twice",
+  "{{-2d}} type=sleep quality=5 duration=8 | Best sleep in weeks",
+  "{{-3d}} type=sleep quality=4 duration=7 | Good night",
+  "{{-5d}} type=sleep quality=2 duration=5 | Late deadline",
+  "{{-7d}} type=sleep quality=4 duration=6 | Average",
+  "{{-9d}} type=sleep quality=5 duration=7 | Deep sleep",
+  "{{-12d}} type=sleep quality=3 duration=6 | Restless",
+  "{{-1d}} type=mood rating=3 context=home | Low energy, cozy evening",
+  "{{-2d}} type=mood rating=4 context=work | Good momentum",
+  "{{-3d}} type=mood rating=5 context=work | Shipped the feature",
+  "{{-5d}} type=mood rating=2 context=work | Stressful sprint day",
+  "{{-7d}} type=mood rating=4 context=home | Relaxed weekend",
+  "{{-9d}} type=mood rating=3 context=social | Dinner with old friends",
+  "{{-12d}} type=mood rating=5 context=work | Demo went great",
+  "{{-15d}} type=mood rating=4 context=home | Slow, pleasant Sunday",
+  "{{-2d}} type=learning topic=finance source=podcast domain=self | Passive income ep.",
+  "{{-4d}} type=learning topic=productivity source=book domain=work | Deep Work — ch. 3",
+  "{{-8d}} type=learning topic=language source=video domain=self | Spanish basics",
+  "{{-1d}} type=habit name=meditation | 10 minutes",
+  "{{-2d}} type=habit name=meditation | 15 minutes",
+  "{{-4d}} type=habit name=meditation | Skipped evening — did morning",
+  "{{-6d}} type=habit name=meditation | 10 minutes",
+  "{{-8d}} type=habit name=meditation | 10 minutes",
+  "{{-9d}} type=habit name=meditation | 5 minutes, rushed",
+  "{{-11d}} type=habit name=meditation | 10 minutes",
+  "{{-13d}} type=habit name=meditation | 10 minutes",
+  "{{-1d}} type=habit name=walk | 8,000 steps",
+  "{{-3d}} type=habit name=walk | Evening stroll",
+  "{{-6d}} type=habit name=walk | Lunch walk",
+  "{{-8d}} type=habit name=walk | 6,000 steps",
+  "{{-10d}} type=habit name=walk | Morning round",
+  "{{-13d}} type=habit name=walk | Short walk",
+  "{{-2d}} type=habit name=reading | 30 pages, fiction",
+  "{{-5d}} type=habit name=reading | 15 pages",
+  "{{-9d}} type=habit name=reading | 20 pages",
+  "{{-12d}} type=habit name=reading | 10 pages",
+  "{{-15d}} type=habit name=reading | Chapter before bed",
+  "{{-1d}} type=pomodoro task=Inbox zero minutes=25",
+  "{{-3d}} type=pomodoro task=Study Python pattern matching minutes=25",
+  "{{-5d}} type=pomodoro task=Draft thank-you notes minutes=25",
+  "{{-7d}} type=pomodoro task=Meal plan + grocery list minutes=25",
+  "{{-9d}} type=pomodoro task=Resume refresh minutes=25",
+  "{{-12d}} type=pomodoro task=Learn REST API design minutes=25",
+
+  # ── Job search pipeline (board.job_search + due.default) ───────────────
+  "{{-18d}} type=jobsearch position=Product Manager company=Acme status=applied | Submitted application via referral",
+  "{{-12d}} type=jobsearch position=Product Manager company=Acme status=interview project=jobsearch | Phone screen with recruiter",
+  "{{-2d}} type=jobsearch position=Product Manager company=Acme status=interview | Panel with head of product",
+  "{{-20d}} type=jobsearch position=Data Engineer company=Rivo status=applied",
+  "{{-15d}} type=jobsearch position=Data Engineer company=Rivo status=rejected result=rejected | Not moving forward this time",
+  "{{-10d}} type=jobsearch position=Support Specialist company=Nova status=applied project=jobsearch | Applied via portal",
+  "{{-6d}} type=jobsearch position=Support Specialist company=Nova status=offer result=offer | Offer — 12 LPA",
+  "{{-4d}} type=jobsearch position=Support Specialist company=Nova status=accepted result=accepted | Signed the offer",
+  "{{-9d}} type=jobsearch position=BDR company=Midwest status=applied project=jobsearch | Applied, no response yet",
+
+  # ── Capture inbox ──────────────────────────────────────────────────────
+  "{{-2d}} type=capture | Call Dr. Mehta about follow-up",
+  "{{-5d}} type=capture | Idea: read [[high output management]]",
+  "{{-8d}} type=capture | Buy battery 13 (two-pack)",
+]
+
+# --------------------------------------------------
+# TODOS  →  todo/todo.txt and todo/done.txt
+# --------------------------------------------------
+# todo.txt format. +routine items demonstrate the hide_routines toggle.
+
+[todo]
+open = [
+  "(A) {{-6d}} Prepare for Acme round three +jobsearch @phone due:{{-1d}}",
+  "(B) {{-8d}} Send thank-you note to Nova team +jobsearch due:{{+2d}}",
+  "(A) {{-4d}} Book audiologist appointment @phone due:{{0d}} due_time:16:00",
+  "(B) {{-2d}} Morning stretch +routine @home",
+  "(C) {{-3d}} Read 10 pages before bed +routine",
+  "(B) {{-7d}} Rehearse project announcement +routine due:{{+1d}}",
+  "(C) {{-5d}} Reply to rental listing @home due:{{+3d}}",
+  "(C) {{-1d}} Plan weekend trip t:{{+3d}}",
+]
+done = [
+  "x {{-5d}} {{-9d}} Applied to Nova for Support Specialist +jobsearch",
+  "x {{-3d}} {{-7d}} Update resume +jobsearch",
+  "x {{-2d}} {{-4d}} Clean desk +routine",
+]
+
+# --------------------------------------------------
+# JOURNAL  →  journal/YYYY/MM/YYYY-MM-DD.md
+# --------------------------------------------------
+
+[[journal]]
+date = "{{today}}"
+body = """# {{today}}
+
+## ARRIVE
+
+### Reality
+Cold start to the morning — rushed through breakfast. Room felt cramped.
+
+### Body
+Stiff lower back; otherwise fine.
+
+### Mood
+4 — good. Focussed after a decent stretch of sleep.
+
+### Intention
+Close the loop on [[Acme]] round-three prep.
+
+---
+
+## ENGAGE
+
+### Top 3
+- [x] Prepare [[Acme]] interview notes
+- [ ] Send Nova thank-you
+- [ ] Book audiologist appointment
+
+### Habits
+- [x] Prayer
+- [x] Move — morning walk
+- [ ] Connect — skipped
+
+---
+
+## RELEASE
+
+### Wins
+- Interview prep finished and reviewed once.
+
+### Drifted
+- Phone scrolling after dinner.
+
+### Gratitude
+- Good coffee, clear calendar, quiet commute.
+
+### Tomorrow
+- Nova thank-you note; prep call questions.
+"""
+
+[[journal]]
+date = "{{-1d}}"
+body = """# {{-1d}}
+
+## ARRIVE
+
+### Reality
+Long day — commute back after dark. Energy dipped by evening.
+
+### Mood
+3 — neutral.
+
+### Intention
+Protect tomorrow morning for deep work.
+
+---
+
+## ENGAGE
+
+### Top 3
+- [x] Inbox zero
+- [x] Evening run
+- [ ] Groceries — moved to tomorrow
+
+### Habits
+- [x] Meditation
+- [x] Move — evening run
+- [ ] Reading — skipped
+
+---
+
+## RELEASE
+
+### Wins
+- Kept the evening light and skipped extra meetings.
+
+### Drifted
+- Late-night snack.
+
+### Gratitude
+- Supportive team, warm dinner at home.
+
+### Tomorrow
+- Plan the [[Acme]] panel questions.
+"""
+
+[[journal]]
+date = "{{-3d}}"
+body = """# {{-3d}}
+
+## ARRIVE
+
+### Reality
+Shipped the feature — high energy day. Fewer interruptions than usual.
+
+### Mood
+5 — great.
+
+### Intention
+Rest well tonight; start tomorrow with a clear top-three.
+
+---
+
+## ENGAGE
+
+### Top 3
+- [x] Ship the feature
+- [x] Gym session
+- [x] Write release notes
+
+### Habits
+- [x] Prayer
+- [x] Move — strength training
+- [x] Connect — call with parents
+
+---
+
+## RELEASE
+
+### Wins
+- Feature landed one day early.
+
+### Drifted
+- Very little today.
+
+### Gratitude
+- Momentum, good sleep, supportive colleagues.
+
+### Tomorrow
+- Mornings for deep work only.
+"""
+
+# --------------------------------------------------
+# NOTES  →  notes/ (file-explorer depth)
+# --------------------------------------------------
+
+[notes]
+"Demo/template.md" = """---
+title: {{title}}
+date: {{date}}
+---
+
+# {{title}}
+
+_Created: {{date}}_
+
+## Purpose
+(Briefly: why does this note exist?)
+
+## Notes
+-
+
+## Next
+-
+"""
+
+"Demo/welcome.md" = """# Welcome to PTOS
+
+PTOS is a plain-text life-logging and task-management system. Everything
+you type is a real file on disk — no database, no cloud, just `.log` files,
+`todo.txt`, Markdown journals, and notes.
+
+**What's in this fresh install?**
+- A sample of seeded records so every page has something to show
+- A demo `+routine` todo set and a job-search pipeline board
+- This note folder, with `template.md` acting as a local template
+
+**Tour map**
+- Home — dashboard stats, quick capture, today's records
+- Browse — filter/group/sort every record
+- Board — drag job applications through the pipeline
+- Due — nudge applications untouched for a week
+- Habits — meditation/walk/pomodoro heatmaps
+- Calendar + Entity + Thresholds + Projects — cross-page views
+
+Try typing `[[high output management]]` in a journal entry or note — the
+`[[brackets]]` create searchable cross-links.
+
+Seeded sample data can be removed anytime:  `ptos --remove-demo-data`
+"""
+
+"Demo/how_i_log.md" = """# How records work
+
+Records are single lines:  `date type=... key=value | note`
+
+```text
+2026-09-12 type=expense domain=self category=food amount=120 tag=lunch | Team lunch
+2026-09-12 type=habit name=meditation | 10 minutes
+2026-09-12 type=jobsearch position=Product Manager company=Acme status=applied
+```
+
+- Fields come from `config/schema.toml` — add types there
+- The trailing `| note` is free text, searched by `/search`
+- `+Project` and `@context` live on todos; `[[links]]` work anywhere
+
+The seeded demo records in `records/demo/` follow the starter schema.
+Delete that folder (or run `ptos --remove-demo-data`) whenever you want to
+start with a clean slate.
+"""
+
+"Projects/Find a Job/plan.md" = """# Find a Job
+
+## Goal
+Land a product or analytics role by the end of the quarter.
+
+## Why
+New challenge, better growth trajectory, and a chance to build products
+directly.
+
+## Milestones
+- [x] Refresh resume and linkedin
+- [x] Apply to 5 target companies
+- [ ] Interview prep (case rounds) +acme
+- [ ] Close at least one offer
+
+## Tracker
+- Pipeline board: Board → job_search on the Board page
+- Follow-ups: Due list (nudges applications untouched for 7+ days)
+- Todos: `+jobsearch` on the todo page
+"""

@@ -25,7 +25,7 @@
 # --------------------------------------------------
 
 [types]
-allowed = ["expense", "income", "investment", "exercise", "sleep", "mood", "learning", "habit", "capture", "pomodoro"]
+allowed = ["expense", "income", "investment", "exercise", "sleep", "mood", "learning", "habit", "capture", "pomodoro", "jobsearch"]
 
 # --------------------------------------------------
 # GLOBAL FIELD METADATA
@@ -280,3 +280,28 @@ type = "string"
 
 [type.pomodoro.fields.task]
 type = "string"
+
+# ----------------------
+# JOB SEARCH
+# ----------------------
+
+[type.jobsearch]
+required = ["position", "status"]
+
+[type.jobsearch.fields.position]
+type = "string"
+
+[type.jobsearch.fields.company]
+type = "string"
+
+[type.jobsearch.fields.status]
+options = ["applied", "interview", "offer", "rejected", "accepted"]
+
+[type.jobsearch.fields.result]
+options = ["offer", "accepted", "rejected", "withdrew", "no_response"]
+
+[type.jobsearch.tags.status.options]
+applied   = ["submitted", "online", "referral"]
+interview = ["phone", "technical", "onsite", "hr", "first", "final"]
+offer     = ["salary", "negotiation", "signing"]
+rejected  = ["after_interview", "no_response"]

@@ -960,9 +960,26 @@ the starters are used again.
 | File | Contents |
 |------|----------|
 | `starter_config.toml` | User, editor, display, cycles, dashboard, auth, backup, todo settings |
-| `starter_schema.toml` | 7 record types: expense, income, investment, exercise, sleep, mood, learning — with parent-dependent fields, tags, global optional fields (context, project) |
-| `starter_queries.toml` | 15 base queries + 6 metrics (savings_rate, food_ratio, avg_spend, total_income, total_expenses, avg_mood) + 2 dashboards (default, health) + 1 board (patient_journey) |
+| `starter_schema.toml` | 11 record types: expense, income, investment, exercise, sleep, mood, learning, habit, capture, pomodoro, jobsearch — with parent-dependent fields, tags, global optional fields (context, project) |
+| `starter_queries.toml` | 18 base queries + 6 metrics (savings_rate, food_ratio, avg_spend, total_income, total_expenses, avg_mood) + 2 dashboards (default, health) + 1 status board (job_search) |
 | `starter_presets.toml` | 21 presets with short aliases — coffee, lunch, dinner, groceries, restaurant, auto, bus, metro, petrol, rapido, recharge, broadband, electricity, salary, sip, rd, walk, gym, run, read, course |
+| `starter_demo.toml` | Sample demo data (records, todos, journal, notes) seeded by `--init` on a brand-new workspace so every page has content after install — dates are relative to install day via `{{today}}`/`{{-Nd}}`/`{{+Nd}}` tokens |
+
+**Demo data.** A fresh `--init` seeds a small starter story: sample records in
+`records/demo/` (a one-level-deep log group picked up by every record view),
+a few demo todos with `+routine`/`+jobsearch`, three journal entries, and a
+`Demo/` + `Projects/Find a Job` note folder. It is skipped on workspaces that
+already have data, and can be removed any time with:
+
+```
+ptos --remove-demo-data
+```
+
+`--remove-demo-data` only removes demo content — a record or todo you added to
+a demo folder/file keeps that file alive (record lines and todos are
+subtracted line-by-line; `records/demo/` is only deleted when every line still
+matches the demo spec; notes and journal entries are only removed when they
+still match verbatim).
 
 ### config.toml
 

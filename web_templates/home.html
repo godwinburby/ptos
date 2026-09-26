@@ -165,12 +165,14 @@ var tp;
   </div>
   {% if due_rows %}
   {% for row in due_rows %}
+  {% set edit_url = "/edit?filepath=" ~ row.filepath|urlencode ~ "&lineno=" ~ row.lineno ~ "&line=" ~ (row.line|urlencode) ~ "&return_to=%2F" %}
   <div class="due-row">
     <div class="due-badge {{ row.heat }}">{{ row.days }}d</div>
-    <div>
-      <div class="due-name">{{ row.name }}</div>
+    <div style="flex:1;min-width:0;">
+      <a href="{{ edit_url }}" class="due-name" style="text-decoration:none;color:inherit;" title="Open this record">{{ row.name }}</a>
       <div class="due-meta">{{ row.status }}{% if row.note %} · {{ row.note[:50] }}{% if row.note|length > 50 %}…{% endif %}{% endif %}</div>
     </div>
+    <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="{{ edit_url }}" title="Open / edit this record">✎</a>
   </div>
   {% endfor %}
   {% else %}

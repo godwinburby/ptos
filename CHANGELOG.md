@@ -5,6 +5,33 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-26
+
+### Due: dotted-only config convention + record links
+
+- **Dotted-only due config** — due views now read `["due.NAME"]` sections exclusively (plus the default `["due.default"]` for the bare `/due` page); the old bare `[due]` form is no longer written or read. All readers (web page, CLI `--due`, Query Builder preview, home widget) share the same `get_due()` path.
+- **Due rows link to the exact record** — each due row now has an Edit link that opens `/edit?...&return_to=/due` pointing at the underlying record line, so re-stamping "done" surfaces on the same page.
+- **Tests** — `TestDueRead` covers row rendering, sorting, exclusions, and the return_to link wiring end-to-end.
+
+### Starter: generic job-search type + status board
+
+- **`jobsearch` record type and `job_search` board** added to the starter so a fresh install demonstrates the Board + Due workflows with real data. Required `position`/`status`; optional `company` and `result` (offer/accepted/rejected/withdrew/no_response) — the `result` options feed `["due.default"]`'s `exclude_results` (engine matches the hardcoded `result` key).
+- **`["due.default"]` in the starter** tracks job applications untouched for 7+ days (`type=jobsearch key=position sort_by=status days=7 exclude_results=[accepted,rejected,no_response]`) so the bare `/due` page works immediately after install.
+- **`calendar.personal`** named calendar (income/expense/exercise) and the **`jobsearch` project** (board + `+jobsearch` todo + notes path) complete the cross-page walk-through.
+- **Neutralized audiology-specific content** in the Query Builder seed: the due-section seed (`ptos_web.py`) and the new-due JS defaults in `query_builder.html` are now generic (first schema type, `key=name`, days 7, no exclusions), and the `${AUDIOLOGY}` `patient_journey` board was dropped from the starter.
+
+### Demo data on fresh installs (+ `--remove-demo-data`)
+
+- **`starters/starter_demo.toml`** — a demo-story spec seeded by `--init` on a **fresh** workspace only (root year file empty, no `records/demo/`, empty todo/journal/notes); skipped silently when the spec file is absent (keeps `test_init.py` green). Date tokens `{{today}}`/`{{yesterday}}`/`{{next_week}}`/`{{last_week}}`/`{{±Nd}}` resolve to ISO dates so the story always lands near the current month.
+- **Seeded content** — `records/demo/{year}.log` (a one-level-deep log group every record view already scans) with ~88 validated sample records across all 11 starter types; 8 open + 3 done todos (`+routine`, `+jobsearch`, due/threshold dates); 3 journal entries; and a `Demo/` + `Projects/Find a Job` note tree with a `template.md`. End state: dashboard numbers, a single hot due row (BDR, applied, untouched 9d), all five `job_search` board lanes, meditation/walk/pomodoro heatmaps, calendar days, a drift-aware project, and a capture inbox all populated.
+- **`ptos --remove-demo-data`** — removes only demo content: `records/demo/` (deleted only while every line still matches the spec), demo todo/done lines are subtracted line-by-line (user lines survive), demo journal files are deleted only on verbatim match, notes stay untouched. Any user addition keeps the file alive.
+- **Tests** — `tests/test_demo.py` (37 tests): seeding + fresh-guard, schema validation of every demo record, due/board/habits/calendar/projects/dashboard read paths, token resolution units, `--remove-demo-data` CLI + protective keep-edits cases, and a 15-route web smoke test (home/browse/board/due/habits/calendar(entity/projects/todo/journal/notes/thresholds/query-builder/types). The calendar empty-state CLI/web tests now strip `calendar.*` keys to keep covering the hint while the starter ships `calendar.personal`.
+
+### Docs
+
+- **Starter-parity rule** — codified in `AGENTS.md`: any change that alters a fresh install must keep `starters/` in sync, keep the seeded-demo story readable, validate demo records against the starter schema, and preserve `--remove-demo-data` semantics.
+- **README** — starter file table + a "Demo data" section documenting the seed and removal command.
+
 ## 2026-09-25
 
 ### Board: status-change stamp field (`stamp_field`)

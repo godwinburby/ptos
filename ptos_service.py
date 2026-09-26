@@ -855,13 +855,14 @@ def get_trend(filters, time="tm", n=6):
 def get_due(config_name=None, days_override=None):
     """
     Returns:
-      { rows: [{name, days, status, note, heat, key_val}],
+      { rows: [{name, days, status, note, heat, key_val, filepath, lineno, line}],
         count: int,
         rec_type: str,
         days: int,
         key_field: str,
         sort_field: str }
     heat values: 'hot' (>=7d), 'warm' (3-6d), 'cool' (<3d)
+    filepath/lineno/line locate the latest record per key (lineno is 0-based).
     """
     try:
         queries = ptos.get_queries()
@@ -871,34 +872,16 @@ def get_due(config_name=None, days_override=None):
         raise PTOSError(str(e))
 
     # resolve config block
-    # Configs are stored as:
-    # - queries["due"] with root keys = default config (type, key, sort_by, days)
-    # - queries["due"]["followup"] etc = additional configs
-    # - queries["due.followup"] = separate [due.followup] section (backup)
+    # Configs are stored as ["due.NAME"] dotted keys (save_due /
+    # save_queries_full / Query Builder). The default view reads ["due.default"].
     if config_name and config_name not in ("__DEFAULT__",):
-        due_cfg = None
-        named = queries.get("due", {})
-        if isinstance(named, dict):
-            # Check if it's a nested config (e.g., due.followup, due.assessment)
-            if config_name in named and isinstance(named[config_name], dict):
-                due_cfg = named[config_name]
-            # Otherwise check root-level keys
-            elif named.get("type"):
-                due_cfg = named
-        # Check separate [due.config_name] section (backup)
-        if not due_cfg:
-            due_cfg = queries.get(f"due.{config_name}")
+        due_cfg = queries.get(f"due.{config_name}")
         if not due_cfg:
             raise PTOSError(f"Due config '{config_name}' not found in queries.toml")
     else:
-        # Default - use "default" key from [due] section, or fall back to "followup"
-        due_section = queries.get("due", {})
-        if isinstance(due_section, dict):
-            due_cfg = due_section.get("default") or due_section.get("followup")
+        due_cfg = queries.get("due.default")
         if not due_cfg:
-            due_cfg = queries.get("due.followup")  # Backup check
-        if not due_cfg:
-            raise PTOSError("No [due] section in queries.toml")
+            raise PTOSError('No ["due.default"] section in queries.toml')
 
     rec_type  = due_cfg.get("type")
     key_field = due_cfg.get("key") or "name"   # fall back to name if key omitted
@@ -928,19 +911,22 @@ def get_due(config_name=None, days_override=None):
             pass
 
     try:
-        raw, _ = ptos.scan_records(dt.date.min, dt.date.max, [f"type={rec_type}"], None)
+        raw, _, locations = ptos.scan_records(
+            dt.date.min, dt.date.max, [f"type={rec_type}"], None,
+            return_locations=True)
     except Exception as e:
         raise PTOSError(str(e))
 
     latest = {}
-    for line in raw:
+    for line, (fp, idx, _raw_line) in zip(raw, locations):
         p = ptos.safe_parse_line(line)
         if not p: continue
         d, kv, note = p
         k = kv.get(key_field)
         if not k: continue
         if k not in latest or d > latest[k]["date"]:
-            latest[k] = {"date": d, "kv": kv, "note": note}
+            latest[k] = {"date": d, "kv": kv, "note": note,
+                         "filepath": fp, "lineno": idx, "line": line}
 
     if exclude:
         latest = {k: r for k, r in latest.items()
@@ -964,6 +950,9 @@ def get_due(config_name=None, days_override=None):
             "status":    kv.get(sort_field, "") if sort_field else "",
             "note":      rec["note"] or "",
             "heat":      "hot" if gap >= 7 else "warm" if gap >= 3 else "cool",
+            "filepath":  rec.get("filepath", ""),
+            "lineno":    rec.get("lineno", -1),
+            "line":      rec.get("line", ""),
         })
 
     return {
@@ -4901,9 +4890,7 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
 
     # ── Due configs ────────────────────────────────────────────────────────────
     if raw_due is not None:
-        all_due = raw_due
-        due = {}
-        for due_name, due_cfg in all_due.items():
+        for due_name, due_cfg in raw_due.items():
             if not due_cfg or not isinstance(due_cfg, dict):
                 continue
             entry = {}
@@ -4923,9 +4910,7 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
                 for ek, ev in existing_due.items():
                     if ek not in entry:
                         entry[ek] = ev
-            due[due_name] = entry
-        if due:
-            data["due"] = due
+            data[f"due.{due_name}"] = entry
     else:
         # preserve existing due configs
         for k, v in existing.items():

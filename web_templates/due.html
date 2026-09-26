@@ -23,7 +23,16 @@
   </div>
 </div>
 
-{% if error %}
+{% if no_config %}
+<div class="card" style="text-align:center;padding:32px;">
+  <div style="font-weight:700;font-size:16px;">No Due section configured</div>
+  <div style="color:var(--sub);font-size:14px;margin-top:4px;">
+    Set up a due list to track records that need follow-up — open
+    <a href="/query-builder?section=due" style="color:var(--accent);text-decoration:none;font-weight:600;">Query Builder → Due</a>
+    and pick the record type, key field, and days threshold.
+  </div>
+</div>
+{% elif error %}
 <div class="msg msg-error">{{ error }}</div>
 {% elif not rows %}
 <div class="card" style="text-align:center;padding:32px;">
@@ -34,15 +43,17 @@
 {% else %}
 <div class="card" style="padding:0 18px;">
   {% for row in rows %}
+  {% set edit_url = "/edit?filepath=" ~ row.filepath|urlencode ~ "&lineno=" ~ row.lineno ~ "&line=" ~ (row.line|urlencode) ~ "&return_to=" ~ return_to|urlencode %}
   <div class="due-row">
     <div class="due-badge {{ row.heat }}">{{ row.days }}d</div>
     <div style="flex:1;min-width:0;">
-      <div class="due-name">{{ row.name }}</div>
+      <a href="{{ edit_url }}" class="due-name" style="text-decoration:none;color:inherit;" title="Open this record">{{ row.name }}</a>
       <div class="due-meta">
         {% if row.status %}{{ row.status }}{% endif %}
         {% if row.note %} · {{ row.note[:60] }}{% if row.note|length > 60 %}…{% endif %}{% endif %}
       </div>
     </div>
+    <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="{{ edit_url }}" title="Open / edit this record">✎</a>
   </div>
   {% endfor %}
 </div>

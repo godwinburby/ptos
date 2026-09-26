@@ -487,7 +487,7 @@ function addEntry() {
   else if (section==="aliases")
     _st.aliases[name]    = {alias:""};
   else if (section==="due")
-    _st.due[name]      = {type:"followup",key:"client",sort_by:"",days:7,exclude_results:[]};
+    _st.due[name]      = {type:"",key:"name",sort_by:"",days:7,exclude_results:[]};
   else if (section==="boards")
     _st.boards[name]   = {columns:[],set_field:''};
   else if (section==="habits")
@@ -2430,7 +2430,7 @@ function showDueEditor() {
     '<div style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Exclude Results <span style="font-weight:400;color:var(--sub);">(optional)</span></div>'+
       '<div id="due-exclude-chips" class="chip-group"></div>'+
-      '<input type="text" id="due-exclude-input" placeholder="e.g. followup status=closed"'+
+      '<input type="text" id="due-exclude-input" placeholder="e.g. status=closed"'+
       ' style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;margin-top:8px;"'+
       ' onkeydown="if(event.key===\'Enter\'){addDueExclude();}">'+
       '<button onclick="addDueExclude()" class="btn btn-ghost btn-sm" style="margin-top:6px;">Add</button>'+
@@ -2612,7 +2612,7 @@ function removeDueExclude(idx) {
 }
 
 function addNewDue() {
-  var name = prompt("New due config name (e.g., followup, assessment, investment):");
+  var name = prompt("New due config name (e.g., clients, suppliers):");
   if (!name) return;
   name = name.trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
   if (!name || _st.due[name]) { alert("Invalid or already exists"); return; }
