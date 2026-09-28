@@ -3316,11 +3316,14 @@ def entity_run():
 def api_entity_field_values(field):
     """Return top distinct values for a field across all records."""
     time = request.args.get("time", "ty")
+    error = None
     try:
         values, total = svc.get_entity_field_values(field, time=time)
-    except Exception:
+    except Exception as e:
+        log.exception("Entity field-values lookup failed for %s", field)
+        error = str(e)
         values, total = [], 0
-    return jsonify(field=field, values=values, total=total)
+    return jsonify(field=field, values=values, total=total, error=error)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

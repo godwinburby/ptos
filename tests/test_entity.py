@@ -400,3 +400,104 @@ class TestEntityFieldValues:
         assert resp.status_code == 200
         data = resp.get_json()
         assert data["total"] == 1
+
+
+class TestEntityFieldValuesErrorReporting:
+    """A failed lookup must be distinguishable from a field with no values.
+
+    The web value panel renders an empty chip list for both, which previously
+    made a dead endpoint look exactly like "this field has no values".
+    """
+
+    def test_api_error_absent_on_success(self, monkeypatch):
+        _clean_cache()
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/api/entity/field-values/amount")
+        assert resp.status_code == 200
+        assert resp.get_json()["error"] is None
+
+    def test_api_reports_error_when_lookup_raises(self, monkeypatch):
+        _clean_cache()
+
+        def _boom(field, time="ty"):
+            raise RuntimeError("scan exploded")
+
+        monkeypatch.setattr(svc, "get_entity_field_values", _boom)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/api/entity/field-values/amount")
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["error"] == "scan exploded"
+        assert data["values"] == []
+        assert data["total"] == 0
+        assert data["field"] == "amount"
+
+    def test_api_error_is_logged(self, monkeypatch, caplog):
+        _clean_cache()
+
+        def _boom(field, time="ty"):
+            raise RuntimeError("scan exploded")
+
+        monkeypatch.setattr(svc, "get_entity_field_values", _boom)
+        from ptos_web import app
+        with caplog.at_level("ERROR", logger="ptos_web"):
+            app.test_client().get("/api/entity/field-values/amount")
+        assert any("scan exploded" in r.getMessage() or "field-values" in r.getMessage()
+                   for r in caplog.records)
+
+    def test_api_repeatable_across_requests(self):
+        _clean_cache()
+        today = dt.date.today()
+        _write_records([
+            f"{today} type=expense domain=self category=food amount=100",
+            f"{today} type=expense domain=work category=fuel amount=250",
+            f"{today} type=income source=salary amount=500",
+        ])
+        from ptos_web import app
+        client = app.test_client()
+        seen = []
+        for _ in range(3):
+            data = client.get("/api/entity/field-values/amount").get_json()
+            seen.append((data["values"], data["total"], data["error"]))
+        assert seen[0] == seen[1] == seen[2]
+        assert seen[0][1] == 3
+
+
+class TestEntityValuePanelMarkup:
+    """Contract the inline value-panel JS depends on.
+
+    There is no JS test runner in this project, so these pin the markup/CSS
+    hooks the script needs so a template edit cannot silently break it.
+    """
+
+    def _landing_html(self):
+        from ptos_web import app
+        return app.test_client().get("/entity").get_data(as_text=True)
+
+    def test_status_node_present(self):
+        html = self._landing_html()
+        assert 'id="entity-val-status"' in html
+        assert "entity-val-status" in html
+        assert ".entity-val-status.error" in html
+
+    def test_chip_toggle_wiring(self):
+        from ptos_service import get_entity_suggestions
+        from ptos_web import app
+        html = app.test_client().get("/entity").get_data(as_text=True)
+        # the script the chips call into must be exposed on window
+        assert "window.toggleField = toggleField" in html
+        assert "function toggleField" in html
+        assert "loadValues" in html
+        assert "AbortController" in html
+        # chips carry the field they toggle
+        assert 'onclick="toggleField(' in html
+        assert "data-field=" in html
+
+    def test_landing_page_has_panel_nodes(self):
+        html = self._landing_html()
+        for node_id in ("entity-val-panel", "entity-val-chips", "entity-val-datalist",
+                        "entity-val-more", "entity-val-total", "entity-val-field",
+                        "entity-val-text", "entity-field", "entity-chips"):
+            assert f'id="{node_id}"' in html, node_id
