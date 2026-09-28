@@ -80,7 +80,7 @@
     <option value="{{ bname }}" {% if bname == active_board %}selected{% endif %}>{{ bname | replace('_',' ') }}</option>
     {% endfor %}
   </select>
-  <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=boards&amp;edit={{ active_board }}" title="Configure this board in Query Builder">⚙ Configure</a>
+  <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=boards&amp;edit={{ active_board | urlencode }}" title="Configure this board in Query Builder">⚙ Configure</a>
   {% if board_data %}
   <select class="board-select" id="brd-time-select" onchange="onTimeChange(this.value)">
     <option value="" {% if not time %}selected{% endif %}>Default (per board)</option>
@@ -343,7 +343,7 @@
   {% if boards %}
   Select a board from the dropdown above.
   {% else %}
-  Create a board in <a href="/query-builder">Query Builder</a>.
+  Create a board in <a href="/query-builder?section=boards">Query Builder</a>.
   {% endif %}
 </div>
 {% endif %}

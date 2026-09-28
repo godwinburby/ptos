@@ -39,7 +39,7 @@
 <div class="cal-header">
   <div class="page-title">Calendar</div>
   {% if active and active != '__all__' %}
-  <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=calendars&amp;edit={{ active }}" title="Edit this calendar in Query Builder">⚙ Configure</a>
+  <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=calendars&amp;edit={{ active | urlencode }}" title="Edit this calendar in Query Builder">⚙ Configure</a>
   {% else %}
   <a class="edit-btn" style="font-size:12px;" href="/query-builder?section=calendars" title="Edit calendars in Query Builder">⚙ Configure</a>
   {% endif %}
@@ -67,7 +67,7 @@
 <div class="card" style="max-width:520px;padding:16px 20px;margin:0 0 14px;">
   <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">
     Showing <strong>all records</strong>. Add a <code>[calendar.NAME]</code> table in
-    <a href="/query-builder">Query Builder</a> → Calendars for a filtered view.
+    <a href="/query-builder?section=calendars">Query Builder</a> → Calendars for a filtered view.
   </div>
   <pre style="background:var(--bg);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;">[calendar.expenses]
 filters = ["type=expense"]

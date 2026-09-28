@@ -308,10 +308,12 @@ var _lastAggFields = [];
   var params = new URLSearchParams(window.location.search);
   var editName = params.get("edit");
   var editSection = params.get("section");
-  if (editName && editSection && _st[editSection]) {
-    // Load existing item for editing
+  if (editSection && _st[editSection]) {
+    // A section alone is enough — pages with no single selected item
+    // (habits, thresholds, calendar on "All records") link here with
+    // ?section= only. "edit" preselects the item when the page had one.
     switchSection(editSection);
-    select(editSection, editName);
+    if (editName && _st[editSection][editName]) select(editSection, editName);
   } else {
     // Default: select first query
     switchSection("queries");
