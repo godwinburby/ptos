@@ -1000,6 +1000,33 @@ only on a verbatim match; todos and records are matched by their marker first,
 falling back to a whole-line match against the spec (so workspaces seeded before
 the markers existed still clean up).
 
+### Re-installing the demo data
+
+Want the sample story back — or want it fresh again after a few weeks, so the
+dashboard, board and due pages have current-month data?
+
+```
+ptos --add-demo-data
+```
+
+…or **Settings → Data → Re-install demo data** in the web UI (that button shows
+once demo data has been removed).
+
+A re-install first clears the current demo story (so it can never duplicate
+itself), then adds it back with **all dates relative to today**, and it
+**merges** rather than overwrites — safe to run on a workspace you already use:
+
+| Your data | What a re-install does |
+|---|---|
+| Records in `records/demo/` | kept; demo lines are merged in alongside them |
+| `todo.txt` / `done.txt` | kept in place; demo lines are appended after them |
+| Journal entry for today | **never overwritten** — the demo entry is only created if the file is missing |
+| Notes you wrote or edited | **never overwritten** — only missing note files are created |
+| Config | never touched |
+
+Notes are deliberately *not* re-created: removal keeps them, so they are still
+there and only a note you deleted is added back.
+
 ### config.toml
 
 ```toml
@@ -1738,6 +1765,7 @@ ptos -y test -t td --delete --all
 | `--init` | | Initialise workspace (safe to re-run — will not overwrite existing files) |
 | `--no-demo-data` | | With `--init`: skip the demo-data prompt and install no sample content |
 | `--remove-demo-data` | | Remove seeded demo content (`tag=demo` records, `+demo` todos, verbatim demo journal) — also in Settings → Data |
+| `--add-demo-data` | | Re-install the demo story with dates relative to today, merging into your existing data — also in Settings → Data |
 | `--set-home PATH` | | Point PTOS at a data folder (writes `.ptos_home`, migrates existing data) |
 | `--bisync` | | Bidirectional sync with remote (reads `[sync]` from config.toml) |
 | `--sync` | | One-way push to remote (DELETES remote files not present locally — requires `--confirm-delete`) |

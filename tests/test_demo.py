@@ -599,3 +599,166 @@ class TestDemoServiceWrappers:
         # the seeded board is gone; a cached read must not resurrect it
         board = svc.get_board_data("job_search", time="all")
         assert all(not recs for recs in board["data"].values())
+
+    def test_reinstall_demo_data_returns_structured_result(self, demo_home):
+        _seed()
+        result = svc.reinstall_demo_data()
+        assert result["ok"] is True
+        assert set(result["removed"]) == {"records", "todos", "done", "journal"}
+        assert result["removed"]["records"] == 88
+        assert set(result["installed"]) == {
+            "records", "todos", "done", "journal", "notes"}
+        assert result["installed"]["records"] == 88
+        assert result["installed"]["todos"] == 8
+        assert result["installed"]["journal"] == 3
+        assert "Re-installing demo data" in result["message"]
+
+    def test_reinstall_clears_history_cache(self, demo_home):
+        _seed()
+        svc.get_board_data("job_search", time="all")
+        svc.reinstall_demo_data()
+        board = svc.get_board_data("job_search", time="all")
+        assert any(recs for recs in board["data"].values())
+
+    def test_demo_data_available(self, demo_home):
+        assert svc.demo_data_available() is True
+        ptos.remove_demo_data()
+        # still available: the spec ships with the project
+        assert svc.demo_data_available() is True
+
+    def test_demo_data_available_false_without_spec(self, demo_home,
+                                                    monkeypatch):
+        monkeypatch.setattr(ptos, "STARTER_DIR", str(demo_home / "nope"))
+        assert ptos.demo_data_available() is False
+        assert svc.demo_data_available() is False
+        result = svc.reinstall_demo_data()
+        assert result["ok"] is True
+        assert result["installed"] is None
+
+
+class TestDemoReinstall:
+    def test_reinstall_after_removal_restores_full_story(self, demo_home):
+        _seed()
+        ptos.remove_demo_data()
+        assert ptos.demo_data_present() is False
+        result = ptos.reinstall_demo_data()
+        assert result["removed"]["records"] == 0  # nothing left to clear
+        # notes are kept by removal, so nothing is re-added for them
+        assert result["installed"] == {
+            "records": 88, "todos": 8, "done": 3, "journal": 3, "notes": 0}
+        assert ptos.demo_data_present() is True
+        assert (demo_home / "notes" / "Demo" / "welcome.md").exists()
+        assert (demo_home / "notes" / "Projects" / "Find a Job" / "plan.md").exists()
+
+    def test_reinstall_keeps_user_record_in_demo_dir(self, demo_home):
+        _seed()
+        log = demo_home / "records" / "demo" / f"{ptos.today().year}.log"
+        with open(log, "a", encoding="utf-8") as f:
+            f.write("type=expense amount=7 note=my own line\n")
+        ptos.reinstall_demo_data()
+        text = log.read_text(encoding="utf-8")
+        assert "my own line" in text
+        assert text.count("tag=demo") == 88
+
+    def test_reinstall_keeps_user_todos_in_order(self, demo_home):
+        _seed()
+        with open(demo_home / "todo" / "todo.txt", "a", encoding="utf-8") as f:
+            f.write("(A) my own urgent task +work\n(B) my own second task +work\n")
+        ptos.reinstall_demo_data()
+        lines = (demo_home / "todo" / "todo.txt").read_text(
+            encoding="utf-8").strip().split("\n")
+        # user lines keep their place; the demo story is appended after them
+        assert lines[:2] == ["(A) my own urgent task +work",
+                             "(B) my own second task +work"]
+        assert sum(1 for ln in lines if "+demo" in ln) == 8
+
+    def test_reinstall_does_not_duplicate_demo_lines(self, demo_home):
+        _seed()
+        ptos.reinstall_demo_data()
+        ptos.reinstall_demo_data()
+        log = demo_home / "records" / "demo" / f"{ptos.today().year}.log"
+        assert log.read_text(encoding="utf-8").count("tag=demo") == 88
+        todos = (demo_home / "todo" / "todo.txt").read_text(encoding="utf-8")
+        assert todos.count("+demo") == 8
+
+    def test_reinstall_never_overwrites_edited_journal_entry(self, demo_home):
+        _seed()
+        base = ptos.today()
+        rel = os.path.join(str(base.year), f"{base.month:02d}", f"{base}.md")
+        path = demo_home / "journal" / rel
+        assert path.exists()  # the seeded story writes today's entry
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("MY OWN JOURNAL ENTRY")
+        ptos.reinstall_demo_data()
+        assert path.read_text(encoding="utf-8") == "MY OWN JOURNAL ENTRY"
+
+    def test_reinstall_never_overwrites_edited_note(self, demo_home):
+        _seed()
+        note = demo_home / "notes" / "Demo" / "welcome.md"
+        with open(note, "w", encoding="utf-8") as f:
+            f.write("MY OWN NOTE")
+        ptos.reinstall_demo_data()
+        assert note.read_text(encoding="utf-8") == "MY OWN NOTE"
+
+    def test_reinstall_recreates_missing_note(self, demo_home):
+        _seed()
+        note = demo_home / "notes" / "Projects" / "Find a Job" / "plan.md"
+        os.remove(note)
+        ptos.reinstall_demo_data()
+        assert note.exists()
+
+    def test_reinstall_on_fresh_workspace_installs(self, demo_home):
+        result = ptos.reinstall_demo_data()
+        assert result["installed"]["records"] == 88
+        assert ptos.demo_data_present() is True
+
+    def test_reinstall_never_prompts(self, demo_home, monkeypatch):
+        _seed()
+
+        def _boom(*a, **k):
+            raise AssertionError("re-install must not prompt")
+
+        monkeypatch.setattr("builtins.input", _boom)
+        ptos.reinstall_demo_data()
+        assert ptos.demo_data_present() is True
+
+    def test_seed_force_false_still_respects_freshness(self, demo_home):
+        _seed()
+        assert ptos._seed_demo_data(demo=True) is None  # non-fresh, no-op
+        assert ptos.demo_data_present() is True
+
+    def test_add_demo_data_flag_is_wired(self, demo_home, capsys, monkeypatch):
+        import ptos_cli
+        args = ptos_cli.build_parser({}).parse_args(["--add-demo-data"])
+        assert args.add_demo_data is True
+        plain = ptos_cli.build_parser({}).parse_args([])
+        assert plain.add_demo_data is False
+        _seed()
+        monkeypatch.setattr("ptos_cli.sys.argv", ["ptos", "--add-demo-data"])
+        ptos_cli.main()
+        out = capsys.readouterr().out
+        assert "Re-installing demo data" in out
+        assert ptos.demo_data_present() is True
+        assert out.count("tag=demo") == 0
+
+    def test_api_installs_demo_data(self, demo_home):
+        from ptos_web import app
+        client = app.test_client()
+        assert client.post("/api/demo-data/remove").get_json()["ok"] is True
+        r = client.post("/api/demo-data/install")
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["ok"] is True
+        assert body["installed"]["records"] == 88
+        assert ptos.demo_data_present() is True
+        assert "Remove demo data" in client.get("/settings").get_data(as_text=True)
+
+    def test_settings_offers_reinstall_when_absent(self, demo_home):
+        from ptos_web import app
+        client = app.test_client()
+        client.post("/api/demo-data/remove")
+        html = client.get("/settings").get_data(as_text=True)
+        assert "Re-install demo data" in html
+        assert "installDemoData" in html
+        assert 'id="remove-demo-btn"' not in html
+

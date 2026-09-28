@@ -5454,6 +5454,101 @@ def _install_demo(tempdir):
     shutil.rmtree(tempdir, ignore_errors=True)
 
 
+def _merge_demo_lines(dst, src_lines):
+    """Append the lines of src_lines missing from dst, keeping existing ones.
+
+    Returns the number of lines actually added.
+    """
+    existing = _read_lines(dst) if os.path.exists(dst) else []
+    merged = list(existing)
+    added = 0
+    for ln in src_lines:
+        if ln in merged:
+            continue
+        merged.append(ln)
+        added += 1
+    if added == 0:
+        return 0
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    with open(dst, "w", encoding="utf-8") as fh:
+        fh.write("".join(ln + "\n" for ln in merged))
+    return added
+
+
+def _create_demo_file(dst, src):
+    """Write src to dst only when dst does not exist. Returns True if created."""
+    if os.path.exists(dst):
+        return False
+    os.makedirs(os.path.dirname(dst), exist_ok=True)
+    with open(src, "rb") as fi, open(dst, "wb") as fo:
+        fo.write(fi.read())
+    return True
+
+
+def _install_demo_merged(tempdir):
+    """Install demo content from the temp tree without overwriting user data.
+
+    Records and todo lines are merged (existing lines kept, missing ones
+    appended). Journal and note files are created only when absent, so a
+    journal entry or note the user wrote is never clobbered. Returns
+    {records, todos, done, journal, notes} counts of what was added.
+    """
+    added = {"records": 0, "todos": 0, "done": 0, "journal": 0, "notes": 0}
+    try:
+        src_records = os.path.join(tempdir, "records", "demo")
+        if os.path.isdir(src_records):
+            for name in sorted(os.listdir(src_records)):
+                if not name.endswith(".log"):
+                    continue
+                added["records"] += _merge_demo_lines(
+                    os.path.join(RECORDS_DIR, "demo", name),
+                    _read_lines(os.path.join(src_records, name)))
+        src_todo = os.path.join(tempdir, "todo")
+        if os.path.isdir(src_todo):
+            for key, fname in (("todos", "todo.txt"), ("done", "done.txt")):
+                src = os.path.join(src_todo, fname)
+                if os.path.isfile(src):
+                    added[key] += _merge_demo_lines(
+                        os.path.join(TODO_DIR, fname), _read_lines(src))
+        for key, sub in (("journal", "journal"), ("notes", "notes")):
+            root = os.path.join(tempdir, sub)
+            if not os.path.isdir(root):
+                continue
+            base = JOURNAL_DIR if sub == "journal" else NOTES_DIR
+            for dirpath, _dirs, files in os.walk(root):
+                for name in files:
+                    src = os.path.join(dirpath, name)
+                    rel = os.path.relpath(src, root)
+                    if _create_demo_file(os.path.join(base, rel), src):
+                        added[key] += 1
+    finally:
+        shutil.rmtree(tempdir, ignore_errors=True)
+    return added
+
+
+def reinstall_demo_data():
+    """Clear the seeded demo story and install it again with today's dates.
+
+    The old story goes first (marker-based, so only demo content is dropped),
+    which keeps a re-install from duplicating itself. The new story is merged
+    into existing data: user records, todos, journal entries and notes are
+    kept. Returns {removed: {...}, installed: {...}}.
+
+    No-op returning zero counts when the starter demo spec is missing.
+    """
+    if _load_demo_spec() is None:
+        return {"removed": remove_demo_data(), "installed": None}
+    removed = remove_demo_data()
+    print("\nRe-installing demo data...")
+    added = _seed_demo_data(demo=True, force=True)
+    return {"removed": removed, "installed": added}
+
+
+def demo_data_available():
+    """True when the starter demo spec is present (so it could be installed)."""
+    return _load_demo_spec() is not None
+
+
 def _line_count(path):
     """Number of non-empty lines in a file, or 0 when missing."""
     try:
@@ -5479,33 +5574,47 @@ def _count_seeded():
     return counts
 
 
-def _seed_demo_data(demo=None):
-    """Seed starter demo content into a fresh workspace. No-op otherwise.
+def _seed_demo_data(demo=None, force=False):
+    """Seed starter demo content. No-op on a non-fresh workspace unless forced.
 
-    demo: True/False to force, None to ask (default yes).
+    demo: True/False to force the answer, None to ask (default yes).
+    force: skip the fresh-workspace check and merge into existing data
+           instead of overwriting it (used by reinstall_demo_data).
+
+    Returns the added counts when force-installing, else None.
     """
     spec = _load_demo_spec()
     if spec is None:
         return
     base = today()
-    if not _demo_fresh():
+    if not force and not _demo_fresh():
         return
-    if demo is None:
+    if demo is None and not force:
         demo = _confirm_demo_seed()
     if not demo:
         print("  Skipped demo data.")
         return
     print("\nSeeding demo data...")
     tempdir = _seed_temp_demo(spec, base)
-    _install_demo(tempdir)
-    counts = _count_seeded()
-    print(f"  records  {counts.get('records', 0)}"
-          f"  todos  {counts.get('todos', 0)}"
-          f"  done  {counts.get('done', 0)}"
-          f"  journal  {counts.get('journal', 0)}"
-          f"  notes  {counts.get('notes', 0)}")
-    print("  Remove anytime with:  ptos --remove-demo-data")
-    print("  …or Settings -> Data -> Remove demo data")
+    if force:
+        added = _install_demo_merged(tempdir)
+        print(f"  added  records {added.get('records', 0)}"
+              f"  todos {added.get('todos', 0)}"
+              f"  done {added.get('done', 0)}"
+              f"  journal {added.get('journal', 0)}"
+              f"  notes {added.get('notes', 0)}")
+    else:
+        _install_demo(tempdir)
+        added = None
+        counts = _count_seeded()
+        print(f"  records  {counts.get('records', 0)}"
+              f"  todos  {counts.get('todos', 0)}"
+              f"  done  {counts.get('done', 0)}"
+              f"  journal  {counts.get('journal', 0)}"
+              f"  notes  {counts.get('notes', 0)}")
+        print("  Remove anytime with:  ptos --remove-demo-data")
+        print("  …or Settings -> Data -> Remove demo data")
+    return added
 
 
 def _demo_line_sets(spec):
