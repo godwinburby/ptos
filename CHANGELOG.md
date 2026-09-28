@@ -7,6 +7,12 @@ Format: `[version or date] — description`
 
 ## 2026-09-28
 
+### Due: fall back to the first config when `due.default` is missing
+
+- **Fixes an error card on bare `/due`** — the route only set `no_config` when *zero* due configs existed, so an install with e.g. `["due.followup"]` but no `["due.default"]` called `get_due(config_name=None)`, which demanded `due.default` and raised. `/due` then showed `No ["due.default"] section in queries.toml` instead of a list, even though a working config was present. `get_due()` now falls back to the first `["due.*"]` section (alphabetical) when `due.default` is absent; the "no due config at all" case still raises.
+- **The page reflects the config actually used** — `get_due()` returns a new `config` key, and the `/due` route uses it for `selected_due`, so the tab is highlighted and the ⚙ Configure link points at the right item instead of a non-existent `edit=default`.
+- **Tests** — six new cases in `TestDueRead` (`tests/test_scoped_writes.py`) covering the single-config fallback, alphabetical pick when several exist, explicit `config_name` still winning, the route auto-selecting the fallback, and the no-config error message.
+
 ### Web: ⚙ Configure lands on the right Query Builder section from every page
 
 - **Root cause was a single gate** — `query_builder.html` only honoured the deep-link when **both** `?section=` and `?edit=` were present, otherwise it fell through to the Queries tab. Board worked because it passes `&edit=<board>` (a board is always auto-selected); **Habits, Thresholds and Calendar on "All records"** send `?section=` only, so Configure silently dumped you on Queries, as did the unconfigured-Due empty-state link. The gate now honours `section` on its own and uses `edit` only to preselect an item.

@@ -736,19 +736,20 @@ def due_page():
     no_config = False
     if not due_configs:
         no_config = True
-        rows = []; days_used = 7; error = None
+        rows = []; days_used = 7; error = None; used_due = due_name or "default"
     else:
         try:
             data = svc.get_due(config_name=due_name if due_name and due_name != "default" else None, days_override=days_int)
             rows = data["rows"]
             days_used = data["days"]
+            used_due = data.get("config") or (due_name or "default")
             error = None
         except PTOSError as e:
-            rows = []; days_used = 7; error = str(e)
+            rows = []; days_used = 7; error = str(e); used_due = due_name or "default"
     return_to = "/due" + (f"?{request.query_string.decode()}" if request.query_string else "")
     return render_template("due.html", tab="due", title="Due List",
         now=_now_str(), rows=rows, days=days_used, error=error,
-        due_configs=list(due_configs.keys()), selected_due=due_name or "default",
+        due_configs=list(due_configs.keys()), selected_due=used_due,
         no_config=no_config, return_to=return_to)
 
 
