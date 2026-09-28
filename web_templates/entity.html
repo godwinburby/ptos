@@ -35,6 +35,9 @@
   .entity-val-panel { display:none;padding:12px;background:var(--bg);border:1px solid var(--border);border-radius:8px;margin-bottom:14px; }
   .entity-val-panel.open { display:block; }
   .entity-val-label { font-size:11px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px; }
+.entity-val-status { font-size:12px;color:var(--sub);margin-bottom:8px; }
+.entity-val-status.error { color:var(--error);cursor:pointer;font-weight:600; }
+.entity-val-status.error:hover { text-decoration:underline; }
   .entity-val-chips { display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px; }
   .entity-val-chip { padding:5px 12px;border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;border:1.5px solid var(--border);background:var(--card);color:var(--text);transition:all .15s; }
   .entity-val-chip:hover { border-color:var(--accent);color:var(--accent);background:var(--accent-lt); }
@@ -84,6 +87,7 @@
 
   <div id="entity-val-panel" class="entity-val-panel">
     <div class="entity-val-label">VALUES FOR <span id="entity-val-field" style="color:var(--accent);"></span></div>
+    <div id="entity-val-status" class="entity-val-status" style="display:none;"></div>
     <div id="entity-val-chips" class="entity-val-chips"></div>
     <button id="entity-val-more" class="entity-val-more" style="display:none;" onclick="toggleShowAll()">Show all <span id="entity-val-total"></span> values ↓</button>
     <div class="entity-val-input">
@@ -109,58 +113,104 @@
   var _activeField = null;
   var _allValues = [];
   var _showAll = false;
+  var _reqId = 0;
+  var _retryField = null;
+
+  function _el(id) { return document.getElementById(id); }
+
+  function setStatus(msg, isError) {
+    var el = _el('entity-val-status');
+    if (!el) return;
+    el.textContent = msg || '';
+    el.classList.toggle('error', !!isError);
+    el.style.display = msg ? '' : 'none';
+    el.onclick = isError ? function() { if (_retryField) loadValues(_retryField); } : null;
+  }
+
+  function failStatus(field) {
+    _retryField = field;
+    setStatus('Couldn\u2019t load values \u2014 Retry', true);
+  }
+
+  function resetPanel() {
+    _allValues = [];
+    _showAll = false;
+    _retryField = null;
+    var vc = _el('entity-val-chips');
+    var dl = _el('entity-val-datalist');
+    var moreBtn = _el('entity-val-more');
+    var totalSpan = _el('entity-val-total');
+    if (vc) vc.innerHTML = '';
+    if (dl) dl.innerHTML = '';
+    if (moreBtn) moreBtn.style.display = 'none';
+    if (totalSpan) totalSpan.textContent = '';
+    setStatus('');
+  }
 
   function toggleField(field) {
-    var panel = document.getElementById('entity-val-panel');
+    var panel = _el('entity-val-panel');
     var chips = document.querySelectorAll('#entity-chips .entity-chip');
 
-    // Toggle off if same field
     if (_activeField === field) {
       _activeField = null;
-      panel.classList.remove('open');
+      _reqId++;
+      if (panel) panel.classList.remove('open');
       chips.forEach(function(c) { c.classList.remove('active'); });
+      resetPanel();
       return;
     }
 
     _activeField = field;
     _showAll = false;
-    document.getElementById('entity-field').value = field;
-    document.getElementById('entity-val-field').textContent = field;
-    document.getElementById('entity-val-text').value = '';
+    var fieldEl = _el('entity-field');
+    var labelEl = _el('entity-val-field');
+    var textEl = _el('entity-val-text');
+    if (fieldEl) fieldEl.value = field;
+    if (labelEl) labelEl.textContent = field;
+    if (textEl) textEl.value = '';
 
-    // Highlight active chip
     chips.forEach(function(c) {
       c.classList.toggle('active', c.dataset.field === field);
     });
 
-    // Clear chips immediately
-    var vc = document.getElementById('entity-val-chips');
-    var dl = document.getElementById('entity-val-datalist');
-    if (vc) vc.innerHTML = '';
-    if (dl) dl.innerHTML = '';
-    document.getElementById('entity-val-more').style.display = 'none';
-
-    // Fetch values
-    fetch('/api/entity/field-values/' + encodeURIComponent(field) + '?t=' + Date.now(), {cache: 'no-store'})
-      .then(function(r) { return r.json(); })
-      .then(function(data) {
-        _allValues = data.values || [];
-        renderValues(data.total || _allValues.length);
-        panel.classList.add('open');
-      })
-      .catch(function() {
-        _allValues = [];
-        renderValues(0);
-        panel.classList.add('open');
-      });
+    if (panel) panel.classList.add('open');
+    loadValues(field);
   }
   window.toggleField = toggleField;
 
+  function loadValues(field) {
+    var myId = ++_reqId;
+    resetPanel();
+    setStatus('Loading\u2026');
+
+    var ctrl = (typeof AbortController !== 'undefined') ? new AbortController() : null;
+    var timer = setTimeout(function() { if (ctrl) ctrl.abort(); }, 8000);
+    var settle = function() { clearTimeout(timer); };
+
+    fetch('/api/entity/field-values/' + encodeURIComponent(field) + '?t=' + Date.now(),
+          { cache: 'no-store', signal: ctrl ? ctrl.signal : undefined })
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        settle();
+        if (myId !== _reqId) return;
+        if (data && data.error) { failStatus(field); return; }
+        _allValues = (data && data.values) || [];
+        setStatus('');
+        renderValues((data && data.total) || _allValues.length);
+      })
+      .catch(function() {
+        settle();
+        if (myId !== _reqId) return;
+        failStatus(field);
+      });
+  }
+
   function renderValues(total) {
-    var vc = document.getElementById('entity-val-chips');
-    var dl = document.getElementById('entity-val-datalist');
-    var moreBtn = document.getElementById('entity-val-more');
-    var totalSpan = document.getElementById('entity-val-total');
+    var vc = _el('entity-val-chips');
+    var dl = _el('entity-val-datalist');
+    var moreBtn = _el('entity-val-more');
+    var totalSpan = _el('entity-val-total');
+    if (!vc || !dl) return;
     vc.innerHTML = '';
     dl.innerHTML = '';
 
@@ -178,12 +228,13 @@
       dl.appendChild(opt);
     });
 
+    if (!moreBtn) return;
     if (_allValues.length > 8) {
       moreBtn.style.display = '';
-      totalSpan.textContent = total;
+      if (totalSpan) totalSpan.textContent = total;
       moreBtn.textContent = _showAll
-        ? 'Show less ↑'
-        : 'Show all ' + total + ' values ↓';
+        ? 'Show less \u2191'
+        : 'Show all ' + total + ' values \u2193';
     } else {
       moreBtn.style.display = 'none';
     }

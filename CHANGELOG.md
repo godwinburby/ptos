@@ -7,11 +7,19 @@ Format: `[version or date] — description`
 
 ## 2026-09-28
 
+### Entity: value panel can no longer silently look empty when a lookup fails
+
+- **Fixes chips that re-select but never show values** — the value panel was opened *only* from inside the fetch callback, so a failed, hung or non-JSON response left it closed with no feedback whatsoever, and every later chip behaved the same way. The panel now opens the instant a chip is clicked, showing a `Loading…` state while the request is in flight.
+- **Failures are surfaced instead of disguised** — a failed request (or an `error` in the response) now shows a clickable `Couldn’t load values — Retry` line that re-runs the lookup, instead of an empty chip list that is indistinguishable from a field that genuinely has no values. Requests are also aborted after 8s so a hung endpoint cannot leave the panel waiting forever.
+- **Stale responses can no longer hijack the panel** — each request carries a sequence number and a response for a field that is no longer selected is discarded, so a slow lookup for chip A cannot render into chip B's panel. Deselecting a chip also invalidates any in-flight request so a late response cannot re-open the closed panel.
+- **Deselecting no longer leaks state** — the value chips, datalist, "Show all" button, total and the `VALUES FOR <field>` label are all cleared on toggle-off, so a re-selection starts clean.
+- **`/api/entity/field-values/<field>` reports failures** — it still answers `200` with the same shape, but now logs via `log.exception()` (the other 23 web routes already did) and returns an additive `error` key, so a swallowed exception is no longer reported to the UI as "no values".
+
 ### Due: fall back to the first config when `due.default` is missing
 
 - **Fixes an error card on bare `/due`** — the route only set `no_config` when *zero* due configs existed, so an install with e.g. `["due.followup"]` but no `["due.default"]` called `get_due(config_name=None)`, which demanded `due.default` and raised. `/due` then showed `No ["due.default"] section in queries.toml` instead of a list, even though a working config was present. `get_due()` now falls back to the first `["due.*"]` section (alphabetical) when `due.default` is absent; the "no due config at all" case still raises.
 - **The page reflects the config actually used** — `get_due()` returns a new `config` key, and the `/due` route uses it for `selected_due`, so the tab is highlighted and the ⚙ Configure link points at the right item instead of a non-existent `edit=default`.
-- **Tests** — six new cases in `TestDueRead` (`tests/test_scoped_writes.py`) covering the single-config fallback, alphabetical pick when several exist, explicit `config_name` still winning, the route auto-selecting the fallback, and the no-config error message.
+- **Tests** — five new cases in `TestDueRead` (`tests/test_scoped_writes.py`) covering the single-config fallback, alphabetical pick when several exist, explicit `config_name` still winning, the route auto-selecting the fallback, and the no-config error message.
 
 ### Web: ⚙ Configure lands on the right Query Builder section from every page
 
