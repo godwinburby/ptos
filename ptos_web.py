@@ -2039,6 +2039,7 @@ def settings_page():
         rclone_available=rclone_available,
         remote_exists=remote_exists,
         demo_present=svc.demo_data_present(),
+        demo_available=svc.demo_data_available(),
         base_dir=ptos.BASE_DIR)
 
 
@@ -2141,6 +2142,17 @@ def api_demo_data_remove():
         return jsonify(ok=False, error=str(e))
     except Exception as e:
         log.exception("demo-data remove failed")
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/demo-data/install", methods=["POST"])
+def api_demo_data_install():
+    try:
+        return jsonify(svc.reinstall_demo_data())
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("demo-data install failed")
         return jsonify(ok=False, error=str(e))
 
 

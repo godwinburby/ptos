@@ -49,7 +49,7 @@ from ptos import (
     # Misc
     resolve_time, resolve_date, parse_date, today,
     edit_target, init_ptos, set_home, set_user_name, set_date_format,
-    remove_demo_data,
+    remove_demo_data, reinstall_demo_data,
     set_currency, add_cycle, set_auth,
     add_type, add_type_field, remove_type,
     restore_data, restore_config,
@@ -350,6 +350,8 @@ def build_parser(cycles):
                      help="With --init: skip demo data without prompting")
     utl.add_argument("--remove-demo-data", dest="remove_demo_data", action="store_true",
                      help="Remove seeded demo data (tag=demo records, +demo todos, demo journal)")
+    utl.add_argument("--add-demo-data", dest="add_demo_data", action="store_true",
+                     help="Re-install the demo data with today's dates (keeps your own data)")
     utl.add_argument("--set-name", dest="set_name", metavar="NAME",
                      help="Set user name in config")
     utl.add_argument("--set-date-format", dest="set_date_format", metavar="FORMAT",
@@ -3102,6 +3104,10 @@ def main():
 
     if args.remove_demo_data:
         remove_demo_data()
+        return
+
+    if args.add_demo_data:
+        reinstall_demo_data()
         return
 
     if args.set_home:

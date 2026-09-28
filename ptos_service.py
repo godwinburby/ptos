@@ -375,6 +375,46 @@ def remove_demo_data():
     }
 
 
+def demo_data_available():
+    """True when the starter demo spec is present (so it could be installed)."""
+    try:
+        return bool(ptos.demo_data_available())
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def reinstall_demo_data():
+    """Clear the seeded demo story and re-install it with today's dates.
+
+    Only demo content is cleared; the new story is merged into existing data,
+    so user records, todos, journal entries and notes are kept. Journal and
+    note files are created only when absent — never overwritten.
+
+    Returns:
+        dict: {ok, removed: {...}, installed: {...} or None, message}
+    """
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            result = ptos.reinstall_demo_data()
+    except Exception as e:
+        raise PTOSError(str(e))
+    _invalidate_history_cache()
+    removed = (result or {}).get("removed") or {}
+    installed = (result or {}).get("installed")
+    return {
+        "ok": True,
+        "removed": {k: removed.get(k, 0)
+                    for k in ("records", "todos", "done", "journal")},
+        "installed": None if installed is None else {
+            k: installed.get(k, 0)
+            for k in ("records", "todos", "done", "journal", "notes")},
+        "message": buf.getvalue().strip() or "Demo data re-installed.",
+    }
+
+
 def delete_backup(filename):
     """Delete a backup file.
     

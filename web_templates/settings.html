@@ -58,6 +58,16 @@
       Notes, config and anything you added yourself are kept.
     </span>
   </div>
+  {% elif demo_available %}
+  <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px;
+              display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <button type="button" id="install-demo-btn" class="btn btn-ghost"
+            onclick="installDemoData()">Re-install demo data</button>
+    <span style="font-size:12px;color:var(--sub);">
+      Adds the sample story back, with dates relative to today.
+      Anything you added yourself is kept.
+    </span>
+  </div>
   {% endif %}
 </div>
 
@@ -660,6 +670,32 @@ function removeDemoData() {
   })
   .catch(function(err) {
     if (btn) { btn.disabled = false; btn.textContent = "Remove demo data"; }
+    alert("Error: " + err.message);
+  });
+}
+
+function installDemoData() {
+  if (!confirm(
+      "Re-install the demo data?\n\n" +
+      "Any demo data currently present is replaced, and the sample story is\n" +
+      "added back with dates relative to today.\n" +
+      "Your own records, todos, journal entries and notes are kept.")) return;
+
+  var btn = document.getElementById("install-demo-btn");
+  if (btn) { btn.disabled = true; btn.textContent = "Installing…"; }
+
+  fetch("/api/demo-data/install", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"}
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok) { location.reload(); return; }
+    if (btn) { btn.disabled = false; btn.textContent = "Re-install demo data"; }
+    alert("Error: " + (data.error || "could not install demo data"));
+  })
+  .catch(function(err) {
+    if (btn) { btn.disabled = false; btn.textContent = "Re-install demo data"; }
     alert("Error: " + err.message);
   });
 }
