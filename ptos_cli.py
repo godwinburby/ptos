@@ -346,8 +346,10 @@ def build_parser(cycles):
                      help="Apply --set/--delete to all matched records without interactive pick")
     utl.add_argument("--fields", action="store_true", help="Show field discovery report")
     utl.add_argument("--init",   action="store_true", help="Initialise workspace")
+    utl.add_argument("--no-demo-data", dest="no_demo_data", action="store_true",
+                     help="With --init: skip demo data without prompting")
     utl.add_argument("--remove-demo-data", dest="remove_demo_data", action="store_true",
-                     help="Remove seeded demo data (records/demo, demo todos/journal)")
+                     help="Remove seeded demo data (tag=demo records, +demo todos, demo journal)")
     utl.add_argument("--set-name", dest="set_name", metavar="NAME",
                      help="Set user name in config")
     utl.add_argument("--set-date-format", dest="set_date_format", metavar="FORMAT",
@@ -3095,7 +3097,7 @@ def main():
 
     # ---- early exits (no data needed) ----
     if args.init:
-        init_ptos()
+        init_ptos(demo=False if args.no_demo_data else None)
         return
 
     if args.remove_demo_data:

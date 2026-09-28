@@ -5298,6 +5298,11 @@ def _write_if_missing(path, content, label):
 
 _DEMO_TOKENS = {"today", "next_week", "last_week", "yesterday"}
 
+# Markers written on every seeded line so removal never has to guess:
+# records carry tag=demo, todos carry the +demo project.
+DEMO_TAG = "demo"
+DEMO_PROJECT = "demo"
+
 def _load_demo_spec():
     """Load starter_demo.toml, or None when the file is missing."""
     path = os.path.join(STARTER_DIR, "starter_demo.toml")
@@ -5474,13 +5479,21 @@ def _count_seeded():
     return counts
 
 
-def _seed_demo_data():
-    """Seed starter demo content into a fresh workspace. No-op otherwise."""
+def _seed_demo_data(demo=None):
+    """Seed starter demo content into a fresh workspace. No-op otherwise.
+
+    demo: True/False to force, None to ask (default yes).
+    """
     spec = _load_demo_spec()
     if spec is None:
         return
     base = today()
     if not _demo_fresh():
+        return
+    if demo is None:
+        demo = _confirm_demo_seed()
+    if not demo:
+        print("  Skipped demo data.")
         return
     print("\nSeeding demo data...")
     tempdir = _seed_temp_demo(spec, base)
@@ -5492,6 +5505,7 @@ def _seed_demo_data():
           f"  journal  {counts.get('journal', 0)}"
           f"  notes  {counts.get('notes', 0)}")
     print("  Remove anytime with:  ptos --remove-demo-data")
+    print("  …or Settings -> Data -> Remove demo data")
 
 
 def _demo_line_sets(spec):
@@ -5503,21 +5517,67 @@ def _demo_line_sets(spec):
     return records, open_lines, done_lines
 
 
-def _file_demo_match(path, spec):
-    """True when every non-empty line of a file matches the demo spec.
-
-    A conservative whole-line check means the file is only ever removed
-    when it contains demo content and nothing else — any user addition
-    (even a single line) keeps the file alive.
-    """
+def _read_lines(path):
+    """Lines of a text file with newlines stripped; [] when unreadable."""
     try:
         with open(path, encoding="utf-8") as f:
-            lines = [ln.rstrip("\n") for ln in f.read().splitlines()]
+            return f.read().splitlines()
     except OSError:
+        return []
+
+
+def _demo_record_is_demo(line, spec_lines):
+    """True when a record line is demo content.
+
+    The tag=demo marker is the signal; an exact match against the starter
+    spec is kept as a fallback so a workspace seeded before the markers
+    existed still cleans up.
+    """
+    if not line.strip():
         return False
-    records, open_lines, done_lines = _demo_line_sets(spec)
-    known = records | open_lines | done_lines
-    return all(ln and ln in known for ln in lines)
+    if line in spec_lines:
+        return True
+    parsed = safe_parse_line(line)
+    if not parsed:
+        return False
+    tags = parsed[1].get("tag") or []
+    if isinstance(tags, str):
+        tags = [tags]
+    return any(str(t).strip() == DEMO_TAG for t in tags)
+
+
+def _demo_todo_is_demo(line, spec_lines):
+    """True when a todo.txt line is demo content.
+
+    The +demo project is the signal; an exact spec match is the fallback
+    for workspaces seeded before the marker existed.
+    """
+    stripped = line.strip()
+    if not stripped:
+        return False
+    if stripped in spec_lines:
+        return True
+    return any(p == DEMO_PROJECT for p in re.findall(r"\+(\S+)", stripped))
+
+
+def _demo_journal_paths(spec):
+    """Absolute paths of the seeded journal date files for the current month."""
+    base = today()
+    return [os.path.join(JOURNAL_DIR, str(base.year), f"{base.month:02d}",
+                         f"{_resolve_demo_text(str(e['date']), base)}.md")
+            for e in spec.get("journal", [])]
+
+
+def _demo_dir_empty(demo_dir):
+    """True when records/demo/ holds no non-blank content at all."""
+    for f in os.listdir(demo_dir):
+        path = os.path.join(demo_dir, f)
+        if os.path.isdir(path):
+            if os.listdir(path):
+                return False
+        elif any(ln.strip() for ln in _read_lines(path)):
+            return False
+    return True
 
 
 def _file_equals(path, text):
@@ -5529,42 +5589,78 @@ def _file_equals(path, text):
         return False
 
 
-def remove_demo_data():
-    """Remove seeded demo content that no longer matches the starter spec.
-
-    - records/demo/ is removed when every log line is still a demo line
-    - demo todo/done lines are removed line-by-line (other user lines stay)
-    - demo journal files (date files whose content came from the spec) are
-      deleted when the whole file still matches the spec
-    - notes remain untouched — notes/ is user space
-    """
+def demo_data_present():
+    """True when this workspace still holds seeded demo content."""
     spec = _load_demo_spec()
     if spec is None:
-        return
+        return False
     records, open_lines, done_lines = _demo_line_sets(spec)
     demo_dir = os.path.join(RECORDS_DIR, "demo")
     if os.path.isdir(demo_dir):
-        clean = True
         for f in os.listdir(demo_dir):
-            if f.endswith(".log") and not _file_demo_match(
-                    os.path.join(demo_dir, f), spec):
-                clean = False
-                break
-        if clean:
+            if f.endswith(".log") and any(
+                    _demo_record_is_demo(ln, records)
+                    for ln in _read_lines(os.path.join(demo_dir, f))):
+                return True
+    for path, known in ((os.path.join(TODO_DIR, "todo.txt"), open_lines),
+                        (os.path.join(TODO_DIR, "done.txt"), done_lines)):
+        if any(_demo_todo_is_demo(ln, known) for ln in _read_lines(path)):
+            return True
+    return any(os.path.exists(p) for p in _demo_journal_paths(spec))
+
+
+def remove_demo_data():
+    """Remove seeded demo content.
+
+    - records: every tag=demo line (or line matching the starter spec
+      verbatim) is dropped from records/demo/*.log; the folder is deleted
+      when nothing is left, otherwise it is kept
+    - todos: lines carrying the +demo project (or a spec match) are dropped
+      from todo.txt and done.txt; every other line survives untouched
+    - journal: seeded date files are deleted only on a verbatim match
+    - notes and config are never touched
+
+    Returns {records, todos, done, journal, kept_dir} counts.
+    """
+    counts = {"records": 0, "todos": 0, "done": 0, "journal": 0, "kept_dir": False}
+    spec = _load_demo_spec()
+    if spec is None:
+        return counts
+    records, open_lines, done_lines = _demo_line_sets(spec)
+    demo_dir = os.path.join(RECORDS_DIR, "demo")
+    if os.path.isdir(demo_dir):
+        for f in os.listdir(demo_dir):
+            if not f.endswith(".log"):
+                continue
+            path = os.path.join(demo_dir, f)
+            lines = _read_lines(path)
+            kept = [ln for ln in lines if not _demo_record_is_demo(ln, records)]
+            if len(kept) == len(lines):
+                continue
+            counts["records"] += len(lines) - len(kept)
+            with open(path, "w", encoding="utf-8") as fh:
+                fh.write("".join(ln + "\n" for ln in kept))
+        if _demo_dir_empty(demo_dir):
             shutil.rmtree(demo_dir)
-            print("Removed records/demo/ — seeded sample records")
+            print(f"Removed {counts['records']} demo record line(s) and records/demo/")
         else:
+            counts["kept_dir"] = True
+            print(f"Removed {counts['records']} demo record line(s)")
             print("Kept records/demo/ — it contains records you added")
-    for key, path in [("open", os.path.join(TODO_DIR, "todo.txt")),
-                      ("done", os.path.join(TODO_DIR, "done.txt"))]:
-        demo_lines = open_lines if key == "open" else done_lines
-        if not demo_lines or not os.path.exists(path):
+    for key, path, known in (
+            ("todos", os.path.join(TODO_DIR, "todo.txt"), open_lines),
+            ("done", os.path.join(TODO_DIR, "done.txt"), done_lines)):
+        if not os.path.exists(path):
             continue
-        with open(path, encoding="utf-8") as f:
-            remaining = [line for line in f if line.rstrip("\n") not in demo_lines]
-        with open(path, "w", encoding="utf-8") as f:
-            f.writelines(remaining)
-        print(f"Removed demo lines from {os.path.relpath(path, BASE_DIR)}")
+        lines = _read_lines(path)
+        kept = [ln for ln in lines if not _demo_todo_is_demo(ln, known)]
+        if len(kept) == len(lines):
+            continue
+        counts[key] += len(lines) - len(kept)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write("".join(ln + "\n" for ln in kept))
+        print(f"Removed {counts[key]} demo line(s) from "
+              f"{os.path.relpath(path, BASE_DIR)}")
     base = today()
     for entry in spec.get("journal", []):
         date = _resolve_demo_text(str(entry["date"]), base)
@@ -5573,17 +5669,34 @@ def remove_demo_data():
                             f"{base.month:02d}", f"{date}.md")
         if os.path.exists(path) and _file_equals(path, body):
             os.remove(path)
+            counts["journal"] += 1
             print(f"Removed demo journal entry {date}.md")
     _invalidate_all()
     print("Demo data removed.")
+    return counts
 
 
-def init_ptos():
+def _confirm_demo_seed():
+    """Ask whether to seed demo data. Default yes (empty answer, no stdin)."""
+    try:
+        answer = input(
+            "\nInstall demo data? Sample records, todos, journal entries and "
+            "notes, so every page has content.\nRemove it anytime with "
+            "`ptos --remove-demo-data` or Settings -> Data.\n[Y/n]: ")
+    except (EOFError, OSError):
+        # No usable stdin (piped/cron/service) - keep the old default.
+        print()
+        return True
+    return not answer.strip().lower().startswith("n")
+
+
+def init_ptos(demo=None):
     """Initialize PTOS directory structure and config files.
     Creates config/, records/, journal/, templates/ directories and
     writes default config.toml, schema.toml, queries.toml, presets.toml,
     daily.md, and the current year's empty record file.
-    Safe to re-run — skips existing files."""
+    Safe to re-run — skips existing files.
+    demo: True/False to force/skip the demo-data seed, None to ask."""
     print("\nInitializing PTOS...\n")
 
     for d in [CONFIG_DIR, RECORDS_DIR, JOURNAL_DIR, TEMPLATE_DIR, TODO_DIR]:
@@ -5641,8 +5754,9 @@ def init_ptos():
     init_version()
     print("Version tracked.")
 
-    # Seed demo data on a brand-new workspace so every page has content
-    _seed_demo_data()
+    # Seed demo data on a brand-new workspace so every page has content.
+    # demo=None asks (default yes); False skips (--no-demo-data).
+    _seed_demo_data(demo=demo)
 
 
 def set_home(path):
