@@ -960,7 +960,15 @@ def get_due(config_name=None, days_override=None):
     else:
         due_cfg = queries.get("due.default")
         if not due_cfg:
-            raise PTOSError('No ["due.default"] section in queries.toml')
+            due_names = sorted(k[4:] for k, v in queries.items()
+                               if k.startswith("due.") and isinstance(v, dict))
+            if due_names:
+                due_cfg = queries[f"due.{due_names[0]}"]
+            else:
+                raise PTOSError('No ["due.*"] section in queries.toml')
+
+    due_cfg_name = next(k[4:] for k, v in queries.items()
+                        if v is due_cfg and k.startswith("due."))
 
     rec_type  = due_cfg.get("type")
     key_field = due_cfg.get("key") or "name"   # fall back to name if key omitted
@@ -1037,6 +1045,8 @@ def get_due(config_name=None, days_override=None):
     return {
         "rows":       rows,
         "count":      len(rows),
+        "config":     (config_name if config_name and config_name not in ("__DEFAULT__", "default")
+                       else due_cfg_name),
         "rec_type":   rec_type,
         "days":       days,
         "key_field":  key_field,

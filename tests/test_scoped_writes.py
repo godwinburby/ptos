@@ -783,6 +783,38 @@ class TestDueRead:
         assert "href=\"/edit?filepath=" in body
         assert "lineno=0" in body
 
+    def test_falls_back_to_only_config_when_default_missing(self):
+        """An install with ["due.followup"] but no ["due.default"] must still
+        render a list on bare /due instead of an error card."""
+        _write_queries('["due.followup"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        data = svc.get_due()
+        assert data["rows"] and data["rows"][0]["name"] == "foo"
+        assert data["config"] == "followup"
+
+    def test_fallback_picks_first_name_alphabetically(self):
+        _write_queries('["due.zeta"]\ntype = "expense"\nkey = "name"\ndays = 7\n'
+                       '["due.alpha"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        assert svc.get_due()["config"] == "alpha"
+
+    def test_explicit_named_config_still_wins_over_fallback(self):
+        _write_queries('["due.default"]\ntype = "expense"\nkey = "name"\ndays = 7\n'
+                       '["due.other"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        assert svc.get_due()["config"] == "default"
+        assert svc.get_due(config_name="other")["config"] == "other"
+
+    def test_due_page_autoselects_fallback_config(self):
+        _write_queries('["due.followup"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        from ptos_web import app
+        client = app.test_client()
+        body = client.get("/due").get_data(as_text=True)
+        assert "No [\"due.default\"] section" not in body
+        assert "section=due&amp;edit=followup" in body
+
+    def test_no_due_config_at_all_still_errors(self):
+        _write_queries('[expenses]\nwhere = "type=expense"\n')
+        with pytest.raises(PTOSError, match=r'due\.\*'):
+            svc.get_due()
+
     def test_rows_include_record_location(self):
         _write_queries('["due.default"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
         row = self._rows()[0]
