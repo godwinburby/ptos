@@ -188,6 +188,27 @@ def _greeting():
     h = dt.datetime.now().hour
     return "morning" if h < 12 else "afternoon" if h < 17 else "evening"
 
+def _safe_return_to(raw, default="/"):
+    """Validate a return_to value, falling back to `default` when unusable."""
+    if not raw or not raw.startswith("/") or raw.startswith("//"):
+        return default
+    return raw
+
+def _after_save_target(raw):
+    """Where to send the user once a record add/edit/convert is done.
+
+    Browse is never a landing spot. It used to be the fallback (and the
+    Referer for edits started from a record table there, since those links
+    pass return_to explicitly), so saving a record dropped the user on the
+    results grid instead of somewhere they can see the result. Browse now
+    resolves to home; every other origin — home, board, entity, due, the
+    convert page — is honoured as-is.
+    """
+    target = _safe_return_to(raw, default=url_for("home"))
+    if target.split("?", 1)[0].rstrip("/") == url_for("browse_get"):
+        return url_for("home")
+    return target
+
 def _build_period_label(time_code, custom_time, cycles, from_date=None, to_date=None):
     """Build a human-readable label from time code.
     
@@ -1214,7 +1235,7 @@ def add_get():
         tag_options = svc.resolve_tags(schema, ts, initial_context)
         tag_context = svc.get_tag_context(selected_type, field_values)
     return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
-    if not return_to.startswith("/"):
+    if not return_to.startswith("/") or return_to.startswith("//"):
         return_to = url_for("browse_get")
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
@@ -1271,8 +1292,9 @@ def add_post():
                                    for t in links_val.split(",") if t.strip())
     
     return_to = request.form.get("return_to", "") or url_for("browse_get")
-    if not return_to.startswith("/"):
+    if not return_to.startswith("/") or return_to.startswith("//"):
         return_to = url_for("browse_get")
+    after_save = _after_save_target(return_to)
     try:   problems = svc.validate_record(schema, record)
     except PTOSError as e: problems = [str(e)]
     if problems:
@@ -1305,7 +1327,7 @@ def add_post():
             tag_context=svc.get_tag_context(rtype, record),
             field_values=record, today=dt.date.today().isoformat(),
             msg=str(e), msg_type="error", last_line=None, return_to=return_to)
-    return redirect(return_to)
+    return redirect(after_save)
 
 
 @app.route("/add-field-option", methods=["POST"])
@@ -3776,7 +3798,7 @@ def edit_get():
     except PTOSError:
         schema = {}
     return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
-    if not return_to.startswith("/"):
+    if not return_to.startswith("/") or return_to.startswith("//"):
         app.logger.warning("edit_get: return_to '%s' is external, falling back to /browse", return_to)
         return_to = url_for("browse_get")
     app.logger.debug("edit_get: return_to=%s", return_to)
@@ -3863,9 +3885,10 @@ def edit_post():
 
     if request.form.get("convert") == "1":
         return_to = request.form.get("return_to", "") or url_for("browse_get")
-        if not return_to.startswith("/"):
+        if not return_to.startswith("/") or return_to.startswith("//"):
             app.logger.warning("edit_post: return_to '%s' is external, falling back to /browse", return_to)
             return_to = url_for("browse_get")
+        after_save = _after_save_target(return_to)
         if not rtype:
             source_type = ""
             try:
@@ -3879,7 +3902,7 @@ def edit_post():
                 return redirect(url_for("edit_get", filepath=filepath, lineno=lineno,
                                         line=old_line, return_to=return_to,
                                         convert="1", target_type=fallback))
-            return redirect(return_to)
+            return redirect(after_save)
         keep = request.form.get("remove_original") != "1"
         ov = {}
         ts = schema.get("type", {}).get(rtype, {})
@@ -3931,7 +3954,7 @@ def edit_post():
                     kv_overrides=ov)
                 app.logger.debug("edit_post create_and_convert ok: %s",
                                  result.get("new_line"))
-                return redirect(return_to)
+                return redirect(after_save)
             except PTOSError as e:
                 if "Convert blocked" in str(e):
                     return redirect(url_for("edit_get",
@@ -3950,7 +3973,7 @@ def edit_post():
             res = svc.convert_record(filepath, old_line, lineno_int, rtype,
                                      kv_overrides=ov, keep=keep)
             app.logger.debug("edit_post convert ok: %s", res.get("new_line"))
-            return redirect(return_to)
+            return redirect(after_save)
         except PTOSError as e:
             source_rtype = ""
             try:
@@ -4008,7 +4031,7 @@ def edit_post():
     
     parsed = svc.safe_parse_line(old_line)
     if not parsed:
-        return redirect(url_for("browse_get"))
+        return redirect(_after_save_target(request.form.get("return_to", "")))
     old_d, old_kv, old_note = parsed
     set_args = []
     if date_str != str(old_d):
@@ -4035,19 +4058,20 @@ def edit_post():
                 set_args.append(f"{k}={new_v}" if new_v else f"{k}=")
     new_note  = note if note != (old_note or "") else None
     return_to = request.form.get("return_to", "") or url_for("browse_get")
-    if not return_to.startswith("/"):
+    if not return_to.startswith("/") or return_to.startswith("//"):
         app.logger.warning("edit_post: return_to '%s' is external, falling back to /browse", return_to)
         return_to = url_for("browse_get")
+    after_save = _after_save_target(return_to)
     if not set_args and new_note is None:
-        app.logger.debug("edit_post: no changes, redirect to %s", return_to)
-        return redirect(return_to)
+        app.logger.debug("edit_post: no changes, redirect to %s", after_save)
+        return redirect(after_save)
     if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
-        return redirect(return_to)
+        return redirect(after_save)
     try:
         svc.edit_record(filepath, old_line,
                         set_args=set_args, new_note=new_note, lineno=lineno_int)
-        app.logger.debug("edit_post: success, redirect to %s", return_to)
-        return redirect(return_to)
+        app.logger.debug("edit_post: success, redirect to %s", after_save)
+        return redirect(after_save)
     except PTOSError as e:
         try:
             schema = svc.get_schema()
