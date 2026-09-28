@@ -5,6 +5,18 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-28
+
+### Web: ⚙ Configure lands on the right Query Builder section from every page
+
+- **Root cause was a single gate** — `query_builder.html` only honoured the deep-link when **both** `?section=` and `?edit=` were present, otherwise it fell through to the Queries tab. Board worked because it passes `&edit=<board>` (a board is always auto-selected); **Habits, Thresholds and Calendar on "All records"** send `?section=` only, so Configure silently dumped you on Queries, as did the unconfigured-Due empty-state link. The gate now honours `section` on its own and uses `edit` only to preselect an item.
+- **Stale `?edit=` no longer throws** — the gate checks `_st[section][name]` before selecting, so a link whose item was deleted since it was rendered no longer calls `select()` with a phantom name and blows up inside that section's editor.
+- **Entity gains a Configure button** (landing + results) pointing at **Record Types (`/types`)** — entity is a read-only `field=value` lookup, so the types and fields it resolves against are the thing to configure.
+- **Projects deliberately has no page-level Configure** — `["project.*"]` entries are edited via `/projects/<name>/edit`, and the Query Builder has no projects section (its coverage-gap banner already lists them as managed elsewhere), so a Configure button there could only ever mislead. Per-card Edit/Delete are unchanged.
+- **Empty-state cards now carry their section** — the "no habits / no thresholds / no calendars / no boards" hints linked to a bare `/query-builder`, i.e. straight to Queries; all four now deep-link to their own tab.
+- **`edit=` values are URL-encoded** on the board, calendar and due links, so a config name containing `&` or `#` no longer truncates the link.
+- **Tests** — new `tests/test_configure_links.py` (18 tests): per-page link targets (including the auto-selected board, the named vs. "All records" calendar, and configured vs. unconfigured due), entity → `/types`, projects → no button, all four empty-state links, and the boot-gate structure that makes `?section=` work alone.
+
 ## 2026-09-26
 
 ### Due: dotted-only config convention + record links

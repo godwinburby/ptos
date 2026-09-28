@@ -63,6 +63,7 @@
 {# ── Landing form ──────────────────────────────────────────────────────── #}
 <div class="entity-header">
   <h2 class="page-title">Entity</h2>
+  <a class="edit-btn" style="font-size:12px;" href="/types" title="Edit the record types and fields that drive entity lookups">⚙ Configure</a>
 </div>
 <div style="max-width:600px;padding:30px;background:var(--card);border:1px solid var(--border);border-radius:12px;">
   <p style="font-size:14px;color:var(--sub);margin-bottom:16px;">Look up all records for a single entity by entering a field and value below.</p>
@@ -219,6 +220,7 @@
   {% if entity.label != value %}
   <span class="entity-label">{{ entity.label }}</span>
   {% endif %}
+  <a class="edit-btn" style="font-size:12px;" href="/types" title="Edit the record types and fields that drive entity lookups">⚙ Configure</a>
 </div>
 
 {# ── Summary card ─────────────────────────────────────────────────────── #}
