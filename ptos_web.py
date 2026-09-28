@@ -2038,6 +2038,7 @@ def settings_page():
         sync_enabled=sync.get("enabled", True),
         rclone_available=rclone_available,
         remote_exists=remote_exists,
+        demo_present=svc.demo_data_present(),
         base_dir=ptos.BASE_DIR)
 
 
@@ -2129,6 +2130,17 @@ def settings_save():
             return jsonify(ok=True)
         return jsonify(ok=False, error=result.get("message", "Save failed"))
     except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/demo-data/remove", methods=["POST"])
+def api_demo_data_remove():
+    try:
+        return jsonify(svc.remove_demo_data())
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("demo-data remove failed")
         return jsonify(ok=False, error=str(e))
 
 

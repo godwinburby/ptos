@@ -61,7 +61,7 @@ def demo_home(tmp_path, monkeypatch):
 
 
 def _seed():
-    ptos._seed_demo_data()
+    ptos._seed_demo_data(demo=True)
     ptos._invalidate_all()
 
 
@@ -269,7 +269,176 @@ class TestRemoveDemoData:
         assert "user line" in path.read_text(encoding="utf-8")
 
 
+class TestDemoMarkers:
+    """tag=demo on records, +demo on todos - the removal signal."""
+
+    def test_every_seeded_record_carries_the_demo_tag(self, demo_home):
+        _seed()
+        year = ptos.today().year
+        demo_log = demo_home / "records" / "demo" / f"{year}.log"
+        lines = [ln for ln in demo_log.read_text(encoding="utf-8").splitlines()
+                 if ln.strip()]
+        assert lines
+        for line in lines:
+            tags = ptos.parse_line(line)[1].get("tag") or []
+            if isinstance(tags, str):
+                tags = [tags]
+            assert "demo" in tags, line
+
+    def test_every_seeded_todo_carries_the_demo_project(self, demo_home):
+        _seed()
+        for name in ("todo.txt", "done.txt"):
+            todos, _ = ptos_todo.load_todos(str(demo_home / "todo" / name))
+            assert todos
+            for t in todos:
+                projects = [p.lstrip("+") for p in t.projects]
+                assert "demo" in projects, t.raw_line
+
+    def test_edited_demo_record_is_still_removed(self, demo_home):
+        _seed()
+        year = ptos.today().year
+        demo_log = demo_home / "records" / "demo" / f"{year}.log"
+        lines = demo_log.read_text(encoding="utf-8").splitlines()
+        lines[0] = lines[0] + " (edited)"
+        demo_log.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        ptos.remove_demo_data()
+        assert not (demo_home / "records" / "demo").exists()
+
+    def test_edited_demo_todo_is_still_removed(self, demo_home):
+        _seed()
+        path = demo_home / "todo" / "todo.txt"
+        lines = path.read_text(encoding="utf-8").splitlines()
+        lines[0] = lines[0] + " (edited)"
+        path.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        ptos.remove_demo_data()
+        remaining = path.read_text(encoding="utf-8")
+        assert "Acme" not in remaining
+        assert "demo" not in remaining
+
+    def test_user_record_in_demo_dir_survives_marker_removal(self, demo_home):
+        _seed()
+        year = ptos.today().year
+        demo_log = demo_home / "records" / "demo" / f"{year}.log"
+        with demo_log.open("a", encoding="utf-8") as f:
+            f.write(f"{ptos.today().isoformat()} type=capture tag=urgent "
+                    f"| my own note\n")
+        ptos.remove_demo_data()
+        content = demo_log.read_text(encoding="utf-8")
+        assert "my own note" in content
+        assert "tag=urgent" in content
+        assert "Team lunch" not in content
+
+    def test_remove_returns_counts(self, demo_home):
+        _seed()
+        counts = ptos.remove_demo_data()
+        assert counts["records"] > 0
+        assert counts["todos"] > 0
+        assert counts["done"] > 0
+        assert counts["journal"] > 0
+        assert counts["kept_dir"] is False
+
+
+class TestDemoDataPresent:
+    def test_false_on_empty_workspace(self, demo_home):
+        assert ptos.demo_data_present() is False
+
+    def test_true_after_seed(self, demo_home):
+        _seed()
+        assert ptos.demo_data_present() is True
+
+    def test_false_after_clean_remove(self, demo_home):
+        _seed()
+        ptos.remove_demo_data()
+        assert ptos.demo_data_present() is False
+
+    def test_true_while_a_demo_todo_remains(self, demo_home):
+        _seed()
+        ptos.remove_demo_data()
+        with (demo_home / "todo" / "todo.txt").open("a", encoding="utf-8") as f:
+            f.write(f"(A) {ptos.today().isoformat()} Still tagged +demo\n")
+        assert ptos.demo_data_present() is True
+
+    def test_false_when_only_user_data_remains(self, demo_home):
+        _seed()
+        ptos.remove_demo_data()
+        with (demo_home / "todo" / "todo.txt").open("a", encoding="utf-8") as f:
+            f.write(f"(A) {ptos.today().isoformat()} Mine +personal\n")
+        assert ptos.demo_data_present() is False
+
+
+class TestDemoInitPrompt:
+    """--init asks before seeding; --no-demo-data answers for you."""
+
+    @pytest.fixture(autouse=True)
+    def _desktop_mode(self, monkeypatch):
+        # skips the .ptos_home bootstrap (refuses temp dirs on purpose)
+        monkeypatch.setattr(ptos, "DESKTOP_MODE", True)
+
+    def test_demo_false_skips_seed(self, demo_home):
+        ptos.init_ptos(demo=False)
+        assert not (demo_home / "records" / "demo").exists()
+
+    def test_demo_true_seeds_without_asking(self, demo_home, monkeypatch):
+        def _no_input(*a, **k):
+            raise AssertionError("must not prompt when demo=True")
+        monkeypatch.setattr("builtins.input", _no_input)
+        ptos.init_ptos(demo=True)
+        assert (demo_home / "records" / "demo").exists()
+
+    @pytest.mark.parametrize("answer", ["n", "N", "no", "nope"])
+    def test_prompt_no_skips_seed(self, demo_home, monkeypatch, answer):
+        monkeypatch.setattr("builtins.input", lambda *a, **k: answer)
+        ptos.init_ptos()
+        assert not (demo_home / "records" / "demo").exists()
+
+    @pytest.mark.parametrize("answer", ["", "y", "Y", "yes"])
+    def test_prompt_yes_seeds(self, demo_home, monkeypatch, answer):
+        monkeypatch.setattr("builtins.input", lambda *a, **k: answer)
+        ptos.init_ptos()
+        assert (demo_home / "records" / "demo").exists()
+
+    def test_prompt_eof_defaults_to_yes(self, demo_home, monkeypatch):
+        def _eof(*a, **k):
+            raise EOFError
+        monkeypatch.setattr("builtins.input", _eof)
+        ptos.init_ptos()
+        assert (demo_home / "records" / "demo").exists()
+
+    def test_prompt_closed_stdin_defaults_to_yes(self, demo_home, monkeypatch):
+        def _closed(*a, **k):
+            raise OSError("reading from stdin while output is captured")
+        monkeypatch.setattr("builtins.input", _closed)
+        ptos.init_ptos()
+        assert (demo_home / "records" / "demo").exists()
+
+    def test_no_prompt_when_not_fresh(self, demo_home, monkeypatch):
+        (demo_home / "records" / f"{ptos.today().year}.log").write_text(
+            f"{ptos.today().isoformat()} type=mood rating=4\n", encoding="utf-8")
+        def _no_input(*a, **k):
+            raise AssertionError("must not prompt on a non-fresh workspace")
+        monkeypatch.setattr("builtins.input", _no_input)
+        ptos.init_ptos()
+        assert not (demo_home / "records" / "demo").exists()
+
+    def test_no_prompt_without_demo_spec(self, demo_home, monkeypatch,
+                                          tmp_path):
+        monkeypatch.setattr(ptos, "STARTER_DIR", str(tmp_path / "empty"))
+        def _no_input(*a, **k):
+            raise AssertionError("must not prompt without a demo spec")
+        monkeypatch.setattr("builtins.input", _no_input)
+        ptos.init_ptos()
+        assert not (demo_home / "records" / "demo").exists()
+
+
 class TestDemoCli:
+    def test_no_demo_data_flag_is_wired_to_init(self):
+        import ptos_cli
+        args = ptos_cli.build_parser({}).parse_args(["--init", "--no-demo-data"])
+        assert args.init is True
+        assert args.no_demo_data is True
+        plain = ptos_cli.build_parser({}).parse_args(["--init"])
+        assert plain.no_demo_data is False
+
     def test_remove_demo_data_flag(self, demo_home, capsys, monkeypatch):
         _seed()
         monkeypatch.setattr("ptos_cli.sys.argv",
@@ -365,3 +534,68 @@ class TestDemoPages:
     def test_types(self):
         status, html = self._get("/types")
         assert status == 200
+
+    def test_settings_offers_demo_removal(self):
+        status, html = self._get("/settings")
+        assert status == 200
+        assert "Remove demo data" in html
+        assert "removeDemoData" in html
+
+    def test_api_removes_demo_data(self, demo_home):
+        from ptos_web import app
+        client = app.test_client()
+        r = client.post("/api/demo-data/remove")
+        assert r.status_code == 200
+        body = r.get_json()
+        assert body["ok"] is True
+        assert body["removed"]["records"] > 0
+        assert body["removed"]["todos"] > 0
+        assert "Demo data removed." in body["message"]
+        assert not (demo_home / "records" / "demo").exists()
+        assert ptos.demo_data_present() is False
+        assert 'id="remove-demo-btn"' not in self._get("/settings")[1]
+
+    def test_api_removal_is_idempotent(self):
+        from ptos_web import app
+        client = app.test_client()
+        client.post("/api/demo-data/remove")
+        r = client.post("/api/demo-data/remove")
+        body = r.get_json()
+        assert body["ok"] is True
+        assert body["removed"]["records"] == 0
+
+    def test_api_removal_keeps_notes_and_config(self, demo_home):
+        from ptos_web import app
+        client = app.test_client()
+        client.post("/api/demo-data/remove")
+        assert (demo_home / "notes" / "Demo" / "welcome.md").exists()
+        assert (demo_home / "config" / "queries.toml").exists()
+
+
+class TestDemoServiceWrappers:
+    def test_demo_data_present(self, demo_home):
+        _seed()
+        assert svc.demo_data_present() is True
+        ptos.remove_demo_data()
+        assert svc.demo_data_present() is False
+
+    def test_remove_demo_data_returns_structured_result(self, demo_home,
+                                                        capsys):
+        _seed()
+        result = svc.remove_demo_data()
+        assert result["ok"] is True
+        assert set(result["removed"]) == {"records", "todos", "done", "journal"}
+        assert result["removed"]["records"] > 0
+        assert result["kept_dir"] is False
+        assert "Demo data removed." in result["message"]
+        out = capsys.readouterr().out
+        assert "Removed 88 demo record line(s)" not in out  # engine stayed quiet
+        assert "Demo data removed." not in out
+
+    def test_remove_demo_data_clears_history_cache(self, demo_home):
+        _seed()
+        svc.get_board_data("job_search", time="all")  # warms the cache
+        svc.remove_demo_data()
+        # the seeded board is gone; a cached read must not resurrect it
+        board = svc.get_board_data("job_search", time="all")
+        assert all(not recs for recs in board["data"].values())

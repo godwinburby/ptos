@@ -336,6 +336,45 @@ def list_backups():
     return ptos.list_backups()
 
 
+# ══════════════════════════════════════════════════════════════════════════════
+# Demo data
+# ══════════════════════════════════════════════════════════════════════════════
+
+def demo_data_present():
+    """True when the workspace still holds seeded demo content."""
+    try:
+        return bool(ptos.demo_data_present())
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def remove_demo_data():
+    """Remove seeded demo content (tag=demo records, +demo todos, demo journal).
+
+    Notes and config are never touched, and any line the user added survives.
+
+    Returns:
+        dict: {ok, removed: {records, todos, done, journal}, kept_dir, message}
+    """
+    import io
+    from contextlib import redirect_stdout
+    buf = io.StringIO()
+    try:
+        with redirect_stdout(buf):
+            counts = ptos.remove_demo_data()
+    except Exception as e:
+        raise PTOSError(str(e))
+    _invalidate_history_cache()
+    counts = counts or {}
+    return {
+        "ok": True,
+        "removed": {k: counts.get(k, 0)
+                    for k in ("records", "todos", "done", "journal")},
+        "kept_dir": bool(counts.get("kept_dir")),
+        "message": buf.getvalue().strip() or "Demo data removed.",
+    }
+
+
 def delete_backup(filename):
     """Delete a backup file.
     

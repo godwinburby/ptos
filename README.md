@@ -965,21 +965,40 @@ the starters are used again.
 | `starter_presets.toml` | 21 presets with short aliases — coffee, lunch, dinner, groceries, restaurant, auto, bus, metro, petrol, rapido, recharge, broadband, electricity, salary, sip, rd, walk, gym, run, read, course |
 | `starter_demo.toml` | Sample demo data (records, todos, journal, notes) seeded by `--init` on a brand-new workspace so every page has content after install — dates are relative to install day via `{{today}}`/`{{-Nd}}`/`{{+Nd}}` tokens |
 
-**Demo data.** A fresh `--init` seeds a small starter story: sample records in
-`records/demo/` (a one-level-deep log group picked up by every record view),
-a few demo todos with `+routine`/`+jobsearch`, three journal entries, and a
-`Demo/` + `Projects/Find a Job` note folder. It is skipped on workspaces that
-already have data, and can be removed any time with:
+**Demo data.** `--init` asks whether to install a small starter story, so every
+page has content right away:
+
+```
+Install demo data? Sample records, todos, journal entries and notes, so every
+page has content.
+Remove it anytime with `ptos --remove-demo-data` or Settings -> Data.
+[Y/n]:
+```
+
+Press Enter (or `--init --no-demo-data`) to skip it. Seeding only happens on a
+**fresh** workspace — an install that already has records, todos, journal entries
+or notes is never touched. The story is: sample records in `records/demo/` (a
+one-level-deep log group picked up by every record view), a few demo todos with
+`+routine`/`+jobsearch`, three journal entries, and a `Demo/` +
+`Projects/Find a Job` note folder.
+
+Every seeded line carries a marker — records get `tag=demo`, todos get the
+`+demo` project — so demo content is recognisable in the UI *and* removable even
+after you edit it. Remove it any time with either:
 
 ```
 ptos --remove-demo-data
 ```
 
-`--remove-demo-data` only removes demo content — a record or todo you added to
-a demo folder/file keeps that file alive (record lines and todos are
-subtracted line-by-line; `records/demo/` is only deleted when every line still
-matches the demo spec; notes and journal entries are only removed when they
-still match verbatim).
+…or **Settings → Data → Remove demo data** in the web UI (the button only
+appears while demo data is present).
+
+Removal only ever takes demo content. A record, todo or journal entry you added
+yourself is kept, notes and config are never touched, and `records/demo/` is only
+deleted once nothing but demo lines is left in it. Journal entries are removed
+only on a verbatim match; todos and records are matched by their marker first,
+falling back to a whole-line match against the spec (so workspaces seeded before
+the markers existed still clean up).
 
 ### config.toml
 
@@ -1717,6 +1736,8 @@ ptos -y test -t td --delete --all
 | `--journal` | `-j` | Open today's journal (creates from template if new) |
 | `--edit [TARGET]` | `-e` | Edit a workspace file (see targets below) |
 | `--init` | | Initialise workspace (safe to re-run — will not overwrite existing files) |
+| `--no-demo-data` | | With `--init`: skip the demo-data prompt and install no sample content |
+| `--remove-demo-data` | | Remove seeded demo content (`tag=demo` records, `+demo` todos, verbatim demo journal) — also in Settings → Data |
 | `--set-home PATH` | | Point PTOS at a data folder (writes `.ptos_home`, migrates existing data) |
 | `--bisync` | | Bidirectional sync with remote (reads `[sync]` from config.toml) |
 | `--sync` | | One-way push to remote (DELETES remote files not present locally — requires `--confirm-delete`) |
