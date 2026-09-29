@@ -1387,6 +1387,52 @@ def get_queries():
     if not os.path.exists(QUERIES_PATH):
         return {}
     return _load("queries", QUERIES_PATH)
+
+_DEMO_SHOW_MODES = ("auto", "always", "never")
+
+def get_demo_show():
+    """Value of [demo] show in config.toml, normalised. 'auto' when unset/invalid.
+
+    auto      - demo records count toward aggregates only when the workspace
+                holds no real records (a fresh demo install stays meaningful)
+    always    - always count demo records
+    never     - never count them
+    """
+    show = (get_config().get("demo") or {}).get("show", "auto")
+    show = str(show).strip().lower()
+    return show if show in _DEMO_SHOW_MODES else "auto"
+
+def include_demo_records():
+    """Whether demo records should count toward aggregate reads.
+
+    True in 'always'; False in 'never'; in 'auto' (the default) true only
+    when nothing outside the demo log group exists, so seeding demo data into
+    an empty workspace gives a working demo, while a used workspace keeps its
+    metrics, boards, habits and thresholds free of sample rows.
+    """
+    show = get_demo_show()
+    if show == "always":
+        return True
+    if show == "never":
+        return False
+    if _CACHE.get("demo_has_real") is None:
+        group = demo_log_group()
+        has_real = False
+        for fname in get_log_files():
+            if is_demo_logfile(fname):
+                continue
+            path = os.path.join(RECORDS_DIR, fname)
+            try:
+                with open(path, encoding="utf-8") as f:
+                    if any(line.strip() and not line.startswith("#")
+                           for line in f):
+                        has_real = True
+                        break
+            except OSError:
+                continue
+        _CACHE["demo_has_real"] = has_real
+    return not _CACHE["demo_has_real"]
+
 def get_presets(): return _load("presets", PRESETS_PATH).get("presets", {}) if os.path.exists(PRESETS_PATH) else {}
 
 def get_thresholds():
@@ -2348,20 +2394,25 @@ def apply_where(kv, filters):
 # Edit / delete engine
 # --------------------------------------------------
 
-def find_records_with_location(filters, search=None, start=None, end=None):
+def find_records_with_location(filters, search=None, start=None, end=None,
+                               include_demo=None):
     """Scan all log files and return list of (filepath, line_number, raw_line)
     for every record matching filters + optional date range + optional search.
-    Results are cached per (filters, search, start, end) for board/habit reuse.
+    Results are cached per (filters, search, start, end, include_demo) for board/habit reuse.
     """
     if start is None: start = dt.date.min
     if end   is None: end   = dt.date.max
-    cache_key = f"frwl:{tuple(filters)}:{start}:{end}:{search}"
+    if include_demo is None:
+        include_demo = include_demo_records()
+    cache_key = f"frwl:{tuple(filters)}:{start}:{end}:{search}:{include_demo}"
     cached = _CACHE.get(cache_key)
     if cached is not None:
         return cached
     matches = []
     fnames = get_log_files()
     for fname in fnames:
+        if not include_demo and is_demo_logfile(fname):
+            continue
         base = os.path.basename(fname)
         if base[:4].isdigit():
             year = int(base[:4])
@@ -2625,13 +2676,17 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
 # --------------------------------------------------
 
 def scan_records(start, end, filters, search, from_file=None, sum_field=None,
-                 return_locations=False):
+                 return_locations=False, include_demo=None):
     """Scan log files and return (matching_lines, numeric_total).
     from_file: if given, read only that file from records/ folder.
     sum_field: if given, sum this specific field instead of the first numeric field found.
     return_locations: if True, return a 3-tuple (lines, total, locations)
         where locations is a list of (filepath, 0-based lineno, raw_line).
+    include_demo: None (default) resolves from [demo] show in config.toml;
+        when False, records in the demo log group are skipped entirely.
     """
+    if include_demo is None:
+        include_demo = include_demo_records()
     results = []
     total   = 0
     locations = [] if return_locations else None
@@ -2645,6 +2700,8 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None,
     else:
         fnames = get_log_files()
     for fname in fnames:
+        if not include_demo and is_demo_logfile(fname):
+            continue
         # skip files whose year cannot overlap the query window
         base = os.path.basename(fname)
         if base[:4].isdigit() and start is not None and end is not None:
@@ -3322,15 +3379,24 @@ def validate_schema_structure(schema):
 
 
 def lint_records(records, schema):
-    """Validate all records. Returns set of log file paths containing errors."""
+    """Validate all records. Returns set of log file paths containing errors.
+
+    Demo-marked lines are skipped and reported as a count: seeded content is
+    held to the starter schema, so it is expected to fail validation against a
+    workspace schema that has since diverged.
+    """
     total_errors   = 0
     total_warnings = 0
     total_checked  = 0
     type_counts    = {}
     error_files    = set()
+    demo_skipped   = 0
 
     for line in records:
         if not line.strip():
+            continue
+        if _demo_record_is_demo(line):
+            demo_skipped += 1
             continue
         total_checked += 1
         d, kv, note = parse_line(line)
@@ -3365,6 +3431,8 @@ def lint_records(records, schema):
 
     type_summary = "  ".join(f"{t}:{n}" for t, n in sorted(type_counts.items()))
     print(f"\nChecked {total_checked} record(s) across {len(type_counts)} type(s)  [{type_summary}]")
+    if demo_skipped:
+        print(f"  Skipped {demo_skipped} demo record line(s) (tag={DEMO_TAG})")
 
     for link_issue in check_dangling_links():
         total_errors += 1
@@ -3397,7 +3465,8 @@ def lint_all_records():
     errors_list    = []
     warnings_list  = []
     quality_list   = []
-    
+    demo_skipped   = 0
+
     for fname in get_log_files():
         path = os.path.join(RECORDS_DIR, fname)
         if not os.path.exists(path):
@@ -3406,6 +3475,9 @@ def lint_all_records():
             for lineno, raw_line in enumerate(f, 1):
                 line = raw_line.strip()
                 if not line or line.startswith("#"):
+                    continue
+                if _demo_record_is_demo(line):
+                    demo_skipped += 1
                     continue
                 total_checked += 1
                 try:
@@ -3479,6 +3551,7 @@ def lint_all_records():
         "error_count": total_errors,
         "warning_count": total_warnings,
         "quality_warning_count": total_quality_issues,
+        "demo_skipped": demo_skipped,
         "type_counts": type_counts,
         "errors": errors_list,
         "warnings": warnings_list,
@@ -3647,7 +3720,8 @@ def _run_base_query(name, queries, start, end, cycles, sum_field=None):
     if not isinstance(where, str):
         sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
     filters = [where] if where.strip() else []
-    results, total = scan_records(start, end, filters, None, sum_field=sum_field)
+    results, total = scan_records(start, end, filters, None, sum_field=sum_field,
+                                  include_demo=include_demo_records())
     return len(results), total
 
 def _run_base_query_lines(name, queries, start, end, cycles):
@@ -3658,7 +3732,8 @@ def _run_base_query_lines(name, queries, start, end, cycles):
     if not isinstance(where, str):
         sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
     filters = [where] if where.strip() else []
-    return scan_records(start, end, filters, None)
+    return scan_records(start, end, filters, None,
+                        include_demo=include_demo_records())
 
 def run_metric(name, queries, start, end, cycles, color="", reset=""):
     """Compute and print a named metric. Returns True if found, False if not.
@@ -5299,9 +5374,52 @@ def _write_if_missing(path, content, label):
 _DEMO_TOKENS = {"today", "next_week", "last_week", "yesterday"}
 
 # Markers written on every seeded line so removal never has to guess:
-# records carry tag=demo, todos carry the +demo project.
-DEMO_TAG = "demo"
-DEMO_PROJECT = "demo"
+# records carry tag=__demo__, todos carry the +__demo__ project. The
+# underscores keep the marker from colliding with a tag/project a user
+# would plausibly pick for their own data — a collision here is the one
+# case where removal deletes real records.
+DEMO_TAG = "__demo__"
+DEMO_PROJECT = "__demo__"
+
+# Default folder holding seeded demo records, overridable with
+# [demo] log_group in schema.toml. Matches the per-type log_group
+# mechanism: records/<group>/<year>.log is a recognised layout that
+# get_log_files() already walks.
+DEFAULT_DEMO_LOG_GROUP = "demo"
+
+def demo_log_group():
+    """Folder name holding seeded demo records (records/<group>/<year>.log)."""
+    try:
+        schema = get_schema()
+    except Exception:
+        return DEFAULT_DEMO_LOG_GROUP
+    group = (schema.get("demo") or {}).get("log_group")
+    return group if isinstance(group, str) and group.strip() else DEFAULT_DEMO_LOG_GROUP
+
+def is_demo_logfile(fname):
+    """True when a records/ relative path lives in the demo group folder.
+
+    get_log_files() yields platform-native separators, so normalise before
+    taking the first path segment.
+    """
+    parts = re.split(r"[\\/]", str(fname))
+    return bool(parts) and parts[0] == demo_log_group()
+
+def _starter_schema():
+    """Parsed starters/starter_schema.toml, or None when unavailable.
+
+    Demo content is held to the starter contract rather than the user's
+    live schema, so seeding works on a workspace whose schema has
+    diverged (renamed/removed types, narrowed options).
+    """
+    path = os.path.join(STARTER_DIR, "starter_schema.toml")
+    if not os.path.exists(path):
+        return None
+    try:
+        with open(path, "rb") as f:
+            return tomllib.load(f)
+    except Exception:
+        return None
 
 def _load_demo_spec():
     """Load starter_demo.toml, or None when the file is missing."""
@@ -5366,7 +5484,7 @@ def _demo_fresh():
         for f in os.listdir(RECORDS_DIR):
             if f.endswith(".log"):
                 return False
-    if os.path.isdir(os.path.join(RECORDS_DIR, "demo")):
+    if os.path.isdir(os.path.join(RECORDS_DIR, demo_log_group())):
         return False
     if os.path.isdir(TODO_DIR):
         for f in os.listdir(TODO_DIR):
@@ -5383,9 +5501,13 @@ def _demo_fresh():
 
 
 def _seed_temp_demo(spec, base):
-    """Write demo content into an isolated temp tree positioned over the data dirs."""
+    """Write demo content into an isolated temp tree positioned over the data dirs.
+
+    Building the tree validates every record against the starter schema, so
+    a bad spec fails here — before the caller has removed anything.
+    """
     tempdir = tempfile.mkdtemp(prefix="ptos_demo_")
-    records = os.path.join(tempdir, "records", "demo")
+    records = os.path.join(tempdir, "records", demo_log_group())
     cut_yr = f"{base.year}.log"
     def _sorted(txt):
         return sorted(line.strip() for line in txt.strip().splitlines() if line.strip())
@@ -5396,8 +5518,9 @@ def _seed_temp_demo(spec, base):
             for line in spec.get("records", {}).get("lines", [])
         ]
         problems = []
+        schema = _starter_schema() or get_schema()
         for line in rec_lines:
-            problems.extend(validate_record(get_schema(), parse_line(line)[1]))
+            problems.extend(validate_record(schema, parse_line(line)[1]))
         if problems:
             raise ValueError(
                 "starter_demo.toml records fail schema validation:\n  - "
@@ -5495,13 +5618,14 @@ def _install_demo_merged(tempdir):
     """
     added = {"records": 0, "todos": 0, "done": 0, "journal": 0, "notes": 0}
     try:
-        src_records = os.path.join(tempdir, "records", "demo")
+        group = demo_log_group()
+        src_records = os.path.join(tempdir, "records", group)
         if os.path.isdir(src_records):
             for name in sorted(os.listdir(src_records)):
                 if not name.endswith(".log"):
                     continue
                 added["records"] += _merge_demo_lines(
-                    os.path.join(RECORDS_DIR, "demo", name),
+                    os.path.join(RECORDS_DIR, group, name),
                     _read_lines(os.path.join(src_records, name)))
         src_todo = os.path.join(tempdir, "todo")
         if os.path.isdir(src_todo):
@@ -5529,18 +5653,34 @@ def _install_demo_merged(tempdir):
 def reinstall_demo_data():
     """Clear the seeded demo story and install it again with today's dates.
 
-    The old story goes first (marker-based, so only demo content is dropped),
-    which keeps a re-install from duplicating itself. The new story is merged
-    into existing data: user records, todos, journal entries and notes are
-    kept. Returns {removed: {...}, installed: {...}}.
+    The replacement story is built and validated *before* anything is
+    removed, so a bad spec leaves the workspace untouched instead of
+    deleting the old story and then failing to install the new one. The old
+    story goes next (marker-based, so only demo content is dropped), which
+    keeps a re-install from duplicating itself. The new story is merged into
+    existing data: user records, todos, journal entries and notes are kept.
+    Returns {removed: {...}, installed: {...}}.
 
     No-op returning zero counts when the starter demo spec is missing.
     """
-    if _load_demo_spec() is None:
+    spec = _load_demo_spec()
+    if spec is None:
         return {"removed": remove_demo_data(), "installed": None}
+    base = today()
+    _warn_demo_collisions()
+    try:
+        tempdir = _seed_temp_demo(spec, base)
+    except Exception as e:
+        print(f"  Re-install cancelled, nothing was changed:\n  {e}")
+        return {"removed": None, "installed": None, "error": str(e)}
     removed = remove_demo_data()
     print("\nRe-installing demo data...")
-    added = _seed_demo_data(demo=True, force=True)
+    added = _install_demo_merged(tempdir)
+    print(f"  added  records {added.get('records', 0)}"
+          f"  todos {added.get('todos', 0)}"
+          f"  done {added.get('done', 0)}"
+          f"  journal {added.get('journal', 0)}"
+          f"  notes {added.get('notes', 0)}")
     return {"removed": removed, "installed": added}
 
 
@@ -5560,7 +5700,7 @@ def _line_count(path):
 
 def _count_seeded():
     counts = {}
-    demo_dir = os.path.join(RECORDS_DIR, "demo")
+    demo_dir = os.path.join(RECORDS_DIR, demo_log_group())
     counts["records"] = 0
     if os.path.isdir(demo_dir):
         for f in os.listdir(demo_dir):
@@ -5572,6 +5712,109 @@ def _count_seeded():
     counts["journal"] = sum(len(files) for _, _, files in os.walk(JOURNAL_DIR))
     counts["notes"] = sum(len(files) for _, _, files in os.walk(NOTES_DIR))
     return counts
+
+
+def _warn_demo_collisions():
+    """Print a heads-up when live config items would also match demo records.
+
+    Advisory only — demo rows are excluded from aggregates on a used workspace
+    (see [demo] show), so this is about transparency, not a blocker.
+    """
+    spec = _load_demo_spec()
+    if spec is None:
+        return
+    if include_demo_records():
+        # No real records yet, so nothing to collide with: every matching
+        # starter item is simply describing the demo data being installed.
+        return
+    base = today()
+    lines = [_resolve_demo_text(ln, base)
+             for ln in spec.get("records", {}).get("lines", [])]
+    parsed = []
+    for ln in lines:
+        p = safe_parse_line(ln)
+        if p:
+            parsed.append(p[1])
+    if not parsed:
+        return
+
+    def _hits(expr):
+        try:
+            return any(apply_where(kv, [expr]) for kv in parsed)
+        except Exception:
+            return False
+
+    queries = get_queries()
+
+    def _cfg_dicts(prefix):
+        return {k.split(".", 1)[1]: v for k, v in queries.items()
+                if k.startswith(prefix + ".") and isinstance(v, dict)}
+
+    base_queries = {k: v for k, v in queries.items()
+                    if isinstance(v, dict) and v.get("where")
+                    and not k.startswith(("board.", "habit.", "threshold.",
+                                          "calendar.", "project."))}
+    metrics = queries.get("metrics") or {}
+
+    def _metric_ref_collides(ref, seen=None):
+        """True when a metric/query reference reads records demo rows match.
+
+        Derived metrics (sum/avg/ratio) are followed down to their base
+        queries; cycles are broken with `seen`.
+        """
+        if not ref or not isinstance(ref, str):
+            return False
+        seen = seen or set()
+        if ref in seen:
+            return False
+        seen.add(ref)
+        if ref in base_queries:
+            return _hits(str(base_queries[ref]["where"]))
+        m = metrics.get(ref)
+        if not isinstance(m, dict):
+            return False
+        for kind in ("sum", "avg", "count", "formula"):
+            dep = m.get(kind)
+            if isinstance(dep, str):
+                return _metric_ref_collides(dep, seen)
+            if isinstance(dep, dict):
+                if kind == "ratio" or "ratio" in dep:
+                    for r in (dep.get("ratio") or []):
+                        if _metric_ref_collides(r, seen):
+                            return True
+        return _metric_ref_collides(m.get("ratio")[0], seen) \
+            if m.get("ratio") else False
+
+    live = []
+    for name, q in base_queries.items():
+        if _hits(str(q["where"])):
+            live.append(f"query '{name}'")
+    for name, h in _cfg_dicts("habit").items():
+        if any(_hits(str(f)) for f in h.get("filters") or []):
+            live.append(f"habit '{name}'")
+    for name, t in _cfg_dicts("threshold").items():
+        if t.get("where") and _hits(str(t["where"])):
+            live.append(f"threshold '{name}'")
+        elif _metric_ref_collides(t.get("metric")):
+            live.append(f"threshold '{name}'")
+    for name, c in _cfg_dicts("calendar").items():
+        if any(_hits(str(f)) for f in c.get("filters") or []):
+            live.append(f"calendar '{name}'")
+    for name, b in _cfg_dicts("board").items():
+        cols = b.get("columns") or []
+        if any(isinstance(l, dict) and _hits(str(l.get("where") or ""))
+               for l in cols) or any(_hits(str(c)) for c in cols
+                                      if isinstance(c, str)):
+            live.append(f"board '{name}'")
+    for name, pr in _cfg_dicts("project").items():
+        if any(_hits(str(f)) for f in pr.get("tag_filters") or []):
+            live.append(f"project '{name}'")
+    if not live:
+        return
+    print("  Note: these existing config items also match the demo records —")
+    print(f"        {', '.join(sorted(live))}")
+    print("        Demo rows are excluded from aggregates automatically"
+          " (set [demo] show in config.toml to change).")
 
 
 def _seed_demo_data(demo=None, force=False):
@@ -5595,6 +5838,7 @@ def _seed_demo_data(demo=None, force=False):
         print("  Skipped demo data.")
         return
     print("\nSeeding demo data...")
+    _warn_demo_collisions()
     tempdir = _seed_temp_demo(spec, base)
     if force:
         added = _install_demo_merged(tempdir)
@@ -5617,15 +5861,6 @@ def _seed_demo_data(demo=None, force=False):
     return added
 
 
-def _demo_line_sets(spec):
-    """Build {record-lines, todo-open, todo-done} matched against resolved tokens."""
-    base = today()
-    records = {_resolve_demo_text(line, base) for line in spec.get("records", {}).get("lines", [])}
-    open_lines = {_resolve_demo_text(line) for line in spec.get("todo", {}).get("open", [])}
-    done_lines = {_resolve_demo_text(line) for line in spec.get("todo", {}).get("done", [])}
-    return records, open_lines, done_lines
-
-
 def _read_lines(path):
     """Lines of a text file with newlines stripped; [] when unreadable."""
     try:
@@ -5635,17 +5870,14 @@ def _read_lines(path):
         return []
 
 
-def _demo_record_is_demo(line, spec_lines):
-    """True when a record line is demo content.
+def _demo_record_is_demo(line):
+    """True when a record line carries the demo marker (tag=__demo__).
 
-    The tag=demo marker is the signal; an exact match against the starter
-    spec is kept as a fallback so a workspace seeded before the markers
-    existed still cleans up.
+    The marker is the only signal: it survives the user editing a seeded
+    line, so removal never depends on the record still matching the spec.
     """
     if not line.strip():
         return False
-    if line in spec_lines:
-        return True
     parsed = safe_parse_line(line)
     if not parsed:
         return False
@@ -5655,30 +5887,29 @@ def _demo_record_is_demo(line, spec_lines):
     return any(str(t).strip() == DEMO_TAG for t in tags)
 
 
-def _demo_todo_is_demo(line, spec_lines):
-    """True when a todo.txt line is demo content.
-
-    The +demo project is the signal; an exact spec match is the fallback
-    for workspaces seeded before the marker existed.
-    """
+def _demo_todo_is_demo(line):
+    """True when a todo.txt line carries the +__demo__ project."""
     stripped = line.strip()
     if not stripped:
         return False
-    if stripped in spec_lines:
-        return True
     return any(p == DEMO_PROJECT for p in re.findall(r"\+(\S+)", stripped))
 
 
-def _demo_journal_paths(spec):
-    """Absolute paths of the seeded journal date files for the current month."""
+def _demo_journal_pairs(spec):
+    """(date, body, path) for each seeded journal entry, dates resolved."""
     base = today()
-    return [os.path.join(JOURNAL_DIR, str(base.year), f"{base.month:02d}",
-                         f"{_resolve_demo_text(str(e['date']), base)}.md")
-            for e in spec.get("journal", [])]
+    out = []
+    for entry in spec.get("journal", []):
+        date = _resolve_demo_text(str(entry["date"]), base)
+        body = _resolve_demo_text(entry["body"], base)
+        path = os.path.join(JOURNAL_DIR, str(base.year),
+                            f"{base.month:02d}", f"{date}.md")
+        out.append((date, body, path))
+    return out
 
 
 def _demo_dir_empty(demo_dir):
-    """True when records/demo/ holds no non-blank content at all."""
+    """True when the demo records folder holds no non-blank content at all."""
     for f in os.listdir(demo_dir):
         path = os.path.join(demo_dir, f)
         if os.path.isdir(path):
@@ -5699,33 +5930,38 @@ def _file_equals(path, text):
 
 
 def demo_data_present():
-    """True when this workspace still holds seeded demo content."""
+    """True when this workspace still holds seeded demo content.
+
+    A seeded journal file is only counted when its content still matches the
+    spec — the demo dates are today/-1d/-3d, exactly where real entries live,
+    so mere existence of the date file would leave the Remove button showing
+    forever on a workspace the user has since written in.
+    """
     spec = _load_demo_spec()
     if spec is None:
         return False
-    records, open_lines, done_lines = _demo_line_sets(spec)
-    demo_dir = os.path.join(RECORDS_DIR, "demo")
+    demo_dir = os.path.join(RECORDS_DIR, demo_log_group())
     if os.path.isdir(demo_dir):
         for f in os.listdir(demo_dir):
             if f.endswith(".log") and any(
-                    _demo_record_is_demo(ln, records)
+                    _demo_record_is_demo(ln)
                     for ln in _read_lines(os.path.join(demo_dir, f))):
                 return True
-    for path, known in ((os.path.join(TODO_DIR, "todo.txt"), open_lines),
-                        (os.path.join(TODO_DIR, "done.txt"), done_lines)):
-        if any(_demo_todo_is_demo(ln, known) for ln in _read_lines(path)):
+    for path in (os.path.join(TODO_DIR, "todo.txt"),
+                 os.path.join(TODO_DIR, "done.txt")):
+        if any(_demo_todo_is_demo(ln) for ln in _read_lines(path)):
             return True
-    return any(os.path.exists(p) for p in _demo_journal_paths(spec))
+    return any(_file_equals(p, body)
+               for _d, body, p in _demo_journal_pairs(spec))
 
 
 def remove_demo_data():
     """Remove seeded demo content.
 
-    - records: every tag=demo line (or line matching the starter spec
-      verbatim) is dropped from records/demo/*.log; the folder is deleted
-      when nothing is left, otherwise it is kept
-    - todos: lines carrying the +demo project (or a spec match) are dropped
-      from todo.txt and done.txt; every other line survives untouched
+    - records: every tag=__demo__ line is dropped from the demo log group;
+      the folder is deleted when nothing is left, otherwise it is kept
+    - todos: lines carrying the +__demo__ project are dropped from todo.txt
+      and done.txt; every other line survives untouched
     - journal: seeded date files are deleted only on a verbatim match
     - notes and config are never touched
 
@@ -5735,15 +5971,15 @@ def remove_demo_data():
     spec = _load_demo_spec()
     if spec is None:
         return counts
-    records, open_lines, done_lines = _demo_line_sets(spec)
-    demo_dir = os.path.join(RECORDS_DIR, "demo")
+    group = demo_log_group()
+    demo_dir = os.path.join(RECORDS_DIR, group)
     if os.path.isdir(demo_dir):
         for f in os.listdir(demo_dir):
             if not f.endswith(".log"):
                 continue
             path = os.path.join(demo_dir, f)
             lines = _read_lines(path)
-            kept = [ln for ln in lines if not _demo_record_is_demo(ln, records)]
+            kept = [ln for ln in lines if not _demo_record_is_demo(ln)]
             if len(kept) == len(lines):
                 continue
             counts["records"] += len(lines) - len(kept)
@@ -5751,18 +5987,17 @@ def remove_demo_data():
                 fh.write("".join(ln + "\n" for ln in kept))
         if _demo_dir_empty(demo_dir):
             shutil.rmtree(demo_dir)
-            print(f"Removed {counts['records']} demo record line(s) and records/demo/")
+            print(f"Removed {counts['records']} demo record line(s) and records/{group}/")
         else:
             counts["kept_dir"] = True
             print(f"Removed {counts['records']} demo record line(s)")
-            print("Kept records/demo/ — it contains records you added")
-    for key, path, known in (
-            ("todos", os.path.join(TODO_DIR, "todo.txt"), open_lines),
-            ("done", os.path.join(TODO_DIR, "done.txt"), done_lines)):
+            print(f"Kept records/{group}/ — it contains records you added")
+    for key, fname in (("todos", "todo.txt"), ("done", "done.txt")):
+        path = os.path.join(TODO_DIR, fname)
         if not os.path.exists(path):
             continue
         lines = _read_lines(path)
-        kept = [ln for ln in lines if not _demo_todo_is_demo(ln, known)]
+        kept = [ln for ln in lines if not _demo_todo_is_demo(ln)]
         if len(kept) == len(lines):
             continue
         counts[key] += len(lines) - len(kept)
@@ -5770,12 +6005,7 @@ def remove_demo_data():
             fh.write("".join(ln + "\n" for ln in kept))
         print(f"Removed {counts[key]} demo line(s) from "
               f"{os.path.relpath(path, BASE_DIR)}")
-    base = today()
-    for entry in spec.get("journal", []):
-        date = _resolve_demo_text(str(entry["date"]), base)
-        body = _resolve_demo_text(entry["body"], base)
-        path = os.path.join(JOURNAL_DIR, str(base.year),
-                            f"{base.month:02d}", f"{date}.md")
+    for date, body, path in _demo_journal_pairs(spec):
         if os.path.exists(path) and _file_equals(path, body):
             os.remove(path)
             counts["journal"] += 1

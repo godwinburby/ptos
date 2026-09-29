@@ -58,7 +58,7 @@ from ptos import (
     get_log_files, atomic_write, AtomicWrite, run_sync,
     # Output / rendering helpers
     group_results, pivot_results, detect_value_field,
-    fmt_avg, render_group, render_pivot,
+    fmt_avg, fmt, render_group, render_pivot,
     # Field introspection
     numeric_fields, non_dimension_fields, derived_fields,
     datetime_fields, compute_derived,
@@ -349,7 +349,7 @@ def build_parser(cycles):
     utl.add_argument("--no-demo-data", dest="no_demo_data", action="store_true",
                      help="With --init: skip demo data without prompting")
     utl.add_argument("--remove-demo-data", dest="remove_demo_data", action="store_true",
-                     help="Remove seeded demo data (tag=demo records, +demo todos, demo journal)")
+                     help="Remove seeded demo data (tag=__demo__ records, +__demo__ todos, demo journal)")
     utl.add_argument("--add-demo-data", dest="add_demo_data", action="store_true",
                      help="Re-install the demo data with today's dates (keeps your own data)")
     utl.add_argument("--set-name", dest="set_name", metavar="NAME",
@@ -3405,7 +3405,8 @@ def main():
 
     # ---- lint mode ----
     if args.lint:
-        results, _ = scan_records(dt.date.min, dt.date.max, [], None)
+        results, _ = scan_records(dt.date.min, dt.date.max, [], None,
+                                 include_demo=True)
         error_files = lint_records(results, schema)
         if getattr(args, "fix", False) and error_files:
             editor = resolve_editor()
@@ -3565,12 +3566,15 @@ def main():
                  f"Numeric fields: {', '.join(numeric_fields())}")
 
     # ---- scan ----
-    results, total = scan_records(start, end, final_filters, args.search, getattr(args, "from_file", None), sum_field=sum_field)
+    results, total = scan_records(start, end, final_filters, args.search,
+                                  getattr(args, "from_file", None),
+                                  sum_field=sum_field, include_demo=True)
 
     if not results:
         print("\nNo records found.\n")
         if final_filters:
-            all_results, _ = scan_records(dt.date.min, dt.date.max, [], None)
+            all_results, _ = scan_records(dt.date.min, dt.date.max, [], None,
+                                         include_demo=True)
             known = {k for line in all_results for p in [ptos.safe_parse_line(line)] if p for k in p[1]}
             known.update({"type", "tag"})
             for f in final_filters:

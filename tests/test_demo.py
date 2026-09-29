@@ -1,10 +1,12 @@
 import os
 import shutil
 import datetime as dt
+import tomllib
 
 import pytest
 
 import ptos
+import ptos_cli
 import ptos_todo
 import ptos_service as svc
 
@@ -126,7 +128,7 @@ class TestDemoSeed:
 
     def test_board_job_search_has_populated_lanes(self, demo_home):
         _seed()
-        board = svc.get_board_data("job_search", time="all")
+        board = svc.get_board_data("demo_job", time="all")
         counts = {lane: len(recs) for lane, recs in board["data"].items()}
         assert counts == {"Applied": 4, "Interview": 2, "Offer": 1,
                           "Rejected": 1, "Accepted": 1}
@@ -150,9 +152,9 @@ class TestDemoSeed:
     def test_projects_has_demo_project(self, demo_home):
         _seed()
         names = [p["name"] for p in svc.get_projects_overview()]
-        assert "jobsearch" in names
+        assert "demo_job" in names
         project = next(p for p in svc.get_projects_overview()
-                       if p["name"] == "jobsearch")
+                       if p["name"] == "demo_job")
         assert project["has_board"] is True
         assert project["record_count"] >= 3
         assert project["open_items"]
@@ -270,7 +272,7 @@ class TestRemoveDemoData:
 
 
 class TestDemoMarkers:
-    """tag=demo on records, +demo on todos - the removal signal."""
+    """tag=__demo__ on records, +__demo__ on todos - the removal signal."""
 
     def test_every_seeded_record_carries_the_demo_tag(self, demo_home):
         _seed()
@@ -283,7 +285,7 @@ class TestDemoMarkers:
             tags = ptos.parse_line(line)[1].get("tag") or []
             if isinstance(tags, str):
                 tags = [tags]
-            assert "demo" in tags, line
+            assert ptos.DEMO_TAG in tags, line
 
     def test_every_seeded_todo_carries_the_demo_project(self, demo_home):
         _seed()
@@ -292,7 +294,7 @@ class TestDemoMarkers:
             assert todos
             for t in todos:
                 projects = [p.lstrip("+") for p in t.projects]
-                assert "demo" in projects, t.raw_line
+                assert ptos.DEMO_PROJECT in projects, t.raw_line
 
     def test_edited_demo_record_is_still_removed(self, demo_home):
         _seed()
@@ -355,7 +357,7 @@ class TestDemoDataPresent:
         _seed()
         ptos.remove_demo_data()
         with (demo_home / "todo" / "todo.txt").open("a", encoding="utf-8") as f:
-            f.write(f"(A) {ptos.today().isoformat()} Still tagged +demo\n")
+            f.write(f"(A) {ptos.today().isoformat()} Still tagged +__demo__\n")
         assert ptos.demo_data_present() is True
 
     def test_false_when_only_user_data_remains(self, demo_home):
@@ -478,7 +480,7 @@ class TestDemoPages:
         assert body["data"]["count"] >= 80
 
     def test_board(self):
-        status, html = self._get("/board?board=job_search")
+        status, html = self._get("/board?board=demo_job")
         assert status == 200
         assert "Applied" in html
 
@@ -507,7 +509,7 @@ class TestDemoPages:
     def test_projects(self):
         status, html = self._get("/projects")
         assert status == 200
-        assert "jobsearch" in html
+        assert "demo_job" in html
 
     def test_todo(self):
         status, html = self._get("/todo")
@@ -594,10 +596,10 @@ class TestDemoServiceWrappers:
 
     def test_remove_demo_data_clears_history_cache(self, demo_home):
         _seed()
-        svc.get_board_data("job_search", time="all")  # warms the cache
+        svc.get_board_data("demo_job", time="all")  # warms the cache
         svc.remove_demo_data()
         # the seeded board is gone; a cached read must not resurrect it
-        board = svc.get_board_data("job_search", time="all")
+        board = svc.get_board_data("demo_job", time="all")
         assert all(not recs for recs in board["data"].values())
 
     def test_reinstall_demo_data_returns_structured_result(self, demo_home):
@@ -615,9 +617,9 @@ class TestDemoServiceWrappers:
 
     def test_reinstall_clears_history_cache(self, demo_home):
         _seed()
-        svc.get_board_data("job_search", time="all")
+        svc.get_board_data("demo_job", time="all")
         svc.reinstall_demo_data()
-        board = svc.get_board_data("job_search", time="all")
+        board = svc.get_board_data("demo_job", time="all")
         assert any(recs for recs in board["data"].values())
 
     def test_demo_data_available(self, demo_home):
@@ -648,7 +650,7 @@ class TestDemoReinstall:
             "records": 88, "todos": 8, "done": 3, "journal": 3, "notes": 0}
         assert ptos.demo_data_present() is True
         assert (demo_home / "notes" / "Demo" / "welcome.md").exists()
-        assert (demo_home / "notes" / "Projects" / "Find a Job" / "plan.md").exists()
+        assert (demo_home / "notes" / "Demo" / "Find a Job" / "index.md").exists()
 
     def test_reinstall_keeps_user_record_in_demo_dir(self, demo_home):
         _seed()
@@ -658,7 +660,7 @@ class TestDemoReinstall:
         ptos.reinstall_demo_data()
         text = log.read_text(encoding="utf-8")
         assert "my own line" in text
-        assert text.count("tag=demo") == 88
+        assert text.count("tag=__demo__") == 88
 
     def test_reinstall_keeps_user_todos_in_order(self, demo_home):
         _seed()
@@ -670,16 +672,16 @@ class TestDemoReinstall:
         # user lines keep their place; the demo story is appended after them
         assert lines[:2] == ["(A) my own urgent task +work",
                              "(B) my own second task +work"]
-        assert sum(1 for ln in lines if "+demo" in ln) == 8
+        assert sum(1 for ln in lines if "+__demo__" in ln) == 8
 
     def test_reinstall_does_not_duplicate_demo_lines(self, demo_home):
         _seed()
         ptos.reinstall_demo_data()
         ptos.reinstall_demo_data()
         log = demo_home / "records" / "demo" / f"{ptos.today().year}.log"
-        assert log.read_text(encoding="utf-8").count("tag=demo") == 88
+        assert log.read_text(encoding="utf-8").count("tag=__demo__") == 88
         todos = (demo_home / "todo" / "todo.txt").read_text(encoding="utf-8")
-        assert todos.count("+demo") == 8
+        assert todos.count("+__demo__") == 8
 
     def test_reinstall_never_overwrites_edited_journal_entry(self, demo_home):
         _seed()
@@ -702,7 +704,7 @@ class TestDemoReinstall:
 
     def test_reinstall_recreates_missing_note(self, demo_home):
         _seed()
-        note = demo_home / "notes" / "Projects" / "Find a Job" / "plan.md"
+        note = demo_home / "notes" / "Demo" / "Find a Job" / "index.md"
         os.remove(note)
         ptos.reinstall_demo_data()
         assert note.exists()
@@ -739,7 +741,7 @@ class TestDemoReinstall:
         out = capsys.readouterr().out
         assert "Re-installing demo data" in out
         assert ptos.demo_data_present() is True
-        assert out.count("tag=demo") == 0
+        assert out.count("tag=__demo__") == 0
 
     def test_api_installs_demo_data(self, demo_home):
         from ptos_web import app
@@ -761,4 +763,417 @@ class TestDemoReinstall:
         assert "Re-install demo data" in html
         assert "installDemoData" in html
         assert 'id="remove-demo-btn"' not in html
+
+
+def _add_real_record(demo_home):
+    """Log a user record outside the demo group, as a used workspace would."""
+    year = ptos.today().year
+    with open(demo_home / "records" / f"{year}.log", "a", encoding="utf-8") as f:
+        f.write(f"{ptos.today()} type=expense domain=self category=food "
+                f"amount=99 tag=real | my own lunch\n")
+    ptos._invalidate_all()
+
+
+def _install_broken_spec(monkeypatch, spec):
+    """Point STARTER_DIR at a temp dir holding an intentionally invalid spec."""
+    import tempfile
+    import tomli_w
+    work = tempfile.mkdtemp(prefix="ptos_demo_spec_")
+    for name in os.listdir(_REPO_STARTERS):
+        shutil.copy2(os.path.join(_REPO_STARTERS, name), os.path.join(work, name))
+    with open(os.path.join(work, "starter_demo.toml"), "wb") as f:
+        tomli_w.dump(spec, f)
+    monkeypatch.setattr(ptos, "STARTER_DIR", work)
+    ptos._invalidate_all()
+
+
+def _edit_toml(path, mutate):
+    import tomli_w
+    with open(path, "rb") as f:
+        data = tomllib.load(f)
+    mutate(data)
+    with open(path, "wb") as f:
+        tomli_w.dump(data, f)
+    ptos._invalidate_all()
+
+
+def _set_schema_demo_group(demo_home, group):
+    _edit_toml(demo_home / "config" / "schema.toml",
+               lambda d: d["demo"].__setitem__("log_group", group))
+
+
+def _drop_type_from_live_schema(demo_home, type_name):
+    """Simulate a user who deleted a type the starter still ships."""
+
+    def mutate(data):
+        data["types"]["allowed"] = [t for t in data["types"]["allowed"]
+                                    if t != type_name]
+        data["type"].pop(type_name, None)
+
+    _edit_toml(demo_home / "config" / "schema.toml", mutate)
+
+
+def _narrow_status_options(demo_home):
+    """Simulate a user who trimmed an option list the starter still uses."""
+    _edit_toml(demo_home / "config" / "schema.toml",
+               lambda d: d["type"]["jobsearch"]["fields"]["status"]
+               .__setitem__("options", ["applied", "interview"]))
+
+
+def _replace_config_with_non_matching_items(demo_home):
+    """Strip every config item that would match the demo records.
+
+    These sections are stored as literal quoted dotted keys
+    (``"habit.NAME"``), so they must be matched by prefix, not by nesting.
+    """
+    path = demo_home / "config" / "queries.toml"
+    prefixes = ("habit.", "threshold.", "board.", "calendar.", "project.")
+
+    def mutate(data):
+        for name in list(data):
+            if isinstance(name, str) and name.startswith(prefixes):
+                data.pop(name)
+        for name, value in data.items():
+            if isinstance(value, dict):
+                if value.get("where"):
+                    value["where"] = "type=does_not_exist"
+                for key in ("filters", "tag_filters", "columns"):
+                    if key in value:
+                        value[key] = "type=does_not_exist"
+        for name, m in (data.get("metrics") or {}).items():
+            if isinstance(m, dict) and isinstance(m.get("sum"), str):
+                m["sum"] = "type=does_not_exist"
+
+    _edit_toml(path, mutate)
+
+
+def _set_show(demo_home, value):
+    _edit_toml(demo_home / "config" / "config.toml",
+               lambda d: d.setdefault("demo", {}).__setitem__("show", value))
+
+
+class TestDemoLogGroup:
+    """[demo] log_group names the folder; is_demo_logfile routes every path."""
+
+    def test_default_group_is_demo(self, demo_home):
+        assert ptos.demo_log_group() == "demo"
+
+    def test_schema_can_rename_the_group(self, demo_home):
+        _set_schema_demo_group(demo_home, "samples")
+        assert ptos.demo_log_group() == "samples"
+
+    def test_renamed_group_changes_where_records_land(self, demo_home):
+        _set_schema_demo_group(demo_home, "samples")
+        _seed()
+        assert (demo_home / "records" / "samples" /
+                f"{ptos.today().year}.log").exists()
+        assert not (demo_home / "records" / "demo").exists()
+
+    def test_is_demo_logfile_handles_both_separators(self, demo_home):
+        assert ptos.is_demo_logfile("demo/2026.log") is True
+        assert ptos.is_demo_logfile("demo\\2026.log") is True
+        assert ptos.is_demo_logfile("2026.log") is False
+        assert ptos.is_demo_logfile("followup/2026.log") is False
+
+    def test_removal_uses_the_renamed_group(self, demo_home):
+        _set_schema_demo_group(demo_home, "samples")
+        _seed()
+        assert ptos.demo_data_present() is True
+        ptos.remove_demo_data()
+        assert not (demo_home / "records" / "samples").exists()
+
+    def test_freshness_check_uses_the_renamed_group(self, demo_home):
+        _set_schema_demo_group(demo_home, "samples")
+        _seed()
+        assert ptos._demo_fresh() is False
+
+
+class TestDemoShowSetting:
+    """[demo] show controls whether demo rows reach aggregate reads."""
+
+    def test_fresh_demo_workspace_counts_demo_records(self, demo_home):
+        _seed()
+        assert ptos.include_demo_records() is True
+
+    def test_used_workspace_excludes_demo_records(self, demo_home):
+        _seed()
+        _add_real_record(demo_home)
+        assert ptos.include_demo_records() is False
+
+    def test_always_includes_despite_real_records(self, demo_home):
+        _seed()
+        _add_real_record(demo_home)
+        _set_show(demo_home, "always")
+        assert ptos.include_demo_records() is True
+
+    def test_never_excludes_even_without_real_records(self, demo_home):
+        _seed()
+        _set_show(demo_home, "never")
+        assert ptos.include_demo_records() is False
+
+    def test_invalid_value_falls_back_to_auto(self, demo_home):
+        _seed()
+        _set_show(demo_home, "sideways")
+        assert ptos.get_demo_show() == "auto"
+        assert ptos.include_demo_records() is True
+
+    def test_aggregate_metric_ignores_demo_on_used_workspace(self, demo_home):
+        _seed()
+        _add_real_record(demo_home)
+        _set_show(demo_home, "auto")
+        ptos._invalidate_all()
+        from ptos_service import get_metric
+        # the real record logged above is an expense, not income
+        assert get_metric("total_income")["raw"] == 0
+
+    def test_aggregate_metric_counts_demo_on_fresh_workspace(self, demo_home):
+        _seed()
+        _set_show(demo_home, "auto")
+        ptos._invalidate_all()
+        from ptos_service import get_metric
+        assert get_metric("total_income")["raw"] > 0
+
+    def test_threshold_ignores_demo_on_used_workspace(self, demo_home):
+        _seed()
+        _add_real_record(demo_home)
+        ptos._invalidate_all()
+        from ptos_service import get_all_threshold_status
+        food = next(t for t in get_all_threshold_status() if t["name"] == "food_spend")
+        assert food["raw"] < 5000  # demo's food rows are excluded
+
+    def test_browse_still_shows_demo_on_used_workspace(self, demo_home):
+        _seed()
+        _add_real_record(demo_home)
+        ptos._invalidate_all()
+        rows = svc.get_records("all", time="all")["records"]
+        assert any(f"tag={ptos.DEMO_TAG}" in r["_line"] for r in rows)
+        assert any("tag=real" in r["_line"] for r in rows)
+
+    def test_browse_includes_demo_whatever_the_setting(self, demo_home):
+        """show governs aggregates; browse/edit always surface demo rows."""
+        _seed()
+        _add_real_record(demo_home)
+        for value in ("always", "never", "auto"):
+            _set_show(demo_home, value)
+            rows = svc.get_records("all", time="all")["records"]
+            assert any(f"tag={ptos.DEMO_TAG}" in r["_line"] for r in rows), value
+
+    def test_type_record_count_never_counts_demo(self, demo_home):
+        _seed()
+        _add_real_record(demo_home)
+        assert svc.get_type_record_count("expense") == 1
+
+
+class TestDemoAtomicReinstall:
+    """A bad spec must never leave the workspace half-emptied."""
+
+    def test_invalid_spec_leaves_records_and_todos_intact(
+            self, demo_home, monkeypatch):
+        _seed()
+        log = demo_home / "records" / "demo" / f"{ptos.today().year}.log"
+        todo = demo_home / "todo" / "todo.txt"
+        log_before = log.read_text(encoding="utf-8")
+        todo_before = todo.read_text(encoding="utf-8")
+
+        spec = ptos._load_demo_spec()
+        spec["records"]["lines"].append("2020-01-01 type=not_a_real_type | x")
+        _install_broken_spec(monkeypatch, spec)
+
+        result = ptos.reinstall_demo_data()
+        assert result["error"]
+        assert result["removed"] is None
+        assert result["installed"] is None
+        assert log.read_text(encoding="utf-8") == log_before
+        assert todo.read_text(encoding="utf-8") == todo_before
+        assert ptos.demo_data_present() is True
+
+    def test_invalid_spec_leaves_journal_intact(self, demo_home, monkeypatch):
+        _seed()
+        spec = ptos._load_demo_spec()
+        spec["records"]["lines"].append("2020-01-01 type=not_a_real_type | x")
+        _install_broken_spec(monkeypatch, spec)
+        before = sorted(os.listdir(demo_home / "journal" / "2026" / "09"))
+        ptos.reinstall_demo_data()
+        assert sorted(os.listdir(demo_home / "journal" / "2026" / "09")) == before
+
+
+class TestDemoSchemaDrift:
+    """Demo content is held to the starter schema, not the live one."""
+
+    def test_seeding_survives_a_live_schema_that_removed_the_type(
+            self, demo_home):
+        _seed()
+        ptos.remove_demo_data()
+        _drop_type_from_live_schema(demo_home, "jobsearch")
+        _add_real_record(demo_home)
+        result = ptos.reinstall_demo_data()
+        assert "error" not in result
+        assert result["installed"]["records"] == 88
+
+    def test_seeding_survives_a_narrowed_option_list(self, demo_home):
+        _seed()
+        ptos.remove_demo_data()
+        _narrow_status_options(demo_home)
+        result = ptos.reinstall_demo_data()
+        assert "error" not in result
+        assert result["installed"]["records"] == 88
+
+    def test_live_schema_validation_still_guards_real_records(
+            self, demo_home):
+        _drop_type_from_live_schema(demo_home, "jobsearch")
+        kv = ptos.safe_parse_line(
+            "2026-01-01 type=jobsearch position=PM company=Acme "
+            "status=applied | applied")[1]
+        assert any("jobsearch" in p for p in ptos.validate_record(
+            ptos.get_schema(), kv))
+        # the very same record is perfectly valid against the starter schema
+        assert ptos.validate_record(ptos._starter_schema(), kv) == []
+
+    def test_lint_skips_demo_lines_that_break_the_live_schema(self, demo_home):
+        _seed()
+        _add_real_record(demo_home)
+        _narrow_status_options(demo_home)
+        result = svc.run_lint()
+        assert result["demo_skipped"] == 88
+        assert result["error_count"] == 0
+        assert result["clean"] is True
+
+
+class TestDemoNamespacing:
+    """The demo project/board/habit/note are namespaced so they cannot
+    collide with a user's identically-named config."""
+
+    def test_project_uses_the_demo_job_key(self, demo_home):
+        _seed()
+        names = [p["name"] for p in svc.get_projects_overview()]
+        assert "demo_job" in names
+        assert "jobsearch" not in names
+
+    def test_project_board_link_resolves(self, demo_home):
+        _seed()
+        proj = next(p for p in svc.get_projects_overview()
+                    if p["name"] == "demo_job")
+        assert proj["has_board"] is True
+        assert proj["board_name"] == "demo_job"
+
+    def test_board_lanes_are_guarded_by_type_and_marker(self, demo_home):
+        _seed()
+        board = svc.get_board_data("demo_job", time="all")
+        for lane in board["columns"]:
+            assert "type=jobsearch" in board["lanes"][lane]["where"]
+            assert f"tag={ptos.DEMO_TAG}" in board["lanes"][lane]["where"]
+
+    def test_due_default_still_points_at_the_real_type(self, demo_home):
+        _seed()
+        due = svc.get_due("default")
+        assert due["rec_type"] == "jobsearch"
+
+    def test_pomodoro_habit_is_namespaced(self, demo_home):
+        import tomllib
+        with open(demo_home / "config" / "queries.toml", "rb") as f:
+            q = tomllib.load(f)
+        assert "habit.demo_pomodoro" in q
+        assert "habit.pomodoro" not in q
+
+    def test_demo_notes_live_under_demo(self, demo_home):
+        _seed()
+        assert (demo_home / "notes" / "Demo" / "Find a Job" / "index.md").exists()
+        assert not (demo_home / "notes" / "Projects").exists()
+
+
+class TestDemoCollisionWarning:
+    def test_warning_lists_matching_live_config_on_used_workspace(
+            self, demo_home, capsys):
+        _seed()
+        _add_real_record(demo_home)
+        ptos.reinstall_demo_data()
+        out = capsys.readouterr().out
+        assert "also match the demo records" in out
+        assert "query 'food_this_month'" in out
+        assert "threshold 'food_spend'" in out
+        assert "habit 'meditation'" in out
+        assert "board 'demo_job'" in out
+
+    def test_warning_is_silent_when_nothing_collides(self, demo_home, capsys):
+        _seed()
+        _add_real_record(demo_home)
+        _replace_config_with_non_matching_items(demo_home)
+        ptos.reinstall_demo_data()
+        out = capsys.readouterr().out
+        assert "also match the demo records" not in out
+
+    def test_warning_is_silent_on_a_fresh_workspace(self, demo_home, capsys):
+        _seed()
+        ptos.reinstall_demo_data()
+        out = capsys.readouterr().out
+        assert "also match the demo records" not in out
+
+    def test_warning_does_not_block_installing(self, demo_home, capsys):
+        _seed()
+        _add_real_record(demo_home)
+        result = ptos.reinstall_demo_data()
+        assert result["installed"]["records"] == 88
+
+
+class TestDemoShowFromCli:
+    """`ptos --set-config demo.show` is the supported way to flip the switch."""
+
+    def test_set_config_persists_and_takes_effect(self, demo_home, monkeypatch,
+                                                   capsys):
+        _seed()
+        _add_real_record(demo_home)
+        monkeypatch.setattr("sys.argv",
+                            ["ptos", "--set-config", "demo.show", "always"])
+        ptos_cli.main()
+        capsys.readouterr()
+        ptos._invalidate_all()
+        assert ptos.get_demo_show() == "always"
+        assert ptos.include_demo_records() is True
+
+    def test_get_config_reports_the_current_value(self, demo_home, monkeypatch,
+                                                  capsys):
+        _seed()
+        monkeypatch.setattr("sys.argv", ["ptos", "--get-config", "demo.show"])
+        ptos_cli.main()
+        assert "demo.show=auto" in capsys.readouterr().out
+
+    def test_cli_trend_honours_the_setting(self, demo_home, monkeypatch, capsys):
+        """--trend is an aggregate, so demo rows drop out on a used workspace."""
+        _seed()
+        _add_real_record(demo_home)
+        monkeypatch.setattr("sys.argv",
+                            ["ptos", "--type", "income", "-t", "tm",
+                             "--trend", "3", "--table"])
+        ptos_cli.main()
+        used = capsys.readouterr().out
+        _set_show(demo_home, "always")
+        monkeypatch.setattr("sys.argv",
+                            ["ptos", "--type", "income", "-t", "tm",
+                             "--trend", "3", "--table"])
+        ptos_cli.main()
+        always = capsys.readouterr().out
+        assert always != used  # always sees the demo salary rows too
+
+
+class TestProjectsBoardLink:
+    def test_projects_page_links_to_the_namespaced_board(self, demo_home):
+        _seed()
+        from ptos_web import app
+        html = app.test_client().get("/projects").get_data(as_text=True)
+        assert "/board?board=demo_job" in html
+        assert "Find a Job (Demo)" in html
+
+
+class TestSchemaBuilderPreservesUnknownSections:
+    def test_demo_section_survives_a_builder_save(self, demo_home):
+        from ptos_web import _build_schema_dict
+        old = ptos.get_schema()
+        assert "demo" in old
+        rebuilt = _build_schema_dict(
+            old,
+            new_types=list(old["types"]["allowed"]),
+            type_schemas={t: {"fields": dict(d.get("fields") or {})}
+                          for t, d in old["type"].items()},
+        )
+        assert rebuilt.get("demo") == old["demo"]
 

@@ -349,7 +349,7 @@ def demo_data_present():
 
 
 def remove_demo_data():
-    """Remove seeded demo content (tag=demo records, +demo todos, demo journal).
+    """Remove seeded demo content (tag=__demo__ records, +__demo__ todos, demo journal).
 
     Notes and config are never touched, and any line the user added survives.
 
@@ -635,9 +635,9 @@ def get_conditional_suggestions(rtype, field, value):
             fields_with_options.add(fname)
 
     try:
-        raw, _ = ptos.scan_records(
-            dt.date.min, dt.date.max,
-            [f"type={rtype}", f"{field}={value}"], None)
+            raw, _ = ptos.scan_records(
+                dt.date.min, dt.date.max,
+                [f"type={rtype}", f"{field}={value}"], None)
     except Exception:
         return {}
 
@@ -697,7 +697,7 @@ def get_records(filters, time="tm", search=None, sort=None,
         raw, total, loc_matches = ptos.scan_records(
             start, end, filters, search,
             from_file=from_file, sum_field=sum_field,
-            return_locations=True)
+            return_locations=True, include_demo=True)
     except PTOSError:
         raise
     except Exception as e:
@@ -790,8 +790,9 @@ def get_group(filters, time="tm", group_fields=None,
         else:
             start, end = _resolve_time(time)
             time_label = ptos._TIME_ALIASES.get(time, time)
-        raw, total = ptos.scan_records(start, end, filters, None,
-                                       from_file=from_file, sum_field=sum_field)
+            raw, total = ptos.scan_records(start, end, filters, None,
+                                           from_file=from_file, sum_field=sum_field,
+                                           include_demo=True)
     except PTOSError:
         raise
     except Exception as e:
@@ -846,7 +847,7 @@ def get_pivot(filters, time="tm", row_field="type", col_field="month",
     """
     try:
         start, end = _resolve_time(time)
-        raw, _ = ptos.scan_records(start, end, filters, None)
+        raw, _ = ptos.scan_records(start, end, filters, None, include_demo=True)
     except PTOSError:
         raise
     except Exception as e:
@@ -907,7 +908,8 @@ def get_trend(filters, time="tm", n=6):
     rows       = []
     has_amount = False
     for label, start, end in periods:
-        raw, total = ptos.scan_records(start, end, filters, None)
+        raw, total = ptos.scan_records(start, end, filters, None,
+                                       include_demo=True)
         count = len(raw)
         if total > 0:
             has_amount = True
@@ -998,9 +1000,9 @@ def get_due(config_name=None, days_override=None):
             pass
 
     try:
-        raw, _, locations = ptos.scan_records(
-            dt.date.min, dt.date.max, [f"type={rec_type}"], None,
-            return_locations=True)
+            raw, _, locations = ptos.scan_records(
+                dt.date.min, dt.date.max, [f"type={rec_type}"], None,
+                return_locations=True)
     except Exception as e:
         raise PTOSError(str(e))
 
@@ -1582,11 +1584,13 @@ def run_lint():
         errors: [{line, problems: [str]}],
         warnings: [{line, problems: [str]}],
         error_count: int,
-        warning_count: int }
+        warning_count: int,
+        demo_skipped: int }
     """
     try:
         schema  = ptos.get_schema()
-        raw, _  = ptos.scan_records(dt.date.min, dt.date.max, [], None)
+        raw, _  = ptos.scan_records(dt.date.min, dt.date.max, [], None,
+                                   include_demo=True)
     except PTOSError:
         raise
     except Exception as e:
@@ -1596,9 +1600,13 @@ def run_lint():
     warnings     = []
     type_counts  = {}
     total_checked = 0
+    demo_skipped = 0
 
     for line in raw:
         if not line.strip():
+            continue
+        if ptos._demo_record_is_demo(line):
+            demo_skipped += 1
             continue
         total_checked += 1
         p = ptos.safe_parse_line(line)
@@ -1636,6 +1644,7 @@ def run_lint():
         "warnings":      warnings,
         "error_count":   len(errors),
         "warning_count": len(warnings),
+        "demo_skipped":  demo_skipped,
     }
 
 
@@ -1825,7 +1834,8 @@ def find_records(filters, time="all", search=None):
         start, end = __import__("datetime").date.min, __import__("datetime").date.max
 
     matches = ptos.find_records_with_location(filters, search=search,
-                                               start=start, end=end)
+                                               start=start, end=end,
+                                               include_demo=True)
     results = []
     for filepath, _idx, line in matches:
         row = _parse_record(line)
@@ -2179,7 +2189,7 @@ def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
     if scan_start < dt.date.min:
         scan_start = dt.date.min
 
-    matches = ptos.find_records_with_location(filters, start=scan_start, end=end)
+    matches = ptos.find_records_with_location(filters, start=scan_start, end=end,)
 
     present_all = set()
     for _, _, line in matches:
@@ -2403,7 +2413,7 @@ def get_calendar_data(name, year=None, month=None):
     start = dt.date(y, m, 1)
     end = dt.date(y, m, days_in_month)
 
-    matches = ptos.find_records_with_location(filters, start=start, end=end)
+    matches = ptos.find_records_with_location(filters, start=start, end=end,)
 
     by_day = {}
     for fp, idx, line in matches:
@@ -2497,7 +2507,7 @@ def _iter_tag_filter_records(tag_filters):
     """Yield (filepath, lineno, date, kv, note) for records matching tag_filters."""
     start = dt.date.min
     end = dt.date.max
-    matches = ptos.find_records_with_location(tag_filters, start=start, end=end)
+    matches = ptos.find_records_with_location(tag_filters, start=start, end=end,)
     for filepath, lineno, raw_line in matches:
         try:
             d, kv, note = ptos.parse_line(raw_line)
@@ -2719,6 +2729,7 @@ def get_projects_overview():
             "journals": journal_refs,
             "board_stalls": board_stalls,
             "has_board": has_board,
+            "board_name": board_name,
             "link_target": link_target,
             "drift": drift,
         })
@@ -3018,7 +3029,8 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
         key = lane["key"]
         filters = [lane["where"]]
         try:
-            loc_matches = ptos.find_records_with_location(filters, start=start, end=end)
+            loc_matches = ptos.find_records_with_location(filters, start=start,
+                                                          end=end,)
         except Exception:
             loc_matches = []
 
@@ -4151,7 +4163,8 @@ def create_and_convert(note, filepath, old_line, lineno, target_name,
 
 def get_type_record_count(type_name):
     """Return the number of records using the given type."""
-    recs = ptos.find_records_with_location([f"type={type_name}"])
+    recs = ptos.find_records_with_location([f"type={type_name}"],
+                                           include_demo=False)
     return len(recs)
 
 

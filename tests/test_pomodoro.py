@@ -78,7 +78,7 @@ class TestPomodoroLogService:
 
     def test_log_invalidates_habit_cache(self):
         _clean_cache()
-        svc.get_habit_data("pomodoro")
+        svc.get_habit_data("demo_pomodoro")
         assert any(k.startswith("habit:") for k in ptos._CACHE)
         svc.pomodoro_log("work", 1)
         assert not any(k.startswith("habit:") for k in ptos._CACHE)

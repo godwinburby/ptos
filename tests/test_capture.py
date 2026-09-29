@@ -68,7 +68,7 @@ class TestCaptureService:
 
     def test_capture_invalidates_habit_cache(self):
         _clean_cache()
-        svc.get_habit_data("pomodoro")
+        svc.get_habit_data("demo_pomodoro")
         assert any(k.startswith("habit:") for k in ptos._CACHE)
         svc.capture("hello")
         assert not any(k.startswith("habit:") for k in ptos._CACHE)

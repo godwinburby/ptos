@@ -96,7 +96,7 @@ New optional section in `queries.toml`, following the same pattern as
 
 ```toml
 ["funnel.job_pipeline"]
-board = "job_search"          # must be a board with match_field set
+board = "demo_job"           # must be a board with match_field set
 stages = ["applied", "phone_screen", "interview", "offer"]  # column order
 time_window = "this-quarter"  # optional — falls back to board's config window
 ```
