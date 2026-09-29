@@ -85,3 +85,12 @@ log_sessions = true
 # Number of most-used quick-add presets shown on Home and Add Record
 # (default: 10); the rest appear under "Show all".
 quick_presets = 10
+
+[demo]
+# Whether seeded demo records count toward metrics, dashboards, thresholds,
+# boards, habits, calendars and projects. Browse and search always show them.
+#   auto    - count them only when the workspace holds no real records, so a
+#             fresh demo install works while a used workspace stays clean
+#   always  - always count them
+#   never   - never count them
+show = "auto"

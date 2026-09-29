@@ -246,7 +246,7 @@
       <a class="proj-link-btn" href="/todo?project={{ p.todo_project }}">Todos</a>
       {% endif %}
       {% if p.has_board %}
-      <a class="proj-link-btn" href="/board?board={{ p.name }}">Board</a>
+      <a class="proj-link-btn" href="/board?board={{ p.board_name | urlencode }}">Board</a>
       {% endif %}
       {% if p.record_count > 0 %}
       <a class="proj-link-btn" href="/browse?where=project%3D{{ p.name }}">Records</a>

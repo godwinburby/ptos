@@ -5,6 +5,32 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-29
+
+### Demo data can no longer silently pollute your real numbers
+
+- **`[demo] show` (`auto`/`always`/`never`, default `auto`)** in `config.toml` is the new single switch for whether demo records count in **aggregates**. `auto` counts them only while the workspace has no real records — detected as *no nonblank log lines outside the demo group*, so the empty yearly placeholders `--init` creates don't count as real data. The moment you log your first own record they drop out of every dashboard, metric, threshold, board, habit, project, calendar and due list, and they come back if you clear your data again. Set it with `ptos --set-config demo.show never`; there is deliberately no Settings UI control for it.
+- **Browse, Search and the record editor still show demo rows unconditionally** — you can always see and fix what you were given. `scan_records()` and `find_records_with_location()` take a trailing `include_demo=None`; `None` resolves from config (aggregates), `True` forces inclusion (browse/search/edit). Destructive confirmations (`get_type_record_count`) pass `False` so a demo row can never inflate "N records will be deleted". CLI `--trend` was flipped to honour the setting, since it is an aggregate comparison table rather than a record listing.
+- **Lint no longer reports demo lines as errors.** Both `ptos.lint_records()`/`lint_all_records()` and `svc.run_lint()` pass `include_demo=True` and then skip marked lines, reporting `demo_skipped`. Without this, a fresh workspace with a trimmed schema showed every demo line as invalid.
+- **Collision heads-up before seeding into a used workspace** — `_warn_demo_collisions()` names every live query, habit, threshold, calendar, board and project that the demo rows would also match, so demo data quietly landing in your existing config is never invisible. Advisory only; it never blocks the install. Thresholds are followed through their `metric` reference (down through derived metrics to base queries) since they carry a `metric`, not a `where`.
+- **Markers renamed and made the only removal signal** — records carry `tag=__demo__`, todos the `+__demo__` project. The legacy whole-line spec-text fallback is gone, so removal depends solely on markers that survive user edits. Journal entries have no marker field and remain the documented exact-body-match exception; that content check also fixes a stuck *Remove demo data* button when the workspace held no valid demo lines.
+
+### Re-installing demo data is now atomic
+
+- **`reinstall_demo_data()` validates before it destroys.** `_seed_temp_demo()` builds the entire new story in a temporary folder and validates it against `starters/starter_schema.toml` via `_starter_schema()` — deliberately *not* the live schema, because users legitimately delete types and trim option lists that the starter demo still exercises. Only after validation passes does it remove the old story and re-add. A bad spec returns `{"error": ...}` with `removed`/`installed` unset and records, todos and journal left byte-identical.
+- **Schema Builder no longer silently drops `[demo]`** — `_build_schema_dict()` previously rebuilt the file from a fixed set of top-level sections, so saving from `/schema-builder` deleted the `log_group` key and broke demo seeding. Unknown top-level sections are now carried over.
+
+### Starter config is namespaced so demo items can't collide with yours
+
+- **Board, project and pomodoro habit renamed** to `demo_job` / `["project.demo_job"]` / `["habit.demo_pomodoro"]`, demo todos now use the `+demo_job` project instead of `+jobsearch`, record rows use `project=demo_job`, and demo notes moved from `Projects/Find a Job` to `Demo/Find a Job`. The job-search board's lanes gained a `type=jobsearch AND status=… AND tag=__demo__` guard so they can't pick up a real `jobsearch` record you create later.
+- **`get_projects_overview()` now returns `board_name`** and `projects.html` links to it, so the demo project card's board button resolves to the namespaced board instead of a dead link.
+
+### Fixes
+
+- **`--trend` no longer crashes on a numeric trend.** `fmt` was missing from `ptos_cli`'s import list, so the totals/avg columns raised `NameError` whenever a trend matched records with amounts.
+
+---
+
 ## 2026-09-28
 
 ### Entity: value panel can no longer silently look empty when a lookup fails

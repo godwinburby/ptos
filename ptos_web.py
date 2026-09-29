@@ -2879,6 +2879,16 @@ def _build_schema_dict(old_schema, new_types, type_schemas,
         types_out[tname] = tdict
 
     schema["type"] = types_out
+
+    # ── carry over unknown top-level sections ────────────────────────────────
+    # This builder reconstructs the file from known parts only, so any section
+    # it does not model would be silently dropped on every save. [demo] (the
+    # demo log group) is one such section; this keeps it and any future
+    # top-level key the engine reads.
+    _known_top = {"types", "fields", "global_fields", "type", "shared"}
+    for key, val in old_schema.items():
+        if key not in _known_top and key not in schema:
+            schema[key] = val
     return schema
 
 # ══════════════════════════════════════════════════════════════════════════════

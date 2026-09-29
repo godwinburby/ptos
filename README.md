@@ -961,7 +961,7 @@ the starters are used again.
 |------|----------|
 | `starter_config.toml` | User, editor, display, cycles, dashboard, auth, backup, todo settings |
 | `starter_schema.toml` | 11 record types: expense, income, investment, exercise, sleep, mood, learning, habit, capture, pomodoro, jobsearch — with parent-dependent fields, tags, global optional fields (context, project) |
-| `starter_queries.toml` | 17 base queries + 6 metrics (balance, food_ratio, avg_spend, total_income, total_expenses, avg_mood) + 2 dashboards (default, health) + 1 status board (job_search) |
+| `starter_queries.toml` | 17 base queries + 6 metrics (balance, food_ratio, avg_spend, total_income, total_expenses, avg_mood) + 2 dashboards (default, health) + 1 status board (`demo_job`) |
 | `starter_presets.toml` | 21 presets with short aliases — coffee, lunch, dinner, groceries, restaurant, auto, bus, metro, petrol, rapido, recharge, broadband, electricity, salary, sip, rd, walk, gym, run, read, course |
 | `starter_demo.toml` | Sample demo data (records, todos, journal, notes) seeded by `--init` on a brand-new workspace so every page has content after install — dates are relative to install day via `{{today}}`/`{{-Nd}}`/`{{+Nd}}` tokens |
 
@@ -979,12 +979,13 @@ Press Enter (or `--init --no-demo-data`) to skip it. Seeding only happens on a
 **fresh** workspace — an install that already has records, todos, journal entries
 or notes is never touched. The story is: sample records in `records/demo/` (a
 one-level-deep log group picked up by every record view), a few demo todos with
-`+routine`/`+jobsearch`, three journal entries, and a `Demo/` +
-`Projects/Find a Job` note folder.
+`+routine`/`+__demo__`, three journal entries, and a `Demo/Find a Job` note
+folder. The demo board, project and pomodoro habit are all namespaced
+(`demo_job`, `demo_pomodoro`) so they can never collide with your own config.
 
-Every seeded line carries a marker — records get `tag=demo`, todos get the
-`+demo` project — so demo content is recognisable in the UI *and* removable even
-after you edit it. Remove it any time with either:
+Every seeded line carries a marker — records get `tag=__demo__`, todos get the
+`+__demo__` project — so demo content is recognisable in the UI *and* removable
+even after you edit it. Remove it any time with either:
 
 ```
 ptos --remove-demo-data
@@ -993,12 +994,44 @@ ptos --remove-demo-data
 …or **Settings → Data → Remove demo data** in the web UI (the button only
 appears while demo data is present).
 
-Removal only ever takes demo content. A record, todo or journal entry you added
-yourself is kept, notes and config are never touched, and `records/demo/` is only
-deleted once nothing but demo lines is left in it. Journal entries are removed
-only on a verbatim match; todos and records are matched by their marker first,
-falling back to a whole-line match against the spec (so workspaces seeded before
-the markers existed still clean up).
+Removal only ever takes demo content, matched **by marker only**. A record, todo
+or journal entry you added yourself is kept, notes and config are never touched,
+and `records/demo/` is only deleted once nothing but demo lines is left in it.
+Journal entries have no marker field, so they are the one exception and are
+removed only on an exact body match.
+
+### Keeping demo data out of your numbers
+
+Demo records stay browsable and editable — but they must not quietly inflate
+your dashboard, metrics, boards, habits, projects, calendars or thresholds once
+you start logging your own data. The `[demo]` section in `config.toml` controls
+this:
+
+```toml
+[demo]
+show = "auto"      # auto (default) | always | never
+log_group = "demo" # actually lives in schema.toml — the record folder
+```
+
+| Value | Meaning |
+|---|---|
+| `auto` *(default)* | Demo rows count **only while you have no real records yet**. The moment you log your first non-demo record, they drop out of every aggregate — and come back if you clear your data again. |
+| `always` | Demo rows always count. Use this while you are deliberately evaluating the sample data. |
+| `never` | Demo rows never count in aggregates. |
+
+Change it any time:
+
+```
+ptos --set-config demo.show never
+ptos --get-config demo.show
+```
+
+Browse, Search and the record editor always show demo rows regardless of this
+setting — you can always see and fix what you were given. Only the aggregate
+views (dashboards, metrics, thresholds, boards, habits, projects, calendars, due
+lists and the lint report) respect it. When a re-install would add demo records
+that your existing queries, boards, habits, projects or thresholds also match, the
+CLI prints a short heads-up naming them first.
 
 ### Re-installing the demo data
 
@@ -1014,7 +1047,10 @@ once demo data has been removed).
 
 A re-install first clears the current demo story (so it can never duplicate
 itself), then adds it back with **all dates relative to today**, and it
-**merges** rather than overwrites — safe to run on a workspace you already use:
+**merges** rather than overwrites — safe to run on a workspace you already use.
+The new story is built and schema-validated in a temporary folder *before*
+anything is removed, so a broken spec can never leave you with a half-emptied
+workspace:
 
 | Your data | What a re-install does |
 |---|---|
@@ -1764,7 +1800,7 @@ ptos -y test -t td --delete --all
 | `--edit [TARGET]` | `-e` | Edit a workspace file (see targets below) |
 | `--init` | | Initialise workspace (safe to re-run — will not overwrite existing files) |
 | `--no-demo-data` | | With `--init`: skip the demo-data prompt and install no sample content |
-| `--remove-demo-data` | | Remove seeded demo content (`tag=demo` records, `+demo` todos, verbatim demo journal) — also in Settings → Data |
+| `--remove-demo-data` | | Remove seeded demo content (`tag=__demo__` records, `+__demo__` todos, verbatim demo journal) — also in Settings → Data |
 | `--add-demo-data` | | Re-install the demo story with dates relative to today, merging into your existing data — also in Settings → Data |
 | `--set-home PATH` | | Point PTOS at a data folder (writes `.ptos_home`, migrates existing data) |
 | `--bisync` | | Bidirectional sync with remote (reads `[sync]` from config.toml) |

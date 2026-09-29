@@ -305,3 +305,14 @@ applied   = ["submitted", "online", "referral"]
 interview = ["phone", "technical", "onsite", "hr", "first", "final"]
 offer     = ["salary", "negotiation", "signing"]
 rejected  = ["after_interview", "no_response"]
+
+# ══════════════════════════════════════════════════════════════════════════════
+# DEMO
+# ══════════════════════════════════════════════════════════════════════════════
+# log_group names the folder under records/ that holds seeded demo records
+# (records/<log_group>/<year>.log). It works like the per-type log_group
+# setting above, so those records stay visible to browse, search and edits
+# while every aggregate read can exclude them by folder.
+
+[demo]
+log_group = "demo"

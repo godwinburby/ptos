@@ -154,13 +154,13 @@ metrics = [
 # BOARDS
 # ══════════════════════════════════════════════════════════════════════════════
 
-["board.job_search"]
+["board.demo_job"]
 columns = [
-    { label = "Applied",   where = "status=applied" },
-    { label = "Interview", where = "status=interview" },
-    { label = "Offer",     where = "status=offer" },
-    { label = "Rejected",  where = "status=rejected" },
-    { label = "Accepted",  where = "status=accepted" },
+    { label = "Applied",   where = "type=jobsearch AND status=applied AND tag=__demo__" },
+    { label = "Interview", where = "type=jobsearch AND status=interview AND tag=__demo__" },
+    { label = "Offer",     where = "type=jobsearch AND status=offer AND tag=__demo__" },
+    { label = "Rejected",  where = "type=jobsearch AND status=rejected AND tag=__demo__" },
+    { label = "Accepted",  where = "type=jobsearch AND status=accepted AND tag=__demo__" },
 ]
 set_field         = "status"
 card_title_fields = ["position", "company"]
@@ -179,7 +179,7 @@ weeks = 12
 filters = ["type=habit", "name=walk"]
 weeks = 12
 
-["habit.pomodoro"]
+["habit.demo_pomodoro"]
 filters = ["type=pomodoro"]
 weeks = 12
 toggleable = false
@@ -222,12 +222,14 @@ exclude_results = ["accepted", "rejected", "no_response"]
 # ══════════════════════════════════════════════════════════════════════════════
 # At least one of todo_project / tag_filters / board / notes_path required.
 # label is required.
+# The demo project is namespaced (demo_job) and its notes live under Demo/ so
+# they never mix with a real project of the same name.
 
-["project.jobsearch"]
-label        = "Find a Job"
-todo_project = "jobsearch"
-tag_filters  = ["project=jobsearch"]
-board        = "job_search"
-notes_path   = "Projects/Find a Job"
+["project.demo_job"]
+label        = "Find a Job (Demo)"
+todo_project = "demo_job"
+tag_filters  = ["project=demo_job"]
+board        = "demo_job"
+notes_path   = "Demo/Find a Job"
 
 
