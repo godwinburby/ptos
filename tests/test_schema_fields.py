@@ -161,7 +161,8 @@ class TestDerivedDateSecurity:
         monkeypatch.setattr(ptos, "get_schema", lambda: self.DATE_SCHEMA)
         ptos._CACHE.clear()
         result = ptos.compute_derived(
-            {"type": "test"}, record_date=dt.date(2026, 8, 1)
+            {"type": "test"},
+            record_date=dt.date.today() - dt.timedelta(days=42),
         )
         assert result.get("age_days") == 42
 
@@ -170,7 +171,8 @@ class TestDerivedDateSecurity:
         monkeypatch.setattr(ptos, "get_schema", lambda: self.DATE_SCHEMA)
         ptos._CACHE.clear()
         result = ptos.compute_derived(
-            {"type": "test"}, record_date=dt.date(2026, 8, 1)
+            {"type": "test"},
+            record_date=dt.date.today() - dt.timedelta(days=42),
         )
         assert result.get("senior") == "true"
 
@@ -211,7 +213,8 @@ class TestDerivedDateSecurity:
         monkeypatch.setattr(ptos, "get_schema", lambda: schema)
         ptos._CACHE.clear()
         result = ptos.compute_derived(
-            {"type": "test", "days_active": "5"}, record_date=dt.date(2026, 8, 1)
+            {"type": "test", "days_active": "5"},
+            record_date=dt.date.today() - dt.timedelta(days=42),
         )
         assert result.get("age_days") == 47
 

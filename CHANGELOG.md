@@ -29,6 +29,15 @@ Format: `[version or date] — description`
 
 - **`--trend` no longer crashes on a numeric trend.** `fmt` was missing from `ptos_cli`'s import list, so the totals/avg columns raised `NameError` whenever a trend matched records with amounts.
 
+### Sync lock liveness now works on headless Windows
+
+- **`_pid_is_running()` uses `OpenProcess` on Windows** instead of `os.kill(pid, 0)`. Signal 0 raises `OSError(22)` on win32 for processes without an attached console, so the PID-based `.sync.lock` guard decided the owner was dead and let a second sync start alongside the first — a real concurrent-rclone hazard for web/CLI/cron on headless Windows, not just a test failure.
+
+### Test suite is date-relative and green end-to-end
+
+- **Tests no longer hardcode dates against a frozen past.** Derived-date records (`record_date = today - timedelta(42)`), the convert "last week" scrape (capture dated today, scraped Monday always precedes it), the habit streak/`days_done` assertion (present days counted, not filled grid cells), and the once-on-startup reminder test (no-op `_system_notify`, stopping subprocess reader threads being counted as fake threads) all derive from the real clock.
+- **`test_sync.py` stubs `run_sync`'s `Popen` with a `_FakePopen` (`wait()`/`kill()`)** so the mocked-process checks exercise the real `proc.wait()`/`returncode` path; the whole suite including `test_sync.py` passes (`1976 passed`), so `--ignore=tests/test_sync.py` is gone from the normal run and the pre-commit hook runs the full suite un-ignored.
+
 ---
 
 ## 2026-09-28

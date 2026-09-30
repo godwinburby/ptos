@@ -86,8 +86,7 @@ class TestHabitStreak:
         _write_records([f"{d} type=habit name=meditation" for d in lines])
         data = svc.get_habit_data("med")
         assert data["streak"] == 21
-        grid_start = dt.date.fromisoformat(data["grid"][0]["date"])
-        assert data["days_done"] == (today - grid_start).days + 1
+        assert data["days_done"] == 21
         assert len(data["months"]) == 1
 
     def test_unconfigured_habit_raises(self):

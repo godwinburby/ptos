@@ -52,14 +52,17 @@ ptos-backups/    → ZIP backups (sibling to ptos-data, outside sync scope)
 ## Running tests
 
 ```bash
-python -m pytest tests/ -q --ignore=tests/test_sync.py   # normal run (~1441 tests, ~50s)
+python -m pytest tests/ -q        # full suite (~1976 tests, ~100s) — same command the pre-commit hook runs
 python -m pytest tests/test_todo.py -q                    # one module
 python -m pytest tests/test_todo.py -k "test_name" -q     # one test
 ```
 
-`tests/test_sync.py` has 2 pre-existing failures (mocked `Popen` lacks `.wait()`).
-Always use `--ignore=tests/test_sync.py` for normal runs. Use `--no-verify` to
-bypass the pre-commit hook when the only failures are in `test_sync.py`.
+The full suite is green (including `tests/test_sync.py`, which mocks
+`subprocess.Popen` for `run_sync` via a `_FakePopen` helper with `wait()`/`kill()`).
+On Windows, `test_sync.py` must be run in an attached console (pytest only), or it
+can be verified with the full-suite command; a lone `pytest tests/test_sync.py` in a
+hidden/detached window may misreport — use the whole-suite run for authoritative
+results.
 
 ## Code conventions
 
@@ -84,7 +87,7 @@ bypass the pre-commit hook when the only failures are in `test_sync.py`.
 - Schema: `schema.toml` defines record types, fields, validation
 - Queries: `queries.toml` defines saved queries, metrics, dashboards
 - Data folder: resolved by `PTOS_HOME` env var > `.ptos_home` file > SCRIPT_DIR; setup scripts (Windows/Linux) create `ptos-data` as a sibling to the repo dir; Android uses `~/storage/shared/ptos-data`; `--set-home PATH` writes `.ptos_home` and migrates existing data to the target
-- Multi-device sync: `--bisync` runs `rclone bisync`, `--sync --confirm-delete` runs `rclone sync`; reads `[sync]` section from config.toml for remote_name, remote_path, folders; corruption pre-flight check detects zero-byte files before sync (excludes `todo/done.txt` since empty is expected after archiving or undoing); web UI: Settings → Sync card always visible with editable remote_name/remote_path inputs; sync action buttons (bisync/push/resync) only shown when remote is configured and valid; `_invalidate_all()` called after sync to refresh cached TOML config; `run_sync()` returns `{"ok", "output", "error", "returncode"}` dict (no `sys.exit()`); PID-based file lock (`.sync.lock`) prevents concurrent syncs across processes (web + CLI/cron); rclone flags: `--stats-one-line --log-level INFO` for clean captured output; sync card shows rclone status: "rclone not found" / "remote not found in rclone" / full interactive card; auto-sync on startup/shutdown via `auto_sync_on_startup`/`auto_sync_on_shutdown` config keys (default off); `sync.enabled` config key (default true) gates all sync paths — auto-sync, periodic sync, and manual UI button; periodic background sync via `sync_interval_minutes` (default 0 = disabled); **smart skip**: periodic sync checks local file mtimes/sizes in `.ptos_sync_state` before calling rclone (`skip_if_clean=True`); if no local files changed, rclone is skipped entirely; manual sync (UI/CLI), startup, and shutdown always run; periodic sync broadcasts `sync-start`/`sync-done` SSE events so the browser dot blinks and turns green/red; **live streaming**: `run_sync()` accepts `on_line=None` callback — each rclone output line is passed to the callback as it arrives; web UI uses `_sse_broadcast("sync-log", line)` for real-time Settings output, CLI uses `print(line, end="", flush=True)`; subprocess uses `Popen` with manual 300s timeout instead of blocking `subprocess.run`; **remote validation**: before running rclone, `rclone listremotes` is called to verify the remote exists in rclone config; returns clear error with available remotes if not found; **stale lock clearing**: `_clear_rclone_bisync_locks()` deletes `.lck` files from rclone's cache bisync directory before each bisync run (fixes interrupted bisync blocking subsequent runs)
+- Multi-device sync: `--bisync` runs `rclone bisync`, `--sync --confirm-delete` runs `rclone sync`; reads `[sync]` section from config.toml for remote_name, remote_path, folders; corruption pre-flight check detects zero-byte files before sync (excludes `todo/done.txt` since empty is expected after archiving or undoing); web UI: Settings → Sync card always visible with editable remote_name/remote_path inputs; sync action buttons (bisync/push/resync) only shown when remote is configured and valid; `_invalidate_all()` called after sync to refresh cached TOML config; `run_sync()` returns `{"ok", "output", "error", "returncode"}` dict (no `sys.exit()`); PID-based file lock (`.sync.lock`) prevents concurrent syncs across processes (web + CLI/cron) — liveness is `os.kill(pid, 0)` on POSIX and `OpenProcess` on Windows (probe signal 0 fails headless on win32); rclone flags: `--stats-one-line --log-level INFO` for clean captured output; sync card shows rclone status: "rclone not found" / "remote not found in rclone" / full interactive card; auto-sync on startup/shutdown via `auto_sync_on_startup`/`auto_sync_on_shutdown` config keys (default off); `sync.enabled` config key (default true) gates all sync paths — auto-sync, periodic sync, and manual UI button; periodic background sync via `sync_interval_minutes` (default 0 = disabled); **smart skip**: periodic sync checks local file mtimes/sizes in `.ptos_sync_state` before calling rclone (`skip_if_clean=True`); if no local files changed, rclone is skipped entirely; manual sync (UI/CLI), startup, and shutdown always run; periodic sync broadcasts `sync-start`/`sync-done` SSE events so the browser dot blinks and turns green/red; **live streaming**: `run_sync()` accepts `on_line=None` callback — each rclone output line is passed to the callback as it arrives; web UI uses `_sse_broadcast("sync-log", line)` for real-time Settings output, CLI uses `print(line, end="", flush=True)`; subprocess uses `Popen` with manual 300s timeout instead of blocking `subprocess.run`; **remote validation**: before running rclone, `rclone listremotes` is called to verify the remote exists in rclone config; returns clear error with available remotes if not found; **stale lock clearing**: `_clear_rclone_bisync_locks()` deletes `.lck` files from rclone's cache bisync directory before each bisync run (fixes interrupted bisync blocking subsequent runs)
 - **Filter expression syntax** (`apply_where` in `ptos.py`): boolean expressions with `AND`/`OR`/`NOT`/parentheses; operators `=  !=  >  <  >=  <=  ~(contains)  !~(not contains)`. Operators may be surrounded by whitespace (`tag != snacks` works — `_tok_where` collapses spaced `field op value` token triples via `_collapse_spaced_ops`); unspaced (`tag!=snacks`) and `NOT (tag=snacks)` behave identically; `!=`/`!~` also match records missing the field entirely (NaN-like, equal to `NOT (field=x)`), while ordered/`=` comparisons are False for missing fields. Used by browse expression box, `--where`, and query/metric definitions.
 - **Glob wildcard search**: `_glob_match(pattern, text)` in `ptos.py` — plain text uses `in` for substring match; patterns with `*` or `?` use `fnmatch.translate()` for glob matching. Used by all search paths: universal search, browse, todo page, query builder
 - **Server config**: `[server]` section with `host` (default `127.0.0.1`) and `port` (default `5000`); `ptos_web.py` reads from config and warns on startup if `host != 127.0.0.1` and `[auth]` is disabled; `desktop_app.py` always binds `127.0.0.1`, reads port from config
@@ -608,5 +611,16 @@ cp scripts/pre-commit .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
 
-Use `git commit --no-verify` to bypass (only for genuinely unrelated
-pre-existing failures).
+Use `git commit --no-verify` to bypass (only when the test suite is already
+green — e.g. a genuinely unrelated infra problem). Re-copy the hook after
+editing `scripts/pre-commit`.
+
+### Committing on Windows (PowerShell)
+
+PowerShell has no heredoc, so write the commit message to a temp file (e.g.
+`C:\Users\<user>\AppData\Local\Temp\opencode\msg.txt`) and use
+`git commit -F <file>` instead of `git commit -m "..."` for long messages.
+The hook and git write to stderr, which PowerShell renders as a cosmetic
+`NativeCommandError`; when a command's output looks swallowed or hangs, run it
+detached with `Start-Process -WindowStyle Hidden` and redirect both streams to
+log files, then read those files with the file tools.
