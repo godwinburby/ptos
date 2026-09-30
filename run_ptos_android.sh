@@ -172,12 +172,12 @@ else
 fi
 
 # ── Keep Syncthing running (unless disabled) ─────────────────────────────────
-SERVE="$(python ptos.py --get-config syncthing.serve 2>/dev/null | tr -d '[:space:]')"
+SERVE="$(python ptos.py --get-config syncthing.serve 2>/dev/null | sed -n 's/^syncthing\.serve=//p' | tr -d '[:space:]')"
 if [ "$SERVE" = "true" ] && command -v syncthing &>/dev/null; then
     termux-wake-lock 2>/dev/null || true
     if command -v sv-enable &>/dev/null; then
         sv-enable syncthing 2>/dev/null || true
-        sv up syncthing 2>/dev/null || true
+        sv start syncthing 2>/dev/null || true
     fi
     if ! pgrep -x syncthing >/dev/null 2>&1; then
         nohup syncthing serve --no-browser >/dev/null 2>&1 &
