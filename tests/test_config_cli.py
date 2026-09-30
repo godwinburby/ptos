@@ -36,8 +36,16 @@ class TestCliSetConfig:
         assert ptos.get_config()["server"]["port"] == 8080
 
     def test_bool_coercion(self, monkeypatch, capsys):
-        _run(monkeypatch, "--set-config", "sync.enabled", "false")
-        assert ptos.get_config()["sync"]["enabled"] is False
+        _run(monkeypatch, "--set-config", "syncthing.serve", "false")
+        assert ptos.get_config()["syncthing"]["serve"] is False
+
+    def test_syncthing_serve_defaults_true(self, monkeypatch, capsys):
+        _run(monkeypatch, "--get-config", "syncthing.serve")
+        assert "true" in capsys.readouterr().out
+
+    def test_write_preserves_syncthing_section(self, monkeypatch, capsys):
+        _run(monkeypatch, "--set-config", "user.name", "Ada")
+        assert ptos.get_config()["syncthing"]["serve"] is True
 
     def test_int_and_str_preserved(self, monkeypatch, capsys):
         _run(monkeypatch, "--set-config", "home.quick_presets", "5")

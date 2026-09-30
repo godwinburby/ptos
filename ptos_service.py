@@ -25,8 +25,12 @@ import os
 import re
 import glob
 import time
+import json
 import datetime as dt
 import dataclasses
+import urllib.request
+import urllib.parse
+import xml.etree.ElementTree as ET
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -6087,6 +6091,276 @@ def retro_id_todo(line_no):
         raise
     except Exception as e:
         raise PTOSError(str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Syncthing status  —  read Syncthing's own REST API + log for last sync info.
+# PTOS does not know when a sync succeeded (Syncthing is autonomous, and the
+# old rclone engine is gone) — so the CLI and web UI observe Syncthing instead.
+# Auto-detects the GUI address + API key from Syncthing's own config.xml and
+# matches folders against BASE_DIR. Never logs or prints the API key.
+# ══════════════════════════════════════════════════════════════════════════════
+
+_SYNCTHING_TIMEOUT = 2
+
+_SYNC_LOG_PATTERNS = [
+    re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*synced in \S+"),
+    re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*[Cc]ompleted sync"),
+    re.compile(r"(\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}).*[Cc]omplete"),
+]
+
+
+def _syncthing_config_candidates():
+    """Candidate config.xml paths per platform. Deterministic order."""
+    home = os.path.expanduser("~")
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local")
+        return [os.path.join(base, "Syncthing", "config.xml")]
+    return [
+        os.path.join(home, ".config", "syncthing", "config.xml"),
+        os.path.join(home, ".local", "state", "syncthing", "config.xml"),
+    ]
+
+
+def _syncthing_log_candidates():
+    """Candidate syncthing.log paths per platform. Deterministic order."""
+    home = os.path.expanduser("~")
+    if sys.platform == "win32":
+        base = os.environ.get("LOCALAPPDATA") or os.path.join(home, "AppData", "Local")
+        return [os.path.join(base, "Syncthing", "syncthing.log")]
+    return [
+        os.path.join(home, ".local", "state", "syncthing", "syncthing.log"),
+        os.path.join(home, ".config", "syncthing", "syncthing.log"),
+        os.path.join(home, ".log", "syncthing", "syncthing.log"),
+    ]
+
+
+def _syncthing_config():
+    """Parse Syncthing's config.xml into {ok, address, apikey, folders}.
+
+    folders items: {id, label, path} with path absolutized + ~-expanded.
+    Non-ok return carries a human-friendly 'error'."""
+    for path in _syncthing_config_candidates():
+        if not os.path.exists(path):
+            continue
+        try:
+            root = ET.parse(path).getroot()
+        except Exception:
+            continue
+        gui = root.find("gui")
+        if gui is None or (gui.get("enabled") or "true").lower() == "false":
+            return {"ok": False,
+                    "error": "Syncthing web UI / API is disabled (config.xml gui.enabled=false)"}
+        apikey_el = gui.find("apikey")
+        apikey = (apikey_el.text or "").strip() if apikey_el is not None else ""
+        if not apikey:
+            return {"ok": False, "error": "No Syncthing API key found in config.xml"}
+        address_el = gui.find("address")
+        address = (address_el.text or "").strip() if address_el is not None else ""
+        if not address:
+            address = "127.0.0.1:8384"
+        if "://" not in address:
+            address = "http://" + address
+        folders = []
+        for folder in root.findall("folder"):
+            folders.append({
+                "id": folder.get("id", ""),
+                "label": folder.get("label") or folder.get("id", ""),
+                "path": os.path.abspath(os.path.expanduser((folder.get("path") or "").strip())),
+            })
+        return {"ok": True, "address": address, "apikey": apikey, "folders": folders}
+    return {"ok": False,
+            "error": "Syncthing config.xml not found — is Syncthing installed and configured?"}
+
+
+def _syncthing_request(address, apikey, path, timeout=_SYNCTHING_TIMEOUT):
+    """GET a Syncthing REST endpoint with the API key. Returns parsed JSON."""
+    url = address.rstrip("/") + path
+    req = urllib.request.Request(url, headers={"X-API-Key": apikey})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _match_syncthing_folder(folders, base_dir):
+    """Return the configured Syncthing folder whose path equals base_dir.
+    Case-insensitive on Windows; realpath-normalized both sides."""
+    norm_base = os.path.realpath(base_dir)
+    if sys.platform == "win32":
+        norm_base = norm_base.lower()
+    for f in folders:
+        p = os.path.realpath(f["path"])
+        if sys.platform == "win32":
+            p = p.lower()
+        if p == norm_base:
+            return f
+    return None
+
+
+def _last_sync_from_log():
+    """Last '… synced in …' timestamp from Syncthing's own log (tail scan).
+    Survives daemon restarts, unlike the in-memory REST event buffer."""
+    for path in _syncthing_log_candidates():
+        if not os.path.exists(path):
+            continue
+        ts = None
+        try:
+            size = os.path.getsize(path)
+            with open(path, "r", encoding="utf-8", errors="replace") as f:
+                if size > 512 * 1024:
+                    f.seek(-(512 * 1024), 2)
+                    f.readline()
+                for line in f:
+                    for pat in _SYNC_LOG_PATTERNS:
+                        m = pat.search(line)
+                        if m:
+                            ts = m.group(1)
+                            break
+        except Exception:
+            continue
+        if ts:
+            return ts
+    return None
+
+
+def _fmt_sync_time(value):
+    """Local, human-readable time from Syncthing's ISO/RFC3339 or log stamps.
+
+    Converts Z/offset timestamps to the machine's local time; naive log
+    timestamps (already local) pass through. None in, None out."""
+    if not value:
+        return None
+    if isinstance(value, dt.datetime):
+        parsed = value
+    else:
+        text = str(value).strip()
+        if text.endswith("Z"):
+            text = text[:-1] + "+00:00"
+        try:
+            parsed = dt.datetime.fromisoformat(text)
+        except ValueError:
+            return text
+    if parsed.tzinfo is not None:
+        parsed = parsed.astimezone()
+    return parsed.strftime("%Y-%m-%d %I:%M %p")
+
+
+def _syncthing_status_skeleton(address, error):
+    return {
+        "ok": True, "reachable": False, "version": None, "address": address,
+        "my_id": None, "my_name": None,
+        "folder": None, "state": None, "state_changed": None, "completion_pct": None,
+        "need_bytes": None, "fully_in_sync_as_of": None,
+        "last_sync": None, "last_sync_source": None,
+        "last_sync_fmt": None, "fully_in_sync_as_of_fmt": None,
+        "devices": [], "devices_connected": 0, "error": error,
+    }
+
+
+def get_syncthing_status():
+    """Read Syncthing's own REST API + log and report folder sync state.
+
+    Never raises and never touches the network config itself reports on
+    beyond the local daemon. Return dict (shared by CLI + web):
+      ok                 — config.xml was found and parsed
+      reachable          — REST API responded
+      version, address
+      folder             — matched {id, label, path} or None (unmatched)
+      state, state_changed, completion_pct, need_bytes
+      last_sync, last_sync_source ('api' | 'log' | None)
+      devices, devices_connected
+      error              — friendly message for the unreachable / config cases
+    """
+    cfg = _syncthing_config()
+    if not cfg.get("ok"):
+        result = _syncthing_status_skeleton(None, cfg.get("error"))
+        result["ok"] = False
+        return result
+    address, apikey = cfg["address"], cfg["apikey"]
+    result = _syncthing_status_skeleton(address, None)
+    folder = _match_syncthing_folder(cfg["folders"], BASE_DIR)
+    if folder:
+        result["folder"] = folder
+    try:
+        version = _syncthing_request(address, apikey, "/rest/system/version")
+        result["version"] = version.get("version")
+        result["reachable"] = True
+    except Exception:
+        result["error"] = f"Syncthing daemon not reachable at {address}"
+        if not result["last_sync"]:
+            log_ts = _last_sync_from_log()
+            if log_ts:
+                result["last_sync"] = log_ts
+                result["last_sync_source"] = "log"
+        result["last_sync_fmt"] = _fmt_sync_time(result["last_sync"])
+        result["fully_in_sync_as_of_fmt"] = _fmt_sync_time(result["fully_in_sync_as_of"])
+        return result
+    try:
+        sys_status = _syncthing_request(address, apikey, "/rest/system/status")
+        result["my_id"] = sys_status.get("myID")
+        result["my_name"] = sys_status.get("myName")
+    except Exception:
+        pass
+    fid = folder["id"] if folder else None
+    if folder:
+        try:
+            q = urllib.parse.quote(folder["id"])
+            db = _syncthing_request(address, apikey, f"/rest/db/status?folder={q}")
+            result["state"] = db.get("state")
+            result["state_changed"] = db.get("stateChanged")
+            global_b = db.get("globalBytes") or 0
+            in_sync = db.get("inSyncBytes") or 0
+            result["completion_pct"] = round(in_sync / global_b * 100, 1) if global_b else 100.0
+            result["need_bytes"] = db.get("needBytes", 0)
+            if (result["state"] == "idle" and result["completion_pct"] >= 100.0
+                    and not result["need_bytes"] and result["state_changed"]):
+                result["fully_in_sync_as_of"] = result["state_changed"]
+        except Exception:
+            result["error"] = "Could not read folder state from Syncthing API"
+    try:
+        # timeout=0 turns the events long-poll into an immediate response
+        events = _syncthing_request(
+            address, apikey,
+            "/rest/events?since=0&events=FolderCompletion&limit=20&timeout=0")
+    except Exception:
+        events = []
+    for ev in events or []:
+        data = ev.get("data") or {}
+        if fid and data.get("folder") != fid:
+            continue
+        comp = data.get("completion")
+        if comp is not None and float(comp) >= 0.99:
+            result["last_sync"] = ev.get("time") or result["last_sync"]
+            result["last_sync_source"] = "api"
+    if not result["last_sync"]:
+        log_ts = _last_sync_from_log()
+        if log_ts:
+            result["last_sync"] = log_ts
+            result["last_sync_source"] = "log"
+    try:
+        devs = _syncthing_request(address, apikey, "/rest/config/devices")
+        conns = _syncthing_request(address, apikey, "/rest/system/connections") or {}
+        conn_map = conns.get("connections") or {}
+        result["devices"] = []
+        for d in devs or []:
+            did = d.get("deviceID") or d.get("deviceId") or ""
+            c = conn_map.get(did) or {}
+            last_seen = d.get("lastSeen") or c.get("at") or c.get("connectedAt")
+            if last_seen and last_seen.startswith("0001-01-01"):
+                last_seen = None
+            result["devices"].append({
+                "name": d.get("name") or (did.split("-")[0][:7] if did else ""),
+                "id": did,
+                "connected": bool(c.get("connected", False)),
+                "last_seen": last_seen,
+            })
+        result["devices_connected"] = sum(1 for d in result["devices"] if d["connected"])
+    except Exception:
+        pass
+    result["last_sync_fmt"] = _fmt_sync_time(result["last_sync"])
+    result["fully_in_sync_as_of_fmt"] = _fmt_sync_time(result["fully_in_sync_as_of"])
+    for d in result["devices"]:
+        d["last_seen_fmt"] = _fmt_sync_time(d.get("last_seen"))
+    return result
 
 
 def link_entries(src_target, dst_target):

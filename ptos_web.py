@@ -1988,19 +1988,7 @@ def settings_page():
     todo = cfg.get("todo", {})
     dashboard = cfg.get("dashboard", {})
     auth = cfg.get("auth", {})
-    sync = cfg.get("sync", {})
-    
-    rclone_available = shutil.which("rclone") is not None
-    remote_exists = False
-    if rclone_available and sync.get("remote_name"):
-        try:
-            remotes = subprocess.run(
-                ["rclone", "listremotes"], capture_output=True, text=True, timeout=5
-            )
-            remote_exists = (sync["remote_name"] + ":") in (remotes.stdout or "")
-        except Exception:
-            pass
-    
+
     cycles = [{"name": k, "day": v} for k, v in cycles_raw.items()]
     
     today = dt.date.today()
@@ -2054,16 +2042,15 @@ def settings_page():
         auth_username=auth.get("username", ""),
         auth_password=auth.get("password", ""),
         todo=todo,
-        sync=sync,
-        sync_auto_on_startup=sync.get("auto_sync_on_startup", False),
-        sync_auto_on_shutdown=sync.get("auto_sync_on_shutdown", False),
-        sync_interval=sync.get("sync_interval_minutes", 0),
-        sync_enabled=sync.get("enabled", True),
-        rclone_available=rclone_available,
-        remote_exists=remote_exists,
         demo_present=svc.demo_data_present(),
         demo_available=svc.demo_data_available(),
-        base_dir=ptos.BASE_DIR)
+        base_dir=ptos.BASE_DIR,
+        syncthing_status=svc.get_syncthing_status())
+
+
+@app.route("/api/syncthing/status")
+def syncthing_status_api():
+    return jsonify(svc.get_syncthing_status())
 
 
 @app.route("/settings/save", methods=["POST"])
@@ -2107,22 +2094,7 @@ def settings_save():
             cfg.setdefault("todo", {})["reminder_check_interval"] = rci
         if "archive_months" in data:
             cfg.setdefault("todo", {})["archive_months"] = max(1, min(24, int(data["archive_months"])))
-        if "remote_name" in data:
-            val = data["remote_name"].strip().rstrip(":").replace(":", "")
-            cfg.setdefault("sync", {})["remote_name"] = val
-        if "remote_path" in data:
-            val = data["remote_path"].strip()
-            if val and not val.endswith("/"):
-                val += "/"
-            cfg.setdefault("sync", {})["remote_path"] = val
-        if "auto_sync_on_startup" in data or "auto_sync_on_shutdown" in data:
-            cfg.setdefault("sync", {})["auto_sync_on_startup"] = bool(data.get("auto_sync_on_startup"))
-            cfg.setdefault("sync", {})["auto_sync_on_shutdown"] = bool(data.get("auto_sync_on_shutdown"))
-        if "sync_enabled" in data:
-            cfg.setdefault("sync", {})["enabled"] = bool(data.get("sync_enabled"))
-        if "sync_interval_minutes" in data:
-            cfg.setdefault("sync", {})["sync_interval_minutes"] = max(0, min(120, int(data["sync_interval_minutes"])))
-        
+
         if "default_dashboard" in data:
             db_val = data["default_dashboard"]
             cfg["dashboard"] = {"default": db_val} if db_val else {}
@@ -2377,75 +2349,11 @@ def share_schema():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# Sync (rclone)
+# Sync conflicts (Syncthing / any file-sync tool)
 # ══════════════════════════════════════════════════════════════════════════════
 
-_sync_busy = False
-_sync_result = None
-
-
-@app.route("/sync/run", methods=["POST"])
-def sync_run():
-    global _sync_busy, _sync_result
-    if _sync_busy:
-        return jsonify(ok=False, error="Sync already in progress"), 409
-
-    if not shutil.which("rclone"):
-        return jsonify(ok=False, error="rclone not found. Install from https://rclone.org")
-
-    sync_cfg = svc.get_config().get("sync", {})
-    if not sync_cfg.get("enabled", True):
-        return jsonify(ok=False, error="Sync is disabled. Enable it in Settings.")
-
-    data = request.get_json(silent=True) or {}
-    command = data.get("command", "")
-    if command not in ("bisync", "sync", "resync"):
-        return jsonify(ok=False, error="Invalid command. Use bisync, sync, or resync")
-
-    payload_name = data.get("remote_name", "").strip().rstrip(":").replace(":", "")
-    payload_path = data.get("remote_path", "").strip()
-
-    cfg = svc.get_config()
-    sync_cfg = cfg.get("sync", {})
-    remote_name = payload_name or sync_cfg.get("remote_name", "")
-    remote_path = payload_path or sync_cfg.get("remote_path", "")
-    if not remote_name or not remote_path:
-        return jsonify(ok=False, error="[sync] not configured. Enter remote name and path above.")
-
-    _sync_busy = True
-    _sync_result = None
-    _sse_broadcast("sync-start")
-
-    def _run():
-        global _sync_busy, _sync_result
-        try:
-            actual_cmd = "bisync"
-            resync = False
-            if command == "sync":
-                actual_cmd = "sync"
-            elif command == "resync":
-                actual_cmd = "bisync"
-                resync = True
-            _sync_result = ptos.run_sync(actual_cmd, resync=resync,
-                                         remote_name=remote_name, remote_path=remote_path,
-                                         on_line=lambda line: _sse_broadcast("sync-log", line.rstrip("\r\n")))
-        except Exception as e:
-            _sync_result = {"ok": False, "output": "", "error": str(e), "returncode": 1}
-        finally:
-            _sync_busy = False
-            _sse_broadcast("sync-done", _sync_result)
-
-    threading.Thread(target=_run, daemon=True).start()
-    return jsonify(ok=True, message="Sync started")
-
-
-@app.route("/sync/status")
-def sync_status():
-    return jsonify(running=_sync_busy, result=_sync_result)
-
-
-@app.route("/sync/conflicts")
-def sync_conflicts_page():
+@app.route("/conflicts")
+def conflicts_page():
     conflicts = ptos.find_sync_conflicts()
     diffs = {}
     for c in conflicts:
@@ -2470,7 +2378,7 @@ def sync_conflicts_page():
             except Exception:
                 note_data["conf"] = ""
             diffs[c["conflict_path"]] = note_data
-    return render_template("sync_conflicts.html",
+    return render_template("conflicts.html",
                            conflicts=conflicts, diffs=diffs)
 
 
@@ -4689,26 +4597,6 @@ def _reminder_loop(check_interval_minutes=2):
         time.sleep(max(1, svc.get_config().get("todo", {}).get("reminder_check_interval", 2)) * 60)
 
 
-def _sync_loop(interval_minutes=30):
-    """Background thread: periodic rclone bisync."""
-    while True:
-        time.sleep(interval_minutes * 60)
-        if _sync_busy:
-            continue
-        try:
-            sync_cfg = svc.get_config().get("sync", {})
-            if not sync_cfg.get("enabled", True):
-                continue
-            if not sync_cfg.get("remote_name") or not sync_cfg.get("remote_path"):
-                continue
-            if not shutil.which("rclone"):
-                continue
-            _sse_broadcast("sync-start")
-            result = ptos.run_sync("bisync", skip_if_clean=True)
-            _sse_broadcast("sync-done", result)
-        except Exception:
-            pass
-
 # ── Shutdown ──────────────────────────────────────────────────────────────────
 
 @app.route("/shutdown", methods=["GET", "POST"])
@@ -4716,10 +4604,6 @@ def shutdown_server():
     _sse_broadcast("shutdown")
     try:
         _exit_backup()
-    except Exception:
-        pass
-    try:
-        _exit_sync()
     except Exception:
         pass
     def _exit():
@@ -4946,28 +4830,6 @@ def _exit_backup():
 
 atexit.register(_exit_backup)
 
-def _exit_sync():
-    """Run sync on exit if configured."""
-    try:
-        sync_cfg = svc.get_config().get("sync", {})
-        if not sync_cfg.get("enabled", True):
-            print("Shutdown sync skipped: sync disabled")
-            return
-        if sync_cfg.get("auto_sync_on_shutdown") and sync_cfg.get("remote_name") and sync_cfg.get("remote_path"):
-            if not shutil.which("rclone"):
-                print("Shutdown sync skipped: rclone not found")
-                return
-            print("Running shutdown sync...")
-            result = ptos.run_sync("bisync")
-            if result.get("ok"):
-                print("Shutdown sync complete")
-            else:
-                print(f"Shutdown sync failed: {result.get('error', 'unknown')}")
-    except Exception as e:
-        print(f"Shutdown sync skipped: {e}")
-
-atexit.register(_exit_sync)
-
 if __name__ == "__main__":
     # One-time backup dir migration (ptos-data/backups → ptos-backups)
     try:
@@ -4991,24 +4853,6 @@ if __name__ == "__main__":
     except Exception as e:
         print(f"Startup backup skipped: {e}")
     
-    # Auto sync on startup if configured
-    try:
-        sync_cfg = svc.get_config().get("sync", {})
-        if not sync_cfg.get("enabled", True):
-            print("Startup sync skipped: sync disabled")
-        elif sync_cfg.get("auto_sync_on_startup") and sync_cfg.get("remote_name") and sync_cfg.get("remote_path"):
-            if not shutil.which("rclone"):
-                print("Startup sync skipped: rclone not found")
-            else:
-                print("Running startup sync...")
-                result = ptos.run_sync("bisync")
-                if result.get("ok"):
-                    print("Startup sync complete")
-                else:
-                    print(f"Startup sync failed: {result.get('error', 'unknown')}")
-    except Exception as e:
-        print(f"Startup sync skipped: {e}")
-    
     # Archive old done tasks on startup
     try:
         todo_cfg = svc.get_config().get("todo", {})
@@ -5022,8 +4866,6 @@ if __name__ == "__main__":
     
     # ── Check requirements ─────────────────────────────────────────────────────
     missing = []
-    if not shutil.which("rclone"):
-        missing.append("rclone — run setup script or install from https://rclone.org/install/")
     if _notify_platform == "termux" and not shutil.which("termux-notification"):
         missing.append("termux-api — run: pkg install termux-api  (also install Termux:API app from F-Droid/Play Store)")
     if missing:
@@ -5099,16 +4941,5 @@ def _start_reminder_thread():
 
 if __name__ == "__main__":
     _start_reminder_thread()
-
-    # Start periodic sync background thread
-    try:
-        sync_cfg = svc.get_config().get("sync", {})
-        sync_min = sync_cfg.get("sync_interval_minutes", 0)
-        if sync_min > 0 and sync_cfg.get("enabled", True):
-            _t = threading.Thread(target=_sync_loop, args=(sync_min,), daemon=True)
-            _t.start()
-            print(f"Periodic sync enabled (every {sync_min} min)")
-    except Exception:
-        pass
 
     app.run(host=_host, port=_port)

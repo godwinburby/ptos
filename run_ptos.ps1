@@ -72,20 +72,12 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     }
 }
 
-# -- 2b. Rclone detection + auto-install (best effort) --
-if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) {
-    if (Get-Command winget -ErrorAction SilentlyContinue) {
-        Write-Host "rclone not found. Installing via winget..."
-        winget install -e --id Rclone.Rclone --silent `
-            --accept-package-agreements --accept-source-agreements
-        $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
-                    [System.Environment]::GetEnvironmentVariable("Path","User")
-    }
-    if (-not (Get-Command rclone -ErrorAction SilentlyContinue)) {
-        Write-Host "rclone not available - sync feature will be disabled."
-        Write-Host "Install later from https://rclone.org/downloads if you want cloud sync."
-    }
-}
+# -- 2b. Syncthing note (runs on startup; no install needed) --
+# PTOS syncs via Syncthing, which is assumed to already be installed
+# and running on startup. To pair this device with another: open
+# http://127.0.0.1:8384 on both devices, add each other's device ID
+# (Actions -> Show ID), and share the ptos-data folder as 'Send & Receive'
+# (the folder ID must match on both devices). Verify with: ptos --sync-status
 
 # -- 3. Locate or clone PTOS --
 if (Test-Path "$scriptDir\ptos.py") {
@@ -232,8 +224,7 @@ if ($serverReady) {
     Start-Process "http://localhost:5000"
 } else {
     Write-Host ""
-    Write-Host "Server is taking longer than usual to start (startup sync may"
-    Write-Host "still be running - check the messages above)."
+    Write-Host "Server is taking longer than usual to start."
     Write-Host "Waiting for server to become available..."
     for ($i = 0; $i -lt 120; $i++) {
         try {

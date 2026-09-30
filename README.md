@@ -40,9 +40,8 @@ No database. No cloud. You own the data completely.
 - [Atomic Operations](#atomic-operations)
 - [Doctor Command](#doctor-command)
 - [Sharing and sync](#sharing-and-sync)
-  - [Built-in OneDrive sync (rclone bisync)](#built-in-onedrive-sync-rclone-bisync)
+  - [Sync (Syncthing)](#sync-syncthing)
   - [Git](#git)
-  - [Syncthing / Dropbox / iCloud](#syncthing--dropbox--icloud)
   - [Conflict Resolution](#conflict-resolution)
 - [Ignore patterns](#ignore-patterns)
 
@@ -128,12 +127,16 @@ Auto-installs Python via `pkg install -y python` if missing.
 The script handles everything on first launch:
 
 1. Checks Python (3.11+) — auto-installs via winget/apt/dnf/pacman/zypper/pkg
-2. Installs Git and rclone if missing
+2. Installs Git if missing
 3. Clones PTOS from GitHub
 4. Installs Flask and tomli-w via pip
 5. Runs `ptos --init` — creates config, records, journal, and starter files
 6. Prompts for your name and writes it to `config.toml`
 7. Starts the web server
+
+On Linux and Termux the script also installs **Syncthing** and keeps it running
+(it's what syncs your data between devices — see [Sharing and sync](#sharing-and-sync)).
+Windows uses your own Syncthing installation running on startup.
 
 On Android, code goes to `~/ptos` (Termux home), data to `~/storage/shared/ptos-data`.
 On Windows/Linux, data lives in a sibling directory (`~/ptos-data`) — outside the repo and away from OneDrive.
@@ -188,7 +191,7 @@ python ptos.py --set-home ~/ptos-data
 │   ├── web_templates/               # Jinja2 HTML templates
 │   └── web_static/                  # CSS, JS, icons, PWA manifest
 │
-└── ptos-data/                       # Data (synced via rclone, outside OneDrive)
+└── ptos-data/                       # Data (synced via Syncthing, outside OneDrive)
     ├── config/                      # User config (created by --init)
     │   ├── config.toml
     │   ├── schema.toml
@@ -199,7 +202,7 @@ python ptos.py --set-home ~/ptos-data
     ├── todo/                        # Todo files (todo.txt, done.txt, done.YYYY.txt)
     ├── journal/                     # Markdown journal entries
     ├── notes/                       # Markdown notes by category
-    └── .ptos_sync_state             # Smart sync skip state
+    └── .stignore                    # Syncthing ignore rules (transient files)
 
 ptos-backups/                        # ZIP backups (sibling to ptos-data, outside sync scope)
 ```
@@ -790,7 +793,7 @@ Configure user profile and app preferences. Sections:
 - **Backup Folders**: core folders locked, custom folders editable
 - **Backup Settings**: auto backup on startup/shutdown triggers
 - **Todo**: reminder check interval (minutes) — how often PTOS checks for due todos (`0` disables); include-routines toggle; notify-once-on-startup toggle; takes effect after restart
-- **Sync**: OneDrive bidirectional sync via rclone bisync. See [Sync section](#sharing-and-sync) for full details.
+- **Sync conflicts**: conflicts detected in synced folders can be reviewed and resolved (via the `/conflicts` page and `--resolve-conflicts`). See [Conflict Resolution](#conflict-resolution).
 - **Server** (config only): `[server]` section in `config.toml` with `host` and `port` — default `127.0.0.1:5000`. Set `host = "0.0.0.0"` to expose on LAN or Tailscale. Always set `[auth]` before exposing publicly.
 
 Settings are stored in `config.toml` and editable via the UI.
@@ -1091,14 +1094,8 @@ max_full_backups        = 10     # keep last N full backups
 max_config_backups      = 10     # keep last N config-only backups
 folders = ["records", "config", "templates", "journal", "notes"]
 
-[sync]
-enabled                 = true   # enable/disable all sync paths
-remote_name             = ""     # rclone remote name (configure in Settings)
-remote_path             = ""     # remote folder path
-folders                 = ["config", "records", "journal", "todo"]
-auto_sync_on_startup    = false
-auto_sync_on_shutdown   = false
-sync_interval_minutes   = 0      # periodic sync interval (0 = disabled)
+[syncthing]
+serve                   = true   # keep the daemon running on Linux/Termux launches
 
 [todo]
 notify_interval         = 5      # background due-todo check interval (minutes; 0 = disabled)
@@ -1490,71 +1487,74 @@ Health checks after every AI-assisted session, before trusting the result:
 Records are plain text — one line per entry, one file per year. Multiple
 devices can safely append to the same log file as long as writes don't overlap.
 
-### Built-in OneDrive sync (rclone bisync)
+### Sync (Syncthing)
 
-PTOS has built-in bidirectional sync with OneDrive using
-[rclone bisync](https://rclone.org/). Enable it in **Settings → Sync**.
+PTOS syncs your whole `ptos-data/` folder between devices using
+[Syncthing](https://syncthing.net) — peer-to-peer folder sync with no cloud
+account, no server, and no per-file lock conflicts.
 
-**Platform support:**
-- **Linux / macOS / Termux / Windows**: Full support. Requires rclone installed and configured
-  with a remote.
+**Install & launch:**
+- **Linux / Termux** — the run script installs Syncthing on first launch and
+  keeps it running on every run (`systemctl --user` where available, otherwise
+  a background `syncthing serve --no-browser`). To stop serving on a machine,
+  run `ptos --set-config syncthing.serve false`.
+- **Windows** — bring your own Syncthing; the script assumes it is already
+  installed and running on startup (it does not install it).
 
-**Web UI controls:**
-- **Enable/disable toggle** — turns periodic sync on and off
-- **Remote name and path** — rclone remote name (e.g. `onedrive`) and remote
-  folder path
-- **Folder checkboxes** — select which data folders to sync (e.g. `records/`,
-  `config/`, `journal/`, `todo/`)
-- **Sync Now** — trigger an immediate sync
-- **Force Resync** — discard rclone's sync history and start fresh (for
-  fixing sync conflicts or state corruption)
+**Pairing (one-time, ~2 minutes):**
+1. **Start Syncthing on both devices.** The Linux/Termux run scripts do this
+   automatically; on Windows it runs from the system tray. Open the web UI on
+   each device — `http://127.0.0.1:8384`.
+2. **Exchange device IDs (mutual).** On each device go to `Actions → Show ID`
+   and copy that 56-character ID. Then on each device click `Add Remote
+   Device` and paste the *other* device's ID. Pairing only works when **both
+   devices have each other** — always do it in both directions.
+3. **Share the folder.** On one device click `Add Folder` with Folder ID
+   `ptos-data` (use the **same ID on both devices** — the ID is what syncs,
+   not the label or path), set the Folder Path to that machine's ptos-data
+   directory, and under *Sharing* add the paired device as **Send & Receive**.
+4. **Accept on the other device.** Click `Add Folder → Accept these incoming
+   folders`, and set that device's folder path to **its own** ptos-data
+   directory (e.g. `~/storage/shared/ptos-data` on Android).
 
-**Status indicator:** The sidebar shows a colored dot reflecting sync state:
-- Gray: idle
-- Blue with pulse animation: running
-- Green: OK (last sync succeeded)
-- Orange: conflict detected
-- Red: error
+The shared folder must be the same folder `ptos.py` uses for data:
+`ptos-data/` next to the repo on Linux/Windows, and
+`~/storage/shared/ptos-data` on Android (visible to Syncthing directly).
 
-**SSE events:** The web UI receives `sync-start` and `sync-done` SSE events
-in real time. `sync-start` triggers the dot pulse animation; `sync-done`
-updates the dot color (green for success, red for error) and clears after 10s.
-Periodic syncs also broadcast these events so the browser reflects background
-sync activity. Manual UI syncs additionally stream rclone output line-by-line
-via `sync-log` events to the Settings output panel.
+**Verify:** `ptos --sync-status` (or the Syncthing card in Settings) shows this
+device's own ID — copy it from there when pairing the other side — plus the
+folder state and connected devices. Expect all devices connected and the
+folder at 100%.
 
-**Change detection (smart skip):** Periodic sync checks local file mtimes
-and sizes against `.ptos_sync_state` before calling rclone. If no local files
-changed since the last successful sync, rclone is skipped entirely — saving
-network, CPU, and battery. Manual sync (UI button), startup, and shutdown
-syncs always run regardless. If another device pushes changes while your
-local side is quiet, those changes are pulled the next time you make a
-local edit and sync.
+**Troubleshooting:**
+- **"0 of N devices connected"** — device IDs must be exchanged in *both*
+  directions (step 2); make sure Syncthing is actually running on each device.
+- **Never syncs off the same LAN** — keep Syncthing's default **Global
+  Discovery** and **Relay** switched on in its Settings so devices can find
+  each other over the internet.
+- **Same folder shows up as two separate folders** — the two sides got
+  different Folder IDs. Folder IDs must match exactly (`ptos-data`).
+- **Changes only flow one way** — use **Send & Receive** on both sides, not a
+  mix of Send-only / Receive-only.
 
-**Concurrency:** A PID-based file lock (`.sync.lock`) prevents overlapping
-sync runs across processes (web + CLI + cron). If a sync is already in
-progress, new requests are rejected with a clear error.
+**Ignore rules:** `--init` writes a `.stignore` file in the data folder
+(initially just `*.tmp`) so transient files never sync. Sync tools may also
+leave conflict files (see [Conflict Resolution](#conflict-resolution)).
 
-**Configuration in `config.toml`:**
+**Status:** PTOS never syncs anything itself, so `--sync-status` (and the
+Syncthing card in Settings) reads **Syncthing's own** REST API and log to report
+whether the `ptos-data` folder is in sync, when the last sync succeeded, and
+which devices are connected. It auto-detects the GUI address, API key and
+folder from Syncthing's `config.xml`; `last_sync` comes from the API's
+`FolderCompletion` events (the Syncthing log file is used as a fallback — and
+is also the only source that survives a Syncthing restart).
+
+**Config:** the `[syncthing]` section in `config.toml` controls the run-script
+daemon only — it has no effect on your pairing:
 ```toml
-[sync]
-enabled = true           # enable/disable all sync paths
-remote_name = "onedrive" # rclone remote name
-remote_path = "ptos"     # remote folder path
-folders = ["config", "records", "journal", "todo"]
-auto_sync_on_startup = false
-auto_sync_on_shutdown = false
-sync_interval_minutes = 0   # periodic sync (0 = disabled)
+[syncthing]
+serve = true   # keep the daemon running on Linux/Termux launches
 ```
-
-### Git
-
-Commit `records/` after each session. Full history, diff-friendly.
-
-### Syncthing / Dropbox / iCloud
-
-Sync the whole `ptos-data/` folder. On Android, data lives in
-`$HOME/storage/shared/ptos-data` — visible to Syncthing and file managers.
 
 ### Conflict Resolution
 
@@ -1583,16 +1583,13 @@ conflicts (same date+type, different content). Per-item choices:
   per item; done.txt supersedes todo.txt (done items auto-resolve)
 - **Notes:** side-by-side content comparison with merge or keep options
 
-**Web UI** (`/sync/conflicts`):
+**Web UI** (`/conflicts`):
 - Amber banner appears below the main content on every page when conflicts exist
 - Resolution page with per-record checkboxes, import-all button, side-by-side
   todo comparison, note diff view, and save/delete actions
 
 **Doctor warning:** `ptos --doctor` detects conflict files and suggests running
 `--resolve-conflicts`.
-
-**Status dot:** The sidebar shows an orange/amber dot when conflicts are detected
-and a green dot once all conflicts are resolved.
 
 ---
 
@@ -1803,11 +1800,8 @@ ptos -y test -t td --delete --all
 | `--remove-demo-data` | | Remove seeded demo content (`tag=__demo__` records, `+__demo__` todos, verbatim demo journal) — also in Settings → Data |
 | `--add-demo-data` | | Re-install the demo story with dates relative to today, merging into your existing data — also in Settings → Data |
 | `--set-home PATH` | | Point PTOS at a data folder (writes `.ptos_home`, migrates existing data) |
-| `--bisync` | | Bidirectional sync with remote (reads `[sync]` from config.toml) |
-| `--sync` | | One-way push to remote (DELETES remote files not present locally — requires `--confirm-delete`) |
-| `--confirm-delete` | | Required alongside `--sync` to acknowledge remote file deletions |
-| `--resync` | | With `--bisync`: initialize bisync relationship (first-time setup) |
 | `--resolve-conflicts [--records] [--todo]` | | Review and merge sync conflict files interactively. Flags filter by type |
+| `--sync-status` | | Show Syncthing status: folder state, last successful sync, connected devices (reads Syncthing's own REST API + log — PTOS does not sync anything itself) |
 | `--migrate-log-group TYPE` | | Move records of TYPE from `records/*.log` to `records/<group>/<year>.log` (requires `log_group` in schema) |
 | `--backup-full` | | Create full backup (records/, config/, templates/, journal/) |
 | `--backup-config` | | Create config-only backup (schema, queries, presets, config) |
