@@ -169,9 +169,9 @@ else
     echo "Not a git repo — skipping update check."
 fi
 
-# ── Keep Syncthing running (unless disabled) ─────────────────────────────────
+# ── Keep Syncthing running (opt-in) ─────────────────────────────────────────
 SERVE="$($PYTHON ptos.py --get-config syncthing.serve 2>/dev/null | tr -d '[:space:]')"
-if [ "$SERVE" != "false" ] && command -v syncthing &>/dev/null; then
+if [ "$SERVE" = "true" ] && command -v syncthing &>/dev/null; then
     if command -v systemctl &>/dev/null; then
         systemctl --user enable --now syncthing >/dev/null 2>&1 || true
     fi
@@ -179,6 +179,9 @@ if [ "$SERVE" != "false" ] && command -v syncthing &>/dev/null; then
         nohup syncthing serve --no-browser >/dev/null 2>&1 &
     fi
     echo "Syncthing is running (http://127.0.0.1:8384). Disable with: $PYTHON ptos.py --set-config syncthing.serve false"
+elif command -v syncthing &>/dev/null; then
+    echo "Syncthing is installed but not set to start automatically."
+    echo "Enable it in Settings -> Syncthing, or run: $PYTHON ptos.py --set-config syncthing.serve true"
 fi
 
 # ── Kill anything on port 5000 ──────────────────────────────────────────────

@@ -39,13 +39,17 @@ class TestCliSetConfig:
         _run(monkeypatch, "--set-config", "syncthing.serve", "false")
         assert ptos.get_config()["syncthing"]["serve"] is False
 
-    def test_syncthing_serve_defaults_true(self, monkeypatch, capsys):
+    def test_syncthing_serve_defaults_false(self, monkeypatch, capsys):
         _run(monkeypatch, "--get-config", "syncthing.serve")
-        assert "true" in capsys.readouterr().out
+        assert "false" in capsys.readouterr().out
+
+    def test_syncthing_serve_set_true(self, monkeypatch, capsys):
+        _run(monkeypatch, "--set-config", "syncthing.serve", "true")
+        assert ptos.get_config()["syncthing"]["serve"] is True
 
     def test_write_preserves_syncthing_section(self, monkeypatch, capsys):
         _run(monkeypatch, "--set-config", "user.name", "Ada")
-        assert ptos.get_config()["syncthing"]["serve"] is True
+        assert ptos.get_config()["syncthing"]["serve"] is False
 
     def test_int_and_str_preserved(self, monkeypatch, capsys):
         _run(monkeypatch, "--set-config", "home.quick_presets", "5")

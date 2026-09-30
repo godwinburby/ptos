@@ -5,6 +5,8 @@ import urllib.request
 import datetime as dt
 from urllib.parse import urlsplit
 
+import pytest
+
 import ptos_service
 import ptos_cli
 
@@ -375,7 +377,7 @@ class TestCli:
         assert "Send & Receive" in out
         assert "abcd-1234" in out
         assert str(tmp_path) in out
-        assert "--set-config syncthing.serve false" in out
+        assert "--set-config syncthing.serve true" in out
 
     def test_run_sync_status_fully_in_sync_fallback(self, tmp_path, monkeypatch, capsys):
         status = {
@@ -422,6 +424,40 @@ class TestCli:
         monkeypatch.setattr("sys.argv", ["ptos", "--sync-status"])
         ptos_cli.main()
         assert "config.xml not found" in capsys.readouterr().out
+
+    def test_sync_check_reachable_exits_zero(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(ptos_service, "get_syncthing_status",
+                            lambda: {"ok": True, "reachable": True, "folder": None, "error": None})
+        with pytest.raises(SystemExit) as exc:
+            ptos_cli.run_sync_check()
+        assert exc.value.code == 0
+        assert "Syncthing reachable." in capsys.readouterr().out
+
+    def test_sync_check_unreachable_exits_one(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(ptos_service, "get_syncthing_status",
+                            lambda: {"ok": False, "reachable": False, "error": "daemon down"})
+        with pytest.raises(SystemExit) as exc:
+            ptos_cli.run_sync_check()
+        assert exc.value.code == 1
+        assert "Syncthing not detected." in capsys.readouterr().out
+
+    def test_sync_check_status_raises_exits_one(self, tmp_path, monkeypatch, capsys):
+        def boom():
+            raise RuntimeError("unexpected")
+        monkeypatch.setattr(ptos_service, "get_syncthing_status", boom)
+        with pytest.raises(SystemExit) as exc:
+            ptos_cli.run_sync_check()
+        assert exc.value.code == 1
+        assert "Syncthing not detected." in capsys.readouterr().out
+
+    def test_main_dispatch_sync_check(self, tmp_path, monkeypatch, capsys):
+        monkeypatch.setattr(ptos_service, "get_syncthing_status",
+                            lambda: {"ok": True, "reachable": True, "folder": None, "error": None})
+        monkeypatch.setattr("sys.argv", ["ptos", "--sync-check"])
+        with pytest.raises(SystemExit) as exc:
+            ptos_cli.main()
+        assert exc.value.code == 0
+        assert "Syncthing reachable." in capsys.readouterr().out
 
 
 class TestWeb:
@@ -512,3 +548,63 @@ class TestWeb:
         client = app.test_client()
         html = client.get("/settings").get_data(as_text=True)
         assert "No configured Syncthing folder matches this data folder" in html
+
+    def test_settings_serve_toggle_hidden_on_windows(self, tmp_path, monkeypatch):
+        from ptos_web import app
+        import ptos_web
+        status = {"ok": True, "reachable": True, "folder": None, "error": None}
+        monkeypatch.setattr(ptos_service, "get_syncthing_status", lambda: status)
+        monkeypatch.setattr(ptos_web.platform, "system", lambda: "Windows")
+        client = app.test_client()
+        html = client.get("/settings").get_data(as_text=True)
+        assert 'id="syncthing-serve"' not in html
+        assert "syncthing_serve" not in html
+
+    def test_settings_serve_toggle_unchecked_by_default(self, tmp_path, monkeypatch):
+        from ptos_web import app
+        import ptos_web
+        status = {"ok": True, "reachable": True, "folder": None, "error": None}
+        monkeypatch.setattr(ptos_service, "get_syncthing_status", lambda: status)
+        monkeypatch.setattr(ptos_web.platform, "system", lambda: "Linux")
+        client = app.test_client()
+        html = client.get("/settings").get_data(as_text=True)
+        assert 'id="syncthing-serve"' in html
+        assert 'syncthing-serve").checked = false' in html
+        assert "syncthing_serve: document.getElementById" in html
+
+    def test_settings_serve_toggle_checked_when_configured(self, tmp_path, monkeypatch):
+        from ptos_web import app
+        import ptos_web
+        status = {"ok": True, "reachable": True, "folder": None, "error": None}
+        monkeypatch.setattr(ptos_service, "get_syncthing_status", lambda: status)
+        monkeypatch.setattr(ptos_web.platform, "system", lambda: "Linux")
+        cfg = ptos_service.get_config()
+        cfg.setdefault("syncthing", {})["serve"] = True
+        ptos_service.save_config(cfg)
+        client = app.test_client()
+        html = client.get("/settings").get_data(as_text=True)
+        assert 'id="syncthing-serve"' in html
+        assert 'syncthing-serve").checked = true' in html
+
+    def test_settings_save_persists_syncthing_serve(self, tmp_path, monkeypatch):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/settings/save", json={"syncthing_serve": True, "user_name": "Ada"})
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+        assert ptos_service.get_config()["syncthing"]["serve"] is True
+        resp2 = client.post("/settings/save", json={"syncthing_serve": False})
+        assert resp2.get_json()["ok"] is True
+        assert ptos_service.get_config()["syncthing"]["serve"] is False
+
+    def test_settings_save_keeps_other_syncthing_keys(self, tmp_path, monkeypatch):
+        from ptos_web import app
+        cfg = ptos_service.get_config()
+        cfg.setdefault("syncthing", {})["extra"] = "kept"
+        ptos_service.save_config(cfg)
+        client = app.test_client()
+        resp = client.post("/settings/save", json={"syncthing_serve": True})
+        assert resp.get_json()["ok"] is True
+        saved = ptos_service.get_config()["syncthing"]
+        assert saved["extra"] == "kept"
+        assert saved["serve"] is True

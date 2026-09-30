@@ -1095,7 +1095,7 @@ max_config_backups      = 10     # keep last N config-only backups
 folders = ["records", "config", "templates", "journal", "notes"]
 
 [syncthing]
-serve                   = true   # keep the daemon running on Linux/Termux launches
+serve                   = false  # start the daemon on Linux/Termux launches only when true (Settings → Syncthing or --set-config syncthing.serve true)
 
 [todo]
 notify_interval         = 5      # background due-todo check interval (minutes; 0 = disabled)
@@ -1495,11 +1495,19 @@ account, no server, and no per-file lock conflicts.
 
 **Install & launch:**
 - **Linux / Termux** — the run script installs Syncthing on first launch and
-  keeps it running on every run (`systemctl --user` where available, otherwise
-  a background `syncthing serve --no-browser`). To stop serving on a machine,
-  run `ptos --set-config syncthing.serve false`.
-- **Windows** — bring your own Syncthing; the script assumes it is already
-  installed and running on startup (it does not install it).
+  starts it on every run **only when serving is enabled** (`systemctl --user`
+  where available, otherwise a background `syncthing serve --no-browser`).
+  Serving is off by default; turn it on per machine with
+  `ptos --set-config syncthing.serve true` or the Settings → Syncthing
+  "Start the Syncthing daemon when PTOS launches" checkbox (both write the same
+  `[syncthing] serve` key — since `config.toml` syncs between devices, a
+  `serve = true` set anywhere applies to every Linux/Termux device sharing the
+  config; any value other than `true` means don't serve).
+- **Windows** — bring your own Syncthing; `run_ptos.ps1` never starts the
+  daemon (the checkbox is hidden there). It probes at launch with
+  `ptos --sync-check` and, if the Syncthing API is unreachable, prints
+  install guidance (download from syncthing.net and enable **"Run as a
+  Windows service"** during setup).
 
 **Pairing (one-time, ~2 minutes):**
 1. **Start Syncthing on both devices.** The Linux/Termux run scripts do this
@@ -1553,7 +1561,7 @@ is also the only source that survives a Syncthing restart).
 daemon only — it has no effect on your pairing:
 ```toml
 [syncthing]
-serve = true   # keep the daemon running on Linux/Termux launches
+serve = false  # start the Linux/Termux daemon on launch only when true (Settings → Syncthing / --set-config syncthing.serve true); missing key = off
 ```
 
 ### Conflict Resolution

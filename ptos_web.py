@@ -2045,6 +2045,8 @@ def settings_page():
         demo_present=svc.demo_data_present(),
         demo_available=svc.demo_data_available(),
         base_dir=ptos.BASE_DIR,
+        syncthing_serve=cfg.get("syncthing", {}).get("serve", False),
+        is_windows=platform.system() == "Windows",
         syncthing_status=svc.get_syncthing_status())
 
 
@@ -2120,6 +2122,9 @@ def settings_save():
         
         if "dashboard_highlights" in data and isinstance(data["dashboard_highlights"], dict):
             cfg.setdefault("dashboard", {})["highlights"] = data["dashboard_highlights"]
+        
+        if "syncthing_serve" in data:
+            cfg.setdefault("syncthing", {})["serve"] = bool(data["syncthing_serve"])
         
         result = svc.save_config(cfg)
         if result.get("ok"):

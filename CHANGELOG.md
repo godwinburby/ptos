@@ -31,6 +31,12 @@ Format: `[version or date] — description`
 - **README** — the "Sync (Syncthing)" pairings section is expanded into a full two-side walkthrough plus troubleshooting (0/N connected, same folder appearing twice = Folder ID mismatch, Global Discovery/Relay, Send & Receive required).
 - **Tests** — `my_id` population (and tolerant drop when `/rest/system/status` is unavailable), CLI guide printing only while unpaired, and web card + guide branch assertions.
 
+### Syncthing `serve` is now opt-in, with a Settings toggle
+
+- **Default flipped to off.** `[syncthing] serve` now defaults to `false` (starter config ships `serve = false`, and a missing key means off) — the Linux/Termux run scripts start the daemon only on an explicit `serve = true`. Existing installs that relied on the old missing-key-means-serve default stop auto-serving until they opt back in.
+- **Settings → Syncthing gains a real control** — a **"Start the Syncthing daemon when PTOS launches"** checkbox (off by default) writes `syncthing.serve` through Save Settings. It is **hidden on Windows**, where PTOS never starts the daemon (Windows runs Syncthing from its own system tray); a `serve = true` set on a shared `config.toml` still applies to the Linux/Termux devices that sync that config, never to Windows.
+- **`ptos --sync-check`** — thin CLI probe (exit 0 when the Syncthing API is reachable, 1 otherwise; prints "Syncthing reachable."/"Syncthing not detected."). `run_ptos.ps1` calls it at launch and, when the daemon is unreachable, prints install guidance (download from syncthing.net and enable "Run as a Windows service" during setup).
+
 ---
 
 ## 2026-09-29
