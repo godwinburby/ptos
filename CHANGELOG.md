@@ -7,6 +7,10 @@ Format: `[version or date] — description`
 
 ## 2026-09-30
 
+### Termux Syncthing startup
+
+- **Restart the enabled service correctly** — the Android launcher now uses `sv up syncthing`, the runit command for bringing the service online when `syncthing.serve=true`.
+
 ### rclone sync feature removed — Syncthing is the sync story
 
 - **The whole rclone feature is gone.** Engine `run_sync()` and its helpers (corruption pre-flight, smart-skip `.ptos_sync_state`, PID lock liveness, bisync stale-lock clearing), the `[sync]` config section, the `--bisync`/`--sync`/`--confirm-delete`/`--resync` CLI flags, the Settings → Sync card, the sidebar sync dot, `sync-start`/`sync-done`/`sync-log` SSE events, and the periodic sync thread were all removed. Do not reintroduce them.
