@@ -5,6 +5,19 @@ import pytest
 import ptos
 
 
+class _FakePopen:
+    def __init__(self, cmd, **kw):
+        self.cmd = cmd
+        self.returncode = 0
+        self.stdout = iter([])
+
+    def wait(self, timeout=None):
+        return self.returncode
+
+    def kill(self):
+        pass
+
+
 class TestPidIsRunning:
     def test_current_pid_is_running(self):
         assert ptos._pid_is_running(os.getpid()) is True
@@ -68,11 +81,7 @@ class TestRunSyncLock:
             return subprocess.CompletedProcess(
                 args=cmd, returncode=0, stdout="", stderr="")
         monkeypatch.setattr(subprocess, "run", capture_run)
-        def fake_popen(cmd, **kw):
-            proc = subprocess.CompletedProcess(args=cmd, returncode=0, stdout="", stderr="")
-            proc.stdout = iter([])
-            return proc
-        monkeypatch.setattr(subprocess, "Popen", fake_popen)
+        monkeypatch.setattr(subprocess, "Popen", _FakePopen)
         ptos.run_sync("bisync")
         assert not os.path.isfile(os.path.join(ptos.BASE_DIR, ".sync.lock"))
 
@@ -118,10 +127,7 @@ class TestRunSyncLock:
                 args=cmd, returncode=0, stdout="", stderr="")
         def capture_popen(cmd, **kw):
             captured_cmd.extend(cmd)
-            proc = subprocess.CompletedProcess(
-                args=cmd, returncode=0, stdout="", stderr="")
-            proc.stdout = iter([])
-            return proc
+            return _FakePopen(cmd, **kw)
         monkeypatch.setattr(ptos, "get_config", lambda: {
             "sync": {"remote_name": "test", "remote_path": "data"}
         })

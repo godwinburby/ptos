@@ -200,6 +200,7 @@ class TestStartHousekeepingThread:
                 self.args = kw.get("args")
             def start(self):
                 started.append(self)
+        monkeypatch.setattr(ptos_web, "_system_notify", lambda *a, **k: None)
         monkeypatch.setattr(ptos_web.threading, "Thread", FakeThread)
         monkeypatch.setattr(ptos_web.svc, "get_config",
                             lambda: {"todo": {"notify_interval": 60,

@@ -770,10 +770,11 @@ class TestConvertDraftStrip:
 
     def test_date_scraped_from_note(self):
         _clean_cache()
+        today = ptos.today().isoformat()
         draft = svc.convert_draft(
-            "2026-09-05 type=capture | petrol for scooter rs 200 last week",
+            f"{today} type=capture | petrol for scooter rs 200 last week",
             0, "expense")
-        assert draft["date"] < "2026-09-05"
+        assert draft["date"] < today
         assert "last week" not in draft["note"]
         assert draft["note"] == "petrol for scooter"
 

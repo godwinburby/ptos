@@ -6252,6 +6252,20 @@ def _clear_rclone_bisync_locks():
 
 
 def _pid_is_running(pid):
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        try:
+            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+            handle = ctypes.windll.kernel32.OpenProcess(
+                PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+            if not handle:
+                return False
+            ctypes.windll.kernel32.CloseHandle(handle)
+            return True
+        except Exception:
+            return False
     import errno
     try:
         os.kill(pid, 0)
