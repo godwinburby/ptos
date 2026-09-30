@@ -318,7 +318,7 @@ help="Print a config value for a dotted path, e.g.\n"
                      nargs=2,
 help="Set a config value via dotted path, e.g.\n"
                            "  --set-config todo.priority_labels.A Critical\n"
-                           "  --set-config syncthing.serve false\n"
+                           "  --set-config syncthing.serve true\n"
                           "  Interprets true/false as bool and pure numbers as int/float")
     utl.add_argument("--set",      nargs="+", metavar="KEY=VALUE",
                      help="Edit matched record(s)  (use with --where)\n"
@@ -392,6 +392,9 @@ help="Set a config value via dotted path, e.g.\n"
     utl.add_argument("--sync-status", dest="sync_status", action="store_true",
                      help="Show Syncthing status: folder state, last successful sync,\n"
                           "and connected devices (reads Syncthing's own API + log)")
+    utl.add_argument("--sync-check", dest="sync_check", action="store_true",
+                     help="Exit 0 if the Syncthing API is reachable, exit 1 otherwise\n"
+                          "(used by the Windows launch script to detect a missing daemon)")
 
     sch = p.add_argument_group("Schema")
     sch.add_argument("--add-type", dest="add_type", metavar="NAME",
@@ -2843,8 +2846,21 @@ def _print_sync_setup_guide(folder):
     print("    5. Re-run `ptos --sync-status` — expect both devices")
     print("       connected and the folder at 100%.")
     print("  The Folder ID must match on both devices (use '" + folder["id"] + "');")
-    print("  the label and path may differ. Disable this machine's daemon with:")
-    print("  ptos --set-config syncthing.serve false")
+    print("  the label and path may differ. To keep this machine's daemon running")
+    print("  on Linux/Termux launches, opt in via Settings -> Syncthing or:")
+    print("  ptos --set-config syncthing.serve true (Windows runs its own daemon)")
+
+
+def run_sync_check():
+    """Exit 0 when the Syncthing API is reachable, exit 1 otherwise. Thin
+    wrapper used by the Windows launch script to detect a missing daemon."""
+    import ptos_service as svc
+    try:
+        reachable = bool(svc.get_syncthing_status().get("reachable"))
+    except Exception:
+        reachable = False
+    print("Syncthing reachable." if reachable else "Syncthing not detected.")
+    sys.exit(0 if reachable else 1)
 
 
 def run_sync_status():
@@ -3459,7 +3475,10 @@ def main():
         _handle_resolve_conflicts(args)
         return
 
-    # ---- sync-status ----
+    # ---- sync-status / sync-check ----
+    if args.sync_check:
+        run_sync_check()
+        return
     if args.sync_status:
         run_sync_status()
         return

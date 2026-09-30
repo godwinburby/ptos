@@ -186,7 +186,7 @@ fi
 
 # ── Keep Syncthing running (unless disabled) ─────────────────────────────────
 SERVE="$(python ptos.py --get-config syncthing.serve 2>/dev/null | tr -d '[:space:]')"
-if [ "$SERVE" != "false" ] && command -v syncthing &>/dev/null; then
+if [ "$SERVE" = "true" ] && command -v syncthing &>/dev/null; then
     termux-wake-lock 2>/dev/null || true
     if command -v sv-enable &>/dev/null; then
         sv-enable syncthing 2>/dev/null || true
@@ -196,6 +196,9 @@ if [ "$SERVE" != "false" ] && command -v syncthing &>/dev/null; then
         nohup syncthing serve --no-browser >/dev/null 2>&1 &
     fi
     echo "Syncthing is running (http://127.0.0.1:8384). Disable with: ptos --set-config syncthing.serve false"
+elif command -v syncthing &>/dev/null; then
+    echo "Syncthing is installed but not set to start automatically."
+    echo "Enable it in Settings -> Syncthing, or run: ptos --set-config syncthing.serve true"
 fi
 
 # ── Kill anything on port 5000 ─────────────────────────────────────────────

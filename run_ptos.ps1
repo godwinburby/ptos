@@ -72,12 +72,14 @@ if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
     }
 }
 
-# -- 2b. Syncthing note (runs on startup; no install needed) --
+# -- 2b. Syncthing (Windows runs its own daemon; PTOS never starts one) --
 # PTOS syncs via Syncthing, which is assumed to already be installed
-# and running on startup. To pair this device with another: open
-# http://127.0.0.1:8384 on both devices, add each other's device ID
-# (Actions -> Show ID), and share the ptos-data folder as 'Send & Receive'
-# (the folder ID must match on both devices). Verify with: ptos --sync-status
+# and running on startup. The script detects it below (--sync-check) and
+# prints install guidance when the daemon is missing. To pair this device
+# with another: open http://127.0.0.1:8384 on both devices, add each other's
+# device ID (Actions -> Show ID), and share the ptos-data folder as
+# 'Send & Receive' (the folder ID must match on both devices).
+# Verify with: ptos --sync-status
 
 # -- 3. Locate or clone PTOS --
 if (Test-Path "$scriptDir\ptos.py") {
@@ -163,6 +165,17 @@ if (-not (Test-Path $configDir)) {
     Write-Host "PTOS initialised."
 } else {
     Write-Host "PTOS already initialised (config/ exists)."
+}
+
+# -- 8b. Syncthing detection (Windows runs its own daemon; never started here) --
+& $python ptos.py --sync-check 2>$null | Out-Null
+if ($LASTEXITCODE -ne 0) {
+    Write-Host ""
+    Write-Host "Syncthing not detected. Install it from https://syncthing.net/downloads/"
+    Write-Host "and enable 'Run as a Windows service' during setup."
+    Write-Host "Once it is running, pair devices at http://127.0.0.1:8384"
+    Write-Host "(share the PTOS data folder: $dataDir). You can ignore this"
+    Write-Host "message if you're not syncing across devices."
 }
 
 # -- 8. Git pull (if repo) --
