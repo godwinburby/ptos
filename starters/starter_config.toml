@@ -43,19 +43,13 @@ backup_if_files_changed = true
 max_full_backups = 10
 max_config_backups = 10
 
-[sync]
-# rclone remote for multi-device sync (configure in Settings after installing rclone)
-# Usage:  ptos --bisync    (bidirectional)
-#         ptos --sync --confirm-delete  (one-way push, deletes remote)
-enabled = false
-remote_name = ""
-remote_path = ""
-# Folders to include in sync corruption check
-folders = ["config", "records", "journal", "todo"]
-# Auto-sync settings (enable in Settings after configuring remote)
-auto_sync_on_startup = false
-auto_sync_on_shutdown = false
-sync_interval_minutes = 0
+[syncthing]
+# Serve the Syncthing daemon on every Linux/Termux run
+# (peer-to-peer folder sync — no cloud account required).
+# Pair your devices in the Syncthing web UI: http://127.0.0.1:8384
+# Disable per-machine (e.g. Windows, where you run Syncthing yourself):
+#   ptos --set-config syncthing.serve false
+serve = true
 
 [todo]
 # Background notification check interval in minutes (0 = disabled)

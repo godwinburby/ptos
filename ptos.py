@@ -109,7 +109,7 @@ def find_sync_conflicts():
     """Scan records/, todo/, journal/, notes/ for sync conflict files.
     Detects any file with 'conflict' in the name (case-insensitive),
     excluding .trashed-* prefix files and .stversions/ directories.
-    Works with any sync tool (Syncthing, rclone, Nextcloud, etc.).
+    Works with any sync tool (Syncthing, Nextcloud, etc.).
     Returns list of dicts with keys: original_path, conflict_path,
     file_type (records|todo|done|notes|journal), device, detected_at."""
     results = []
@@ -130,7 +130,7 @@ def find_sync_conflicts():
                 if fname.startswith(".trashed-"):
                     continue
                 ext = os.path.splitext(fname)[1].lower()
-                # also accept rclone's .conflictN suffix (e.g. .conflict1, .conflict2)
+                # back-compat: .conflictN suffix (rclone-style), e.g. .conflict1, .conflict2
                 is_conflict_ext = ext.startswith(".conflict") and ext[9:].isdigit()
                 if ext not in extensions and not is_conflict_ext:
                     continue
@@ -156,7 +156,7 @@ def _strip_conflict_suffix(fname):
     """Strip sync conflict markers from a filename to recover the original name.
     Handles patterns: name.sync-conflict-YYYYMMDD-HHMMSS-DEVICEID.ext,
     name (conflict YYYY-MM-DD-HH-MM-SS).ext, name.log.conflict1, name.txt.conflict2."""
-    # rclone: name.log.conflict1 — conflict suffix is the extension itself
+    # .conflictN suffix (rclone-style): name.log.conflict1 — suffix is the extension itself
     # os.path.splitext("2026.log.conflict1") → ("2026.log", ".conflict1")
     base, ext = os.path.splitext(fname)
     if ext.lower().startswith(".conflict") and ext[9:].isdigit():
@@ -196,7 +196,7 @@ def _parse_conflict_meta(fname):
     if m:
         y, mo, d, h, mi, s = m.groups()
         return None, f"{y}-{mo}-{d} {h}:{mi}:{s}"
-    # rclone: name.conflict1 — no metadata
+    # .conflictN suffix (rclone-style): name.conflict1 — no metadata
     return None, None
 
 
@@ -6029,6 +6029,11 @@ def _confirm_demo_seed():
     return not answer.strip().lower().startswith("n")
 
 
+_STIGNORE = """# PTOS/Syncthing ignore rules — transient files that must never sync
+*.tmp
+"""
+
+
 def init_ptos(demo=None):
     """Initialize PTOS directory structure and config files.
     Creates config/, records/, journal/, templates/ directories and
@@ -6068,6 +6073,8 @@ def init_ptos(demo=None):
         print(f"  created  records/{today().year}.log")
     else:
         print(f"  exists   records/{today().year}.log")
+
+    _write_if_missing(os.path.join(BASE_DIR, ".stignore"), _STIGNORE, ".stignore")
 
     # Write .ptos_home bootstrap file so PTOS_HOME env var is no longer needed
     if not DESKTOP_MODE:
@@ -6154,278 +6161,6 @@ def set_home(path):
     with open(bootstrap, "w", encoding="utf-8") as f:
         f.write(target + "\n")
     print(f"\n  Restart the server to use the new data folder.\n")
-
-
-def _detect_corruption(base_dir, state_file):
-    """Compare current file sizes against sizes recorded after last sync.
-    Returns list of files that went from non-zero to zero bytes."""
-    import json
-    _EXCLUDE = {"todo/done.txt"}
-    if not os.path.isfile(state_file):
-        return []
-    with open(state_file, encoding="utf-8") as f:
-        last_state = json.load(f)
-    concerning = []
-    for rel_path, prev in last_state.items():
-        if rel_path.startswith("_"):
-            continue
-        if rel_path in _EXCLUDE:
-            continue
-        prev_size = prev["size"] if isinstance(prev, dict) else prev
-        full_path = os.path.join(base_dir, rel_path)
-        if prev_size > 0 and os.path.isfile(full_path) and os.path.getsize(full_path) == 0:
-            concerning.append(rel_path)
-    return concerning
-
-
-def _record_sizes(base_dir, state_file, folders):
-    """Record current file mtimes and sizes for change detection and corruption detection."""
-    import json
-    state = {}
-    for folder in folders:
-        folder_path = os.path.join(base_dir, folder)
-        if not os.path.isdir(folder_path):
-            continue
-        for root, _, files in os.walk(folder_path):
-            for fname in files:
-                fpath = os.path.join(root, fname)
-                rel = os.path.relpath(fpath, base_dir)
-                try:
-                    st = os.stat(fpath)
-                    state[rel] = {"size": st.st_size, "mtime": st.st_mtime}
-                except OSError:
-                    pass
-    state["_last_sync"] = time.time()
-    with open(state_file, "w", encoding="utf-8") as f:
-        json.dump(state, f)
-
-
-def _local_changed(state_file, folders):
-    """Return True if any synced file changed since last recorded state."""
-    import json
-    if not os.path.isfile(state_file):
-        return True
-    with open(state_file, encoding="utf-8") as f:
-        state = json.load(f)
-    if "_last_sync" not in state:
-        return True
-    for folder in folders:
-        folder_path = os.path.join(BASE_DIR, folder)
-        if not os.path.isdir(folder_path):
-            continue
-        for root, _, files in os.walk(folder_path):
-            for fname in files:
-                fpath = os.path.join(root, fname)
-                rel = os.path.relpath(fpath, BASE_DIR)
-                try:
-                    st = os.stat(fpath)
-                    prev = state.get(rel)
-                    if not prev or prev["size"] != st.st_size or prev["mtime"] != st.st_mtime:
-                        return True
-                except OSError:
-                    return True
-    return False
-
-
-def _clear_rclone_bisync_locks():
-    import subprocess
-    import glob as _glob
-    cache_dir = None
-    try:
-        result = subprocess.run(["rclone", "config", "paths"],
-                                capture_output=True, text=True, timeout=10)
-        for line in result.stdout.splitlines():
-            if "Cache" in line and ":" in line:
-                cache_dir = line.split(":", 1)[1].strip()
-                break
-    except Exception:
-        pass
-    if not cache_dir:
-        cache_dir = os.path.join(os.path.expanduser("~"), ".cache", "rclone")
-    bisync_dir = os.path.join(cache_dir, "bisync")
-    if os.path.isdir(bisync_dir):
-        for f in _glob.glob(os.path.join(bisync_dir, "*.lck")):
-            try:
-                os.remove(f)
-            except OSError:
-                pass
-
-
-def _pid_is_running(pid):
-    if pid <= 0:
-        return False
-    if os.name == "nt":
-        import ctypes
-        try:
-            PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
-            handle = ctypes.windll.kernel32.OpenProcess(
-                PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
-            if not handle:
-                return False
-            ctypes.windll.kernel32.CloseHandle(handle)
-            return True
-        except Exception:
-            return False
-    import errno
-    try:
-        os.kill(pid, 0)
-        return True
-    except OSError as e:
-        return e.errno == errno.EPERM
-
-
-def _acquire_sync_lock():
-    lock_path = os.path.join(BASE_DIR, ".sync.lock")
-    if os.path.isfile(lock_path):
-        with open(lock_path, encoding="utf-8") as f:
-            try:
-                existing_pid = int(f.read().strip())
-            except ValueError:
-                existing_pid = None
-        if existing_pid and _pid_is_running(existing_pid):
-            return False
-    with open(lock_path, "w", encoding="utf-8") as f:
-        f.write(str(os.getpid()))
-    return True
-
-
-def _release_sync_lock():
-    lock_path = os.path.join(BASE_DIR, ".sync.lock")
-    try:
-        os.remove(lock_path)
-    except FileNotFoundError:
-        pass
-
-
-def run_sync(command, resync=False, skip_if_clean=False, remote_name=None, remote_path=None, on_line=None):
-    """Run rclone sync or bisync against configured remote.
-
-    Returns {"ok": bool, "output": str, "error": str, "returncode": int}.
-    Reads [sync] section from config.toml for remote_name, remote_path, folders.
-    Runs corruption pre-flight check before sync, records file sizes after success.
-    Uses a PID-based file lock (`.sync.lock`) to prevent concurrent syncs across processes.
-    When skip_if_clean=True, skips rclone if no local files changed since last sync.
-    remote_name/remote_path override config values (used by web UI to sync without saving config).
-    """
-    import subprocess
-
-    if not _acquire_sync_lock():
-        return {"ok": False, "output": "", "error":
-                "Another sync is already running (lock held by "
-                "a different process). Try again shortly.",
-                "returncode": 1}
-
-    try:
-        cfg = get_config()
-        sync_cfg = cfg.get("sync", {})
-        if not remote_name:
-            remote_name = sync_cfg.get("remote_name", "")
-        if not remote_path:
-            remote_path = sync_cfg.get("remote_path", "")
-        folders = sync_cfg.get("folders", ["config", "records", "journal", "todo"])
-
-        if not remote_name or not remote_path:
-            return {"ok": False, "output": "", "error":
-                    "[sync] not configured in config.toml. "
-                    "Add: [sync] remote_name = \"onedrive\" remote_path = \"personal/ptos-data\"",
-                    "returncode": 1}
-
-        try:
-            result = subprocess.run(["rclone", "listremotes"],
-                                    capture_output=True, text=True, timeout=10)
-            remote_names = result.stdout.strip().splitlines()
-            if not any(r.strip().rstrip(":") == remote_name for r in remote_names):
-                return {"ok": False, "output": "", "error":
-                        f"Remote '{remote_name}' not found in rclone config. "
-                        f"Available: {', '.join(r.strip() for r in remote_names) or '(none)'}.\n"
-                        f"Run 'rclone config' to set it up.",
-                        "returncode": 1}
-        except (subprocess.TimeoutExpired, FileNotFoundError):
-            pass
-
-        state_file = os.path.join(BASE_DIR, ".ptos_sync_state")
-
-        if skip_if_clean and not resync:
-            if not _local_changed(state_file, folders):
-                _invalidate_all()
-                return {"ok": True, "output": "Sync skipped: no local changes",
-                        "error": "", "returncode": 0}
-
-        concerning = _detect_corruption(BASE_DIR, state_file)
-        if concerning:
-            return {"ok": False, "output": "", "error":
-                    f"Refusing to sync: {len(concerning)} file(s) had content "
-                    f"before and are now 0 bytes: " +
-                    ", ".join(concerning[:10]) +
-                    (f" and {len(concerning)-10} more" if len(concerning) > 10 else "") +
-                    ". Investigate before syncing — syncing now risks overwriting "
-                    "your remote backup with this corrupted state.",
-                    "returncode": 1}
-
-        remote = f"{remote_name}:{remote_path}"
-        local = BASE_DIR
-
-        cmd = ["rclone", command, local, remote,
-               "--exclude", ".ptos_sync_state",
-               "--exclude", ".bisync.*",
-               "--exclude", ".sync.lock",
-               "--exclude", ".sync_scheduled.log",
-               "--stats-one-line",
-               "--log-level", "INFO"]
-        if command == "bisync" and not resync:
-            import glob as _glob
-            if not _glob.glob(os.path.join(BASE_DIR, ".bisync.*")):
-                resync = True
-        if command == "bisync" and not resync:
-            cmd.append("--conflict-resolve")
-            cmd.append("none")
-        if resync and command == "bisync":
-            cmd.append("--resync")
-
-        if command == "bisync":
-            _clear_rclone_bisync_locks()
-
-        try:
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                    stderr=subprocess.STDOUT, text=True)
-        except FileNotFoundError:
-            return {"ok": False, "output": "", "error":
-                    "rclone not found. Install from https://rclone.org",
-                    "returncode": 1}
-
-        output_lines = []
-        deadline = time.time() + 300
-        try:
-            for line in proc.stdout:
-                output_lines.append(line)
-                if on_line:
-                    on_line(line)
-                if time.time() > deadline:
-                    proc.kill()
-                    proc.wait()
-                    return {"ok": False, "output": "".join(output_lines),
-                            "error": "Sync timed out after 5 minutes",
-                            "returncode": 1}
-        except Exception:
-            proc.kill()
-            proc.wait()
-            raise
-        proc.wait()
-
-        output = "".join(output_lines)
-
-        if proc.returncode != 0:
-            return {"ok": False, "output": output,
-                    "error": f"rclone exited with code {proc.returncode}",
-                    "returncode": proc.returncode}
-
-        _record_sizes(BASE_DIR, state_file, folders)
-        _invalidate_all()
-
-        return {"ok": True, "output": output, "error": "", "returncode": 0}
-
-    finally:
-        _release_sync_lock()
 
 
 def set_user_name(name):

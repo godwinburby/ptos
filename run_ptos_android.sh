@@ -93,10 +93,26 @@ if [ ! -d "$DATA_DIR/config" ]; then
         pkg install -y git
     fi
 
-    # Install rclone if missing
-    if ! command -v rclone &>/dev/null; then
-        echo "Installing rclone..."
-        pkg install -y rclone
+    # Install Syncthing if missing
+    if ! command -v syncthing &>/dev/null; then
+        echo "Installing Syncthing..."
+        pkg install -y syncthing termux-services
+    fi
+    if ! command -v syncthing &>/dev/null; then
+        echo "Syncthing could not be installed automatically."
+        echo "Install it manually:  pkg install syncthing termux-services"
+    else
+        echo ""
+        echo "Syncthing installed. Next: pair this device with your other device(s)."
+        echo "Open http://127.0.0.1:8384 on each device and:"
+        echo "  1. Actions -> Show ID, then Add Remote Device with the OTHER"
+        echo "     device's ID — do this on BOTH devices (pairing is mutual)."
+        echo "  2. Add Folder with Folder ID 'ptos-data',"
+        echo "     path '/storage/shared/ptos-data', Share it with the other"
+        echo "     device as 'Send & Receive'."
+        echo "  3. On the other device ACCEPT the folder and set its path to"
+        echo "     its own ptos-data directory (the folder ID must match on both)."
+        echo "  4. Verify later with: ptos --sync-status"
     fi
 
     # Install termux-api for notifications
@@ -168,6 +184,20 @@ else
     echo "Not a git repo — skipping update check."
 fi
 
+# ── Keep Syncthing running (unless disabled) ─────────────────────────────────
+SERVE="$(python ptos.py --get-config syncthing.serve 2>/dev/null | tr -d '[:space:]')"
+if [ "$SERVE" != "false" ] && command -v syncthing &>/dev/null; then
+    termux-wake-lock 2>/dev/null || true
+    if command -v sv-enable &>/dev/null; then
+        sv-enable syncthing 2>/dev/null || true
+        sv start syncthing 2>/dev/null || true
+    fi
+    if ! pgrep -x syncthing >/dev/null 2>&1; then
+        nohup syncthing serve --no-browser >/dev/null 2>&1 &
+    fi
+    echo "Syncthing is running (http://127.0.0.1:8384). Disable with: ptos --set-config syncthing.serve false"
+fi
+
 # ── Kill anything on port 5000 ─────────────────────────────────────────────
 pkill -f "python.*ptos_web.py" 2>/dev/null || true
 sleep 1
@@ -200,7 +230,7 @@ if [ "$SERVER_READY" = "1" ]; then
 else
     echo ""
     echo "Server is taking longer than usual to start"
-    echo "Startup sync may still be running -- check the messages above."
+    echo "Check the messages above for details."
     echo -n "Waiting "
     for i in $(seq 1 120); do
         if curl -s http://localhost:5000 >/dev/null 2>&1; then

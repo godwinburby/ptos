@@ -5,6 +5,34 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-09-30
+
+### rclone sync feature removed — Syncthing is the sync story
+
+- **The whole rclone feature is gone.** Engine `run_sync()` and its helpers (corruption pre-flight, smart-skip `.ptos_sync_state`, PID lock liveness, bisync stale-lock clearing), the `[sync]` config section, the `--bisync`/`--sync`/`--confirm-delete`/`--resync` CLI flags, the Settings → Sync card, the sidebar sync dot, `sync-start`/`sync-done`/`sync-log` SSE events, and the periodic sync thread were all removed. Do not reintroduce them.
+- **Syncthing (peer-to-peer) is now how PTOS syncs.** The Linux and Termux run scripts install `syncthing` (`termux-services` on Termux) on first launch and keep the daemon alive on every run unless `[syncthing] serve` is `false` — `systemctl --user enable --now syncthing` where available, else a `pgrep` guard plus `nohup syncthing serve --no-browser &`. Windows brings its own Syncthing running on startup; `run_ptos.ps1` only prints a pairing note.
+- **New `[syncthing] serve` config key** (not a Settings UI control — set with `ptos --set-config syncthing.serve false`). `--get-config` reports a missing key as "not set" (exit 0), so the scripts treat anything-but-`false` as serve, which also defaults existing installs to serving.
+- **`--init` writes `.stignore`** (`*.tmp`) into the data folder so transient files never sync.
+- **Conflict resolution is untouched and sync-tool-agnostic** — `find_sync_conflicts`/`--resolve-conflicts`/the `/conflicts` page detect `*.sync-conflict-*` (Syncthing) and `.conflictN` (rclone, kept for back-compat). The web route moved from `/sync/conflicts` to the cleaner `/conflicts`.
+
+### `--sync-status` reads Syncthing's own API and log
+
+- **`ptos --sync-status`** reports whether the `ptos-data` folder is in sync, when the last sync succeeded, and which devices are connected — read from Syncthing itself (it is autonomous, and PTOS no longer syncs anything). Auto-detects the GUI address, API key and folders from Syncthing's `config.xml` on each platform; matches the folder against the PTOS data dir (realpath, case-insensitive on Windows). Exits 0 when the daemon is unreachable — it is a diagnostic, not an error.
+- **Last sync from two sources.** The REST `FolderCompletion` event (`completion >= 0.99`, filtered to the matched folder) gives the live answer; the events long-poll is called with `timeout=0` so it never blocks. When the in-memory event buffer is empty (right after a daemon restart) or the daemon is down, `syncthing.log` is tail-scanned for the newest "synced in" line. `fully_in_sync_as_of` (`stateChanged` when idle + 100% + 0 needed) covers the healthy-but-unrecorded case. All reads use stdlib `urllib` with a 2s timeout and `X-API-Key`; **the API key is never logged or printed**.
+- **Web parity** — `GET /api/syncthing/status` returns the same dict, and Settings gains a read-only **Syncthing** card (nav link + Refresh button, excluded from Save Settings) showing folder state, last sync, completion and the device list.
+- **Human-readable times** — every exposed timestamp (`last_sync`, `fully_in_sync_as_of`, per-device `last_seen`) also ships as a local `*_fmt` twin (`2026-09-30 16:30`-style), so the CLI and the Settings card never show raw `2026-09-30T11:00:00Z` / `+05:30` strings.
+- **Tests** — `tests/test_syncthing_status.py` (40 tests): fake `urlopen`/config fixtures covering every config.xml shape, folder match (incl. Windows case-insensitivity), completion event vs log fallback, daemon-down, time formatting, this-device ID, CLI output + setup guide, and the web route + template branches.
+
+### Guided two-device sync setup
+
+- **This device's own ID is now surfaced** — `get_syncthing_status()` reads `/rest/system/status` `myID`/`myName` into `my_id`/`my_name`. `ptos --sync-status` prints it as a `This dev:` line (full 56-character ID), and the Settings → Syncthing card shows a "This device" row with a **Copy** button, so a new user can paste it into the other device without opening the raw Syncthing GUI.
+- **Pairing walkthrough when nothing is connected** — with 0 connected devices `--sync-status` prints a numbered one-time two-device setup guide (exchange IDs **mutually**, share the folder **Send & Receive** with a Folder ID that must match on both devices, accept the incoming folder on the other side), and the Settings card shows a collapsible "Set up sync between two devices" guide (auto-`open` while unpaired) using the live folder ID and data-dir path. Guidance only — still read-only, no Sync write path.
+- **Run scripts point at the concrete steps** — the Linux/Termux first-run notes and the Windows `.ps1` note now walk through the same exchange/ID-match/accept sequence instead of a two-line hint, and refer to `ptos --sync-status` for verification.
+- **README** — the "Sync (Syncthing)" pairings section is expanded into a full two-side walkthrough plus troubleshooting (0/N connected, same folder appearing twice = Folder ID mismatch, Global Discovery/Relay, Send & Receive required).
+- **Tests** — `my_id` population (and tolerant drop when `/rest/system/status` is unavailable), CLI guide printing only while unpaired, and web card + guide branch assertions.
+
+---
+
 ## 2026-09-29
 
 ### Demo data can no longer silently pollute your real numbers

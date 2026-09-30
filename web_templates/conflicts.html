@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="page-title">Sync Conflicts</div>
+
+{% if not conflicts %}
+<div class="card">
+  <div style="text-align:center;padding:30px;color:var(--sub);">
+    No sync conflict files found.
+  </div>
+</div>
+{% else %}
+
+<div class="card" style="margin-bottom:14px;">
+  <div style="font-size:14px;color:var(--sub);">
+    Found {{ conflicts|length }} conflict file{{ 's' if conflicts|length != 1 }}.
+    Review each conflict and choose how to resolve it.
+  </div>
+</div>
+
+{% for c in conflicts %}
+<div class="card conflict-card" id="conflict-{{ loop.index }}" data-path="{{ c.conflict_path }}" data-original="{{ c.original_path }}">
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+    <div>
+      <div style="font-size:15px;font-weight:700;">{{ c.original_path }}</div>
+      <div style="font-size:12px;color:var(--sub);">
+        vs {{ c.conflict_path.split('/')[-1] }}
+        {% if c.device %} (device: {{ c.device }}){% endif %}
+        {% if c.detected_at %}, {{ c.detected_at }}{% endif %}
+      </div>
+    </div>
+    <span style="font-size:11px;font-weight:600;padding:3px 8px;border-radius:6px;
+                 background:var(--warn-lt);color:var(--warn);border:1px solid var(--warn);">
+      {{ c.file_type }}
+    </span>
+  </div>
+
+  {% if c.file_type == 'records' %}
+    {% set d = diffs.get(c.conflict_path, {}) %}
+    {% set unique_conf = d.get('lines_only_in_conflict', []) %}
+    {% set edit_conf = d.get('edit_conflicts', []) %}
+    {% set unique_orig = d.get('lines_only_in_original', []) %}
+
+    {% if not unique_conf and not edit_conf %}
+    <div style="font-size:13px;color:var(--sub);margin-bottom:10px;">
+      Files are identical. Conflict file can be safely removed.
+    </div>
+    <button class="btn btn-sm" onclick="removeConflict(this)" style="font-size:12px;">Remove conflict file</button>
+    {% else %}
+
+    {% if edit_conf %}
+    <div style="font-size:13px;font-weight:600;color:var(--warn);margin-bottom:8px;">
+      ⚠ {{ edit_conf|length }} edit conflict{{ 's' if edit_conf|length != 1 }} — same date+type, different content
+    </div>
+    {% for orig_l, conf_l in edit_conf %}
+    <div style="display:flex;gap:8px;margin-bottom:6px;font-size:12px;">
+      <div style="flex:1;padding:6px 8px;background:var(--bg);border-radius:6px;font-family:monospace;word-break:break-all;">
+        <span style="color:var(--sub);font-size:10px;">Original:</span><br>{{ orig_l }}
+      </div>
+      <div style="flex:1;padding:6px 8px;background:var(--warn-lt);border-radius:6px;font-family:monospace;word-break:break-all;">
+        <span style="color:var(--warn);font-size:10px;">Conflict:</span><br>{{ conf_l }}
+      </div>
+      <div style="display:flex;flex-direction:column;gap:4px;">
+        <button class="btn btn-sm" onclick="resolveEditConflict(this, 'original', {{ loop.parent.loop.index }}, '{{ orig_l | e }}')" style="font-size:11px;">Keep original</button>
+        <button class="btn btn-sm" onclick="resolveEditConflict(this, 'conflict', {{ loop.parent.loop.index }}, '{{ conf_l | e }}')" style="font-size:11px;">Keep conflict</button>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if unique_conf %}
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin:10px 0 8px;">
+      {{ unique_conf|length }} record{{ 's' if unique_conf|length != 1 }} only in conflict file:
+    </div>
+    <div style="max-height:300px;overflow-y:auto;margin-bottom:10px;">
+      {% for line in unique_conf %}
+      <label style="display:flex;align-items:flex-start;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">
+        <input type="checkbox" class="conflict-line-cb" value="{{ line }}" checked style="margin-top:3px;">
+        <span style="font-family:monospace;word-break:break-all;">{{ line }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary btn-sm" onclick="importSelected(this)" style="font-size:12px;">Import selected</button>
+      <button class="btn btn-sm" onclick="importAllRecords(this)" style="font-size:12px;">Import all</button>
+      <button class="btn btn-sm" onclick="keepOriginal(this)" style="font-size:12px;color:var(--sub);">Keep original (skip all)</button>
+    </div>
+    {% endif %}
+
+    {% endif %}
+
+  {% elif c.file_type in ('todo', 'done') %}
+    {% set d = diffs.get(c.conflict_path, {}) %}
+    {% set edit_conf = d.get('edit_conflicts', []) %}
+    {% set only_conf = d.get('only_in_conflict', []) %}
+    {% set only_orig = d.get('only_in_original', []) %}
+    {% set identical = d.get('identical', []) %}
+
+    {% if c.file_type == 'done' and not only_conf and not edit_conf %}
+    <div style="font-size:13px;color:var(--sub);margin-bottom:10px;">
+      Current file is already complete (superset). Conflict file can be safely removed.
+    </div>
+    <button class="btn btn-sm" onclick="removeConflict(this)" style="font-size:12px;">Remove conflict file</button>
+    {% else %}
+
+    {% if edit_conf %}
+    <div style="font-size:13px;font-weight:600;color:var(--warn);margin-bottom:8px;">
+      ⚠ {{ edit_conf|length }} task{{ 's' if edit_conf|length != 1 }} differ
+    </div>
+    {% for orig_t, conf_t in edit_conf %}
+    <div style="padding:8px;margin-bottom:8px;border:1px solid var(--border);border-radius:8px;">
+      <div style="font-size:13px;font-weight:600;margin-bottom:6px;">{{ orig_t.description }}</div>
+      <div style="display:flex;gap:8px;font-size:12px;">
+        <div style="flex:1;padding:6px 8px;background:var(--bg);border-radius:6px;">
+          <span style="color:var(--sub);font-size:10px;">Original:</span><br>
+          due={{ orig_t.due or 'none' }} pri={{ orig_t.priority or 'none' }}
+          {% if orig_t.projects %} {{ orig_t.projects|map('join', '+')|join(' ') }}{% endif %}
+          {% if orig_t.contexts %} {{ orig_t.contexts|map('join', '@')|join(' ') }}{% endif %}
+        </div>
+        <div style="flex:1;padding:6px 8px;background:var(--warn-lt);border-radius:6px;">
+          <span style="color:var(--warn);font-size:10px;">Conflict:</span><br>
+          due={{ conf_t.due or 'none' }} pri={{ conf_t.priority or 'none' }}
+          {% if conf_t.projects %} {{ conf_t.projects|map('join', '+')|join(' ') }}{% endif %}
+          {% if conf_t.contexts %} {{ conf_t.contexts|map('join', '@')|join(' ') }}{% endif %}
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;margin-top:6px;">
+        <button class="btn btn-sm" onclick="resolveTodoChoice(this, 'original', '{{ orig_t.description | e }}')" style="font-size:11px;">Keep original</button>
+        <button class="btn btn-sm" onclick="resolveTodoChoice(this, 'conflict', '{{ orig_t.description | e }}')" style="font-size:11px;">Keep conflict</button>
+        <button class="btn btn-sm" onclick="resolveTodoChoice(this, 'skip', '{{ orig_t.description | e }}')" style="font-size:11px;color:var(--sub);">Skip</button>
+      </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+
+    {% if only_conf %}
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin:10px 0 8px;">
+      {{ only_conf|length }} task{{ 's' if only_conf|length != 1 }} only in conflict file:
+    </div>
+    <div style="max-height:200px;overflow-y:auto;margin-bottom:10px;">
+      {% for t in only_conf %}
+      <label style="display:flex;align-items:flex-start;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">
+        <input type="checkbox" class="conflict-todo-cb" value="{{ t.raw_line }}" checked style="margin-top:3px;">
+        <span style="font-family:monospace;">{{ t.raw_line }}</span>
+      </label>
+      {% endfor %}
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;">
+      <button class="btn btn-primary btn-sm" onclick="importSelectedTodos(this)" style="font-size:12px;">Import selected</button>
+      <button class="btn btn-sm" onclick="importAllTodos(this)" style="font-size:12px;">Import all</button>
+      <button class="btn btn-sm" onclick="keepOriginal(this)" style="font-size:12px;color:var(--sub);">Keep original (skip all)</button>
+    </div>
+    {% endif %}
+
+    {% endif %}
+
+  {% elif c.file_type == 'notes' %}
+    {% set d = diffs.get(c.conflict_path, {}) %}
+    {% set orig_content = d.get('orig', '') %}
+    {% set conf_content = d.get('conf', '') %}
+
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">
+      Note conflict — choose which version to keep:
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:10px;">
+      <div style="flex:1;padding:8px;background:var(--bg);border-radius:6px;font-size:12px;max-height:200px;overflow-y:auto;">
+        <div style="font-weight:600;margin-bottom:4px;">Original</div>
+        <pre style="margin:0;white-space:pre-wrap;font-size:11px;">{{ orig_content[:500] }}{% if orig_content|length > 500 %}...{% endif %}</pre>
+      </div>
+      <div style="flex:1;padding:8px;background:var(--warn-lt);border-radius:6px;font-size:12px;max-height:200px;overflow-y:auto;">
+        <div style="font-weight:600;color:var(--warn);margin-bottom:4px;">Conflict</div>
+        <pre style="margin:0;white-space:pre-wrap;font-size:11px;">{{ conf_content[:500] }}{% if conf_content|length > 500 %}...{% endif %}</pre>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;">
+      <button class="btn btn-sm" onclick="keepOriginal(this)" style="font-size:12px;">Keep original</button>
+      <button class="btn btn-sm" onclick="keepConflict(this)" style="font-size:12px;">Keep conflict</button>
+      <button class="btn btn-sm" onclick="removeConflict(this)" style="font-size:12px;color:var(--sub);">Skip</button>
+    </div>
+  {% endif %}
+</div>
+{% endfor %}
+
+<script>
+function getCard(btn) { return btn.closest('.conflict-card'); }
+function getPath(btn, attr) { return getCard(btn).getAttribute(attr); }
+
+function apiCall(btn, body) {
+  var card = getCard(btn);
+  btn.disabled = true;
+  fetch("/api/conflict/resolve", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify(body)
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d.ok) {
+      card.style.transition = "opacity 0.3s";
+      card.style.opacity = "0.3";
+      setTimeout(function() { card.remove(); checkEmpty(); }, 300);
+      if (d.remaining !== undefined) updateConflictBanner(d.remaining);
+    } else {
+      alert("Error: " + (d.error || "Unknown error"));
+      btn.disabled = false;
+    }
+  })
+  .catch(function(e) {
+    alert("Error: " + e);
+    btn.disabled = false;
+  });
+}
+
+function importSelected(btn) {
+  var card = getCard(btn);
+  var cbs = card.querySelectorAll(".conflict-line-cb:checked");
+  var lines = Array.from(cbs).map(function(cb) { return cb.value; });
+  if (!lines.length) { alert("Select at least one record."); return; }
+  apiCall(btn, {action: "import_records", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), lines: lines});
+}
+
+function importAllRecords(btn) {
+  apiCall(btn, {action: "import_all_records", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original")});
+}
+
+function importSelectedTodos(btn) {
+  var card = getCard(btn);
+  var cbs = card.querySelectorAll(".conflict-todo-cb:checked");
+  var lines = Array.from(cbs).map(function(cb) { return cb.value; });
+  if (!lines.length) { alert("Select at least one todo."); return; }
+  apiCall(btn, {action: "import_records", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), lines: lines});
+}
+
+function importAllTodos(btn) {
+  apiCall(btn, {action: "import_all_todos", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original")});
+}
+
+function keepOriginal(btn) {
+  apiCall(btn, {action: "keep_original", conflict_path: getPath(btn, "data-path")});
+}
+
+function keepConflict(btn) {
+  apiCall(btn, {action: "keep_conflict", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original")});
+}
+
+function removeConflict(btn) {
+  apiCall(btn, {action: "remove_conflict", conflict_path: getPath(btn, "data-path")});
+}
+
+function resolveEditConflict(btn, choice, conflictIdx, line) {
+  apiCall(btn, {action: "edit_record", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), line: choice === 'conflict' ? line : ''});
+}
+
+function resolveTodoChoice(btn, choice, desc) {
+  apiCall(btn, {action: "resolve_todo_choice", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), choice: choice, description: desc});
+}
+
+function updateConflictBanner(count) {
+  var banner = document.querySelector('.msg-warn-banner');
+  if (count <= 0 && banner) {
+    banner.style.transition = "opacity 0.3s";
+    banner.style.opacity = "0";
+    setTimeout(function() { banner.remove(); }, 300);
+  } else if (banner) {
+    banner.innerHTML = "⚠ " + count + " sync conflict file" + (count !== 1 ? "s" : "") + " detected — <a href='/conflicts'>Resolve</a>";
+  }
+}
+
+function checkEmpty() {
+  var cards = document.querySelectorAll('.conflict-card');
+  if (!cards.length) {
+    location.reload();
+  }
+}
+</script>
+
+{% endif %}
+{% endblock %}

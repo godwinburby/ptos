@@ -34,7 +34,7 @@
   <a href="#sec-backup-folders">Folders</a>
   <a href="#sec-backup-settings">Backup</a>
   <a href="#sec-todo">Todo</a>
-  <a href="#sec-sync">Sync</a>
+  <a href="#sec-syncthing">Syncthing</a>
 </nav>
 
 <div class="card" id="sec-data" style="margin-bottom:14px;">
@@ -123,8 +123,33 @@
       </label>
       {% endfor %}
     </div>
-    {% endif %}
+{% endif %}
   </div>
+  {% if syncthing_status.ok and syncthing_status.folder %}
+  <details id="sync-setup-guide" {% if syncthing_status.devices_connected == 0 %}open{% endif %}>
+    <summary style="cursor:pointer;font-size:0.9em;margin-top:12px;">Set up sync between two devices
+      <span style="color:var(--text-secondary,#888);">(one-time)</span></summary>
+    <ol style="margin:8px 0 0 18px;font-size:0.9em;line-height:1.6;">
+      <li>Syncthing is running here (see the status above). On the <strong>other</strong> device, start Syncthing
+          too, open its UI at <code>http://127.0.0.1:8384</code>, and go to <em>Actions → Show ID</em>. Copy that ID.</li>
+      <li>On this machine's Syncthing UI, click <em>Add Remote Device</em> and paste the other device's ID.
+          On the <strong>other device</strong>, do the same with <strong>this</strong> device's ID (in the table
+          above — press Copy). Pairing is <strong>mutual</strong>: both devices must have each other.</li>
+      <li>On this machine, click <em>Add Folder</em>. Set Folder ID to <code>{{ syncthing_status.folder.id }}</code>
+          (it must <strong>match on both devices</strong>), path to <code>{{ base_dir }}</code>, and under
+          <em>Sharing</em> add the paired device with <strong>Send &amp; Receive</strong>.</li>
+      <li>On the other device, <strong>accept the incoming folder</strong> and set its path to <em>that device's
+          own</em> ptos-data directory (e.g. <code>~/storage/shared/ptos-data</code> on Android — the paths may
+          differ per device; the folder ID is what syncs, not the path).</li>
+      <li>Press <em>Refresh</em> here — you should see both devices connected and the folder at 100%.</li>
+    </ol>
+    <div style="margin:8px 0 0 18px;font-size:0.85em;color:var(--text-secondary,#888);">
+      Stuck on "0 of 2 devices connected"? Check both IDs were exchanged in <em>both</em> directions and that the
+      devices can reach each other (same Wi‑Fi, or open the firewall/relay on Syncthing's <em>Settings</em> tab).
+      This card only observes Syncthing — PTOS never syncs anything itself.
+    </div>
+  </details>
+  {% endif %}
 </div>
 
 {% if dashboards %}
@@ -309,98 +334,126 @@
   </div>
 </div>
 
-
-
-<div class="card" id="sec-sync" style="margin-bottom:14px;">
-  <div class="card-title">Sync <span id="sync-dot-card" class="sync-dot"></span></div>
-
-  <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;margin-bottom:12px;">
-    <input type="checkbox" id="sync-enabled" style="width:16px;height:16px;" onchange="toggleSyncEnabled()">
-    Enable rclone sync
-  </label>
-
-  <div id="sync-card-body">
-  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
-    <div class="field-group" style="flex:1;min-width:120px;">
-      <label>Remote name</label>
-      <input type="text" id="sync-remote-name" value="{{ sync.get('remote_name', '') }}" placeholder="gdrive" style="width:100%;font-size:14px;">
+<div class="card" id="sec-syncthing" style="margin-bottom:14px;">
+  <div class="card-title" style="display:flex;align-items:center;gap:10px;">
+    <span>Syncthing</span>
+    <button type="button" class="btn btn-ghost" style="margin-left:auto;font-size:0.8em;padding:3px 10px;"
+            onclick="refreshSyncthing()">Refresh</button>
+  </div>
+  <div style="font-size:0.8em;color:var(--text-secondary,#888);margin-bottom:10px;">
+    Read-only view of your local Syncthing daemon (its own API + log). PTOS does not sync anything itself —
+    it just reports whether the ptos-data folder is in sync and when it last succeeded.
+  </div>
+  <div id="syncthing-status-body">
+  {% if not syncthing_status.ok %}
+    <div style="color:var(--error,#c0392b);">{{ syncthing_status.error }}</div>
+    <div class="hint" style="margin-top:8px;">
+      Run Syncthing on this machine and sync your ptos-data folder. You only need one device to run Syncthing;
+      the folder must be shared with at least one other device for Syncthing to sync at all.
+      On Windows Syncthing can run from the system tray (it sets up a LAN pairing GTK-like UI).
+      Then re-open this page or press Refresh.
     </div>
-    <div class="field-group" style="flex:1;min-width:120px;">
-      <label>Remote path</label>
-      <input type="text" id="sync-remote-path" value="{{ sync.get('remote_path', '') }}" placeholder="ptos/" style="width:100%;font-size:14px;">
+  {% else %}
+    <table style="width:100%;border-collapse:collapse;font-size:0.9em;">
+      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);width:130px;">Daemon</td>
+          <td>{{ syncthing_status.version or 'unknown' }}
+              {% if not syncthing_status.reachable %}<span style="color:var(--error,#c0392b);"> · not reachable</span>{% endif %}
+          </td></tr>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Address</td>
+          <td style="font-family:monospace;">{{ syncthing_status.address }}</td></tr>
+      {% if syncthing_status.my_id %}
+      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">This device</td>
+          <td style="font-family:monospace;">{{ syncthing_status.my_id }}
+              {% if syncthing_status.my_name %}<span style="color:var(--text-secondary,#888);"> ({{ syncthing_status.my_name }})</span>{% endif %}
+              <button type="button" class="btn btn-ghost" style="margin-left:8px;font-size:0.75em;padding:1px 8px;"
+                      onclick="copyStId()">Copy</button>
+          </td></tr>
+      {% endif %}
+      {% if syncthing_status.folder %}
+      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Folder</td>
+          <td>{{ syncthing_status.folder.label }} <span style="color:var(--text-secondary,#888);">({{ syncthing_status.folder.id }})</span>
+              <div style="font-family:monospace;font-size:0.85em;color:var(--text-secondary,#888);">{{ syncthing_status.folder.path }}</div>
+          </td></tr>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">State</td>
+          <td>{{ syncthing_status.state or 'unknown' }}
+              {% if syncthing_status.completion_pct is not none %} · {{ syncthing_status.completion_pct }}% in sync{% endif %}
+              {% if syncthing_status.need_bytes %} · {{ syncthing_status.need_bytes }} bytes waiting{% endif %}
+          </td></tr>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Last sync</td>
+          <td>
+            {% if syncthing_status.last_sync_fmt or syncthing_status.last_sync %}
+              {{ syncthing_status.last_sync_fmt or syncthing_status.last_sync }}
+              <span style="color:var(--text-secondary,#888);">
+                from {{ 'Syncthing event log' if syncthing_status.last_sync_source == 'api' else 'Syncthing log file' }}
+              </span>
+            {% elif syncthing_status.fully_in_sync_as_of_fmt or syncthing_status.fully_in_sync_as_of %}
+              unknown since last Syncthing restart — folder is currently fully in sync
+              <span style="color:var(--text-secondary,#888);">(as of {{ syncthing_status.fully_in_sync_as_of_fmt or syncthing_status.fully_in_sync_as_of }})</span>
+            {% else %}
+              not recorded since Syncthing last restarted
+            {% endif %}
+          </td></tr>
+      {% else %}
+      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Folder</td>
+          <td style="color:var(--error,#c0392b);">No configured Syncthing folder matches this data folder.</td></tr>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Data dir</td>
+          <td style="font-family:monospace;">{{ base_dir }}</td></tr>
+      {% endif %}
+      {% if syncthing_status.error %}
+      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Note</td>
+          <td style="color:var(--warn,#e67e22);">{{ syncthing_status.error }}</td></tr>
+      {% endif %}
+    </table>
+    {% if syncthing_status.devices %}
+    <div style="margin-top:10px;font-size:0.9em;">
+      <strong>{{ syncthing_status.devices_connected }} of {{ syncthing_status.devices|length }} device(s) connected</strong>
     </div>
-  </div>
-
-  {% if sync.get('remote_name') and sync.get('remote_path') %}
-    {% if not rclone_available %}
-  <div style="font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:12px;">
-    rclone not found on this system.<br>
-    Install from <a href="https://rclone.org/install/" target="_blank" style="color:var(--accent);">rclone.org</a>,
-    configure a remote with <code>rclone config</code>, then restart PTOS.
-  </div>
-    {% elif not remote_exists %}
-  <div style="font-size:13px;color:var(--sub);line-height:1.6;margin-bottom:12px;">
-    Remote <code>{{ sync.remote_name }}:</code> not found in rclone config.<br>
-    Run <code>rclone config</code> to set up this remote, then restart PTOS.
-  </div>
+    <table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-top:6px;">
+      <tr style="color:var(--text-secondary,#888);text-align:left;">
+        <th style="padding:3px 8px 3px 0;">Device</th>
+        <th style="padding:3px 8px 3px 0;">ID</th>
+        <th style="padding:3px 8px 3px 0;">Status</th>
+      </tr>
+      {% for d in syncthing_status.devices %}
+      <tr>
+        <td style="padding:2px 8px 2px 0;">{{ d.name or (d.id[:7] if d.id else '') }}</td>
+        <td style="padding:2px 8px 2px 0;font-family:monospace;color:var(--text-secondary,#888);">{% if d.id %}{{ d.id[:13] }}…{% endif %}</td>
+        <td style="padding:2px 8px 2px 0;">
+          {% if d.connected %}
+            <span style="color:var(--success,#27ae60);">connected</span>
+          {% else %}
+            <span style="color:var(--text-secondary,#888);">offline · last seen {{ d.last_seen_fmt or d.last_seen or 'never' }}</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </table>
     {% endif %}
   {% endif %}
-
-  <div id="sync-actions" style="display:none;margin-bottom:12px;">
-    <div style="display:flex;flex-direction:column;gap:14px;">
-      <div>
-        <button id="sync-bisync-btn" onclick="runSync('bisync')" class="btn btn-primary" style="margin-right:8px;">Bisync</button>
-        <span style="font-size:13px;color:var(--sub);">Bidirectional — recommended, safe for both sides</span>
-      </div>
-
-      <div style="border-top:1px solid var(--border);padding-top:12px;">
-        <button id="sync-push-btn" onclick="runSync('sync')" disabled class="btn btn-ghost" style="margin-right:8px;">Sync (push)</button>
-        <span style="font-size:13px;color:var(--sub);">One-way push — <b style="color:var(--error);">deletes</b> remote files not present locally</span>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-          <span style="font-size:12px;color:var(--sub);">Type DELETE to confirm:</span>
-          <input type="text" id="sync-delete-confirm" placeholder="DELETE" style="width:100px;font-size:13px;padding:4px 8px;" oninput="checkSyncConfirm()">
-        </div>
-      </div>
-
-      <div style="border-top:1px solid var(--border);padding-top:12px;">
-        <button id="sync-resync-btn" onclick="runSync('resync')" disabled class="btn btn-ghost" style="margin-right:8px;">Resync</button>
-        <span style="font-size:13px;color:var(--sub);">Initialize bisync relationship — for new machines or after conflicts</span>
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;">
-          <span style="font-size:12px;color:var(--sub);">Type RESYNC to confirm:</span>
-          <input type="text" id="sync-resync-confirm" placeholder="RESYNC" style="width:100px;font-size:13px;padding:4px 8px;" oninput="checkSyncConfirm()">
-        </div>
-      </div>
-    </div>
   </div>
-
-  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;display:flex;gap:20px;flex-wrap:wrap;">
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
-      <input type="checkbox" id="auto-sync-startup" style="width:16px;height:16px;">
-      Auto-sync on startup
-    </label>
-    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;">
-      <input type="checkbox" id="auto-sync-shutdown" style="width:16px;height:16px;">
-      Auto-sync on shutdown
-    </label>
-  </div>
-
-  <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:14px;">
-    <div style="display:flex;align-items:center;gap:10px;">
-      <label style="margin:0;font-size:13px;white-space:nowrap;">Periodic sync interval (min)</label>
-      <input type="number" id="sync-interval" min="0" max="120" style="width:70px;">
-    </div>
-    <div class="hint">Background bisync every N minutes. 0 = disabled. Requires restart.</div>
-  </div>
-
-  <div id="sync-output-wrap" style="display:none;margin-top:14px;">
-    <div style="font-size:12px;font-weight:600;color:var(--sub);margin-bottom:6px;">Output</div>
-    <pre id="sync-output" style="background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;max-height:300px;overflow:auto;white-space:pre-wrap;word-break:break-all;margin:0;"></pre>
-  </div>
-  </div><!-- /sync-card-body -->
 </div>
+
+
 
 <script>
 (function() {
+  var _stMyID = {{ (syncthing_status.my_id | default(none)) | tojson }};
+  window.copyStId = function() {
+    if (!_stMyID) return;
+    function fallback() {
+      var ta = document.createElement("textarea");
+      ta.value = _stMyID;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand("copy"); } catch (e) {}
+      document.body.removeChild(ta);
+    }
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(_stMyID).catch(fallback);
+    } else {
+      fallback();
+    }
+  };
   var cycles = {{ cycles | tojson }};
   var coreFolders = ["records", "config", "templates", "journal", "todo", "notes"];
   var backupFolders = {{ backup_folders | tojson }};
@@ -417,21 +470,7 @@
   document.getElementById("notify-routines").checked = {{ 'true' if todo.get('notify_routines', false) else 'false' }};
   document.getElementById("notify-once").checked = {{ 'true' if todo.get('notify_once_on_startup', false) else 'false' }};
   document.getElementById("hide-routines").checked = {{ 'true' if todo.get('hide_routines', false) else 'false' }};
-  document.getElementById("auto-sync-startup").checked = {{ 'true' if sync_auto_on_startup else 'false' }};
-  document.getElementById("auto-sync-shutdown").checked = {{ 'true' if sync_auto_on_shutdown else 'false' }};
-  var syncIntEl = document.getElementById("sync-interval");
-  if (syncIntEl) syncIntEl.value = {{ sync_interval }};
-  document.getElementById("sync-enabled").checked = {{ 'true' if sync_enabled else 'false' }};
-  toggleSyncEnabled();
 
-  function toggleSyncEnabled() {
-    var on = document.getElementById("sync-enabled").checked;
-    var body = document.getElementById("sync-card-body");
-    if (body) body.style.opacity = on ? "1" : "0.4";
-    var inputs = body ? body.querySelectorAll("input, button, select") : [];
-    for (var i = 0; i < inputs.length; i++) inputs[i].disabled = !on;
-  }
-  
   function renderBackupFolders() {
     coreFolders.forEach(function(cf) {
       if (backupFolders.indexOf(cf) === -1) backupFolders.push(cf);
@@ -571,12 +610,6 @@
         auth_enabled: document.getElementById("auth-enabled").checked,
         auth_username: document.getElementById("auth-username").value.trim(),
         auth_password: document.getElementById("auth-password").value,
-        remote_name: (document.getElementById("sync-remote-name") || {}).value || "",
-        remote_path: (document.getElementById("sync-remote-path") || {}).value || "",
-        auto_sync_on_startup: !!(document.getElementById("auto-sync-startup") || {}).checked,
-        auto_sync_on_shutdown: !!(document.getElementById("auto-sync-shutdown") || {}).checked,
-        sync_interval_minutes: parseInt((document.getElementById("sync-interval") || {}).value) || 0,
-        sync_enabled: !!(document.getElementById("sync-enabled") || {}).checked,
         dashboard_highlights: (function() {
           var h = {};
           document.querySelectorAll(".hl-chip").forEach(function(chip) {
@@ -619,34 +652,6 @@
   
   renderCycles();
   renderBackupFolders();
-})();
-
-var cachedSync = sessionStorage.getItem("sync-result");
-if (cachedSync) {
-  sessionStorage.removeItem("sync-result");
-  onSyncDone(JSON.parse(cachedSync));
-}
-
-function checkSyncConfirm() {
-  var del = document.getElementById("sync-delete-confirm");
-  var res = document.getElementById("sync-resync-confirm");
-  if (del) document.getElementById("sync-push-btn").disabled = del.value !== "DELETE";
-  if (res) document.getElementById("sync-resync-btn").disabled = res.value !== "RESYNC";
-}
-
-function checkSyncReady() {
-  var name = (document.getElementById("sync-remote-name") || {}).value || "";
-  var path = (document.getElementById("sync-remote-path") || {}).value || "";
-  var actions = document.getElementById("sync-actions");
-  if (actions) actions.style.display = (name.trim() && path.trim()) ? "block" : "none";
-}
-
-(function() {
-  var rn = document.getElementById("sync-remote-name");
-  var rp = document.getElementById("sync-remote-path");
-  if (rn) rn.addEventListener("input", checkSyncReady);
-  if (rp) rp.addEventListener("input", checkSyncReady);
-  checkSyncReady();
 })();
 
 function removeDemoData() {
@@ -700,74 +705,77 @@ function installDemoData() {
   });
 }
 
-function runSync(command) {
-  var btnId = command === "bisync" ? "sync-bisync-btn" : command === "sync" ? "sync-push-btn" : "sync-resync-btn";
-  var btn = document.getElementById(btnId);
-  var wrap = document.getElementById("sync-output-wrap");
-  var out = document.getElementById("sync-output");
-  if (!btn) return;
-
-  var remoteName = (document.getElementById("sync-remote-name") || {}).value || "";
-  var remotePath = (document.getElementById("sync-remote-path") || {}).value || "";
-
-  btn.disabled = true;
-  btn.textContent = "Running...";
-  wrap.style.display = "block";
-  out.textContent = "> Starting " + command + "...\n";
-  updateSyncDot("running");
-
-  fetch("/sync/run", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({command: command, remote_name: remoteName, remote_path: remotePath})
-  })
+function refreshSyncthing() {
+  var body = document.getElementById("syncthing-status-body");
+  if (!body) return;
+  var esc = function(v) {
+    return String(v == null ? "" : v).replace(/[&<>"']/g, function(c) {
+      return {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c];
+    });
+  };
+  fetch("/api/syncthing/status")
   .then(function(r) { return r.json(); })
-  .then(function(data) {
-    if (!data.ok) {
-      out.textContent += "Error: " + data.error + "\n";
-      btn.disabled = false;
-      btn.textContent = command === "bisync" ? "Bisync" : command === "sync" ? "Sync (push)" : "Resync";
-      checkSyncConfirm();
+  .then(function(s) {
+    var h = "";
+    if (!s.ok) {
+      h = '<div style="color:var(--error,#c0392b);">' + esc(s.error) + "</div>";
+    } else {
+      h += '<table style="width:100%;border-collapse:collapse;font-size:0.9em;">';
+      var addRow = function(label, val) {
+        h += '<tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);width:130px;">' + label + "</td><td>" + val + "</td></tr>";
+      };
+      addRow("Daemon", (s.version || "unknown") + (s.reachable ? "" : ' <span style="color:var(--error,#c0392b);">· not reachable</span>'));
+      addRow("Address", '<span style="font-family:monospace;">' + esc(s.address) + "</span>");
+      if (s.my_id) {
+        _stMyID = s.my_id;
+        addRow("This device", '<span style="font-family:monospace;">' + esc(s.my_id) + "</span>" +
+          (s.my_name ? ' <span style="color:var(--text-secondary,#888);">(' + esc(s.my_name) + ")</span>" : "") +
+          ' <button type="button" class="btn btn-ghost" style="font-size:0.75em;padding:1px 8px;" onclick="copyStId()">Copy</button>');
+      }
+      if (s.folder) {
+        addRow("Folder", esc(s.folder.label) + ' <span style="color:var(--text-secondary,#888);">(' + esc(s.folder.id) + ")</span>" +
+          '<div style="font-family:monospace;font-size:0.85em;color:var(--text-secondary,#888);">' + esc(s.folder.path) + "</div>");
+        var state = esc(s.state || "unknown");
+        if (s.completion_pct != null) state += " · " + esc(s.completion_pct) + "% in sync";
+        if (s.need_bytes) state += " · " + esc(s.need_bytes) + " bytes waiting";
+        addRow("State", state);
+        var ls;
+        if (s.last_sync_fmt || s.last_sync) {
+          ls = esc(s.last_sync_fmt || s.last_sync) + ' <span style="color:var(--text-secondary,#888);">from ' +
+               (s.last_sync_source === "api" ? "Syncthing event log" : "Syncthing log file") + "</span>";
+        } else if (s.fully_in_sync_as_of_fmt || s.fully_in_sync_as_of) {
+          ls = "unknown since last Syncthing restart — folder is currently fully in sync " +
+               ' <span style="color:var(--text-secondary,#888);">(as of ' + esc(s.fully_in_sync_as_of_fmt || s.fully_in_sync_as_of) + ")</span>";
+        } else {
+          ls = "not recorded since Syncthing last restarted";
+        }
+        addRow("Last sync", ls);
+      } else {
+        addRow("Folder", '<span style="color:var(--error,#c0392b);">No configured Syncthing folder matches this data folder.</span>');
+      }
+      if (s.error) addRow("Note", '<span style="color:var(--warn,#e67e22);">' + esc(s.error) + "</span>");
+      h += "</table>";
+      if (s.devices && s.devices.length) {
+        h += '<div style="margin-top:10px;font-size:0.9em;"><strong>' + esc(s.devices_connected) + " of " + esc(s.devices.length) + " device(s) connected</strong></div>";
+        h += '<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-top:6px;">';
+        h += '<tr style="color:var(--text-secondary,#888);text-align:left;"><th style="padding:3px 8px 3px 0;">Device</th><th style="padding:3px 8px 3px 0;">ID</th><th style="padding:3px 8px 3px 0;">Status</th></tr>';
+        s.devices.forEach(function(d) {
+          var name = d.name || (d.id ? d.id.slice(0, 7) : "");
+          var did = d.id ? esc(d.id.slice(0, 13)) + "…" : "";
+          var lastSeen = d.last_seen_fmt || d.last_seen || "never";
+          var st = d.connected
+            ? '<span style="color:var(--success,#27ae60);">connected</span>'
+            : '<span style="color:var(--text-secondary,#888);">offline · last seen ' + esc(lastSeen) + "</span>";
+          h += "<tr><td style=\"padding:2px 8px 2px 0;\">" + esc(name) + "</td><td style=\"padding:2px 8px 2px 0;font-family:monospace;color:var(--text-secondary,#888);\">" + did + "</td><td style=\"padding:2px 8px 2px 0;\">" + st + "</td></tr>";
+        });
+        h += "</table>";
+      }
     }
+    body.innerHTML = h;
   })
   .catch(function(err) {
-    out.textContent += "Error: " + err.message + "\n";
-    btn.disabled = false;
-    btn.textContent = command === "bisync" ? "Bisync" : command === "sync" ? "Sync (push)" : "Resync";
-    checkSyncConfirm();
+    body.innerHTML = '<div style="color:var(--error,#c0392b);">Could not reach PTOS: ' + esc(err.message) + "</div>";
   });
-}
-
-function onSyncDone(result) {
-  var btns = ["sync-bisync-btn", "sync-push-btn", "sync-resync-btn"];
-  var labels = ["Bisync", "Sync (push)", "Resync"];
-  btns.forEach(function(id, i) {
-    var btn = document.getElementById(id);
-    if (btn) { btn.disabled = false; btn.textContent = labels[i]; }
-  });
-  checkSyncConfirm();
-  updateSyncDot(result && result.ok ? "ok" : "error");
-  setTimeout(function() { updateSyncDot(""); }, 10000);
-
-  var wrap = document.getElementById("sync-output-wrap");
-  var out = document.getElementById("sync-output");
-  if (!wrap || !out) return;
-  wrap.style.display = "block";
-
-  if (result && result.ok) {
-    if (!out.textContent.trim()) out.textContent = result.output || "(no output)";
-    out.textContent += "\n\nDone.";
-    out.style.borderColor = "var(--accent)";
-  } else {
-    if (!out.textContent.trim()) {
-      out.textContent = (result ? result.error || "Unknown error" : "No result");
-      if (result && result.output) out.textContent += "\n\n" + result.output;
-    } else {
-      out.textContent += "\n\n" + (result ? result.error || "Failed" : "No result");
-    }
-    out.textContent += "\n\nFailed.";
-    out.style.borderColor = "var(--error)";
-  }
 }
 </script>
 

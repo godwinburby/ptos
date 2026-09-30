@@ -23,11 +23,12 @@ ptos_error.log
 .sync_state
 .sync.log
 
-# Syncthing
+# Syncthing / rclone conflict files
 .stfolder/
 .stversions/
 .stignore
-*conflict*
+*.sync-conflict-*
+*.conflict[0-9]*
 
 # Build artifacts
 build/

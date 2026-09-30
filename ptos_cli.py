@@ -55,7 +55,7 @@ from ptos import (
     restore_data, restore_config,
     backup_data, backup_config, list_backups, delete_backup,
     doctor_check, print_doctor_results,
-    get_log_files, atomic_write, AtomicWrite, run_sync,
+    get_log_files, atomic_write, AtomicWrite,
     # Output / rendering helpers
     group_results, pivot_results, detect_value_field,
     fmt_avg, fmt, render_group, render_pivot,
@@ -310,15 +310,15 @@ def build_parser(cycles):
     utl.add_argument("--link-ids", dest="link_ids", action="store_true",
                      help="List all type:id targets (records, todos, notes)")
     utl.add_argument("--get-config", dest="get_config_key", metavar="KEY",
-                     help="Print a config value for a dotted path, e.g.\n"
-                          "  todo.priority_labels.A     sync.remote_name\n"
-                          "  home.quick_presets         server.port\n"
+help="Print a config value for a dotted path, e.g.\n"
+                           "  todo.priority_labels.A     syncthing.serve\n"
+                           "  home.quick_presets         server.port\n"
                           "  (lists the whole section when the path has no more subkeys)")
     utl.add_argument("--set-config", dest="set_config", metavar=("KEY", "VALUE"),
                      nargs=2,
-                     help="Set a config value via dotted path, e.g.\n"
-                          "  --set-config todo.priority_labels.A Critical\n"
-                          "  --set-config sync.remote_name my-mega\n"
+help="Set a config value via dotted path, e.g.\n"
+                           "  --set-config todo.priority_labels.A Critical\n"
+                           "  --set-config syncthing.serve false\n"
                           "  Interprets true/false as bool and pure numbers as int/float")
     utl.add_argument("--set",      nargs="+", metavar="KEY=VALUE",
                      help="Edit matched record(s)  (use with --where)\n"
@@ -382,19 +382,6 @@ def build_parser(cycles):
     utl.add_argument("--set-home", dest="set_home", metavar="PATH",
                      help="Point PTOS at a data folder  (writes .ptos_home)\n"
                           "  Migrates existing data to the new location")
-    utl.add_argument("--bisync", action="store_true",
-                     help="Bidirectional sync with remote (rclone bisync)\n"
-                          "  Reads [sync] config from config.toml")
-    utl.add_argument("--sync", action="store_true",
-                     help="One-way push to remote (rclone sync) — DELETES\n"
-                          "  anything on remote not present locally.\n"
-                          "  Requires --confirm-delete")
-    utl.add_argument("--confirm-delete", action="store_true",
-                     help="Required alongside --sync to acknowledge it can\n"
-                          "  delete remote files")
-    utl.add_argument("--resync", action="store_true",
-                     help="With --bisync: initialize bisync relationship\n"
-                          "  (first-time setup or reset)")
     utl.add_argument("--resolve-conflicts", dest="resolve_conflicts", action="store_true",
                      help="Review and merge sync conflict files\n"
                           "  Interactively resolves conflicts in records, todos, and notes")
@@ -402,6 +389,9 @@ def build_parser(cycles):
                      help="With --resolve-conflicts: only resolve record conflicts")
     utl.add_argument("--todo", action="store_true",
                      help="With --resolve-conflicts: only resolve todo conflicts")
+    utl.add_argument("--sync-status", dest="sync_status", action="store_true",
+                     help="Show Syncthing status: folder state, last successful sync,\n"
+                          "and connected devices (reads Syncthing's own API + log)")
 
     sch = p.add_argument_group("Schema")
     sch.add_argument("--add-type", dest="add_type", metavar="NAME",
@@ -2835,6 +2825,87 @@ def _handle_resolve_conflicts(args):
         print(f"Removed {len(resolved_files)} conflict file(s).")
 
 
+def _print_sync_setup_guide(folder):
+    """Print the one-time two-device pairing walkthrough, using the matched
+    folder's real id/path. `folder` is the {id, label, path} dict."""
+    print("  Sync setup (one-time, between this device and another):")
+    print("    1. On the OTHER device, add this device: Actions → Show ID,")
+    print("       then on the other device Add Remote Device and paste the")
+    print("       'This dev' ID shown above.")
+    print("    2. Add the OTHER device back: on this device Add Remote Device")
+    print("       and paste its ID (Actions → Show ID over there). Pairing is")
+    print("       mutual — both devices must have each other.")
+    print("    3. Share the data folder: Add Folder with Folder ID")
+    print(f"       '{folder['id']}', path {folder['path']}, then in the Share")
+    print("       tab select the paired device and keep 'Send & Receive'.")
+    print("    4. On the OTHER device, accept the incoming folder and point it")
+    print("       at ITS ptos-data directory (not this machine's path).")
+    print("    5. Re-run `ptos --sync-status` — expect both devices")
+    print("       connected and the folder at 100%.")
+    print("  The Folder ID must match on both devices (use '" + folder["id"] + "');")
+    print("  the label and path may differ. Disable this machine's daemon with:")
+    print("  ptos --set-config syncthing.serve false")
+
+
+def run_sync_status():
+    """Report Syncthing's own view of the PTOS data folder: state, last
+    successful sync, and connected devices. Read-only diagnostic."""
+    import ptos_service as svc
+
+    s = svc.get_syncthing_status()
+    print("\nSyncthing status\n")
+    if not s.get("ok"):
+        print(f"  {s.get('error')}")
+        print("  Install and run Syncthing on this machine, then sync your")
+        print("  ptos-data folder. PTOS watches Syncthing's own API + log")
+        print("  (`ptos --sync-status`) — it does not sync anything itself.")
+        print()
+        return
+    if s.get("version"):
+        print(f"  Daemon:    Syncthing {s['version']}")
+    print(f"  Address:   {s.get('address')}")
+    if s.get("my_id"):
+        who = f" ({s['my_name']})" if s.get("my_name") else ""
+        print(f"  This dev:  {s['my_id']}{who}")
+    folder = s.get("folder")
+    if folder:
+        print(f"  Folder:    {folder['label']}  ({folder['id']})")
+        print(f"             {folder['path']}")
+        print(f"  State:     {s.get('state') or 'unknown'}"
+              + (f" — {s.get('completion_pct')}%" if s.get('completion_pct') is not None else ""))
+        if s.get("need_bytes"):
+            print(f"  Waiting:   {s['need_bytes']} bytes to download")
+        last_sync = s.get("last_sync_fmt") or s.get("last_sync")
+        if last_sync:
+            src = {"api": "Syncthing event log",
+                   "log": "Syncthing log file"}.get(s.get("last_sync_source"), "log")
+            print(f"  Last sync: {last_sync}  (from {src})")
+        elif s.get("fully_in_sync_as_of_fmt") or s.get("fully_in_sync_as_of"):
+            print(f"  Last sync: unknown since last restart — folder is fully in sync"
+                  f" as of {s.get('fully_in_sync_as_of_fmt') or s.get('fully_in_sync_as_of')}")
+        else:
+            print("  Last sync: not recorded since Syncthing last restarted")
+    else:
+        print("  Folder:    no configured Syncthing folder matches this PTOS data folder")
+        print(f"             data dir = {ptos.BASE_DIR}")
+        print("  Pair the data folder as a Syncthing folder on this machine.")
+    if s.get("devices"):
+        print(f"  Devices:   {s['devices_connected']} of {len(s['devices'])} connected")
+        for d in s["devices"]:
+            last_seen = d.get("last_seen_fmt") or d.get("last_seen")
+            state = "connected" if d.get("connected") else f"offline (last seen {last_seen or 'never'})"
+            short_id = d["id"][:7] if d.get("id") else ""
+            print(f"             {d.get('name') or short_id:<20} {state}")
+    if s.get("error"):
+        print(f"  Note:      {s['error']}")
+    if not s.get("reachable") and s.get("folder"):
+        print("  Run Syncthing, then re-run `ptos --sync-status`.")
+    if s.get("reachable") and folder and s.get("devices_connected", 0) == 0:
+        print()
+        _print_sync_setup_guide(folder)
+    print()
+
+
 def _resolve_record_conflict(c, orig_full, conf_full):
     """Resolve a records conflict interactively. Returns (imported, skipped)."""
     result = ptos.diff_records_conflict(c["original_path"], c["conflict_path"])
@@ -3114,21 +3185,6 @@ def main():
         set_home(args.set_home)
         return
 
-    if args.bisync or args.sync:
-        if args.sync and not args.confirm_delete:
-            sys.exit(
-                "--sync deletes anything on the remote that isn't present\n"
-                "locally. If you're sure, re-run with --confirm-delete.\n"
-                "If you just want to push local changes without risking\n"
-                "remote deletions, use --bisync instead."
-            )
-        cmd = "bisync" if args.bisync else "sync"
-        result = run_sync(cmd, resync=args.resync,
-                          on_line=lambda line: print(line, end="", flush=True))
-        if not result["ok"]:
-            sys.exit(result["error"])
-        return
-
     if args.set_name:
         set_user_name(args.set_name)
         return
@@ -3401,6 +3457,11 @@ def main():
     # ---- resolve-conflicts ----
     if args.resolve_conflicts:
         _handle_resolve_conflicts(args)
+        return
+
+    # ---- sync-status ----
+    if args.sync_status:
+        run_sync_status()
         return
 
     # ---- lint mode ----

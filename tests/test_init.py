@@ -49,6 +49,18 @@ class TestInitPtos:
         year = ptos.today().year
         assert (ptos_home / "records" / f"{year}.log").exists()
 
+    def test_creates_stignore(self, ptos_home):
+        ptos.init_ptos()
+        stignore = ptos_home / ".stignore"
+        assert stignore.exists()
+        assert "*.tmp" in stignore.read_text()
+
+    def test_stignore_idempotent(self, ptos_home):
+        ptos.init_ptos()
+        first = (ptos_home / ".stignore").read_text()
+        ptos.init_ptos()
+        assert (ptos_home / ".stignore").read_text() == first
+
     def test_idempotent_no_errors(self, ptos_home):
         ptos.init_ptos()
         ptos.init_ptos()  # second run should not raise
