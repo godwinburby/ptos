@@ -108,6 +108,13 @@ def _gzip_response(resp):
 
 @app.context_processor
 def _inject_globals():
+    # Pick up data changed outside PTOS (folder sync). Throttled and
+    # non-blocking in the engine, so this costs one stat sweep at most per
+    # second and never waits on another thread.
+    try:
+        ptos.check_external_changes()
+    except Exception:
+        pass
     try:
         cfg = svc.get_config()
     except Exception:
@@ -5021,7 +5028,41 @@ def _start_reminder_thread():
     return None
 
 
+def _start_external_watch_thread():
+    """Watch for data files changed outside PTOS (folder sync, another tool).
+
+    Caches are only invalidated by PTOS's own writes, so a file that arrives
+    through Syncthing would otherwise stay invisible to a running server until
+    something else happened to invalidate it. The sweep is a stat per cache-
+    relevant file and is throttled + non-blocking in the engine, so this is
+    cheap. [server] external_check_seconds = 0 turns it off.
+    """
+    try:
+        seconds = float(_cfg_server("external_check_seconds", 5))
+    except (TypeError, ValueError):
+        seconds = 5.0
+    if seconds <= 0:
+        return None
+
+    def loop():
+        while True:
+            time.sleep(seconds)
+            try:
+                result = ptos.check_external_changes()
+            except Exception:
+                log.exception("External change check failed")
+                continue
+            if result.get("changed"):
+                log.info("Data changed outside PTOS: %s (%d cache key(s) dropped)",
+                         ", ".join(result["files"]), len(result["invalidated"]))
+
+    _t = threading.Thread(target=loop, daemon=True, name="ptos-external-watch")
+    _t.start()
+    return _t
+
+
 if __name__ == "__main__":
     _start_reminder_thread()
+    _start_external_watch_thread()
 
     app.run(host=_host, port=_port)

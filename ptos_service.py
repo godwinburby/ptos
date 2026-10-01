@@ -112,6 +112,7 @@ def invalidate_all():
     """Invalidate every cached resource (e.g. after restore)."""
     for key in list(ptos._CACHE.keys()):
         ptos._CACHE.pop(key, None)
+    ptos.reset_external_watch()
 
 
 def invalidate_cache(keys):
@@ -138,6 +139,9 @@ def _invalidate_history_cache(rtype=None):
                     or key.startswith("habit:") or key.startswith("calendar:")
                     or key.startswith("frwl:")):
                 ptos._CACHE.pop(key, None)
+    # We just wrote these files ourselves, so the external-change watcher must
+    # re-baseline rather than report our own write as a foreign change.
+    ptos.reset_external_watch()
 
 
 def _cycles():
@@ -616,8 +620,9 @@ def get_conditional_suggestions(rtype, field, value):
     other schema-option field across matching history records.
     Used for cascade pre-fill: user picks source=mgm → suggest booked_by=cso.
     Returns: {fieldname: most_common_value}
-    Fully cacheable per (rtype, field, value) — invalidated on any record
-    write via _invalidate_history_cache.
+    Fully cacheable per (rtype, field, value) — a record write drops only that
+    type's keys via _invalidate_history_cache(rtype=...), and a file that
+    changed outside PTOS drops every condsug: key (see ptos.check_external_changes).
     """
     cache_key = f"condsug:{rtype}:{field}:{value}"
     cached = ptos._CACHE.get(cache_key)
@@ -2142,8 +2147,9 @@ def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
     The streak is computed independently over the habit's configured `weeks`
     (default 12) ending today, so the badge never truncates to the display
     window. Future days past today are never rendered. Cached per habit +
-    window under habit:{habit_name}:...; invalidated broadly by
-    _invalidate_history_cache() on any record write."""
+    window under habit:{habit_name}:...; dropped by _invalidate_history_cache()
+    after a record write and by ptos.check_external_changes() when a record
+    file changed outside PTOS."""
     time = time or None
     cache_key = f"habit:{habit_name}:{time or 'tm'}:{from_date or ''}:{to_date or ''}"
     cached = ptos._CACHE.get(cache_key)
@@ -2379,8 +2385,9 @@ def get_calendar_data(name, year=None, month=None):
     year/month default to the initial month from the calendar's time_window
     (falling back to the current month); pass explicit values to navigate
     to a different month. Cached per (name, year, month) under key
-    calendar:{name}:{year}:{month}; invalidated by _invalidate_history_cache()
-    on any record write."""
+    calendar:{name}:{year}:{month}; dropped by _invalidate_history_cache()
+    after a record write and by ptos.check_external_changes() when a record
+    file changed outside PTOS."""
     y = year
     m = month
     cache_key = f"calendar:{name}:{y}:{m}"
