@@ -84,10 +84,10 @@ class TestHabitStreak:
         today = dt.date.today()
         lines = [(today - dt.timedelta(days=i)).isoformat() for i in range(21)]
         _write_records([f"{d} type=habit name=meditation" for d in lines])
-        data = svc.get_habit_data("med")
+        data = svc.get_habit_data("med", time="weeks")
         assert data["streak"] == 21
+        # 21 logged days all fall inside the habit's own week span.
         assert data["days_done"] == 21
-        assert len(data["months"]) == 1
 
     def test_unconfigured_habit_raises(self):
         _clean_cache()

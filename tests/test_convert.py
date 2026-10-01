@@ -28,6 +28,11 @@ def _records_content():
 
 def _convert(argv, monkeypatch, answer="y"):
     items = ["ptos"] + list(argv)
+    # Test fixtures use fixed record dates, but --time defaults to this-month,
+    # so a fixture from a previous month drops out of the window on the 1st.
+    # Default every --convert run to "all" unless the caller picks a window.
+    if not any(a in ("-t", "--time") for a in argv):
+        items += ["--time", "all"]
     monkeypatch.setattr("sys.argv", items)
     monkeypatch.setattr("builtins.input", lambda _: answer)
     ptos_cli.main()
