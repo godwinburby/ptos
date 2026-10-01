@@ -270,6 +270,22 @@ ptos --set-config server.templates_auto_reload true
 Leave it off (the default) for day-to-day use — template auto-reload costs about
 140 ms per page load. A restart is needed either way after editing Python.
 
+### Sync and change detection
+
+PTOS reads the data folder and never writes to it behind your back, but it does
+notice when *something else* changes it. Every few seconds (and on each page
+load) the server stats the files it caches — record logs and the config TOMLs —
+and drops the caches a changed file feeds. A record edited on another device
+and synced in therefore shows up in the UI without restarting the server.
+
+```bash
+ptos --set-config server.external_check_seconds 0   # disable the check
+```
+
+Backups use the same idea: each full backup records the size and modification
+time of everything it captured, so the next run can tell exactly what changed
+(including a synced edit that arrived with an old timestamp).
+
 ### Files
 
 | File | Purpose |

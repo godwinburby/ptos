@@ -11,6 +11,8 @@ import uuid
 import zipfile
 import tempfile
 import fnmatch
+import json
+import threading
 
 if sys.stdout:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -344,18 +346,84 @@ def get_backup_max_config_backups():
     config = get_backup_config()
     return config.get("max_config_backups", 10)
 
+def _backup_state_path():
+    return os.path.join(BACKUP_DIR, ".backup_state.json")
+
+
+def _scan_backup_files():
+    """{relpath: [mtime_ns, size]} for every file a full backup would include.
+
+    Mirrors backup_data()'s walk exactly, so a comparison against a stored
+    snapshot only differs when a backed-up file actually did.
+    """
+    state = {}
+    for folder in get_backup_folders():
+        folder_path = os.path.join(BASE_DIR, folder)
+        for root, _dirs, files in os.walk(folder_path):
+            for name in files:
+                if name.endswith(".bak") or name.endswith(".tmp"):
+                    continue
+                path = os.path.join(root, name)
+                try:
+                    st = os.stat(path)
+                except OSError:
+                    continue
+                rel = os.path.relpath(path, BASE_DIR).replace(os.sep, "/")
+                state[rel] = [st.st_mtime_ns, st.st_size]
+    return state
+
+
+def write_backup_state():
+    """Record the state of the data just backed up.
+
+    Lives in BACKUP_DIR (outside the synced data folder) and is written
+    atomically. Failures are logged and ignored — losing it only costs one
+    extra backup.
+    """
+    try:
+        os.makedirs(BACKUP_DIR, exist_ok=True)
+        path = _backup_state_path()
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(_scan_backup_files(), f)
+        os.replace(tmp, path)
+    except Exception as e:
+        _log_error(f"Could not record backup state: {e}")
+
+
+def _read_backup_state():
+    try:
+        with open(_backup_state_path(), encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except Exception:
+        return {}
+
 
 def should_backup():
-    """Check if backup is needed by comparing file mod times with last backup.
-    Returns True if backup is needed, False if files unchanged since last backup.
+    """Check if backup is needed.
+
+    Compares the current (mtime, size) of every backed-up file against the
+    snapshot taken by the last successful backup. A snapshot comparison is
+    used rather than "modified after the last backup time" because folder
+    sync can deliver a file whose mtime predates that time — an edit made on
+    another machine keeps the sender's timestamp, so the mtime-only test
+    misses it entirely.
+
+    Falls back to the mtime comparison when no snapshot exists yet (first run
+    after upgrading), and writes one so the next call is exact.
     """
     # Check config setting first
     config = get_backup_config()
     if not config.get("backup_if_files_changed", True):
         return True  # Always backup when this setting is false
-    
+
+    previous = _read_backup_state()
+    if previous:
+        return _scan_backup_files() != previous
+
     backup_folders = get_backup_folders()
-    
+
     # Find most recent full backup
     last_backup_time = None
     if os.path.exists(BACKUP_DIR):
@@ -369,19 +437,19 @@ def should_backup():
                     backup_files.append((backup_time, os.path.join(BACKUP_DIR, f)))
                 except:
                     continue
-        
+
         if backup_files:
             # Get most recent backup
             backup_files.sort(key=lambda x: x[0], reverse=True)
             last_backup_time = backup_files[0][0]
-    
-    # If no previous backup found, need to backup
+
+    # No previous backup found, need to backup
     if not last_backup_time:
         return True
-    
+
     # Check if any file in backup folders has been modified since last backup
     last_backup_timestamp = last_backup_time.timestamp()
-    
+
     for folder in backup_folders:
         folder_path = os.path.join(BASE_DIR, folder)
         if os.path.exists(folder_path):
@@ -397,7 +465,9 @@ def should_backup():
                             return True
                     except:
                         continue
-    
+
+    # Nothing newer than the last backup — start tracking exactly from here.
+    write_backup_state()
     return False
 
 
@@ -1064,6 +1134,7 @@ def backup_data(force=False):
         # Clean up old backups if limit exceeded
         _cleanup_old_backups()
         
+        write_backup_state()
         return final_path
         
     except Exception as e:
@@ -1337,6 +1408,178 @@ def _invalidate_all():
     _WHERE_TOKEN_CACHE.clear()
     _IS_EXPRESSION_CACHE.clear()
     _FILTER_DERIVED_CACHE.clear()
+    # A PTOS write invalidates everything already, and the next read re-reads
+    # from disk (picking up any external change too), so re-baseline the
+    # external-change signature instead of letting the watcher report our own
+    # write as a foreign one.
+    reset_external_watch()
+
+
+# --------------------------------------------------
+# External change detection (Syncthing / another tool)
+# --------------------------------------------------
+#
+# Every cache above is only invalidated by PTOS's own writes. When a file
+# arrives through folder sync (or is edited in a text editor on another
+# machine) the running server keeps serving the old parse until something
+# happens to invalidate it. check_external_changes() stats the cache-relevant
+# data files, and drops only the keys the changed files actually feed.
+#
+# Todo/journal/notes are deliberately not watched: nothing in those layers is
+# cached in memory (verified — ptos_todo.py holds no module-level caches), so
+# they are read from disk on every request already.
+
+_EXT_WATCH_LOCK = threading.Lock()
+_EXT_WATCH_STATE = {"signature": None, "last_check": 0.0}
+_EXT_CHECK_INTERVAL = 1.0
+
+# Cache keys derived from record files.
+_EXT_RECORD_PREFIXES = ("frwl:", "history:", "condsug:", "habit:", "calendar:")
+# Config file -> the resource key it feeds.
+_EXT_CONFIG_KEYS = {
+    "config/schema.toml": "schema",
+    "config/queries.toml": "queries",
+    "config/config.toml": "config",
+    "config/presets.toml": "presets",
+}
+
+
+def _data_signature():
+    """(relpath, mtime_ns, size) for every cache-relevant data file.
+
+    Paths are relative to BASE_DIR with forward slashes so the signature is
+    identical on Windows and POSIX. Directories that do not exist yet are
+    simply absent from the tuple.
+    """
+    entries = []
+    for root, _dirs, files in os.walk(RECORDS_DIR):
+        for name in files:
+            if not name.endswith(".log"):
+                continue
+            path = os.path.join(root, name)
+            try:
+                st = os.stat(path)
+            except OSError:
+                continue
+            rel = os.path.relpath(path, BASE_DIR).replace(os.sep, "/")
+            entries.append((rel, st.st_mtime_ns, st.st_size))
+    for rel in _EXT_CONFIG_KEYS:
+        path = os.path.join(CONFIG_DIR, os.path.basename(rel))
+        try:
+            st = os.stat(path)
+        except OSError:
+            continue
+        entries.append((rel, st.st_mtime_ns, st.st_size))
+    entries.sort()
+    return tuple(entries)
+
+
+def _diff_signature(old, new):
+    """Relative paths whose (mtime_ns, size) differs between two signatures."""
+    old_map = {rel: (mtime, size) for rel, mtime, size in old}
+    new_map = {rel: (mtime, size) for rel, mtime, size in new}
+    changed = set()
+    for rel, value in new_map.items():
+        if old_map.get(rel) != value:
+            changed.add(rel)
+    for rel in old_map:
+        if rel not in new_map:
+            changed.add(rel)
+    return sorted(changed)
+
+
+def _pop_cache_keys(keys):
+    popped = []
+    for key in keys:
+        if key in _CACHE:
+            _CACHE.pop(key, None)
+            popped.append(key)
+    return popped
+
+
+def _pop_cache_prefixes(prefixes):
+    popped = []
+    for key in list(_CACHE.keys()):
+        if key.startswith(prefixes):
+            _CACHE.pop(key, None)
+            popped.append(key)
+    return popped
+
+
+def _invalidate_from_changes(changed):
+    """Drop the cache keys invalidated by a set of changed data files."""
+    popped = []
+    if "config/schema.toml" in changed:
+        # Field definitions changed, so parsed records, suggestions, and the
+        # filter memos (which ask the schema whether a field is derived) are
+        # all stale.
+        popped += _pop_cache_keys(_CACHE_DEPS["schema"])
+        _WHERE_TOKEN_CACHE.clear()
+        _IS_EXPRESSION_CACHE.clear()
+        _FILTER_DERIVED_CACHE.clear()
+    for rel, resource in _EXT_CONFIG_KEYS.items():
+        if rel == "config/schema.toml":
+            continue
+        if rel in changed:
+            popped += _pop_cache_keys(_CACHE_DEPS.get(resource, [resource]))
+    if any(rel.startswith("records/") for rel in changed) \
+            or "config/schema.toml" in changed:
+        popped += _pop_cache_keys(["log_files"])
+        popped += _pop_cache_prefixes(_EXT_RECORD_PREFIXES)
+    return popped
+
+
+def check_external_changes(force=False):
+    """Detect data files changed outside PTOS and invalidate what they feed.
+
+    Cheap enough to call on every page render: at most one stat sweep per
+    _EXT_CHECK_INTERVAL seconds, and a sweep already in flight is skipped
+    rather than queued (the lock is non-blocking, so this never stalls a
+    request behind another thread's sweep).
+
+    The first call only records a baseline — nothing is known about changes
+    that happened before PTOS started.
+
+    Args:
+        force: ignore the throttle (tests, and the CLI's --sync-check path).
+
+    Returns:
+        dict: {checked, changed, files, invalidated}. ``checked`` is False
+        when the throttle or the lock skipped the sweep.
+    """
+    now = time.time()
+    if not force and now - _EXT_WATCH_STATE["last_check"] < _EXT_CHECK_INTERVAL:
+        return {"checked": False, "changed": False, "files": [], "invalidated": []}
+    if not _EXT_WATCH_LOCK.acquire(blocking=False):
+        return {"checked": False, "changed": False, "files": [], "invalidated": []}
+    try:
+        _EXT_WATCH_STATE["last_check"] = now
+        signature = _data_signature()
+        previous = _EXT_WATCH_STATE["signature"]
+        _EXT_WATCH_STATE["signature"] = signature
+        if previous is None:
+            return {"checked": True, "changed": False, "files": [], "invalidated": []}
+        changed = _diff_signature(previous, signature)
+        if not changed:
+            return {"checked": True, "changed": False, "files": [], "invalidated": []}
+        return {"checked": True, "changed": True, "files": changed,
+                "invalidated": _invalidate_from_changes(changed)}
+    except Exception as e:
+        _log_error(f"External change check failed: {e}")
+        return {"checked": True, "changed": False, "files": [], "invalidated": []}
+    finally:
+        _EXT_WATCH_LOCK.release()
+
+
+def reset_external_watch():
+    """Forget the recorded signature so the next check re-baselines.
+
+    Called after PTOS writes its own data (the caches are already invalidated
+    by the write path, so re-baselining cannot hide a real external change
+    that landed before it), and by --init.
+    """
+    _EXT_WATCH_STATE["signature"] = None
+    _EXT_WATCH_STATE["last_check"] = 0.0
 
 
 def _load(key, path):

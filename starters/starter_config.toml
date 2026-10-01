@@ -32,6 +32,10 @@ port = 5000
 # Re-check templates for changes on every render (handy while editing them,
 # costs ~140ms per page load). Set true while developing, false to run fast.
 templates_auto_reload = false
+# How often (seconds) the server checks whether data files changed outside
+# PTOS (e.g. synced in by Syncthing) and drops the caches they feed. Set 0 to
+# disable and rely on PTOS's own write-invalidation.
+external_check_seconds = 5
 
 [backup]
 # Folders to include in full backup
