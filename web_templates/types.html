@@ -81,7 +81,7 @@
   .adv-link:hover { border-color:var(--accent); color:var(--accent); }
 </style>
 
-<script src="/static/js/drag.js"></script>
+<script src="{{ av('/static/js/drag.js') }}"></script>
 <script>
 var _existingTypes = {{ types | tojson }};
 var _editMode = {{ 'true' if edit_type else 'false' }};

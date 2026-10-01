@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, glob, fnmatch, datetime as dt, json, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil
+import sys, os, re, glob, fnmatch, datetime as dt, json, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil, gzip as _gzip
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
@@ -21,10 +21,90 @@ app = Flask(__name__,
     static_folder=os.path.join(_basedir, 'web_static'),
     static_url_path="/static")
 app.secret_key = "ptos-local-only"
-app.config['TEMPLATES_AUTO_RELOAD'] = True
 app.config["DEBUG"] = False
 
+# Bump ASSET_VERSION whenever anything under web_static/ changes; templates
+# reference assets through av() so one constant covers the whole app.
+ASSET_VERSION = 5
+
+# Static paths that must never be cached (the browser must be able to pick up
+# a new version).
+_STATIC_NEVER_CACHE = ("/static/manifest.json", "/static/sw.js")
+
+_GZIP_MIN_BYTES = 500
+_GZIP_TYPES = ("text/", "application/json", "application/javascript",
+               "text/javascript", "image/svg+xml")
+
+
+def _cfg_server(key, default=None):
+    try:
+        return svc.get_config().get("server", {}).get(key, default)
+    except Exception:
+        return default
+
+
+def _as_bool(value, default=False):
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in ("1", "true", "yes", "on")
+    if value is None:
+        return default
+    return bool(value)
+
+
+app.config["TEMPLATES_AUTO_RELOAD"] = _as_bool(
+    _cfg_server("templates_auto_reload", False))
+
 log = logging.getLogger("ptos_web")
+
+@app.template_global()
+def av(path):
+    """Static asset URL with a cache-busting version. Enables long-lived
+    immutable caching for web_static/ files."""
+    sep = "&" if "?" in path else "?"
+    return f"{path}{sep}v={ASSET_VERSION}"
+
+
+@app.after_request
+def _static_cache_control(resp):
+    """Versioned static assets are immutable; everything else revalidates."""
+    if request.path.startswith("/static/"):
+        if request.path in _STATIC_NEVER_CACHE or "v=" not in request.query_string.decode("latin-1"):
+            resp.headers["Cache-Control"] = "no-cache"
+        else:
+            resp.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+    resp.headers.setdefault("Vary", "")
+    if "Accept-Encoding" not in resp.headers.get("Vary", ""):
+        resp.headers["Vary"] = (resp.headers.get("Vary", "") + " Accept-Encoding").strip()
+    return resp
+
+
+@app.after_request
+def _gzip_response(resp):
+    """Compress text responses. Never touches streams (SSE) or send_file."""
+    if resp.headers.get("Content-Encoding"):
+        return resp
+    if "gzip" not in request.headers.get("Accept-Encoding", ""):
+        return resp
+    ctype = resp.headers.get("Content-Type", "")
+    if not any(ctype.startswith(t) for t in _GZIP_TYPES):
+        return resp
+    if resp.direct_passthrough or resp.is_streamed:
+        return resp
+    if resp.status_code != 200:
+        return resp
+    data = resp.get_data()
+    if not data or len(data) < _GZIP_MIN_BYTES:
+        return resp
+    compressed = _gzip.compress(data, 6)
+    if len(compressed) >= len(data):
+        return resp
+    resp.set_data(compressed)
+    resp.headers["Content-Encoding"] = "gzip"
+    resp.headers["Content-Length"] = str(len(compressed))
+    return resp
+
 
 @app.context_processor
 def _inject_globals():

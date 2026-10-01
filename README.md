@@ -258,6 +258,18 @@ Then open `http://localhost:5000` in your browser. For mobile access, use your
 device's local IP (e.g. `http://192.168.1.x:5000`). The Android/Termux start script
 opens the browser automatically.
 
+Responses are gzipped when the browser asks for it (text, JSON, JS, SVG — a
+typical page drops from ~136 KB to ~28 KB), and static assets are served with a
+one-year immutable cache via a single version constant. Templates are re-checked
+for changes on every render only when you ask for it:
+
+```bash
+ptos --set-config server.templates_auto_reload true
+```
+
+Leave it off (the default) for day-to-day use — template auto-reload costs about
+140 ms per page load. A restart is needed either way after editing Python.
+
 ### Files
 
 | File | Purpose |

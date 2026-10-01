@@ -7,6 +7,14 @@ Format: `[version or date] — description`
 
 ## 2026-10-01
 
+### Cheaper page loads: gzip, one asset version, no template auto-reload
+
+- **Responses are gzipped** — a new `_gzip_response` `after_request` hook compresses text/JSON/JS/SVG responses of 500 bytes or more when the client sends `Accept-Encoding: gzip`, using stdlib `gzip` so the no-dependency property of the CLI is untouched. A typical page drops from ~136 KB to ~28 KB, which is the difference between a snappy and a sluggish page over Tailscale or mobile data. It bails on an existing `Content-Encoding`, on non-200 responses, on binary types, and on any streamed or `direct_passthrough` response — the SSE endpoint must never be buffered.
+- **Static assets use one version constant, not per-file numbers.** Templates reference `web_static/` files through the new `av()` Jinja global, which appends `?v=<ASSET_VERSION>`; the constant lives at the top of `ptos_web.py` and bumping it revalidates every asset at once. This retires 24 hand-written `?v=` references that had already drifted apart (`record_table.js` was on `?v=4` in four templates and `?v=5` in `entity.html`, `filter_builder.js` on `?v=2`).
+- **Versioned assets are immutable, unversioned ones revalidate.** `_static_cache_control` serves `?v=` requests as `public, max-age=31536000, immutable` and everything else as `no-cache`, so forgetting the bump degrades to a cheap 304 instead of pinning stale JS in a browser cache forever. `manifest.json` and `sw.js` are pinned to `no-cache` so a new one is always picked up. Both hooks advertise `Vary: Accept-Encoding`.
+- **Template auto-reload is now a config key.** `[server] templates_auto_reload` (default `false`) replaces the hardcoded `TEMPLATES_AUTO_RELOAD = True`; re-stat'ing every template on every render cost about 140 ms per page load, and turning it off is ~20x faster per render. Set it `true` while editing templates (`ptos --set-config server.templates_auto_reload true`).
+- **Tests** — `tests/test_web_perf.py` covers the gzip rules (including that SSE is never buffered), the cache-header rules, `av()`, the config coercion, and a repo-wide scan that fails if any template reintroduces a hand-written `?v=`.
+
 ### PTOS never installs or starts Syncthing
 
 - **The `[syncthing] serve` config key is gone.** It only existed to let the Linux/Termux run scripts start the daemon on launch — Windows never started it — so it made the data model look like PTOS manages sync when it never has.
