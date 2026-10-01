@@ -145,7 +145,11 @@ class TestDemoSeed:
 
     def test_habits_populated(self, demo_home):
         _seed()
-        data = svc.get_habit_data("meditation", "type=habit name=meditation")
+        # Habit filters come from queries.toml, not an argument. Use the habit's
+        # own week span: demo habit days are seeded relative to today, while the
+        # default display window is the current month, whose Monday floor can
+        # exclude days seeded a few days back.
+        data = svc.get_habit_data("meditation", time="weeks")
         assert data["days_done"] >= 5
         assert data["streak"] >= 1
 
@@ -992,9 +996,13 @@ class TestDemoAtomicReinstall:
         spec = ptos._load_demo_spec()
         spec["records"]["lines"].append("2020-01-01 type=not_a_real_type | x")
         _install_broken_spec(monkeypatch, spec)
-        before = sorted(os.listdir(demo_home / "journal" / "2026" / "09"))
+        # Demo journal entries are seeded at today/-1d/-3d, so the month
+        # directory follows the current date rather than a fixed one.
+        today = dt.date.today()
+        jdir = demo_home / "journal" / str(today.year) / f"{today.month:02d}"
+        before = sorted(os.listdir(jdir))
         ptos.reinstall_demo_data()
-        assert sorted(os.listdir(demo_home / "journal" / "2026" / "09")) == before
+        assert sorted(os.listdir(jdir)) == before
 
 
 class TestDemoSchemaDrift:

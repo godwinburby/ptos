@@ -127,9 +127,17 @@ class TestProjectsOverview:
         assert p["open_todos"] == 3
         assert p["done_todos"] == 2
         assert p["overdue_todos"] == 1
-        assert p["todo_added"] == 3
-        assert p["todo_done"] == 2
-        assert p["todo_delta"] == 1
+        # todo_added / todo_done / todo_delta only count records dated on or
+        # after the 1st of the current month, so derive the expectation from the
+        # same boundary rather than hardcoding a count that breaks once
+        # "yesterday" lands in the previous month.
+        month_start = dt.date.today().replace(day=1)
+        yest = dt.date.today() - dt.timedelta(days=1)
+        expected_added = sum(1 for d in (TODAY, TODAY, yest) if d >= month_start)
+        expected_done = sum(1 for d in (TODAY, yest) if d >= month_start)
+        assert p["todo_added"] == expected_added
+        assert p["todo_done"] == expected_done
+        assert p["todo_delta"] == expected_added - expected_done
 
     def test_staleness_from_records(self, tmp_path, monkeypatch):
         todo_path = tmp_path / "todo.txt"
