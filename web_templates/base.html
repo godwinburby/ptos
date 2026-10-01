@@ -5,11 +5,11 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <link rel="manifest" href="/static/manifest.json">
-  <link rel="icon" href="/static/icon-192.png" sizes="192x192">
-  <link rel="apple-touch-icon" href="/static/icon-192.png">
+  <link rel="icon" href="{{ av('/static/icon-192.png') }}" sizes="192x192">
+  <link rel="apple-touch-icon" href="{{ av('/static/icon-192.png') }}">
   <meta name="theme-color" content="#4F6BED">
   <title>PTOS{% if title %} · {{ title }}{% endif %}</title>
-  <link rel="stylesheet" href="/static/css/components.css">
+  <link rel="stylesheet" href="{{ av('/static/css/components.css') }}">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
     :root {

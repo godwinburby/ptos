@@ -29,6 +29,9 @@ password = ""
 # Use 0.0.0.0 to expose via Tailscale or LAN (enable [auth] first!)
 host = "127.0.0.1"
 port = 5000
+# Re-check templates for changes on every render (handy while editing them,
+# costs ~140ms per page load). Set true while developing, false to run fast.
+templates_auto_reload = false
 
 [backup]
 # Folders to include in full backup

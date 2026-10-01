@@ -47,7 +47,7 @@
   {% endwith %}
 </div>
 
-<script src="/static/js/time_picker.js"></script>
+<script src="{{ av('/static/js/time_picker.js') }}"></script>
 <script>
 var tp;
 (function() {
@@ -308,7 +308,7 @@ var tp;
 
 <!-- Delete modal injected by RecordTable -->
 
-<script src="/static/js/record_table.js?v=4"></script>
+<script src="{{ av('/static/js/record_table.js') }}"></script>
 <script>
 window._recentRecords = {{ recent_rows|tojson }};
 window._recentCols    = {{ recent_cols|tojson }};
