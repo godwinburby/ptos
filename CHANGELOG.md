@@ -7,6 +7,15 @@ Format: `[version or date] — description`
 
 ## 2026-10-01
 
+### Filtered scans ~20x faster (Add/Edit page load)
+
+- **Root cause was not I/O.** Profiling an 8,765-record workspace showed `apply_where` costing 16 µs per record against `parse_line` at 1.37 µs — an 11x gap that made a filtered all-time scan ~8x slower than the same scan with no filter. Two pieces of per-record work did not depend on the record at all.
+- **Filter tokenization is now memoized** (`_tok_where_cached`) instead of re-tokenizing the identical filter string once per record. `_is_expression` and the derived-field check got the same treatment (`_is_expression_cached`, `_filter_derived_cached`); all three caches are cleared by `_invalidate_all()`.
+- **Derived fields are only computed when the filter references one.** `compute_derived()` used to evaluate every derived field for every record, including an `eval()` per field, even for a plain `type=capture` filter. It was 50% of total scan time on a typical workspace.
+- **Measured on an 8,765-record workspace** (13 log files, 2015-2026): filtered all-time scan 153 ms -> 23 ms, and the Add page's history + cascade pair 316 ms -> 79 ms. `parse_line` is now the dominant per-record cost, which is the correct place for it.
+- **Results are unchanged.** Every starter `queries.toml` filter is covered by a before/after equivalence sweep in `tests/test_filter_perf.py`, including expression mode, the legacy AND-chain, and derived-field selection.
+- **No new cache layer.** The parsed-line cache proposed in `SPEC-add-edit-performance.md` was dropped: it addressed a cost that was not the bottleneck, and the three small memos deliver more for far less risk.
+
 ### Android data folder back in shared storage
 
 - **Reverted the internal-storage launcher change** (f9613ba) — `run_ptos_android.sh` again creates the data folder in shared storage (`~/storage/shared/ptos-data`), prompts `termux-setup-storage` when needed, and rewrites `.ptos_home` to match on every run.

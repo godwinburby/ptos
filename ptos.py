@@ -1334,6 +1334,9 @@ def _invalidate_all():
     """Invalidate every cached key."""
     for key in list(_CACHE.keys()):
         _CACHE.pop(key, None)
+    _WHERE_TOKEN_CACHE.clear()
+    _IS_EXPRESSION_CACHE.clear()
+    _FILTER_DERIVED_CACHE.clear()
 
 
 def _load(key, path):
@@ -2184,6 +2187,75 @@ def _tok_where(expr):
     return _collapse_spaced_ops(tokens)
 
 
+_WHERE_TOKEN_CACHE = {}
+_IS_EXPRESSION_CACHE = {}
+_FILTER_DERIVED_CACHE = {}
+
+
+def _is_expression_cached(s):
+    """Memoized _is_expression -- apply_where probes this once per record."""
+    hit = _IS_EXPRESSION_CACHE.get(s)
+    if hit is None:
+        hit = bool(_is_expression(s))
+        _IS_EXPRESSION_CACHE[s] = hit
+    return hit
+
+
+def _filter_derived_cached(filters):
+    """Memoized _filter_derived_fields, keyed on the filter tuple.
+
+    apply_where asks "does this filter mention a derived field?" once per
+    record; the answer depends only on the filter strings.
+    """
+    key = tuple(filters)
+    hit = _FILTER_DERIVED_CACHE.get(key)
+    if hit is None:
+        hit = _filter_derived_fields(key)
+        _FILTER_DERIVED_CACHE[key] = hit
+    return hit
+
+
+def _tok_where_cached(expr):
+    """Memoized _tok_where.
+
+    apply_where() runs once per record, so a query over a few thousand records
+    re-tokenized the identical filter string thousands of times. The filter set
+    is small and bounded (queries.toml plus ad-hoc --where), so a plain dict is
+    enough; it is cleared by _invalidate_all().
+
+    Callers must treat the returned list as read-only -- _parse_expr and
+    _eval_node only read it.
+    """
+    tokens = _WHERE_TOKEN_CACHE.get(expr)
+    if tokens is None:
+        tokens = _tok_where(expr)
+        _WHERE_TOKEN_CACHE[expr] = tokens
+    return tokens
+
+
+def _filter_derived_fields(filters):
+    """Return the derived field names a filter expression actually references.
+
+    compute_derived() evaluates every derived field for every record, which is
+    the single most expensive part of a filtered scan even though most filters
+    never mention a derived field. Only compute them when the filter text names
+    one. Type-scoped keys are stored as "rtype.field" in the schema but are
+    matched in filters by their bare name.
+
+    Deliberately conservative: a substring match (e.g. "balance" matching
+    "balance_sheet") only costs an unnecessary compute, never a wrong result.
+    """
+    if not filters:
+        return ()
+    blob = " ".join(f for f in filters if isinstance(f, str))
+    if not blob:
+        return ()
+    return tuple(
+        fname for fname in derived_fields()
+        if (fname.split(".", 1)[1] if "." in fname else fname) in blob
+    )
+
+
 _OP_TOKEN = re.compile(r"^(?P<op>!~|!=|>=|<=|~|=|>|<)$")
 _FIELD_TOKEN = re.compile(r"^[A-Za-z_]\w*$")
 
@@ -2360,25 +2432,26 @@ def apply_where(kv, filters):
     if not filters:
         return True
 
-    # merge derived field values into a copy of kv so filters can use them
-    dfields = derived_fields()
-    if dfields:
+    # merge derived field values into a copy of kv so filters can use them,
+    # but only when the filter actually references one
+    if _filter_derived_cached(filters):
         # extract date from kv if available (scan_records passes date in kv context)
         rec_date = kv.get("_date")  # injected by scan_records
         computed = compute_derived(kv, record_date=rec_date)
-        kv = dict(kv)
-        for fname, val in computed.items():
-            if val is not None:
-                kv[fname] = str(val) if not isinstance(val, str) else val
+        if computed:
+            kv = dict(kv)
+            for fname, val in computed.items():
+                if val is not None:
+                    kv[fname] = str(val) if not isinstance(val, str) else val
 
-    if len(filters) == 1 and _is_expression(filters[0]):
-        tokens = _tok_where(filters[0])
+    if len(filters) == 1 and _is_expression_cached(filters[0]):
+        tokens = _tok_where_cached(filters[0])
         node, _ = _parse_expr(tokens, 0)
         return _eval_node(node, kv)
 
     # Legacy AND-chain
     for cond in filters:
-        tokens = _tok_where(cond)
+        tokens = _tok_where_cached(cond)
         if not tokens:
             continue
         if len(tokens) == 1 and tokens[0][0] == 'COND':
