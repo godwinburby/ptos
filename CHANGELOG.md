@@ -7,6 +7,21 @@ Format: `[version or date] — description`
 
 ## 2026-10-01
 
+### PTOS never installs or starts Syncthing
+
+- **The `[syncthing] serve` config key is gone.** It only existed to let the Linux/Termux run scripts start the daemon on launch — Windows never started it — so it made the data model look like PTOS manages sync when it never has.
+- **Removed from the run scripts** — the Linux first-time `apt`/`dnf`/`pacman`/`zypper` install of `syncthing`, the Termux `pkg install syncthing termux-services`, and both every-run start blocks (`systemctl --user enable --now` / `sv-enable` + `sv start` / `nohup syncthing serve --no-browser`) with their pairing walkthroughs. `run_ptos.ps1` was already install-free and is unchanged: it still probes with `ptos --sync-check` and prints install guidance when Syncthing is unreachable.
+- **Removed from Settings → Syncthing** — the "Start the Syncthing daemon when PTOS launches" checkbox, along with the `syncthing_serve` payload key. The card is now a pure read-only observation of Syncthing's own API + log, on every platform.
+- **Stale config self-heals** — `settings_save` now does `cfg.pop("syncthing", None)`, so an existing `[syncthing] serve = …` left in a synced `config.toml` is cleaned up the next time any device saves Settings. The section is also gone from `starter_config.toml`, so fresh installs never have it.
+- **PTOS is still the observer, never the sync engine** — `--sync-status`, `--sync-check`, `GET /api/syncthing/status`, `.stignore`, the Settings card and the two-device pairing guide all remain; users just install and run Syncthing themselves.
+
+### The current machine is no longer listed as a synced peer
+
+- **The device table now holds other devices only.** Syncthing's `/rest/config/devices` always includes the machine it runs on, so `get_syncthing_status()` skips any entry whose `deviceID == my_id`, and `devices_connected` counts what's left.
+- **This device is still shown, just once and in its own place** — the status card's "This device" row with the Copy-ID button (the ID you paste into the *other* machine), so the peers table and the count stay about actual sync partners.
+- **Wording follows** — the card, its JS refresh, `--sync-status`, and the pairing/troubleshooting hints now read "N of M **other** device(s) connected".
+- **Filtering is skipped when `my_id` can't be read** (a daemon that doesn't answer `/rest/system/status`); the self row then simply stays visible rather than the table silently dropping a machine it couldn't recognise.
+
 ### Filtered scans ~20x faster (Add/Edit page load)
 
 - **Root cause was not I/O.** Profiling an 8,765-record workspace showed `apply_where` costing 16 µs per record against `parse_line` at 1.37 µs — an 11x gap that made a filtered all-time scan ~8x slower than the same scan with no filter. Two pieces of per-record work did not depend on the record at all.

@@ -93,28 +93,6 @@ if [ ! -d "$DATA_DIR/config" ]; then
         pkg install -y git
     fi
 
-    # Install Syncthing if missing
-    if ! command -v syncthing &>/dev/null; then
-        echo "Installing Syncthing..."
-        pkg install -y syncthing termux-services
-    fi
-    if ! command -v syncthing &>/dev/null; then
-        echo "Syncthing could not be installed automatically."
-        echo "Install it manually:  pkg install syncthing termux-services"
-    else
-        echo ""
-        echo "Syncthing installed. Next: pair this device with your other device(s)."
-        echo "Open http://127.0.0.1:8384 on each device and:"
-        echo "  1. Actions -> Show ID, then Add Remote Device with the OTHER"
-        echo "     device's ID — do this on BOTH devices (pairing is mutual)."
-        echo "  2. Add Folder with Folder ID 'ptos-data',"
-        echo "     path '/storage/shared/ptos-data', Share it with the other"
-        echo "     device as 'Send & Receive'."
-        echo "  3. On the other device ACCEPT the folder and set its path to"
-        echo "     its own ptos-data directory (the folder ID must match on both)."
-        echo "  4. Verify later with: ptos --sync-status"
-    fi
-
     # Install termux-api for notifications
     if ! command -v termux-notification &>/dev/null; then
         echo "Installing termux-api for notifications..."
@@ -182,23 +160,6 @@ if [ -d ".git" ]; then
     fi
 else
     echo "Not a git repo — skipping update check."
-fi
-
-# ── Keep Syncthing running (unless disabled) ─────────────────────────────────
-SERVE="$(python ptos.py --get-config syncthing.serve 2>/dev/null | sed -n 's/^syncthing\.serve=//p' | tr -d '[:space:]')"
-if [ "$SERVE" = "true" ] && command -v syncthing &>/dev/null; then
-    termux-wake-lock 2>/dev/null || true
-    if command -v sv-enable &>/dev/null; then
-        sv-enable syncthing 2>/dev/null || true
-        sv start syncthing 2>/dev/null || true
-    fi
-    if ! pgrep -x syncthing >/dev/null 2>&1; then
-        nohup syncthing serve --no-browser >/dev/null 2>&1 &
-    fi
-    echo "Syncthing is running (http://127.0.0.1:8384). Disable with: ptos --set-config syncthing.serve false"
-elif command -v syncthing &>/dev/null; then
-    echo "Syncthing is installed but not set to start automatically."
-    echo "Enable it in Settings -> Syncthing, or run: ptos --set-config syncthing.serve true"
 fi
 
 # ── Kill anything on port 5000 ─────────────────────────────────────────────

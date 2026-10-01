@@ -134,9 +134,9 @@ The script handles everything on first launch:
 6. Prompts for your name and writes it to `config.toml`
 7. Starts the web server
 
-On Linux and Termux the script also installs **Syncthing** and keeps it running
-(it's what syncs your data between devices — see [Sharing and sync](#sharing-and-sync)).
-Windows uses your own Syncthing installation running on startup.
+Multi-device sync is **Syncthing**, which you install and run yourself on each
+device — PTOS never installs or starts it (see
+[Sharing and sync](#sharing-and-sync)).
 
 On Android, code goes to `~/ptos` (Termux home), data to `~/storage/shared/ptos-data`.
 On Windows/Linux, data lives in a sibling directory (`~/ptos-data`) — outside the repo and away from OneDrive.
@@ -1094,9 +1094,6 @@ max_full_backups        = 10     # keep last N full backups
 max_config_backups      = 10     # keep last N config-only backups
 folders = ["records", "config", "templates", "journal", "notes"]
 
-[syncthing]
-serve                   = false  # start the daemon on Linux/Termux launches only when true (Settings → Syncthing or --set-config syncthing.serve true)
-
 [todo]
 notify_interval         = 5      # background due-todo check interval (minutes; 0 = disabled)
 notify_routines         = false  # include +routine todos in due-today/due-soon reminders
@@ -1489,30 +1486,19 @@ devices can safely append to the same log file as long as writes don't overlap.
 
 ### Sync (Syncthing)
 
-PTOS syncs your whole `ptos-data/` folder between devices using
+Your whole `ptos-data/` folder is synced between devices using
 [Syncthing](https://syncthing.net) — peer-to-peer folder sync with no cloud
 account, no server, and no per-file lock conflicts.
 
-**Install & launch:**
-- **Linux / Termux** — the run script installs Syncthing on first launch and
-  starts it on every run **only when serving is enabled** (`systemctl --user`
-  where available, otherwise a background `syncthing serve --no-browser`).
-  Serving is off by default; turn it on per machine with
-  `ptos --set-config syncthing.serve true` or the Settings → Syncthing
-  "Start the Syncthing daemon when PTOS launches" checkbox (both write the same
-  `[syncthing] serve` key — since `config.toml` syncs between devices, a
-  `serve = true` set anywhere applies to every Linux/Termux device sharing the
-  config; any value other than `true` means don't serve).
-- **Windows** — bring your own Syncthing; `run_ptos.ps1` never starts the
-  daemon (the checkbox is hidden there). It probes at launch with
-  `ptos --sync-check` and, if the Syncthing API is unreachable, prints
-  install guidance (download from syncthing.net and enable **"Run as a
-  Windows service"** during setup).
+**Install & launch:** PTOS never installs or starts Syncthing — run it yourself
+on each device (Linux package manager, Termux `pkg install syncthing
+termux-services`, or the Windows tray app / "Run as a Windows service"). Pair the
+devices from their own Syncthing web UI at `http://127.0.0.1:8384`, then check
+the result with `ptos --sync-status`.
 
 **Pairing (one-time, ~2 minutes):**
-1. **Start Syncthing on both devices.** The Linux/Termux run scripts do this
-   automatically; on Windows it runs from the system tray. Open the web UI on
-   each device — `http://127.0.0.1:8384`.
+1. **Start Syncthing on both devices** (it runs on its own once installed). Open
+   the web UI on each device — `http://127.0.0.1:8384`.
 2. **Exchange device IDs (mutual).** On each device go to `Actions → Show ID`
    and copy that 56-character ID. Then on each device click `Add Remote
    Device` and paste the *other* device's ID. Pairing only works when **both
@@ -1531,11 +1517,11 @@ The shared folder must be the same folder `ptos.py` uses for data:
 
 **Verify:** `ptos --sync-status` (or the Syncthing card in Settings) shows this
 device's own ID — copy it from there when pairing the other side — plus the
-folder state and connected devices. Expect all devices connected and the
-folder at 100%.
+folder state and the connected **other** devices. Expect every other device
+connected and the folder at 100%.
 
 **Troubleshooting:**
-- **"0 of N devices connected"** — device IDs must be exchanged in *both*
+- **"0 of N other devices connected"** — device IDs must be exchanged in *both*
   directions (step 2); make sure Syncthing is actually running on each device.
 - **Never syncs off the same LAN** — keep Syncthing's default **Global
   Discovery** and **Relay** switched on in its Settings so devices can find
@@ -1552,17 +1538,12 @@ leave conflict files (see [Conflict Resolution](#conflict-resolution)).
 **Status:** PTOS never syncs anything itself, so `--sync-status` (and the
 Syncthing card in Settings) reads **Syncthing's own** REST API and log to report
 whether the `ptos-data` folder is in sync, when the last sync succeeded, and
-which devices are connected. It auto-detects the GUI address, API key and
-folder from Syncthing's `config.xml`; `last_sync` comes from the API's
-`FolderCompletion` events (the Syncthing log file is used as a fallback — and
-is also the only source that survives a Syncthing restart).
-
-**Config:** the `[syncthing]` section in `config.toml` controls the run-script
-daemon only — it has no effect on your pairing:
-```toml
-[syncthing]
-serve = false  # start the Linux/Termux daemon on launch only when true (Settings → Syncthing / --set-config syncthing.serve true); missing key = off
-```
+which *other* devices are connected (the machine PTOS runs on is shown
+separately as **This device**, since its ID is what the other side needs during
+pairing — it is left out of the peers table and the count). It auto-detects the
+GUI address, API key and folder from Syncthing's `config.xml`; `last_sync` comes
+from the API's `FolderCompletion` events (the Syncthing log file is used as a
+fallback — and is also the only source that survives a Syncthing restart).
 
 ### Conflict Resolution
 
@@ -1809,7 +1790,7 @@ ptos -y test -t td --delete --all
 | `--add-demo-data` | | Re-install the demo story with dates relative to today, merging into your existing data — also in Settings → Data |
 | `--set-home PATH` | | Point PTOS at a data folder (writes `.ptos_home`, migrates existing data) |
 | `--resolve-conflicts [--records] [--todo]` | | Review and merge sync conflict files interactively. Flags filter by type |
-| `--sync-status` | | Show Syncthing status: folder state, last successful sync, connected devices (reads Syncthing's own REST API + log — PTOS does not sync anything itself) |
+| `--sync-status` | | Show Syncthing status: folder state, last successful sync, and the connected other devices (reads Syncthing's own REST API + log — PTOS does not sync anything itself) |
 | `--migrate-log-group TYPE` | | Move records of TYPE from `records/*.log` to `records/<group>/<year>.log` (requires `log_group` in schema) |
 | `--backup-full` | | Create full backup (records/, config/, templates/, journal/) |
 | `--backup-config` | | Create config-only backup (schema, queries, presets, config) |

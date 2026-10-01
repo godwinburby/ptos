@@ -43,14 +43,6 @@ backup_if_files_changed = true
 max_full_backups = 10
 max_config_backups = 10
 
-[syncthing]
-# Linux/Termux only: start the Syncthing daemon on every run (off by default).
-# Enable it in Settings -> Syncthing, or with:
-#   ptos --set-config syncthing.serve true
-# Windows is unaffected — it runs its own Syncthing from the system tray.
-# Pair your devices in the Syncthing web UI: http://127.0.0.1:8384
-serve = false
-
 [todo]
 # Background notification check interval in minutes (0 = disabled)
 notify_interval = 5

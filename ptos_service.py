@@ -6269,6 +6269,12 @@ def get_syncthing_status():
       last_sync, last_sync_source ('api' | 'log' | None)
       devices, devices_connected
       error              — friendly message for the unreachable / config cases
+
+    `devices` holds the PAIRED peers only — the device PTOS runs on is always
+    present in Syncthing's own device list, so it is filtered out here and
+    reported separately as my_id / my_name (the UI shows it as "This device"
+    with a Copy button, since it is what the other side needs during pairing).
+    Filtering is skipped when my_id could not be read.
     """
     cfg = _syncthing_config()
     if not cfg.get("ok"):
@@ -6343,6 +6349,8 @@ def get_syncthing_status():
         result["devices"] = []
         for d in devs or []:
             did = d.get("deviceID") or d.get("deviceId") or ""
+            if did and did == result["my_id"]:
+                continue
             c = conn_map.get(did) or {}
             last_seen = d.get("lastSeen") or c.get("at") or c.get("connectedAt")
             if last_seen and last_seen.startswith("0001-01-01"):

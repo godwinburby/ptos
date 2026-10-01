@@ -49,6 +49,15 @@ CONNECTIONS = {"connections": {
         {"connected": False, "at": "0001-01-01T00:00:00Z"},
 }}
 
+# Syncthing's own device list always contains the machine it runs on
+DEVICES_WITH_SELF = DEVICES + [
+    {"name": "test-pc", "deviceID": MY_ID, "lastSeen": "2026-09-30T12:00:00Z"},
+]
+
+CONNECTIONS_WITH_SELF = {"connections": dict(
+    CONNECTIONS["connections"],
+    **{MY_ID: {"connected": True, "at": "2026-09-30T12:00:00Z"}})}
+
 
 class FakeResponse:
     def __init__(self, payload):
@@ -89,14 +98,15 @@ def _patch_config(tmp_path, monkeypatch, folder_path="", xml=None):
     return cfg_path
 
 
-def _default_routes(events=None):
+def _default_routes(events=None, devices=None, connections=None):
     routes = {
         "/rest/system/version": json.dumps({"version": "v2.1.5"}),
         "/rest/system/status": json.dumps(SYSTEM_STATUS),
         "/rest/db/status": json.dumps(DB_STATUS),
         "/rest/events": json.dumps(events if events is not None else EVENTS),
-        "/rest/config/devices": json.dumps(DEVICES),
-        "/rest/system/connections": json.dumps(CONNECTIONS),
+        "/rest/config/devices": json.dumps(devices if devices is not None else DEVICES),
+        "/rest/system/connections": json.dumps(
+            connections if connections is not None else CONNECTIONS),
     }
     return routes
 
@@ -255,6 +265,30 @@ class TestGetSyncthingStatus:
         assert s["devices"][1]["last_seen_fmt"] is None
         assert any("timeout=0" in url for url, _ in fake.calls)
 
+    def test_current_device_is_skipped_in_device_list(self, tmp_path, monkeypatch):
+        _patch_config(tmp_path, monkeypatch, folder_path=str(tmp_path))
+        monkeypatch.setattr(ptos_service, "BASE_DIR", str(tmp_path))
+        self._install_routes(monkeypatch, _default_routes(
+            devices=DEVICES_WITH_SELF, connections=CONNECTIONS_WITH_SELF))
+        s = ptos_service.get_syncthing_status()
+        assert s["my_id"] == MY_ID
+        assert MY_ID not in [d["id"] for d in s["devices"]]
+        assert len(s["devices"]) == 2
+        assert s["devices_connected"] == 1
+
+    def test_current_device_kept_when_my_id_unavailable(self, tmp_path, monkeypatch):
+        _patch_config(tmp_path, monkeypatch, folder_path=str(tmp_path))
+        monkeypatch.setattr(ptos_service, "BASE_DIR", str(tmp_path))
+        self._install_routes(monkeypatch, {
+            "/rest/system/version": json.dumps({"version": "v2.1.5"}),
+            "/rest/config/devices": json.dumps(DEVICES_WITH_SELF),
+            "/rest/system/connections": json.dumps(CONNECTIONS_WITH_SELF),
+        })
+        s = ptos_service.get_syncthing_status()
+        assert s["my_id"] is None
+        assert MY_ID in [d["id"] for d in s["devices"]]
+        assert s["devices_connected"] == 2
+
     def test_events_empty_falls_back_to_log(self, tmp_path, monkeypatch):
         _patch_config(tmp_path, monkeypatch, folder_path=str(tmp_path))
         monkeypatch.setattr(ptos_service, "BASE_DIR", str(tmp_path))
@@ -377,7 +411,7 @@ class TestCli:
         assert "Send & Receive" in out
         assert "abcd-1234" in out
         assert str(tmp_path) in out
-        assert "--set-config syncthing.serve true" in out
+        assert "PTOS never installs or starts it" in out
 
     def test_run_sync_status_fully_in_sync_fallback(self, tmp_path, monkeypatch, capsys):
         status = {
@@ -504,6 +538,7 @@ class TestWeb:
         assert "Set up sync between two devices" in html
         assert "Add Remote Device" in html
         assert 'id="sync-setup-guide" open' not in html
+        assert "1 of 1 other device(s) connected" in html
 
     def test_settings_page_no_config(self, tmp_path, monkeypatch):
         from ptos_web import app
@@ -549,62 +584,34 @@ class TestWeb:
         html = client.get("/settings").get_data(as_text=True)
         assert "No configured Syncthing folder matches this data folder" in html
 
-    def test_settings_serve_toggle_hidden_on_windows(self, tmp_path, monkeypatch):
+    def test_settings_page_has_no_serve_control(self, tmp_path, monkeypatch):
         from ptos_web import app
         import ptos_web
         status = {"ok": True, "reachable": True, "folder": None, "error": None}
         monkeypatch.setattr(ptos_service, "get_syncthing_status", lambda: status)
-        monkeypatch.setattr(ptos_web.platform, "system", lambda: "Windows")
+        monkeypatch.setattr(ptos_web.platform, "system", lambda: "Linux")
         client = app.test_client()
         html = client.get("/settings").get_data(as_text=True)
         assert 'id="syncthing-serve"' not in html
         assert "syncthing_serve" not in html
+        assert "syncthing.serve" not in html
+        assert "Start the Syncthing daemon when PTOS launches" not in html
 
-    def test_settings_serve_toggle_unchecked_by_default(self, tmp_path, monkeypatch):
+    def test_settings_save_strips_stale_serve_key(self, tmp_path, monkeypatch):
         from ptos_web import app
-        import ptos_web
-        status = {"ok": True, "reachable": True, "folder": None, "error": None}
-        monkeypatch.setattr(ptos_service, "get_syncthing_status", lambda: status)
-        monkeypatch.setattr(ptos_web.platform, "system", lambda: "Linux")
-        client = app.test_client()
-        html = client.get("/settings").get_data(as_text=True)
-        assert 'id="syncthing-serve"' in html
-        assert 'syncthing-serve").checked = false' in html
-        assert "syncthing_serve: document.getElementById" in html
-
-    def test_settings_serve_toggle_checked_when_configured(self, tmp_path, monkeypatch):
-        from ptos_web import app
-        import ptos_web
-        status = {"ok": True, "reachable": True, "folder": None, "error": None}
-        monkeypatch.setattr(ptos_service, "get_syncthing_status", lambda: status)
-        monkeypatch.setattr(ptos_web.platform, "system", lambda: "Linux")
         cfg = ptos_service.get_config()
-        cfg.setdefault("syncthing", {})["serve"] = True
+        cfg["syncthing"] = {"serve": True}
         ptos_service.save_config(cfg)
+        assert "syncthing" in ptos_service.get_config()
         client = app.test_client()
-        html = client.get("/settings").get_data(as_text=True)
-        assert 'id="syncthing-serve"' in html
-        assert 'syncthing-serve").checked = true' in html
+        resp = client.post("/settings/save", json={"user_name": "Ada"})
+        assert resp.get_json()["ok"] is True
+        assert "syncthing" not in ptos_service.get_config()
+        assert ptos_service.get_config()["user"]["name"] == "Ada"
 
-    def test_settings_save_persists_syncthing_serve(self, tmp_path, monkeypatch):
+    def test_settings_save_ignores_stale_serve_payload(self, tmp_path, monkeypatch):
         from ptos_web import app
         client = app.test_client()
         resp = client.post("/settings/save", json={"syncthing_serve": True, "user_name": "Ada"})
-        assert resp.status_code == 200
         assert resp.get_json()["ok"] is True
-        assert ptos_service.get_config()["syncthing"]["serve"] is True
-        resp2 = client.post("/settings/save", json={"syncthing_serve": False})
-        assert resp2.get_json()["ok"] is True
-        assert ptos_service.get_config()["syncthing"]["serve"] is False
-
-    def test_settings_save_keeps_other_syncthing_keys(self, tmp_path, monkeypatch):
-        from ptos_web import app
-        cfg = ptos_service.get_config()
-        cfg.setdefault("syncthing", {})["extra"] = "kept"
-        ptos_service.save_config(cfg)
-        client = app.test_client()
-        resp = client.post("/settings/save", json={"syncthing_serve": True})
-        assert resp.get_json()["ok"] is True
-        saved = ptos_service.get_config()["syncthing"]
-        assert saved["extra"] == "kept"
-        assert saved["serve"] is True
+        assert "syncthing" not in ptos_service.get_config()
