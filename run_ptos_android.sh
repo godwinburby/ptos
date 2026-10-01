@@ -30,29 +30,43 @@ else
 fi
 PTOS_DIR="$(pwd)"
 
-# ── Resolve data directory (sibling to repo, like the other scripts) ────────
-# Fresh installs use Termux internal storage ($HOME/ptos-data) — fast, and no
-# storage permission is needed. An existing install's location (e.g.
-# ~/storage/shared/ptos-data from older versions) is honored via .ptos_home.
-# Note: only the Termux-started Syncthing daemon can reach internal storage;
-# the Syncthing Android app cannot. To move to shared storage instead later:
-#   termux-setup-storage && python ptos.py --set-home ~/storage/shared/ptos-data
-PARENT_DIR="$(dirname "$PTOS_DIR")"
-if [ -f "$PTOS_DIR/.ptos_home" ]; then
-    DATA_DIR="$(cat "$PTOS_DIR/.ptos_home" | tr -d '[:space:]')"
-    echo "Data directory: $DATA_DIR (from .ptos_home)"
-else
-    DATA_DIR="$PARENT_DIR/ptos-data"
-    if [ ! -d "$DATA_DIR" ]; then
-        echo ""
-        echo "--- Creating data directory ---"
-        mkdir -p "$DATA_DIR"
-        echo "Data directory created at: $DATA_DIR"
+# ── Storage permission (optional) ──────────────────────────────────────────
+if [ ! -d "$HOME/storage/shared" ]; then
+    echo "Requesting storage permission (optional — needed for data folder)..."
+    termux-setup-storage
+    sleep 3
+    if [ -d "$HOME/storage/shared" ]; then
+        echo "Storage permission granted."
     else
-        echo "Data directory: $DATA_DIR"
+        echo "Storage permission not granted (you can grant it later if needed)."
     fi
-    echo "$DATA_DIR" > "$PTOS_DIR/.ptos_home"
-    echo "Configured .ptos_home -> $DATA_DIR"
+fi
+
+# ── Create data folder in shared storage ────────────────────────────────────
+# Android separates code ($HOME/ptos) from data (~/storage/shared/ptos-data)
+# so Syncthing/file managers can access the data folder directly.
+DATA_DIR="$HOME/storage/shared/ptos-data"
+if [ -d "$HOME/storage/shared" ]; then
+    if [ ! -d "$DATA_DIR" ]; then
+        echo "Creating data folder: $DATA_DIR"
+        mkdir -p "$DATA_DIR"
+    else
+        echo "Data folder: $DATA_DIR"
+    fi
+    # Write .ptos_home if missing or different
+    BOOTSTRAP="$PTOS_DIR/.ptos_home"
+    CURRENT_HOME=""
+    if [ -f "$BOOTSTRAP" ]; then
+        CURRENT_HOME="$(cat "$BOOTSTRAP")"
+    fi
+    if [ "$CURRENT_HOME" != "$DATA_DIR" ]; then
+        echo "$DATA_DIR" > "$BOOTSTRAP"
+        echo "Configured .ptos_home -> $DATA_DIR"
+    fi
+else
+    echo "Shared storage not available — data will stay in code folder."
+    echo "Run 'termux-setup-storage' and re-run to separate data from code."
+    DATA_DIR="$PTOS_DIR"
 fi
 
 # ── Set PTOS_HOME for this session ─────────────────────────────────────────
@@ -93,10 +107,9 @@ if [ ! -d "$DATA_DIR/config" ]; then
         echo "Open http://127.0.0.1:8384 on each device and:"
         echo "  1. Actions -> Show ID, then Add Remote Device with the OTHER"
         echo "     device's ID — do this on BOTH devices (pairing is mutual)."
-        echo "  2. Add Folder with Folder ID 'ptos-data', path '$DATA_DIR',"
-        echo "     Share it with the other device as 'Send & Receive'."
-        echo "     (Your data is in Termux internal storage — only the Termux-started"
-        echo "     daemon can sync it, not the Syncthing Android app.)"
+        echo "  2. Add Folder with Folder ID 'ptos-data',"
+        echo "     path '/storage/shared/ptos-data', Share it with the other"
+        echo "     device as 'Send & Receive'."
         echo "  3. On the other device ACCEPT the folder and set its path to"
         echo "     its own ptos-data directory (the folder ID must match on both)."
         echo "  4. Verify later with: ptos --sync-status"

@@ -138,8 +138,7 @@ On Linux and Termux the script also installs **Syncthing** and keeps it running
 (it's what syncs your data between devices — see [Sharing and sync](#sharing-and-sync)).
 Windows uses your own Syncthing installation running on startup.
 
-On Android, code goes to `~/ptos` (Termux home), data to `~/ptos-data` — a
-sibling folder in Termux's internal storage (fast, no storage permission needed).
+On Android, code goes to `~/ptos` (Termux home), data to `~/storage/shared/ptos-data`.
 On Windows/Linux, data lives in a sibling directory (`~/ptos-data`) — outside the repo and away from OneDrive.
 
 ### Daily use
@@ -208,7 +207,7 @@ python ptos.py --set-home ~/ptos-data
 ptos-backups/                        # ZIP backups (sibling to ptos-data, outside sync scope)
 ```
 
-On Android, data lives in `~/ptos-data` (Termux internal storage) instead.
+On Android, data lives in `~/storage/shared/ptos-data` instead.
 
 ---
 
@@ -1524,13 +1523,11 @@ account, no server, and no per-file lock conflicts.
    directory, and under *Sharing* add the paired device as **Send & Receive**.
 4. **Accept on the other device.** Click `Add Folder → Accept these incoming
    folders`, and set that device's folder path to **its own** ptos-data
-   directory (e.g. `~/ptos-data` on Android — Termux internal storage, synced by
-   the Termux-run daemon, not the Syncthing Android app).
+   directory (e.g. `~/storage/shared/ptos-data` on Android).
 
 The shared folder must be the same folder `ptos.py` uses for data:
 `ptos-data/` next to the repo on Linux/Windows, and
-`~/ptos-data` on Android (Termux internal — synced by the Termux-run daemon,
-not the Syncthing Android app).
+`~/storage/shared/ptos-data` on Android (visible to Syncthing directly).
 
 **Verify:** `ptos --sync-status` (or the Syncthing card in Settings) shows this
 device's own ID — copy it from there when pairing the other side — plus the

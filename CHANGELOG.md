@@ -5,6 +5,15 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-01
+
+### Android data folder back in shared storage
+
+- **Reverted the internal-storage launcher change** (f9613ba) — `run_ptos_android.sh` again creates the data folder in shared storage (`~/storage/shared/ptos-data`), prompts `termux-setup-storage` when needed, and rewrites `.ptos_home` to match on every run.
+- **Why** — the internal-storage default gave no measurable speedup. Page latency is dominated by Python-side record parsing, not FUSE I/O, so trading away Syncthing and file-manager visibility bought nothing.
+- **Moving back on an existing install** — `python ptos.py --set-home ~/storage/shared/ptos-data` migrates the data and rewrites `.ptos_home`; the launcher picks it up on the next run. Delete the stale target first (`set_home` skips non-empty destination folders).
+- **Docs** — README, AGENTS and the Settings pairing-guide example point at `~/storage/shared/ptos-data` again.
+
 ## 2026-09-30
 
 ### Termux Syncthing startup
@@ -40,13 +49,6 @@ Format: `[version or date] — description`
 - **Default flipped to off.** `[syncthing] serve` now defaults to `false` (starter config ships `serve = false`, and a missing key means off) — the Linux/Termux run scripts start the daemon only on an explicit `serve = true`. Existing installs that relied on the old missing-key-means-serve default stop auto-serving until they opt back in.
 - **Settings → Syncthing gains a real control** — a **"Start the Syncthing daemon when PTOS launches"** checkbox (off by default) writes `syncthing.serve` through Save Settings. It is **hidden on Windows**, where PTOS never starts the daemon (Windows runs Syncthing from its own system tray); a `serve = true` set on a shared `config.toml` still applies to the Linux/Termux devices that sync that config, never to Windows.
 - **`ptos --sync-check`** — thin CLI probe (exit 0 when the Syncthing API is reachable, 1 otherwise; prints "Syncthing reachable."/"Syncthing not detected."). `run_ptos.ps1` calls it at launch and, when the daemon is unreachable, prints install guidance (download from syncthing.net and enable "Run as a Windows service" during setup).
-
-### Android launcher stores data in Termux internal storage
-
-- **Fresh Termux installs now get a sibling `ptos-data` inside Termux home** (`~/ptos-data`), matching the Linux/Windows scripts instead of defaulting to `~/storage/shared/ptos-data`. Internal storage is plain ext4 rather than the FUSE-backed shared storage, so PTOS's tiny-file, metadata-heavy record scans and atomic writes are faster — and the data folder no longer needs a storage-permission grant.
-- **Existing installs are untouched** — `run_ptos_android.sh` now honours `.ptos_home` when present, so older setups keep pointing at `~/storage/shared/ptos-data`. The forced shared-storage override and the `termux-setup-storage` prompt were removed; moving an existing folder elsewhere is still a manual `ptos --set-home`.
-- **Syncthing can only follow if it runs in Termux** — internal storage is invisible to the Syncthing Android app, so the script's pairing guide now prints the live data-dir path (`$DATA_DIR`) and notes the Termux-run daemon is the sync path (`serve` remains opt-in under `[syncthing]`).
-- **Docs** — README, AGENTS and the Settings pairing-guide example updated to `~/ptos-data` on Android.
 
 ---
 
