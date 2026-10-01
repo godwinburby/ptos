@@ -100,35 +100,6 @@ if [ ! -d "$DATA_DIR/config" ]; then
     elif command -v zypper &>/dev/null; then
         sudo zypper install -y python3-pip 2>/dev/null || true
     fi
-
-    # Install Syncthing if missing
-    if ! command -v syncthing &>/dev/null; then
-        echo "Installing Syncthing..."
-        if command -v apt &>/dev/null; then
-            sudo apt update -qq && sudo apt install -y syncthing 2>/dev/null || true
-        elif command -v dnf &>/dev/null; then
-            sudo dnf install -y syncthing 2>/dev/null || true
-        elif command -v pacman &>/dev/null; then
-            sudo pacman -Sy --noconfirm syncthing 2>/dev/null || true
-        elif command -v zypper &>/dev/null; then
-            sudo zypper install -y syncthing 2>/dev/null || true
-        fi
-    fi
-    if ! command -v syncthing &>/dev/null; then
-        echo "Syncthing could not be installed automatically."
-        echo "Install it manually (https://syncthing.net) to sync across devices."
-    else
-        echo ""
-        echo "Syncthing installed. Next: pair this device with your other device(s)."
-        echo "Open http://127.0.0.1:8384 on each device and:"
-        echo "  1. Actions -> Show ID, then Add Remote Device with the OTHER"
-        echo "     device's ID — do this on BOTH devices (pairing is mutual)."
-        echo "  2. Add Folder with Folder ID 'ptos-data', path '$DATA_DIR',"
-        echo "     Share it with the other device as 'Send & Receive'."
-        echo "  3. On the other device ACCEPT the folder and set its path to"
-        echo "     its own ptos-data directory (the folder ID must match on both)."
-        echo "  4. Verify later with: ptos --sync-status"
-    fi
 fi
 
 # ── Install Flask + tomli-w if missing ──────────────────────────────────────
@@ -167,21 +138,6 @@ if [ -d ".git" ]; then
     fi
 else
     echo "Not a git repo — skipping update check."
-fi
-
-# ── Keep Syncthing running (opt-in) ─────────────────────────────────────────
-SERVE="$($PYTHON ptos.py --get-config syncthing.serve 2>/dev/null | tr -d '[:space:]')"
-if [ "$SERVE" = "true" ] && command -v syncthing &>/dev/null; then
-    if command -v systemctl &>/dev/null; then
-        systemctl --user enable --now syncthing >/dev/null 2>&1 || true
-    fi
-    if ! pgrep -x syncthing >/dev/null 2>&1; then
-        nohup syncthing serve --no-browser >/dev/null 2>&1 &
-    fi
-    echo "Syncthing is running (http://127.0.0.1:8384). Disable with: $PYTHON ptos.py --set-config syncthing.serve false"
-elif command -v syncthing &>/dev/null; then
-    echo "Syncthing is installed but not set to start automatically."
-    echo "Enable it in Settings -> Syncthing, or run: $PYTHON ptos.py --set-config syncthing.serve true"
 fi
 
 # ── Kill anything on port 5000 ──────────────────────────────────────────────

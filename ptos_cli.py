@@ -311,14 +311,14 @@ def build_parser(cycles):
                      help="List all type:id targets (records, todos, notes)")
     utl.add_argument("--get-config", dest="get_config_key", metavar="KEY",
 help="Print a config value for a dotted path, e.g.\n"
-                           "  todo.priority_labels.A     syncthing.serve\n"
+                           "  todo.priority_labels.A     backup.auto_backup_on_startup\n"
                            "  home.quick_presets         server.port\n"
                           "  (lists the whole section when the path has no more subkeys)")
     utl.add_argument("--set-config", dest="set_config", metavar=("KEY", "VALUE"),
                      nargs=2,
 help="Set a config value via dotted path, e.g.\n"
                            "  --set-config todo.priority_labels.A Critical\n"
-                           "  --set-config syncthing.serve true\n"
+                           "  --set-config backup.auto_backup_on_startup false\n"
                           "  Interprets true/false as bool and pure numbers as int/float")
     utl.add_argument("--set",      nargs="+", metavar="KEY=VALUE",
                      help="Edit matched record(s)  (use with --where)\n"
@@ -2843,12 +2843,11 @@ def _print_sync_setup_guide(folder):
     print("       tab select the paired device and keep 'Send & Receive'.")
     print("    4. On the OTHER device, accept the incoming folder and point it")
     print("       at ITS ptos-data directory (not this machine's path).")
-    print("    5. Re-run `ptos --sync-status` — expect both devices")
-    print("       connected and the folder at 100%.")
+    print("    5. Re-run `ptos --sync-status` — expect the other device to show")
+    print("       as connected and the folder at 100%.")
     print("  The Folder ID must match on both devices (use '" + folder["id"] + "');")
-    print("  the label and path may differ. To keep this machine's daemon running")
-    print("  on Linux/Termux launches, opt in via Settings -> Syncthing or:")
-    print("  ptos --set-config syncthing.serve true (Windows runs its own daemon)")
+    print("  the label and path may differ. Syncthing runs on its own on every")
+    print("  device — PTOS never installs or starts it.")
 
 
 def run_sync_check():
@@ -2906,7 +2905,7 @@ def run_sync_status():
         print(f"             data dir = {ptos.BASE_DIR}")
         print("  Pair the data folder as a Syncthing folder on this machine.")
     if s.get("devices"):
-        print(f"  Devices:   {s['devices_connected']} of {len(s['devices'])} connected")
+        print(f"  Devices:   {s['devices_connected']} of {len(s['devices'])} other connected")
         for d in s["devices"]:
             last_seen = d.get("last_seen_fmt") or d.get("last_seen")
             state = "connected" if d.get("connected") else f"offline (last seen {last_seen or 'never'})"

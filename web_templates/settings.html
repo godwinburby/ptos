@@ -144,7 +144,7 @@
       <li>Press <em>Refresh</em> here — you should see both devices connected and the folder at 100%.</li>
     </ol>
     <div style="margin:8px 0 0 18px;font-size:0.85em;color:var(--text-secondary,#888);">
-      Stuck on "0 of 2 devices connected"? Check both IDs were exchanged in <em>both</em> directions and that the
+      Stuck on "0 of 1 other device connected"? Check both IDs were exchanged in <em>both</em> directions and that the
       devices can reach each other (same Wi‑Fi, or open the firewall/relay on Syncthing's <em>Settings</em> tab).
       This card only observes Syncthing — PTOS never syncs anything itself.
     </div>
@@ -343,9 +343,7 @@
   <div style="font-size:0.8em;color:var(--text-secondary,#888);margin-bottom:10px;">
     PTOS does not sync anything itself — it reports whether the ptos-data folder is
     in sync and when it last succeeded, reading Syncthing's own API + log.
-    {% if not is_windows %}On Linux/Termux you can also have the daemon started for you below.
-    {% else %}Windows runs its own Syncthing from the system tray; PTOS never starts it.
-    {% endif %}
+    Syncthing runs on its own; PTOS never installs or starts it.
   </div>
   <div id="syncthing-status-body">
   {% if not syncthing_status.ok %}
@@ -409,7 +407,7 @@
     </table>
     {% if syncthing_status.devices %}
     <div style="margin-top:10px;font-size:0.9em;">
-      <strong>{{ syncthing_status.devices_connected }} of {{ syncthing_status.devices|length }} device(s) connected</strong>
+      <strong>{{ syncthing_status.devices_connected }} of {{ syncthing_status.devices|length }} other device(s) connected</strong>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-top:6px;">
       <tr style="color:var(--text-secondary,#888);text-align:left;">
@@ -434,18 +432,6 @@
     {% endif %}
   {% endif %}
   </div>
-  {% if not is_windows %}
-  <div style="display:flex;align-items:center;gap:10px;margin-top:12px;padding-top:12px;border-top:1px solid var(--border,rgba(128,128,128,0.2));">
-    <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:14px;">
-      <input type="checkbox" id="syncthing-serve" style="width:18px;height:18px;">
-      Start the Syncthing daemon when PTOS launches
-    </label>
-  </div>
-  <div style="font-size:0.8em;color:var(--text-secondary,#888);margin:-6px 0 4px 28px;">
-    Linux / Termux only, off by default. Takes effect the next time you launch PTOS on this device.
-    Equivalent to: ptos --set-config syncthing.serve true
-  </div>
-  {% endif %}
 </div>
 
 
@@ -477,9 +463,6 @@
   document.getElementById("auto-backup-shutdown").checked = {{ 'true' if backup.get('auto_backup_on_shutdown', true) else 'false' }};
   document.getElementById("backup-if-changed").checked = {{ 'true' if backup.get('backup_if_files_changed', true) else 'false' }};
   document.getElementById("max-full-backups").value = {{ backup.get('max_full_backups', 10) }};
-  {% if not is_windows %}
-  document.getElementById("syncthing-serve").checked = {{ 'true' if syncthing_serve else 'false' }};
-  {% endif %}
   document.getElementById("max-config-backups").value = {{ backup.get('max_config_backups', 10) }};
   document.getElementById("notify-interval").value = {{ todo.get('notify_interval', 5) }};
   document.getElementById("remind-before").value = {{ todo.get('remind_before_minutes', 0) }};
@@ -619,9 +602,6 @@
         notify_routines: document.getElementById("notify-routines").checked,
         notify_once_on_startup: document.getElementById("notify-once").checked,
         hide_routines: document.getElementById("hide-routines").checked,
-        {% if not is_windows %}
-        syncthing_serve: document.getElementById("syncthing-serve").checked,
-        {% endif %}
         remind_before_minutes: parseInt(document.getElementById("remind-before").value) || 0,
         reminder_check_interval: parseInt(document.getElementById("reminder-check").value) || 2,
         archive_months: parseInt(document.getElementById("archive-months").value) || 6,
@@ -777,7 +757,7 @@ function refreshSyncthing() {
       if (s.error) addRow("Note", '<span style="color:var(--warn,#e67e22);">' + esc(s.error) + "</span>");
       h += "</table>";
       if (s.devices && s.devices.length) {
-        h += '<div style="margin-top:10px;font-size:0.9em;"><strong>' + esc(s.devices_connected) + " of " + esc(s.devices.length) + " device(s) connected</strong></div>";
+        h += '<div style="margin-top:10px;font-size:0.9em;"><strong>' + esc(s.devices_connected) + " of " + esc(s.devices.length) + " other device(s) connected</strong></div>";
         h += '<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-top:6px;">';
         h += '<tr style="color:var(--text-secondary,#888);text-align:left;"><th style="padding:3px 8px 3px 0;">Device</th><th style="padding:3px 8px 3px 0;">ID</th><th style="padding:3px 8px 3px 0;">Status</th></tr>';
         s.devices.forEach(function(d) {

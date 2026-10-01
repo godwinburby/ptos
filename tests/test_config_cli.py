@@ -36,20 +36,20 @@ class TestCliSetConfig:
         assert ptos.get_config()["server"]["port"] == 8080
 
     def test_bool_coercion(self, monkeypatch, capsys):
-        _run(monkeypatch, "--set-config", "syncthing.serve", "false")
-        assert ptos.get_config()["syncthing"]["serve"] is False
+        _run(monkeypatch, "--set-config", "backup.auto_backup_on_startup", "false")
+        assert ptos.get_config()["backup"]["auto_backup_on_startup"] is False
 
-    def test_syncthing_serve_defaults_false(self, monkeypatch, capsys):
-        _run(monkeypatch, "--get-config", "syncthing.serve")
-        assert "false" in capsys.readouterr().out
+    def test_bool_defaults_true(self, monkeypatch, capsys):
+        _run(monkeypatch, "--get-config", "backup.auto_backup_on_startup")
+        assert "true" in capsys.readouterr().out
 
-    def test_syncthing_serve_set_true(self, monkeypatch, capsys):
-        _run(monkeypatch, "--set-config", "syncthing.serve", "true")
-        assert ptos.get_config()["syncthing"]["serve"] is True
+    def test_bool_set_true(self, monkeypatch, capsys):
+        _run(monkeypatch, "--set-config", "backup.backup_if_files_changed", "true")
+        assert ptos.get_config()["backup"]["backup_if_files_changed"] is True
 
-    def test_write_preserves_syncthing_section(self, monkeypatch, capsys):
+    def test_write_preserves_other_sections(self, monkeypatch, capsys):
         _run(monkeypatch, "--set-config", "user.name", "Ada")
-        assert ptos.get_config()["syncthing"]["serve"] is False
+        assert ptos.get_config()["server"]["port"] == 5000
 
     def test_int_and_str_preserved(self, monkeypatch, capsys):
         _run(monkeypatch, "--set-config", "home.quick_presets", "5")
