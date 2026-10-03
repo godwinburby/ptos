@@ -37,6 +37,14 @@ templates_auto_reload = false
 # disable and rely on PTOS's own write-invalidation.
 external_check_seconds = 5
 
+[cache]
+# How long (seconds) a type's Add/Edit suggestions (tags, past field values,
+# defaults) may be reused. Writing a record of that type refreshes them
+# immediately, so this only bounds how long an unhooked write — a hand-edited
+# file, a script writing .log files directly — can go unnoticed. Set 0 to keep
+# suggestions until PTOS restarts.
+suggestion_ttl_seconds = 300
+
 [backup]
 # Folders to include in full backup
 folders = ["records", "config", "templates", "journal", "todo", "exports", "notes", "scripts"]

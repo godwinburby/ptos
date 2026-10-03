@@ -120,28 +120,87 @@ def invalidate_cache(keys):
     invalidate(keys)
 
 
-def _invalidate_history_cache(rtype=None):
+def _invalidate_history_cache(rtype=None, rtypes=None):
     """Invalidate history/conditional-suggestion/habit/calendar/record caches.
 
     When *rtype* is given, only that type's history/condsug caches are popped
     (fast path). Habit, calendar, and record caches are always cleared since
-    they're cheap to rebuild and can match multiple types.  Pass ``None`` to
+    they're cheap to rebuild and can match multiple types.  *rtypes* takes an
+    iterable of types for a bulk write that touched more than one (a bulk set
+    that moves records between types, for example).  Pass ``None`` for both to
     clear everything (schema changes, bulk ops)."""
+    types = set()
+    if rtype:
+        types.add(rtype)
+    if rtypes:
+        types.update(t for t in rtypes if t)
     for key in list(ptos._CACHE.keys()):
-        if rtype:
-            if (key == f"history:{rtype}"
-                    or key.startswith(f"condsug:{rtype}:")
-                    or key.startswith("habit:") or key.startswith("calendar:")
-                    or key.startswith("frwl:")):
+        if types:
+            if any(key == f"history:{t}" or key.startswith(f"condsug:{t}:")
+                   or key.startswith("habit:") or key.startswith("calendar:")
+                   or key.startswith("frwl:") for t in types):
                 ptos._CACHE.pop(key, None)
+                _SUGGESTION_STAMP.pop(key, None)
         else:
             if (key.startswith("history:") or key.startswith("condsug:")
                     or key.startswith("habit:") or key.startswith("calendar:")
                     or key.startswith("frwl:")):
                 ptos._CACHE.pop(key, None)
+                _SUGGESTION_STAMP.pop(key, None)
     # We just wrote these files ourselves, so the external-change watcher must
     # re-baseline rather than report our own write as a foreign change.
     ptos.reset_external_watch()
+
+
+# ── Suggestion cache TTL ──────────────────────────────────────────────────────
+# Own-type writes drop a type's suggestion caches immediately (see
+# _invalidate_history_cache), so the TTL is only a backstop for the writes that
+# can't say what they touched: the /editor free-text rewrites (which call the
+# engine directly and bypass the service), and a path that writes a log file
+# through some route nobody remembered to hook. Without it, a single unhooked
+# write left the Add form's dropdowns serving pre-write suggestions until the
+# process restarted.
+
+_SUGGESTION_STAMP = {}
+_monotonic = time.monotonic
+
+
+def _suggestion_ttl():
+    """Seconds a history/conditional-suggestion cache entry may be reused.
+    ``[cache] suggestion_ttl_seconds``; default 300, ``0`` disables the TTL."""
+    try:
+        raw = ptos.get_config().get("cache", {}).get("suggestion_ttl_seconds", 300)
+    except Exception:
+        return 300
+    try:
+        ttl = int(raw)
+    except (TypeError, ValueError):
+        return 300
+    return ttl if ttl >= 0 else 300
+
+
+def _suggestion_cached(key):
+    """Return the cached value for *key* if it is present and not aged out,
+    else None (and drop the entry so the next call rebuilds it)."""
+    value = ptos._CACHE.get(key)
+    if value is None:
+        _SUGGESTION_STAMP.pop(key, None)
+        return None
+    ttl = _suggestion_ttl()
+    if ttl <= 0:
+        return value
+    stamp = _SUGGESTION_STAMP.get(key)
+    if stamp is None or (_monotonic() - stamp) >= ttl:
+        ptos._CACHE.pop(key, None)
+        _SUGGESTION_STAMP.pop(key, None)
+        return None
+    return value
+
+
+def _suggestion_store(key, value):
+    ptos._CACHE[key] = value
+    _SUGGESTION_STAMP[key] = _monotonic()
+    return value
 
 
 def _cycles():
@@ -251,8 +310,7 @@ def append_record(line):
     """
     try:
         result = ptos.append_record(line)
-        rtype = ptos.parse_line(line)
-        _invalidate_history_cache(rtype=rtype[1].get("type") if rtype else None)
+        _invalidate_history_cache(rtype=_line_type(line))
         return result
     except Exception as e:
         raise PTOSError(str(e))
@@ -598,12 +656,15 @@ def get_history_suggestions(rtype, context_record=None):
     The expensive full-file scan is cached per rtype (key history:{rtype});
     the context-dependent filter is re-run cheaply on every call since
     context_record varies per request and the aggregates are already built.
+    A write that changes this type's history drops the key immediately, and
+    the entry also ages out after [cache] suggestion_ttl_seconds so a write
+    that bypasses the service can't leave the Add form on pre-write
+    suggestions until the next restart.
     """
     cache_key = f"history:{rtype}"
-    cached = ptos._CACHE.get(cache_key)
+    cached = _suggestion_cached(cache_key)
     if cached is None:
-        cached = _build_history_suggestions(rtype)
-        ptos._CACHE[cache_key] = cached
+        cached = _suggestion_store(cache_key, _build_history_suggestions(rtype))
 
     filtered_tags = _apply_context_filter(cached["tags_by_field_value"], rtype, context_record)
 
@@ -623,9 +684,10 @@ def get_conditional_suggestions(rtype, field, value):
     Fully cacheable per (rtype, field, value) — a record write drops only that
     type's keys via _invalidate_history_cache(rtype=...), and a file that
     changed outside PTOS drops every condsug: key (see ptos.check_external_changes).
+    Entries also age out after [cache] suggestion_ttl_seconds.
     """
     cache_key = f"condsug:{rtype}:{field}:{value}"
-    cached = ptos._CACHE.get(cache_key)
+    cached = _suggestion_cached(cache_key)
     if cached is not None:
         return cached
 
@@ -675,8 +737,7 @@ def get_conditional_suggestions(rtype, field, value):
         for k, counter in field_counts.items()
         if counter
     }
-    ptos._CACHE[cache_key] = result
-    return result
+    return _suggestion_store(cache_key, result)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1857,6 +1918,22 @@ def find_records(filters, time="all", search=None):
     return results
 
 
+def _line_type(line):
+    """type= of a raw record line, or None if it won't parse."""
+    if not line:
+        return None
+    parsed = ptos.parse_line(line)
+    return parsed[1].get("type") if parsed else None
+
+
+def _touched_types(*lines):
+    """The set of record types across *lines* — the types a write invalidated.
+    Returns None when no type could be read, which makes the caller fall back
+    to clearing every suggestion cache (the safe direction)."""
+    found = {t for t in (_line_type(line) for line in lines) if t}
+    return found or None
+
+
 def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
     """Apply --set changes and/or note replacement to one record.
     lineno: 0-based file line index for precise targeting (handles duplicates).
@@ -1893,7 +1970,10 @@ def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
     except Exception as e:
         raise PTOSError(str(e))
 
-    _invalidate_history_cache(rtype=ptos.parse_line(old_line)[1].get("type") if ptos.parse_line(old_line) else None)
+    # Both types, not just the old one: changing type=invoice to type=expense
+    # on edit leaves the *new* type's history and condsug aggregates stale too,
+    # and the Add form for that type would keep offering pre-edit values.
+    _invalidate_history_cache(rtypes=_touched_types(old_line, new_line))
     return {"old_line": old_line, "new_line": new_line,
             "changed_date": changed_date}
 
@@ -1909,7 +1989,7 @@ def delete_record(filepath, old_line, lineno=None):
         raise PTOSError(str(e))
     except Exception as e:
         raise PTOSError(str(e))
-    _invalidate_history_cache(rtype=ptos.parse_line(old_line)[1].get("type") if ptos.parse_line(old_line) else None)
+    _invalidate_history_cache(rtype=_line_type(old_line))
     return {"deleted_line": old_line}
 
 
@@ -1921,6 +2001,7 @@ def bulk_delete(records):
     """
     deleted = 0
     errors  = []
+    touched = set()
     # Group by filepath so we only backup each file once
     from collections import defaultdict
     by_file = defaultdict(list)
@@ -1937,10 +2018,13 @@ def bulk_delete(records):
             try:
                 _update_record_in_file(filepath, r["line"], None, lineno=r.get("lineno"))
                 deleted += 1
+                t = _line_type(r["line"])
+                if t:
+                    touched.add(t)
             except Exception as e:
                 errors.append(str(e))
     if deleted:
-        _invalidate_history_cache()
+        _invalidate_history_cache(rtypes=touched or None)
     return {"deleted": deleted, "errors": errors}
 
 
@@ -1952,6 +2036,7 @@ def bulk_set(records, set_args):
     """
     updated = 0
     errors  = []
+    touched = set()
     from collections import defaultdict
     by_file = defaultdict(list)
     for r in records:
@@ -1968,10 +2053,15 @@ def bulk_set(records, set_args):
                     _update_record_in_file(filepath, r["line"], new_line,
                                            lineno=r.get("lineno"))
                     updated += 1
+                    # A bulk set can change the type itself, so both the old
+                    # and the new type's suggestions are now stale.
+                    for t in (_line_type(r["line"]), _line_type(new_line)):
+                        if t:
+                            touched.add(t)
             except Exception as e:
                 errors.append(str(e))
     if updated:
-        _invalidate_history_cache()
+        _invalidate_history_cache(rtypes=touched or None)
     return {"updated": updated, "errors": errors}
 
 
@@ -3451,8 +3541,7 @@ def move_record(filepath, old_line, field, value, lineno=None,
         raise PTOSError(str(e))
     except Exception as e:
         raise PTOSError(str(e))
-    _invalidate_history_cache(
-        rtype=ptos.parse_line(old_line)[1].get("type") if ptos.parse_line(old_line) else None)
+    _invalidate_history_cache(rtypes=_touched_types(old_line, new_line))
     return {"old_line": old_line, "new_line": new_line}
 
 

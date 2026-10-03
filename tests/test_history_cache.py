@@ -15,6 +15,36 @@ def _record_dict(line, lineno=0):
             "line": line, "lineno": lineno}
 
 
+def _set_ttl(monkeypatch, value):
+    """Pin [cache] suggestion_ttl_seconds for this test."""
+    real = ptos.get_config
+    def patched():
+        cfg = dict(real())
+        cfg["cache"] = dict(cfg.get("cache") or {})
+        cfg["cache"]["suggestion_ttl_seconds"] = value
+        return cfg
+    monkeypatch.setattr(ptos, "get_config", patched)
+
+
+class _Clock:
+    def __init__(self):
+        self.now = 1000.0
+    def __call__(self):
+        return self.now
+    def advance(self, seconds):
+        self.now += seconds
+
+
+def _counting_scans(monkeypatch):
+    calls = []
+    original = ptos.scan_records
+    def counting_scan(*a, **kw):
+        calls.append(a)
+        return original(*a, **kw)
+    monkeypatch.setattr(ptos, "scan_records", counting_scan)
+    return calls
+
+
 class TestHistorySuggestionsCached:
     def test_second_call_no_rescan(self, monkeypatch):
         _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
@@ -99,6 +129,132 @@ class TestHistorySuggestionsCached:
         svc.save_schema(ptos.get_schema())
         assert all(not k.startswith("history:") and not k.startswith("condsug:")
                    for k in ptos._CACHE)
+
+
+class TestSuggestionTtl:
+    """The TTL is a backstop for writes that never reach the service (a
+    hand-edited .log, a script writing records directly, the /editor rewrite
+    path). Own-type writes still invalidate immediately."""
+
+    def test_default_ttl_is_300(self, monkeypatch):
+        monkeypatch.setattr(ptos, "get_config", lambda: {})
+        assert svc._suggestion_ttl() == 300
+
+    def test_ttl_from_config(self, monkeypatch):
+        _set_ttl(monkeypatch, 45)
+        assert svc._suggestion_ttl() == 45
+
+    def test_garbage_ttl_falls_back_to_default(self, monkeypatch):
+        _set_ttl(monkeypatch, "soon")
+        assert svc._suggestion_ttl() == 300
+        _set_ttl(monkeypatch, -5)
+        assert svc._suggestion_ttl() == 300
+
+    def test_history_rebuilt_after_ttl(self, monkeypatch):
+        clock = _Clock()
+        monkeypatch.setattr(svc, "_monotonic", clock)
+        _set_ttl(monkeypatch, 300)
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        calls = _counting_scans(monkeypatch)
+        svc.get_history_suggestions("expense")
+        assert len(calls) == 1
+        clock.advance(299)
+        svc.get_history_suggestions("expense")
+        assert len(calls) == 1          # still fresh
+        clock.advance(2)
+        svc.get_history_suggestions("expense")
+        assert len(calls) == 2          # aged out
+
+    def test_unhooked_write_shows_up_after_ttl(self, monkeypatch):
+        clock = _Clock()
+        monkeypatch.setattr(svc, "_monotonic", clock)
+        _set_ttl(monkeypatch, 300)
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        assert svc.get_history_suggestions("expense")["field_defaults"].get("domain") == "work"
+        # Straight to disk — no service write path, so no invalidation at all
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10\n"
+                      "2026-01-02 type=expense domain=home category=food amount=5")
+        clock.advance(301)
+        assert svc.get_history_suggestions("expense")["field_defaults"].get("domain") in ("work", "home")
+
+    def test_ttl_zero_disables_expiry(self, monkeypatch):
+        clock = _Clock()
+        monkeypatch.setattr(svc, "_monotonic", clock)
+        _set_ttl(monkeypatch, 0)
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        calls = _counting_scans(monkeypatch)
+        svc.get_history_suggestions("expense")
+        clock.advance(100000)
+        svc.get_history_suggestions("expense")
+        assert len(calls) == 1
+
+    def test_condsug_expires_too(self, monkeypatch):
+        clock = _Clock()
+        monkeypatch.setattr(svc, "_monotonic", clock)
+        _set_ttl(monkeypatch, 60)
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        calls = _counting_scans(monkeypatch)
+        assert svc.get_conditional_suggestions("expense", "domain", "work") == {"category": "supplies"}
+        n = len(calls)
+        clock.advance(61)
+        assert svc.get_conditional_suggestions("expense", "domain", "work") == {"category": "supplies"}
+        assert len(calls) == n + 1
+
+    def test_stamp_dropped_with_entry(self, monkeypatch):
+        clock = _Clock()
+        monkeypatch.setattr(svc, "_monotonic", clock)
+        _set_ttl(monkeypatch, 300)
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        svc.get_history_suggestions("expense")
+        svc.append_record("2026-01-02 type=expense domain=home category=food amount=5")
+        assert "history:expense" not in ptos._CACHE
+        assert "history:expense" not in svc._SUGGESTION_STAMP
+
+    def test_engine_side_invalidation_leaves_no_stale_stamp(self, monkeypatch):
+        """ptos.check_external_changes pops the key from _CACHE without going
+        through the service — a surviving stamp must not resurrect it."""
+        clock = _Clock()
+        monkeypatch.setattr(svc, "_monotonic", clock)
+        _set_ttl(monkeypatch, 300)
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        svc.get_history_suggestions("expense")
+        ptos._CACHE.pop("history:expense")
+        assert "history:expense" in svc._SUGGESTION_STAMP
+        stale_stamp = svc._SUGGESTION_STAMP["history:expense"]
+        calls = _counting_scans(monkeypatch)
+        clock.advance(10)
+        svc.get_history_suggestions("expense")
+        assert len(calls) == 1                       # rebuilt, not a false hit
+        assert svc._SUGGESTION_STAMP["history:expense"] > stale_stamp
+
+
+class TestInvalidationBothTypes:
+    def test_edit_that_changes_type_invalidates_both(self):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        svc.get_history_suggestions("expense")
+        svc.get_history_suggestions("income")
+        old = "2026-01-01 type=expense domain=work category=supplies amount=10"
+        filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
+        svc.edit_record(filepath, old, ["type=income"], None, lineno=0)
+        assert "history:expense" not in ptos._CACHE
+        assert "history:income" not in ptos._CACHE
+
+    def test_bulk_set_type_change_invalidates_both(self):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        svc.get_history_suggestions("expense")
+        svc.get_history_suggestions("income")
+        svc.bulk_set([_record_dict("2026-01-01 type=expense domain=work category=supplies amount=10")],
+                     ["type=income"])
+        assert "history:expense" not in ptos._CACHE
+        assert "history:income" not in ptos._CACHE
+
+    def test_bulk_delete_keeps_unrelated_type_cached(self):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        svc.get_history_suggestions("expense")
+        svc.get_history_suggestions("income")
+        svc.bulk_delete([_record_dict("2026-01-01 type=expense domain=work category=supplies amount=10")])
+        assert "history:expense" not in ptos._CACHE
+        assert "history:income" in ptos._CACHE
 
 
 class TestContextFilterLive:

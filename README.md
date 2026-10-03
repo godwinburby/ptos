@@ -287,6 +287,15 @@ Backups use the same idea: each full backup records the size and modification
 time of everything it captured, so the next run can tell exactly what changed
 (including a synced edit that arrived with an old timestamp).
 
+The Add/Edit form's history suggestions (tags, past values, cascade defaults)
+work the same way: writing a record of that type refreshes them immediately,
+and a synced or hand-edited file is picked up within
+`[cache] suggestion_ttl_seconds` (default `300`, `0` keeps them until restart).
+
+```bash
+ptos --set-config cache.suggestion_ttl_seconds 60
+```
+
 ### Files
 
 | File | Purpose |
