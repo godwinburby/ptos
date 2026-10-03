@@ -23,9 +23,70 @@ app = Flask(__name__,
 app.secret_key = "ptos-local-only"
 app.config["DEBUG"] = False
 
-# Bump ASSET_VERSION whenever anything under web_static/ changes; templates
-# reference assets through av() so one constant covers the whole app.
-ASSET_VERSION = 5
+# Versioned static assets: templates reference files through av(), which appends
+# a cache-busting version. The version is a short hash over the names and
+# contents under web_static/, so a changed asset gets a new URL automatically —
+# no manual bump to forget. With PTOS_DEV=1 it is recomputed (throttled) when a
+# web_static/ file's mtime changes, so edits show up without a restart.
+def _compute_asset_version():
+    import hashlib
+    root = os.path.join(_basedir, "web_static")
+    h = hashlib.sha256()
+    try:
+        for dirpath, dirnames, filenames in os.walk(root):
+            dirnames.sort()
+            for name in sorted(filenames):
+                fp = os.path.join(dirpath, name)
+                rel = os.path.relpath(fp, root).replace("\\", "/")
+                h.update(rel.encode("utf-8"))
+                h.update(b"\0")
+                try:
+                    with open(fp, "rb") as fh:
+                        h.update(fh.read())
+                except OSError:
+                    continue
+                h.update(b"\0")
+    except OSError:
+        pass
+    return h.hexdigest()[:10]
+
+
+_ASSET_DEV = os.environ.get("PTOS_DEV") == "1"
+_ASSET_DEV_STATE = {"checked": 0.0, "mtime": 0.0}
+
+
+def _static_max_mtime():
+    root = os.path.join(_basedir, "web_static")
+    newest = 0.0
+    try:
+        for dirpath, _dirnames, filenames in os.walk(root):
+            for name in filenames:
+                try:
+                    mt = os.path.getmtime(os.path.join(dirpath, name))
+                except OSError:
+                    continue
+                if mt > newest:
+                    newest = mt
+    except OSError:
+        pass
+    return newest
+
+
+def _refresh_asset_version_if_dev():
+    if not _ASSET_DEV:
+        return
+    now = time.monotonic()
+    if now - _ASSET_DEV_STATE["checked"] < 1.0:
+        return
+    _ASSET_DEV_STATE["checked"] = now
+    newest = _static_max_mtime()
+    if newest != _ASSET_DEV_STATE["mtime"]:
+        _ASSET_DEV_STATE["mtime"] = newest
+        global ASSET_VERSION
+        ASSET_VERSION = _compute_asset_version()
+
+
+ASSET_VERSION = _compute_asset_version()
 
 # Static paths that must never be cached (the browser must be able to pick up
 # a new version).
@@ -34,6 +95,9 @@ _STATIC_NEVER_CACHE = ("/static/manifest.json", "/static/sw.js")
 _GZIP_MIN_BYTES = 500
 _GZIP_TYPES = ("text/", "application/json", "application/javascript",
                "text/javascript", "image/svg+xml")
+# Compression buys nothing over the phone's own loopback connection; it pays
+# off over Tailscale/LAN, so skip these client addresses only.
+_LOOPBACK_ADDRS = {"127.0.0.1", "::1", "localhost", "::ffff:127.0.0.1"}
 
 
 def _cfg_server(key, default=None):
@@ -62,6 +126,7 @@ log = logging.getLogger("ptos_web")
 def av(path):
     """Static asset URL with a cache-busting version. Enables long-lived
     immutable caching for web_static/ files."""
+    _refresh_asset_version_if_dev()
     sep = "&" if "?" in path else "?"
     return f"{path}{sep}v={ASSET_VERSION}"
 
@@ -84,6 +149,8 @@ def _static_cache_control(resp):
 def _gzip_response(resp):
     """Compress text responses. Never touches streams (SSE) or send_file."""
     if resp.headers.get("Content-Encoding"):
+        return resp
+    if request.remote_addr in _LOOPBACK_ADDRS:
         return resp
     if "gzip" not in request.headers.get("Accept-Encoding", ""):
         return resp

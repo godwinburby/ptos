@@ -260,9 +260,12 @@ opens the browser automatically — on whatever port `[server] port` is set to
 (default `5000`).
 
 Responses are gzipped when the browser asks for it (text, JSON, JS, SVG — a
-typical page drops from ~136 KB to ~28 KB), and static assets are served with a
-one-year immutable cache via a single version constant. Templates are re-checked
-for changes on every render only when you ask for it:
+typical page drops from ~136 KB to ~28 KB); loopback requests skip compression
+since it buys nothing on the phone's own connection. Static assets are served
+with a one-year immutable cache, and the cache-busting version is a hash of
+everything under `web_static/`, so editing or adding an asset gets a fresh URL
+automatically — no manual bump. Templates are re-checked for changes on every
+render only when you ask for it:
 
 ```bash
 ptos --set-config server.templates_auto_reload true

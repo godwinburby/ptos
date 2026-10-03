@@ -7,6 +7,12 @@ Format: `[version or date] — description`
 
 ## 2026-10-03
 
+### Asset versioning is automatic, and gzip skips loopback
+
+- **No more manual bump.** `ASSET_VERSION` was a hand-maintained constant (`5`), so any change to `web_static/` that forgot the bump served stale JS/CSS under the old `?v=` URL. It is now computed at import as a short SHA-256 over the names and contents under `web_static/` (`_compute_asset_version()`); templates and `av()` are unchanged, but a changed or added asset gets a fresh URL by itself. With `PTOS_DEV=1`, `av()` recomputes it (throttled to a one-second mtime check) so edits show without a restart.
+- **Loopback skips compression.** `_gzip_response` now returns early for `127.0.0.1`/`::1`/`localhost`/`::ffff:127.0.0.1` clients — gzip buys nothing on the phone's own connection and only costs CPU. Remote (Tailscale/LAN) clients still get compressed responses.
+- **Tests** — `tests/test_web_perf.py` gains `TestAssetVersionAuto` (version is short hex; editing or adding a static file changes it; dev mode recomputes on change) and a loopback-not-compressed case; the compression assertions now use a non-loopback `REMOTE_ADDR` since the Werkzeug test client defaults to loopback. Full suite: `2179 passed`.
+
 ### Browse re-scans no more, and each record is parsed once
 
 - **Results are cached, not re-scanned.** `svc.get_records` ran a fresh `ptos.scan_records` on every browse/search/query request, so reloading the same filtered view re-read every matching log file. Results are now cached in `ptos._CACHE` under a `recs:` key (filters, time, search, sort, from/to, file, sum/select), reusing the existing invalidation plumbing — every record-affecting write calls `_invalidate_history_cache()` (which now clears `recs:` alongside `frwl:`), and external record/schema changes drop it via `_EXT_RECORD_PREFIXES`.

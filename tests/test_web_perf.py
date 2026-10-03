@@ -14,12 +14,15 @@ STARTER_CONFIG = os.path.join(
     "starters", "starter_config.toml")
 
 GZIP = {"Accept-Encoding": "gzip"}
+# gzip is skipped for loopback clients, so compression assertions must come
+# from a non-loopback address.
+REMOTE = {"REMOTE_ADDR": "203.0.113.7"}
 
 
 class TestGzip:
     def test_html_page_is_compressed(self):
         from ptos_web import app
-        resp = app.test_client().get("/", headers=GZIP)
+        resp = app.test_client().get("/", headers=GZIP, environ_base=REMOTE)
         assert resp.status_code == 200
         assert resp.headers.get("Content-Encoding") == "gzip"
         assert int(resp.headers["Content-Length"]) == len(resp.get_data())
@@ -29,19 +32,26 @@ class TestGzip:
     def test_compressed_is_smaller_than_identity(self):
         from ptos_web import app
         client = app.test_client()
-        zipped = client.get("/", headers=GZIP)
-        plain = client.get("/", headers={"Accept-Encoding": "identity"})
+        zipped = client.get("/", headers=GZIP, environ_base=REMOTE)
+        plain = client.get("/", headers={"Accept-Encoding": "identity"},
+                           environ_base=REMOTE)
         assert plain.headers.get("Content-Encoding") is None
         assert len(zipped.get_data()) < len(plain.get_data())
 
     def test_vary_header_includes_accept_encoding(self):
         from ptos_web import app
-        resp = app.test_client().get("/", headers=GZIP)
+        resp = app.test_client().get("/", headers=GZIP, environ_base=REMOTE)
         assert "Accept-Encoding" in resp.headers.get("Vary", "")
+
+    def test_loopback_client_not_compressed(self):
+        from ptos_web import app
+        resp = app.test_client().get("/", headers=GZIP)
+        assert resp.headers.get("Content-Encoding") is None
 
     def test_not_compressed_without_accept_encoding(self):
         from ptos_web import app
-        resp = app.test_client().get("/", headers={"Accept-Encoding": "identity"})
+        resp = app.test_client().get("/", headers={"Accept-Encoding": "identity"},
+                                     environ_base=REMOTE)
         assert resp.headers.get("Content-Encoding") is None
 
     def test_small_body_left_alone(self):
@@ -151,6 +161,54 @@ class TestAssetVersionHelper:
         out = ptos_web.av("/static/x.js?a=1")
         assert out.startswith("/static/x.js?a=1&")
         assert f"v={ptos_web.ASSET_VERSION}" in out
+
+
+class TestAssetVersionAuto:
+    """The version is derived from web_static/ contents, so a changed asset
+    gets a new URL with no manual bump."""
+
+    def test_version_is_short_hex(self):
+        import ptos_web
+        assert re.fullmatch(r"[0-9a-f]{10}", ptos_web.ASSET_VERSION)
+
+    def test_changing_a_static_file_changes_version(self, tmp_path, monkeypatch):
+        import ptos_web
+        static = tmp_path / "web_static"
+        static.mkdir()
+        (static / "a.css").write_text("body{}", encoding="utf-8")
+        monkeypatch.setattr(ptos_web, "_basedir", str(tmp_path))
+        first = ptos_web._compute_asset_version()
+        (static / "a.css").write_text("body{color:red}", encoding="utf-8")
+        assert ptos_web._compute_asset_version() != first
+
+    def test_adding_a_static_file_changes_version(self, tmp_path, monkeypatch):
+        import ptos_web
+        static = tmp_path / "web_static"
+        static.mkdir()
+        (static / "a.css").write_text("body{}", encoding="utf-8")
+        monkeypatch.setattr(ptos_web, "_basedir", str(tmp_path))
+        first = ptos_web._compute_asset_version()
+        (static / "b.js").write_text("x", encoding="utf-8")
+        assert ptos_web._compute_asset_version() != first
+
+    def test_dev_mode_recomputes_on_file_change(self, tmp_path, monkeypatch):
+        import ptos_web
+        static = tmp_path / "web_static"
+        static.mkdir()
+        (static / "a.css").write_text("body{}", encoding="utf-8")
+        monkeypatch.setattr(ptos_web, "_basedir", str(tmp_path))
+        monkeypatch.setattr(ptos_web, "ASSET_VERSION", "start00000")
+        monkeypatch.setattr(ptos_web, "_ASSET_DEV", True)
+        monkeypatch.setattr(ptos_web, "_ASSET_DEV_STATE",
+                            {"checked": 0.0, "mtime": 0.0})
+        ptos_web._refresh_asset_version_if_dev()
+        first = ptos_web.ASSET_VERSION
+        assert first != "start00000"
+        (static / "a.css").write_text("body{color:red}", encoding="utf-8")
+        monkeypatch.setattr(ptos_web, "_ASSET_DEV_STATE",
+                            {"checked": 0.0, "mtime": 0.0})
+        ptos_web._refresh_asset_version_if_dev()
+        assert ptos_web.ASSET_VERSION != first
 
 
 class TestTemplatesUseVersionedAssets:
