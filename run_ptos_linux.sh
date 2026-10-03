@@ -130,71 +130,120 @@ fi
 
 # ── Git pull (if repo) ──────────────────────────────────────────────────────
 if [ -d ".git" ]; then
-    echo "Checking for updates..."
-    if git pull --ff-only 2>&1; then
-        echo "Updated."
+    UPDATE_STAMP="$PTOS_DIR/.ptos_last_update"
+    UPDATE_INTERVAL=21600
+    NOW=$(date +%s 2>/dev/null || echo 0)
+    LAST=0
+    if [ -f "$UPDATE_STAMP" ]; then
+        LAST=$(cat "$UPDATE_STAMP" 2>/dev/null || echo 0)
+    fi
+    case "$LAST" in ''|*[!0-9]*) LAST=0 ;; esac
+    FORCE_UPDATE=0
+    for arg in "$@"; do
+        if [ "$arg" = "--update" ]; then FORCE_UPDATE=1; fi
+    done
+    if [ "$FORCE_UPDATE" = "1" ] || [ $((NOW - LAST)) -ge "$UPDATE_INTERVAL" ]; then
+        echo "Checking for updates..."
+        # Stamp before the fetch so an offline check still waits out the interval.
+        echo "$NOW" > "$UPDATE_STAMP" 2>/dev/null || true
+        # Bound the check so a dead network can't stall the launcher. Without
+        # timeout we skip the check entirely rather than fetch unbounded.
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 15 git fetch --quiet origin main 2>/dev/null
+            LOCAL=$(git rev-parse HEAD 2>/dev/null)
+            REMOTE=$(git rev-parse origin/main 2>/dev/null)
+            if [ "$LOCAL" = "$REMOTE" ]; then
+                echo "Already on latest version."
+            else
+                echo "Updating..."
+                if git pull --ff-only origin main; then
+                    echo "Updated to latest version."
+                else
+                    echo "Could not reach GitHub — continuing with local version."
+                fi
+            fi
+        else
+            echo "Skipping update check ('timeout' not available)."
+        fi
     else
-        echo "Could not reach GitHub — continuing with local version."
+        echo "Skipping update check (checked recently)."
     fi
 else
     echo "Not a git repo — skipping update check."
 fi
 
-# ── Kill anything on port 5000 ──────────────────────────────────────────────
+# ── Port (ask ptos.py, which reads [server] port the same way) ──────────────
+PTOS_PORT=$("$PYTHON" -c "import ptos; print(ptos.get_config().get('server', {}).get('port', 5000))" 2>/dev/null)
+case "$PTOS_PORT" in
+    ''|*[!0-9]*) PTOS_PORT=5000 ;;
+esac
+PTOS_URL="http://localhost:$PTOS_PORT"
+
+# ── Kill anything already on the port ───────────────────────────────────────
 echo ""
-echo "Checking port 5000..."
+echo "Checking port $PTOS_PORT..."
 if command -v lsof &>/dev/null; then
-    PID=$(lsof -ti:5000 2>/dev/null || true)
+    PID=$(lsof -ti:"$PTOS_PORT" 2>/dev/null || true)
     if [ -n "$PID" ]; then
-        echo "Stopping process on port 5000 (PID $PID)..."
+        echo "Stopping process on port $PTOS_PORT (PID $PID)..."
         kill "$PID" 2>/dev/null || kill -9 "$PID" 2>/dev/null || true
-        sleep 1
     fi
 elif command -v fuser &>/dev/null; then
-    fuser -k 5000/tcp 2>/dev/null || true
-    sleep 1
+    fuser -k "$PTOS_PORT"/tcp 2>/dev/null || true
 fi
-echo "Port 5000 ready."
+echo "Port $PTOS_PORT ready."
 
-# ── Start Flask, then open browser ───────────────────────────────────────────
+# ── Start Flask, then open browser ──────────────────────────────────────────
 echo ""
 echo "=========================================="
 echo "  Starting PTOS Web Server"
 echo "=========================================="
 echo ""
-echo "Open in browser: http://localhost:5000"
+echo "Open in browser: $PTOS_URL"
 echo "Press Ctrl+C to stop."
 echo ""
 
 $PYTHON ptos_web.py &
 FLASK_PID=$!
 
-# Wait for Flask to be ready (up to 15s)
+# Wait for Flask to be ready (up to 15s), polling 4x faster and giving up
+# early if the server process died instead of waiting out the full timeout.
 echo -n "Waiting for server "
 SERVER_READY=0
-for i in $(seq 1 15); do
-    if curl -s http://localhost:5000 >/dev/null 2>&1; then
+for i in $(seq 1 60); do
+    if curl -s "$PTOS_URL" >/dev/null 2>&1; then
         SERVER_READY=1
         echo ""
         break
     fi
+    if ! kill -0 "$FLASK_PID" 2>/dev/null; then
+        echo ""
+        echo "Server process exited — see the errors above."
+        SERVER_READY=-1
+        break
+    fi
     echo -n "."
-    sleep 1
+    sleep 0.25
 done
 
 if [ "$SERVER_READY" = "1" ]; then
     echo "Server ready!"
-    xdg-open http://localhost:5000 2>/dev/null || true
-else
+    xdg-open "$PTOS_URL" 2>/dev/null || true
+elif [ "$SERVER_READY" = "0" ]; then
     echo ""
     echo "Server is taking longer than usual to start"
     echo "Check the messages above for details."
     echo -n "Waiting "
     for i in $(seq 1 120); do
-        if curl -s http://localhost:5000 >/dev/null 2>&1; then
+        if curl -s "$PTOS_URL" >/dev/null 2>&1; then
             echo ""
             echo "Server ready!"
-            xdg-open http://localhost:5000 2>/dev/null || true
+            xdg-open "$PTOS_URL" 2>/dev/null || true
+            break
+        fi
+        if ! kill -0 "$FLASK_PID" 2>/dev/null; then
+            echo ""
+            echo "Server process exited — see the errors above."
             break
         fi
         echo -n "."

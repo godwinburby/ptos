@@ -20,6 +20,7 @@ ptos_error.log
 # Bootstrap
 .version
 .ptos_home
+.ptos_last_update
 .sync_state
 .sync.log
 

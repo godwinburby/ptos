@@ -144,24 +144,43 @@ echo "Widget shortcut: ~/.shortcuts/run_ptos.sh"
 
 # ── Git pull (if repo) ─────────────────────────────────────────────────────
 if [ -d ".git" ]; then
-    echo "Checking for updates..."
-    # Bound the check so a dead network can't stall the launcher.
-    if command -v timeout >/dev/null 2>&1; then
-        timeout 15 git fetch --quiet origin main 2>/dev/null
-    else
-        git fetch --quiet origin main 2>/dev/null
+    UPDATE_STAMP="$PTOS_DIR/.ptos_last_update"
+    UPDATE_INTERVAL=21600
+    NOW=$(date +%s 2>/dev/null || echo 0)
+    LAST=0
+    if [ -f "$UPDATE_STAMP" ]; then
+        LAST=$(cat "$UPDATE_STAMP" 2>/dev/null || echo 0)
     fi
-    LOCAL=$(git rev-parse HEAD 2>/dev/null)
-    REMOTE=$(git rev-parse origin/main 2>/dev/null)
-    if [ "$LOCAL" = "$REMOTE" ]; then
-        echo "Already on latest version."
-    else
-        echo "Updating..."
-        if git pull --ff-only origin main; then
-            echo "Updated to latest version."
+    case "$LAST" in ''|*[!0-9]*) LAST=0 ;; esac
+    FORCE_UPDATE=0
+    for arg in "$@"; do
+        if [ "$arg" = "--update" ]; then FORCE_UPDATE=1; fi
+    done
+    if [ "$FORCE_UPDATE" = "1" ] || [ $((NOW - LAST)) -ge "$UPDATE_INTERVAL" ]; then
+        echo "Checking for updates..."
+        # Stamp before the fetch so an offline check still waits out the interval.
+        echo "$NOW" > "$UPDATE_STAMP" 2>/dev/null || true
+        # Bound the check so a dead network can't stall the launcher. Without
+        # timeout we skip the check entirely rather than fetch unbounded.
+        if command -v timeout >/dev/null 2>&1; then
+            timeout 15 git fetch --quiet origin main 2>/dev/null
+            LOCAL=$(git rev-parse HEAD 2>/dev/null)
+            REMOTE=$(git rev-parse origin/main 2>/dev/null)
+            if [ "$LOCAL" = "$REMOTE" ]; then
+                echo "Already on latest version."
+            else
+                echo "Updating..."
+                if git pull --ff-only origin main; then
+                    echo "Updated to latest version."
+                else
+                    echo "Could not reach GitHub — continuing with local version."
+                fi
+            fi
         else
-            echo "Could not reach GitHub — continuing with local version."
+            echo "Skipping update check ('timeout' not available)."
         fi
+    else
+        echo "Skipping update check (checked recently)."
     fi
 else
     echo "Not a git repo — skipping update check."
