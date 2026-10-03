@@ -7,6 +7,13 @@ Format: `[version or date] — description`
 
 ## 2026-10-03
 
+### Launchers stop hammering the network, and Linux catches up
+
+- **The update check is throttled.** Both `run_ptos_android.sh` and `run_ptos_linux.sh` ran a `git fetch` on every launch, so a stalled link cost up to 15 s each time it was opened. They now check at most once per 6 h (`UPDATE_STAMP="$PTOS_DIR/.ptos_last_update"`, `UPDATE_INTERVAL=21600`), stamping the file **before** the fetch so an offline launch still waits out the interval, and `bash run_ptos_*.sh --update` forces an immediate check. The stamp is gitignored.
+- **No unbounded fallback.** When `timeout` is missing the old Android script ran `git fetch` with no limit; both scripts now skip the check in that case instead.
+- **Linux reaches parity with Android (`b98fe76`).** `run_ptos_linux.sh` no longer hardcodes port 5000 — it asks `ptos.py` for `[server] port` (guarding garbage to the default) and uses `$PTOS_URL` for the port probe and `xdg-open`; the readiness loop polls every `0.25 s` (4× faster) and gives up early when Flask dies; and the unconditional `sleep 1` after killing the old process was dropped.
+- **Tests** — `tests/test_launch_scripts.py` gains a `TestLinuxLauncher` mirroring the Android checks plus throttle and missing-`timeout` cases on both. Full suite: `2191 passed`.
+
 ### Asset versioning is automatic, and gzip skips loopback
 
 - **No more manual bump.** `ASSET_VERSION` was a hand-maintained constant (`5`), so any change to `web_static/` that forgot the bump served stale JS/CSS under the old `?v=` URL. It is now computed at import as a short SHA-256 over the names and contents under `web_static/` (`_compute_asset_version()`); templates and `av()` are unchanged, but a changed or added asset gets a fresh URL by itself. With `PTOS_DEV=1`, `av()` recomputes it (throttled to a one-second mtime check) so edits show without a restart.
