@@ -145,7 +145,12 @@ echo "Widget shortcut: ~/.shortcuts/run_ptos.sh"
 # ── Git pull (if repo) ─────────────────────────────────────────────────────
 if [ -d ".git" ]; then
     echo "Checking for updates..."
-    git fetch --quiet origin main 2>/dev/null
+    # Bound the check so a dead network can't stall the launcher.
+    if command -v timeout >/dev/null 2>&1; then
+        timeout 15 git fetch --quiet origin main 2>/dev/null
+    else
+        git fetch --quiet origin main 2>/dev/null
+    fi
     LOCAL=$(git rev-parse HEAD 2>/dev/null)
     REMOTE=$(git rev-parse origin/main 2>/dev/null)
     if [ "$LOCAL" = "$REMOTE" ]; then
@@ -162,45 +167,63 @@ else
     echo "Not a git repo — skipping update check."
 fi
 
-# ── Kill anything on port 5000 ─────────────────────────────────────────────
+# ── Port (ask ptos.py, which reads [server] port the same way) ─────────────
+PTOS_PORT=$(python -c "import ptos; print(ptos.get_config().get('server', {}).get('port', 5000))" 2>/dev/null)
+case "$PTOS_PORT" in
+    ''|*[!0-9]*) PTOS_PORT=5000 ;;
+esac
+PTOS_URL="http://localhost:$PTOS_PORT"
+
+# ── Kill anything already on the port ──────────────────────────────────────
 pkill -f "python.*ptos_web.py" 2>/dev/null || true
-sleep 1
 
 # ── Start Flask, then open browser ──────────────────────────────────────────
 echo ""
 echo "Starting PTOS Web Server..."
-echo "Open in browser: http://localhost:5000"
+echo "Open in browser: $PTOS_URL"
 echo ""
 
 python ptos_web.py &
 FLASK_PID=$!
 
-# Wait for Flask to be ready (up to 15s)
+# Wait for Flask to be ready (up to 15s), polling 4x faster and giving up
+# early if the server process died instead of waiting out the full timeout.
 echo -n "Waiting for server "
 SERVER_READY=0
-for i in $(seq 1 15); do
-    if curl -s http://localhost:5000 >/dev/null 2>&1; then
+for i in $(seq 1 60); do
+    if curl -s "$PTOS_URL" >/dev/null 2>&1; then
         SERVER_READY=1
         echo ""
         break
     fi
+    if ! kill -0 "$FLASK_PID" 2>/dev/null; then
+        echo ""
+        echo "Server process exited — see the errors above."
+        SERVER_READY=-1
+        break
+    fi
     echo -n "."
-    sleep 1
+    sleep 0.25
 done
 
 if [ "$SERVER_READY" = "1" ]; then
     echo "Server ready!"
-    am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
-else
+    am start -a android.intent.action.VIEW -d "$PTOS_URL" >/dev/null 2>&1 || true
+elif [ "$SERVER_READY" = "0" ]; then
     echo ""
     echo "Server is taking longer than usual to start"
     echo "Check the messages above for details."
     echo -n "Waiting "
     for i in $(seq 1 120); do
-        if curl -s http://localhost:5000 >/dev/null 2>&1; then
+        if curl -s "$PTOS_URL" >/dev/null 2>&1; then
             echo ""
             echo "Server ready!"
-            am start -a android.intent.action.VIEW -d http://localhost:5000 >/dev/null 2>&1 || true
+            am start -a android.intent.action.VIEW -d "$PTOS_URL" >/dev/null 2>&1 || true
+            break
+        fi
+        if ! kill -0 "$FLASK_PID" 2>/dev/null; then
+            echo ""
+            echo "Server process exited — see the errors above."
             break
         fi
         echo -n "."

@@ -256,7 +256,8 @@ python ptos_web.py
 
 Then open `http://localhost:5000` in your browser. For mobile access, use your
 device's local IP (e.g. `http://192.168.1.x:5000`). The Android/Termux start script
-opens the browser automatically.
+opens the browser automatically — on whatever port `[server] port` is set to
+(default `5000`).
 
 Responses are gzipped when the browser asks for it (text, JSON, JS, SVG — a
 typical page drops from ~136 KB to ~28 KB), and static assets are served with a

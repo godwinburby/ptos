@@ -7,6 +7,16 @@ Format: `[version or date] — description`
 
 ## 2026-10-01
 
+### A faster, more honest launcher (and a cross-platform notes fix)
+
+- **The Android launcher no longer hardcodes port 5000.** It resolved the port in a script and told the server nothing, so a user who set `[server] port` got a server on their port and a browser and a health check pointed at a dead 5000 — the app looked broken on first launch. It now asks `ptos.py` itself (which is already the authority on how `PTOS_HOME` and the config resolve) and threads the result through every `curl` and `am start` as `$PTOS_URL`. The answer is guarded by a `case` that falls back to 5000 when python is missing, prints nothing, or prints garbage.
+- **Launch is up to ~15s faster** — the readiness loop polled once a second, so a server that came up in 200 ms still cost a full second, and the unconditional `sleep 1` after `pkill` added another. Polling is now every 0.25s and the sleep is gone.
+- **A dead server is reported, not waited out** — each poll iteration checks `kill -0 "$FLASK_PID"`, so a Flask that exited (a `PTOS_HOME` typo, a port already taken) prints "Server process exited — see the errors above" instead of blocking for the full timeout and then opening a browser onto nothing.
+- **A dead network can't stall the update check** — `git fetch` runs under `timeout 15` when `timeout` exists (Termux has it; the guard keeps other shells working), instead of blocking on DNS indefinitely before the web server ever starts.
+- **`init_version()` refreshes a stale SHA** — in a git checkout it now rewrites `.version` whenever HEAD moved. Previously the file was written once, on first run, so a device that pulled new code could never report an available update again. Without `.git` the running SHA is not derivable locally, so it still only calls the GitHub API when nothing is recorded — no new network wait at launch.
+- **`_safe_path()` rejects Windows-shaped paths on every platform** — `C:\x`, `C:/x`, `\\server\share`, and a leading `\` are not absolute on POSIX, so they passed the escape check and resolved *inside* `notes/` under a bogus name instead of raising. A folder whose name merely starts like a drive (`c_and_d/`) is unaffected. Found on code review, not from a report.
+- **Tests** — `tests/test_launch_scripts.py` pins the launcher rules (port is not hardcoded, update check is bounded, fast polling, process-liveness checks, every URL uses `$PTOS_URL`) and runs `bash -n` over both `.sh` launchers; `tests/test_config.py` covers the `init_version` refresh and the no-network non-git path; `tests/test_notes.py` covers the rejected path shapes.
+
 ### Synced changes are now visible without a restart
 
 - **The bug** — every cache in PTOS is invalidated by PTOS's own writes, so a record file that arrived through Syncthing (or was hand-edited on another machine) stayed invisible to a running server: the UI kept serving the pre-sync parse until something unrelated happened to invalidate it.
