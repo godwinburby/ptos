@@ -569,7 +569,7 @@ in `todo/todo.txt`, completed tasks move to `todo/done.txt`.
 - Inline edit (pencil icon on hover) and delete for open and done tasks; done tasks also support undo (checkmark) to move back to todo.txt
 - Project rail for filtering by `+Project` with toggle behavior
 - Collapsible `? Help` reference card with priority labels
-- **System notifications** — native OS desktop notifications (Linux: `notify-send`, macOS: Notification Center, Windows: toast, Android: `termux-notification`) alongside browser notifications; works in PWA mode (service worker excludes SSE endpoint); `+routine` todos are excluded from reminders by default (`[todo] notify_routines`, via Settings → Todo); `notify_interval = 0` disables reminders outright; `notify_once_on_startup` fires a single check at boot and starts no periodic thread
+- **System notifications** — native OS desktop notifications (Linux: `notify-send`, macOS: Notification Center, Windows: toast, Android: `termux-notification`) alongside browser notifications; `+routine` todos are excluded from reminders by default (`[todo] notify_routines`, via Settings → Todo); `notify_interval = 0` disables reminders outright; `notify_once_on_startup` fires a single check at boot and starts no periodic thread
 - Automatic archiving: done items older than 6 months move to `done.YYYY.txt` on startup
 
 <img src="images/ptos_todo.png" width="260" alt="Todo screen showing task list with priority badges, due dates, and quick-add">

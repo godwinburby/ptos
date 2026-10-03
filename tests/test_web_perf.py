@@ -108,6 +108,38 @@ class TestStaticCacheControl:
         assert resp.headers.get("Cache-Control") == "no-cache"
 
 
+class TestServiceWorkerRetired:
+    def _read(self, name):
+        return open(os.path.join(TEMPLATE_DIR, name), encoding="utf-8").read()
+
+    def _read_static(self, name):
+        root = os.path.dirname(TEMPLATE_DIR)
+        return open(os.path.join(root, "web_static", name), encoding="utf-8").read()
+
+    def test_sw_js_does_not_precache_or_intercept(self):
+        text = self._read_static("sw.js")
+        assert "addEventListener('fetch'" not in text
+        assert 'addEventListener("fetch"' not in text
+        assert "addAll" not in text
+        assert "cache.put" not in text
+
+    def test_sw_js_self_destructs(self):
+        text = self._read_static("sw.js")
+        assert '"activate"' in text
+        assert "caches.delete" in text
+        assert "registration.unregister" in text
+
+    def test_base_no_longer_registers_a_worker(self):
+        text = self._read("base.html")
+        assert "serviceWorker.register" not in text
+
+    def test_base_unregisters_and_clears_caches(self):
+        text = self._read("base.html")
+        assert "getRegistrations" in text
+        assert "unregister" in text
+        assert "caches.keys" in text
+
+
 class TestAssetVersionHelper:
     def test_av_appends_version(self):
         import ptos_web
