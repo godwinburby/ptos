@@ -5,6 +5,15 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-03
+
+### Browse re-scans no more, and each record is parsed once
+
+- **Results are cached, not re-scanned.** `svc.get_records` ran a fresh `ptos.scan_records` on every browse/search/query request, so reloading the same filtered view re-read every matching log file. Results are now cached in `ptos._CACHE` under a `recs:` key (filters, time, search, sort, from/to, file, sum/select), reusing the existing invalidation plumbing — every record-affecting write calls `_invalidate_history_cache()` (which now clears `recs:` alongside `frwl:`), and external record/schema changes drop it via `_EXT_RECORD_PREFIXES`.
+- **One parse per line, not two.** `scan_records` parsed every line to filter it, then `get_records` re-parsed the survivors via `_parse_record` to build UI rows. `scan_records` now takes `return_parsed=True` and hands back the `(date, kv, note)` it already computed, aligned with the results/locations; `_parse_record` was split so the row builder (`_build_row_from_parsed`) can be fed those triples directly. The `sort` path reuses the same parsed map instead of parsing a third time. Default callers still get the original 2-/3-tuple.
+- **Copies, so callers can keep mutating.** Several callers decorate the returned dict (`result["kind"]`, `result["query_name"]`, …), so cache reads hand back a `copy.deepcopy`; the stored entry is never touched.
+- **Tests** — `tests/test_history_cache.py` gains `TestGetRecordsCache` (no rescan on an identical second call, distinct params get distinct entries, returned copies are isolated, a write clears `recs:`, external-change prefixes include it) and `TestGetRecordsSingleParse` (the scan path never calls `_parse_record`, the parsed-row builder matches `_parse_record`, and `return_parsed` output is aligned). Full suite: `2148 passed`.
+
 ## 2026-10-01
 
 ### The service worker is retired

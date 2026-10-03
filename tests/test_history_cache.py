@@ -299,3 +299,68 @@ class TestConditionalSuggestionsCached:
         assert "condsug:expense:domain:work" not in ptos._CACHE
         after = svc.get_conditional_suggestions("expense", "domain", "work")
         assert after.get("category") in ("supplies", "travel")
+
+
+class TestGetRecordsCache:
+    def test_second_call_no_rescan(self, monkeypatch):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        calls = _counting_scans(monkeypatch)
+        first = svc.get_records([], "all")
+        n_after_first = len(calls)
+        second = svc.get_records([], "all")
+        assert len(calls) == n_after_first
+        assert first == second
+
+    def test_distinct_params_distinct_entries(self, monkeypatch):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        calls = _counting_scans(monkeypatch)
+        svc.get_records([], "all")
+        svc.get_records(["type=expense"], "all")
+        assert len(calls) == 2
+
+    def test_returned_copy_is_isolated(self):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        first = svc.get_records([], "all")
+        first["kind"] = "records"
+        first["records"][0]["date"] = "MUTATED"
+        second = svc.get_records([], "all")
+        assert "kind" not in second
+        assert second["records"][0]["date"] != "MUTATED"
+
+    def test_write_invalidates(self):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        svc.get_records([], "all")
+        assert any(k.startswith("recs:") for k in ptos._CACHE)
+        svc.append_record("2026-01-02 type=expense domain=home category=food amount=5")
+        assert not any(k.startswith("recs:") for k in ptos._CACHE)
+        after = svc.get_records([], "all")
+        assert after["count"] == 2
+
+    def test_recs_prefix_watched_for_external_changes(self):
+        assert "recs:" in ptos._EXT_RECORD_PREFIXES
+
+
+class TestGetRecordsSingleParse:
+    def test_scan_path_does_not_reparse(self, monkeypatch):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        def boom(line, format_date=True):
+            raise AssertionError("get_records must not re-parse via _parse_record")
+        monkeypatch.setattr(svc, "_parse_record", boom)
+        result = svc.get_records([], "all")
+        assert result["count"] == 1
+
+    def test_build_row_matches_parse_record(self):
+        line = "2026-01-01 type=expense domain=work category=supplies amount=10 | lunch"
+        assert (svc._build_row_from_parsed(*ptos.safe_parse_line(line))
+                == svc._parse_record(line))
+
+    def test_scan_return_parsed_aligned(self):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        lines, total, parsed = ptos.scan_records(
+            ptos.parse_from_to("2026-01-01"),
+            ptos.parse_from_to("2026-12-31", as_end=True),
+            [], None, return_parsed=True)
+        assert len(parsed) == len(lines) == 1
+        d, kv, note = parsed[0]
+        assert d.isoformat() == "2026-01-01"
+        assert kv["type"] == "expense"

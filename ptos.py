@@ -1450,7 +1450,7 @@ _EXT_WATCH_STATE = {"signature": None, "last_check": 0.0}
 _EXT_CHECK_INTERVAL = 1.0
 
 # Cache keys derived from record files.
-_EXT_RECORD_PREFIXES = ("frwl:", "history:", "condsug:", "habit:", "calendar:")
+_EXT_RECORD_PREFIXES = ("frwl:", "recs:", "history:", "condsug:", "habit:", "calendar:")
 # Config file -> the resource key it feeds.
 _EXT_CONFIG_KEYS = {
     "config/schema.toml": "schema",
@@ -3008,20 +3008,24 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
 # --------------------------------------------------
 
 def scan_records(start, end, filters, search, from_file=None, sum_field=None,
-                 return_locations=False, include_demo=None):
+                 return_locations=False, include_demo=None, return_parsed=False):
     """Scan log files and return (matching_lines, numeric_total).
     from_file: if given, read only that file from records/ folder.
     sum_field: if given, sum this specific field instead of the first numeric field found.
-    return_locations: if True, return a 3-tuple (lines, total, locations)
-        where locations is a list of (filepath, 0-based lineno, raw_line).
+    return_locations: if True, append a locations list to the return tuple
+        (a list of (filepath, 0-based lineno, raw_line)).
     include_demo: None (default) resolves from [demo] show in config.toml;
         when False, records in the demo log group are skipped entirely.
+    return_parsed: if True, append a parsed list to the return tuple — the
+        (date, kv, note) for each match, aligned with results/locations, so a
+        caller can build rows without re-parsing every line.
     """
     if include_demo is None:
         include_demo = include_demo_records()
     results = []
     total   = 0
     locations = [] if return_locations else None
+    parsed = [] if return_parsed else None
     if from_file:
         # validate — relative path within records/, no traversal
         if os.path.isabs(from_file) or ".." in from_file.replace("\\", "/").split("/"):
@@ -3062,12 +3066,17 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None,
                 results.append(line)
                 if return_locations:
                     locations.append((path, idx, line))
+                if return_parsed:
+                    parsed.append((d, kv, note))
                 val = numeric_value_for(kv, sum_field) if sum_field else numeric_value(kv)
                 if val is not None:
                     total += val
+    out = [results, total]
     if return_locations:
-        return results, total, locations
-    return results, total
+        out.append(locations)
+    if return_parsed:
+        out.append(parsed)
+    return tuple(out)
 
 # --------------------------------------------------
 # Cross-record links (type:id)
