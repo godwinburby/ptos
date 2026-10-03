@@ -26,6 +26,7 @@ import re
 import glob
 import time
 import json
+import copy
 import datetime as dt
 import dataclasses
 import urllib.request
@@ -138,13 +139,14 @@ def _invalidate_history_cache(rtype=None, rtypes=None):
         if types:
             if any(key == f"history:{t}" or key.startswith(f"condsug:{t}:")
                    or key.startswith("habit:") or key.startswith("calendar:")
-                   or key.startswith("frwl:") for t in types):
+                   or key.startswith("frwl:") or key.startswith("recs:")
+                   for t in types):
                 ptos._CACHE.pop(key, None)
                 _SUGGESTION_STAMP.pop(key, None)
         else:
             if (key.startswith("history:") or key.startswith("condsug:")
                     or key.startswith("habit:") or key.startswith("calendar:")
-                    or key.startswith("frwl:")):
+                    or key.startswith("frwl:") or key.startswith("recs:")):
                 ptos._CACHE.pop(key, None)
                 _SUGGESTION_STAMP.pop(key, None)
     # We just wrote these files ourselves, so the external-change watcher must
@@ -221,7 +223,15 @@ def _parse_record(line, format_date=True):
     parsed = ptos.safe_parse_line(line)
     if not parsed:
         return None
-    d, kv, note = parsed
+    return _build_row_from_parsed(*parsed, format_date=format_date)
+
+
+def _build_row_from_parsed(d, kv, note, format_date=True):
+    """Build a UI row dict from an already-parsed (date, kv, note) triple.
+
+    Mirrors _parse_record but skips re-parsing the raw line, so callers that
+    already parsed a line (scan_records(return_parsed=True)) pay the cost once.
+    """
     row = {"date": fmt_date(d) if format_date else str(d)}
     _dt_fields = set(ptos.datetime_fields())
     for k, v in kv.items():
@@ -756,6 +766,14 @@ def get_records(filters, time="tm", search=None, sort=None,
         time_label: str,
         filters: [str] }
     """
+    cache_key = (
+        f"recs:{tuple(filters or ())}:{time}:{search}:{sort}:"
+        f"{from_file}:{sum_field}:{tuple(select) if select else None}:"
+        f"{from_date}:{to_date}"
+    )
+    cached = ptos._CACHE.get(cache_key)
+    if cached is not None:
+        return copy.deepcopy(cached)
     try:
         if from_date:
             start = ptos.parse_from_to(from_date)
@@ -764,10 +782,10 @@ def get_records(filters, time="tm", search=None, sort=None,
         else:
             start, end = _resolve_time(time)
             time_label = ptos._TIME_ALIASES.get(time, time)
-        raw, total, loc_matches = ptos.scan_records(
+        raw, total, loc_matches, parsed = ptos.scan_records(
             start, end, filters, search,
             from_file=from_file, sum_field=sum_field,
-            return_locations=True, include_demo=True)
+            return_locations=True, include_demo=True, return_parsed=True)
     except PTOSError:
         raise
     except Exception as e:
@@ -781,9 +799,11 @@ def get_records(filters, time="tm", search=None, sort=None,
         line_to_filepath = {}
         line_to_lineno   = {}
 
+    parsed_by_line = {line: p for line, p in zip(raw, parsed)}
+
     if sort:
         def _sk(line):
-            p = ptos.safe_parse_line(line)
+            p = parsed_by_line.get(line)
             if not p: return (1, 0, "")
             # date is in p[0], other fields in p[1]
             if sort == "date":
@@ -799,7 +819,10 @@ def get_records(filters, time="tm", search=None, sort=None,
     col_set  = set()
 
     for line in raw:
-        row = _parse_record(line)
+        p = parsed_by_line.get(line)
+        if not p:
+            continue
+        row = _build_row_from_parsed(*p)
         if not row:
             continue
         row["_line"]     = line
@@ -819,7 +842,7 @@ def get_records(filters, time="tm", search=None, sort=None,
 
     count = len(records)
 
-    return {
+    result = {
         "records":    records,
         "columns":    col_seen,
         "count":      count,
@@ -831,6 +854,8 @@ def get_records(filters, time="tm", search=None, sort=None,
         "time_label": time_label,
         "filters":    filters,
     }
+    ptos._CACHE[cache_key] = result
+    return copy.deepcopy(result)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
