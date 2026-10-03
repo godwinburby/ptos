@@ -149,14 +149,14 @@ if [ -d ".git" ]; then
         # Bound the check so a dead network can't stall the launcher. Without
         # timeout we skip the check entirely rather than fetch unbounded.
         if command -v timeout >/dev/null 2>&1; then
-            timeout 15 git fetch --quiet origin main 2>/dev/null
+            GIT_TERMINAL_PROMPT=0 timeout 8 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 fetch --quiet origin main 2>/dev/null
             LOCAL=$(git rev-parse HEAD 2>/dev/null)
             REMOTE=$(git rev-parse origin/main 2>/dev/null)
             if [ "$LOCAL" = "$REMOTE" ]; then
                 echo "Already on latest version."
             else
                 echo "Updating..."
-                if git pull --ff-only origin main; then
+                if timeout 30 git pull --ff-only origin main; then
                     echo "Updated to latest version."
                 else
                     echo "Could not reach GitHub — continuing with local version."

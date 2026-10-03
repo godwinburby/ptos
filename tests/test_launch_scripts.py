@@ -35,12 +35,13 @@ class TestAndroidLauncher:
         self.text = _read(ANDROID)
 
     def test_update_check_is_bounded(self):
-        assert "timeout 15 git fetch" in self.text
+        assert "GIT_TERMINAL_PROMPT=0 timeout 8 git" in self.text
+        assert "timeout 30 git pull" in self.text
         assert "command -v timeout" in self.text
 
     def test_missing_timeout_skips_update(self):
         assert "Skipping update check ('timeout' not available)" in self.text
-        assert self.text.count("git fetch --quiet origin main") == 1
+        assert self.text.count("fetch --quiet origin main") == 1
 
     def test_update_check_is_throttled(self):
         assert "UPDATE_INTERVAL=21600" in self.text
@@ -84,12 +85,13 @@ class TestLinuxLauncher:
         self.text = _read(LINUX)
 
     def test_update_check_is_bounded(self):
-        assert "timeout 15 git fetch" in self.text
+        assert "GIT_TERMINAL_PROMPT=0 timeout 8 git" in self.text
+        assert "timeout 30 git pull" in self.text
         assert "command -v timeout" in self.text
 
     def test_missing_timeout_skips_update(self):
         assert "Skipping update check ('timeout' not available)" in self.text
-        assert self.text.count("git fetch --quiet origin main") == 1
+        assert self.text.count("fetch --quiet origin main") == 1
 
     def test_update_check_is_throttled(self):
         assert "UPDATE_INTERVAL=21600" in self.text

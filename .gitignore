@@ -21,6 +21,7 @@ ptos_error.log
 .version
 .ptos_home
 .ptos_last_update
+.ptos_server.log
 .sync_state
 .sync.log
 
