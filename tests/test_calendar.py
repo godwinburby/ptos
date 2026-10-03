@@ -232,6 +232,15 @@ class TestCalendarCaching:
         data2 = svc.get_calendar_data("exp", today.year, today.month)
         assert data2["total_records"] == 2
 
+    def test_default_call_keys_on_resolved_month_not_none(self):
+        _clean_cache()
+        _add_calendar("exp", ["type=expense"])
+        today = dt.date.today()
+        _write_records(today.year, [f"{today} type=expense amount=1"])
+        svc.get_calendar_data("exp")
+        assert f"calendar:exp:{today.year}:{today.month}" in ptos._CACHE
+        assert not any(k.startswith("calendar:exp:None") for k in ptos._CACHE)
+
     def test_second_call_no_rescan(self, monkeypatch):
         _clean_cache()
         _add_calendar("exp", ["type=expense"])
