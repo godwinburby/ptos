@@ -7,6 +7,12 @@ Format: `[version or date] — description`
 
 ## 2026-10-03
 
+### Update checks are prompt-proof and the pull is bounded
+
+- **Non-interactive fetches.** Both launchers run the update check with `GIT_TERMINAL_PROMPT=0` and `-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5`, so a credential prompt or a stalled transfer can't hang a widget launch, and the fetch timeout is `timeout 8` (the Phase 3 target).
+- **The pull is bounded too.** After a successful fetch, `git pull --ff-only origin main` is wrapped in `timeout 30` instead of running unbounded (spec item L5). `.ptos_server.log` joins the ignore list.
+- **Tests** — `tests/test_launch_scripts.py` asserts the prompt-suppressed 8 s fetch and the bounded pull on both launchers. Full suite: `2191 passed`.
+
 ### Launchers stop hammering the network, and Linux catches up
 
 - **The update check is throttled.** Both `run_ptos_android.sh` and `run_ptos_linux.sh` ran a `git fetch` on every launch, so a stalled link cost up to 15 s each time it was opened. They now check at most once per 6 h (`UPDATE_STAMP="$PTOS_DIR/.ptos_last_update"`, `UPDATE_INTERVAL=21600`), stamping the file **before** the fetch so an offline launch still waits out the interval, and `bash run_ptos_*.sh --update` forces an immediate check. The stamp is gitignored.
