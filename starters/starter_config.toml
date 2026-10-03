@@ -45,6 +45,12 @@ external_check_seconds = 5
 # suggestions until PTOS restarts.
 suggestion_ttl_seconds = 300
 
+[history]
+# How many months of past records feed Add/Edit suggestions (tags, past field
+# values, option defaults, cascade pre-fill). Older records are skipped for
+# speed. Set 0 to scan all history (slower on large logs).
+window_months = 24
+
 [backup]
 # Folders to include in full backup
 folders = ["records", "config", "templates", "journal", "todo", "exports", "notes", "scripts"]

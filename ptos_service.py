@@ -134,7 +134,7 @@ def _invalidate_history_cache(rtype=None, rtypes=None):
     narrow the clear.
     """
     for key in list(ptos._CACHE.keys()):
-        if (key.startswith(("history:", "condsug:", "habit:", "calendar:",
+        if (key.startswith(("history:", "habit:", "calendar:",
                             "frwl:", "recs:"))
                 or key in ("log_files", "demo_has_real")):
             ptos._CACHE.pop(key, None)
@@ -548,12 +548,50 @@ def restore_full(zip_path):
 # History suggestions
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _history_window_months():
+    """[history] window_months: months of history to scan, 0 = all time.
+    Missing, garbage or negative values fall back to 24."""
+    try:
+        raw = ptos.get_config().get("history", {}).get("window_months", 24)
+    except Exception:
+        return 24
+    try:
+        months = int(raw)
+    except (TypeError, ValueError):
+        return 24
+    if months < 0:
+        return 24
+    return months
+
+
+def _history_start(months):
+    """First day of the month *months* ago (dt.date.min when 0 = all time)."""
+    if months <= 0:
+        return dt.date.min
+    today = ptos.today()
+    y = today.year
+    m = today.month - months
+    while m <= 0:
+        m += 12
+        y -= 1
+    return dt.date(y, m, 1)
+
+
+def _empty_history_aggregate():
+    return {"tags": [], "field_values": {}, "field_defaults": {},
+            "tags_by_field_value": {}, "cascade": {}}
+
+
 def _build_history_suggestions(rtype):
-    """Scan all records of the given type and aggregate suggestion data.
-    Expensive part (full file scan) — cached by get_history_suggestions.
-    Returns a dict with the scan-derived aggregates; filtered_tags is
-    computed per-call by _apply_context_filter since it depends on the
-    per-request context_record."""
+    """Scan records of the given type (within [history] window_months) and
+    aggregate suggestion data. Expensive part (file scan) — cached by
+    get_history_suggestions. Returns the scan-derived aggregates; filtered_tags
+    is computed per-call by _apply_context_filter since it depends on the
+    per-request context_record.
+
+    A single `return_parsed` pass builds free-text values, option defaults,
+    per-field tags and the cascade co-occurrence together, so
+    get_conditional_suggestions needs no scan of its own."""
     try:
         schema      = ptos.get_schema()
         type_schema = schema.get("type", {}).get(rtype, {})
@@ -573,11 +611,11 @@ def _build_history_suggestions(rtype):
             numeric_fields.add(fname)
 
     try:
-        raw, _ = ptos.scan_records(
-            dt.date.min, dt.date.max,
-            [f"type={rtype}"], None)
+        _raw, _total, parsed = ptos.scan_records(
+            _history_start(_history_window_months()), dt.date.max,
+            [f"type={rtype}"], None, return_parsed=True)
     except Exception:
-        return {"tags": [], "field_values": {}, "field_defaults": {}, "tags_by_field_value": {}}
+        return _empty_history_aggregate()
 
     from collections import Counter
     tag_set      = set()
@@ -585,28 +623,41 @@ def _build_history_suggestions(rtype):
     # Track tags per field value for cascade-aware filtering
     # {fieldname: {fieldvalue: {tags...}}}
     tags_by_field_value = {}
+    # Co-occurrence of option fields for cascade pre-fill
+    # {field: {value: {other_field: Counter}}}
+    cascade = {}
 
-    for line in raw:
-        parsed = ptos.safe_parse_line(line)
-        if not parsed:
-            continue
-        _, kv, _ = parsed
+    for _date, kv, _note in parsed:
+        option_values = {}
+        for f in fields_with_options:
+            fv = kv.get(f)
+            if fv:
+                option_values[f] = fv if isinstance(fv, list) else [fv]
+
         # tags
         tv = kv.get("tag")
         if tv:
             record_tags = set(tv if isinstance(tv, list) else [tv])
             tag_set.update(record_tags)
             # Track tags per field value for cascade filtering
-            for f in fields_with_options:
-                fv = kv.get(f)
-                if fv:
-                    fv_list = fv if isinstance(fv, list) else [fv]
-                    for v in fv_list:
-                        if f not in tags_by_field_value:
-                            tags_by_field_value[f] = {}
-                        if v not in tags_by_field_value[f]:
-                            tags_by_field_value[f][v] = set()
-                        tags_by_field_value[f][v].update(record_tags)
+            for f, fv_list in option_values.items():
+                for v in fv_list:
+                    tags_by_field_value.setdefault(f, {}).setdefault(v, set()).update(record_tags)
+
+        # cascade co-occurrence between the option fields
+        for f, fv_list in option_values.items():
+            by_value = cascade.setdefault(f, {})
+            for v in fv_list:
+                entry = by_value.setdefault(v, {})
+                for g, gv_list in option_values.items():
+                    if g == f:
+                        continue
+                    counter = entry.get(g)
+                    if counter is None:
+                        counter = entry[g] = Counter()
+                    for w in gv_list:
+                        counter[w] += 1
+
         # all non-type, non-numeric fields
         for k, v in kv.items():
             if k in ("type", "tag") or k in numeric_fields:
@@ -635,6 +686,7 @@ def _build_history_suggestions(rtype):
         "field_values":        field_values,
         "field_defaults":      field_defaults,
         "tags_by_field_value": tags_by_field_value,
+        "cascade":             cascade,
     }
 
 
@@ -671,8 +723,21 @@ def _apply_context_filter(tags_by_field_value, rtype, context_record):
     return filtered_tags
 
 
+def _history_cache_key(rtype):
+    return f"history:{rtype}:{ptos.today()}"
+
+
+def _history_aggregate(rtype):
+    """Return (cache_key, aggregate), building and caching on a miss."""
+    cache_key = _history_cache_key(rtype)
+    cached = _suggestion_cached(cache_key)
+    if cached is None:
+        cached = _suggestion_store(cache_key, _build_history_suggestions(rtype))
+    return cache_key, cached
+
+
 def get_history_suggestions(rtype, context_record=None):
-    """Scan all records of the given type and return:
+    """Scan records of the given type and return:
       tags: sorted list of all tags ever used for this type
       filtered_tags: tags filtered by context_record's field cascade (schema + history based)
       field_values: {fieldname: [values by freq]} for free-text fields
@@ -683,18 +748,16 @@ def get_history_suggestions(rtype, context_record=None):
     1. Schema-defined tags from resolve_tags() based on context field values
     2. Historical tags that appeared in past records with matching field values
 
-    The expensive full-file scan is cached per rtype (key history:{rtype});
-    the context-dependent filter is re-run cheaply on every call since
-    context_record varies per request and the aggregates are already built.
-    A write that changes this type's history drops the key immediately, and
-    the entry also ages out after [cache] suggestion_ttl_seconds so a write
+    The scan is bounded by [history] window_months (0 = all time) and cached
+    per rtype + day (key history:{rtype}:{today}) so a month rollover
+    re-resolves the window; the context-dependent filter is re-run cheaply on
+    every call since context_record varies per request and the aggregates are
+    already built. A write that changes any history drops the key immediately,
+    and the entry also ages out after [cache] suggestion_ttl_seconds so a write
     that bypasses the service can't leave the Add form on pre-write
     suggestions until the next restart.
     """
-    cache_key = f"history:{rtype}"
-    cached = _suggestion_cached(cache_key)
-    if cached is None:
-        cached = _suggestion_store(cache_key, _build_history_suggestions(rtype))
+    _key, cached = _history_aggregate(rtype)
 
     filtered_tags = _apply_context_filter(cached["tags_by_field_value"], rtype, context_record)
 
@@ -711,63 +774,22 @@ def get_conditional_suggestions(rtype, field, value):
     other schema-option field across matching history records.
     Used for cascade pre-fill: user picks source=mgm → suggest booked_by=cso.
     Returns: {fieldname: most_common_value}
-    Fully cacheable per (rtype, field, value) — a record write drops only that
-    type's keys via _invalidate_history_cache(rtype=...), and a file that
-    changed outside PTOS drops every condsug: key (see ptos.check_external_changes).
-    Entries also age out after [cache] suggestion_ttl_seconds.
+
+    Reads the rtype's cached history aggregate — the cascade co-occurrence is
+    built in the same single pass, so a cascade pick scans and caches nothing
+    of its own. A record write drops the aggregate via
+    _invalidate_history_cache(); a file changed outside PTOS drops it via
+    ptos.check_external_changes(); it also ages out after
+    [cache] suggestion_ttl_seconds.
     """
-    cache_key = f"condsug:{rtype}:{field}:{value}"
-    cached = _suggestion_cached(cache_key)
-    if cached is not None:
-        return cached
-
-    from collections import Counter
-
-    try:
-        schema      = ptos.get_schema()
-        type_schema = schema.get("type", {}).get(rtype, {})
-    except Exception:
+    _key, cached = _history_aggregate(rtype)
+    by_value = (cached.get("cascade") or {}).get(field) or {}
+    counters = by_value.get(value)
+    if counters is None:
+        counters = by_value.get(str(value))
+    if not counters:
         return {}
-
-    # only suggest for fields that have schema options
-    fields_with_options = set()
-    for fname, fdef in type_schema.get("fields", {}).items():
-        if isinstance(fdef, dict) and (fdef.get("options") or fdef.get("use")):
-            fields_with_options.add(fname)
-
-    try:
-            raw, _ = ptos.scan_records(
-                dt.date.min, dt.date.max,
-                [f"type={rtype}", f"{field}={value}"], None)
-    except Exception:
-        return {}
-
-    if not raw:
-        return {}
-
-    field_counts = {}
-    for line in raw:
-        parsed = ptos.safe_parse_line(line)
-        if not parsed:
-            continue
-        _, kv, _ = parsed
-        for k, v in kv.items():
-            if k in ("type", "tag", field):
-                continue
-            if k not in fields_with_options:
-                continue
-            vals = v if isinstance(v, list) else [v]
-            if k not in field_counts:
-                field_counts[k] = Counter()
-            for val in vals:
-                field_counts[k][val] += 1
-
-    result = {
-        k: counter.most_common(1)[0][0]
-        for k, counter in field_counts.items()
-        if counter
-    }
-    return _suggestion_store(cache_key, result)
+    return {f: c.most_common(1)[0][0] for f, c in counters.items() if c}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2018,8 +2040,8 @@ def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
         raise PTOSError(str(e))
 
     # Both types, not just the old one: changing type=invoice to type=expense
-    # on edit leaves the *new* type's history and condsug aggregates stale too,
-    # and the Add form for that type would keep offering pre-edit values.
+    # on edit leaves the *new* type's history aggregate stale too, and the Add
+    # form for that type would keep offering pre-edit values.
     _invalidate_history_cache(rtypes=_touched_types(old_line, new_line))
     return {"old_line": old_line, "new_line": new_line,
             "changed_date": changed_date}

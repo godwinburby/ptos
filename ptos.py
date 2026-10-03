@@ -1481,7 +1481,7 @@ _EXT_WATCH_STATE = {"signature": None, "last_check": 0.0}
 _EXT_CHECK_INTERVAL = 1.0
 
 # Cache keys derived from record files.
-_EXT_RECORD_PREFIXES = ("frwl:", "recs:", "history:", "condsug:", "habit:", "calendar:")
+_EXT_RECORD_PREFIXES = ("frwl:", "recs:", "history:", "habit:", "calendar:")
 # Config file -> the resource key it feeds.
 _EXT_CONFIG_KEYS = {
     "config/schema.toml": "schema",

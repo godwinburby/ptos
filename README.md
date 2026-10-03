@@ -291,9 +291,13 @@ The Add/Edit form's history suggestions (tags, past values, cascade defaults)
 work the same way: writing a record of that type refreshes them immediately,
 and a synced or hand-edited file is picked up within
 `[cache] suggestion_ttl_seconds` (default `300`, `0` keeps them until restart).
+One pass over the recent history builds the tags, past field values, option
+defaults and cascade co-occurrence together, and the lookback is bounded by
+`[history] window_months` (default `24` months; `0` scans everything).
 
 ```bash
 ptos --set-config cache.suggestion_ttl_seconds 60
+ptos --set-config history.window_months 12
 ```
 
 ### Files

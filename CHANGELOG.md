@@ -32,6 +32,15 @@ Format: `[version or date] — description`
 - **Backups snapshot before they archive (B8)** — `write_backup_state()` rescanned *after* the zip was built, so a file synced in during the write was recorded as already backed up and skipped by the next `should_backup()`. `backup_data()` now takes the snapshot before the walk and records that.
 - **Tests** — `tests/test_external_changes.py` gains `TestLocalWriteDoesNotAbsorbExternal` (a foreign tag on another type and a foreign new log file both stay visible after a local write re-baselines), a monotonic-throttle test, and a "file synced during backup" test; `tests/test_habits.py`/`tests/test_calendar.py` assert the day/month-stamped keys. Full suite: `2163 passed`.
 
+### Past suggestions build in one bounded pass
+
+- **One pass, one parse.** `_build_history_suggestions` scanned the record files and re-parsed every line with `safe_parse_line`; it now calls `ptos.scan_records(..., return_parsed=True)` once and consumes the already-parsed `(date, kv, note)` triples — the same "parse each line once" contract the browse cache uses.
+- **Bounded lookback (`[history] window_months`).** The scan was unbounded (`date.min`→`date.max`), re-reading the entire history on every rebuild. It now starts at the first of the month `window_months` ago (starter default `24`; `0` = all time; missing/garbage/negative fall back to `24`). The aggregate's cache key is day-stamped (`history:{rtype}:{today}`) so a month rollover re-resolves the window instead of serving the previous one.
+- **Cascade pre-fill without a second scan.** `get_conditional_suggestions` ran its own full scan per `(field, value)` pair (cached under `condsug:*`), so every cascade pick paid the whole cost. The single pass now also builds `{field: {value: {other_field: Counter}}}`, making a cascade lookup a dictionary read from the same cached aggregate; the `condsug:*` keys are gone. Measured on the real log (~8.8k records): cold cascade ≈27 ms (the shared aggregate build), warm lookup ≈0.007 ms, versus a separate full scan per pair before.
+- **Equivalence verified** — against a re-implementation of the old logic on the real 8.8k-record dataset: all 20 types matched on tags / free-text values / option defaults / per-field tags, and 74 sampled cascade pairs matched, 0 mismatches.
+- **Starter config** — `starters/starter_config.toml` gains `[history] window_months = 24`; the README documents it.
+- **Tests** — `tests/test_history_cache.py` adds `TestHistoryWindow` (default, config override, garbage/negative fallback, `0` = all time, old records excluded, `0` includes them) and `TestCascadePrecomputed` (one scan builds both, most-common other field, unknown value empty, source field excluded); `test_write_invalidates_condsug` becomes `test_write_invalidates_cascade_aggregate`. Full suite: `2174 passed`.
+
 ## 2026-10-01
 
 ### The service worker is retired

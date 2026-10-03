@@ -27,6 +27,22 @@ def _set_ttl(monkeypatch, value):
     monkeypatch.setattr(ptos, "get_config", patched)
 
 
+def _set_window(monkeypatch, value):
+    """Pin [history] window_months for this test."""
+    real = ptos.get_config
+    def patched():
+        cfg = dict(real())
+        cfg["history"] = dict(cfg.get("history") or {})
+        cfg["history"]["window_months"] = value
+        return cfg
+    monkeypatch.setattr(ptos, "get_config", patched)
+
+
+def _clear_suggest_cache():
+    ptos._CACHE.clear()
+    svc._SUGGESTION_STAMP.clear()
+
+
 class _Clock:
     def __init__(self):
         self.now = 1000.0
@@ -44,6 +60,12 @@ def _counting_scans(monkeypatch):
         return original(*a, **kw)
     monkeypatch.setattr(ptos, "scan_records", counting_scan)
     return calls
+
+
+def _hkey(rtype):
+    """The history aggregate's cache key (day-stamped, so a month rollover
+    re-resolves the [history] window)."""
+    return f"history:{rtype}:{ptos.today()}"
 
 
 class TestHistorySuggestionsCached:
@@ -65,9 +87,9 @@ class TestHistorySuggestionsCached:
         _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
         before = svc.get_history_suggestions("expense")
         assert "domain" in before["field_defaults"]
-        assert "history:expense" in ptos._CACHE
+        assert _hkey("expense") in ptos._CACHE
         svc.append_record("2026-01-02 type=expense domain=home category=food amount=5")
-        assert "history:expense" not in ptos._CACHE
+        assert _hkey("expense") not in ptos._CACHE
         after = svc.get_history_suggestions("expense")
         assert after["field_defaults"]["domain"] in ("work", "home")
 
@@ -78,7 +100,7 @@ class TestHistorySuggestionsCached:
         assert before["field_defaults"].get("domain") == "work"
         filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
         svc.edit_record(filepath, old, ["domain=home"], None, lineno=0)
-        assert "history:expense" not in ptos._CACHE
+        assert _hkey("expense") not in ptos._CACHE
         after = svc.get_history_suggestions("expense")
         assert after["field_defaults"]["domain"] == "home"
 
@@ -88,7 +110,7 @@ class TestHistorySuggestionsCached:
         filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
         svc.get_history_suggestions("expense")
         svc.delete_record(filepath, old, lineno=0)
-        assert "history:expense" not in ptos._CACHE
+        assert _hkey("expense") not in ptos._CACHE
         after = svc.get_history_suggestions("expense")
         assert after["field_defaults"] == {}
         assert after["field_values"] == {}
@@ -100,7 +122,7 @@ class TestHistorySuggestionsCached:
         result = svc.advance_record(old, 0, "income", {"source": "gift"})
         assert result["ok"] is True
         assert result.get("new_line") is not None
-        assert "history:income" not in ptos._CACHE
+        assert _hkey("income") not in ptos._CACHE
         after = svc.get_history_suggestions("income")
         assert after["field_defaults"].get("source") == "gift"
 
@@ -109,7 +131,7 @@ class TestHistorySuggestionsCached:
         svc.get_history_suggestions("expense")
         result = svc.bulk_delete([_record_dict("2026-01-01 type=expense domain=work category=supplies amount=10")])
         assert result["deleted"] == 1
-        assert "history:expense" not in ptos._CACHE
+        assert _hkey("expense") not in ptos._CACHE
         after = svc.get_history_suggestions("expense")
         assert after["field_defaults"] == {}
 
@@ -119,17 +141,16 @@ class TestHistorySuggestionsCached:
         result = svc.bulk_set([_record_dict("2026-01-01 type=expense domain=work category=supplies amount=10")],
                               ["domain=home"])
         assert result["updated"] == 1
-        assert "history:expense" not in ptos._CACHE
+        assert _hkey("expense") not in ptos._CACHE
         after = svc.get_history_suggestions("expense")
         assert after["field_defaults"]["domain"] == "home"
 
     def test_save_schema_invalidates(self):
         _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
         svc.get_history_suggestions("expense")
-        assert "history:expense" in ptos._CACHE
+        assert _hkey("expense") in ptos._CACHE
         svc.save_schema(ptos.get_schema())
-        assert all(not k.startswith("history:") and not k.startswith("condsug:")
-                   for k in ptos._CACHE)
+        assert all(not k.startswith("history:") for k in ptos._CACHE)
 
 
 class TestSuggestionTtl:
@@ -189,7 +210,9 @@ class TestSuggestionTtl:
         svc.get_history_suggestions("expense")
         assert len(calls) == 1
 
-    def test_condsug_expires_too(self, monkeypatch):
+    def test_cascade_rebuilds_after_ttl(self, monkeypatch):
+        """The cascade reads the history aggregate, so it inherits the TTL:
+        after expiry the aggregate is re-scanned and the cascade reflects it."""
         clock = _Clock()
         monkeypatch.setattr(svc, "_monotonic", clock)
         _set_ttl(monkeypatch, 60)
@@ -208,8 +231,8 @@ class TestSuggestionTtl:
         _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
         svc.get_history_suggestions("expense")
         svc.append_record("2026-01-02 type=expense domain=home category=food amount=5")
-        assert "history:expense" not in ptos._CACHE
-        assert "history:expense" not in svc._SUGGESTION_STAMP
+        assert _hkey("expense") not in ptos._CACHE
+        assert _hkey("expense") not in svc._SUGGESTION_STAMP
 
     def test_engine_side_invalidation_leaves_no_stale_stamp(self, monkeypatch):
         """ptos.check_external_changes pops the key from _CACHE without going
@@ -219,14 +242,14 @@ class TestSuggestionTtl:
         _set_ttl(monkeypatch, 300)
         _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
         svc.get_history_suggestions("expense")
-        ptos._CACHE.pop("history:expense")
-        assert "history:expense" in svc._SUGGESTION_STAMP
-        stale_stamp = svc._SUGGESTION_STAMP["history:expense"]
+        ptos._CACHE.pop(_hkey("expense"))
+        assert _hkey("expense") in svc._SUGGESTION_STAMP
+        stale_stamp = svc._SUGGESTION_STAMP[_hkey("expense")]
         calls = _counting_scans(monkeypatch)
         clock.advance(10)
         svc.get_history_suggestions("expense")
         assert len(calls) == 1                       # rebuilt, not a false hit
-        assert svc._SUGGESTION_STAMP["history:expense"] > stale_stamp
+        assert svc._SUGGESTION_STAMP[_hkey("expense")] > stale_stamp
 
 
 class TestInvalidationBothTypes:
@@ -237,8 +260,8 @@ class TestInvalidationBothTypes:
         old = "2026-01-01 type=expense domain=work category=supplies amount=10"
         filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
         svc.edit_record(filepath, old, ["type=income"], None, lineno=0)
-        assert "history:expense" not in ptos._CACHE
-        assert "history:income" not in ptos._CACHE
+        assert _hkey("expense") not in ptos._CACHE
+        assert _hkey("income") not in ptos._CACHE
 
     def test_bulk_set_type_change_invalidates_both(self):
         _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
@@ -246,16 +269,16 @@ class TestInvalidationBothTypes:
         svc.get_history_suggestions("income")
         svc.bulk_set([_record_dict("2026-01-01 type=expense domain=work category=supplies amount=10")],
                      ["type=income"])
-        assert "history:expense" not in ptos._CACHE
-        assert "history:income" not in ptos._CACHE
+        assert _hkey("expense") not in ptos._CACHE
+        assert _hkey("income") not in ptos._CACHE
 
     def test_bulk_delete_clears_all_record_caches(self):
         _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
         svc.get_history_suggestions("expense")
         svc.get_history_suggestions("income")
         svc.bulk_delete([_record_dict("2026-01-01 type=expense domain=work category=supplies amount=10")])
-        assert "history:expense" not in ptos._CACHE
-        assert "history:income" not in ptos._CACHE
+        assert _hkey("expense") not in ptos._CACHE
+        assert _hkey("income") not in ptos._CACHE
 
 
 class TestContextFilterLive:
@@ -292,14 +315,88 @@ class TestConditionalSuggestionsCached:
         assert first == second
         assert first.get("category") == "supplies"
 
-    def test_write_invalidates_condsug(self):
+    def test_write_invalidates_cascade_aggregate(self):
         _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
         assert svc.get_conditional_suggestions("expense", "domain", "work").get("category") == "supplies"
-        assert "condsug:expense:domain:work" in ptos._CACHE
+        assert _hkey("expense") in ptos._CACHE
         svc.append_record("2026-01-02 type=expense domain=work category=travel amount=9")
-        assert "condsug:expense:domain:work" not in ptos._CACHE
+        assert _hkey("expense") not in ptos._CACHE
         after = svc.get_conditional_suggestions("expense", "domain", "work")
         assert after.get("category") in ("supplies", "travel")
+
+
+class TestHistoryWindow:
+    def test_default_window_is_24(self, monkeypatch):
+        monkeypatch.setattr(ptos, "get_config", lambda: {})
+        assert svc._history_window_months() == 24
+
+    def test_window_from_config(self, monkeypatch):
+        _set_window(monkeypatch, 6)
+        assert svc._history_window_months() == 6
+
+    def test_garbage_and_negative_fall_back(self, monkeypatch):
+        _set_window(monkeypatch, "soon")
+        assert svc._history_window_months() == 24
+        _set_window(monkeypatch, -3)
+        assert svc._history_window_months() == 24
+
+    def test_zero_means_all_time(self):
+        assert svc._history_start(0) == dt.date.min
+
+    def test_start_is_first_of_the_month(self, monkeypatch):
+        monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 10, 3))
+        assert svc._history_start(1) == dt.date(2026, 9, 1)
+
+    def test_old_records_excluded_outside_window(self, monkeypatch):
+        _clear_suggest_cache()
+        monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 10, 3))
+        _set_window(monkeypatch, 24)
+        _write_record("2023-01-01 type=expense domain=work category=food amount=10 tag=oldtag")
+        _write_record("2026-09-01 type=expense domain=work category=supplies amount=10 tag=newtag")
+        tags = svc.get_history_suggestions("expense")["tags"]
+        assert "oldtag" not in tags
+        assert "newtag" in tags
+
+    def test_zero_window_includes_all_history(self, monkeypatch):
+        _clear_suggest_cache()
+        monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 10, 3))
+        _set_window(monkeypatch, 0)
+        _write_record("2023-01-01 type=expense domain=work category=food amount=10 tag=oldtag")
+        _write_record("2026-09-01 type=expense domain=work category=supplies amount=10 tag=newtag")
+        tags = svc.get_history_suggestions("expense")["tags"]
+        assert "oldtag" in tags
+        assert "newtag" in tags
+
+
+class TestCascadePrecomputed:
+    def test_cascade_single_scan_builds_both(self, monkeypatch):
+        """One aggregate build serves the tag/field suggestions and the
+        cascade — a cascade lookup adds no scan."""
+        _clear_suggest_cache()
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        calls = _counting_scans(monkeypatch)
+        svc.get_conditional_suggestions("expense", "domain", "work")
+        assert len(calls) == 1
+        svc.get_history_suggestions("expense")
+        assert len(calls) == 1
+
+    def test_cascade_most_common_other_field(self):
+        _clear_suggest_cache()
+        os.makedirs(ptos.RECORDS_DIR, exist_ok=True)
+        with open(os.path.join(ptos.RECORDS_DIR, "2026.log"), "w", encoding="utf-8") as f:
+            f.write("2026-01-01 type=expense domain=work category=supplies amount=10\n"
+                    "2026-01-02 type=expense domain=work category=supplies amount=10\n"
+                    "2026-01-03 type=expense domain=work category=travel amount=10\n")
+        assert svc.get_conditional_suggestions("expense", "domain", "work") == {"category": "supplies"}
+
+    def test_cascade_unknown_value_returns_empty(self):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        assert svc.get_conditional_suggestions("expense", "domain", "nowhere") == {}
+
+    def test_cascade_excludes_source_field(self):
+        _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
+        result = svc.get_conditional_suggestions("expense", "domain", "work")
+        assert "domain" not in result
 
 
 class TestGetRecordsCache:
