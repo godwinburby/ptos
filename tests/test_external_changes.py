@@ -36,7 +36,6 @@ def _seed_cache():
     """Fill _CACHE with one entry per prefix the watcher can clear."""
     ptos._CACHE["frwl:all"] = [("x", 1)]
     ptos._CACHE["history:expense"] = {"field_defaults": {}}
-    ptos._CACHE["condsug:expense:domain:work"] = {"category": "supplies"}
     ptos._CACHE["habit:meditation:tm::"] = {"streak": 1}
     ptos._CACHE["calendar:__all__:2026:10"] = {"total_records": 1}
     ptos._CACHE["log_files"] = ["2026.log"]
@@ -104,7 +103,7 @@ class TestCheckExternalChanges:
         _write_record(line="2026-03-03 type=income source=gift amount=1")
         ptos.check_external_changes(force=True)
         assert not [k for k in ptos._CACHE
-                    if k.startswith(("frwl:", "history:", "condsug:",
+                    if k.startswith(("frwl:", "history:",
                                      "habit:", "calendar:"))]
         assert "log_files" not in ptos._CACHE
 
