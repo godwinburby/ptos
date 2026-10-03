@@ -373,8 +373,13 @@ def _scan_backup_files():
     return state
 
 
-def write_backup_state():
+def write_backup_state(snapshot=None):
     """Record the state of the data just backed up.
+
+    Pass *snapshot* (from ``_scan_backup_files()`` taken before the zip was
+    built) so a file that arrives while the archive is being written is not
+    recorded as backed up — it stays different from the snapshot and the next
+    ``should_backup()`` catches it. Recomputes the snapshot when omitted.
 
     Lives in BACKUP_DIR (outside the synced data folder) and is written
     atomically. Failures are logged and ignored — losing it only costs one
@@ -385,7 +390,7 @@ def write_backup_state():
         path = _backup_state_path()
         tmp = path + ".tmp"
         with open(tmp, "w", encoding="utf-8") as f:
-            json.dump(_scan_backup_files(), f)
+            json.dump(_scan_backup_files() if snapshot is None else snapshot, f)
         os.replace(tmp, path)
     except Exception as e:
         _log_error(f"Could not record backup state: {e}")
@@ -1122,7 +1127,12 @@ def backup_data(force=False):
     timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     temp_path = os.path.join(BACKUP_DIR, f".ptos-backup-full-{timestamp}.tmp")
     final_path = os.path.join(BACKUP_DIR, f"ptos-backup-full-{timestamp}.zip")
-    
+
+    # Snapshot *before* the walk: a file synced in while the archive is built
+    # is then absent from the snapshot, so the next should_backup() flags it
+    # instead of treating it as already backed up.
+    snapshot = _scan_backup_files()
+
     try:
         # Write to .tmp file (skip .bak files)
         with zipfile.ZipFile(temp_path, "w", zipfile.ZIP_DEFLATED) as zf:
@@ -1149,8 +1159,8 @@ def backup_data(force=False):
         
         # Clean up old backups if limit exceeded
         _cleanup_old_backups()
-        
-        write_backup_state()
+
+        write_backup_state(snapshot)
         return final_path
         
     except Exception as e:
@@ -1446,11 +1456,10 @@ def _invalidate_all():
     _IS_EXPRESSION_CACHE.clear()
     _FILTER_DERIVED_CACHE.clear()
     bump_records_gen()
-    # A PTOS write invalidates everything already, and the next read re-reads
-    # from disk (picking up any external change too), so re-baseline the
-    # external-change signature instead of letting the watcher report our own
-    # write as a foreign one.
-    reset_external_watch()
+    # A PTOS write invalidates everything already, so re-baseline the
+    # external-change signature to the post-write state instead of letting the
+    # watcher report our own write as a foreign one.
+    rebaseline_external_watch()
 
 
 # --------------------------------------------------
@@ -1562,7 +1571,7 @@ def _invalidate_from_changes(changed):
             popped += _pop_cache_keys(_CACHE_DEPS.get(resource, [resource]))
     if any(rel.startswith("records/") for rel in changed) \
             or "config/schema.toml" in changed:
-        popped += _pop_cache_keys(["log_files"])
+        popped += _pop_cache_keys(["log_files", "demo_has_real"])
         popped += _pop_cache_prefixes(_EXT_RECORD_PREFIXES)
         bump_records_gen()
     elif "config/queries.toml" in changed or "config/config.toml" in changed:
@@ -1591,7 +1600,7 @@ def check_external_changes(force=False):
         dict: {checked, changed, files, invalidated}. ``checked`` is False
         when the throttle or the lock skipped the sweep.
     """
-    now = time.time()
+    now = time.monotonic()
     if not force and now - _EXT_WATCH_STATE["last_check"] < _EXT_CHECK_INTERVAL:
         return {"checked": False, "changed": False, "files": [], "invalidated": []}
     if not _EXT_WATCH_LOCK.acquire(blocking=False):
@@ -1618,11 +1627,28 @@ def check_external_changes(force=False):
 def reset_external_watch():
     """Forget the recorded signature so the next check re-baselines.
 
-    Called after PTOS writes its own data (the caches are already invalidated
-    by the write path, so re-baselining cannot hide a real external change
-    that landed before it), and by --init.
+    Used by --init and tests. Normal writes call rebaseline_external_watch()
+    instead, which captures the post-write state so a change landing after the
+    write is still detected.
     """
     _EXT_WATCH_STATE["signature"] = None
+    _EXT_WATCH_STATE["last_check"] = 0.0
+
+
+def rebaseline_external_watch():
+    """Record the current disk state as the external-change baseline.
+
+    Called after PTOS writes its own data. Capturing the signature *now*
+    (rather than forgetting it) matters: a foreign change that lands after this
+    point differs from the baseline and is caught by the next sweep, whereas
+    clearing the baseline would absorb it too. The write path is responsible
+    for having already invalidated everything the write could change.
+    """
+    try:
+        _EXT_WATCH_STATE["signature"] = _data_signature()
+    except Exception as e:
+        _log_error(f"External watch re-baseline failed: {e}")
+        _EXT_WATCH_STATE["signature"] = None
     _EXT_WATCH_STATE["last_check"] = 0.0
 
 

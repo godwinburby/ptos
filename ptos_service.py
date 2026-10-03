@@ -114,7 +114,7 @@ def invalidate_all():
     for key in list(ptos._CACHE.keys()):
         ptos._CACHE.pop(key, None)
     ptos.bump_records_gen()
-    ptos.reset_external_watch()
+    ptos.rebaseline_external_watch()
 
 
 def invalidate_cache(keys):
@@ -123,37 +123,26 @@ def invalidate_cache(keys):
 
 
 def _invalidate_history_cache(rtype=None, rtypes=None):
-    """Invalidate history/conditional-suggestion/habit/calendar/record caches.
+    """Clear every record-derived cache after a write.
 
-    When *rtype* is given, only that type's history/condsug caches are popped
-    (fast path). Habit, calendar, and record caches are always cleared since
-    they're cheap to rebuild and can match multiple types.  *rtypes* takes an
-    iterable of types for a bulk write that touched more than one (a bulk set
-    that moves records between types, for example).  Pass ``None`` for both to
-    clear everything (schema changes, bulk ops)."""
-    types = set()
-    if rtype:
-        types.add(rtype)
-    if rtypes:
-        types.update(t for t in rtypes if t)
+    A local write and an external (Syncthing) change are indistinguishable at
+    the disk level, and a write may absorb a foreign change that landed just
+    before it. So a write clears ALL record-derived caches rather than only the
+    written type's — otherwise an absorbed change to another type (or a newly
+    delivered log file) would stay invisible until the suggestion TTL expired.
+    *rtype* / *rtypes* are accepted for call-site compatibility but do not
+    narrow the clear.
+    """
     for key in list(ptos._CACHE.keys()):
-        if types:
-            if any(key == f"history:{t}" or key.startswith(f"condsug:{t}:")
-                   or key.startswith("habit:") or key.startswith("calendar:")
-                   or key.startswith("frwl:") or key.startswith("recs:")
-                   for t in types):
-                ptos._CACHE.pop(key, None)
-                _SUGGESTION_STAMP.pop(key, None)
-        else:
-            if (key.startswith("history:") or key.startswith("condsug:")
-                    or key.startswith("habit:") or key.startswith("calendar:")
-                    or key.startswith("frwl:") or key.startswith("recs:")):
-                ptos._CACHE.pop(key, None)
-                _SUGGESTION_STAMP.pop(key, None)
-    # We just wrote these files ourselves, so the external-change watcher must
-    # re-baseline rather than report our own write as a foreign change.
+        if (key.startswith(("history:", "condsug:", "habit:", "calendar:",
+                            "frwl:", "recs:"))
+                or key in ("log_files", "demo_has_real")):
+            ptos._CACHE.pop(key, None)
+            _SUGGESTION_STAMP.pop(key, None)
     ptos.bump_records_gen()
-    ptos.reset_external_watch()
+    # We just wrote the files ourselves: capture the post-write state so our own
+    # write is not reported as foreign, but a change landing after this point is.
+    ptos.rebaseline_external_watch()
 
 
 # ── Browse-result cache (bounded) ─────────────────────────────────────────────
@@ -2299,7 +2288,11 @@ def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
     after a record write and by ptos.check_external_changes() when a record
     file changed outside PTOS."""
     time = time or None
-    cache_key = f"habit:{habit_name}:{time or 'tm'}:{from_date or ''}:{to_date or ''}"
+    # The day is part of the key so a "current window" (tm, or the rolling
+    # `weeks` span) re-resolves after midnight instead of serving the previous
+    # day's grid until some unrelated write clears the cache.
+    cache_key = (f"habit:{habit_name}:{ptos.today()}:{time or 'tm'}:"
+                 f"{from_date or ''}:{to_date or ''}")
     cached = ptos._CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -2317,7 +2310,7 @@ def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
         raise PTOSError(f"Habit '{habit_name}' has no filters defined")
     weeks = int(cfg.get("weeks", 12))
 
-    today = dt.date.today()
+    today = ptos.today()
 
     if from_date:
         start = ptos.parse_from_to(from_date)
@@ -2538,10 +2531,6 @@ def get_calendar_data(name, year=None, month=None):
     file changed outside PTOS."""
     y = year
     m = month
-    cache_key = f"calendar:{name}:{y}:{m}"
-    cached = ptos._CACHE.get(cache_key)
-    if cached is not None:
-        return cached
 
     if name == "__all__":
         filters = []
@@ -2563,9 +2552,17 @@ def get_calendar_data(name, year=None, month=None):
         try:
             initial = _resolve_time(time_window)[0]
         except Exception:
-            initial = dt.date.today()
+            initial = ptos.today()
         y = y or initial.year
         m = m or initial.month
+
+    # Key on the resolved month: a "current month" request (year/month None)
+    # must carry the concrete year and month, or it would keep serving the
+    # previous month after a rollover until some write cleared the cache.
+    cache_key = f"calendar:{name}:{y}:{m}"
+    cached = ptos._CACHE.get(cache_key)
+    if cached is not None:
+        return cached
 
     import calendar as _cal
     first_weekday, days_in_month = _cal.monthrange(y, m)

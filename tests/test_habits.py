@@ -152,6 +152,24 @@ class TestHabitCaching:
         assert len(calls) == n_after_first
         assert first == second
 
+    def test_cache_key_is_day_stamped(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        _write_records([])
+        svc.get_habit_data("med")
+        assert f"habit:med:{ptos.today()}:tm::" in ptos._CACHE
+
+    def test_new_day_does_not_reuse_previous_entry(self, monkeypatch):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        _write_records([])
+        monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 3, 1))
+        svc.get_habit_data("med")
+        assert "habit:med:2026-03-01:tm::" in ptos._CACHE
+        monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 3, 2))
+        svc.get_habit_data("med")
+        assert "habit:med:2026-03-02:tm::" in ptos._CACHE
+
 
 class TestHabitWindow:
     def test_grid_monday_aligned(self):

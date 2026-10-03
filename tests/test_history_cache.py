@@ -249,13 +249,13 @@ class TestInvalidationBothTypes:
         assert "history:expense" not in ptos._CACHE
         assert "history:income" not in ptos._CACHE
 
-    def test_bulk_delete_keeps_unrelated_type_cached(self):
+    def test_bulk_delete_clears_all_record_caches(self):
         _write_record("2026-01-01 type=expense domain=work category=supplies amount=10")
         svc.get_history_suggestions("expense")
         svc.get_history_suggestions("income")
         svc.bulk_delete([_record_dict("2026-01-01 type=expense domain=work category=supplies amount=10")])
         assert "history:expense" not in ptos._CACHE
-        assert "history:income" in ptos._CACHE
+        assert "history:income" not in ptos._CACHE
 
 
 class TestContextFilterLive:

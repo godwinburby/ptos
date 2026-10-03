@@ -194,6 +194,43 @@ class TestCheckExternalChanges:
         svc.append_record("2026-05-05 type=expense domain=home category=food amount=7")
         assert ptos.check_external_changes(force=True)["changed"] is False
 
+    def test_throttle_uses_monotonic_clock(self, monkeypatch):
+        _write_record()
+        ptos.check_external_changes(force=True)
+        # The throttle must not consult the wall clock: a backward system-time
+        # jump would otherwise make now - last_check negative and stall the
+        # sweep until the clock caught up again.
+        def boom():
+            raise AssertionError("external-change throttle used the wall clock")
+        monkeypatch.setattr(ptos.time, "time", boom)
+        assert ptos.check_external_changes()["checked"] is False
+        assert ptos.check_external_changes(force=True)["checked"] is True
+
+
+class TestLocalWriteDoesNotAbsorbExternal:
+    def test_foreign_history_of_another_type_stays_fresh(self):
+        _write_record(
+            2026,
+            line="2026-01-01 type=expense domain=work category=supplies amount=1 tag=office")
+        assert "office" in svc.get_history_suggestions("expense")["tags"]
+        # A foreign write adds a new expense tag...
+        with open(os.path.join(ptos.RECORDS_DIR, "2026.log"), "a", encoding="utf-8") as f:
+            f.write("2026-02-02 type=expense domain=work category=travel amount=2 tag=flight\n")
+        # ...then a local write to an unrelated type re-baselines the watcher.
+        svc.append_record("2026-05-05 type=income source=gift amount=3")
+        assert ptos.check_external_changes(force=True)["changed"] is False
+        # The absorbed foreign change must still be visible: the write cleared
+        # every record-derived cache, not only the written type's.
+        assert "flight" in svc.get_history_suggestions("expense")["tags"]
+
+    def test_foreign_new_log_file_stays_visible(self):
+        _write_record(2026)
+        assert "2026.log" in ptos.get_log_files()
+        _write_record(2031, line="2031-01-01 type=expense domain=work category=supplies amount=1")
+        svc.append_record("2026-05-05 type=income source=gift amount=3")
+        assert ptos.check_external_changes(force=True)["changed"] is False
+        assert "2031.log" in ptos.get_log_files()
+
 
 class TestBackupStateManifest:
     def test_snapshot_comparison_detects_backdated_edit(self):
@@ -240,6 +277,41 @@ class TestBackupStateManifest:
             state = json.load(f)
         assert "records/2026.log" in state
         assert ptos.should_backup() is False
+
+    def test_file_synced_during_backup_is_not_marked_backed_up(self, monkeypatch):
+        _write_record()
+        real_zip = ptos.zipfile.ZipFile
+        state = {"injected": False}
+
+        class InjectingZip:
+            def __init__(self, *a, **kw):
+                self._z = real_zip(*a, **kw)
+
+            def __enter__(self):
+                self._z.__enter__()
+                return self
+
+            def __exit__(self, *exc):
+                # A record arrives via sync while the archive is being written.
+                if not state["injected"]:
+                    state["injected"] = True
+                    _write_record(
+                        2031,
+                        line="2031-01-01 type=expense domain=work category=supplies amount=1")
+                return self._z.__exit__(*exc)
+
+            def write(self, *a, **kw):
+                return self._z.write(*a, **kw)
+
+            def testzip(self, *a, **kw):
+                return self._z.testzip(*a, **kw)
+
+        monkeypatch.setattr(ptos.zipfile, "ZipFile", InjectingZip)
+        ptos.backup_data()
+        # The snapshot was taken before the walk, so the late file is seen as
+        # still-unbacked-up rather than silently folded into the snapshot.
+        assert "records/2031.log" not in json.load(open(ptos._backup_state_path(), encoding="utf-8"))
+        assert ptos.should_backup() is True
 
     def test_missing_snapshot_falls_back_to_mtime(self, monkeypatch):
         os.makedirs(ptos.BACKUP_DIR, exist_ok=True)
