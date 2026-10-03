@@ -113,6 +113,7 @@ def invalidate_all():
     """Invalidate every cached resource (e.g. after restore)."""
     for key in list(ptos._CACHE.keys()):
         ptos._CACHE.pop(key, None)
+    ptos.bump_records_gen()
     ptos.reset_external_watch()
 
 
@@ -151,7 +152,37 @@ def _invalidate_history_cache(rtype=None, rtypes=None):
                 _SUGGESTION_STAMP.pop(key, None)
     # We just wrote these files ourselves, so the external-change watcher must
     # re-baseline rather than report our own write as a foreign change.
+    ptos.bump_records_gen()
     ptos.reset_external_watch()
+
+
+# ── Browse-result cache (bounded) ─────────────────────────────────────────────
+# get_records stores its fully-built result under a ``recs:`` key so a repeated
+# browse doesn't re-scan and re-parse the whole record set. The cache lives in
+# ptos._CACHE so every existing invalidation path (service writes, engine
+# _invalidate, external-change detection) drops it for free. Entries are capped
+# and evicted least-recently-used, since one session can generate a lot of
+# distinct filter permutations.
+
+_RECS_MAX = 40
+
+
+def _recs_get(key):
+    value = ptos._CACHE.get(key)
+    if value is not None:
+        # Refresh recency so the LRU cap keeps hot filters.
+        ptos._CACHE.pop(key, None)
+        ptos._CACHE[key] = value
+    return value
+
+
+def _recs_put(key, value):
+    ptos._CACHE.pop(key, None)
+    ptos._CACHE[key] = value
+    recs_keys = [k for k in ptos._CACHE
+                 if isinstance(k, str) and k.startswith("recs:")]
+    for old in recs_keys[:-_RECS_MAX]:
+        ptos._CACHE.pop(old, None)
 
 
 # ── Suggestion cache TTL ──────────────────────────────────────────────────────
@@ -767,13 +798,14 @@ def get_records(filters, time="tm", search=None, sort=None,
         filters: [str] }
     """
     cache_key = (
-        f"recs:{tuple(filters or ())}:{time}:{search}:{sort}:"
+        f"recs:{ptos.today()}:{tuple(filters or ())}:{time}:{search}:{sort}:"
         f"{from_file}:{sum_field}:{tuple(select) if select else None}:"
         f"{from_date}:{to_date}"
     )
-    cached = ptos._CACHE.get(cache_key)
+    cached = _recs_get(cache_key)
     if cached is not None:
         return copy.deepcopy(cached)
+    stamp = ptos.records_gen()
     try:
         if from_date:
             start = ptos.parse_from_to(from_date)
@@ -854,7 +886,8 @@ def get_records(filters, time="tm", search=None, sort=None,
         "time_label": time_label,
         "filters":    filters,
     }
-    ptos._CACHE[cache_key] = result
+    if ptos.records_gen() == stamp:
+        _recs_put(cache_key, result)
     return copy.deepcopy(result)
 
 

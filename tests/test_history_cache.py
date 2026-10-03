@@ -1,3 +1,4 @@
+import datetime as dt
 import os
 import ptos
 import ptos_service as svc
@@ -338,6 +339,85 @@ class TestGetRecordsCache:
 
     def test_recs_prefix_watched_for_external_changes(self):
         assert "recs:" in ptos._EXT_RECORD_PREFIXES
+
+
+class TestRecsDayRollover:
+    def test_today_alias_not_served_after_midnight(self, monkeypatch):
+        _write_record("2026-01-01 type=expense amount=10")
+        monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 1, 1))
+        first = svc.get_records([], "td")
+        assert first["count"] == 1
+        # Day advances and a new record lands straight on disk (no service
+        # write, so nothing invalidates the cache).
+        with open(os.path.join(ptos.RECORDS_DIR, "2026.log"), "w",
+                  encoding="utf-8") as f:
+            f.write("2026-01-01 type=expense amount=10\n"
+                    "2026-01-02 type=expense amount=7\n")
+        monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 1, 2))
+        second = svc.get_records([], "td")
+        assert second["count"] == 1
+        assert "2026-01-02" in second["records"][0]["_line"]
+
+
+class TestRecsStaleStoreGuard:
+    def test_stores_when_generation_unchanged(self):
+        _write_record("2026-01-01 type=expense amount=10")
+        svc.get_records([], "all")
+        assert any(k.startswith("recs:") for k in ptos._CACHE)
+
+    def test_no_store_when_invalidated_mid_scan(self, monkeypatch):
+        _write_record("2026-01-01 type=expense amount=10")
+        original = ptos.scan_records
+
+        def bumping_scan(*a, **kw):
+            result = original(*a, **kw)
+            ptos.bump_records_gen()
+            return result
+
+        monkeypatch.setattr(ptos, "scan_records", bumping_scan)
+        svc.get_records([], "all")
+        assert not any(k.startswith("recs:") for k in ptos._CACHE)
+
+
+class TestRecsCacheBounded:
+    def test_capped(self):
+        _write_record("2026-01-01 type=expense amount=10")
+        for i in range(svc._RECS_MAX + 5):
+            svc.get_records([f"amount={i}"], "all")
+        recs_keys = [k for k in ptos._CACHE if k.startswith("recs:")]
+        assert len(recs_keys) == svc._RECS_MAX
+
+    def test_hit_refreshes_recency(self):
+        _write_record("2026-01-01 type=expense amount=10")
+        for i in range(svc._RECS_MAX):
+            svc.get_records([f"amount={i}"], "all")
+        assert any("('amount=0',)" in k for k in ptos._CACHE)
+        svc.get_records(["amount=0"], "all")           # cache hit, moves to MRU
+        for i in range(svc._RECS_MAX, svc._RECS_MAX + 2):
+            svc.get_records([f"amount={i}"], "all")
+        assert any("('amount=0',)" in k for k in ptos._CACHE)   # refreshed, survived
+        assert not any("('amount=1',)" in k for k in ptos._CACHE)  # evicted as oldest
+
+
+class TestConfigChangeClearsRecs:
+    def test_save_config_clears_recs(self):
+        _write_record("2026-01-01 type=expense amount=10")
+        svc.get_records([], "all")
+        assert any(k.startswith("recs:") for k in ptos._CACHE)
+        svc.save_config(ptos.get_config())
+        assert not any(k.startswith("recs:") for k in ptos._CACHE)
+
+    def test_external_config_change_clears_recs(self):
+        _write_record("2026-01-01 type=expense amount=10")
+        svc.get_records([], "all")
+        ptos._invalidate_from_changes(["config/config.toml"])
+        assert not any(k.startswith("recs:") for k in ptos._CACHE)
+
+    def test_external_schema_change_clears_recs(self):
+        _write_record("2026-01-01 type=expense amount=10")
+        svc.get_records([], "all")
+        ptos._invalidate_from_changes(["config/schema.toml"])
+        assert not any(k.startswith("recs:") for k in ptos._CACHE)
 
 
 class TestGetRecordsSingleParse:
