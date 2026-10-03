@@ -667,16 +667,26 @@ def save_current_version(sha):
         f.write(sha)
 
 def init_version():
-    """Initialize version file with current SHA.
-    For git: use HEAD. For non-git (Termux): fetch from GitHub API.
+    """Record the SHA of the code that is currently running.
+
+    In a git checkout local HEAD is authoritative, so an existing version file
+    is refreshed whenever the code has moved on — otherwise a device that
+    updated its code once would never again report a new version (only a fresh
+    install ever wrote a SHA). Without git the running SHA cannot be derived
+    locally, so the GitHub API is consulted, but only when nothing is recorded
+    yet: every later launch would otherwise pay a network call at startup.
     """
+    existing = None
     if os.path.exists(VERSION_FILE):
-        return  # Already initialized
-    
-    sha = None
-    
+        try:
+            with open(VERSION_FILE, "r", encoding="utf-8") as f:
+                existing = f.read().strip()
+        except Exception:
+            existing = None
+
     # Try git first
     if os.path.exists(os.path.join(SCRIPT_DIR, ".git")):
+        sha = None
         try:
             result = subprocess.run(
                 ["git", "rev-parse", "HEAD"],
@@ -689,21 +699,27 @@ def init_version():
                 sha = result.stdout.strip()
         except Exception:
             pass
-    
+        if sha and sha != existing:
+            save_current_version(sha)
+        return
+
+    if existing:
+        return  # Already initialized, and not derivable locally.
+
     # For non-git (Termux), fetch from GitHub API
-    if not sha:
-        try:
-            import urllib.request
-            req = urllib.request.Request(
-                GITHUB_API_URL,
-                headers={"User-Agent": "PTOS/1.0"}
-            )
-            with urllib.request.urlopen(req, timeout=10) as response:
-                import json
-                data = json.loads(response.read().decode())
-                sha = data.get("sha", "")
-        except Exception:
-            pass
+    sha = None
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            GITHUB_API_URL,
+            headers={"User-Agent": "PTOS/1.0"}
+        )
+        with urllib.request.urlopen(req, timeout=10) as response:
+            import json
+            data = json.loads(response.read().decode())
+            sha = data.get("sha", "")
+    except Exception:
+        pass
     
     # Save if we got something
     if sha:
@@ -5466,6 +5482,12 @@ def _safe_path(rel_path):
     _ensure_notes_dir()
     if not rel_path:
         return NOTES_DIR
+    # A Windows-style path ("C:\x", "C:/x", "\\server\share") is not absolute
+    # on POSIX, so it would sail past the join below as a relative segment and
+    # land inside NOTES_DIR under a bogus name. Reject it on every platform.
+    head = rel_path.replace("/", "\\").split("\\", 1)[0]
+    if re.match(r"^[A-Za-z]:$", head) or head == "":
+        raise PTOSError("Invalid path")
     full = os.path.normpath(os.path.join(NOTES_DIR, rel_path))
     if not full.startswith(os.path.abspath(NOTES_DIR) + os.sep) \
        and full != os.path.abspath(NOTES_DIR):

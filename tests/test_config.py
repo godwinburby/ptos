@@ -185,6 +185,64 @@ class TestVersion:
         ptos.init_version()
         assert ver_file.read_text().strip() == "existing"
 
+    def test_init_version_refreshes_stale_sha_in_git_checkout(self, tmp_path, monkeypatch):
+        """A device that pulled new code must record the new SHA, otherwise it
+        never reports an update again."""
+        ver_file = tmp_path / ".version"
+        ver_file.write_text("oldsha")
+        monkeypatch.setattr(ptos, "VERSION_FILE", str(ver_file))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "SCRIPT_DIR", str(tmp_path))
+        (tmp_path / ".git").mkdir()
+        import subprocess
+        def fake_run(*a, **kw):
+            class Res:
+                returncode = 0
+                stdout = "newsha\n"
+                stderr = ""
+            return Res()
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        ptos.init_version()
+        assert ver_file.read_text().strip() == "newsha"
+
+    def test_init_version_matching_sha_is_not_rewritten(self, tmp_path, monkeypatch):
+        ver_file = tmp_path / ".version"
+        ver_file.write_text("same")
+        monkeypatch.setattr(ptos, "VERSION_FILE", str(ver_file))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "SCRIPT_DIR", str(tmp_path))
+        (tmp_path / ".git").mkdir()
+        saved = []
+        monkeypatch.setattr(ptos, "save_current_version", lambda sha: saved.append(sha))
+        import subprocess
+        def fake_run(*a, **kw):
+            class Res:
+                returncode = 0
+                stdout = "same\n"
+                stderr = ""
+            return Res()
+        monkeypatch.setattr(subprocess, "run", fake_run)
+        ptos.init_version()
+        assert saved == []
+
+    def test_init_version_no_git_does_not_refetch(self, tmp_path, monkeypatch):
+        """Without git the running SHA is unknowable, so an already-initialized
+        file must not trigger a network call on every launch."""
+        ver_file = tmp_path / ".version"
+        ver_file.write_text("existing")
+        monkeypatch.setattr(ptos, "VERSION_FILE", str(ver_file))
+        monkeypatch.setattr(ptos, "BASE_DIR", str(tmp_path))
+        monkeypatch.setattr(ptos, "SCRIPT_DIR", str(tmp_path))
+        import urllib.request
+        calls = []
+        def boom(*a, **kw):
+            calls.append(1)
+            raise AssertionError("must not hit the network")
+        monkeypatch.setattr(urllib.request, "urlopen", boom)
+        ptos.init_version()
+        assert calls == []
+        assert ver_file.read_text().strip() == "existing"
+
     def test_init_version_uses_git(self, tmp_path, monkeypatch):
         ver_file = tmp_path / ".version"
         monkeypatch.setattr(ptos, "VERSION_FILE", str(ver_file))

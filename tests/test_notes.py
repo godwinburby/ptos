@@ -217,6 +217,25 @@ class TestSafePath:
         with pytest.raises(ptos.PTOSError, match="Invalid path"):
             ptos._safe_path("C:\\Windows\\System32")
 
+    def test_rejects_windows_drive_path_with_slashes(self):
+        # On POSIX "C:/Windows" is a *relative* segment, so the join below
+        # would happily resolve it inside NOTES_DIR — it has to be rejected on
+        # every platform, not just where it happens to be absolute.
+        with pytest.raises(ptos.PTOSError, match="Invalid path"):
+            ptos._safe_path("C:/Windows/System32")
+
+    def test_rejects_unc_path(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid path"):
+            ptos._safe_path("\\\\server\\share\\note.md")
+
+    def test_rejects_leading_backslash(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid path"):
+            ptos._safe_path("\\etc\\passwd")
+
+    def test_allows_folder_that_merely_starts_like_a_drive(self):
+        result = ptos._safe_path("c_and_d/notes.md")
+        assert result.startswith(os.path.abspath(ptos.NOTES_DIR))
+
 
 class TestValidateName:
     def test_rejects_empty(self):
