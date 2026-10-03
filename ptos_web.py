@@ -5047,11 +5047,6 @@ if __name__ == "__main__":
     _display_host = "localhost" if _host in ("127.0.0.1", "localhost") else _host
     print(f"Open: http://{_display_host}:{_port}\n")
 
-    # Start housekeeping background thread
-    try:
-        _start_housekeeping_thread()
-    except Exception:
-        pass
 
 def _start_housekeeping_thread():
     """Start due-todo notifications. Returns the started thread or None.
@@ -5128,8 +5123,20 @@ def _start_external_watch_thread():
     return _t
 
 
-if __name__ == "__main__":
+def _start_background_threads():
+    """Start every long-running background thread, just before app.run.
+
+    Defined after the individual _start_* helpers so the call site is always
+    past their definitions -- calling one above its def raises NameError, which
+    an enclosing try/except would swallow silently (due-todo notifications
+    stopped starting that way once).
+    """
+    _start_housekeeping_thread()
     _start_reminder_thread()
     _start_external_watch_thread()
+
+
+if __name__ == "__main__":
+    _start_background_threads()
 
     app.run(host=_host, port=_port)

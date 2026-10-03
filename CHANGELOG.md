@@ -7,6 +7,11 @@ Format: `[version or date] — description`
 
 ## 2026-10-03
 
+### Due-todo notifications start again on the web server
+
+- **A call moved above its definition.** Commit `4f4c7968` extracted the due-todo notification setup into `_start_housekeeping_thread()`, but left the call inside the first `if __name__ == "__main__":` block — which runs *before* the function is defined at module level. It raised `NameError`, swallowed by the surrounding `try/except`, so due-todo notifications silently never started on the Termux/Linux server since 2026-09-25. The background threads now all start through `_start_background_threads()`, defined after every `_start_*` helper and called once in the second `__main__` block just before `app.run()`.
+- **Tests** — `tests/test_reminder.py` gains `TestBackgroundThreadStartup` (all three builders invoked in order; the housekeeping call is asserted to sit after its own definition).
+
 ### Update checks are prompt-proof and the pull is bounded
 
 - **Non-interactive fetches.** Both launchers run the update check with `GIT_TERMINAL_PROMPT=0` and `-c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5`, so a credential prompt or a stalled transfer can't hang a widget launch, and the fetch timeout is `timeout 8` (the Phase 3 target).

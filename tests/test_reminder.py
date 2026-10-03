@@ -221,6 +221,26 @@ class TestStartHousekeepingThread:
         assert len(started) == 0
 
 
+class TestBackgroundThreadStartup:
+    def test_starts_housekeeping_reminder_and_external_watch(self, monkeypatch):
+        calls = []
+        monkeypatch.setattr(ptos_web, "_start_housekeeping_thread",
+                            lambda: calls.append("housekeeping"))
+        monkeypatch.setattr(ptos_web, "_start_reminder_thread",
+                            lambda: calls.append("reminder"))
+        monkeypatch.setattr(ptos_web, "_start_external_watch_thread",
+                            lambda: calls.append("external"))
+        ptos_web._start_background_threads()
+        assert calls == ["housekeeping", "reminder", "external"]
+
+    def test_housekeeping_is_called_after_its_definition(self):
+        with open(ptos_web.__file__, encoding="utf-8") as f:
+            src = f.read()
+        def_pos = src.index("def _start_housekeeping_thread(")
+        call_pos = src.index("\n    _start_housekeeping_thread()\n", def_pos)
+        assert call_pos > def_pos
+
+
 class TestSettingsSaveNotifier:
     def _save(self, data):
         from ptos_web import app
