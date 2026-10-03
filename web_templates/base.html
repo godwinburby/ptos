@@ -2024,6 +2024,20 @@ function initJournalBacklinks(container, content) {
 </script>
 
 {% block scripts %}{% endblock %}
-<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('/static/sw.js')}</script>
+<script>
+/* The PTOS service worker is retired. Unregister any registration still left
+   in this browser and drop the caches it created, so a stale worker can never
+   serve a page from its own cache. */
+if ('serviceWorker' in navigator) {
+  navigator.serviceWorker.getRegistrations().then(function (rs) {
+    rs.forEach(function (r) { r.unregister(); });
+  });
+}
+if (window.caches) {
+  caches.keys().then(function (ks) {
+    ks.forEach(function (k) { caches.delete(k); });
+  });
+}
+</script>
 </body>
 </html>

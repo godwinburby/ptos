@@ -7,6 +7,13 @@ Format: `[version or date] — description`
 
 ## 2026-10-01
 
+### The service worker is retired
+
+- **It bought nothing and cost something.** The worker was registered at `/static/sw.js` (scope `/static/`) and served every non-`/api/` GET cache-first, but it never called `cache.put` — so nothing was ever stored, and each asset request paid a service-worker revalidation on top of the HTTP cache. The first commit's `?v=` immutable caching is what actually makes assets cheap.
+- **A self-destructing stub, not a hole.** `sw.js` is now a small worker that installs immediately (`skipWaiting`), and on activate deletes every cache it can see, unregisters itself, and reloads the windows it controlled. A browser with the old worker registered fetches the stub on its next update check and cleans itself up. It stays at `/static/sw.js`, pinned `no-cache`, for a release or two so those clients can pick it up; after that the file can be deleted.
+- **The page cleans up too, not just the worker.** `base.html` no longer registers anything. It now calls `getRegistrations()` + `unregister()` and clears `caches` on every load, so a returning visitor is freed of the old worker on their next page view instead of waiting on the browser's update schedule. The PWA `manifest.json` is untouched — "add to home screen" still works.
+- **Tests** — `tests/test_web_perf.py` gains `TestServiceWorkerRetired`: `sw.js` has no `fetch` handler, no `addAll`, no `cache.put`, and does unregister/delete; `base.html` no longer registers a worker and does unregister/clear caches. The existing never-cache check for `/static/sw.js` still guards the transition.
+
 ### Suggestion caches self-heal, and a type change clears both types
 
 - **The bug** — the Add/Edit form's suggestions (tags, past field values, cascade defaults) are cached per record type and dropped only by PTOS's own write paths. A write that bypassed the service — the `/editor` free-text rewrite, a hand-edited `.log`, a script appending records directly — left the dropdowns serving pre-write suggestions until the process restarted. Nothing was wrong with the data; the form just kept offering yesterday's tags.
