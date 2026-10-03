@@ -14,6 +14,14 @@ Format: `[version or date] — description`
 - **Copies, so callers can keep mutating.** Several callers decorate the returned dict (`result["kind"]`, `result["query_name"]`, …), so cache reads hand back a `copy.deepcopy`; the stored entry is never touched.
 - **Tests** — `tests/test_history_cache.py` gains `TestGetRecordsCache` (no rescan on an identical second call, distinct params get distinct entries, returned copies are isolated, a write clears `recs:`, external-change prefixes include it) and `TestGetRecordsSingleParse` (the scan path never calls `_parse_record`, the parsed-row builder matches `_parse_record`, and `return_parsed` output is aligned). Full suite: `2148 passed`.
 
+### The browse cache grows up: day-stable keys, a cap, a stale-store guard, and config invalidation
+
+- **A daily key, so "today" can't mean yesterday.** The `recs:` key used the raw time alias, so `get_records([...], "td")` resolved to the current day only on a cache miss — a server left running across midnight kept serving yesterday's rows until something else invalidated the cache. The key now carries `ptos.today()`, so a day (or month/quarter/year) rollover lands on a fresh key and re-resolves the window.
+- **A bounded cache.** A session can generate unbounded filter permutations, and the previous entry was never evicted. `recs:` entries are now capped (`_RECS_MAX = 40`) and evicted least-recently-used — a cache read refreshes recency via `_recs_get`, and `_recs_put` drops the oldest overflow.
+- **A generation guard against the stale-store race.** A write landing *during* a scan would finish first, then the scan stored its now-pre-write result as if it were current. `ptos` now exposes a monotonic `records_gen()` / `bump_records_gen()` token, bumped by every invalidation path (`_invalidate`, `_invalidate_all`, `_invalidate_from_changes`, service `invalidate_all` / `_invalidate_history_cache`). `get_records` captures the token before scanning and only caches the result if it is unchanged.
+- **Config/schema changes clear `recs:` too.** `date_format` changes how rows render and queries changes how time cycles resolve, but the config write path only dropped `config`/`queries` keys — a settings save could leave the browse table formatted the old way. `_invalidate()` now drops `recs:` on any resource, and `_invalidate_from_changes` drops it for external `config.toml`/`queries.toml` edits.
+- **Tests** — `tests/test_history_cache.py` gains `TestRecsDayRollover` (a `"td"` view re-resolves after midnight), `TestRecsStaleStoreGuard` (a bump mid-scan suppresses the store; an unchanged token stores), `TestRecsCacheBounded` (cap enforced, a hit refreshes recency), and `TestConfigChangeClearsRecs` (save_config and external config/schema changes clear `recs:`). Full suite: `2156 passed`.
+
 ## 2026-10-01
 
 ### The service worker is retired

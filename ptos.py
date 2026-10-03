@@ -1405,6 +1405,22 @@ _CACHE_DEPS = {
     "presets": ["presets"],
 }
 
+# Monotonic token bumped whenever record-derived data may have changed. A
+# builder captures records_gen() before it starts and stores its result only
+# if the token is unchanged afterwards, so a write that lands mid-build can
+# never be cached as if it were the post-write truth.
+_RECORDS_GEN = 0
+
+
+def bump_records_gen():
+    """Signal that record-derived values may be stale."""
+    global _RECORDS_GEN
+    _RECORDS_GEN += 1
+
+
+def records_gen():
+    return _RECORDS_GEN
+
 
 def _invalidate(resource):
     """Invalidate cache for a resource and all its dependent keys."""
@@ -1415,6 +1431,11 @@ def _invalidate(resource):
         keys.update(_CACHE_DEPS.get(r, [r]))
     for key in keys:
         _CACHE.pop(key, None)
+    # Any data write can change what a browse query returns — record content
+    # itself, or config/schema-driven row formatting — so drop the record-result
+    # cache and bump the generation token.
+    _pop_cache_prefixes(("recs:",))
+    bump_records_gen()
 
 
 def _invalidate_all():
@@ -1424,6 +1445,7 @@ def _invalidate_all():
     _WHERE_TOKEN_CACHE.clear()
     _IS_EXPRESSION_CACHE.clear()
     _FILTER_DERIVED_CACHE.clear()
+    bump_records_gen()
     # A PTOS write invalidates everything already, and the next read re-reads
     # from disk (picking up any external change too), so re-baseline the
     # external-change signature instead of letting the watcher report our own
@@ -1542,6 +1564,12 @@ def _invalidate_from_changes(changed):
             or "config/schema.toml" in changed:
         popped += _pop_cache_keys(["log_files"])
         popped += _pop_cache_prefixes(_EXT_RECORD_PREFIXES)
+        bump_records_gen()
+    elif "config/queries.toml" in changed or "config/config.toml" in changed:
+        # Time-cycle resolution (queries) and row date formatting (config) both
+        # feed browse results, so drop the record-result cache too.
+        popped += _pop_cache_prefixes(("recs:",))
+        bump_records_gen()
     return popped
 
 
