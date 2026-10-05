@@ -272,6 +272,27 @@ class TestBaseTemplateUsesExternalStylesheet:
         text = open(path, encoding="utf-8").read()
         assert "{{" not in text and "{%" not in text
 
+    def test_widget_css_is_linked_last_of_the_three(self):
+        # base-widgets.css held two body-level <style> blocks; linking it
+        # after base.css keeps it the winning sheet on specificity ties.
+        text = self._base()
+        css = re.findall(r'href="\{\{ av\(\'/static/css/([\w-]+\.css)\'', text)
+        assert css == ["components.css", "base.css", "base-widgets.css"], css
+
+    def test_widget_css_carries_the_extracted_rules(self):
+        path = os.path.join(
+            os.path.dirname(TEMPLATE_DIR), "web_static", "css",
+            "base-widgets.css")
+        text = open(path, encoding="utf-8").read()
+        assert text.count("{") == text.count("}")
+        for sel in ("#dt-picker-overlay", "#dt-picker .dtp-header",
+                    ".bracket-ac-list", ".bracket-ac-item:hover"):
+            assert sel in text, sel
+        assert "{{" not in text and "{%" not in text
+
+    def test_no_inline_style_remains_in_base(self):
+        assert "<style>" not in self._base()
+
 
 class TestBaseTemplateUsesExternalScripts:
     """base.html's shared JS lives in web_static/js/, not inline.

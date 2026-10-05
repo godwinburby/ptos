@@ -1,0 +1,97 @@
+/* Shared widget styles extracted from base.html's body-level <style>
+   blocks. Linked after base.css so cascade order is unchanged. */
+
+  #dt-picker-overlay {
+    display:none; position:fixed; inset:0; z-index:9999;
+    background:rgba(0,0,0,.35);
+  }
+  #dt-picker-overlay.open { display:block; }
+  #dt-picker {
+    position:fixed; z-index:10000;
+    background:var(--card); border-radius:12px; padding:14px 16px;
+    width:310px; border:1px solid var(--border);
+    box-shadow:0 8px 30px rgba(0,0,0,.25); user-select:none;
+  }
+  #dt-picker .dtp-header {
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:8px;
+  }
+  #dt-picker .dtp-header .dtp-title { font-size:14px; font-weight:700; color:var(--text); }
+  #dt-picker .dtp-header button {
+    background:none; border:none; font-size:18px; cursor:pointer;
+    color:var(--sub); padding:2px 6px; border-radius:6px;
+  }
+  #dt-picker .dtp-header button:hover { background:var(--bg); color:var(--text); }
+  #dt-picker .dtp-weekdays {
+    display:grid; grid-template-columns:repeat(7,1fr); text-align:center;
+    font-size:10px; font-weight:700; color:var(--sub); margin-bottom:2px;
+  }
+  #dt-picker .dtp-days {
+    display:grid; grid-template-columns:repeat(7,1fr); gap:1px; margin-bottom:10px;
+  }
+  #dt-picker .dtp-day {
+    aspect-ratio:1; display:flex; align-items:center; justify-content:center;
+    font-size:12px; font-weight:600; border-radius:6px; cursor:pointer;
+    color:var(--text); border:none; background:none;
+  }
+  #dt-picker .dtp-day:hover { background:var(--bg); }
+  #dt-picker .dtp-day.today { border:1.5px solid var(--accent); }
+  #dt-picker .dtp-day.selected { background:var(--accent); color:#fff; }
+  #dt-picker .dtp-day.empty { cursor:default; }
+  #dt-picker .dtp-day.empty:hover { background:none; }
+  #dt-picker .dtp-time-section {
+    border-top:1px solid var(--border); padding-top:8px; margin-bottom:8px;
+  }
+  #dt-picker .dtp-time-toggle {
+    display:flex; align-items:center; gap:8px; margin-bottom:6px;
+  }
+  #dt-picker .dtp-time-toggle label {
+    font-size:11px; font-weight:600; color:var(--sub); cursor:pointer;
+  }
+  #dt-picker .dtp-time-toggle input[type="checkbox"] {
+    accent-color:var(--accent); cursor:pointer;
+  }
+  #dt-picker .dtp-time-selects {
+    display:none; gap:6px; align-items:center; justify-content:center;
+  }
+  #dt-picker .dtp-time-selects.open { display:flex; }
+  #dt-picker .dtp-time-selects select {
+    font-size:15px; padding:6px 8px; border-radius:8px;
+    border:1px solid var(--border); background:var(--bg); color:var(--text);
+  }
+  #dt-picker .dtp-time-selects .dtp-time-sep {
+    font-size:16px; font-weight:700; color:var(--sub);
+  }
+  #dt-picker .dtp-footer {
+    display:flex; gap:8px; justify-content:flex-end; padding-top:8px;
+    border-top:1px solid var(--border);
+  }
+  #dt-picker .dtp-footer button {
+    padding:6px 16px; border-radius:8px; font-size:12px; font-weight:600;
+    border:none; cursor:pointer;
+  }
+  #dt-picker .dtp-btn-cancel { background:var(--bg); color:var(--sub); }
+  #dt-picker .dtp-btn-ok { background:var(--accent); color:#fff; }
+  #dt-picker .dtp-btn-ok:disabled { opacity:.4; cursor:default; }
+  @media (max-width:767px) {
+    #dt-picker { width: calc(100vw - 32px); max-width:360px; }
+    #dt-picker .dtp-weekdays { font-size:12px; }
+    #dt-picker .dtp-day { font-size:15px; border-radius:6px; }
+    #dt-picker .dtp-time-toggle label { font-size:13px; }
+    #dt-picker .dtp-header .dtp-title { font-size:16px; }
+  }
+
+  .bracket-ac-list {
+    display:none; position:absolute; left:0; right:0; top:100%;
+    background:var(--card); border:1px solid var(--border); border-radius:8px;
+    max-height:180px; overflow-y:auto; z-index:50; box-shadow:0 4px 12px rgba(0,0,0,.12);
+    margin-top:4px;
+  }
+  .bracket-ac-list.open { display:block; }
+  .bracket-ac-item {
+    padding:8px 12px; cursor:pointer; font-size:13px; font-weight:600;
+    color:var(--text); border-bottom:1px solid var(--border);
+  }
+  .bracket-ac-item:last-child { border-bottom:none; }
+  .bracket-ac-item:hover, .bracket-ac-item.active {
+    background:var(--accent-lt); color:var(--accent);
+  }

@@ -7,6 +7,12 @@ Format: `[version or date] — description`
 
 ## 2026-10-05
 
+### base.html ends up with no inline CSS or bulk JS
+
+- **~4 KB of widget CSS joins the static assets.** The date-picker overlay and bracket-autocomplete dropdown were the last two `<style>` blocks in `base.html`'s body; they are now `web_static/css/base-widgets.css`. `base.html` therefore has no inline `<style>` at all and no large inline `<script>` — only three sub-1 KB inline blocks remain (the `window.PTOS` shim, the one-line `floatingAddAction()`, and the retired-service-worker unregister stub). Home's HTML is down to ~84 KB from ~155 KB before this work started.
+- **Cascade order is preserved exactly** — the sheet is `<link>`ed last, after `components.css` and `base.css`, which is the position its rules had relative to them. Page-level inline `<style>` blocks in child templates still come later in the document than any head `<link>`, so they still win ties, exactly as before. The kb-help overlay's `<style>` deliberately stays inside the `HELP_HTML` template string in `nav_chords.js`: it is injected via `innerHTML` at runtime, not a stylesheet.
+- **Tests** — `TestBaseTemplateUsesExternalStylesheet` gains four cases pinning that `base-widgets.css` is linked third of three, that it carries the extracted selectors with balanced braces and no Jinja, and that `base.html` has no inline `<style>` left. `/`, `/todo`, `/browse`, `/notes`, `/journal`, `/add` and `/types` all render 200 with all three sheets resolving and caching immutably. Full suite: `2215 passed`.
+
 ### base.html's shared JS becomes cached static files
 
 - **~43 KB of JavaScript no longer ships inside every page.** The seven shared inline `<script>` blocks in `base.html` (sidebar search autocomplete, sidebar collapse, date picker, keyboard shortcuts + nav chords, SSE listener, bracket autocomplete, Pomodoro pill) are now `web_static/js/sidebar_search.js`, `sidebar_collapse.js`, `date_picker.js`, `nav_chords.js`, `sse.js`, `bracket_links.js` and `pomodoro.js`, each loaded via `av()` at exactly the position its inline block occupied. The Home page's HTML drops from ~130 KB to ~88 KB, and the scripts are cached (`immutable`) across navigations instead of re-parsed per page.
