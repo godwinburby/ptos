@@ -1667,6 +1667,50 @@ def _load(key, path):
     return _CACHE[key]
 
 def get_config():  return _load("config",  CONFIG_PATH)  if os.path.exists(CONFIG_PATH)  else {}
+
+
+def generate_secret_key(nbytes=24):
+    """Generate a random hex secret for the web session cookie."""
+    import secrets
+    return secrets.token_hex(nbytes)
+
+
+def ensure_session_secret(persist=True):
+    """Return this install's Flask session secret, generating one if needed.
+
+    A hardcoded default would let anyone who has read PTOS's source forge a
+    signed session cookie, so every install gets its own. The value lives in
+    config.toml under [server].secret_key and is created on first use (by
+    --init or by the web app at startup).
+
+    A config directory that cannot be written (read-only mount, permissions)
+    must not stop the server: fall back to an ephemeral in-memory secret and
+    say so, since sessions then reset on restart — harmless, because PTOS
+    keeps no session state today.
+    """
+    cfg = get_config()
+    existing = (cfg.get("server") or {}).get("secret_key")
+    if isinstance(existing, str) and existing.strip():
+        return existing.strip()
+
+    secret = generate_secret_key()
+    if not persist:
+        return secret
+    try:
+        import tomli_w
+        cfg = dict(cfg)
+        cfg["server"] = {**(cfg.get("server") or {}), "secret_key": secret}
+        os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
+        with AtomicWrite(CONFIG_PATH, "config") as w:
+            tomli_w.dump(cfg, w.stream)
+        return secret
+    except Exception as e:
+        print(f"Warning: could not save session secret to {CONFIG_PATH} ({e}).\n"
+              "         Using a temporary secret; sessions reset on restart.",
+              file=sys.stderr)
+        return secret
+
+
 def get_schema():
     if not os.path.exists(SCHEMA_PATH):
         return {}
@@ -6476,6 +6520,8 @@ def init_ptos(demo=None):
         print(f"  exists   records/{today().year}.log")
 
     _write_if_missing(os.path.join(BASE_DIR, ".stignore"), _STIGNORE, ".stignore")
+
+    ensure_session_secret()
 
     # Write .ptos_home bootstrap file so PTOS_HOME env var is no longer needed
     if not DESKTOP_MODE:

@@ -20,7 +20,7 @@ app = Flask(__name__,
     template_folder=os.path.join(_basedir, 'web_templates'),
     static_folder=os.path.join(_basedir, 'web_static'),
     static_url_path="/static")
-app.secret_key = "ptos-local-only"
+app.secret_key = ptos.ensure_session_secret()
 app.config["DEBUG"] = False
 
 # Versioned static assets: templates reference files through av(), which appends

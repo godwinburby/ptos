@@ -7,6 +7,14 @@ Format: `[version or date] — description`
 
 ## 2026-10-05
 
+### Every install gets its own session secret
+
+- **The hardcoded signing key is gone.** `ptos_web.py` set `app.secret_key = "ptos-local-only"`, a constant published in the source — anyone who had read PTOS could forge a signed session cookie. Each install now generates its own 48-hex-character key and stores it under `[server] secret_key` in `config.toml`, created by `ptos --init` and by the web app's first start, and repaired if it goes missing or blank.
+- **The starter deliberately ships no secret.** `starters/starter_config.toml` documents the key as a commented-out `# secret_key = "<generated>"`, because a value in the starter file would be copied to every install and become shared the moment anyone pasted it.
+- **A read-only config directory cannot stop the server.** If the key cannot be persisted, PTOS falls back to an ephemeral in-memory key and warns on stderr that sessions will reset on restart — harmless today, since PTOS keeps no session state.
+- **Settings saves never drop it.** `settings_save` mutates the loaded config in place rather than rebuilding it, so the key survives a save. No template ever renders it.
+- **Tests** — `tests/test_init.py` gains `TestSessionSecret` (generation, stability across calls, blank-value repair, per-install uniqueness, preservation of neighbouring `[server]` keys, the unwritable-config fallback, the starter shipping no secret, and the web app never using the old literal) plus three `--init` cases asserting the key is written, stable across re-init, and present even when the starter directory is missing. Full suite: `2226 passed`.
+
 ### base.html ends up with no inline CSS or bulk JS
 
 - **~4 KB of widget CSS joins the static assets.** The date-picker overlay and bracket-autocomplete dropdown were the last two `<style>` blocks in `base.html`'s body; they are now `web_static/css/base-widgets.css`. `base.html` therefore has no inline `<style>` at all and no large inline `<script>` — only three sub-1 KB inline blocks remain (the `window.PTOS` shim, the one-line `floatingAddAction()`, and the retired-service-worker unregister stub). Home's HTML is down to ~84 KB from ~155 KB before this work started.
