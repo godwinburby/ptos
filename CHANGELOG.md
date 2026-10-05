@@ -7,11 +7,18 @@ Format: `[version or date] — description`
 
 ## 2026-10-05
 
+### base.html's shared JS becomes cached static files
+
+- **~43 KB of JavaScript no longer ships inside every page.** The seven shared inline `<script>` blocks in `base.html` (sidebar search autocomplete, sidebar collapse, date picker, keyboard shortcuts + nav chords, SSE listener, bracket autocomplete, Pomodoro pill) are now `web_static/js/sidebar_search.js`, `sidebar_collapse.js`, `date_picker.js`, `nav_chords.js`, `sse.js`, `bracket_links.js` and `pomodoro.js`, each loaded via `av()` at exactly the position its inline block occupied. The Home page's HTML drops from ~130 KB to ~88 KB, and the scripts are cached (`immutable`) across navigations instead of re-parsed per page.
+- **Execution order is deliberately unchanged** — the tags are plain `<script src>` with no `defer`/`async`, so they still block and run in document order, which the inline blocks depended on. `sidebar_collapse.js` queries `.sidebar-nav-group` as soon as it runs, so it still loads after the sidebar markup; it must not be merged into another file or hoisted into `<head>`. The `frozen`/`desktop_mode` guard around `stopServer` and around the whole `sse.js` tag stayed in Jinja rather than becoming a JS `if`.
+- **No Jinja inside a static asset** — the four `{{ }}`/`{% if %}` expressions the inline JS needed now come from a one-line `window.PTOS = {frozen, desktop, pomoMinutes, pomoLog}` shim at the top of `<body>`, all four supplied by the existing context processor. Adding new config-driven values belongs in that shim, not in a `.js` file.
+- **Tests** — a new `TestBaseTemplateUsesExternalScripts` pins that every file is loaded through `av()`, that no extracted file contains Jinja, that the remaining inline blocks are all under 1 KB, that the shim declares every key and precedes the scripts that read it, and that the load order still matches the original inline order. Every one of the seven files passes `node --check`.
+
 ### The page-wide stylesheet leaves base.html
 
 - **~24 KB of CSS per page is now a cached file.** `base.html` carried the reset, `:root` variables and the layout/sidebar/topbar rules in a 540-line inline `<style>` block, so every page re-shipped it. It is now `web_static/css/base.css`, `<link>`ed via `av()` immediately after `components.css` — the cascade order is identical, the CSS is byte-for-byte the same, and because it is a versioned static asset the browser caches it across navigations instead of re-parsing it with the HTML.
 - **No behaviour change.** No Jinja was involved, no script moved, and the block was already last in `<head>`, so selector precedence is untouched.
-- **Tests** — `tests/test_web_perf.py::TestTemplatesUseVersionedAssets` covers the new `<link>` automatically (it fails on any un-versioned `/static/` reference), and a new `TestBaseTemplateUsesExternalStylesheet` pins the link, its position after `components.css`, the absence of an inline `<style>` in `<head>`, and that the file is non-empty Jinja-free CSS. Full suite: `2203 passed`.
+- **Tests** — `tests/test_web_perf.py::TestTemplatesUseVersionedAssets` covers the new `<link>` automatically (it fails on any un-versioned `/static/` reference), and a new `TestBaseTemplateUsesExternalStylesheet` pins the link, its position after `components.css`, the absence of an inline `<style>` in `<head>`, and that the file is non-empty Jinja-free CSS. Full suite: `2212 passed`.
 
 ## 2026-10-03
 

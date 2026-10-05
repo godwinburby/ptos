@@ -273,6 +273,85 @@ class TestBaseTemplateUsesExternalStylesheet:
         assert "{{" not in text and "{%" not in text
 
 
+class TestBaseTemplateUsesExternalScripts:
+    """base.html's shared JS lives in web_static/js/, not inline.
+
+    Tags are plain <script src> with no defer/async, so they still block and
+    run in document order — which is what the old inline blocks relied on
+    (sidebar_collapse.js queries .sidebar-nav-group as soon as it runs, and
+    must stay after the sidebar markup). The few Jinja values the inline JS
+    needed come from a small window.PTOS shim near the top of <body>.
+    """
+
+    FILES = ("sidebar_search.js", "sidebar_collapse.js", "date_picker.js",
+             "nav_chords.js", "sse.js", "bracket_links.js", "pomodoro.js")
+    SHIM_KEYS = ("frozen", "desktop", "pomoMinutes", "pomoLog")
+
+    def _base(self):
+        return open(os.path.join(TEMPLATE_DIR, "base.html"), encoding="utf-8").read()
+
+    def _static(self, name):
+        path = os.path.join(
+            os.path.dirname(TEMPLATE_DIR), "web_static", "js", name)
+        return open(path, encoding="utf-8").read()
+
+    def test_each_file_is_loaded_via_av(self):
+        text = self._base()
+        for name in self.FILES:
+            assert text.count("av('/static/js/%s')" % name) == 1, name
+
+    def test_files_exist_and_are_substantial(self):
+        for name in self.FILES:
+            assert len(self._static(name)) > 100, name
+
+    def test_extracted_files_contain_no_jinja(self):
+        for name in self.FILES:
+            text = self._static(name)
+            assert "{{" not in text, name
+            assert "{%" not in text, name
+
+    def test_no_remaining_large_inline_script(self):
+        # Only the PTOS shim, floatingAddAction and the service-worker
+        # unregister stub are meant to stay inline.
+        text = self._base()
+        for body in re.findall(r"<script(?![^>]*\bsrc=)[^>]*>(.*?)</script>",
+                               text, re.S):
+            assert len(body.strip()) < 1000, len(body.strip())
+
+    def test_config_shim_declares_every_key(self):
+        text = self._base()
+        m = re.search(r"window\.PTOS=\{(.*?)\};", text, re.S)
+        assert m, "PTOS config shim missing from base.html"
+        for key in self.SHIM_KEYS:
+            assert "%s:" % key in m.group(1), key
+
+    def test_shim_precedes_every_script_that_reads_it(self):
+        text = self._base()
+        shim = text.index("window.PTOS={")
+        for name in ("nav_chords.js", "pomodoro.js"):
+            assert shim < text.index(name), name
+
+    def test_scripts_keep_their_original_document_order(self):
+        text = self._base()
+        order = [m.group(1) for m in
+                 re.finditer(r"<script src=\"\{\{ av\('/static/js/([\w.]+)'",
+                             text)]
+        assert order == list(self.FILES), order
+
+    def test_sse_stays_inside_the_frozen_guard(self):
+        # sse.js was guarded by Jinja around the whole tag, not by JS.
+        text = self._base()
+        i = text.index("{% if not frozen or desktop_mode %}")
+        assert "sse.js" in text[i:i + 400]
+
+    def test_js_values_read_the_shim_not_inline_jinja(self):
+        chords = self._static("nav_chords.js")
+        assert "if (!window.PTOS.frozen || window.PTOS.desktop) {" in chords
+        pomo = self._static("pomodoro.js")
+        assert "window.PTOS.pomoMinutes" in pomo
+        assert "if (window.PTOS.pomoLog) {" in pomo
+
+
 class TestTemplatesAutoReload:
     def test_default_off(self):
         import ptos_web
