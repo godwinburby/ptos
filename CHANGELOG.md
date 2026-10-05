@@ -7,6 +7,12 @@ Format: `[version or date] — description`
 
 ## 2026-10-05
 
+### PTOS is MIT licensed
+
+- **`LICENSE` added** — the full MIT text, `Copyright (c) 2026 godwinburby`. PTOS is a tool people are invited to self-host, fork, and change, and shipping the licence terms is part of inviting them: without a `LICENSE` file the default is "all rights reserved", which reads as *don't* rather than *please do*.
+- **`tests/test_license.py` guards it.** A licence that gets truncated is a legal problem, not a build failure, so the test asserts the file exists, starts with the MIT header, notices the holder, and keeps all four operative clauses — grant, attribution, no warranty, no liability. Two cases target the failure mode where a copy-paste slip makes a permissive licence restrictive without obviously doing so: `without restriction` and `distribute, sublicense, and/or sell` must both survive.
+- **README** gains a License section stating the grant plainly — use, modify, redistribute, including commercially — and what the only requirement is.
+
 ### The test suite now runs on every push, on both platforms
 
 - **New `.github/workflows/tests.yml`** — the `tests` job runs `python -m pytest tests/ -q`, the exact command the local pre-commit hook runs, across a `ubuntu-latest`/`windows-latest` × Python 3.11/3.13 matrix. Linux and Windows both ship a launcher script and the suite asserts on both, so a Windows-only regression can no longer reach `main` unseen. `fail-fast: false` keeps one broken cell from hiding the other three; permissions are `contents: read`.

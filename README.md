@@ -2405,3 +2405,14 @@ of where the WSGI process runs from. You can also skip the env var by running
 `--init` once — it creates a `.ptos_home` bootstrap file next to `ptos.py`.
 Free tier requires a manual renewal click every 3 months — PythonAnywhere sends
 an email reminder.
+
+---
+
+## License
+
+MIT — see [LICENSE](LICENSE).
+
+You may use, modify, and redistribute PTOS, including commercially. The only
+requirement is that the copyright notice and permission notice travel with
+copies or substantial portions of the software. There is no warranty of any
+kind, and the authors are not liable for damages arising from use.
