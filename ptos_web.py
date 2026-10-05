@@ -5015,6 +5015,23 @@ def _exit_backup():
 
 atexit.register(_exit_backup)
 
+def _warn_if_exposed(host, auth_cfg):
+    """Print a warning when the server is reachable from the network without auth.
+
+    Binding beyond loopback with [auth] disabled is the one genuinely dangerous
+    misconfiguration PTOS can be put into, so it says so loudly at startup.
+    Split out of the __main__ block so it can be tested.
+    """
+    if host in ("127.0.0.1", "localhost"):
+        return False
+    if (auth_cfg or {}).get("enabled", False):
+        return False
+    print(f"WARNING: Server bound to {host} (reachable from network).")
+    print("  No [auth] configured -- anyone on the network can access your data.")
+    print("  Enable auth in Settings or config.toml before exposing publicly.\n")
+    return True
+
+
 if __name__ == "__main__":
     # One-time backup dir migration (ptos-data/backups → ptos-backups)
     try:
@@ -5049,12 +5066,7 @@ if __name__ == "__main__":
     _port = server_cfg.get("port", 5000)
 
     # Warn if exposed without auth
-    if _host not in ("127.0.0.1", "localhost"):
-        auth_cfg = svc.get_config().get("auth", {})
-        if not auth_cfg.get("enabled", False):
-            print(f"WARNING: Server bound to {_host} (reachable from network).")
-            print("  No [auth] configured -- anyone on the network can access your data.")
-            print("  Enable auth in Settings or config.toml before exposing publicly.\n")
+    _warn_if_exposed(_host, svc.get_config().get("auth", {}))
 
     print("\nPTOS Web UI")
     _display_host = "localhost" if _host in ("127.0.0.1", "localhost") else _host

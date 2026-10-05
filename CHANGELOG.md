@@ -7,6 +7,14 @@ Format: `[version or date] — description`
 
 ## 2026-10-05
 
+### Test the security posture that was already correct
+
+- **PTOS reads Syncthing's API key and never leaks it.** `tests/test_syncthing_status.py` gains `TestApiKeyHandling`, which pins that the key travels only as an `X-API-Key` header on every REST call (never in a URL, where Syncthing's request log would keep it), that it appears nowhere in the status dict the CLI and Settings page render, not in the unreachable-daemon error, and not on stdout. A seventh case confirms config.xml is the only source, so rotating the key in Syncthing takes effect without touching PTOS.
+- **DEBUG is pinned off, and now has a test.** `app.config["DEBUG"] = False` was a single unguarded line. `tests/test_web_security.py` asserts it stays off, that it is still the *only* `DEBUG` reference in `ptos_web.py`, that no `app.run(...)` in `ptos_web.py`/`desktop_app.py` passes `debug=` or re-enables the reloader, and that no template can read `config.DEBUG`.
+- **The exposed-without-auth warning became testable.** Binding beyond loopback with `[auth]` disabled is the one genuinely dangerous misconfiguration, but the check sat inline in `__main__` where no test could reach it. It is now `_warn_if_exposed(host, auth_cfg)` — same output, same conditions — with four cases covering a public bind, an absent `[auth]` section, and silence on loopback or with auth enabled.
+- **Loopback defaults asserted.** The starter binds `127.0.0.1`, and `desktop_app.py` never binds `0.0.0.0`.
+- Full suite: `2264 passed`.
+
 ### The web password is stored as a hash, never in the page
 
 - **`--set-auth` no longer writes your password in cleartext.** `config.toml` kept `[auth] password` verbatim — readable by anything that can reach the file, including the Syncthing sync and every backup ZIP. Passwords are now salted PBKDF2-SHA256 hashes (`pbkdf2_sha256$<iterations>$<salt>$<hash>`, 200 000 iterations). The iteration count lives inside the stored string, so raising the cost later is just a re-save and existing hashes keep verifying.

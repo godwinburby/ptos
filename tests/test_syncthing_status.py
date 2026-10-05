@@ -1,5 +1,6 @@
 import json
 import os
+import sys
 import urllib.error
 import urllib.request
 import datetime as dt
@@ -77,11 +78,13 @@ class FakeUrlopen:
     def __init__(self, routes):
         self.routes = routes
         self.calls = []
+        self.requests = []
 
     def __call__(self, req, timeout=None):
         url = req.full_url
         path = urlsplit(url).path
         self.calls.append((url, timeout))
+        self.requests.append(req)
         for key, payload in self.routes.items():
             if path == key:
                 return FakeResponse(payload)
@@ -361,6 +364,87 @@ class TestGetSyncthingStatus:
         s = ptos_service.get_syncthing_status()
         assert s["ok"] is True
         assert s["my_id"] is None
+
+
+class TestApiKeyHandling:
+    """PTOS reads Syncthing's API key out of config.xml and must never leak it.
+
+    It exists only to sign the X-API-Key header. It must not appear in a URL
+    (which would land in Syncthing's request log), in the status dict the CLI
+    and web UI print, in any error string, or on stdout.
+    """
+
+    KEY = "abc123secret"
+
+    def _run(self, tmp_path, monkeypatch, routes=None):
+        _patch_config(tmp_path, monkeypatch, folder_path=str(tmp_path))
+        monkeypatch.setattr(ptos_service, "BASE_DIR", str(tmp_path))
+        fake = FakeUrlopen(routes if routes is not None else _default_routes())
+        monkeypatch.setattr(urllib.request, "urlopen", fake)
+        return fake, ptos_service.get_syncthing_status()
+
+    def test_key_is_sent_as_a_header_on_every_call(self, tmp_path, monkeypatch):
+        fake, status = self._run(tmp_path, monkeypatch)
+        assert fake.requests, "no REST calls made"
+        for req in fake.requests:
+            assert req.get_header("X-api-key") == self.KEY
+
+    def test_key_is_never_in_a_url(self, tmp_path, monkeypatch):
+        fake, _ = self._run(tmp_path, monkeypatch)
+        for url, _timeout in fake.calls:
+            assert self.KEY not in url, url
+
+    def test_key_is_absent_from_the_status_dict(self, tmp_path, monkeypatch):
+        _fake, status = self._run(tmp_path, monkeypatch)
+
+        def walk(node):
+            if isinstance(node, dict):
+                for k, v in node.items():
+                    yield k
+                    yield from walk(v)
+            elif isinstance(node, (list, tuple)):
+                for v in node:
+                    yield from walk(v)
+            elif isinstance(node, str):
+                yield node
+
+        blob = "\n".join(str(x) for x in walk(status))
+        assert self.KEY not in blob, blob
+        assert "apikey" not in "\n".join(str(x) for x in walk(status)).lower()
+        assert "api_key" not in blob.lower()
+
+    def test_key_is_absent_when_the_daemon_is_unreachable(self, tmp_path,
+                                                           monkeypatch):
+        fake = FakeUrlopen({})
+        monkeypatch.setattr(urllib.request, "urlopen", fake)
+        _patch_config(tmp_path, monkeypatch, folder_path=str(tmp_path))
+        monkeypatch.setattr(ptos_service, "BASE_DIR", str(tmp_path))
+        status = ptos_service.get_syncthing_status()
+        assert status["reachable"] is False
+        assert self.KEY not in str(status)
+
+    def test_key_is_absent_from_the_cli_output(self, tmp_path, monkeypatch,
+                                               capsys):
+        self._run(tmp_path, monkeypatch)
+        ptos_cli.run_sync_status()
+        assert self.KEY not in capsys.readouterr().out
+
+    def test_key_is_absent_from_the_settings_page(self, tmp_path, monkeypatch):
+        self._run(tmp_path, monkeypatch)
+        import ptos_web
+        body = ptos_web.app.test_client().get("/settings").get_data(as_text=True)
+        assert self.KEY not in body
+        assert "X-API-Key" not in body
+
+    def test_config_xml_is_the_only_source(self, tmp_path, monkeypatch):
+        # PTOS keeps no key of its own: it is re-read from Syncthing's
+        # config.xml on every call, so rotating it in Syncthing takes effect.
+        cfg_path = _patch_config(tmp_path, monkeypatch, folder_path=str(tmp_path))
+        assert ptos_service._syncthing_config()["apikey"] == "abc123secret"
+        cfg_path.write_text(
+            CONFIG_XML.format(folder_path="").replace("abc123secret", "rotated"),
+            encoding="utf-8")
+        assert ptos_service._syncthing_config()["apikey"] == "rotated"
 
 
 class TestCli:
