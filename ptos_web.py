@@ -4993,22 +4993,6 @@ if __name__ == "__main__":
     except Exception:
         pass
 
-    # Smart backup on startup if configured
-    try:
-        backup_config = svc.get_backup_config()
-        if backup_config.get("auto_backup_on_startup", True):
-            created, backup_path = svc.backup_if_needed()
-            if created:
-                print(f"Startup backup created: {os.path.basename(backup_path)}")
-            else:
-                print("Startup backup skipped: no changes detected")
-        else:
-            print("Startup backup disabled in config")
-    except PTOSError as e:
-        print(f"Startup backup skipped: {e}")
-    except Exception as e:
-        print(f"Startup backup skipped: {e}")
-    
     # Archive old done tasks on startup
     try:
         todo_cfg = svc.get_config().get("todo", {})
@@ -5046,6 +5030,35 @@ if __name__ == "__main__":
     print("\nPTOS Web UI")
     _display_host = "localhost" if _host in ("127.0.0.1", "localhost") else _host
     print(f"Open: http://{_display_host}:{_port}\n")
+
+
+def _startup_backup():
+    """Create a startup backup if configured.
+
+    Runs in a daemon thread so the server can bind without waiting on the zip;
+    migration stays synchronous in __main__ because the backup depends on it.
+    """
+    try:
+        backup_config = svc.get_backup_config()
+        if backup_config.get("auto_backup_on_startup", True):
+            created, backup_path = svc.backup_if_needed()
+            if created:
+                print(f"Startup backup created: {os.path.basename(backup_path)}")
+            else:
+                print("Startup backup skipped: no changes detected")
+        else:
+            print("Startup backup disabled in config")
+    except PTOSError as e:
+        print(f"Startup backup skipped: {e}")
+    except Exception as e:
+        print(f"Startup backup skipped: {e}")
+
+
+def _start_startup_backup_thread():
+    """Start the startup backup in a daemon thread. Returns the thread."""
+    _t = threading.Thread(target=_startup_backup, daemon=True, name="ptos-startup-backup")
+    _t.start()
+    return _t
 
 
 def _start_housekeeping_thread():
@@ -5134,6 +5147,7 @@ def _start_background_threads():
     _start_housekeeping_thread()
     _start_reminder_thread()
     _start_external_watch_thread()
+    _start_startup_backup_thread()
 
 
 if __name__ == "__main__":

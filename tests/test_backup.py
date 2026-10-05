@@ -2,6 +2,7 @@ import os
 import zipfile
 import pytest
 import ptos
+import ptos_web
 
 
 class TestBackupData:
@@ -291,3 +292,56 @@ class TestZipSlipProtection:
         ptos.restore_data(good_zip)
         assert (base / "config" / "schema.toml").read_text() == "restored"
         assert (base / "records" / "2026.log").read_text() == "new line\n"
+
+
+class TestStartupBackupThread:
+    def test_thread_targets_startup_backup_as_daemon(self, monkeypatch):
+        started = []
+
+        class FakeThread:
+            def __init__(self, *a, **kw):
+                self.target = kw.get("target")
+                self.daemon = kw.get("daemon")
+                self.name = kw.get("name")
+
+            def start(self):
+                started.append(self)
+
+        monkeypatch.setattr(ptos_web.threading, "Thread", FakeThread)
+        result = ptos_web._start_startup_backup_thread()
+        assert result is not None
+        assert len(started) == 1
+        assert started[0].target == ptos_web._startup_backup
+        assert started[0].daemon is True
+        assert started[0].name == "ptos-startup-backup"
+
+    def test_created_message(self, monkeypatch, capsys):
+        monkeypatch.setattr(ptos_web.svc, "get_backup_config",
+                            lambda: {"auto_backup_on_startup": True})
+        monkeypatch.setattr(ptos_web.svc, "backup_if_needed",
+                            lambda: (True, os.path.join("backups", "ptos-x.zip")))
+        ptos_web._startup_backup()
+        assert "Startup backup created: ptos-x.zip" in capsys.readouterr().out
+
+    def test_skipped_message(self, monkeypatch, capsys):
+        monkeypatch.setattr(ptos_web.svc, "get_backup_config",
+                            lambda: {"auto_backup_on_startup": True})
+        monkeypatch.setattr(ptos_web.svc, "backup_if_needed", lambda: (False, None))
+        ptos_web._startup_backup()
+        assert "Startup backup skipped: no changes detected" in capsys.readouterr().out
+
+    def test_disabled_message(self, monkeypatch, capsys):
+        monkeypatch.setattr(ptos_web.svc, "get_backup_config",
+                            lambda: {"auto_backup_on_startup": False})
+        ptos_web._startup_backup()
+        assert "Startup backup disabled in config" in capsys.readouterr().out
+
+    def test_backup_error_is_contained(self, monkeypatch, capsys):
+        def boom():
+            raise RuntimeError("disk full")
+
+        monkeypatch.setattr(ptos_web.svc, "get_backup_config",
+                            lambda: {"auto_backup_on_startup": True})
+        monkeypatch.setattr(ptos_web.svc, "backup_if_needed", boom)
+        ptos_web._startup_backup()
+        assert "Startup backup skipped: disk full" in capsys.readouterr().out

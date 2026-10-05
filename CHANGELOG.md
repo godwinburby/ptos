@@ -7,6 +7,12 @@ Format: `[version or date] — description`
 
 ## 2026-10-03
 
+### The startup backup no longer delays the server
+
+- **The zip runs off the critical path.** The startup backup was a synchronous block in the first `__main__` block, so on a slow phone the Flask bind waited for a full data zip (spec item L4). It now runs in a daemon thread (`ptos-startup-backup`, target `_startup_backup`) started by `_start_background_threads()` just before `app.run()`. Output and error handling are unchanged ("created/skipped/disabled", errors contained), so the server still binds if the backup raises.
+- **Two things deliberately stay synchronous.** Backup-dir migration runs first because the backup depends on it, and todo archiving stays inline because it rewrites `done*.txt` and would otherwise race requests.
+- **Tests** — `tests/test_backup.py` gains `TestStartupBackupThread` (the thread is a daemon named `ptos-startup-backup` targeting `_startup_backup`; the created/skipped/disabled messages; a raising `backup_if_needed` is contained). Full suite: `2198 passed`.
+
 ### Due-todo notifications start again on the web server
 
 - **A call moved above its definition.** Commit `4f4c7968` extracted the due-todo notification setup into `_start_housekeeping_thread()`, but left the call inside the first `if __name__ == "__main__":` block — which runs *before* the function is defined at module level. It raised `NameError`, swallowed by the surrounding `try/except`, so due-todo notifications silently never started on the Termux/Linux server since 2026-09-25. The background threads now all start through `_start_background_threads()`, defined after every `_start_*` helper and called once in the second `__main__` block just before `app.run()`.

@@ -222,7 +222,7 @@ class TestStartHousekeepingThread:
 
 
 class TestBackgroundThreadStartup:
-    def test_starts_housekeeping_reminder_and_external_watch(self, monkeypatch):
+    def test_starts_all_background_threads(self, monkeypatch):
         calls = []
         monkeypatch.setattr(ptos_web, "_start_housekeeping_thread",
                             lambda: calls.append("housekeeping"))
@@ -230,8 +230,10 @@ class TestBackgroundThreadStartup:
                             lambda: calls.append("reminder"))
         monkeypatch.setattr(ptos_web, "_start_external_watch_thread",
                             lambda: calls.append("external"))
+        monkeypatch.setattr(ptos_web, "_start_startup_backup_thread",
+                            lambda: calls.append("backup"))
         ptos_web._start_background_threads()
-        assert calls == ["housekeeping", "reminder", "external"]
+        assert calls == ["housekeeping", "reminder", "external", "backup"]
 
     def test_housekeeping_is_called_after_its_definition(self):
         with open(ptos_web.__file__, encoding="utf-8") as f:
