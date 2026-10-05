@@ -235,6 +235,44 @@ class TestTemplatesUseVersionedAssets:
         assert set(ptos_web._STATIC_NEVER_CACHE) == set(self.ALLOWED)
 
 
+class TestBaseTemplateUsesExternalStylesheet:
+    """base.html's page-wide CSS lives in web_static/css/base.css, not inline.
+
+    Extracting it keeps the cascade identical (the file is <link>ed right after
+    components.css, where the old <style> block sat) while letting the browser
+    cache it instead of re-parsing it with every page.
+    """
+
+    def _base(self):
+        return open(os.path.join(TEMPLATE_DIR, "base.html"), encoding="utf-8").read()
+
+    def test_head_links_base_css_via_av(self):
+        text = self._base()
+        assert text.count("av('/static/css/base.css')") == 1
+
+    def test_base_css_is_linked_after_components_css(self):
+        text = self._base()
+        assert text.index("av('/static/css/components.css')") < text.index(
+            "av('/static/css/base.css')")
+
+    def test_head_has_no_inline_style_block(self):
+        text = self._base()
+        head = text[:text.index("</head>")]
+        assert "<style>" not in head
+
+    def test_base_css_file_exists_and_has_content(self):
+        path = os.path.join(
+            os.path.dirname(TEMPLATE_DIR), "web_static", "css", "base.css")
+        assert os.path.exists(path)
+        assert len(open(path, encoding="utf-8").read()) > 10000
+
+    def test_base_css_has_no_jinja(self):
+        path = os.path.join(
+            os.path.dirname(TEMPLATE_DIR), "web_static", "css", "base.css")
+        text = open(path, encoding="utf-8").read()
+        assert "{{" not in text and "{%" not in text
+
+
 class TestTemplatesAutoReload:
     def test_default_off(self):
         import ptos_web

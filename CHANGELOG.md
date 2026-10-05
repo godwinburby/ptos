@@ -5,6 +5,14 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-05
+
+### The page-wide stylesheet leaves base.html
+
+- **~24 KB of CSS per page is now a cached file.** `base.html` carried the reset, `:root` variables and the layout/sidebar/topbar rules in a 540-line inline `<style>` block, so every page re-shipped it. It is now `web_static/css/base.css`, `<link>`ed via `av()` immediately after `components.css` — the cascade order is identical, the CSS is byte-for-byte the same, and because it is a versioned static asset the browser caches it across navigations instead of re-parsing it with the HTML.
+- **No behaviour change.** No Jinja was involved, no script moved, and the block was already last in `<head>`, so selector precedence is untouched.
+- **Tests** — `tests/test_web_perf.py::TestTemplatesUseVersionedAssets` covers the new `<link>` automatically (it fails on any un-versioned `/static/` reference), and a new `TestBaseTemplateUsesExternalStylesheet` pins the link, its position after `components.css`, the absence of an inline `<style>` in `<head>`, and that the file is non-empty Jinja-free CSS. Full suite: `2203 passed`.
+
 ## 2026-10-03
 
 ### The startup backup no longer delays the server
