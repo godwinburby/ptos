@@ -47,12 +47,13 @@ ptos-backups/    → ZIP backups (sibling to ptos-data, outside sync scope)
 - Jinja2 (templates)
 - Vanilla CSS/JS (no build step, no npm)
 - pytest (testing)
+- GitHub Actions (`.github/workflows/tests.yml` — `tests` job, Linux + Windows × Python 3.11/3.13)
 - SSE (Server-Sent Events for real-time notifications)
 
 ## Running tests
 
 ```bash
-python -m pytest tests/ -q        # full suite (~1976 tests, ~100s) — same command the pre-commit hook runs
+python -m pytest tests/ -q        # full suite (~2270 tests, ~130s) — same command the pre-commit hook and CI run
 python -m pytest tests/test_todo.py -q                    # one module
 python -m pytest tests/test_todo.py -k "test_name" -q     # one test
 ```

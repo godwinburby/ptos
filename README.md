@@ -1,5 +1,7 @@
 # PTOS — Plain Text Operating System
 
+[![tests](https://github.com/godwinburby/ptos/actions/workflows/tests.yml/badge.svg)](https://github.com/godwinburby/ptos/actions/workflows/tests.yml)
+
 > **New to PTOS?** See [README_START_HERE.md](README_START_HERE.md) for a plain-English overview.
 
 > Log it. Query it. Own it.
@@ -2328,7 +2330,13 @@ Journal files are stored at `journal/YYYY/YYYY-MM-DD.md`.
 python -m pytest tests/ -v
 ```
 
-The full suite runs in ~7s. All tests should pass.
+The full suite takes ~2 minutes. All tests should pass.
+
+CI runs the same command (`.github/workflows/tests.yml`) on Linux and Windows
+across Python 3.11 and 3.13, so a green run here means a green run before any
+commit lands.
+
+Test dependencies: `flask`, `tomli-w`, `pytest`, and `pyyaml`.
 
 ### Test isolation
 

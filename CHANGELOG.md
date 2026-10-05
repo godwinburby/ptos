@@ -7,6 +7,14 @@ Format: `[version or date] — description`
 
 ## 2026-10-05
 
+### The test suite now runs on every push, on both platforms
+
+- **New `.github/workflows/tests.yml`** — the `tests` job runs `python -m pytest tests/ -q`, the exact command the local pre-commit hook runs, across a `ubuntu-latest`/`windows-latest` × Python 3.11/3.13 matrix. Linux and Windows both ship a launcher script and the suite asserts on both, so a Windows-only regression can no longer reach `main` unseen. `fail-fast: false` keeps one broken cell from hiding the other three; permissions are `contents: read`.
+- **`tests/test_ci_workflow.py` keeps the workflow honest.** It reads the hook to assert the two commands match, that both platforms and Python 3.11+ are covered, that action refs are version-pinned, that no linter step creeps in unannounced, and that `BACKUP_DIR` resolves outside the repo.
+- **The dependency list is derived, not hand-kept.** Two tests scan every non-stdlib import in the suite, map import names to distributions (`tomli_w` → `tomli-w`, `yaml` → `pyyaml`), and assert the workflow installs all four **and nothing extra**. Adding a library without adding it to CI now fails here, with a readable message, instead of as an `ImportError` halfway through a job.
+- **README** gains a CI badge and a corrected test section (the old "~7s" claim was off by nearly 20×; the suite is ~2 minutes).
+- Full suite: `2276 passed`.
+
 ### Test the security posture that was already correct
 
 - **PTOS reads Syncthing's API key and never leaks it.** `tests/test_syncthing_status.py` gains `TestApiKeyHandling`, which pins that the key travels only as an `X-API-Key` header on every REST call (never in a URL, where Syncthing's request log would keep it), that it appears nowhere in the status dict the CLI and Settings page render, not in the unreachable-daemon error, and not on stdout. A seventh case confirms config.xml is the only source, so rotating the key in Syncthing takes effect without touching PTOS.
