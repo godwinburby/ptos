@@ -238,6 +238,16 @@ Records may also carry two schema-free tokens: `id=<id>` (a unique link target) 
 A record missing a tag or note is valid but weak — Lint will warn you.
 A record missing a date or type is broken — Lint will error.
 
+**One rule matters more than the rest:** a field value is a single token, so it cannot
+contain a space. Write `merchant=Big_Bazaar`, not `merchant=Big Bazaar` — the second is
+read as `merchant=Big` plus a stray `Bazaar` that is silently dropped, and nothing warns
+you. The app displays underscores as spaces, so you never see them.
+
+[FORMAT.md](FORMAT.md) is the complete specification of that line: the grammar, every
+key, values and schema types, the note, the full table of what does *not* work, and how
+to read and write the files with `grep`, `awk`, or your own parser — no PTOS required.
+It also carries the format's stability promise.
+
 ---
 
 ## Web Interface

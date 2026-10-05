@@ -13,6 +13,13 @@ Format: `[version or date] — description`
 - **`tests/test_license.py` guards it.** A licence that gets truncated is a legal problem, not a build failure, so the test asserts the file exists, starts with the MIT header, notices the holder, and keeps all four operative clauses — grant, attribution, no warranty, no liability. Two cases target the failure mode where a copy-paste slip makes a permissive licence restrictive without obviously doing so: `without restriction` and `distribute, sublicense, and/or sell` must both survive.
 - **README** gains a License section stating the grant plainly — use, modify, redistribute, including commercially — and what the only requirement is.
 
+### The record format has a written specification
+
+- **`FORMAT.md` added and linked from the README's _Anatomy of a record_.** It is the complete specification of a record line — grammar, keys, values and schema types, the note, a table of everything that does *not* work, and `grep`/`awk` recipes plus a reference parser and writer in plain Python. The point is that a PTOS user is never dependent on PTOS to read their own data: everything needed to parse `records/*.log` is on one page, and it was already written and simply unlinked.
+- **The one hard rule is now stated as a rule, not an observation.** _Values carry no spaces_ replaces the old _Spaces in values_, which described what PTOS happened to do and so quietly invited `merchant=Big Bazaar`. That line is read as `merchant=Big` plus a stray `Bazaar` that is **silently discarded** — no error, no warning, and the value on screen just reads "Big". The section now leads with the rule, shows both spellings side by side, spells out the truncation, and notes that a `|` in a value is worse, because it starts the note and throws away the rest of the field part.
+- **`|` joins whitespace as a forbidden character in a value**, in both the grammar and the failure table, with quotes called out as a way of making the same mistake twice.
+- **Writing from your own script** now marks value normalisation as the step that is not optional, and says plainly that PTOS applies it to every value it writes — so a writer that skips it is the only kind that can break.
+
 ### The test suite now runs on every push, on both platforms
 
 - **New `.github/workflows/tests.yml`** — the `tests` job runs `python -m pytest tests/ -q`, the exact command the local pre-commit hook runs, across a `ubuntu-latest`/`windows-latest` × Python 3.11/3.13 matrix. Linux and Windows both ship a launcher script and the suite asserts on both, so a Windows-only regression can no longer reach `main` unseen. `fail-fast: false` keeps one broken cell from hiding the other three; permissions are `contents: read`.
