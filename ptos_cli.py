@@ -368,7 +368,7 @@ help="Set a config value via dotted path, e.g.\n"
     utl.add_argument("--add-cycle", dest="add_cycle", nargs=2, metavar=("NAME", "DAY"),
                      help="Add or replace a custom cycle: NAME DAY (day of month, 1-31)")
     utl.add_argument("--set-auth", dest="set_auth", nargs=2, metavar=("USERNAME", "PASSWORD"),
-                     help="Set HTTP Basic Auth credentials (stored in plaintext in config)")
+                     help="Set HTTP Basic Auth credentials (password stored as a hash)")
     utl.add_argument("--retro-id", dest="retro_id", metavar="TYPE",
                      help="Assign an id to an existing entry so it can be linked to.\n"
                           "  Records: --retro-id expense --where \"amount=450 category=food\"\n"

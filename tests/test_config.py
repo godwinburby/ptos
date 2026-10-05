@@ -413,8 +413,16 @@ class TestSetAuth:
         ptos.set_auth("admin", "secret")
         auth = ptos.get_config()["auth"]
         assert auth["username"] == "admin"
-        assert auth["password"] == "secret"
-        assert "plaintext" in capsys.readouterr().out
+        assert ptos.verify_password(auth["password"], "secret")
+        assert not ptos.verify_password(auth["password"], "wrong")
+        assert "hash" in capsys.readouterr().out
+
+    def test_never_stores_plaintext(self, cfg):
+        ptos.set_auth("admin", "hunter2")
+        stored = ptos.get_config()["auth"]["password"]
+        assert "hunter2" not in stored
+        assert stored.startswith("pbkdf2_sha256$")
+        assert "hunter2" not in open(ptos.CONFIG_PATH, encoding="utf-8").read()
 
     def test_defaults_enabled_true(self, cfg):
         ptos.set_auth("u", "p")
@@ -432,7 +440,7 @@ class TestSetAuth:
         auth = ptos.get_config()["auth"]
         assert auth["enabled"] is False
         assert auth["username"] == "newu"
-        assert auth["password"] == "newp"
+        assert ptos.verify_password(auth["password"], "newp")
 
     def test_empty_credentials_exit(self, cfg):
         with pytest.raises(SystemExit):
@@ -444,6 +452,70 @@ class TestSetAuth:
         monkeypatch.setattr(ptos, "CONFIG_PATH", "/nonexistent/config.toml")
         with pytest.raises(SystemExit):
             ptos.set_auth("u", "p")
+
+
+class TestPasswordHashing:
+    def test_round_trip(self):
+        stored = ptos.hash_password("correct horse")
+        assert ptos.verify_password(stored, "correct horse")
+        assert not ptos.verify_password(stored, "correct hors")
+        assert not ptos.verify_password(stored, "")
+
+    def test_hash_is_salted(self):
+        a = ptos.hash_password("same")
+        b = ptos.hash_password("same")
+        assert a != b
+        assert ptos.verify_password(a, "same") and ptos.verify_password(b, "same")
+
+    def test_format_carries_the_iteration_count(self):
+        scheme, iters, salt, digest = ptos.hash_password("x").split("$")
+        assert scheme == "pbkdf2_sha256"
+        assert int(iters) == ptos.AUTH_HASH_ITERATIONS
+        assert len(bytes.fromhex(salt)) == 16
+        assert len(bytes.fromhex(digest)) == 32
+
+    def test_verifies_a_hash_made_with_other_iterations(self):
+        # Raising the cost later must not invalidate existing hashes.
+        stored = ptos.hash_password("pw", iterations=1000)
+        assert ptos.verify_password(stored, "pw")
+        assert not ptos.verify_password(stored, "nope")
+
+    def test_legacy_plaintext_still_verifies(self):
+        assert ptos.verify_password("oldpw", "oldpw")
+        assert not ptos.verify_password("oldpw", "other")
+        assert not ptos.is_hashed_password("oldpw")
+        assert ptos.is_hashed_password(ptos.hash_password("x"))
+
+    def test_rejects_garbage(self):
+        for bad in ("", None, "pbkdf2_sha256$", "pbkdf2_sha256$x$y",
+                    "pbkdf2_sha256$200000$zz$zz", 123):
+            assert ptos.verify_password(bad, "pw") is False
+
+    def test_upgrade_replaces_plaintext(self, cfg):
+        import tomli_w
+        with open(ptos.CONFIG_PATH, "rb") as f:
+            config = tomllib.load(f)
+        config["auth"] = {"enabled": True, "username": "u", "password": "plain"}
+        with open(ptos.CONFIG_PATH, "wb") as f:
+            tomli_w.dump(config, f)
+        assert ptos.upgrade_auth_password("u", "plain")
+        stored = ptos.get_config()["auth"]["password"]
+        assert ptos.verify_password(stored, "plain")
+        assert "plain" not in stored
+
+    def test_upgrade_is_a_noop_for_a_hash(self, cfg):
+        ptos.set_auth("u", "hashed")
+        assert ptos.upgrade_auth_password("u", "hashed") is False
+
+    def test_upgrade_ignores_a_wrong_username(self, cfg):
+        import tomli_w
+        with open(ptos.CONFIG_PATH, "rb") as f:
+            config = tomllib.load(f)
+        config["auth"] = {"enabled": True, "username": "u", "password": "plain"}
+        with open(ptos.CONFIG_PATH, "wb") as f:
+            tomli_w.dump(config, f)
+        assert ptos.upgrade_auth_password("someoneelse", "plain") is False
+        assert ptos.get_config()["auth"]["password"] == "plain"
 
 
 class TestSavePreset:

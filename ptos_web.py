@@ -259,6 +259,7 @@ from functools import wraps
 from flask import request, Response
 
 def _check_auth(username, password):
+    import hmac
     try:
         cfg = svc.get_config()
         auth = cfg.get("auth")
@@ -266,7 +267,21 @@ def _check_auth(username, password):
             return True
         if not auth.get("enabled", True):
             return True
-        return username == auth.get("username", "") and password == auth.get("password", "")
+        stored_user = auth.get("username", "")
+        stored_pw = auth.get("password", "")
+        # Username first: a wrong username then costs one cheap comparison
+        # instead of a 200k-iteration PBKDF2, so unauthenticated floods do not
+        # get a free CPU burner.
+        if not username or not hmac.compare_digest(str(username), str(stored_user)):
+            return False
+        if not ptos.verify_password(stored_pw, password):
+            return False
+        if not ptos.is_hashed_password(stored_pw):
+            # Legacy plaintext config: the password is now proven correct, so
+            # replace it with a hash. Never fatal — a failure here must not
+            # lock the user out of their own data.
+            ptos.upgrade_auth_password(username, password)
+        return True
     except Exception:
         return False
 
@@ -2194,7 +2209,10 @@ def settings_page():
         dashboard_metrics_map=dashboard_metrics_map,
         auth_enabled=auth.get("enabled", False),
         auth_username=auth.get("username", ""),
-        auth_password=auth.get("password", ""),
+        # The password itself is never handed to the template — only whether
+        # one is set, so the field can show "unchanged" instead of a value
+        # that would also put the hash in the page source.
+        auth_password_set=bool(auth.get("password")),
         todo=todo,
         demo_present=svc.demo_data_present(),
         demo_available=svc.demo_data_available(),
@@ -2268,9 +2286,20 @@ def settings_save():
             enabled = bool(data["auth_enabled"])
             username = data.get("auth_username", "").strip()
             password = data.get("auth_password", "").strip()
-            if enabled and (not username or not password):
-                return jsonify(ok=False, error="Username and password required when auth is enabled")
-            cfg["auth"] = {"enabled": enabled, "username": username, "password": password}
+            existing = (cfg.get("auth") or {}).get("password", "")
+            # An empty field means "keep the current password" — the Settings
+            # page no longer pre-fills it, so blank is the normal case on every
+            # save that does not change the password.
+            if password:
+                stored = ptos.hash_password(password)
+            else:
+                if not existing:
+                    return jsonify(ok=False, error="Password required when auth is enabled")
+                stored = existing
+            if enabled and not username:
+                return jsonify(ok=False, error="Username required when auth is enabled")
+            cfg["auth"] = {"enabled": enabled, "username": username,
+                           "password": stored}
         
         if "dashboard_highlights" in data and isinstance(data["dashboard_highlights"], dict):
             cfg.setdefault("dashboard", {})["highlights"] = data["dashboard_highlights"]

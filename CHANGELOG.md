@@ -7,6 +7,14 @@ Format: `[version or date] — description`
 
 ## 2026-10-05
 
+### The web password is stored as a hash, never in the page
+
+- **`--set-auth` no longer writes your password in cleartext.** `config.toml` kept `[auth] password` verbatim — readable by anything that can reach the file, including the Syncthing sync and every backup ZIP. Passwords are now salted PBKDF2-SHA256 hashes (`pbkdf2_sha256$<iterations>$<salt>$<hash>`, 200 000 iterations). The iteration count lives inside the stored string, so raising the cost later is just a re-save and existing hashes keep verifying.
+- **Existing installs upgrade themselves.** `verify_password` still accepts a legacy plaintext value, so an old config keeps working, and the first *successful* login rewrites it as a hash (`upgrade_auth_password`). A failed login never triggers it, and a persistence failure is swallowed rather than locking anyone out of their own data.
+- **Login checks the username first.** `_check_auth` compares the username with `hmac.compare_digest` before running the KDF, so an unauthenticated flood costs one cheap comparison instead of a 200k-iteration hash per request. Password comparison is constant-time in both the hashed and legacy paths.
+- **Settings no longer round-trips the password through HTML.** The page used to render `value="{{ auth_password }}"` — with hashing that would have put the hash in the page source and in every screenshot of it. The field is now blank with a "Leave blank to keep current" placeholder and a note; a blank field on save keeps the existing password, and a non-blank one is hashed.
+- **Tests** — `tests/test_config.py` gains `TestPasswordHashing` (round-trip, salting, format, hashes made with a different iteration count, legacy plaintext acceptance, garbage rejection, and both upgrade paths) and `TestSetAuth` now asserts the plaintext never reaches the file. A new `tests/test_web_auth.py` (11 tests) covers 401 for a wrong username or password, static files staying unauthenticated, the plaintext → hash upgrade firing only on a correct password, `/settings` never rendering the password or `pbkdf2`, blank-keeps-current, new-password hashing, and both rejection cases. Full suite: `2247 passed`.
+
 ### Every install gets its own session secret
 
 - **The hardcoded signing key is gone.** `ptos_web.py` set `app.secret_key = "ptos-local-only"`, a constant published in the source — anyone who had read PTOS could forge a signed session cookie. Each install now generates its own 48-hex-character key and stores it under `[server] secret_key` in `config.toml`, created by `ptos --init` and by the web app's first start, and repaired if it goes missing or blank.

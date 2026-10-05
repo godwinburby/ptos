@@ -6771,9 +6771,89 @@ def add_cycle(name, day):
     print(f"Cycle '{name}' set to start on day {day}.")
 
 
+AUTH_HASH_SCHEME = "pbkdf2_sha256"
+AUTH_HASH_ITERATIONS = 200000
+
+
+def hash_password(password, iterations=None):
+    """Hash a web password for storage in config.toml.
+
+    Returns '<scheme>$<iterations>$<salt_hex>$<hash_hex>'. The iteration count
+    lives inside the stored string, so raising it later is just a re-save and
+    old hashes keep verifying unchanged.
+    """
+    import hashlib
+    import secrets
+    if iterations is None:
+        iterations = AUTH_HASH_ITERATIONS
+    salt = secrets.token_bytes(16)
+    digest = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt,
+                                 iterations)
+    return f"{AUTH_HASH_SCHEME}${iterations}${salt.hex()}${digest.hex()}"
+
+
+def is_hashed_password(stored):
+    """True if the stored value is a PTOS password hash rather than plaintext."""
+    return isinstance(stored, str) and stored.startswith(AUTH_HASH_SCHEME + "$")
+
+
+def verify_password(stored, password):
+    """Constant-time check of a password against a stored value.
+
+    A plaintext value (written by an older PTOS) still compares equal, so an
+    existing config keeps working and can be upgraded in place on first login.
+    """
+    import hashlib
+    import hmac
+    if not isinstance(stored, str) or not stored or not password:
+        return False
+    if not is_hashed_password(stored):
+        return hmac.compare_digest(stored, password)
+    parts = stored.split("$")
+    if len(parts) != 4:
+        return False
+    _, iterations, salt_hex, hash_hex = parts
+    try:
+        salt = bytes.fromhex(salt_hex)
+        expected = bytes.fromhex(hash_hex)
+        actual = hashlib.pbkdf2_hmac("sha256", password.encode("utf-8"), salt,
+                                     int(iterations))
+    except (ValueError, TypeError):
+        return False
+    return hmac.compare_digest(actual, expected)
+
+
+def upgrade_auth_password(username, password):
+    """Replace a legacy plaintext password in config.toml with a hash.
+
+    Called after a successful login against a plaintext config. A failure to
+    persist must never deny access, so it is reported, not raised.
+    """
+    try:
+        import tomli_w
+    except ImportError:
+        return False
+    try:
+        with open(CONFIG_PATH, "rb") as f:
+            config = tomllib.load(f)
+        auth = config.get("auth") or {}
+        if auth.get("username") != username:
+            return False
+        if is_hashed_password(auth.get("password")):
+            return False
+        auth["password"] = hash_password(password)
+        config["auth"] = auth
+        with AtomicWrite(CONFIG_PATH, "config") as w:
+            tomli_w.dump(config, w.stream)
+        return True
+    except Exception:
+        return False
+
+
 def set_auth(username, password):
     """Set HTTP Basic Auth credentials in config.toml.
-    Preserves the existing 'enabled' flag (defaults to true if absent)."""
+    Preserves the existing 'enabled' flag (defaults to true if absent).
+    The password is stored as a salted PBKDF2-SHA256 hash, never in plaintext."""
     try:
         import tomli_w
     except ImportError:
@@ -6792,13 +6872,15 @@ def set_auth(username, password):
 
     auth = config.setdefault("auth", {})
     enabled = auth.get("enabled", True)
-    auth.update({"enabled": enabled, "username": username.strip(), "password": password})
+    auth.update({"enabled": enabled, "username": username.strip(),
+                 "password": hash_password(password)})
 
     with AtomicWrite(CONFIG_PATH, "config") as w:
         tomli_w.dump(config, w.stream)
 
     print("Auth credentials set.")
-    print("  NOTE: Password is stored in plaintext in config/config.toml.")
+    print("  Password stored as a salted PBKDF2-SHA256 hash in "
+          "config/config.toml.")
 
 
 # --------------------------------------------------
