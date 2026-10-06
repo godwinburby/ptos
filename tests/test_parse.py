@@ -77,7 +77,7 @@ class TestBuildRecordLine:
 
     def test_note_strip(self):
         line = build_record_line("2026-01-15", {"type": "expense"}, note="  spaced  ")
-        assert line == "2026-01-15 type=expense |   spaced  "  # note preserved as-is
+        assert line == "2026-01-15 type=expense | spaced"  # surrounding space trimmed
 
 
 class TestApplySet:

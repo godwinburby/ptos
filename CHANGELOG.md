@@ -7,6 +7,15 @@ Format: `[version or date] — description`
 
 ## 2026-10-06
 
+### The record writer cleans and validates every line it stores
+
+- **A newline in a note used to corrupt the log.** `build_record_line` appended the note verbatim and `append_record` wrote it without a check, so a note containing a line break produced a second physical line that no longer parsed — and the extra line was invisible to queries but present in the file. The note is now flattened to one line by a new `clean_note()` (inner spaces, `|`, `=` and punctuation are kept — only line breaks become a space), and `append_record` refuses outright any line containing `\n` or `\r`.
+- **`build_record_line` now validates the date and every key, and raises `PTOSError` instead of writing a line that cannot be read back.** The date must be strict `YYYY-MM-DD` (a bare `20260313`, which `fromisoformat` accepts on 3.11+, is rejected), and a key may not be empty or contain whitespace, `=`, or `|`. Previously a bad date or a spaced key was written and then silently vanished on the next read.
+- **`append_record` is the last line of defence.** A line that `safe_parse_line` cannot read back is rejected with `PTOSError` and the file is left untouched, so no caller can smuggle an unparseable row into the data.
+- **The write paths now clean values before validating, not only before storing.** `validate_record` compares against normalized schema options, so a value such as `Big Bazaar` must be normalized first or validation and storage disagree. The web add/edit/convert forms, the interactive CLI prompts, the `--set` argument parser (`+=`/`-=` now compare against the cleaned value, so `tag+=big shop` no longer duplicates `big_shop` and `tag-=big shop` no longer silently no-ops), and the habit toggle (`ptos_service`) all now route values through `normalize_field_value` / `build_record_line` instead of ad-hoc `.replace(" ", "_")` concatenation.
+- **Tests** — `tests/test_value_normalisation.py` covers `clean_note`, the new validation, the `append_record` refusals (file byte-unchanged), the `+=`/`-=` normalization, and a static scan asserting no non-engine module hand-builds a record line. `tests/test_record_format.py` and `tests/test_parse.py` are updated to the new note contract (inner text preserved, surrounding whitespace trimmed, line breaks collapsed).
+- **Docs** — `FORMAT.md` (note rule + the writer's new refusals) and the record-format invariants in `AGENTS.md` describe the cleaner, the validation, and the `append_record` guard.
+
 ### A fresh `--init` keeps every comment in the starter config
 
 - **The 46 explanatory comment lines in `starters/starter_config.toml` now survive installation.** They were being written into `config/config.toml` and then immediately stripped, because the session-secret write re-dumped the whole file through `tomli_w` — which does not preserve comments. A new user lost all the guidance in the very file the docs tell them to edit by hand. With the session-secret write gone (the next entry), `--init` no longer touches an existing `config.toml` at all and is byte-idempotent on a second run.

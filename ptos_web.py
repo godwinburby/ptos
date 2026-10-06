@@ -1490,7 +1490,7 @@ def add_post():
     rtype     = request.form.get("type","").strip()
     date_str  = request.form.get("date", dt.date.today().isoformat()).strip()
     note      = request.form.get("note","").strip() or None
-    custom_tags = [t.strip().replace(" ","_")
+    custom_tags = [ptos.normalize_field_value(t)
                    for t in request.form.get("custom_tags","").split(",") if t.strip()]
     record = {"type": rtype}
     ts     = schema.get("type", {}).get(rtype, {})
@@ -1502,18 +1502,19 @@ def add_post():
     for fname in all_f:
         if fname == "tag": continue
         val = request.form.get(fname,"").strip()
-        if val: record[fname] = val.replace(" ","_")
+        if val: record[fname] = ptos.normalize_field_value(val)
     # collect global optional fields from form
     for fname in svc.get_global_fields(schema):
         val = request.form.get(fname, "").strip()
-        if val: record[fname] = val.replace(" ", "_")
-    tags = request.form.getlist("tag") + custom_tags
+        if val: record[fname] = ptos.normalize_field_value(val)
+    tags = [ptos.normalize_field_value(t)
+            for t in request.form.getlist("tag")] + custom_tags
     if tags: record["tag"] = tags
-    id_val = request.form.get("id", "").strip().replace(" ", "_")
+    id_val = ptos.normalize_field_value(request.form.get("id", ""))
     links_val = request.form.get("links", "").strip()
     if id_val: record["id"] = id_val
     if links_val:
-        record["links"] = ",".join(t.strip().replace(" ", "_")
+        record["links"] = ",".join(ptos.normalize_field_value(t)
                                    for t in links_val.split(",") if t.strip())
     
     return_to = request.form.get("return_to", "") or url_for("browse_get")
@@ -4049,7 +4050,7 @@ def edit_post():
     rtype     = request.form.get("type", "").strip()
     date_str  = request.form.get("date", dt.date.today().isoformat()).strip()
     note      = request.form.get("note", "").strip() or None
-    custom_tags = [t.strip().replace(" ", "_")
+    custom_tags = [ptos.normalize_field_value(t)
                    for t in request.form.get("custom_tags", "").split(",") if t.strip()]
     try:
         lineno_int = int(lineno) if lineno else None
@@ -4088,12 +4089,13 @@ def edit_post():
                 continue
             val = request.form.get(fname, "").strip()
             if val:
-                ov[fname] = val.replace(" ", "_")
+                ov[fname] = ptos.normalize_field_value(val)
         for fname in svc.get_global_fields(schema):
             val = request.form.get(fname, "").strip()
             if val:
-                ov[fname] = val.replace(" ", "_")
-        tags = request.form.getlist("tag") + [t.strip().replace(" ", "_")
+                ov[fname] = ptos.normalize_field_value(val)
+        tags = [ptos.normalize_field_value(t)
+                for t in request.form.getlist("tag")] + [ptos.normalize_field_value(t)
                for t in request.form.get("custom_tags", "").split(",") if t.strip()]
         if tags:
             ov["tag"] = tags
@@ -4192,18 +4194,19 @@ def edit_post():
     for fname in all_f:
         if fname == "tag": continue
         val = request.form.get(fname, "").strip()
-        if val: new_record[fname] = val.replace(" ", "_")
+        if val: new_record[fname] = ptos.normalize_field_value(val)
     # collect global optional fields from form
     for fname in svc.get_global_fields(schema):
         val = request.form.get(fname, "").strip()
-        if val: new_record[fname] = val.replace(" ", "_")
-    id_val = request.form.get("id", "").strip().replace(" ", "_")
+        if val: new_record[fname] = ptos.normalize_field_value(val)
+    id_val = ptos.normalize_field_value(request.form.get("id", ""))
     links_val = request.form.get("links", "").strip()
     if id_val: new_record["id"] = id_val
     if links_val:
-        new_record["links"] = ",".join(t.strip().replace(" ", "_")
+        new_record["links"] = ",".join(ptos.normalize_field_value(t)
                                        for t in links_val.split(",") if t.strip())
-    tags = request.form.getlist("tag") + custom_tags
+    tags = [ptos.normalize_field_value(t)
+            for t in request.form.getlist("tag")] + custom_tags
     if tags: new_record["tag"] = tags
     
     parsed = svc.safe_parse_line(old_line)

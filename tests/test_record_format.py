@@ -61,12 +61,20 @@ class TestBuildRecordLine:
         assert ptos.parse_line(line) == (
             ptos.parse_date("2026-03-13"), {"tag": "a/b"}, "note here")
 
-    def test_note_is_never_touched(self):
-        # Notes live after the | and may contain anything at all.
+    def test_note_keeps_inner_text_but_collapses_line_breaks(self):
+        # Notes live after the | and keep inner spacing, '|', '=' and
+        # punctuation — only line breaks are collapsed, because a record is
+        # one physical line.
         note = "Team lunch | with  snacks   and   a=b"
         line = ptos.build_record_line("2026-03-13", {"type": "expense"}, note)
         assert line.endswith("| " + note)
         assert ptos.parse_line(line)[2] == note
+
+    def test_newline_in_note_becomes_a_space(self):
+        line = ptos.build_record_line(
+            "2026-03-13", {"type": "expense"}, "line one\nline two")
+        assert "\n" not in line
+        assert ptos.parse_line(line)[2] == "line one line two"
 
     def test_multi_value_fields(self):
         line = ptos.build_record_line(

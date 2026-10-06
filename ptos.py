@@ -2482,6 +2482,26 @@ def normalize_field_value(v):
     return "_".join(str(v).split()).replace("|", "/")
 
 
+def clean_note(n):
+    """Coerce a note into a single line.
+
+    A record is one physical line, so any line break (LF, CR, CRLF) becomes a
+    space; `|` and interior spacing are kept, because the note is free text.
+    Returns None for an empty or whitespace-only note so callers can treat
+    "no note" uniformly.
+    """
+    if n is None:
+        return None
+    text = " ".join(str(n).splitlines()).strip()
+    return text or None
+
+
+def _invalid_record_key(k):
+    """True when `k` cannot be the key half of a `key=value` pair."""
+    s = str(k or "")
+    return (not s) or any(c.isspace() for c in s) or "=" in s or "|" in s
+
+
 # A type/field/config name is the *key* half of a key=value pair, so it obeys
 # the same single-token rule as a value: lowercase letters, digits, underscores.
 # Matched with fullmatch so a trailing newline cannot sneak a name through.
@@ -2540,15 +2560,32 @@ def build_record_line(date, record, note=None):
     """Build a log line from its components.
     Format: YYYY-MM-DD key=value key=value ... | note
     Multi-value fields (lists) produce repeated key=value pairs.
-    Values are normalized to single tokens (see normalize_field_value);
-    the note is free text and is never touched."""
+
+    This is the single place a record line is assembled. Values are cleaned to
+    single tokens (see normalize_field_value), the note to one line (see
+    clean_note), and the date and every key are validated — so no caller can
+    write a line that silently loses data on the next read. Never assemble a
+    record line by hand; always go through here.
+    """
+    date = str(date)
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        raise PTOSError(f"Invalid record date '{date}' — use YYYY-MM-DD.")
+    try:
+        parse_date(date)
+    except ValueError:
+        raise PTOSError(f"Invalid record date '{date}' — use YYYY-MM-DD.")
     parts = []
     for k, v in record.items():
+        if _invalid_record_key(k):
+            raise PTOSError(
+                f"Invalid field key '{k}' — a key cannot be empty or contain "
+                "spaces, '=', or '|'.")
         if isinstance(v, list):
             parts.extend(f"{k}={normalize_field_value(i)}" for i in v)
         else:
             parts.append(f"{k}={normalize_field_value(v)}")
     line = date + " " + " ".join(parts)
+    note = clean_note(note)
     if note:
         line += " | " + note
     return line
@@ -2985,6 +3022,13 @@ def apply_set(old_line, set_args, new_note):
         if not m:
             sys.exit(f"--set: expected key=value, key+=value, or key-=value — got '{item}'")
         k, op, v = m.groups()
+
+        # Clean the value before comparing so `-=big shop` matches the stored
+        # `big_shop` and `+=big shop` does not create a duplicate. The value is
+        # cleaned again in build_record_line; cleanup is idempotent. `date` is
+        # left alone — it is validated below, not tokenised.
+        if k != "date":
+            v = normalize_field_value(v)
 
         if op == "=":
             if k == "date":
@@ -3567,6 +3611,15 @@ def append_record(line, return_position=False):
 
     If return_position=True, returns (filepath, lineno) of the
     newly appended line; otherwise returns None."""
+    # Last line of defence: a record is one physical line, and a line the
+    # parser cannot read back would vanish from queries. Refuse both rather
+    # than corrupt the log.
+    if "\n" in line or "\r" in line:
+        raise PTOSError(
+            "Refusing to write a record line containing a line break.")
+    if safe_parse_line(line) is None:
+        raise PTOSError(
+            f"Refusing to write an unparseable record line: {line!r}")
     os.makedirs(RECORDS_DIR, exist_ok=True)
     path = _resolve_record_path(line)
     file_existed = os.path.exists(path)
@@ -4624,7 +4677,7 @@ def input_text(prompt, default=None):
         if not val and default is not None:
             return default
         if val:
-            return val.replace(" ", "_")
+            return normalize_field_value(val)
 
 def input_int(prompt, default=None):
     while True:
@@ -4656,7 +4709,7 @@ def input_tags(allowed_tags):
         val = input("\nTags (comma separated, or Enter to skip): ").strip()
         if not val:
             return [], []
-        tags = [t.strip().replace(" ", "_") for t in val.split(",") if t.strip()]
+        tags = [normalize_field_value(t) for t in val.split(",") if t.strip()]
         return tags, tags  # all are new when no schema tags exist
 
     print("\nTag options (pick numbers, add custom, or Enter to skip):")
@@ -4695,7 +4748,7 @@ def input_tags(allowed_tags):
                                 tags.append(t)
                 else:
                     match = next((t for t in allowed_tags if t.lower() == part.lower()), None)
-                    t = match if match else part.replace(" ", "_")
+                    t = match if match else normalize_field_value(part)
                     if t not in tags:
                         tags.append(t)
     else:
@@ -5246,7 +5299,7 @@ def complete_record(schema, record, skip_optional=False, suggest_fn=None):
                 if not val and defaults.get(fname):
                     val = defaults[fname]
             if val:
-                record[fname] = val.replace(" ", "_")
+                record[fname] = normalize_field_value(val)
 
     return record, note
 

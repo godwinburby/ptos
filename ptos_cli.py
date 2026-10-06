@@ -2718,14 +2718,14 @@ def _handle_migrate_log_group(rtype):
                 keep.append(line)
                 continue
             try:
-                d, kv, _ = ptos.parse_line(stripped)
+                d, kv, note = ptos.parse_line(stripped)
             except (ValueError, IndexError):
                 keep.append(line)
                 continue
             if kv.get("type") != rtype:
                 keep.append(line)
                 continue
-            ptos.append_record(stripped)
+            ptos.append_record(ptos.build_record_line(d.isoformat(), kv, note))
             moved += 1
             source_files.add(fpath)
         if len(keep) != len(lines):

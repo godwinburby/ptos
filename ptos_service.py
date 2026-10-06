@@ -2485,11 +2485,12 @@ def toggle_habit_day(habit_name, date_str):
         action = "removed"
         present = False
     else:
-        parts = [date_str]
+        record = {}
         for f in filters:
             if "=" in f and not f.startswith(("!", "~")):
-                parts.append(f)
-        line = " ".join(parts)
+                k, _, v = f.partition("=")
+                record[k] = v
+        line = ptos.build_record_line(date_str, record)
         append_record(line)
         action = "added"
         present = True
@@ -5627,7 +5628,7 @@ def add_tag_option(rtype, tag_field, parent_value, new_tag):
         if parent_value not in tag_options:
             return {"success": False, "error": f"Parent value '{parent_value}' not found in {tag_field} tags"}
         
-        new_tag = new_tag.strip().replace(" ", "_")
+        new_tag = ptos.normalize_field_value(new_tag)
         if not new_tag:
             return {"success": False, "error": "Empty tag"}
         

@@ -64,8 +64,9 @@ Rules in plain words:
    date and puts `tag=` and `note` last.
 8. **A repeated key means several values.** `tag=auto tag=bus` is one field `tag` with the
    values `auto` and `bus`, in order.
-9. **The note is trimmed** of leading and trailing whitespace. It is not searched as a
-   field.
+9. **The note is trimmed** of leading and trailing whitespace, and any line break
+   (LF, CR or CRLF) inside it becomes a single space — a record is one physical line. It is
+   not searched as a field.
 10. **Blank lines and lines starting with `#` are ignored.**
 11. **Quotes and backslashes are ordinary characters.** `"` has no special meaning
     anywhere. See [Things that do not work](#things-that-do-not-work).
@@ -223,8 +224,9 @@ spaces around it.
 | `2026-03-11 amount=5` (no `type`) | Parses, but Lint reports "missing type field". |
 
 Every one of these is silent *in the file*: nothing errors, the value is just shorter than
-you meant. PTOS itself never writes a line like this — the writer normalizes values, and
-every page that mints a key or a value checks it — so these only happen in a hand-edited
+you meant. PTOS itself never writes a line like this — the writer normalizes values and
+keys, flattens a multi-line note, and refuses a bad date, a bad key, a line containing a
+line break, or a line that would not parse back — so these only happen in a hand-edited
 file. `ptos --lint` (or the Lint page in the web app) shows the file and line number.
 
 ---
