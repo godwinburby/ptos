@@ -71,69 +71,91 @@ class TestInitPtos:
         content = (ptos_home / "config" / "config.toml").read_text()
         assert "[user]" in content
 
-    def test_generates_a_session_secret(self, ptos_home):
+    def test_init_writes_no_session_secret(self, ptos_home):
         ptos.init_ptos()
-        secret = ptos.get_config()["server"]["secret_key"]
-        assert len(secret) == 48
-        assert all(c in "0123456789abcdef" for c in secret)
+        cfg = ptos.get_config()
+        assert "secret_key" not in (cfg.get("server") or {})
 
-    def test_session_secret_survives_reinit(self, ptos_home):
-        ptos.init_ptos()
-        secret = ptos.get_config()["server"]["secret_key"]
-        ptos.init_ptos()
-        assert ptos.get_config()["server"]["secret_key"] == secret
-
-    def test_session_secret_written_even_without_starters(self, ptos_home,
-                                                          monkeypatch):
+    def test_init_writes_no_secret_even_without_starters(self, ptos_home,
+                                                         monkeypatch):
         monkeypatch.setattr(ptos, "STARTER_DIR", str(ptos_home / "nonexistent"))
         ptos.init_ptos()
-        assert ptos.get_config()["server"]["secret_key"]
+        assert "secret_key" not in (ptos.get_config().get("server") or {})
+
+    def test_init_does_not_modify_a_config_already_holding_a_secret(
+            self, ptos_home):
+        import tomli_w
+        ptos.init_ptos()
+        cfg = ptos.get_config()
+        cfg.setdefault("server", {})["secret_key"] = "legacy-shared-key"
+        with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
+            tomli_w.dump(cfg, w.stream)
+        ptos._CACHE.pop("config", None)
+        path = os.path.join(ptos_home, "config", "config.toml")
+        before = open(path, encoding="utf-8").read()
+
+        ptos.init_ptos()
+        ptos._CACHE.pop("config", None)
+
+        assert open(path, encoding="utf-8").read() == before
+        assert ptos.get_config()["server"]["secret_key"] == "legacy-shared-key"
 
 
 class TestSessionSecret:
-    def test_generates_and_persists(self, ptos_home):
-        assert "secret_key" not in (ptos.get_config().get("server") or {})
-        secret = ptos.ensure_session_secret()
-        assert ptos.get_config()["server"]["secret_key"] == secret
+    def test_is_ephemeral_and_changing(self, ptos_home):
+        first = ptos.session_secret()
+        second = ptos.session_secret()
+        assert first != second
+        assert len(first) == 64
+        assert all(c in "0123456789abcdef" for c in first)
 
-    def test_is_stable_across_calls(self, ptos_home):
-        assert ptos.ensure_session_secret() == ptos.ensure_session_secret()
+    def test_has_at_least_32_bytes_of_entropy(self, ptos_home):
+        assert len(ptos.session_secret()) // 2 == 32
+        assert len(ptos.generate_secret_key(32)) // 2 == 32
 
-    def test_repairs_a_blank_value(self, ptos_home):
+    def test_ptos_secret_key_env_var_is_pinned(self, ptos_home, monkeypatch):
+        monkeypatch.setenv("PTOS_SECRET_KEY", "a-fixed-key-for-tooling")
+        assert ptos.session_secret() == "a-fixed-key-for-tooling"
+
+    def test_empty_env_var_falls_back_to_a_random_key(self, ptos_home,
+                                                      monkeypatch):
+        monkeypatch.setenv("PTOS_SECRET_KEY", "")
+        secret = ptos.session_secret()
+        assert secret
+        assert secret != ""
+
+    def test_config_secret_key_is_ignored(self, ptos_home):
         import tomli_w
-        ptos.ensure_session_secret()
+        ptos.init_ptos()
+        cfg = ptos.get_config()
+        cfg.setdefault("server", {})["secret_key"] = "a-syncthing-shared-key"
+        with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
+            tomli_w.dump(cfg, w.stream)
+        ptos._CACHE.pop("config", None)
+
+        secret = ptos.session_secret()
+        assert secret != "a-syncthing-shared-key"
+        assert len(secret) == 64
+        assert "secret_key" in ptos.get_config()["server"]
+
+    def test_reading_a_stale_key_does_not_error_or_repair_it(self, ptos_home):
+        import tomli_w
+        ptos.init_ptos()
         cfg = ptos.get_config()
         cfg.setdefault("server", {})["secret_key"] = "   "
         with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
             tomli_w.dump(cfg, w.stream)
-        assert ptos.ensure_session_secret() != "   "
-        assert len(ptos.get_config()["server"]["secret_key"]) == 48
-
-    def test_each_install_gets_its_own(self, ptos_home):
-        first = ptos.ensure_session_secret()
-        assert ptos.generate_secret_key() != first
-
-    def test_preserves_other_config_keys(self, ptos_home):
-        import tomli_w
-        ptos.ensure_session_secret()
-        cfg = ptos.get_config()
-        cfg.setdefault("server", {})["port"] = 5001
-        with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
-            tomli_w.dump(cfg, w.stream)
-        ptos.ensure_session_secret()
-        assert ptos.get_config()["server"]["port"] == 5001
-
-    def test_unwritable_config_falls_back_without_raising(self, ptos_home):
-        blocker = ptos_home / "blocker"
-        blocker.write_text("not a dir")
-        ptos.CONFIG_PATH = str(blocker / "sub" / "config.toml")
         ptos._CACHE.pop("config", None)
-        try:
-            secret = ptos.ensure_session_secret()
-        finally:
-            ptos.CONFIG_PATH = str(ptos_home / "config" / "config.toml")
-        assert len(secret) == 48
-        assert blocker.read_text() == "not a dir"
+
+        assert ptos.session_secret() != "   "
+        assert len(ptos.get_config()["server"]["secret_key"]) == 3
+
+    def test_two_process_starts_produce_different_keys(self, ptos_home):
+        # A process start resolves the key once, at import. Two independent
+        # resolutions stand in for two starts; neither consults config, so
+        # there is nothing for them to converge on.
+        starts = {ptos.session_secret() for _ in range(8)}
+        assert len(starts) == 8
 
     def test_no_secret_in_the_starter_file(self):
         # The starter ships to every install, so a secret there would be shared.
@@ -145,16 +167,29 @@ class TestSessionSecret:
             if line.strip().startswith("secret_key"):
                 assert line.strip().startswith("#"), line
 
-    def test_web_app_uses_the_persisted_secret(self, ptos_home):
+    def test_web_app_uses_an_ephemeral_secret(self, ptos_home):
         # ptos_web may already be imported by an earlier test (and therefore
         # bound to a different test home), so assert on the property that
-        # matters: a real per-install key, never the old hardcoded literal.
+        # matters: a real per-install key, never the old hardcoded literal,
+        # and nothing read back out of a config file.
         import ptos_web
         secret = ptos_web.app.secret_key
         assert secret
         assert len(secret) >= 32
         assert secret != "ptos-local-only"
-        assert len(ptos.generate_secret_key()) == len(secret)
+        assert secret not in (ptos.get_config().get("server") or {}).values()
+
+    def test_web_app_secret_is_not_the_config_key(self, ptos_home):
+        import tomli_w
+        import ptos_web
+        ptos.init_ptos()
+        # A stale key left in config must not become the live one.
+        secret = ptos_web.app.secret_key
+        cfg = ptos.get_config()
+        cfg.setdefault("server", {})["secret_key"] = "stale-value"
+        with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
+            tomli_w.dump(cfg, w.stream)
+        assert secret != "stale-value"
 
 
 class TestDoctorCheck:

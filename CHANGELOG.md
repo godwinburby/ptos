@@ -5,6 +5,17 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-06
+
+### The session secret is no longer written into the synced config
+
+- **`config.toml` stops carrying `[server] secret_key`.** `ensure_session_secret()` used to generate the Flask session key and persist it into `config.toml` — a file that Syncthing copies to every device and that lands inside every backup zip. A persisted key therefore ended up **shared across installs**, contradicting its "per-install" intent, and two devices starting before their first sync would each generate their own and then race to a conflict on the file. PTOS keeps no session state today, so the key protected nothing.
+- **`app.secret_key` is now resolved in memory at startup** by a new `ptos.session_secret()`: `PTOS_SECRET_KEY` env var if set (pins a stable value for tooling), otherwise a fresh `generate_secret_key(32)`. Two process starts produce two different keys, which is exactly what "per-install" meant — it just never needed to be on disk.
+- **An old `secret_key` in an existing config is ignored, not honoured.** Nothing reads it back, so no reader remains to be re-added, and a config that still holds a stale key neither errors on startup nor gets silently rewritten.
+- **`--init` no longer writes a secret, and therefore no longer rewrites `config.toml` at all.** This was why a fresh install lost all 46 comment lines from the starter config: `ensure_session_secret` dumped the whole file through `tomli_w`, which drops comments. Init is now byte-idempotent on an existing config.
+- **The danger was the sync, not just the bloat.** Anyone who ever received your `config.toml` now holds a key that could forge session cookies for your install; keeping it out of the file stops that recurring on every future backup and every device you add.
+- **Tests** — `tests/test_init.py::TestSessionSecret` re-covers the new behaviour: entropy and per-start uniqueness, the `PTOS_SECRET_KEY` override (including that an empty string falls back to a random key), a stale config key being ignored without being repaired, init writing no secret with or without starters, init byte-identically preserving a config that already holds one, and the web app's live secret never coming from config. The old persistence assertions are gone, since persistence is now the bug.
+
 ## 2026-10-05
 
 ### Keys obey the same single-token rule as values

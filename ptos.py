@@ -1669,46 +1669,27 @@ def _load(key, path):
 def get_config():  return _load("config",  CONFIG_PATH)  if os.path.exists(CONFIG_PATH)  else {}
 
 
-def generate_secret_key(nbytes=24):
-    """Generate a random hex secret for the web session cookie."""
+def generate_secret_key(nbytes=32):
+    """Generate a random hex secret for the web session cookie.
+
+    Never written to disk: config.toml syncs between devices and lands in
+    every backup, so a persisted key would be shared across installs. PTOS
+    keeps no session state, so an ephemeral key costs nothing.
+    """
     import secrets
     return secrets.token_hex(nbytes)
 
 
-def ensure_session_secret(persist=True):
-    """Return this install's Flask session secret, generating one if needed.
+def session_secret():
+    """Return this process's Flask session secret, or a pinned override.
 
-    A hardcoded default would let anyone who has read PTOS's source forge a
-    signed session cookie, so every install gets its own. The value lives in
-    config.toml under [server].secret_key and is created on first use (by
-    --init or by the web app at startup).
-
-    A config directory that cannot be written (read-only mount, permissions)
-    must not stop the server: fall back to an ephemeral in-memory secret and
-    say so, since sessions then reset on restart — harmless, because PTOS
-    keeps no session state today.
+    Deliberately never reads or writes config.toml: that file is synced
+    between devices (Syncthing) and included in every backup, so a persisted
+    key would end up shared across installs — and two devices starting before
+    their first sync would each generate one and then race to conflict on the
+    file. Any old [server] secret_key in a config is ignored, not honoured.
     """
-    cfg = get_config()
-    existing = (cfg.get("server") or {}).get("secret_key")
-    if isinstance(existing, str) and existing.strip():
-        return existing.strip()
-
-    secret = generate_secret_key()
-    if not persist:
-        return secret
-    try:
-        import tomli_w
-        cfg = dict(cfg)
-        cfg["server"] = {**(cfg.get("server") or {}), "secret_key": secret}
-        os.makedirs(os.path.dirname(CONFIG_PATH), exist_ok=True)
-        with AtomicWrite(CONFIG_PATH, "config") as w:
-            tomli_w.dump(cfg, w.stream)
-        return secret
-    except Exception as e:
-        print(f"Warning: could not save session secret to {CONFIG_PATH} ({e}).\n"
-              "         Using a temporary secret; sessions reset on restart.",
-              file=sys.stderr)
-        return secret
+    return os.environ.get("PTOS_SECRET_KEY") or generate_secret_key(32)
 
 
 def get_schema():
@@ -6618,8 +6599,6 @@ def init_ptos(demo=None):
         print(f"  exists   records/{today().year}.log")
 
     _write_if_missing(os.path.join(BASE_DIR, ".stignore"), _STIGNORE, ".stignore")
-
-    ensure_session_secret()
 
     # Write .ptos_home bootstrap file so PTOS_HOME env var is no longer needed
     if not DESKTOP_MODE:

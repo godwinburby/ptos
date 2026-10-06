@@ -20,7 +20,11 @@ app = Flask(__name__,
     template_folder=os.path.join(_basedir, 'web_templates'),
     static_folder=os.path.join(_basedir, 'web_static'),
     static_url_path="/static")
-app.secret_key = ptos.ensure_session_secret()
+# Ephemeral by design — see ptos.session_secret(): config.toml is synced and
+# backed up, so a persisted key would be shared across installs. PTOS keeps no
+# session state, so a key that is random per start costs nothing.
+# PTOS_SECRET_KEY pins one for tooling that needs a stable value.
+app.secret_key = ptos.session_secret()
 app.config["DEBUG"] = False
 
 # Versioned static assets: templates reference files through av(), which appends
