@@ -115,3 +115,146 @@ def test_settings_save_rejects_blank_username(client):
         headers=creds("u", "p"))
     assert r.get_json()["ok"] is False
     assert "Username" in r.get_json()["error"]
+
+
+def _count_verify(monkeypatch):
+    """Patch ptos.verify_password with a call counter; return the counter."""
+    import ptos as _ptos
+    calls = {"n": 0}
+    real = _ptos.verify_password
+
+    def wrapper(stored, pw):
+        calls["n"] += 1
+        return real(stored, pw)
+
+    monkeypatch.setattr(_ptos, "verify_password", wrapper)
+    return calls
+
+
+class TestAuthCache:
+    """Basic auth re-sends the password every request; the KDF is cached.
+
+    The cache must never hold the password, never hold a failure, and stop
+    matching the instant the stored password changes.
+    """
+
+    @pytest.fixture(autouse=True)
+    def _clean_cache(self):
+        import ptos_web
+        ptos_web.clear_auth_cache()
+        yield
+        ptos_web.clear_auth_cache()
+
+    def test_second_request_skips_the_kdf(self, client, monkeypatch):
+        import ptos_web
+        write_auth({"enabled": True, "username": "u",
+                    "password": ptos.hash_password("p")})
+        calls = _count_verify(monkeypatch)
+        for _ in range(3):
+            assert client.get("/", headers=creds("u", "p")).status_code == 200
+        assert calls["n"] == 1, "the KDF ran more than once"
+        assert len(ptos_web._AUTH_CACHE) == 1
+
+    def test_wrong_password_is_never_cached(self, client, monkeypatch):
+        import ptos_web
+        write_auth({"enabled": True, "username": "u",
+                    "password": ptos.hash_password("p")})
+        calls = _count_verify(monkeypatch)
+        for _ in range(3):
+            assert client.get("/", headers=creds("u", "wrong")).status_code == 401
+        assert calls["n"] == 3, "a failure was cached"
+        assert not ptos_web._AUTH_CACHE
+
+    def test_password_change_invalidates_cached_credentials(self, client):
+        write_auth({"enabled": True, "username": "u",
+                    "password": ptos.hash_password("old")})
+        assert client.get("/", headers=creds("u", "old")).status_code == 200
+        ptos.set_auth("u", "new")
+        assert client.get("/", headers=creds("u", "old")).status_code == 401
+        assert client.get("/", headers=creds("u", "new")).status_code == 200
+
+    def test_settings_save_clears_cached_credentials(self, client):
+        import ptos_web
+        write_auth({"enabled": True, "username": "u",
+                    "password": ptos.hash_password("old")})
+        assert client.get("/", headers=creds("u", "old")).status_code == 200
+        assert ptos_web._AUTH_CACHE
+        r = client.post("/settings/save", json={
+            "auth_enabled": True, "auth_username": "u", "auth_password": "new"},
+            headers=creds("u", "old"))
+        assert r.get_json()["ok"] is True
+        assert not ptos_web._AUTH_CACHE
+        assert client.get("/", headers=creds("u", "old")).status_code == 401
+        assert client.get("/", headers=creds("u", "new")).status_code == 200
+
+    def test_cache_never_exceeds_its_maximum(self, monkeypatch):
+        import ptos_web
+        monkeypatch.setattr(ptos_web, "_AUTH_CACHE_MAX", 3)
+        for i in range(10):
+            ptos_web._cache_auth("digest%d" % i, "stored%d" % i)
+        assert list(ptos_web._AUTH_CACHE) == ["digest7", "digest8", "digest9"]
+
+    def test_cache_holds_no_plaintext(self, client):
+        import ptos_web
+        write_auth({"enabled": True, "username": "u",
+                    "password": ptos.hash_password("hunter2")})
+        assert client.get("/", headers=creds("u", "hunter2")).status_code == 200
+        blob = "".join(ptos_web._AUTH_CACHE) + "".join(ptos_web._AUTH_CACHE.values())
+        assert "hunter2" not in blob
+        assert "u" not in blob
+
+    def test_wrong_username_skips_digest_and_kdf(self, client, monkeypatch):
+        import ptos_web
+        write_auth({"enabled": True, "username": "u",
+                    "password": ptos.hash_password("p")})
+        digest_calls = {"n": 0}
+        real_digest = ptos_web._cred_digest
+
+        def counting_digest(user, pw):
+            digest_calls["n"] += 1
+            return real_digest(user, pw)
+
+        monkeypatch.setattr(ptos_web, "_cred_digest", counting_digest)
+        kdf = _count_verify(monkeypatch)
+        assert client.get("/", headers=creds("other", "p")).status_code == 401
+        assert digest_calls["n"] == 0
+        assert kdf["n"] == 0
+
+    def test_concurrent_requests_do_not_corrupt(self):
+        import threading
+        import ptos_web
+        write_auth({"enabled": True, "username": "u",
+                    "password": ptos.hash_password("p")})
+        errors = []
+
+        def hit():
+            try:
+                c = ptos_web.app.test_client()
+                for _ in range(5):
+                    if c.get("/", headers=creds("u", "p")).status_code != 200:
+                        errors.append("unexpected status")
+            except Exception as e:  # pragma: no cover - failure path
+                errors.append(repr(e))
+
+        threads = [threading.Thread(target=hit) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert not errors
+        assert len(ptos_web._AUTH_CACHE) <= ptos_web._AUTH_CACHE_MAX
+
+    def test_legacy_plaintext_upgrades_exactly_once(self, client, monkeypatch):
+        import ptos
+        write_auth({"enabled": True, "username": "u", "password": "legacy"})
+        ups = {"n": 0}
+        real = ptos.upgrade_auth_password
+
+        def wrapper(user, pw):
+            ups["n"] += 1
+            return real(user, pw)
+
+        monkeypatch.setattr(ptos, "upgrade_auth_password", wrapper)
+        for _ in range(3):
+            assert client.get("/", headers=creds("u", "legacy")).status_code == 200
+        assert ups["n"] == 1

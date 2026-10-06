@@ -4,7 +4,8 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, glob, fnmatch, datetime as dt, json, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil, gzip as _gzip
+import sys, os, re, glob, fnmatch, datetime as dt, json, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil, gzip as _gzip, hmac
+from collections import OrderedDict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
@@ -269,8 +270,38 @@ def handle_unexpected_error(e):
 from functools import wraps
 from flask import request, Response
 
+# ── Auth credential cache ────────────────────────────────────────────────────
+# Basic auth re-sends the password on every request, and PBKDF2-SHA256 at
+# 200k iterations costs ~120 ms per check — a phone pays that on every page.
+# Verified credentials are cached in memory so the KDF runs once per credential
+# per server run. The cache holds a KEYED digest (never the password) mapped to
+# the stored value that verified it; because the stored value is part of the
+# match, changing the password makes old entries stop matching on their own.
+_AUTH_KEY = os.urandom(32)
+_AUTH_CACHE = OrderedDict()
+_AUTH_CACHE_MAX = 32
+_AUTH_CACHE_LOCK = threading.Lock()
+
+
+def _cred_digest(user, pw):
+    return hmac.new(_AUTH_KEY, f"{user}\0{pw}".encode(), "sha256").hexdigest()
+
+
+def clear_auth_cache():
+    """Drop every cached credential (call when the password changes)."""
+    with _AUTH_CACHE_LOCK:
+        _AUTH_CACHE.clear()
+
+
+def _cache_auth(digest, stored_pw):
+    with _AUTH_CACHE_LOCK:
+        _AUTH_CACHE[digest] = stored_pw
+        _AUTH_CACHE.move_to_end(digest)
+        while len(_AUTH_CACHE) > _AUTH_CACHE_MAX:
+            _AUTH_CACHE.popitem(last=False)
+
+
 def _check_auth(username, password):
-    import hmac
     try:
         cfg = svc.get_config()
         auth = cfg.get("auth")
@@ -285,13 +316,26 @@ def _check_auth(username, password):
         # get a free CPU burner.
         if not username or not hmac.compare_digest(str(username), str(stored_user)):
             return False
+        digest = _cred_digest(username, password)
+        with _AUTH_CACHE_LOCK:
+            if _AUTH_CACHE.get(digest) == stored_pw:
+                _AUTH_CACHE.move_to_end(digest)
+                return True
         if not ptos.verify_password(stored_pw, password):
+            # Never cache a failure.
             return False
         if not ptos.is_hashed_password(stored_pw):
             # Legacy plaintext config: the password is now proven correct, so
             # replace it with a hash. Never fatal — a failure here must not
             # lock the user out of their own data.
             ptos.upgrade_auth_password(username, password)
+            # Re-read what actually landed; cache only if it is now a hash, so
+            # a still-plaintext value never gets cached as "verified".
+            fresh = (svc.get_config().get("auth") or {}).get("password", "")
+            if not ptos.is_hashed_password(fresh):
+                return True
+            stored_pw = fresh
+        _cache_auth(digest, stored_pw)
         return True
     except Exception:
         return False
@@ -2330,6 +2374,10 @@ def settings_save():
         
         result = svc.save_config(cfg)
         if result.get("ok"):
+            if "auth_enabled" in data:
+                # The stored password may have changed; drop cached credentials
+                # so a replaced password takes effect at once.
+                clear_auth_cache()
             return jsonify(ok=True)
         return jsonify(ok=False, error=result.get("message", "Save failed"))
     except Exception as e:

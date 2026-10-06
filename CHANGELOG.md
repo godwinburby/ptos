@@ -29,6 +29,14 @@ Format: `[version or date] — description`
 - **Tests** — `tests/test_web_security.py::TestHttpExceptionsKeepTheirStatus` pins a 404 for unknown pages, unknown `/api/` endpoints and missing static files, a 405 for the wrong method, that an `HTTPException` is returned untouched and is not logged at ERROR, and that a genuine `RuntimeError` is still a 500.
 - **`werkzeug` is now a declared dependency** of the CI job, since `HTTPException` is imported from `werkzeug.exceptions` (`flask` does not re-export it) rather than reached indirectly through Flask.
 
+### With auth on, the password is hashed once per credential, not once per request
+
+- **Every page and API call was paying the full PBKDF2 cost.** HTTP Basic auth re-sends the password on every request, and `_check_auth` ran `verify_password` each time — 200k iterations, measured at ~120 ms per request on a desktop and several times that on a phone. Turning auth on made the whole app slow, the phone most of all.
+- **Verified credentials are now cached in memory.** `ptos_web` keeps an `OrderedDict` of at most 32 entries guarded by a lock, and a request whose credentials were already verified against the same stored value skips the KDF entirely. An unauthenticated request is a single page load fast again; the model is unchanged, only the repeated work is gone.
+- **The cache can hold no password, and cannot hold a failure.** Each key is an HMAC-SHA256 digest of `username\0password` under a per-process key from `os.urandom` — never written down, never the password itself — and the value is the stored hash string that verified it, never the submitted password. A wrong password is never stored, so every bad attempt still pays the full KDF and still gets a 401.
+- **A changed password takes effect immediately.** Because the stored value is part of the match, replacing the password makes every cached entry stop matching on its own; the Settings save also clears the cache eagerly. The legacy plaintext→hash upgrade is unaffected and still happens exactly once: only the post-upgrade hash is cached, so a still-plaintext value can never be remembered as verified.
+- **Tests** — `tests/test_web_auth.py::TestAuthCache` counts that a second authenticated request does not call `verify_password`, that a wrong password re-runs the KDF every time and is never cached, that `set_auth` and the Settings save both invalidate, that the cache never exceeds its cap and contains no plaintext, that a wrong username returns before any digest or KDF work, that concurrent requests neither raise nor corrupt the cache, and that the plaintext upgrade runs exactly once.
+
 ## 2026-10-05
 
 ### Keys obey the same single-token rule as values
