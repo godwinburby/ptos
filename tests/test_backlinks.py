@@ -73,7 +73,7 @@ class TestBacklinks:
         (tmp_path / "todo" / "todo.txt").write_text("Call supplier +HearingCare\n")
         from ptos_web import app
         client = app.test_client()
-        resp = client.get("/api/backlinks?q=hearspeechpro")
+        resp = client.get("/api/backlinks?q=hearingcare")
         data = resp.get_json()
         assert len(data["todo"]) == 1
         hit = data["todo"][0]

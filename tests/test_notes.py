@@ -147,7 +147,7 @@ class TestLinkCandidates:
         (todo_dir / "done.txt").write_text("")
         from ptos_web import app
         client = app.test_client()
-        resp = client.get("/api/link-candidates?q=hearspeechpro")
+        resp = client.get("/api/link-candidates?q=hearingcare")
         data = resp.get_json()
         assert "HearingCare" in data
 
