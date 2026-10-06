@@ -14,6 +14,7 @@ from ptos_service import PTOSError
 
 from flask import (Flask, render_template, request, redirect,
                    url_for, jsonify, send_file, Response)
+from werkzeug.exceptions import HTTPException
 
 _basedir = getattr(sys, '_MEIPASS', None) or os.path.dirname(os.path.abspath(__file__))
 app = Flask(__name__,
@@ -253,6 +254,12 @@ def handle_ptos_error(e):
 
 @app.errorhandler(Exception)
 def handle_unexpected_error(e):
+    # @app.errorhandler(Exception) also matches every HTTPException (404, 405,
+    # 413, ...), which would turn a missing page into a 500 and log a full
+    # traceback for what is an ordinary result. Hand those back untouched so
+    # Flask renders its normal status and only genuine faults reach the 500.
+    if isinstance(e, HTTPException):
+        return e
     app.logger.error(f"Unhandled exception on {request.path}: {e}", exc_info=True)
     if _wants_json():
         return jsonify({"success": False, "error": "Something went wrong."}), 500

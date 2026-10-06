@@ -22,6 +22,13 @@ Format: `[version or date] — description`
 - **The danger was the sync, not just the bloat.** Anyone who ever received your `config.toml` now holds a key that could forge session cookies for your install; keeping it out of the file stops that recurring on every future backup and every device you add.
 - **Tests** — `tests/test_init.py::TestSessionSecret` re-covers the new behaviour: entropy and per-start uniqueness, the `PTOS_SECRET_KEY` override (including that an empty string falls back to a random key), a stale config key being ignored without being repaired, init writing no secret with or without starters, init byte-identically preserving a config that already holds one, and the web app's live secret never coming from config. The old persistence assertions are gone, since persistence is now the bug.
 
+### A missing page is a 404 again, not a 500
+
+- **`@app.errorhandler(Exception)` was also matching every `HTTPException`.** Flask routes that broad handler through for 404s, 405s, oversized uploads and missing static files alike, so an ordinary "no such page" was reported as HTTP 500 and — worse — logged a full `exc_info` traceback in `ptos_web`. Real faults became impossible to spot in a log full of 404 noise, and a client (or a crawler) checking the status got a misleading 500. `handle_unexpected_error` now starts with `if isinstance(e, HTTPException): return e`, handing the exception back so Flask renders its normal status and only genuine exceptions reach the 500 path.
+- **Nothing about the fault path weakened.** `PTOSError` keeps its own more specific handler (which Flask prefers), a real unhandled exception still returns 500 and is still logged with a traceback, and the JSON-vs-HTML split for genuine errors is unchanged.
+- **Tests** — `tests/test_web_security.py::TestHttpExceptionsKeepTheirStatus` pins a 404 for unknown pages, unknown `/api/` endpoints and missing static files, a 405 for the wrong method, that an `HTTPException` is returned untouched and is not logged at ERROR, and that a genuine `RuntimeError` is still a 500.
+- **`werkzeug` is now a declared dependency** of the CI job, since `HTTPException` is imported from `werkzeug.exceptions` (`flask` does not re-export it) rather than reached indirectly through Flask.
+
 ## 2026-10-05
 
 ### Keys obey the same single-token rule as values

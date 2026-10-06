@@ -125,6 +125,7 @@ whole rest of the field part is lost.
 - Engine functions raise `sys.exit()` on errors
 - `ptos_service.py` defines `PTOSError` and `_safe_exit`; the Flask layer installs it per-request via `before_request`/`teardown_request` so web routes can handle errors gracefully without affecting tests
 - Web routes catch `PTOSError` and return JSON error responses
+- **The catch-all `@app.errorhandler(Exception)` (`handle_unexpected_error` in `ptos_web.py`) must begin by returning any `HTTPException` untouched** (`if isinstance(e, HTTPException): return e`). Flask routes every `HTTPException` — 404, 405, oversized uploads, missing static files — through a handler registered for `Exception`, so without the guard a missing page becomes a 500 and logs a full traceback, drowning the log in noise from ordinary traffic. Import it from `werkzeug.exceptions` (`flask` does not re-export it). Keep it ahead of the `exc_info=True` log so HTTP results are never logged as faults. Pinned by `tests/test_web_security.py::TestHttpExceptionsKeepTheirStatus`.
 - CLI catches `PTOSError` and prints user-friendly messages
 - Web routes use `log = logging.getLogger("ptos_web")` — always `log.exception()` before fallback, never bare `except:`
 

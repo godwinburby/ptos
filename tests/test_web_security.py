@@ -80,3 +80,57 @@ class TestExposedWithoutAuthWarning:
         assert ptos_web._warn_if_exposed(
             "0.0.0.0", {"enabled": True, "username": "u"}) is False
         assert capsys.readouterr().out == ""
+
+
+class TestHttpExceptionsKeepTheirStatus:
+    """@app.errorhandler(Exception) also matches every HTTPException.
+
+    Left unguarded it reported a missing page as a 500 and logged a full
+    traceback, so ordinary 404/405 traffic looked like a server fault and
+    filled the log.
+    """
+
+    @staticmethod
+    def _client(monkeypatch):
+        import ptos_web
+        monkeypatch.setattr(ptos_web, "_check_auth", lambda u, p: True)
+        return ptos_web.app.test_client()
+
+    def test_unknown_route_is_404_not_500(self, monkeypatch):
+        c = self._client(monkeypatch)
+        assert c.get("/definitely-not-a-route-xyz").status_code == 404
+
+    def test_unknown_api_route_is_404(self, monkeypatch):
+        c = self._client(monkeypatch)
+        assert c.get("/api/nope").status_code == 404
+
+    def test_missing_static_file_is_404(self, monkeypatch):
+        c = self._client(monkeypatch)
+        assert c.get("/static/definitely-not-here.js").status_code == 404
+
+    def test_wrong_method_is_405(self, monkeypatch):
+        c = self._client(monkeypatch)
+        assert c.post("/").status_code == 405
+
+    def test_http_exception_is_returned_untouched(self):
+        import ptos_web
+        from werkzeug.exceptions import NotFound
+        with ptos_web.app.test_request_context("/some/missing/page"):
+            result = ptos_web.handle_unexpected_error(NotFound())
+        assert isinstance(result, NotFound)
+
+    def test_http_exception_is_not_logged_as_an_error(self, caplog):
+        import logging
+        import ptos_web
+        from werkzeug.exceptions import NotFound
+        with ptos_web.app.test_request_context("/some/missing/page"):
+            with caplog.at_level(logging.ERROR, logger="ptos_web"):
+                ptos_web.handle_unexpected_error(NotFound())
+        assert not [r for r in caplog.records if r.levelno >= logging.ERROR]
+
+    def test_a_genuine_error_is_still_a_500(self):
+        import ptos_web
+        with ptos_web.app.test_request_context("/some/page"):
+            body, code = ptos_web.handle_unexpected_error(
+                RuntimeError("boom"))
+        assert code == 500
