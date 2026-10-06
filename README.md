@@ -1008,6 +1008,8 @@ Stored in `ptos-backups/` (sibling to `ptos-data`, outside sync scope) with time
 
 All configuration lives in `config.toml`. Most settings can be edited via the **Settings** page in the web app.
 
+> **Keeping comments in `config.toml`.** `--init` copies `starter_config.toml` verbatim, so all of its explanatory comments survive installation. Saving from the **Settings** page rewrites the whole file through a TOML writer, which drops comments — every *value* is kept, the commentary is not. To keep or add your own notes, edit `config/config.toml` directly; re-add them after a Settings save. The same applies to password changes (`--set-auth`).
+
 ### Starter configs (`starters/`)
 
 When you run `--init` (or the setup script), PTOS copies default configs from

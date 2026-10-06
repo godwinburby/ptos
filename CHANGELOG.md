@@ -7,6 +7,12 @@ Format: `[version or date] — description`
 
 ## 2026-10-06
 
+### A fresh `--init` keeps every comment in the starter config
+
+- **The 46 explanatory comment lines in `starters/starter_config.toml` now survive installation.** They were being written into `config/config.toml` and then immediately stripped, because the session-secret write re-dumped the whole file through `tomli_w` — which does not preserve comments. A new user lost all the guidance in the very file the docs tell them to edit by hand. With the session-secret write gone (the next entry), `--init` no longer touches an existing `config.toml` at all and is byte-idempotent on a second run.
+- **Tests** — `tests/test_init.py::TestInitKeepsConfigComments` compares the comment lines of a freshly-inited config against the starter's as sets (so a lost *or unexpectedly added* comment fails too), pins the comment count, and asserts a second `--init` leaves the file byte-for-byte unchanged.
+- **The remaining comment-stripping is documented, not hidden.** Settings save, password changes and the structured config writers still go through `tomli_w`, which drops comments — that is a deliberate, out-of-scope-for-now limitation, so `test_settings_style_rewrite_is_the_documented_limitation` pins the current behaviour and the README now tells users how to keep their comments (hand-edit `config/config.toml`). If a comment-preserving writer is ever adopted, that test is the one to change.
+
 ### The session secret is no longer written into the synced config
 
 - **`config.toml` stops carrying `[server] secret_key`.** `ensure_session_secret()` used to generate the Flask session key and persist it into `config.toml` — a file that Syncthing copies to every device and that lands inside every backup zip. A persisted key therefore ended up **shared across installs**, contradicting its "per-install" intent, and two devices starting before their first sync would each generate their own and then race to a conflict on the file. PTOS keeps no session state today, so the key protected nothing.

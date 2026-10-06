@@ -101,6 +101,96 @@ class TestInitPtos:
         assert ptos.get_config()["server"]["secret_key"] == "legacy-shared-key"
 
 
+class TestInitKeepsConfigComments:
+    """--init must never rewrite config.toml wholesale.
+
+    tomli_w drops every comment, so a rewrite silently stripped the starter's
+    46 explanatory lines from the file a new user is told to edit by hand.
+    """
+
+    @staticmethod
+    def _comments(text):
+        return {l for l in text.splitlines() if l.strip().startswith("#")}
+
+    @staticmethod
+    def _use_real_starters(monkeypatch):
+        # ptos_home points STARTER_DIR at a scratch copy that does not exist,
+        # so init falls back to its built-in stubs (which carry no comments).
+        repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        monkeypatch.setattr(ptos, "STARTER_DIR",
+                            os.path.join(repo, "starters"))
+        return os.path.join(repo, "starters", "starter_config.toml")
+
+    def test_fresh_init_keeps_every_starter_comment(self, ptos_home, monkeypatch):
+        starter_path = self._use_real_starters(monkeypatch)
+        starter = open(starter_path, encoding="utf-8").read()
+
+        # Start from nothing, as a brand-new install would.
+        if os.path.exists(ptos.CONFIG_PATH):
+            os.remove(ptos.CONFIG_PATH)
+        ptos._CACHE.pop("config", None)
+        ptos.init_ptos()
+        ptos._CACHE.pop("config", None)
+
+        produced = open(ptos.CONFIG_PATH, encoding="utf-8").read()
+        starter_comments = self._comments(starter)
+        produced_comments = self._comments(produced)
+        missing = starter_comments - produced_comments
+        added = produced_comments - starter_comments
+        assert starter_comments == produced_comments, (
+            f"{len(missing)} starter comment(s) lost, {len(added)} unexpected")
+
+    def test_fresh_init_keeps_comment_count(self, ptos_home, monkeypatch):
+        starter_path = self._use_real_starters(monkeypatch)
+        starter = open(starter_path, encoding="utf-8").read()
+
+        if os.path.exists(ptos.CONFIG_PATH):
+            os.remove(ptos.CONFIG_PATH)
+        ptos._CACHE.pop("config", None)
+        ptos.init_ptos()
+        ptos._CACHE.pop("config", None)
+
+        produced = open(ptos.CONFIG_PATH, encoding="utf-8").read()
+        assert len(self._comments(produced)) == len(self._comments(starter))
+
+    def test_second_init_changes_nothing(self, ptos_home):
+        ptos.init_ptos()
+        path = os.path.join(ptos_home, "config", "config.toml")
+        before = open(path, encoding="utf-8").read()
+
+        ptos.init_ptos()
+        ptos._CACHE.pop("config", None)
+
+        assert open(path, encoding="utf-8").read() == before
+
+    def test_settings_style_rewrite_is_the_documented_limitation(
+            self, ptos_home, monkeypatch):
+        # Everything written through tomli_w.dump loses comments, which is why
+        # the README tells users to hand-edit config.toml to keep them. This
+        # pins the *current* behaviour so adopting a comment-preserving writer
+        # (or not) stays a deliberate choice rather than an accident.
+        import tomli_w
+        self._use_real_starters(monkeypatch)
+        if os.path.exists(ptos.CONFIG_PATH):
+            os.remove(ptos.CONFIG_PATH)
+        ptos._CACHE.pop("config", None)
+        ptos.init_ptos()
+        ptos._CACHE.pop("config", None)
+
+        before = open(ptos.CONFIG_PATH, encoding="utf-8").read()
+        assert self._comments(before)
+
+        cfg = ptos.get_config()
+        cfg["user"] = {**(cfg.get("user") or {}), "name": "Comment Stripper"}
+        with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
+            tomli_w.dump(cfg, w.stream)
+        ptos._CACHE.pop("config", None)
+
+        after = open(ptos.CONFIG_PATH, encoding="utf-8").read()
+        assert not self._comments(after)
+        assert ptos.get_config()["user"]["name"] == "Comment Stripper"
+
+
 class TestSessionSecret:
     def test_is_ephemeral_and_changing(self, ptos_home):
         first = ptos.session_secret()
