@@ -146,8 +146,11 @@ merchant=Big Bazaar          wrong  — two tokens; see below
 2026-03-13 type=expense merchant=Big_Bazaar amount=250 | monthly shopping
 ```
 
-The app displays underscores as spaces ("Big Bazaar") in forms, tags and labels, so you
-never see the underscore while using PTOS. The file keeps it.
+The app shows underscores as spaces ("Big Bazaar") wherever a stored value is displayed to
+you — record tables, the add/edit forms (free-text fields, option menus and tag chips), and
+the filter/query chips — so you normally never see the underscore while using PTOS. The file
+keeps it. Pages that define the stored vocabulary (Record Types, Schema Builder) and the
+engine-reserved `id`/`links` tokens show the exact stored form.
 
 What happens if you get it wrong, exactly:
 

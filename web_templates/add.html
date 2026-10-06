@@ -248,7 +248,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
           {% for opt in f.options %}
           <option value="{{ opt }}"
             {% if field_values and field_values.get(f.name) == opt %}selected{% endif %}>
-            {{ opt }}
+            {{ opt|disp }}
           </option>
           {% endfor %}
         </select>
@@ -309,7 +309,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
       </div>
       {% else %}
       <input type="text" name="{{ f.name }}"
-             value="{{ field_values.get(f.name, '') if field_values else '' }}"
+             value="{{ (field_values.get(f.name, '') if field_values else '')|disp }}"
              placeholder="{{ f.name }}">
       {% endif %}
     </div>
@@ -326,7 +326,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
           <input type="checkbox" name="tag" value="{{ tag }}"
             {% if field_values and tag in (field_values.get('tag') or []) %}checked{% endif %}
             onchange="this.closest('.chip').classList.toggle('selected', this.checked)">
-          {{ tag }}
+          {{ tag|disp }}
         </label>
         {% endfor %}
         {% if tag_context %}
@@ -375,7 +375,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
           <select name="{{ f.name }}" id="field-{{ f.name }}">
             <option value="">— none —</option>
             {% for opt in f.options %}
-            <option value="{{ opt }}" {% if f.value == opt %}selected{% endif %}>{{ opt }}</option>
+            <option value="{{ opt }}" {% if f.value == opt %}selected{% endif %}>{{ opt|disp }}</option>
             {% endfor %}
           </select>
           <button type="button" onclick="addGlobalFieldOption('{{ f.name }}', 'field-{{ f.name }}')"
@@ -384,7 +384,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
         </div>
         {% else %}
         <input type="text" name="{{ f.name }}"
-               value="{{ f.value }}"
+               value="{{ f.value|disp }}"
                placeholder="{{ f.name }}">
         {% endif %}
       </div>
@@ -524,7 +524,7 @@ function onParentChange(fieldName) {
         sel.innerHTML = '<option value="">— select ' + esc(fname) + ' —</option>';
         d.options[fname].forEach(opt => {
           const o = document.createElement("option");
-          o.value = opt; o.textContent = opt;
+          o.value = opt; o.textContent = _disp(opt);
           if (opt === current) o.selected = true;
           sel.appendChild(o);
         });
@@ -593,7 +593,7 @@ document.getElementById("add-form").addEventListener("submit", function() {
         dl.id = dlId;
         document.body.appendChild(dl);
       }
-      dl.innerHTML = values.map(v => `<option value="${v}">`).join("");
+      dl.innerHTML = values.map(v => `<option value="${_disp(v)}">`).join("");
       input.setAttribute("list", dlId);
       input.setAttribute("autocomplete", "off");
     }
@@ -635,7 +635,7 @@ document.getElementById("add-form").addEventListener("submit", function() {
         label.style.opacity = "0.75";
         label.innerHTML = `<input type="checkbox" name="tag" value="${tag}"
           onchange="this.closest('.chip').classList.toggle('selected', this.checked)">
-          ${tag}`;
+          ${_disp(tag)}`;
         chipGroup.appendChild(label);
       });
     }

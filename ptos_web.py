@@ -137,6 +137,9 @@ def av(path):
     return f"{path}{sep}v={ASSET_VERSION}"
 
 
+app.jinja_env.filters["disp"] = ptos._disp
+
+
 @app.after_request
 def _static_cache_control(resp):
     """Versioned static assets are immutable; everything else revalidates."""

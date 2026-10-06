@@ -316,7 +316,7 @@ function removeField(i) {
 }
 
 function addOpt(fi, inputEl) {
-  var v = inputEl.value.trim().replace(/\s+/g, "_");
+  var v = inputEl.value.trim().toLowerCase().replace(/\s+/g, "_");
   if (!v) return;
   if (!_fields[fi].options) _fields[fi].options = [];
   _fields[fi].options.push(v);
@@ -340,7 +340,7 @@ function updatePreview() {
   _fields.forEach(function(f) {
     if (!f.name || f.global || f.derived || f.use) return;
     var sample = f.type === "int" ? "0" : f.type === "datetime" ? "2026-09-09" : f.type === "bool" ? "true" : (f.options && f.options.length ? f.options[0] : f.name);
-    parts.push(f.name + "=" + sample.replace(/\s+/g, "-"));
+    parts.push(f.name + "=" + sample.replace(/\s+/g, "_"));
   });
   var d = new Date();
   var date = d.getFullYear() + "-" + String(d.getMonth()+1).padStart(2,"0") + "-" + String(d.getDate()).padStart(2,"0");

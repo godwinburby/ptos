@@ -7,6 +7,16 @@ Format: `[version or date] — description`
 
 ## 2026-10-06
 
+### Underscores display as spaces in forms, tables and filter chips
+
+- **Stored `_` tokens now render with spaces in the places a user reads them.** The format keeps `Big_Bazaar` (and every other value) with underscores on disk — that is deliberate, so a single field/value is grep-able and never split by whitespace — but a new `ptos._disp` helper (exposed to templates as the `disp` Jinja filter) turns `_` back into a space for display. Applied to the Add/Edit forms (option labels, free-text string inputs, tag chips, autocomplete suggestions), record tables, and the shared Browse/Query Builder filter chips.
+- **Display-only — the raw token is never touched.** `<option value>`, checkbox `value`, hidden inputs, `data-*` attributes, JS chip state (`c.value`) and the `where` expression all keep the underscore form, and a value typed with spaces into a free-text field is still stored normalized to `_` by `normalize_field_value`. Round-trips are unchanged.
+- **Free-text string inputs display spacing without breaking comparisons.** A string field with a stored `Corner_Market` renders as `Corner Market` in the input; posting it back re-normalizes to `Corner_Market`.
+- **`id` and `links` show their exact stored form**, matching the rule that link targets are strict `type:id` values rather than display names.
+- **The Record Types and Schema Builder option editors stay raw** — they edit the schema where the exact token is the point — and the new-option flows normalize freshly typed input to lowercase `_` before saving.
+- **Docs** — `FORMAT.md` now describes the display behaviour and its boundary.
+- **Tests** — `tests/test_disp.py` pins the `disp` filter, option labels spaced with raw `value=`, spaced free-text inputs, raw `id`/`links`, rounded-trip storage, and a static scan that `filter_builder.js` only display-converts and keeps its raw chip values.
+
 ### The record writer cleans and validates every line it stores
 
 - **A newline in a note used to corrupt the log.** `build_record_line` appended the note verbatim and `append_record` wrote it without a check, so a note containing a line break produced a second physical line that no longer parsed — and the extra line was invisible to queries but present in the file. The note is now flattened to one line by a new `clean_note()` (inner spaces, `|`, `=` and punctuation are kept — only line breaks become a space), and `append_record` refuses outright any line containing `\n` or `\r`.
