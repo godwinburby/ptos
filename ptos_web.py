@@ -1902,11 +1902,15 @@ def schema_builder_save():
     field_meta    = data.get("field_meta", {})
     if not new_types:
         return jsonify(ok=False, error="At least one record type is required")
-    import re as _re
     for t in new_types:
-        if not _re.match(r"^[a-z][a-z0-9_]*$", t):
-            return jsonify(ok=False,
-                error=f"Type '{t}' must be lowercase letters, numbers, underscores")
+        if not ptos.is_valid_name(t):
+            return jsonify(ok=False, error=ptos.invalid_name_error("type", t))
+    bad_names = ptos.invalid_schema_names(type_schemas, field_meta,
+                                         global_fields, shared_defs)
+    if bad_names:
+        return jsonify(ok=False,
+            error="Field names must be lowercase letters, numbers, "
+                  "underscores (no spaces): " + ", ".join(bad_names))
     try:
         old_schema  = svc.get_schema()
         new_schema  = _build_schema_dict(old_schema, new_types, type_schemas,
@@ -1931,6 +1935,13 @@ def schema_builder_preview_lint():
 
     if not new_types:
         return jsonify(ok=False, error="No types provided")
+
+    bad_names = ptos.invalid_schema_names(type_schemas, field_meta,
+                                         global_fields, shared_defs)
+    if bad_names:
+        return jsonify(ok=False,
+            error="Field names must be lowercase letters, numbers, "
+                  "underscores (no spaces): " + ", ".join(bad_names))
 
     try:
         old_schema = svc.get_schema()
@@ -2076,7 +2087,7 @@ def types_page():
 def types_post():
     schema = svc.get_schema()
     types = schema.get("types", {}).get("allowed", [])
-    type_name = request.form.get("type_name", "").strip().lower().replace(" ", "_")
+    type_name = ptos.normalize_name(request.form.get("type_name", ""))
     original_name = request.form.get("original_name", "").strip()
     fields_json = request.form.get("fields_json", "[]")
     return_to = request.form.get("return_to", "")
@@ -4504,8 +4515,8 @@ def api_save_preset():
     note   = data.get("note","").strip() or None
     if not name:
         return jsonify(ok=False, error="Preset name cannot be empty")
-    if not re.match(r'^[a-z0-9_]+$', name):
-        return jsonify(ok=False, error="Name must be lowercase letters, numbers and underscores only")
+    if not ptos.is_valid_name(name):
+        return jsonify(ok=False, error=ptos.invalid_name_error("preset", name))
     if not record.get("type"):
         return jsonify(ok=False, error="No record type in form — fill at least the type field")
     try:

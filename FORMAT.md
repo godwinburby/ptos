@@ -26,8 +26,9 @@ A record is:
 
 That is all. There is no quoting, no escaping and no nesting.
 
-**One rule to remember:** a value is a single token, so it carries no spaces — write
-`merchant=Big_Bazaar`, not `merchant=Big Bazaar`. See
+**One rule to remember:** both halves of `key=value` are single tokens, so neither carries
+spaces — write `unit_price=Big_Bazaar`, not `unit price=Big Bazaar`. The note after `|` is
+the only place free-form text belongs. See [Keys](#keys) and
 [Values carry no spaces](#values-carry-no-spaces).
 
 ---
@@ -53,8 +54,9 @@ Rules in plain words:
 3. **The field part is split on whitespace.** Each piece containing `=` is a field. The
    key is the text before the *first* `=`; the value is everything after it, so a value
    may itself contain `=`.
-4. **A value is a single token.** It must not contain whitespace, and it must not contain
-   `|`. See [Values carry no spaces](#values-carry-no-spaces).
+4. **A key and a value are each a single token.** Neither may contain whitespace, and a
+   value may not contain `|` either. See [Keys](#keys) and
+   [Values carry no spaces](#values-carry-no-spaces).
 5. **A value may be empty.** `amount=` is a field whose value is the empty string.
 6. **Pieces without `=` are ignored.** A stray word in the field part is skipped, not an
    error.
@@ -72,9 +74,31 @@ Rules in plain words:
 
 ## Keys
 
-- Field names defined in your schema must match `^[a-z][a-z0-9_]*$`: lowercase letters,
-  digits and underscores, starting with a letter. Use the same style for any key you add by
-  hand.
+A key is the text before the first `=`, and it obeys the same single-token rule as a
+value — so **keys carry no spaces either**. Field names defined in your schema must match
+`^[a-z][a-z0-9_]*$`: lowercase letters, digits and underscores, starting with a letter.
+Use the same style for any key you add by hand.
+
+Why it matters: a space inside a key would make the key unrepresentable. `unit price=50`
+parses as the field `unit` with the value `price`, plus the word `50` silently dropped —
+a key you can write but never read back. Underscores are the only separator a key can use.
+
+PTOS enforces this wherever a name is minted, so a spaced name cannot reach your data:
+
+| Where you create a name | What happens to `my name` |
+|---|---|
+| Record Types page (`/types`) | coerced to `my_name` as you type |
+| Schema Builder (`/schema-builder`) | rejected, listing the offending field names |
+| Query Builder (`/query-builder`) | coerced to `my_name` as you type, rejected on save |
+| `ptos --add-type` / `--add-field` | rejected with the name in the message |
+| `ptos --add-preset` | rejected with the name in the message |
+| Any hand-edited `schema.toml` | reported by `ptos --check-schema` |
+
+The two ends differ on purpose. The beginner-facing pages (Record Types, Query Builder)
+coerce, because the name is being typed fresh and nothing references it yet. The
+Schema Builder and the CLI reject, because those paths edit or script a schema where a
+surprise rename would be harder to spot.
+
 - `type` is required. Every record needs a `type=` field naming its record type.
 - `tag` is the conventional key for free labels; use it more than once for several tags.
 - `id` and `links` are optional keys PTOS uses to link records (`links=expense:k3f9a1`).
@@ -137,9 +161,11 @@ if you notice, but nothing tells you either. A `|` in a value is worse: it start
 note, so the rest of the field part is thrown away.
 
 PTOS therefore never writes a space or a `|` into a value. It writes the underscore,
-and turns `|` into `/`. Whatever you type into the app is stored in the conforming
-shape; see [Writing from your own script](#writing-from-your-own-script) for doing the
-same in your own code.
+and turns `|` into `/`. The same rule applies to keys, which is why field names are
+written `unit_price` and never `unit price` — see [Keys](#keys). Whatever you type into
+the app is stored in the conforming shape; see
+[Writing from your own script](#writing-from-your-own-script) for doing the same in your
+own code.
 
 Two consequences of the underscore convention:
 
@@ -188,6 +214,7 @@ spaces around it.
 | You write | What happens |
 |---|---|
 | `merchant=Big Bazaar` | The field is `merchant`=`Big`; the piece `Bazaar` has no `=` so it is silently dropped. You see "Big". Write `merchant=Big_Bazaar`. |
+| `unit price=50` | The field is `unit`=`price`; the piece `50` is dropped. A key with a space can be written but never read back. Use `unit_price=50`. |
 | `merchant="Big Bazaar"` | Quotes are not special, so this is the same mistake twice: the field is `"Big` and `Bazaar"` is dropped. |
 | `A\| inside a value` | The note starts at the `|` and the rest of the field part is lost. Put it in the note, or write `/`. |
 | `amount=5|note` with no space | Works: the note starts at `|`. |
@@ -195,9 +222,10 @@ spaces around it.
 | `2026-02-30 type=expense` | Not a real date. Same as above. |
 | `2026-03-11 amount=5` (no `type`) | Parses, but Lint reports "missing type field". |
 
-Every one of these is silent: nothing errors, the value is just shorter than you meant.
-Fix such a line in a text editor — `ptos --lint` (or the Lint page in the web app) shows
-the file and line number.
+Every one of these is silent *in the file*: nothing errors, the value is just shorter than
+you meant. PTOS itself never writes a line like this — the writer normalizes values, and
+every page that mints a key or a value checks it — so these only happen in a hand-edited
+file. `ptos --lint` (or the Lint page in the web app) shows the file and line number.
 
 ---
 

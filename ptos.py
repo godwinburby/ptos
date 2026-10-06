@@ -2487,16 +2487,86 @@ def safe_parse_line(line):
     except Exception:
         return None
 
+def normalize_field_value(v):
+    """Coerce a field value into the single token the record format requires.
+
+    A value cannot contain whitespace (the field part is split on it) or a
+    `|` (it would start the note). Collapsing whitespace runs to `_` and
+    turning `|` into `/` means a value written with a space is stored
+    readable instead of being silently truncated on the next read.
+
+    Idempotent: normalizing an already-normalized value returns it
+    unchanged, so rebuilding a line from parsed kv never rewrites it.
+    """
+    return "_".join(str(v).split()).replace("|", "/")
+
+
+# A type/field/config name is the *key* half of a key=value pair, so it obeys
+# the same single-token rule as a value: lowercase letters, digits, underscores.
+# Matched with fullmatch so a trailing newline cannot sneak a name through.
+NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
+
+
+def is_valid_name(name):
+    """True if a type, field, or config name is a legal single-token key."""
+    return bool(NAME_RE.fullmatch(str(name or "")))
+
+
+def invalid_name_error(kind, name):
+    """Message for a rejected name, phrased for the UI that surfaced it."""
+    return ("Invalid %s name '%s' — use lowercase letters, digits, "
+            "underscores (no spaces)." % (kind, name))
+
+
+def normalize_name(name):
+    """Coerce user input into a legal name: lowercase, spaces to underscores.
+
+    Used by the beginner-facing UI, which coerces rather than rejects because
+    the value is being typed fresh and nothing references it yet.
+    """
+    return normalize_field_value(str(name or "")).lower()
+
+
+def invalid_schema_names(type_schemas, field_meta=None,
+                         global_fields=None, shared_defs=None):
+    """Return field names in a Schema Builder payload that are not legal keys.
+
+    The builder is an advanced editor that writes field names through
+    verbatim, so it checks them here rather than writing a name no record could
+    ever match. Covers [fields.*], [global_fields.*], [shared.*], and each
+    [type.X.fields.*] plus its `required` list. Sorted and de-duplicated.
+    """
+    bad = set()
+
+    def _add(name):
+        if not is_valid_name(name):
+            bad.add(str(name))
+
+    for mapping in (field_meta, global_fields, shared_defs):
+        for name in mapping or {}:
+            _add(name)
+    for tschema in (type_schemas or {}).values():
+        if not isinstance(tschema, dict):
+            continue
+        for name in tschema.get("fields") or {}:
+            _add(name)
+        for req in tschema.get("required") or []:
+            _add(req)
+    return sorted(bad)
+
+
 def build_record_line(date, record, note=None):
     """Build a log line from its components.
     Format: YYYY-MM-DD key=value key=value ... | note
-    Multi-value fields (lists) produce repeated key=value pairs."""
+    Multi-value fields (lists) produce repeated key=value pairs.
+    Values are normalized to single tokens (see normalize_field_value);
+    the note is free text and is never touched."""
     parts = []
     for k, v in record.items():
         if isinstance(v, list):
-            parts.extend(f"{k}={i}" for i in v)
+            parts.extend(f"{k}={normalize_field_value(i)}" for i in v)
         else:
-            parts.append(f"{k}={v}")
+            parts.append(f"{k}={normalize_field_value(v)}")
     line = date + " " + " ".join(parts)
     if note:
         line += " | " + note
@@ -3632,15 +3702,19 @@ def validate_record(schema, record):
 
     # field value validation  (check against options where defined)
     # fields with no options defined in schema are treated as free-text — skip silently
+    # Compare normalized forms: build_record_line stores values as single tokens, so a
+    # schema option hand-edited to contain a space ("Big Bazaar") must still match the
+    # "Big_Bazaar" that ends up in the file.
     for field, value in record.items():
         if field == "type":
             continue
         opts = _get_field_options(schema, type_schema, field, record)
         if opts is None:
             continue
+        allowed = {normalize_field_value(o) for o in opts}
         values = value if isinstance(value, list) else [value]
         for v in values:
-            if str(v) not in [str(o) for o in opts]:
+            if normalize_field_value(v) not in allowed:
                 problems.append(f"Invalid value '{v}' for field '{field}'")
 
     # conditional required
@@ -3656,6 +3730,7 @@ def validate_record(schema, record):
 def validate_schema_structure(schema):
     """Validate schema.toml structure and return a list of error strings
     (empty list = schema is valid). Checks:
+      - Type, field, and shared names are legal single-token keys
       - Every [types].allowed type has a [type.X] section
       - Field types are int, string, or datetime
       - required fields have a [type.X.fields.Y] definition
@@ -3674,6 +3749,26 @@ def validate_schema_structure(schema):
     if not isinstance(types_allowed, list):
         issues.append("[types].allowed must be a list")
         return issues
+
+    # --- name checks -------------------------------------------------------
+    # Every name below becomes the key half of a record line's key=value pair,
+    # so a name containing a space could never be matched by a filter or a
+    # parsed record. Reject it here so `ptos --lint` and the write paths that
+    # call this validator catch it instead of writing a field that silently
+    # matches nothing.
+    for tname in types_allowed:
+        if not is_valid_name(tname):
+            issues.append(invalid_name_error("type", tname))
+    for section in ("fields", "global_fields", "shared"):
+        for fname in schema.get(section, {}) or {}:
+            if not is_valid_name(fname):
+                issues.append(invalid_name_error("field", fname))
+    for tname, tschema in (schema.get("type") or {}).items():
+        if not is_valid_name(tname):
+            issues.append(invalid_name_error("type", tname))
+        for fname in ((tschema or {}).get("fields") or {}):
+            if not is_valid_name(fname):
+                issues.append(invalid_name_error("field", fname))
 
     # --- global [fields] type checks ---
     for fname, fdef in schema.get("fields", {}).items():
@@ -4713,8 +4808,8 @@ def add_type(name, required=None):
     name = name.strip()
     if not name:
         sys.exit("Error: Type name cannot be empty.")
-    if not re.match(r"^[a-z][a-z0-9_]*$", name):
-        sys.exit("Error: Invalid type name '%s' — use lowercase letters, digits, underscores." % name)
+    if not is_valid_name(name):
+        sys.exit("Error: " + invalid_name_error("type", name))
 
     schema = get_schema()
     types_allowed = schema.setdefault("types", {}).setdefault("allowed", [])
@@ -4751,8 +4846,8 @@ def add_type_field(type_name, field_name, field_type="string", options=None, use
                  % (field_type, ", ".join(sorted(valid))))
     type_name = type_name.strip()
     field_name = field_name.strip()
-    if not field_name or not re.match(r"^[a-z][a-z0-9_]*$", field_name):
-        sys.exit("Error: Invalid field name '%s' — use lowercase letters, digits, underscores." % field_name)
+    if not field_name or not is_valid_name(field_name):
+        sys.exit("Error: " + invalid_name_error("field", field_name))
 
     schema = get_schema()
     if type_name not in schema.setdefault("type", {}):
@@ -5266,7 +5361,10 @@ def save_as_preset(name, record, note=None, instant=False):
     If a preset with the same name already exists it is replaced.
     note: optional note string to store alongside the record fields.
     instant: flag the preset for one-click (no form) record saving.
+    sys.exit on a name that is not a legal single-token key.
     """
+    if not is_valid_name(name):
+        sys.exit(invalid_name_error("preset", name))
     try:
         import tomli_w
     except ImportError:

@@ -7,6 +7,18 @@ Format: `[version or date] — description`
 
 ## 2026-10-05
 
+### Keys obey the same single-token rule as values
+
+- **`build_record_line` now normalises every value it writes** via a new `normalize_field_value()`. A value containing a space was being written to disk exactly as typed and then silently truncated on the very next read: `merchant=Big Bazaar` comes back as `merchant=Big` plus a discarded `Bazaar`, with no error and no warning. Collapsing whitespace runs to `_` and turning `|` into `/` means a value written with a space is stored readable instead. The function is idempotent, so the rebuild paths (`edit_record`, `advance_record`, `convert_record`) that pass parsed kv back through the writer do not rewrite files that are already conforming.
+- **`normalize_field_value` never touches the note.** Free text lives after the `|` and may contain anything; only the field part is constrained. A record about a `Big Bazaar | shop` lunch still round-trips verbatim.
+- **Keys are now checked wherever a name is minted**, because the key half of `key=value` obeys the same rule as the value half — `unit price=50` parses as `unit=price` with `50` dropped, a name you can write but never read back. A single `is_valid_name()` / `invalid_name_error()` pair replaces the three private regexes that had drifted apart, and `validate_schema_structure()` now checks type, field, global-field and shared names so `ptos --check-schema` flags a hand-edited schema that a record could never match.
+- **The Schema Builder validates the field names it posts.** It checked type names but wrote field names through verbatim, so a field named `unit price` could be saved into `schema.toml` and would then match nothing, ever. Both `/schema-builder/save` and `/schema-builder/preview-lint` now reject a bad name and list every offender.
+- **`save_queries_full` extended to habits, projects and due views.** Queries, metrics, dashboards, aliases, boards, calendars and thresholds already validated their names; those three sections did not, so `["habit.my habit"]` could be written and then be unreachable through the URL or CLI that selects it.
+- **`save_as_preset` validates its name** — the web form already checked, but `ptos --add-preset "My Preset"` wrote the name through verbatim. It now exits with the offending name in the message, matching `--add-type`.
+- **Two ends of the UI differ on purpose.** The beginner-facing pages (Record Types, Query Builder) *coerce* `my name` → `my_name` as you type, because the name is being typed fresh and nothing references it yet. The Schema Builder and the CLI *reject*, because those paths edit or script a schema where a surprise rename is harder to spot.
+- **Starter demo data corrected** — 8 pomodoro `task=` values, 8 jobsearch `position=` values, and the `how_i_log` teaching note all modelled the exact truncation the spec warns against. `tests/test_record_format.py` checks every seeded line for dropped words, spaces inside values, interior `|` and leading key names, so it cannot regress.
+- **`tests/test_record_format.py`** pins the writer, the validator, the name rules, and the starter data. The validator tests also cover the inverse case that motivated the change: a schema option *hand-edited* to `Big Bazaar` now still validates a stored `Big_Bazaar`, so an existing spaced option does not start failing after the writer normalizes.
+
 ### PTOS is MIT licensed
 
 - **`LICENSE` added** — the full MIT text, `Copyright (c) 2026 godwinburby`. PTOS is a tool people are invited to self-host, fork, and change, and shipping the licence terms is part of inviting them: without a `LICENSE` file the default is "all rights reserved", which reads as *don't* rather than *please do*.

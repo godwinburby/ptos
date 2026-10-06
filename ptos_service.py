@@ -1917,13 +1917,12 @@ def save_query(name, where_expr, time="tm", group=None, search=None,
     Returns: {"ok": True, "name": name}
     Raises:  PTOSError on failure or name conflict (when overwrite=False).
     """
-    import re as _re
     import tomli_w
-    name = name.strip().replace(" ", "_").lower()
+    name = ptos.normalize_name(name)
     if not name:
         raise PTOSError("Query name cannot be empty")
-    if not _re.match(r'^[a-z0-9_]+$', name):
-        raise PTOSError("Name must be lowercase letters, numbers and underscores only")
+    if not ptos.is_valid_name(name):
+        raise PTOSError(ptos.invalid_name_error("query", name))
 
     try:
         data = ptos._load("queries", ptos.QUERIES_PATH)
@@ -5014,7 +5013,6 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
     Raises:
         PTOSError on invalid names or write failure.
     """
-    import re
     import tomli_w
     import tomllib
 
@@ -5056,11 +5054,19 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
     board_names = list(raw_boards or {})
     calendar_names = list(raw_calendars or {})
     threshold_names = list(raw_thresholds or {})
-    for n in all_names + board_names + calendar_names + threshold_names:
+    # Every config section name becomes part of a dotted key in queries.toml and
+    # is passed back through URLs and CLI flags, so habits, projects, and due
+    # views hold the same single-token rule as the sections above.
+    habit_names = list(raw_habits or {})
+    project_names = list(raw_projects or {})
+    due_names = list(raw_due or {})
+    for n in (all_names + board_names + calendar_names + threshold_names
+              + habit_names + project_names + due_names):
         bare = _clean_bare_name(n)
-        if not re.match(r'^[a-z][a-z0-9_]*$', bare):
+        if not ptos.is_valid_name(bare):
             raise PTOSError(
-                f"Invalid name '{n}' — use lowercase letters, numbers, underscores")
+                "Invalid name '%s' — use lowercase letters, numbers, underscores"
+                % n)
 
     data = {}
 

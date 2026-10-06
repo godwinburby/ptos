@@ -36,8 +36,8 @@ lines = [
   "{{today}} type=learning topic=coding source=video domain=self tag=__demo__ | Python structural pattern matching",
   "{{today}} type=habit name=meditation tag=__demo__ | 10 minutes, morning sit",
   "{{today}} type=habit name=reading tag=__demo__ | Evening reading, 20 pages",
-  "{{today}} type=pomodoro task=Prep for Acme round 3 minutes=25 tag=__demo__",
-  "{{today}} type=pomodoro task=Deep work on report minutes=25 tag=__demo__",
+  "{{today}} type=pomodoro task=Prep_for_Acme_round_3 minutes=25 tag=__demo__",
+  "{{today}} type=pomodoro task=Deep_work_on_report minutes=25 tag=__demo__",
   "{{today}} type=capture tag=__demo__ | Order hearing-aid accessories online",
 
   # ── Finances this month (dashboard + food_spend threshold bar) ─────────
@@ -101,22 +101,22 @@ lines = [
   "{{-9d}} type=habit name=reading tag=__demo__ | 20 pages",
   "{{-12d}} type=habit name=reading tag=__demo__ | 10 pages",
   "{{-15d}} type=habit name=reading tag=__demo__ | Chapter before bed",
-  "{{-1d}} type=pomodoro task=Inbox zero minutes=25 tag=__demo__",
-  "{{-3d}} type=pomodoro task=Study Python pattern matching minutes=25 tag=__demo__",
-  "{{-5d}} type=pomodoro task=Draft thank-you notes minutes=25 tag=__demo__",
-  "{{-7d}} type=pomodoro task=Meal plan + grocery list minutes=25 tag=__demo__",
-  "{{-9d}} type=pomodoro task=Resume refresh minutes=25 tag=__demo__",
-  "{{-12d}} type=pomodoro task=Learn REST API design minutes=25 tag=__demo__",
+  "{{-1d}} type=pomodoro task=Inbox_zero minutes=25 tag=__demo__",
+  "{{-3d}} type=pomodoro task=Study_Python_pattern_matching minutes=25 tag=__demo__",
+  "{{-5d}} type=pomodoro task=Draft_thank-you_notes minutes=25 tag=__demo__",
+  "{{-7d}} type=pomodoro task=Meal_plan_and_grocery_list minutes=25 tag=__demo__",
+  "{{-9d}} type=pomodoro task=Resume_refresh minutes=25 tag=__demo__",
+  "{{-12d}} type=pomodoro task=Learn_REST_API_design minutes=25 tag=__demo__",
 
   # ── Job search pipeline (board.demo_job + due.default) ─────────────────
-  "{{-18d}} type=jobsearch position=Product Manager company=Acme status=applied tag=__demo__ | Submitted application via referral",
-  "{{-12d}} type=jobsearch position=Product Manager company=Acme status=interview project=demo_job tag=__demo__ | Phone screen with recruiter",
-  "{{-2d}} type=jobsearch position=Product Manager company=Acme status=interview tag=__demo__ | Panel with head of product",
-  "{{-20d}} type=jobsearch position=Data Engineer company=Rivo status=applied tag=__demo__",
-  "{{-15d}} type=jobsearch position=Data Engineer company=Rivo status=rejected result=rejected tag=__demo__ | Not moving forward this time",
-  "{{-10d}} type=jobsearch position=Support Specialist company=Nova status=applied project=demo_job tag=__demo__ | Applied via portal",
-  "{{-6d}} type=jobsearch position=Support Specialist company=Nova status=offer result=offer tag=__demo__ | Offer — 12 LPA",
-  "{{-4d}} type=jobsearch position=Support Specialist company=Nova status=accepted result=accepted tag=__demo__ | Signed the offer",
+  "{{-18d}} type=jobsearch position=Product_Manager company=Acme status=applied tag=__demo__ | Submitted application via referral",
+  "{{-12d}} type=jobsearch position=Product_Manager company=Acme status=interview project=demo_job tag=__demo__ | Phone screen with recruiter",
+  "{{-2d}} type=jobsearch position=Product_Manager company=Acme status=interview tag=__demo__ | Panel with head of product",
+  "{{-20d}} type=jobsearch position=Data_Engineer company=Rivo status=applied tag=__demo__",
+  "{{-15d}} type=jobsearch position=Data_Engineer company=Rivo status=rejected result=rejected tag=__demo__ | Not moving forward this time",
+  "{{-10d}} type=jobsearch position=Support_Specialist company=Nova status=applied project=demo_job tag=__demo__ | Applied via portal",
+  "{{-6d}} type=jobsearch position=Support_Specialist company=Nova status=offer result=offer tag=__demo__ | Offer — 12 LPA",
+  "{{-4d}} type=jobsearch position=Support_Specialist company=Nova status=accepted result=accepted tag=__demo__ | Signed the offer",
   "{{-9d}} type=jobsearch position=BDR company=Midwest status=applied project=demo_job tag=__demo__ | Applied, no response yet",
 
   # ── Capture inbox ──────────────────────────────────────────────────────
@@ -348,7 +348,7 @@ Records are single lines:  `date type=... key=value | note`
 ```text
 2026-09-12 type=expense domain=self category=food amount=120 tag=lunch | Team lunch
 2026-09-12 type=habit name=meditation | 10 minutes
-2026-09-12 type=jobsearch position=Product Manager company=Acme status=applied
+2026-09-12 type=jobsearch position=Product_Manager company=Acme status=applied
 ```
 
 - Fields come from `config/schema.toml` — add types there

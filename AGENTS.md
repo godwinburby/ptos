@@ -80,7 +80,7 @@ hidden/detached window may misreport — use the whole-suite command.
 - `starters/starter_*.toml` — default configs
 
 ### Data model
-- Records: plain `.log` files, one line per record, `key=value` format
+- Records: plain `.log` files, one line per record, `key=value` format. Both halves of `key=value` are **single tokens** (spec: `FORMAT.md`) — see **Record format invariants** below; never reintroduce a space into a key or a value.
 - Todos: `todo.txt` format (https://github.com/todotxt/todo.txt)
 - Config: TOML files
 - Schema: `schema.toml` defines record types, fields, validation
@@ -101,6 +101,25 @@ hidden/detached window may misreport — use the whole-suite command.
 - **Priority labels**: `[todo] priority_labels` config key (e.g. `{ A = "Critical", B = "Important", C = "Moderate", D = "Low" }`); labels are UI-only (not stored in todo.txt); used in quick pick chips, priority picker popup, form modal dropdown, todo list badge tooltips, filter chips, active filter bar, autocomplete dropdown (`pri:` and `(` prefixes), and help card; `ptos_web.py` passes labels to `todo.html` template as `priority_labels`; JS uses `_priLabels` object with fallback defaults
 - **Pomodoro config**: `[pomodoro] duration_minutes` config key (default 25); read by `ptos_web.py` context processor as `pomo_minutes`, passed to `base.html` for JS timer engine
 - **Web password storage** — `[auth] password` holds a salted PBKDF2-SHA256 hash (`ptos.hash_password` → `pbkdf2_sha256$<iters>$<salt>$<hash>`, 200k iterations; the iteration count lives *inside* the string so raising the cost is just a re-save). Never store or render the plaintext. `ptos.verify_password(stored, password)` is the only check: it is constant-time and still accepts a legacy plaintext value, which is what makes the self-upgrade possible — `ptos.upgrade_auth_password()` rewrites a plaintext config after the first *successful* login and swallows write failures so a locked-out user is impossible. `ptos_web._check_auth` compares the username with `hmac.compare_digest` **before** running the KDF, so an unauthenticated request flood can't use the 200k iterations as a CPU burner. `settings.html` receives `auth_password_set` (a bool), never the password; a blank password field on `/settings/save` means "keep the current one" and a non-blank one is hashed. Tests: `tests/test_web_auth.py`, `tests/test_config.py::TestPasswordHashing`
+
+### Record format invariants
+
+The normative spec is `FORMAT.md` (committed). This section is the working summary — keep
+the two in sync, and change `FORMAT.md` first when the format itself changes.
+
+**Both halves of `key=value` are single tokens.** A space in either one is silently
+destroyed on the next read, because the field part is split on whitespace:
+`merchant=Big Bazaar` comes back as `merchant=Big` plus a discarded `Bazaar`; `unit price=50`
+comes back as `unit=price` with `50` dropped. There is no error and no warning — the value
+just reads shorter than intended. A `|` in a value is worse: it starts the note, so the
+whole rest of the field part is lost.
+
+- **`normalize_field_value(v)`** (`ptos.py`) is the single normalizer: `"_".join(str(v).split()).replace("|", "/")`. `build_record_line()` applies it to every value (scalars and each item of a list) and **never to the note** — notes are free text after the `|` and may contain anything. It is idempotent by construction, which is what lets the rebuild paths (`edit_record`, `advance_record`, `convert_record`) pass parsed kv back through the writer without rewriting files that are already conforming. If you add a new write path, build its line with `build_record_line`; do not concatenate `key=value` yourself.
+- **`validate_record` normalizes both sides** of an option comparison. A schema option *hand-edited* to `Big Bazaar` must still validate a stored `Big_Bazaar`, or an existing spaced option starts failing after the writer normalizes. This is the inverse case of the writer fix — keep them in sync.
+- **Keys obey the same rule.** `is_valid_name(name)` / `NAME_RE` / `invalid_name_error(kind, name)` are the single source; `normalize_name(s)` is the coercing variant for UI. Matched with `fullmatch` so a trailing newline cannot sneak a name in. Do **not** add a private regex for a new name-creating path — the three that had drifted apart are gone.
+- **Where names are minted, and whether each end coerces or rejects** (deliberate, do not unify): Record Types (`/types`) and Query Builder coerce `my name` → `my_name` in JS as you type, because the name is fresh and nothing references it yet; the Schema Builder and the CLI reject, because they edit or script a schema where a surprise rename is harder to spot. Server-side coverage: `add_type`/`add_type_field` (`ptos.py`), `save_as_preset` (`ptos.py`), `save_queries_full` (`ptos_service.py` — queries, metrics, dashboards, aliases, boards, calendars, thresholds, **and** habits/projects/due, which were previously missed), `schema_builder_save` + `schema_builder_preview_lint` (`ptos_web.py`, via `ptos.invalid_schema_names`), `create_type_from_form`/`save_query` (normalizing variants).
+- **`validate_schema_structure()` checks name characters**, for `[types].allowed`, `[fields.*]`, `[global_fields.*]`, `[shared.*]`, `[type.*]` and `[type.*.fields.*]`. This is what makes `ptos --check-schema` (not `--lint`, which only walks records) catch a hand-edited schema field that no record could ever match. Note `add_type`/`add_type_field` filter issues to `f"'{name}'" in i`, so `invalid_name_error` must keep the offender in single quotes for that filter to work.
+- **Starter demo data is checked, not trusted.** `tests/test_record_format.py::TestStarterDemoObeysTheFormat` scans every seeded line in `starters/starter_demo.toml` for dropped words, spaces inside values, interior `|` and leading key names, and `TestTeachingNoteObeysTheFormat` checks the example records inside the `how_i_log` note. The demo originally shipped 17 violating lines (8 `task=`, 8 `position=`, 1 in the note) — do not reintroduce them.
 
 ### Error handling
 - Engine functions raise `sys.exit()` on errors
