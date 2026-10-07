@@ -774,7 +774,7 @@ def _add_real_record(demo_home):
     year = ptos.today().year
     with open(demo_home / "records" / f"{year}.log", "a", encoding="utf-8") as f:
         f.write(f"{ptos.today()} type=expense domain=self category=food "
-                f"amount=99 tag=real | my own lunch\n")
+                f'amount=99 tag=real note="my own lunch"\n')
     ptos._invalidate_all()
 
 

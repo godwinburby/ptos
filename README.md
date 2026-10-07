@@ -74,7 +74,7 @@ No database. No cloud. You own the data completely.
 Every event you record becomes one line in a plain-text `.log` file:
 
 ```
-2026-03-10 type=expense domain=self category=food amount=120 tag=restaurant | lunch with team
+2026-03-10 type=expense domain=self category=food amount=120 tag=restaurant note="lunch with team"
 2026-03-10 type=expense domain=self category=transport amount=90 tag=auto
 2026-03-10 type=exercise activity=walk duration=30 tag=morning
 ```
@@ -218,8 +218,8 @@ On Android, data lives in `~/storage/shared/ptos-data` instead.
 Every record follows this exact structure:
 
 ```
-2026-03-11  type=expense  domain=self category=food amount=120  tag=restaurant  | lunch with team
-──────────  ────────────  ──────────────────────────────────────  ─────────────  ────────────────
+2026-03-11  type=expense  domain=self category=food amount=120  tag=restaurant  note="lunch with team"
+──────────  ────────────  ──────────────────────────────────────  ─────────────  ────────────────────────
 date        type          fields                                  tag(s)         note
 ```
 
@@ -229,7 +229,7 @@ date        type          fields                                  tag(s)        
 | type | yes | what kind of event — always second |
 | fields | yes | `key=value` pairs defined by schema for this type |
 | tag | recommended | freeform labels for cross-cutting queries — `tag=auto tag=bus` |
-| note | recommended | human context after `\|` that fields cannot capture |
+| note | recommended | human context in the trailing `note="…"` that fields cannot capture |
 
 Records may also carry two schema-free tokens: `id=<id>` (a unique link target) and
 `links=type:id,type:id` (links to other entries) — see
@@ -238,10 +238,13 @@ Records may also carry two schema-free tokens: `id=<id>` (a unique link target) 
 A record missing a tag or note is valid but weak — Lint will warn you.
 A record missing a date or type is broken — Lint will error.
 
-**One rule matters more than the rest:** a field value is a single token, so it cannot
-contain a space. Write `merchant=Big_Bazaar`, not `merchant=Big Bazaar` — the second is
-read as `merchant=Big` plus a stray `Bazaar` that is silently dropped, and nothing warns
-you. The app displays underscores as spaces, so you never see them.
+**One rule matters more than the rest:** keys and token-field values are single tokens,
+so they cannot contain a space — write `category=Big_Bazaar`, not `category=Big Bazaar`.
+A free-text value *may* contain a space: it is wrapped in quotes, e.g.
+`merchant="Big Bazaar"`. The app shows every value exactly as stored, so a token
+value like `category=Big_Bazaar` keeps its underscore on screen; `ptos --migrate-format`
+decodes v1 free-text underscores back to spaces (`merchant=Big_Bazaar` becomes
+`merchant="Big Bazaar"`).
 
 [FORMAT.md](FORMAT.md) is the complete specification of that line: the grammar, every
 key, values and schema types, the note, the full table of what does *not* work, and how
@@ -1851,6 +1854,7 @@ ptos -y test -t td --delete --all
 | `--resolve-conflicts [--records] [--todo]` | | Review and merge sync conflict files interactively. Flags filter by type |
 | `--sync-status` | | Show Syncthing status: folder state, last successful sync, and the connected other devices (reads Syncthing's own REST API + log — PTOS does not sync anything itself) |
 | `--migrate-log-group TYPE` | | Move records of TYPE from `records/*.log` to `records/<group>/<year>.log` (requires `log_group` in schema) |
+| `--migrate-format [--dry-run]` | | Rewrite legacy v1 record lines (`key=value` single tokens, `\| note` tail) into canonical v2 (`note="…"`, quoted free text); idempotent, atomic per file |
 | `--backup-full` | | Create full backup (records/, config/, templates/, journal/) |
 | `--backup-config` | | Create config-only backup (schema, queries, presets, config) |
 | `--restore-full [PATH]` | | Restore from full backup. Shows interactive list if no path given |

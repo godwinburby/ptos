@@ -5,6 +5,18 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-07
+
+### Record format v2: quoted values, `type` second, `note=`
+
+- **A record line is now `YYYY-MM-DD type=<token> key=value … tag=<token> … note="…"`.** `type` is the second token on every line, a free-text value is quoted when it contains a space, `"` or `\`, and the free-text tail is the reserved `note=` field instead of a `|` separator. This removes the v1 trap where `merchant=Big Bazaar` was silently read as `merchant=Big` and the `Bazaar` dropped: a space now means "quote me", and an unquoted value with a space is rejected by the parser rather than truncated.
+- **`note` is reserved.** It can no longer be a schema field name; `RESERVED_FIELD_NAMES`/`reserved_field_error` enforce it across `add_type`, `add_type_field`, `replace_type_fields`, the Schema Builder and `validate_schema_structure`.
+- **Only token fields are normalised.** `is_token_field` distinguishes a single-token field (an `options` dropdown, `tag`, `type`/`id`/`links`) from free text. Keys, `type`, `tag` and option values still collapse spaces to `_`; free-text values keep their spaces (quoted). Values render **exactly as stored** — the record table, board/entity cards, group/pivot rows, filter chips, Add/Edit option and tag labels and CLI table cells no longer convert `_` to a space; `ptos._disp`/`ptos_service._disp`/the `|disp` filter now serve **identifiers only** (field-name column headers, metric/query/dashboard names, cycle names).
+- **Filter chips quote spaced values.** `web_static/js/filter_builder.js` emits `name="a b"` (a value containing whitespace, `"` or `\` is wrapped in double quotes) so the engine's `apply_where` matches it, and shows the raw stored value on the chip.
+- **Dual-read, v2-write.** `parse_line` strict-parses v2 first, then falls back to the v1 grammar, so existing `.log` files keep working with no migration required to read. Writers only emit v2.
+- **`ptos --migrate-format`** rewrites files in place (idempotent — a canonical line is left byte-identical; blank lines and `#` comments preserved; atomic per file), honouring the global `--dry-run`. It also **decodes v1 free-text underscores back to spaces**: a schema field with no `options` gets `_`→space and is re-quoted (`merchant=Big_Bazaar` → `merchant="Big Bazaar"`), while token values (`type`/`tag`/`id`/`links`, option fields) and unknown fields are left untouched. The decode is lossy for a literal underscore in free text (e.g. an email), by design. `ptos --lint` now flags any line that only reads via the v1 fallback as a legacy line to migrate.
+- **Docs and starters updated.** `FORMAT.md` is rewritten for v2 (`note="…"`, quoting/escaping, the reserved key, the migrator), the AGENTS record-format invariants match, and `starters/starter_demo.toml` is migrated to canonical v2. `tests/test_migrate_format.py` is new; `tests/test_record_format.py` asserts the starter demo strict-parses and re-emits byte-identical.
+
 ## 2026-10-06
 
 ### Underscores display as spaces in forms, tables and filter chips

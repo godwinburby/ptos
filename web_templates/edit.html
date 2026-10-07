@@ -96,7 +96,7 @@
           {% for opt in f.options %}
           <option value="{{ opt }}"
             {% if field_values.get(f.name) == opt %}selected{% endif %}>
-            {{ opt|disp }}
+            {{ opt }}
           </option>
           {% endfor %}
         </select>
@@ -152,7 +152,7 @@
       </div>
       {% else %}
       <input type="text" name="{{ f.name }}"
-             value="{{ field_values.get(f.name, '') | disp }}"
+             value="{{ field_values.get(f.name, '') }}"
              placeholder="{{ f.name }}">
       {% endif %}
     </div>
@@ -173,7 +173,7 @@
           <input type="checkbox" name="tag" value="{{ tag }}"
             {% if is_checked %}checked{% endif %}
             onchange="this.closest('.chip').classList.toggle('selected', this.checked)">
-          {{ tag|disp }}
+          {{ tag }}
         </label>
         {% endfor %}
         {% if tag_context %}
@@ -222,7 +222,7 @@
           <select name="{{ f.name }}" id="field-{{ f.name }}">
             <option value="">— none —</option>
             {% for opt in f.options %}
-            <option value="{{ opt }}" {% if f.value == opt %}selected{% endif %}>{{ opt|disp }}</option>
+            <option value="{{ opt }}" {% if f.value == opt %}selected{% endif %}>{{ opt }}</option>
             {% endfor %}
           </select>
           <button type="button" onclick="addGlobalFieldOption('{{ f.name }}', 'field-{{ f.name }}')"
@@ -231,8 +231,8 @@
         </div>
         {% else %}
         <input type="text" name="{{ f.name }}"
-               value="{{ f.value | disp }}"
-               placeholder="{{ f.name }}">
+value="{{ f.value }}"
+                placeholder="{{ f.name }}">
         {% endif %}
       </div>
       {% endfor %}
@@ -534,7 +534,7 @@ document.getElementById("edit-form").addEventListener("submit", function() {
         dl.id = dlId;
         document.body.appendChild(dl);
       }
-      dl.innerHTML = values.map(v => `<option value="${_disp(v)}">`).join("");
+      dl.innerHTML = values.map(v => `<option value="${v}">`).join("");
       input.setAttribute("list", dlId);
       input.setAttribute("autocomplete", "off");
     }
@@ -559,7 +559,7 @@ document.getElementById("edit-form").addEventListener("submit", function() {
       label.style.opacity = "0.75";
       label.innerHTML = `<input type="checkbox" name="tag" value="${tag}"
         onchange="this.closest('.chip').classList.toggle('selected', this.checked)">
-        ${_disp(tag)}`;
+        ${tag}`;
       chipGroup.appendChild(label);
     });
   }

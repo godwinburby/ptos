@@ -193,7 +193,7 @@ class TestInstantPresets:
         data = resp.get_json()
         assert data["ok"] is True, data.get("error")
         lines = self._records(tmp_path)
-        assert "| daily workout" in lines[0]
+        assert 'note="daily workout"' in lines[0]
 
     def test_multi_preset_applies_per_record_notes(self, tmp_path, monkeypatch):
         self._write_presets(tmp_path, monkeypatch)
@@ -203,8 +203,8 @@ class TestInstantPresets:
         data = resp.get_json()
         assert data["ok"] is True, data.get("error")
         lines = self._records(tmp_path)
-        assert "| uber to station" in lines[0]
-        assert "|" not in lines[1]
+        assert 'note="uber to station"' in lines[0]
+        assert "note=" not in lines[1]
 
     def test_non_instant_preset_rejected(self, tmp_path, monkeypatch):
         self._write_presets(tmp_path, monkeypatch)

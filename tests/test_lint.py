@@ -14,7 +14,7 @@ class TestLintRecords:
             }
         }
         records = [
-            "2026-01-15 type=expense amount=50 tag=food | bought lunch",
+            '2026-01-15 type=expense amount=50 tag=food note="bought lunch"',
         ]
         errors = ptos.lint_records(records, schema)
         out = capsys.readouterr().out
@@ -35,7 +35,7 @@ class TestLintRecords:
             "fields": {"amount": {"type": "int"}},
             "type": {"expense": {"required": ["amount"], "fields": {}}}
         }
-        records = ["2026-01-15 type=expense amount=50 | lunch"]
+        records = ['2026-01-15 type=expense amount=50 note="lunch"']
         ptos.lint_records(records, schema)
         out = capsys.readouterr().out
         assert "no tag" in out
@@ -65,7 +65,7 @@ class TestLintRecords:
                 }
             }
         }
-        records = ["2026-01-15 type=expense amount=50 | note"]
+        records = ['2026-01-15 type=expense amount=50 note="note"']
         ptos.lint_records(records, schema)
         out = capsys.readouterr().out
         assert "domain" in out
@@ -76,7 +76,7 @@ class TestLintRecords:
             "fields": {"amount": {"type": "int"}},
             "type": {"expense": {"required": [], "fields": {}}}
         }
-        records = ["", "   ", "2026-01-15 type=expense amount=50 tag=food | note"]
+        records = ["", "   ", '2026-01-15 type=expense amount=50 tag=food note="note"']
         ptos.lint_records(records, schema)
         out = capsys.readouterr().out
         assert "All records clean" in out
@@ -89,8 +89,8 @@ class TestLintRecords:
             "type": {"expense": {"required": ["amount", "domain"], "fields": {}}}
         }
         records = [
-            "2026-01-14 type=expense amount=50 | note one",
-            "2026-01-15 type=expense | missing amount",
+            '2026-01-14 type=expense amount=50 note="note one"',
+            '2026-01-15 type=expense note="missing amount"',
         ]
         errors = ptos.lint_records(records, schema)
         out = capsys.readouterr().out
@@ -121,7 +121,7 @@ class TestLintAllRecords:
         records_dir = tmp_path / "records"
         records_dir.mkdir()
         (records_dir / "2026.log").write_text(
-            "2026-01-15 type=expense amount=50 tag=food | lunch\n", encoding="utf-8")
+            '2026-01-15 type=expense amount=50 tag=food note="lunch"\n', encoding="utf-8")
         monkeypatch.setattr(ptos, "RECORDS_DIR", str(records_dir))
         monkeypatch.setattr(ptos, "get_schema", lambda: {
             "types": {"allowed": ["expense"]},

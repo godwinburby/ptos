@@ -119,7 +119,7 @@ class TestConvertDraft:
                             "exercise",
                             kv_overrides={"date": "2026-01-01", "note": "custom"})
         assert draft["new_line"].startswith("2026-01-01 ")
-        assert draft["new_line"].endswith("| custom")
+        assert draft["new_line"].endswith("note=custom")
 
     def test_blank_override_removes_field(self):
         draft = self._draft("2026-09-05 type=expense domain=self category=food "
@@ -392,7 +392,7 @@ class TestConvertCli:
         content = _records_content()
         assert content.count("\n") == 1
         assert content.count("type=capture") == 1
-        assert "| walked" in content
+        assert "note=walked" in content
 
     def test_missing_required_blocks_before_write(self, monkeypatch, capsys):
         _clean_cache()

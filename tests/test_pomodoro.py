@@ -36,7 +36,7 @@ class TestPomodoroLogService:
         assert result["ok"] is True
         assert result["line"].startswith(dt.date.today().isoformat())
         assert "type=pomodoro" in result["line"]
-        assert "task=Write_tests" in result["line"]
+        assert 'task="Write tests"' in result["line"]
         assert "minutes=25" in result["line"]
 
     def test_log_with_date(self):

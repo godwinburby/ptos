@@ -1,214 +1,176 @@
-# PTOS record format
+# The PTOS record format
 
-PTOS stores every record as one line of plain text. This page is the complete
-specification of that line, written so you can read, write and search your data with
-nothing but a text editor, `grep`, `awk` or a few lines of your own code.
+PTOS (Plain Text Operating System) stores every record as one line in a `.log` file.
+There is one record per line, fields are `key=value` pairs, and the human-readable
+free text lives in a quoted `note="..."` field at the end.
 
-- **Format version:** 1
-- **Encoding:** UTF-8
-- **Files:** `records/YYYY.log` (see [Files](#files))
-
----
-
-## At a glance
-
-```
-2026-03-11 type=expense domain=self category=food amount=120 tag=restaurant | lunch with team
-────────── ──────────── ─────────────────────────────────── ─────────────── ────────────────
-date       type         fields (key=value, any order)       tag             note
-```
-
-A record is:
-
-1. an ISO date,
-2. one or more `key=value` pairs separated by spaces,
-3. optionally a `|` followed by a free-text note.
-
-That is all. There is no quoting, no escaping and no nesting.
-
-**One rule to remember:** both halves of `key=value` are single tokens, so neither carries
-spaces — write `unit_price=Big_Bazaar`, not `unit price=Big Bazaar`. The note after `|` is
-the only place free-form text belongs. See [Keys](#keys) and
-[Values carry no spaces](#values-carry-no-spaces).
+The format is deliberately plain: a `.log` file is a text file you can open in any
+editor, `grep`, sort, and diff. No parser is required to *read* it, and no database
+sits underneath it.
 
 ---
 
-## Grammar
+## The shape of a line
 
 ```
-line    = date { SP field } [ SP? "|" note ]
+2026-03-11 type=expense domain=self category=food amount=120 tag=lunch note="Team lunch"
+```
+
+Reading left to right:
+
+1. **A leading date**, `YYYY-MM-DD`.
+2. **`type=<kind>`** immediately after the date — always the second token.
+3. **Any number of `key=value` fields** in whatever order the writer chose.
+4. **Zero or more `tag=<label>` fields** (repeat the key for multiple tags).
+5. **An optional `note="..."` field**, always last, holding free text.
+
+Every piece is separated by a single space. A value that contains a space, a `"` or
+a `\` is wrapped in double quotes and those characters are escaped (`\"` and `\\`);
+everything else is written bare.
+
+---
+
+## The grammar
+
+```
+line    = date SP "type=" token { SP field } [ SP "note=" quoted ]
 date    = YYYY-MM-DD
-field   = key "=" value
-key     = one or more characters other than whitespace and "="
-value   = zero or more characters other than whitespace and "|"
-note    = any characters (may contain "|", "=", quotes and spaces)
+field   = key "=" ( token | quoted )
+key     = one or more characters other than whitespace, "=", "|"
+token   = one or more characters other than whitespace, '"' , "\"
+quoted  = '"' { any-character | '\"' | '\\' } '"'
+note    = the value of the final note= field
 SP      = one or more spaces or tabs
 ```
 
-Rules in plain words:
+The rules in plain words:
 
-1. **The date comes first.** It must be `YYYY-MM-DD`. Always write it in this form.
-2. **Everything before the first `|` is the field part.** Everything after it is the note.
-   Because the split happens at the *first* `|`, a `|` can never appear inside a value.
-   It may appear freely inside the note.
-3. **The field part is split on whitespace.** Each piece containing `=` is a field. The
-   key is the text before the *first* `=`; the value is everything after it, so a value
-   may itself contain `=`.
-4. **A key and a value are each a single token.** Neither may contain whitespace, and a
-   value may not contain `|` either. See [Keys](#keys) and
-   [Values carry no spaces](#values-carry-no-spaces).
-5. **A value may be empty.** `amount=` is a field whose value is the empty string.
-6. **Pieces without `=` are ignored.** A stray word in the field part is skipped, not an
-   error.
-7. **Order does not matter** to readers. By convention PTOS writes `type=` right after the
-   date and puts `tag=` and `note` last.
-8. **A repeated key means several values.** `tag=auto tag=bus` is one field `tag` with the
-   values `auto` and `bus`, in order.
-9. **The note is trimmed** of leading and trailing whitespace, and any line break
-   (LF, CR or CRLF) inside it becomes a single space — a record is one physical line. It is
-   not searched as a field.
+1. **A record is one physical line.** A record never spans two lines.
+2. **The first token is the date**, strictly `YYYY-MM-DD`.
+3. **The second token must be `type=<name>`.** A line whose second token is not
+   `type=` is not a v2 record line.
+4. **`key=value`; the key is everything before the first `=`.** Keys never contain a
+   space, `"` or `=`.
+5. **A bare value is a single token.** If a value contains a space, a `"` or a `\`,
+   it is *quoted*: `"..."`. Inside a quoted value, `\"` is a literal quote and `\\` is
+   a literal backslash.
+6. **Empty values are not allowed.** Write `amount=0`, or omit the field — never
+   `amount=`.
+7. **`note` is special.** It is the free-text field. There may be at most one, it is
+   always last, and — because it is reserved by the format — a schema may not define
+   a field named `note`.
+8. **The reader pops `note` out.** When a line is parsed you get `(date, fields, note)`:
+   the note is a separate value, *not* an entry in the field dictionary.
+9. **`tag` repeats.** Because a dictionary has one value per key, `tag=a tag=b` is read
+   as the list `["a", "b"]`. Any key may repeat this way.
 10. **Blank lines and lines starting with `#` are ignored.**
-11. **Quotes and backslashes are ordinary characters.** `"` has no special meaning
-    anywhere. See [Things that do not work](#things-that-do-not-work).
+11. **Order is canonical, not required for reading.** The writer emits the date, then
+    `type`, then the record's fields in order, then `tag`s, then `note`. A reader
+    accepts any order as long as `type=` is second and `note=` is last.
 
 ---
 
 ## Keys
 
-A key is the text before the first `=`, and it obeys the same single-token rule as a
-value — so **keys carry no spaces either**. Field names defined in your schema must match
-`^[a-z][a-z0-9_]*$`: lowercase letters, digits and underscores, starting with a letter.
-Use the same style for any key you add by hand.
+A key is the text before the first `=`. Keys obey the **single-token rule**: no
+spaces, no `"`, no `|`. By convention keys are lowercase `snake_case`
+(`amount`, `due_date`, `merchant_name`).
 
-Why it matters: a space inside a key would make the key unrepresentable. `unit price=50`
-parses as the field `unit` with the value `price`, plus the word `50` silently dropped —
-a key you can write but never read back. Underscores are the only separator a key can use.
-
-PTOS enforces this wherever a name is minted, so a spaced name cannot reach your data:
-
-| Where you create a name | What happens to `my name` |
+| Field | Meaning |
 |---|---|
-| Record Types page (`/types`) | coerced to `my_name` as you type |
-| Schema Builder (`/schema-builder`) | rejected, listing the offending field names |
-| Query Builder (`/query-builder`) | coerced to `my_name` as you type, rejected on save |
-| `ptos --add-type` / `--add-field` | rejected with the name in the message |
-| `ptos --add-preset` | rejected with the name in the message |
-| Any hand-edited `schema.toml` | reported by `ptos --check-schema` |
+| `type` | Required. The record kind, e.g. `expense`. Must be the second token. |
+| `tag` | Free labels; repeat the key for several. Single-token values only. |
+| `note` | Reserved. The free-text tail of the record. Never a schema field. |
+| `id` | Optional. A short opaque id (e.g. `k3f9a1`) for cross-record links. |
+| `links` | Optional. Comma-separated `type:id` targets this record points at. |
 
-The two ends differ on purpose. The beginner-facing pages (Record Types, Query Builder)
-coerce, because the name is being typed fresh and nothing references it yet. The
-Schema Builder and the CLI reject, because those paths edit or script a schema where a
-surprise rename would be harder to spot.
-
-- `type` is required. Every record needs a `type=` field naming its record type.
-- `tag` is the conventional key for free labels; use it more than once for several tags.
-- `id` and `links` are optional keys PTOS uses to link records (`links=expense:k3f9a1`).
-  See the *Cross-record Links* section of the README.
-
-A key that is not in the schema is still stored and read like any other. Lint reports it
-as an unknown field, so you will know if a typo created one.
+The schema's field list is the vocabulary the Add/Edit forms offer. A key not in the
+schema is still stored and read; Lint reports it as an unknown field.
 
 ---
 
-## Values and types
+## Values and quoting
 
-The file contains text only. A value has no type in the syntax: `amount=120` and
-`done=true` are both just strings.
-
-Meaning comes from your **schema** (`config/schema.toml`): the schema says which record
-types exist, which fields each one requires, which values a field such as `category`
-may take, and what type a field has. Field types in the schema are `int`, `string`,
-`datetime` and `bool`. Two of them are checked strictly by Lint:
-
-- an `int` field must contain only digits (no sign and no decimal point), so store
-  amounts in whole units, for example paise or cents;
-- a `datetime` field must be an ISO timestamp such as `2026-03-11T14:30`.
-
-The file itself stays plain text; the checks run when PTOS writes a record and when you
-run `ptos --lint`.
-
-When a key appears once, readers get one string. When it appears two or more times, they
-get a list. **Code that reads `tag` (or any multi-value field) must accept both.**
-
----
-
-## Values carry no spaces
-
-**A value must not contain a space. Write an underscore instead.** This is the one hard
-rule of the format:
+A bare value is a single token: no spaces, no `"`, no `\`. It may contain almost
+anything else — including `=`, `|`, `/`, `.`, `:` and `@` — because the parser splits
+fields on *whitespace*, not on punctuation:
 
 ```
-merchant=Big_Bazaar          correct — one token, greppable
-merchant=Big Bazaar          wrong  — two tokens; see below
+2026-03-13 type=link url=https://example.com/?a=1&b=2
 ```
 
-```
-2026-03-13 type=expense merchant=Big_Bazaar amount=250 | monthly shopping
-```
+Here `url` is the whole value `https://example.com/?a=1&b=2`. The `=` inside it does
+not start a new field.
 
-The app shows underscores as spaces ("Big Bazaar") wherever a stored value is displayed to
-you — record tables, the add/edit forms (free-text fields, option menus and tag chips), and
-the filter/query chips — so you normally never see the underscore while using PTOS. The file
-keeps it. Pages that define the stored vocabulary (Record Types, Schema Builder) and the
-engine-reserved `id`/`links` tokens show the exact stored form.
+### When a value is quoted
 
-What happens if you get it wrong, exactly:
+A value is quoted — wrapped in `"..."` with `\"` and `\\` escaped — **only when it
+contains whitespace, `"` or `\`**. So:
 
 ```
-2026-03-13 type=expense merchant=Big Bazaar amount=250
+2026-03-13 type=expense merchant=Big_Bazaar amount=250
+2026-03-13 type=note title="Meeting with Dr. Mehta" category=work
 ```
 
-The field part is split on whitespace, so this is read as `merchant=Big`, then the
-stray piece `Bazaar` (no `=`), then `amount=250`. **`Bazaar` is silently discarded** —
-no error, no warning, and the value on screen reads "Big". Nothing is lost permanently
-if you notice, but nothing tells you either. A `|` in a value is worse: it starts the
-note, so the rest of the field part is thrown away.
+`Big_Bazaar` needs no quotes; `Meeting with Dr. Mehta` has spaces, so it is quoted and
+parsed back with its spaces intact. Quotes are *not* decoration: an unquoted value
+with a space would split into two tokens and the parser would reject it. Quote
+whenever the value contains a space.
 
-PTOS therefore never writes a space or a `|` into a value. It writes the underscore,
-and turns `|` into `/`. The same rule applies to keys, which is why field names are
-written `unit_price` and never `unit price` — see [Keys](#keys). Whatever you type into
-the app is stored in the conforming shape; see
-[Writing from your own script](#writing-from-your-own-script) for doing the same in your
-own code.
+### Token fields vs free-text fields
 
-Two consequences of the underscore convention:
+Your schema decides whether a field is a **token field** (an `options` dropdown, a
+`tag`, or the engine-reserved `type`/`id`/`links`) or a **free-text field** (a string
+with no options). PTOS treats them differently on write:
 
-- A literal underscore and a space look the same on screen. If the exact text matters,
-  put it in the note.
-- `grep merchant=Big_Bazaar` finds the record. There is only one spelling of each value.
+- **Token fields never carry spaces.** If you type `Big Bazaar` into an option field,
+  PTOS stores `Big_Bazaar` (a space becomes `_`, a `|` becomes `/`). Matching an
+  option value to a stored value normalises both sides, so a schema option written as
+  `Big Bazaar` still validates a stored `Big_Bazaar`.
+- **Free-text fields keep spaces**, via quoting, exactly as typed. `merchant` in a
+  schema with no `options` accepts `merchant="Big Bazaar"`.
 
-Anything free-form (sentences, names with punctuation, quotes, pipes) belongs in the
-note, not in a field.
+Underscores in a *free-text* value are therefore literal — unlike v1, PTOS no longer
+converts a space in a free-text field to `_`. If you want a literal space, a free-text
+field preserves it.
 
 ---
 
 ## The note
 
-Everything after the first `|` is the note. It can contain any characters.
+The note is the free text at the end of a record, written as the final `note=` field:
 
 ```
-2026-03-14 type=income source=salary amount=450 | bonus | q1 = good, "paid" early
+2026-03-14 type=income source=salary amount=4500 note="March salary, including bonus"
 ```
 
-The note is `bonus | q1 = good, "paid" early`. The second `|` and the `=` are part of the
-note, not new fields.
+Everything inside the quotes is the note. It may contain spaces, `=`, `|`, commas,
+punctuation and even an escaped `\"`. Line breaks are not allowed inside a record;
+if a note is given with embedded newlines when a record is built, they are collapsed
+to a single space (a record is one physical line).
 
-Write ` | ` (a space on each side) for readability. PTOS reads `|` with or without
-spaces around it.
+`note` is a **reserved key**: it can never be a schema field name. This does not
+change the parsed shape — `parse_line` still returns the note as a separate third
+value:
+
+```python
+date, fields, note = ptos.parse_line(line)
+```
 
 ---
 
 ## Examples
 
-| Line | What a reader sees |
+| Line | What a reader gets |
 |---|---|
-| `2026-03-11 type=expense category=food amount=120 tag=restaurant \| lunch` | date `2026-03-11`; `type`, `category`, `amount`, `tag` as strings; note `lunch` |
-| `2026-03-12 type=expense amount=40 tag=auto tag=bus \| commute` | `tag` is the list `["auto", "bus"]` |
-| `2026-03-15 type=link url=https://example.com/?a=1&b=2` | `url` is `https://example.com/?a=1&b=2` (the value contains `=`) |
-| `2026-03-16 type=expense amount= category=food` | `amount` is the empty string |
-| `2026-03-17 type=expense merchant=Big_Bazaar amount=250` | `merchant` is `Big_Bazaar` (shown as "Big Bazaar") |
-| `2026-08-17 type=income amount=450 id=ins9x links=expense:k3f9a1 \| refund` | `id` and `links` are ordinary fields with a linking convention |
-| `# my comment` | ignored |
+| `2026-03-11 type=expense category=food amount=120 tag=lunch note="Team lunch"` | `type`, `category`, `amount`, `tag` in the dict; note `Team lunch` |
+| `2026-03-12 type=expense amount=40 tag=auto tag=bus note=commute` | `tag` is the list `["auto", "bus"]` |
+| `2026-03-15 type=note title="Meeting with Dr. Mehta"` | `title` keeps its spaces |
+| `2026-03-16 type=link url=https://example.com/?a=1&b=2` | `url` is the full URL (the `=` is part of the value) |
+| `2026-03-17 type=expense merchant="O'Brien & Sons"` | a quoted free-text value with an ampersand |
+| `2026-03-18 type=quote text="she said \"hi\""` | the value is `she said "hi"` (escaped inner quotes) |
+| `2026-08-17 type=income amount=450 id=ins9x links=expense:k3f9a1 note=refund` | `id`/`links` are ordinary fields with a linking convention |
+| `# a comment` | ignored |
 | (empty line) | ignored |
 
 ---
@@ -217,193 +179,99 @@ spaces around it.
 
 | You write | What happens |
 |---|---|
-| `merchant=Big Bazaar` | The field is `merchant`=`Big`; the piece `Bazaar` has no `=` so it is silently dropped. You see "Big". Write `merchant=Big_Bazaar`. |
-| `unit price=50` | The field is `unit`=`price`; the piece `50` is dropped. A key with a space can be written but never read back. Use `unit_price=50`. |
-| `merchant="Big Bazaar"` | Quotes are not special, so this is the same mistake twice: the field is `"Big` and `Bazaar"` is dropped. |
-| `A\| inside a value` | The note starts at the `|` and the rest of the field part is lost. Put it in the note, or write `/`. |
-| `amount=5|note` with no space | Works: the note starts at `|`. |
-| `type=expense amount=5` (no date) | The first piece is not a date, so the line cannot be parsed. Queries skip it; Lint reports "cannot parse line". |
-| `2026-02-30 type=expense` | Not a real date. Same as above. |
-| `2026-03-11 amount=5` (no `type`) | Parses, but Lint reports "missing type field". |
-
-Every one of these is silent *in the file*: nothing errors, the value is just shorter than
-you meant. PTOS itself never writes a line like this — the writer normalizes values and
-keys, flattens a multi-line note, and refuses a bad date, a bad key, a line containing a
-line break, or a line that would not parse back — so these only happen in a hand-edited
-file. `ptos --lint` (or the Lint page in the web app) shows the file and line number.
+| `2026-03-13 expense amount=40` | No `type=` second → not v2. The v1 reader still reads it, and Lint flags it as a legacy line to migrate. |
+| `2026-03-13 type=expense amount=` | Empty value → the parser rejects it. Use `amount=0` or drop the field. |
+| `2026-03-13 type=expense merchant=Big Bazaar` | `merchant` is bare but contains a space → the parser sees a bare token `Big` and then `Bazaar` (no `=`), and the line is rejected. Quote it: `merchant="Big Bazaar"`. |
+| `2026-03-13 type=expense amount=40 note=hi note=bye` | Two `note` fields — only the last free-text note is meaningful; a schema may not use `note` as a normal field. |
+| `2026-03-13 type=expense category="a"b` | Trailing characters after a quoted value → rejected. |
+| `2026-03-13 type=expense tag="two words"` | `tag` is a token field: a quoted tag is normalised to `two_words`. |
 
 ---
 
-## Files
+## Legacy v1 lines and migration
 
-Records live under your data folder:
+Before v2, a record used single-token values for *everything* and put free text after
+a `|`:
 
 ```
-records/2026.log                 one file per year, any number of lines
-records/<group>/2026.log         optional: a record type kept in its own folder (log_group)
+2026-03-13 type=expense merchant=Big_Bazaar amount=250 | monthly shopping
 ```
 
-- Each file is UTF-8 text, one record per line. Any line ending (`\n` or `\r\n`) is fine.
-- The year in the file name is used to skip files outside a query's date range, so keep
-  names as `YYYY.log`.
-- The order of lines inside a file does not matter to readers.
-- Files are plain text, so Git, Syncthing, backups and any editor work on them directly.
-  PTOS writes through a temporary file and renames it, so a crash does not leave a
-  half-written file.
+PTOS **still reads** these lines (v2 is tried first; a non-conforming line falls back
+to v1), so no data is lost and nothing breaks on upgrade. But writers only emit v2.
+To rewrite every file in place:
+
+```bash
+ptos --migrate-format --dry-run    # report what would change, write nothing
+ptos --migrate-format              # rewrite in place (atomic, per file)
+```
+
+The migrator leaves a line that is already canonical v2 byte-identical (it is
+idempotent), preserves blank lines and `#` comments, and only touches `.log` files.
+`ptos --lint` reports any line that still only reads via the v1 fallback so you can
+find the stragglers.
+
+The migrator also **decodes** a v1 free-text value: the v1 writer encoded spaces as
+`_`, so any schema field with no `options` (a free-text field) has its underscores
+turned back into spaces and re-quoted — `merchant=Big_Bazaar` becomes
+`merchant="Big Bazaar"`. Token values (`type`/`tag`/`id`/`links` and every
+option-bearing field) and fields not defined in the schema are left untouched. The
+decode is **lossy for a literal underscore** in free text (e.g. an email address or a
+code); that is intended — free-text values are expected to hold real spaces. A value
+written after this change keeps its underscores literal (only the migrator decodes).
 
 ---
 
-## Read it yourself
+## Writing from your own script
 
-### Python (standard library only)
+The engine is the only thing that should build record lines:
+`build_record_line(date, record_dict, note=None) -> str`. If you write your own, mimic
+its rules exactly:
 
 ```python
-import datetime as dt
-
-def parse_record(line):
-    """Return (date, fields, note), or None for a blank or comment line.
-    Raises ValueError if the line cannot be parsed (bad or missing date)."""
-    line = line.strip()
-    if not line or line.startswith("#"):
-        return None
-    main, _, note = line.partition("|")
-    parts = main.split()
-    if not parts:
-        raise ValueError("empty line")
-    date = dt.date.fromisoformat(parts[0])
-    fields = {}
-    for token in parts[1:]:
-        if "=" not in token:
+def build(date, fields, note=None):
+    parts = ["%s=%s" % ("type", fields["type"])]
+    for key, val in fields.items():
+        if key in ("type", "tag", "note"):
             continue
-        key, value = token.split("=", 1)
-        if key not in fields:
-            fields[key] = value
-        elif isinstance(fields[key], list):
-            fields[key].append(value)
-        else:
-            fields[key] = [fields[key], value]
-    return date, fields, note.strip()
+        parts.append("%s=%s" % (key, render(val)))
+    for t in fields.get("tag", []):
+        parts.append("tag=%s" % t)
+    line = "%s %s" % (date, " ".join(parts))
+    if note:
+        line += " note=%s" % quote(note)
+    return line
 ```
 
-Read a whole year:
-
-```python
-with open("records/2026.log", encoding="utf-8") as f:
-    for line in f:
-        try:
-            rec = parse_record(line)
-        except ValueError:
-            continue
-        if rec:
-            date, fields, note = rec
-```
-
-The equivalent JSON for the first example is:
-
-```json
-{"date": "2026-03-11", "type": "expense", "domain": "self", "category": "food",
- "amount": "120", "tag": "restaurant", "note": "lunch with team"}
-```
-
-(`tag` is a string here because it appears once; with two `tag=` pieces it would be a list.)
-
-### Writing from your own script
-
-1. Start with the date as `YYYY-MM-DD`.
-2. Add `key=value` pairs separated by single spaces. Use one `key=value` per value for
-   multi-value fields.
-3. Normalise every value: collapse whitespace runs to `_`, trim the ends, and turn any
-   `|` into `/`. This step is not optional — see
-   [Values carry no spaces](#values-carry-no-spaces). PTOS applies it to every value it
-   writes, so a line that skips it is the only kind that can break.
-4. Append ` | ` and the note if you have one. The note is the one place where spaces
-   and `|` are fine.
-5. Append the line to the right year file with a trailing newline.
-
-```python
-def build_record(date, fields, note=None):
-    parts = []
-    for key, value in fields.items():
-        for v in (value if isinstance(value, list) else [value]):
-            v = "_".join(str(v).split()).replace("|", "/")
-            parts.append(f"{key}={v}")
-    line = f"{date.isoformat()} " + " ".join(parts)
-    return line + (f" | {note}" if note else "")
-```
-
-### grep and awk
-
-All food expenses in 2026:
-
-```sh
-grep ' type=expense' records/2026.log | grep ' category=food'
-```
-
-Records with the tag `bus` (the tag may be followed by a space or the `|`):
-
-```sh
-grep -E ' tag=bus([ |]|$)' records/*.log
-```
-
-Search the notes (and everything else) for a word:
-
-```sh
-grep -i 'lunch' records/*.log
-```
-
-Total expenses for March 2026 (the note is stripped first so it cannot interfere):
-
-```sh
-awk '{ sub(/\|.*/, "") }
-     / type=expense( |$)/ && $1 ~ /^2026-03/ {
-       for (i = 2; i <= NF; i++) if ($i ~ /^amount=/) s += substr($i, 8)
-     }
-     END { print s + 0 }' records/2026.log
-```
-
-Number of expenses per category, most frequent first:
-
-```sh
-awk '{ sub(/\|.*/, "") }
-     / type=expense( |$)/ {
-       for (i = 2; i <= NF; i++) if ($i ~ /^category=/) c[substr($i, 10)]++
-     }
-     END { for (k in c) print c[k], k }' records/*.log | sort -rn
-```
-
-Lines that do not start with a date (ignoring blank and comment lines):
-
-```sh
-grep -v -E '^(#|$|[0-9]{4}-[0-9]{2}-[0-9]{2} )' records/*.log
-```
-
-Or let PTOS check everything, including the schema rules: open the Lint page in the web
-app, or run `ptos --lint` from the command line. To get data out as CSV, add `--export` to
-any query, for example `ptos -y expense -t tm --export`.
+where `render`/`quote` wrap a value in `"..."` (escaping `\"` and `\\`) when it
+contains whitespace, `"` or `\`, and raise on an empty value. The date must be
+`YYYY-MM-DD`.
 
 ---
 
-## Why this format
+## Where records live
 
-- **One line, one fact.** `grep`, `sort`, `diff`, `wc -l` and `git log -p` all work on it
-  with no tooling.
-- **Easy to reconcile.** If two devices change the same year file, your sync tool keeps a
-  conflict copy. Because a record is one line, `ptos --resolve-conflicts` can show exactly
-  which lines differ and let you keep both.
-- **Forgiving by design.** A stray word or a hand-typed typo in a field part does not break
-  the line.
-- **No lock-in.** If PTOS disappears, your data is still readable. The reference parser
-  above is short enough to rewrite in any language in a few minutes.
+Records live in a configurable folder (default `records/`), one file per year:
 
-The trade-off is simple: values are single tokens, and free-form text goes in the note.
-For data that needs nested or typed structure, export it (CSV from the CLI) rather than
-bending the record format.
+```
+records/2026.log
+records/2026-03/2026-03.log   # optional grouping, if the user chose a log_group
+```
+
+The file name must be `YYYY.log` — the year in the file name is how PTOS picks the
+files a query scans. A record's own date may differ from the file's year (it is used
+for display and filtering, not for the file name).
 
 ---
 
-## Stability
+## Full worked example
 
-The rules on this page are stable. A line that is valid today keeps its meaning in future
-versions. Any new syntax would be added only in a backwards-compatible way, and readers of
-this version that meet something they do not understand skip it rather than fail, exactly
-as they already skip pieces without `=`.
+```
+2026-03-11 type=expense domain=self category=food amount=120 tag=lunch note="Team lunch"
+2026-03-12 type=expense domain=home category=grocery amount=850 tag=vegetables
+2026-03-13 type=note title="Meeting with Dr. Mehta" body="Discussed the hearing aid fitting" tag=work
+2026-03-14 type=income source=salary amount=42000 tag=monthly note="September salary"
+2026-03-15 type=exercise activity=walk duration=40
+```
+
+Each line parses to a date, a field dictionary, and a note (empty when absent).

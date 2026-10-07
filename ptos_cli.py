@@ -167,7 +167,7 @@ def build_parser(cycles):
                           "  (e.g. --link expense:k3f9a1 project:p91a)")
     add.add_argument("--cap", nargs="+", metavar="TEXT",
                      help="Capture a quick note as a type=capture record\n"
-                          "  (text goes in the | note; --date/--tag/--link apply)")
+                          "  (text goes in the note; --date/--tag/--link apply)")
     add.add_argument("--paste", nargs="?", const="__STDIN__", metavar="TEXT",
                      help="Paste clipboard text — validates & appends if it's a\n"
                           "  valid PTOS line, or writes a capture for convert-review\n"
@@ -282,6 +282,10 @@ def build_parser(cycles):
     utl = p.add_argument_group("Utilities")
     utl.add_argument("-l", "--lint",    action="store_true", help="Validate records against schema")
     utl.add_argument("--fix",           action="store_true", help="With --lint: open files with errors in editor")
+    utl.add_argument("--migrate-format", dest="migrate_format", action="store_true",
+                     help="Rewrite every record line to the current v2 format\n"
+                          "  (date, type=, quoted free-text values, note= last;\n"
+                          "  combine with --dry-run to preview)")
     utl.add_argument("-j", "--journal", nargs="?", const="today", default=None, metavar="DATE",
                      help="Open a journal file (default: today; accepts today/yesterday/YYYY-MM-DD)")
     utl.add_argument("-e", "--edit",    nargs="?", const="records", metavar="TARGET",
@@ -1851,7 +1855,7 @@ def _render_single_table(lines, label=None):
                     return parsed.strftime("%d-%b %H:%M")
                 except (ValueError, TypeError):
                     pass
-            return _disp(v)
+            return str(v)
         cells = [trunc(_fmt_cell(f, row.get(f, "")), widths[f]).ljust(widths[f]) for f in all_fields]
         print(gap.join(cells))
 
@@ -3480,6 +3484,26 @@ def main():
         return
     if args.sync_status:
         run_sync_status()
+        return
+
+    # ---- migrate format ----
+    if getattr(args, "migrate_format", False):
+        dry = getattr(args, "dry_run", False)
+        summary = ptos.migrate_record_format(dry_run=dry)
+        verb = "would change" if dry else "changed"
+        print(f"Scanned {summary['files']} record file(s), {summary['lines']} line(s).")
+        print(f"{verb.capitalize()} {summary['changed']} line(s).")
+        if summary["errors"]:
+            print(f"\n{len(summary['errors'])} line(s) could not be rebuilt:")
+            for path, err in summary["errors"][:20]:
+                print(f"  {os.path.basename(path)}: {err}")
+            if len(summary["errors"]) > 20:
+                print(f"  … and {len(summary['errors']) - 20} more")
+            sys.exit(1)
+        if dry:
+            print("Dry run — nothing written. Re-run without --dry-run to apply.")
+        else:
+            print("Migration complete.")
         return
 
     # ---- lint mode ----

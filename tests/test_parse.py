@@ -1,5 +1,6 @@
 import datetime as dt
 import pytest
+import ptos
 from ptos import parse_line, safe_parse_line, build_record_line, apply_set
 
 
@@ -62,7 +63,7 @@ class TestBuildRecordLine:
 
     def test_with_note(self):
         line = build_record_line("2026-01-15", {"type": "expense"}, note="test note")
-        assert line == "2026-01-15 type=expense | test note"
+        assert line == '2026-01-15 type=expense note="test note"'
 
     def test_multi_value_field(self):
         line = build_record_line(
@@ -71,13 +72,14 @@ class TestBuildRecordLine:
         assert "tag=food" in line
         assert "tag=groceries" in line
 
-    def test_empty_record(self):
-        line = build_record_line("2026-01-15", {})
-        assert line == "2026-01-15 "  # trailing space is expected
+    def test_empty_record_is_refused(self):
+        # v2 requires a type as the first field, so a typeless record is invalid.
+        with pytest.raises(ptos.PTOSError):
+            build_record_line("2026-01-15", {})
 
     def test_note_strip(self):
         line = build_record_line("2026-01-15", {"type": "expense"}, note="  spaced  ")
-        assert line == "2026-01-15 type=expense | spaced"  # surrounding space trimmed
+        assert line == "2026-01-15 type=expense note=spaced"  # surrounding space trimmed
 
 
 class TestApplySet:

@@ -23,9 +23,13 @@
       .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
   }
 
-  // Display only: stored values use underscores, show spaces to the user.
-  // Never feed the result back into a chip value or the where expression.
-  function disp(v) { return String(v == null ? "" : v).replace(/_/g, " "); }
+  // Serialise a filter value for the where expression. A value containing
+  // whitespace, a quote or a backslash is wrapped in double quotes (the engine
+  // reads it back verbatim); everything else is emitted bare.
+  function _q(v) {
+    v = String(v == null ? "" : v);
+    return /[\s"\\]/.test(v) ? '"' + v.replace(/\\/g, "\\\\").replace(/"/g, '\\"') + '"' : v;
+  }
 
   function FilterBuilder(opts) {
     var self     = this;
@@ -219,7 +223,7 @@
         schema.forEach(function(opt){
           var act=self._chips.some(function(c){return c.field===f.name&&c.value===opt;});
           var b=document.createElement("button"); b.className="qb-chip"+(act?" active":"");
-          b.textContent=disp(opt);
+          b.textContent=opt;
           b.onclick=function(){self._toggleChip(f.name,"=",opt);b.className="qb-chip"+(self._chips.some(function(c){return c.field===f.name&&c.value===opt;})?" active":"");};
           if(vc)vc.appendChild(b);
         });
@@ -228,7 +232,7 @@
           histExt.forEach(function(v){
             var act=self._chips.some(function(c){return c.field===f.name&&c.value===v;});
             var b=document.createElement("button"); b.className="qb-chip"+(act?" active":"");
-            b.style.opacity="0.75"; b.style.fontSize="12px"; b.textContent=disp(v);
+            b.style.opacity="0.75"; b.style.fontSize="12px"; b.textContent=v;
             b.onclick=function(){self._toggleChip(f.name,"=",v);b.className="qb-chip"+(self._chips.some(function(c){return c.field===f.name&&c.value===v;})?" active":"");};
             if(vh)vh.appendChild(b);
           });
@@ -238,7 +242,7 @@
         hist.slice(0,8).forEach(function(v){
           var act=self._chips.some(function(c){return c.field===f.name&&c.value===v;});
           var b=document.createElement("button"); b.className="qb-chip"+(act?" active":"");
-          b.textContent=disp(v);
+          b.textContent=v;
           b.onclick=function(){self._toggleChip(f.name,"=",v);self.closeValueRow();};
           if(vc)vc.appendChild(b);
         });
@@ -280,7 +284,7 @@
       schema.forEach(function(tag){
         var act=self._chips.some(function(c){return c.field==="tag"&&c.value===tag;});
         var b=document.createElement("button"); b.className="qb-chip"+(act?" active":"");
-        b.textContent=disp(tag);
+        b.textContent=tag;
         b.onclick=function(){self._toggleChip("tag","=",tag);b.className="qb-chip"+(self._chips.some(function(c){return c.field==="tag"&&c.value===tag;})?" active":"");};
         if(tc)tc.appendChild(b);
       });
@@ -289,7 +293,7 @@
         histExt.forEach(function(tag){
           var act=self._chips.some(function(c){return c.field==="tag"&&c.value===tag;});
           var b=document.createElement("button"); b.className="qb-chip"+(act?" active":"");
-          b.style.opacity="0.75"; b.style.fontSize="12px"; b.textContent=disp(tag);
+          b.style.opacity="0.75"; b.style.fontSize="12px"; b.textContent=tag;
           b.onclick=function(){self._toggleChip("tag","=",tag);b.className="qb-chip"+(self._chips.some(function(c){return c.field==="tag"&&c.value===tag;})?" active":"");};
           if(th)th.appendChild(b);
         });
@@ -305,7 +309,7 @@
       wrap.style.display="block"; list.innerHTML="";
       nonType.forEach(function(c,i){
         var span=document.createElement("span"); span.className="qb-active-chip";
-        span.innerHTML=esc(c.field+c.op+disp(c.value))+
+        span.innerHTML=esc(c.field+c.op+c.value)+
           ' <button onclick="FilterBuilder._get(\''+self._id+'\')._rmByIdx('+i+')"'+
           ' style="background:none;border:none;cursor:pointer;color:var(--sub);">&times;</button>';
         list.appendChild(span);
@@ -340,8 +344,8 @@
       self._chips.forEach(function(c){if(!byF[c.field]){byF[c.field]=[];ord.push(c.field);}byF[c.field].push(c);});
       return ord.map(function(f){
         var g=byF[f];
-        if(g.length===1)return g[0].field+g[0].op+g[0].value;
-        return"("+g.map(function(c){return c.field+c.op+c.value;}).join(" OR ")+")";
+        if(g.length===1)return g[0].field+g[0].op+_q(g[0].value);
+        return"("+g.map(function(c){return c.field+c.op+_q(c.value);}).join(" OR ")+")";
       }).join(" AND ");
     };
 

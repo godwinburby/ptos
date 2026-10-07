@@ -1,9 +1,4 @@
 
-// ── Display helper ──────────────────────────────────────────────────────────────────
-// Record values are stored with underscores; show them to the user as spaces.
-// Only for display — never feed the result back into a stored value.
-function _disp(v) { return String(v == null ? "" : v).replace(/_/g, " "); }
-
 // ── Editable Options ────────────────────────────────────────────────────────────────
 let pendingOption = null;
 
@@ -116,7 +111,7 @@ function addGlobalFieldOption(fieldName, selectId) {
         if (result.success) {
             const opt = document.createElement('option');
             opt.value = val;
-            opt.textContent = _disp(val);
+            opt.textContent = val;
             opt.selected = true;
             select.appendChild(opt);
         } else {
@@ -156,7 +151,7 @@ function addNewOption(fieldName) {
             value: val,
             parentValue: parentVal
         };
-        document.getElementById('add-option-value').textContent = _disp(val);
+        document.getElementById('add-option-value').textContent = val;
         document.getElementById('add-option-field').textContent = fieldName;
         document.getElementById('add-option-parent-msg').style.display = 'block';
         document.getElementById('add-option-parent-key').textContent = parentField + '=' + parentVal;
@@ -170,7 +165,7 @@ function addNewOption(fieldName) {
         value: val,
         parentValue: null
     };
-    document.getElementById('add-option-value').textContent = _disp(val);
+    document.getElementById('add-option-value').textContent = val;
     document.getElementById('add-option-field').textContent = fieldName;
     document.getElementById('add-option-parent-msg').style.display = 'none';
     document.getElementById('add-option-modal').style.display = 'flex';
@@ -207,7 +202,7 @@ async function confirmAddOption() {
         if (result.success) {
             const opt = document.createElement('option');
             opt.value = value;
-            opt.textContent = _disp(value);
+            opt.textContent = value;
             opt.selected = true;
             select.appendChild(opt);
         } else {

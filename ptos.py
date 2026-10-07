@@ -2441,8 +2441,108 @@ def resolve_time(keyword, cycles):
 # Record parsing
 # --------------------------------------------------
 
-def parse_line(line):
-    """Parse a log line into (date, kv_dict, note)."""
+def _read_quoted(s, j):
+    """Read a double-quoted value starting at ``s[j] == '"'``.
+
+    Returns ``(value, next_index)``. Only ``\\"`` and ``\\\\`` are recognised
+    escapes (v2). Raises ValueError on an invalid escape or an unterminated
+    quote.
+    """
+    j += 1
+    out = []
+    n = len(s)
+    while j < n:
+        c = s[j]
+        if c == "\\":
+            if j + 1 < n and s[j + 1] in ('"', "\\"):
+                out.append(s[j + 1])
+                j += 2
+                continue
+            raise ValueError("invalid escape in quoted value")
+        if c == '"':
+            return "".join(out), j + 1
+        out.append(c)
+        j += 1
+    raise ValueError("unterminated quoted value")
+
+
+def _tokenize_v2_fields(s):
+    """Tokenize the field part of a v2 line into ``(key, value)`` pairs.
+
+    Fields are whitespace-separated. A value is either a bare token (no
+    whitespace, ``"`` or ``\\``) or a double-quoted string. Raises ValueError
+    on any v2 violation (missing ``=``, empty key/value, bad quote).
+    """
+    tokens = []
+    i = 0
+    n = len(s)
+    while i < n:
+        while i < n and s[i].isspace():
+            i += 1
+        if i >= n:
+            break
+        j = i
+        while j < n and s[j] not in "= \t":
+            j += 1
+        if j >= n or s[j] != "=":
+            raise ValueError("field without '='")
+        key = s[i:j]
+        if not key:
+            raise ValueError("empty key")
+        j += 1
+        if j < n and s[j] == '"':
+            val, j = _read_quoted(s, j)
+            if j < n and not s[j].isspace():
+                raise ValueError("trailing characters after quoted value")
+        else:
+            k = j
+            while k < n and not s[k].isspace():
+                k += 1
+            val = s[j:k]
+            j = k
+            if any(c in val for c in ('"', "\\")):
+                raise ValueError("bare value contains a quote or backslash")
+        if val == "":
+            raise ValueError("empty value")
+        tokens.append((key, val))
+        i = j
+    return tokens
+
+
+def _parse_v2(line):
+    """Strict v2 parse. Raises ValueError on any deviation."""
+    s = line.strip()
+    if not s:
+        raise ValueError("empty line")
+    i = 0
+    n = len(s)
+    while i < n and not s[i].isspace():
+        i += 1
+    date = s[:i]
+    if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", date):
+        raise ValueError("date must be a leading YYYY-MM-DD")
+    fields = _tokenize_v2_fields(s[i:])
+    if not fields:
+        raise ValueError("no fields")
+    if fields[0][0] != "type":
+        raise ValueError("type must be the first field after the date")
+    kv = {}
+    note = None
+    for key, val in fields:
+        if key == "note":
+            note = val
+            continue
+        if key not in kv:
+            kv[key] = val
+        elif isinstance(kv[key], list):
+            kv[key].append(val)
+        else:
+            kv[key] = [kv[key], val]
+    return parse_date(date), kv, (note or "")
+
+
+def _parse_v1(line):
+    """Legacy v1 parse: single-token values, `|` note tail, type anywhere."""
     main, _, note = line.partition("|")
     parts = main.strip().split()
     if not parts:
@@ -2461,6 +2561,21 @@ def parse_line(line):
             kv[k] = [kv[k], v]
     return parse_date(date), kv, note.strip()
 
+
+def parse_line(line):
+    """Parse a log line into ``(date, kv_dict, note)``.
+
+    Tries the v2 grammar first (leading date, ``type=`` next, quoted free-text,
+    ``note=`` field), then falls back to v1 (unquoted single-token values with
+    a `| note` tail) so a not-yet-migrated file still reads. Writers only emit
+    v2.
+    """
+    line = line.rstrip("\r\n")
+    try:
+        return _parse_v2(line)
+    except ValueError:
+        return _parse_v1(line)
+
 def safe_parse_line(line):
     """Like parse_line but returns None on any error instead of raising."""
     try:
@@ -2469,12 +2584,13 @@ def safe_parse_line(line):
         return None
 
 def normalize_field_value(v):
-    """Coerce a field value into the single token the record format requires.
+    """Coerce a token into a single-token form (keys, type, tags, options).
 
-    A value cannot contain whitespace (the field part is split on it) or a
-    `|` (it would start the note). Collapsing whitespace runs to `_` and
-    turning `|` into `/` means a value written with a space is stored
-    readable instead of being silently truncated on the next read.
+    Free-text field values and notes are *not* run through this — they are
+    quoted instead (see `build_record_line`). Token fields cannot contain
+    whitespace or `|`, so collapsing whitespace runs to `_` and turning `|`
+    into `/` keeps a value like `Big Bazaar` readable as `Big_Bazaar` rather
+    than quoting a controlled-vocabulary value that no option would match.
 
     Idempotent: normalizing an already-normalized value returns it
     unchanged, so rebuilding a line from parsed kv never rewrites it.
@@ -2506,6 +2622,17 @@ def _invalid_record_key(k):
 # the same single-token rule as a value: lowercase letters, digits, underscores.
 # Matched with fullmatch so a trailing newline cannot sneak a name through.
 NAME_RE = re.compile(r"[a-z][a-z0-9_]*")
+
+
+# Field names reserved by the record grammar. `note` is written last as a
+# separate field and returned out-of-band by parse_line, so a schema field
+# named `note` would collide with it.
+RESERVED_FIELD_NAMES = frozenset({"note"})
+
+
+def reserved_field_error(name):
+    return (f"Invalid field name '{name}' — it is reserved by the record "
+            "format (used for the trailing note).")
 
 
 def is_valid_name(name):
@@ -2540,7 +2667,7 @@ def invalid_schema_names(type_schemas, field_meta=None,
     bad = set()
 
     def _add(name):
-        if not is_valid_name(name):
+        if not is_valid_name(name) or str(name) in RESERVED_FIELD_NAMES:
             bad.add(str(name))
 
     for mapping in (field_meta, global_fields, shared_defs):
@@ -2556,14 +2683,50 @@ def invalid_schema_names(type_schemas, field_meta=None,
     return sorted(bad)
 
 
+def _needs_quote(v):
+    """True when a free-text value must be quoted in the v2 grammar."""
+    return any(c.isspace() for c in v) or '"' in v or "\\" in v
+
+
+def _quote_value(v):
+    """Wrap a value in double quotes, escaping `\\` and `"`."""
+    return '"' + v.replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _render_record_value(key, value):
+    """Render one `key=value` pair for a v2 line.
+
+    `tag` values keep the single-token rule (spaces -> `_`, never quoted).
+    Any other value is quoted only when it needs it. An empty value is refused
+    — omit the field instead.
+    """
+    if key == "tag":
+        val = normalize_field_value(value)
+        if _needs_quote(val):
+            raise PTOSError(
+                f"Invalid tag value {value!r} — a tag is a single token with "
+                "no quotes or backslashes.")
+        return "tag=" + val
+    val = str(value)
+    if val == "":
+        raise PTOSError(
+            f"Invalid empty value for field '{key}' — omit the field instead.")
+    return key + "=" + (_quote_value(val) if _needs_quote(val) else val)
+
+
 def build_record_line(date, record, note=None):
-    """Build a log line from its components.
-    Format: YYYY-MM-DD key=value key=value ... | note
+    """Build a v2 log line from its components.
+
+    Format: ``YYYY-MM-DD type=... key=value ... tag=... note="..."``
+
+    - `type` is always the first field after the date (required, single).
+    - Keys and `tag` values keep the single-token rule (spaces -> `_`).
+    - Any other value is quoted only when it contains whitespace, `"` or `\\`.
+    - The note is written last as ``note=...`` (never as a `|` tail).
+    - Empty values are refused.
     Multi-value fields (lists) produce repeated key=value pairs.
 
-    This is the single place a record line is assembled. Values are cleaned to
-    single tokens (see normalize_field_value), the note to one line (see
-    clean_note), and the date and every key are validated — so no caller can
+    This is the single place a record line is assembled, so no caller can
     write a line that silently loses data on the next read. Never assemble a
     record line by hand; always go through here.
     """
@@ -2574,20 +2737,38 @@ def build_record_line(date, record, note=None):
         parse_date(date)
     except ValueError:
         raise PTOSError(f"Invalid record date '{date}' — use YYYY-MM-DD.")
-    parts = []
+
+    type_val = record.get("type")
+    if type_val is None or isinstance(type_val, list):
+        raise PTOSError("A record needs a single type=<name> field.")
+    type_val = normalize_field_value(type_val)
+    if not type_val:
+        raise PTOSError("Invalid record type — it cannot be empty.")
+    parts = ["type=" + type_val]
+
     for k, v in record.items():
-        if _invalid_record_key(k):
+        if k in ("type", "tag", "note"):
+            continue
+        key = normalize_field_value(k)
+        if _invalid_record_key(key):
             raise PTOSError(
                 f"Invalid field key '{k}' — a key cannot be empty or contain "
                 "spaces, '=', or '|'.")
         if isinstance(v, list):
-            parts.extend(f"{k}={normalize_field_value(i)}" for i in v)
+            parts.extend(_render_record_value(key, i) for i in v)
         else:
-            parts.append(f"{k}={normalize_field_value(v)}")
+            parts.append(_render_record_value(key, v))
+
+    tags = record.get("tag")
+    if tags is not None:
+        for t in (tags if isinstance(tags, list) else [tags]):
+            parts.append(_render_record_value("tag", t))
+
     line = date + " " + " ".join(parts)
     note = clean_note(note)
     if note:
-        line += " | " + note
+        parts_note = _quote_value(note) if _needs_quote(note) else note
+        line += " note=" + parts_note
     return line
 
 def _tok_where(expr):
@@ -3001,6 +3182,18 @@ def rewrite_line_in_file(filepath, old_line, new_line, lineno=None):
     atomic_write(filepath, "".join(lines))
 
 
+def _set_value_is_token(field, rtype, kv):
+    """Whether an `--set` value should be normalized to a single token.
+
+    Token fields (tag, option lists, id/links) are normalized; free-text stays
+    verbatim so build_record_line quotes it. Falls back to normalizing when the
+    schema can't be read (keeps the old behaviour rather than failing)."""
+    try:
+        return is_token_field(get_schema(), rtype, field, kv)
+    except Exception:
+        return True
+
+
 def apply_set(old_line, set_args, new_note):
     """Build a new record line from old_line by applying --set changes and/or --set-note.
     set_args: list of assignment strings. Three forms:
@@ -3023,11 +3216,12 @@ def apply_set(old_line, set_args, new_note):
             sys.exit(f"--set: expected key=value, key+=value, or key-=value — got '{item}'")
         k, op, v = m.groups()
 
-        # Clean the value before comparing so `-=big shop` matches the stored
-        # `big_shop` and `+=big shop` does not create a duplicate. The value is
-        # cleaned again in build_record_line; cleanup is idempotent. `date` is
-        # left alone — it is validated below, not tokenised.
-        if k != "date":
+        # Token fields (tag, option lists, id/links) are cleaned before
+        # comparing so `-=big shop` matches the stored `big_shop` and
+        # `+=big shop` does not create a duplicate. Free-text values are left
+        # verbatim — build_record_line quotes them. `date` is validated below,
+        # not tokenised.
+        if k != "date" and _set_value_is_token(k, kv.get("type"), kv):
             v = normalize_field_value(v)
 
         if op == "=":
@@ -3520,11 +3714,15 @@ def backlink_refs(target):
 
 
 def append_links_to_line(raw_line, new_links):
-    """Append a 'links=...' token to a record line, merging with any
-    existing links value. Returns the new line."""
-    existing = _links_list(parse_line(raw_line)[1].get("links"))
+    """Append/merge a 'links=...' token on a record line, preserving the note.
+
+    Quote-aware: the line is parsed (v2 or v1), the link tokens are merged, and
+    the line is rebuilt in canonical v2 order — so a quoted free-text value or
+    a note can never be mangled by naive whitespace editing. Returns the new
+    line."""
+    date, kv, note = parse_line(raw_line)
     all_links = []
-    for v in existing:
+    for v in _links_list(kv.get("links")):
         all_links.extend(tok.strip() for tok in str(v).split(",") if tok.strip())
     for v in new_links:
         all_links.extend(tok.strip() for tok in str(v).split(",") if tok.strip())
@@ -3532,25 +3730,26 @@ def append_links_to_line(raw_line, new_links):
     for tok in all_links:
         if tok not in merged:
             merged.append(tok)
-    # strip any existing links token, then append merged
-    parts = raw_line.split()
-    kept = [p for p in parts if not p.startswith("links=")]
     if merged:
-        kept.append("links=" + ",".join(merged))
-    return " ".join(kept)
+        kv["links"] = ",".join(merged)
+    else:
+        kv.pop("links", None)
+    return build_record_line(date, kv, note)
 
 
 def append_record_id(filepath, lineno, old_line, new_id=None):
-    """Append id=<id> to a record line in place. Generates one if not given.
-    Returns the new id."""
+    """Insert id=<id> into a record line in place. Generates one if not given.
+
+    Quote-aware: the line is parsed and rebuilt (v2), so a quoted free-text
+    value or a note is preserved exactly. Returns the new id."""
     if not new_id:
         new_id = generate_unique_id()
-    line = old_line.rstrip("\n")
-    if re.search(r'\bid=(\S+)', line):
-        raise ValueError(f"Line already has an id: {line}")
-    parts = line.split()
-    parts.append(f"id={new_id}")
-    rewrite_line_in_file(filepath, old_line, " ".join(parts), lineno=lineno)
+    date, kv, note = parse_line(old_line.rstrip("\n"))
+    if "id" in kv or re.search(r'\bid=(\S+)', old_line):
+        raise ValueError(f"Line already has an id: {old_line}")
+    kv["id"] = new_id
+    rewrite_line_in_file(filepath, old_line,
+                         build_record_line(date, kv, note), lineno=lineno)
     return new_id
 
 
@@ -3684,6 +3883,21 @@ def _get_field_options(schema, type_schema, field, record):
 
     return None
 
+
+def is_token_field(schema, rtype, field, record=None):
+    """True if `field` holds a single token, so its value is normalized
+    (spaces -> `_`) rather than quoted.
+
+    `type`, `tag`, `id`, and `links` are always tokens. A field with schema
+    `options` (directly, via `use`, or in `[global_fields]`) is a token; a
+    field with no options is free-text and keeps its spaces (quoted on write).
+    """
+    if field in ("type", "tag", "id", "links"):
+        return True
+    tschema = (schema or {}).get("type", {}).get(rtype, {}) or {}
+    return _get_field_options(schema or {}, tschema, field, record or {}) is not None
+
+
 def validate_record(schema, record):
     """Validate a record dict against the schema. Returns list of error strings.
     Checks: type is allowed, required fields present, int fields valid,
@@ -3797,12 +4011,21 @@ def validate_schema_structure(schema):
         for fname in schema.get(section, {}) or {}:
             if not is_valid_name(fname):
                 issues.append(invalid_name_error("field", fname))
+            elif fname in RESERVED_FIELD_NAMES:
+                issues.append(reserved_field_error(fname))
     for tname, tschema in (schema.get("type") or {}).items():
         if not is_valid_name(tname):
             issues.append(invalid_name_error("type", tname))
         for fname in ((tschema or {}).get("fields") or {}):
             if not is_valid_name(fname):
                 issues.append(invalid_name_error("field", fname))
+            elif fname in RESERVED_FIELD_NAMES:
+                issues.append(reserved_field_error(fname))
+        for fname in ((tschema or {}).get("required") or []):
+            if not is_valid_name(fname):
+                issues.append(invalid_name_error("field", fname))
+            elif fname in RESERVED_FIELD_NAMES:
+                issues.append(reserved_field_error(fname))
 
     # --- global [fields] type checks ---
     for fname, fdef in schema.get("fields", {}).items():
@@ -3997,6 +4220,17 @@ def lint_records(records, schema):
             if d != dt.date.min:
                 error_files.add(_resolve_record_path(line))
 
+    # v2 conformance: a line that only parses through the v1 fallback is a
+        # legacy line that must be migrated (`ptos --migrate-format`).
+        try:
+            _parse_v2(line)
+        except ValueError:
+            total_errors += 1
+            print(f"\n{'─' * 60}")
+            print(line)
+            print("  ✖ legacy v1 line — migrate with `ptos --migrate-format`")
+            error_files.add(_resolve_record_path(line))
+
     type_summary = "  ".join(f"{t}:{n}" for t, n in sorted(type_counts.items()))
     print(f"\nChecked {total_checked} record(s) across {len(type_counts)} type(s)  [{type_summary}]")
     if demo_skipped:
@@ -4076,7 +4310,12 @@ def lint_all_records():
                 
                 schema_problems = validate_record(schema, kv)
                 line_errors.extend(schema_problems)
-                
+                try:
+                    _parse_v2(line)
+                except ValueError:
+                    line_errors.append(
+                        "legacy v1 line — migrate with `ptos --migrate-format`")
+
                 if line_errors:
                     total_errors += len(line_errors)
                     errors_list.append({
@@ -4125,6 +4364,77 @@ def lint_all_records():
         "warnings": warnings_list,
         "quality_warnings": quality_list,
     }
+
+
+def migrate_record_format(dry_run=False):
+    """Rewrite every record line to the v2 grammar (date, type=, quoted values,
+    note= last).
+
+    Walks ``records/`` including log-group subdirectories. Each line is parsed
+    (v2 first, then the v1 fallback) and rebuilt with build_record_line; a line
+    already canonical is left byte-identical. Blank lines and ``#`` comments are
+    preserved. A line that cannot be rebuilt (e.g. an empty value, which v2
+    refuses) is reported and left untouched for manual fixing.
+
+    As part of the rebuild, a **free-text** value keeps its spaces: the v1
+    writer encoded spaces as ``_``, so a schema field with no ``options`` is
+    decoded back (``_`` -> space) here and re-quoted by build_record_line.
+    Token fields (``type``/``tag``/``id``/``links`` and any option-bearing
+    field) and unknown fields are left untouched — the decode is lossy for a
+    literal underscore in free text (e.g. an email), which is intended.
+
+    With dry_run=True nothing is written. Returns a summary dict:
+    ``{files, lines, changed, errors}``.
+    """
+    summary = {"files": 0, "lines": 0, "changed": 0, "errors": []}
+    if not os.path.isdir(RECORDS_DIR):
+        return summary
+    schema = get_schema()
+    for dirpath, _dirs, files in os.walk(RECORDS_DIR):
+        for fname in files:
+            if not fname.endswith(".log"):
+                continue
+            path = os.path.join(dirpath, fname)
+            summary["files"] += 1
+            try:
+                with open(path, encoding="utf-8") as f:
+                    lines = f.readlines()
+            except OSError as e:
+                summary["errors"].append((path, str(e)))
+                continue
+            out = []
+            file_changed = 0
+            for raw in lines:
+                stripped = raw.rstrip("\r\n")
+                if not stripped.strip() or stripped.lstrip().startswith("#"):
+                    out.append(raw)
+                    continue
+                summary["lines"] += 1
+                try:
+                    d, kv, note = parse_line(stripped)
+                    rtype = kv.get("type")
+                    if rtype:
+                        known = set(filter_fields_for_type(rtype, schema))
+                        for k, v in kv.items():
+                            if (isinstance(v, str) and "_" in v and k in known
+                                    and not is_token_field(schema, rtype, k)):
+                                kv[k] = v.replace("_", " ")
+                    new = build_record_line(d, kv, note or None)
+                except Exception as e:
+                    summary["errors"].append((path, f"{stripped!r}: {e}"))
+                    out.append(raw)
+                    continue
+                if new != stripped:
+                    file_changed += 1
+                out.append(new + "\n")
+            if file_changed:
+                summary["changed"] += file_changed
+                if not dry_run:
+                    atomic_write(path, "".join(out))
+    if not dry_run:
+        _invalidate_all()
+        rebaseline_external_watch()
+    return summary
 
 # --------------------------------------------------
 # Analysis  —  group + pivot return data, render separately
@@ -4196,7 +4506,7 @@ def pivot_results(results, row_field, col_field, count_mode=False, sort_col=None
 def render_group(counts, sums, has_amount, fields):
     """Print a grouped count/summary table to stdout.
     CLI-only. has_amount controls whether a total column is shown."""
-    label_fn = lambda key: "  ".join(_disp(k) for k in key) if isinstance(key, tuple) else _disp(key)
+    label_fn = lambda key: "  ".join(str(k) for k in key) if isinstance(key, tuple) else str(key)
 
     if has_amount:
         # show count and sum together
@@ -4227,7 +4537,7 @@ def render_pivot(table, cols, rows, row_field):
     width = 12
     header = f"{_disp(row_field):15}"
     for c in cols:
-        header += f"{_disp(c):>{width}}"
+        header += f"{str(c):>{width}}"
     header += f"{'Total':>{width}}"
     print()
     print(header)
@@ -4237,7 +4547,7 @@ def render_pivot(table, cols, rows, row_field):
     grand      = 0
     for row in rows:
         row_total = 0
-        line      = f"{_disp(row):15}"
+        line      = f"{str(row):15}"
         for c in cols:
             val = table[row].get(c, 0)
             line += f"{val:>{width}}"
@@ -4620,7 +4930,7 @@ def show_fields(results):
             star   = "★ " if is_dim else "  "
             if is_dim:
                 good.append(field)
-            print(f"{star}{_disp(field):12} {', '.join(_disp(v) for v in sorted(fields[field]))}")
+            print(f"{star}{_disp(field):12} {', '.join(str(v) for v in sorted(fields[field]))}")
         print()
         for f in good[:3]:
             suggested_groups.append(f"ptos -y {rtype} -G {f}")
@@ -4677,7 +4987,7 @@ def input_text(prompt, default=None):
         if not val and default is not None:
             return default
         if val:
-            return normalize_field_value(val)
+            return val
 
 def input_int(prompt, default=None):
     while True:
@@ -4851,6 +5161,9 @@ def add_type(name, required=None):
         sys.exit(f"Error: Type '{name}' already exists.")
 
     req = [r.strip() for r in (required or []) if r.strip()]
+    for r in req:
+        if r in RESERVED_FIELD_NAMES:
+            sys.exit("Error: " + reserved_field_error(r))
     types_allowed.append(name)
     type_entry = {"required": req}
     global_fields = schema.setdefault("global_fields", {})
@@ -4882,6 +5195,8 @@ def add_type_field(type_name, field_name, field_type="string", options=None, use
     field_name = field_name.strip()
     if not field_name or not is_valid_name(field_name):
         sys.exit("Error: " + invalid_name_error("field", field_name))
+    if field_name in RESERVED_FIELD_NAMES:
+        sys.exit("Error: " + reserved_field_error(field_name))
 
     schema = get_schema()
     if type_name not in schema.setdefault("type", {}):
@@ -4978,6 +5293,8 @@ def replace_type_fields(type_name, required, fields_dict):
     for r in req:
         if not re.match(r"^[a-z][a-z0-9_]*$", r):
             sys.exit(f"Error: Invalid required field name '{r}'.")
+        if r in RESERVED_FIELD_NAMES:
+            sys.exit("Error: " + reserved_field_error(r))
 
     type_def = schema["type"].setdefault(type_name, {})
     type_def["required"] = req
@@ -4986,6 +5303,8 @@ def replace_type_fields(type_name, required, fields_dict):
         fname = fname.strip()
         if not fname or not re.match(r"^[a-z][a-z0-9_]*$", fname):
             sys.exit(f"Error: Invalid field name '{fname}'.")
+        if fname in RESERVED_FIELD_NAMES:
+            sys.exit("Error: " + reserved_field_error(fname))
         ft = fdef.get("type", "string")
         if ft not in valid_field_types:
             sys.exit(f"Error: Unknown field type '{ft}' for field '{fname}'.")
@@ -5299,7 +5618,9 @@ def complete_record(schema, record, skip_optional=False, suggest_fn=None):
                 if not val and defaults.get(fname):
                     val = defaults[fname]
             if val:
-                record[fname] = normalize_field_value(val)
+                record[fname] = (normalize_field_value(val)
+                                 if is_token_field(schema, record.get("type"), fname, record)
+                                 else val)
 
     return record, note
 

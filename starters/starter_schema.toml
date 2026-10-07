@@ -265,7 +265,7 @@ options = [
 # ----------------------
 
 [type.capture]
-# Zero required fields. The captured text lives in the trailing | note.
+# Zero required fields. The captured text lives in the trailing note.
 # Logged with  ptos --cap "text"   or   the home page Capture box.
 
 [type.capture.fields.converted]

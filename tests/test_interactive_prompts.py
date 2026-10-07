@@ -50,9 +50,9 @@ class TestInputText:
         monkeypatch.setattr("builtins.input", lambda _: "hello")
         assert ptos.input_text("Name:") == "hello"
 
-    def test_replaces_spaces_with_underscores(self, monkeypatch):
+    def test_preserves_spaces(self, monkeypatch):
         monkeypatch.setattr("builtins.input", lambda _: "hello world")
-        assert ptos.input_text("Name:") == "hello_world"
+        assert ptos.input_text("Name:") == "hello world"
 
     def test_empty_loops(self, monkeypatch):
         inputs = iter(["", "", "ok"])

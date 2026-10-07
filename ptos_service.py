@@ -262,9 +262,9 @@ def _build_row_from_parsed(d, kv, note, format_date=True):
                 parsed_dt = _dt_mod.datetime.fromisoformat(raw)
                 row[k] = parsed_dt.strftime("%d-%b-%Y %H:%M")
             except (ValueError, TypeError):
-                row[k] = _disp(raw)
+                row[k] = raw
         else:
-            row[k] = _disp(raw)
+            row[k] = raw
     # append derived fields — pass record date for date arithmetic
     computed = ptos.compute_derived(kv, record_date=d)
     for fname, val in computed.items():
@@ -943,7 +943,7 @@ def get_group(filters, time="tm", group_fields=None,
     grand_count = 0
     grand_total = 0
     for key in sorted(counts):
-        label = "  ".join(_disp(k) for k in key) if isinstance(key, tuple) else _disp(key)
+        label = "  ".join(str(k) for k in key) if isinstance(key, tuple) else str(key)
         cnt   = counts[key]
         s     = sums.get(key, 0)
         grand_count += cnt
@@ -1000,10 +1000,10 @@ def get_pivot(filters, time="tm", row_field="type", col_field="month",
     rows       = []
     for row_label in row_order:
         row_total = 0
-        r = {"label": _disp(row_label)}
+        r = {"label": str(row_label)}
         for c in cols:
             val = table[row_label].get(c, 0)
-            r[_disp(c)]    = val
+            r[str(c)]    = val
             row_total      += val
             col_totals[c]  += val
         r["total"] = row_total
@@ -1011,9 +1011,9 @@ def get_pivot(filters, time="tm", row_field="type", col_field="month",
         rows.append(r)
 
     return {
-        "cols":        [_disp(c) for c in cols],
+        "cols":        [str(c) for c in cols],
         "rows":        rows,
-        "col_totals":  {_disp(k): v for k, v in col_totals.items()},
+        "col_totals":  {str(k): v for k, v in col_totals.items()},
         "grand":       grand,
         "row_field":   row_field,
         "col_field":   col_field,
@@ -2861,7 +2861,7 @@ def get_projects_overview():
                 record_count += 1
                 row = {"date": ptos.fmt_date(d) if hasattr(ptos, 'fmt_date') else str(d)}
                 for k, v in kv.items():
-                    row[k] = _disp(str(v))
+                    row[k] = str(v)
                 if rec_note:
                     row["note"] = rec_note
                 row["_filepath"] = filepath
@@ -2938,7 +2938,7 @@ def _iso_date(value, default=None):
 def capture(text, date=None, tag=None, links=None):
     """Write a quick capture as a type=capture record.
 
-    The captured text is stored in the trailing | note. Raises PTOSError
+    The captured text is stored in the trailing note. Raises PTOSError
     if the capture type is missing from the schema or the text is empty.
     Returns {ok, line, filepath, lineno}."""
     schema = ptos.get_schema()

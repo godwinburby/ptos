@@ -21,86 +21,84 @@
 # --------------------------------------------------
 # RECORDS  →  records/demo/YYYY.log
 # --------------------------------------------------
-# One record per line (key=value fields, trailing `| note`).
+# One record per line (date, type=, key=value fields, trailing note="...").
 # Only fields defined in starter_schema.toml are used.
 
 [records]
 lines = [
   # ── Today ─────────────────────────────────────────────────────────────
-  "{{today}} type=expense domain=self category=food amount=120 tag=lunch tag=__demo__ | Team lunch with snacks",
-  "{{today}} type=expense domain=self category=transport amount=45 tag=__demo__ | Metro + auto fare",
-  "{{today}} type=income source=salary amount=42000 tag=monthly tag=__demo__ | September salary",
-  "{{today}} type=exercise activity=walk duration=40 tag=__demo__ | Morning walk",
-  "{{today}} type=sleep quality=4 duration=7 tag=__demo__ | Solid 7 hours",
-  "{{today}} type=mood rating=4 context=work tag=__demo__ | Productive, steady day",
-  "{{today}} type=learning topic=coding source=video domain=self tag=__demo__ | Python structural pattern matching",
-  "{{today}} type=habit name=meditation tag=__demo__ | 10 minutes, morning sit",
-  "{{today}} type=habit name=reading tag=__demo__ | Evening reading, 20 pages",
+  "{{today}} type=expense domain=self category=food amount=120 tag=lunch tag=__demo__ note=\"Team lunch with snacks\"",
+  "{{today}} type=expense domain=self category=transport amount=45 tag=__demo__ note=\"Metro + auto fare\"",
+  "{{today}} type=income source=salary amount=42000 tag=monthly tag=__demo__ note=\"September salary\"",
+  "{{today}} type=exercise activity=walk duration=40 tag=__demo__ note=\"Morning walk\"",
+  "{{today}} type=sleep quality=4 duration=7 tag=__demo__ note=\"Solid 7 hours\"",
+  "{{today}} type=mood rating=4 context=work tag=__demo__ note=\"Productive, steady day\"",
+  "{{today}} type=learning topic=coding source=video domain=self tag=__demo__ note=\"Python structural pattern matching\"",
+  "{{today}} type=habit name=meditation tag=__demo__ note=\"10 minutes, morning sit\"",
+  "{{today}} type=habit name=reading tag=__demo__ note=\"Evening reading, 20 pages\"",
   "{{today}} type=pomodoro task=Prep_for_Acme_round_3 minutes=25 tag=__demo__",
   "{{today}} type=pomodoro task=Deep_work_on_report minutes=25 tag=__demo__",
-  "{{today}} type=capture tag=__demo__ | Order hearing-aid accessories online",
-
+  "{{today}} type=capture tag=__demo__ note=\"Order hearing-aid accessories online\"",
   # ── Finances this month (dashboard + food_spend threshold bar) ─────────
-  "{{-1d}} type=expense domain=self category=transport amount=160 tag=auto tag=__demo__ | Auto fares around town",
-  "{{-2d}} type=expense domain=home category=grocery amount=850 tag=vegetables tag=__demo__ | Monthly groceries",
-  "{{-3d}} type=expense domain=work category=travel amount=110 tag=__demo__ | Office commute errands",
-  "{{-4d}} type=expense domain=self category=food amount=450 tag=restaurant tag=__demo__ | Dinner out with family",
-  "{{-5d}} type=expense domain=home category=utilities amount=1100 tag=electricity tag=__demo__ | Electricity bill",
-  "{{-6d}} type=expense domain=self category=entertainment amount=500 tag=cinema tag=__demo__ | Movie night + snacks",
-  "{{-7d}} type=expense domain=home category=household amount=320 tag=__demo__ | Household supplies",
-  "{{-9d}} type=expense domain=work category=meals amount=240 tag=__demo__ | Work lunch with the team",
-  "{{-12d}} type=expense domain=home category=grocery amount=720 tag=__demo__ | Grocery restock",
-  "{{-15d}} type=expense domain=self category=personal amount=180 tag=__demo__ | Personal care",
-  "{{-18d}} type=expense domain=home category=child amount=200 tag=toy tag=__demo__ | Kid's toy",
-  "{{-6d}} type=income source=freelance amount=15000 tag=project tag=__demo__ | Small consulting gig",
-  "{{-10d}} type=investment instrument=rd provider=bank amount=5000 tag=__demo__ | Recurring deposit",
-  "{{-10d}} type=investment instrument=mutual_fund provider=app amount=3000 tag=sip tag=__demo__ | Index fund SIP",
-
+  "{{-1d}} type=expense domain=self category=transport amount=160 tag=auto tag=__demo__ note=\"Auto fares around town\"",
+  "{{-2d}} type=expense domain=home category=grocery amount=850 tag=vegetables tag=__demo__ note=\"Monthly groceries\"",
+  "{{-3d}} type=expense domain=work category=travel amount=110 tag=__demo__ note=\"Office commute errands\"",
+  "{{-4d}} type=expense domain=self category=food amount=450 tag=restaurant tag=__demo__ note=\"Dinner out with family\"",
+  "{{-5d}} type=expense domain=home category=utilities amount=1100 tag=electricity tag=__demo__ note=\"Electricity bill\"",
+  "{{-6d}} type=expense domain=self category=entertainment amount=500 tag=cinema tag=__demo__ note=\"Movie night + snacks\"",
+  "{{-7d}} type=expense domain=home category=household amount=320 tag=__demo__ note=\"Household supplies\"",
+  "{{-9d}} type=expense domain=work category=meals amount=240 tag=__demo__ note=\"Work lunch with the team\"",
+  "{{-12d}} type=expense domain=home category=grocery amount=720 tag=__demo__ note=\"Grocery restock\"",
+  "{{-15d}} type=expense domain=self category=personal amount=180 tag=__demo__ note=\"Personal care\"",
+  "{{-18d}} type=expense domain=home category=child amount=200 tag=toy tag=__demo__ note=\"Kid's toy\"",
+  "{{-6d}} type=income source=freelance amount=15000 tag=project tag=__demo__ note=\"Small consulting gig\"",
+  "{{-10d}} type=investment instrument=rd provider=bank amount=5000 tag=__demo__ note=\"Recurring deposit\"",
+  "{{-10d}} type=investment instrument=mutual_fund provider=app amount=3000 tag=sip tag=__demo__ note=\"Index fund SIP\"",
   # ── Health / habits across ~2 weeks (heatmaps + streaks) ───────────────
-  "{{-1d}} type=exercise activity=run duration=25 tag=__demo__ | Evening run",
-  "{{-3d}} type=exercise activity=strength duration=45 tag=__demo__ | Gym session",
-  "{{-5d}} type=exercise activity=cycle duration=30 tag=__demo__ | Stationary ride",
-  "{{-8d}} type=exercise activity=yoga duration=20 tag=__demo__ | Morning flow",
-  "{{-10d}} type=exercise activity=walk duration=35 tag=__demo__ | Brisk walk",
-  "{{-12d}} type=exercise activity=stretch duration=15 tag=__demo__ | Mobility",
-  "{{-15d}} type=exercise activity=swim duration=40 tag=__demo__ | Pool laps",
-  "{{-1d}} type=sleep quality=3 duration=6 tag=__demo__ | Woke up twice",
-  "{{-2d}} type=sleep quality=5 duration=8 tag=__demo__ | Best sleep in weeks",
-  "{{-3d}} type=sleep quality=4 duration=7 tag=__demo__ | Good night",
-  "{{-5d}} type=sleep quality=2 duration=5 tag=__demo__ | Late deadline",
-  "{{-7d}} type=sleep quality=4 duration=6 tag=__demo__ | Average",
-  "{{-9d}} type=sleep quality=5 duration=7 tag=__demo__ | Deep sleep",
-  "{{-12d}} type=sleep quality=3 duration=6 tag=__demo__ | Restless",
-  "{{-1d}} type=mood rating=3 context=home tag=__demo__ | Low energy, cozy evening",
-  "{{-2d}} type=mood rating=4 context=work tag=__demo__ | Good momentum",
-  "{{-3d}} type=mood rating=5 context=work tag=__demo__ | Shipped the feature",
-  "{{-5d}} type=mood rating=2 context=work tag=__demo__ | Stressful sprint day",
-  "{{-7d}} type=mood rating=4 context=home tag=__demo__ | Relaxed weekend",
-  "{{-9d}} type=mood rating=3 context=social tag=__demo__ | Dinner with old friends",
-  "{{-12d}} type=mood rating=5 context=work tag=__demo__ | Demo went great",
-  "{{-15d}} type=mood rating=4 context=home tag=__demo__ | Slow, pleasant Sunday",
-  "{{-2d}} type=learning topic=finance source=podcast domain=self tag=__demo__ | Passive income ep.",
-  "{{-4d}} type=learning topic=productivity source=book domain=work tag=__demo__ | Deep Work — ch. 3",
-  "{{-8d}} type=learning topic=language source=video domain=self tag=__demo__ | Spanish basics",
-  "{{-1d}} type=habit name=meditation tag=__demo__ | 10 minutes",
-  "{{-2d}} type=habit name=meditation tag=__demo__ | 15 minutes",
-  "{{-4d}} type=habit name=meditation tag=__demo__ | Skipped evening — did morning",
-  "{{-6d}} type=habit name=meditation tag=__demo__ | 10 minutes",
-  "{{-8d}} type=habit name=meditation tag=__demo__ | 10 minutes",
-  "{{-9d}} type=habit name=meditation tag=__demo__ | 5 minutes, rushed",
-  "{{-11d}} type=habit name=meditation tag=__demo__ | 10 minutes",
-  "{{-13d}} type=habit name=meditation tag=__demo__ | 10 minutes",
-  "{{-1d}} type=habit name=walk tag=__demo__ | 8,000 steps",
-  "{{-3d}} type=habit name=walk tag=__demo__ | Evening stroll",
-  "{{-6d}} type=habit name=walk tag=__demo__ | Lunch walk",
-  "{{-8d}} type=habit name=walk tag=__demo__ | 6,000 steps",
-  "{{-10d}} type=habit name=walk tag=__demo__ | Morning round",
-  "{{-13d}} type=habit name=walk tag=__demo__ | Short walk",
-  "{{-2d}} type=habit name=reading tag=__demo__ | 30 pages, fiction",
-  "{{-5d}} type=habit name=reading tag=__demo__ | 15 pages",
-  "{{-9d}} type=habit name=reading tag=__demo__ | 20 pages",
-  "{{-12d}} type=habit name=reading tag=__demo__ | 10 pages",
-  "{{-15d}} type=habit name=reading tag=__demo__ | Chapter before bed",
+  "{{-1d}} type=exercise activity=run duration=25 tag=__demo__ note=\"Evening run\"",
+  "{{-3d}} type=exercise activity=strength duration=45 tag=__demo__ note=\"Gym session\"",
+  "{{-5d}} type=exercise activity=cycle duration=30 tag=__demo__ note=\"Stationary ride\"",
+  "{{-8d}} type=exercise activity=yoga duration=20 tag=__demo__ note=\"Morning flow\"",
+  "{{-10d}} type=exercise activity=walk duration=35 tag=__demo__ note=\"Brisk walk\"",
+  "{{-12d}} type=exercise activity=stretch duration=15 tag=__demo__ note=Mobility",
+  "{{-15d}} type=exercise activity=swim duration=40 tag=__demo__ note=\"Pool laps\"",
+  "{{-1d}} type=sleep quality=3 duration=6 tag=__demo__ note=\"Woke up twice\"",
+  "{{-2d}} type=sleep quality=5 duration=8 tag=__demo__ note=\"Best sleep in weeks\"",
+  "{{-3d}} type=sleep quality=4 duration=7 tag=__demo__ note=\"Good night\"",
+  "{{-5d}} type=sleep quality=2 duration=5 tag=__demo__ note=\"Late deadline\"",
+  "{{-7d}} type=sleep quality=4 duration=6 tag=__demo__ note=Average",
+  "{{-9d}} type=sleep quality=5 duration=7 tag=__demo__ note=\"Deep sleep\"",
+  "{{-12d}} type=sleep quality=3 duration=6 tag=__demo__ note=Restless",
+  "{{-1d}} type=mood rating=3 context=home tag=__demo__ note=\"Low energy, cozy evening\"",
+  "{{-2d}} type=mood rating=4 context=work tag=__demo__ note=\"Good momentum\"",
+  "{{-3d}} type=mood rating=5 context=work tag=__demo__ note=\"Shipped the feature\"",
+  "{{-5d}} type=mood rating=2 context=work tag=__demo__ note=\"Stressful sprint day\"",
+  "{{-7d}} type=mood rating=4 context=home tag=__demo__ note=\"Relaxed weekend\"",
+  "{{-9d}} type=mood rating=3 context=social tag=__demo__ note=\"Dinner with old friends\"",
+  "{{-12d}} type=mood rating=5 context=work tag=__demo__ note=\"Demo went great\"",
+  "{{-15d}} type=mood rating=4 context=home tag=__demo__ note=\"Slow, pleasant Sunday\"",
+  "{{-2d}} type=learning topic=finance source=podcast domain=self tag=__demo__ note=\"Passive income ep.\"",
+  "{{-4d}} type=learning topic=productivity source=book domain=work tag=__demo__ note=\"Deep Work — ch. 3\"",
+  "{{-8d}} type=learning topic=language source=video domain=self tag=__demo__ note=\"Spanish basics\"",
+  "{{-1d}} type=habit name=meditation tag=__demo__ note=\"10 minutes\"",
+  "{{-2d}} type=habit name=meditation tag=__demo__ note=\"15 minutes\"",
+  "{{-4d}} type=habit name=meditation tag=__demo__ note=\"Skipped evening — did morning\"",
+  "{{-6d}} type=habit name=meditation tag=__demo__ note=\"10 minutes\"",
+  "{{-8d}} type=habit name=meditation tag=__demo__ note=\"10 minutes\"",
+  "{{-9d}} type=habit name=meditation tag=__demo__ note=\"5 minutes, rushed\"",
+  "{{-11d}} type=habit name=meditation tag=__demo__ note=\"10 minutes\"",
+  "{{-13d}} type=habit name=meditation tag=__demo__ note=\"10 minutes\"",
+  "{{-1d}} type=habit name=walk tag=__demo__ note=\"8,000 steps\"",
+  "{{-3d}} type=habit name=walk tag=__demo__ note=\"Evening stroll\"",
+  "{{-6d}} type=habit name=walk tag=__demo__ note=\"Lunch walk\"",
+  "{{-8d}} type=habit name=walk tag=__demo__ note=\"6,000 steps\"",
+  "{{-10d}} type=habit name=walk tag=__demo__ note=\"Morning round\"",
+  "{{-13d}} type=habit name=walk tag=__demo__ note=\"Short walk\"",
+  "{{-2d}} type=habit name=reading tag=__demo__ note=\"30 pages, fiction\"",
+  "{{-5d}} type=habit name=reading tag=__demo__ note=\"15 pages\"",
+  "{{-9d}} type=habit name=reading tag=__demo__ note=\"20 pages\"",
+  "{{-12d}} type=habit name=reading tag=__demo__ note=\"10 pages\"",
+  "{{-15d}} type=habit name=reading tag=__demo__ note=\"Chapter before bed\"",
   "{{-1d}} type=pomodoro task=Inbox_zero minutes=25 tag=__demo__",
   "{{-3d}} type=pomodoro task=Study_Python_pattern_matching minutes=25 tag=__demo__",
   "{{-5d}} type=pomodoro task=Draft_thank-you_notes minutes=25 tag=__demo__",
@@ -109,20 +107,19 @@ lines = [
   "{{-12d}} type=pomodoro task=Learn_REST_API_design minutes=25 tag=__demo__",
 
   # ── Job search pipeline (board.demo_job + due.default) ─────────────────
-  "{{-18d}} type=jobsearch position=Product_Manager company=Acme status=applied tag=__demo__ | Submitted application via referral",
-  "{{-12d}} type=jobsearch position=Product_Manager company=Acme status=interview project=demo_job tag=__demo__ | Phone screen with recruiter",
-  "{{-2d}} type=jobsearch position=Product_Manager company=Acme status=interview tag=__demo__ | Panel with head of product",
+  "{{-18d}} type=jobsearch position=Product_Manager company=Acme status=applied tag=__demo__ note=\"Submitted application via referral\"",
+  "{{-12d}} type=jobsearch position=Product_Manager company=Acme status=interview project=demo_job tag=__demo__ note=\"Phone screen with recruiter\"",
+  "{{-2d}} type=jobsearch position=Product_Manager company=Acme status=interview tag=__demo__ note=\"Panel with head of product\"",
   "{{-20d}} type=jobsearch position=Data_Engineer company=Rivo status=applied tag=__demo__",
-  "{{-15d}} type=jobsearch position=Data_Engineer company=Rivo status=rejected result=rejected tag=__demo__ | Not moving forward this time",
-  "{{-10d}} type=jobsearch position=Support_Specialist company=Nova status=applied project=demo_job tag=__demo__ | Applied via portal",
-  "{{-6d}} type=jobsearch position=Support_Specialist company=Nova status=offer result=offer tag=__demo__ | Offer — 12 LPA",
-  "{{-4d}} type=jobsearch position=Support_Specialist company=Nova status=accepted result=accepted tag=__demo__ | Signed the offer",
-  "{{-9d}} type=jobsearch position=BDR company=Midwest status=applied project=demo_job tag=__demo__ | Applied, no response yet",
-
+  "{{-15d}} type=jobsearch position=Data_Engineer company=Rivo status=rejected result=rejected tag=__demo__ note=\"Not moving forward this time\"",
+  "{{-10d}} type=jobsearch position=Support_Specialist company=Nova status=applied project=demo_job tag=__demo__ note=\"Applied via portal\"",
+  "{{-6d}} type=jobsearch position=Support_Specialist company=Nova status=offer result=offer tag=__demo__ note=\"Offer — 12 LPA\"",
+  "{{-4d}} type=jobsearch position=Support_Specialist company=Nova status=accepted result=accepted tag=__demo__ note=\"Signed the offer\"",
+  "{{-9d}} type=jobsearch position=BDR company=Midwest status=applied project=demo_job tag=__demo__ note=\"Applied, no response yet\"",
   # ── Capture inbox ──────────────────────────────────────────────────────
-  "{{-2d}} type=capture tag=__demo__ | Call Dr. Mehta about follow-up",
-  "{{-5d}} type=capture tag=__demo__ | Idea: read [[high output management]]",
-  "{{-8d}} type=capture tag=__demo__ | Buy battery 13 (two-pack)",
+  "{{-2d}} type=capture tag=__demo__ note=\"Call Dr. Mehta about follow-up\"",
+  "{{-5d}} type=capture tag=__demo__ note=\"Idea: read [[high output management]]\"",
+  "{{-8d}} type=capture tag=__demo__ note=\"Buy battery 13 (two-pack)\"",
 ]
 
 # --------------------------------------------------
@@ -343,16 +340,16 @@ Seeded sample data can be removed anytime:  `ptos --remove-demo-data`
 
 "Demo/how_i_log.md" = """# How records work
 
-Records are single lines:  `date type=... key=value | note`
+Records are single lines:  `date type=... key=value note="..."`
 
 ```text
-2026-09-12 type=expense domain=self category=food amount=120 tag=lunch | Team lunch
-2026-09-12 type=habit name=meditation | 10 minutes
+2026-09-12 type=expense domain=self category=food amount=120 tag=lunch note="Team lunch"
+2026-09-12 type=habit name=meditation note="10 minutes"
 2026-09-12 type=jobsearch position=Product_Manager company=Acme status=applied
 ```
 
 - Fields come from `config/schema.toml` — add types there
-- The trailing `| note` is free text, searched by `/search`
+- The trailing `note="..."` is free text, searched by `/search`
 - `+Project` and `@context` live on todos; `[[links]]` work anywhere
 
 The seeded demo records in `records/demo/` follow the starter schema.

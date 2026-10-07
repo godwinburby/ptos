@@ -1479,6 +1479,14 @@ def add_get():
         today=dt.date.today().isoformat(),
         msg=None, msg_type=None, last_line=None, return_to=return_to)
 
+def _norm_form_value(schema, rtype, field, value):
+    """Normalize a submitted field value to a single token when the field is a
+    token (tag/option/id/links), leaving free-text verbatim so
+    build_record_line can quote it."""
+    return (ptos.normalize_field_value(value)
+            if ptos.is_token_field(schema, rtype, field) else value)
+
+
 @app.route("/add", methods=["POST"])
 def add_post():
     try:
@@ -1505,11 +1513,11 @@ def add_post():
     for fname in all_f:
         if fname == "tag": continue
         val = request.form.get(fname,"").strip()
-        if val: record[fname] = ptos.normalize_field_value(val)
+        if val: record[fname] = _norm_form_value(schema, rtype, fname, val)
     # collect global optional fields from form
     for fname in svc.get_global_fields(schema):
         val = request.form.get(fname, "").strip()
-        if val: record[fname] = ptos.normalize_field_value(val)
+        if val: record[fname] = _norm_form_value(schema, rtype, fname, val)
     tags = [ptos.normalize_field_value(t)
             for t in request.form.getlist("tag")] + custom_tags
     if tags: record["tag"] = tags
@@ -4092,11 +4100,11 @@ def edit_post():
                 continue
             val = request.form.get(fname, "").strip()
             if val:
-                ov[fname] = ptos.normalize_field_value(val)
+                ov[fname] = _norm_form_value(schema, rtype, fname, val)
         for fname in svc.get_global_fields(schema):
             val = request.form.get(fname, "").strip()
             if val:
-                ov[fname] = ptos.normalize_field_value(val)
+                ov[fname] = _norm_form_value(schema, rtype, fname, val)
         tags = [ptos.normalize_field_value(t)
                 for t in request.form.getlist("tag")] + [ptos.normalize_field_value(t)
                for t in request.form.get("custom_tags", "").split(",") if t.strip()]
@@ -4197,11 +4205,11 @@ def edit_post():
     for fname in all_f:
         if fname == "tag": continue
         val = request.form.get(fname, "").strip()
-        if val: new_record[fname] = ptos.normalize_field_value(val)
+        if val: new_record[fname] = _norm_form_value(schema, rtype, fname, val)
     # collect global optional fields from form
     for fname in svc.get_global_fields(schema):
         val = request.form.get(fname, "").strip()
-        if val: new_record[fname] = ptos.normalize_field_value(val)
+        if val: new_record[fname] = _norm_form_value(schema, rtype, fname, val)
     id_val = ptos.normalize_field_value(request.form.get("id", ""))
     links_val = request.form.get("links", "").strip()
     if id_val: new_record["id"] = id_val

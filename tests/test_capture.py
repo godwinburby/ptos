@@ -36,7 +36,7 @@ class TestCaptureService:
         assert result["ok"] is True
         assert result["line"].startswith(dt.date.today().isoformat())
         assert "type=capture" in result["line"]
-        assert result["line"].endswith("| Buy more domes")
+        assert result["line"].endswith('note="Buy more domes"')
         filepath = os.path.join(ptos.RECORDS_DIR, f"{dt.date.today().year}.log")
         assert result["filepath"] == filepath
         with open(filepath, encoding="utf-8") as f:
@@ -98,7 +98,7 @@ class TestCaptureCli:
         filepath = os.path.join(ptos.RECORDS_DIR, "2026.log")
         with open(filepath, encoding="utf-8") as f:
             content = f.read()
-        assert "2026-02-01 type=capture tag=x links=expense:k1 | note" in content
+        assert "2026-02-01 type=capture links=expense:k1 tag=x note=note" in content
 
     def test_run_capture_multiple_links_exits(self):
         _clean_cache()

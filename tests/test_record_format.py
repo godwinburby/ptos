@@ -1,9 +1,8 @@
-"""The record format's one hard rule: both halves of key=value are single tokens.
+"""The v2 record format: single-token keys/tags, quoted free-text values.
 
-FORMAT.md states it; build_record_line enforces the value half and every
-name-minting path enforces the key half. These tests pin both sides, plus a
-check over the starter demo that would have caught the 17 seeded lines that
-violated the rule before it was enforced.
+FORMAT.md states it; build_record_line enforces it and every name-minting
+path enforces the key half. These tests pin both sides, plus a check that
+every seeded line in the starter demo strict-parses as canonical v2.
 """
 import os
 import re
@@ -47,27 +46,29 @@ class TestNormalizeFieldValue:
 
 
 class TestBuildRecordLine:
-    def test_values_are_normalized(self):
+    def test_free_text_is_quoted_and_tokens_are_normalized(self):
+        # Free-text values keep their spaces (quoted); `tag` keeps the
+        # single-token rule (spaces -> underscores) and is never quoted.
         line = ptos.build_record_line(
             "2026-03-13", {"type": "expense", "merchant": "Big Bazaar",
                            "amount": 250})
-        assert line == "2026-03-13 type=expense merchant=Big_Bazaar amount=250"
+        assert line == '2026-03-13 type=expense merchant="Big Bazaar" amount=250'
 
-    def test_pipe_in_value_is_defused(self):
-        line = ptos.build_record_line("2026-03-13", {"tag": "a|b"}, "note here")
-        assert line == "2026-03-13 tag=a/b | note here"
-        # Critically: only one | remains, so the note boundary is unambiguous.
-        assert line.count("|") == 1
+    def test_tag_is_a_single_token_never_quoted(self):
+        line = ptos.build_record_line(
+            "2026-03-13", {"type": "expense", "tag": "a|b"}, "note here")
+        assert line == '2026-03-13 type=expense tag=a/b note="note here"'
+        assert '"a/b"' not in line
         assert ptos.parse_line(line) == (
-            ptos.parse_date("2026-03-13"), {"tag": "a/b"}, "note here")
+            ptos.parse_date("2026-03-13"), {"type": "expense", "tag": "a/b"},
+            "note here")
 
     def test_note_keeps_inner_text_but_collapses_line_breaks(self):
-        # Notes live after the | and keep inner spacing, '|', '=' and
-        # punctuation — only line breaks are collapsed, because a record is
-        # one physical line.
+        # The note keeps inner spacing, '|', '=' and punctuation — only line
+        # breaks are collapsed, because a record is one physical line.
         note = "Team lunch | with  snacks   and   a=b"
         line = ptos.build_record_line("2026-03-13", {"type": "expense"}, note)
-        assert line.endswith("| " + note)
+        assert line.endswith("note=" + ptos._quote_value(note))
         assert ptos.parse_line(line)[2] == note
 
     def test_newline_in_note_becomes_a_space(self):
@@ -82,11 +83,11 @@ class TestBuildRecordLine:
         assert line == "2026-03-12 type=expense tag=auto_deal tag=bus"
         assert ptos.parse_line(line)[1]["tag"] == ["auto_deal", "bus"]
 
-    def test_empty_value_stays_a_field(self):
-        line = ptos.build_record_line("2026-03-16",
-                                     {"type": "expense", "amount": ""})
-        assert line == "2026-03-16 type=expense amount="
-        assert ptos.parse_line(line)[1]["amount"] == ""
+    def test_empty_value_is_refused(self):
+        # v2 forbids empty values: omit the field instead of writing `key=`.
+        with pytest.raises(ptos.PTOSError, match="empty value"):
+            ptos.build_record_line("2026-03-16",
+                                   {"type": "expense", "amount": ""})
 
     def test_round_trip_is_stable(self):
         once = ptos.build_record_line(
@@ -290,7 +291,11 @@ STARTERS = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__
 
 
 def _demo_record_lines():
-    """Every seeded record line, with its {{date}} token left in place."""
+    """Every seeded record line, with its {{date}} token left in place.
+
+    starter_demo.toml is TOML, so the embedded record lines escape their
+    inner quotes (``\\"``); unescape to the raw record line v2 parses.
+    """
     path = os.path.join(STARTERS, "starter_demo.toml")
     text = open(path, encoding="utf-8").read()
     body = re.search(r"^lines\s*=\s*\[(.*?)^\]", text, re.M | re.S)
@@ -298,20 +303,28 @@ def _demo_record_lines():
     out = []
     for raw in body.group(1).splitlines():
         s = raw.strip()
-        if s.startswith('"'):
-            out.append(s.strip('",'))
+        if not (s.startswith('"') and s.endswith('",')):
+            continue
+        out.append(s[1:-2].replace('\\"', '"'))
     return out
 
 
-class TestStarterDemoObeysTheFormat:
-    """Seeded demo data must not model the mistake the spec warns about.
+def _canonical(line):
+    """Real-date the {{date}} token, then strict-parse and re-emit."""
+    real = re.sub(r"\{\{[^}]+\}\}", "2026-09-12", line)
+    date, kv, note = ptos._parse_v2(real)
+    return real, ptos.build_record_line(date, kv, note or None)
 
-    Every value in a record line is a single token, so the field part may
-    not contain a piece without '=' -- that is a silently dropped word.
-    Seventeen seeded lines did exactly this before build_record_line
-    enforced the rule: `position=Product Manager` was stored as
-    position="Product", and schema validation did not catch it because
-    `position` is a free-text field.
+
+class TestStarterDemoObeysTheFormat:
+    """Seeded demo data must be canonical v2.
+
+    Every line must strict-parse (leading date, ``type=`` next, quoted
+    free-text, ``note=``) and re-emit byte-identical -- the same property
+    the migrator relies on to leave canonical lines untouched. Seventeen
+    seeded lines once carried `position=Product Manager`, which v1 silently
+    read as `position=Product`; the v2 writer now refuses a space in a token
+    field, and the demo must use an underscore instead.
     """
 
     LINES = _demo_record_lines()
@@ -319,35 +332,32 @@ class TestStarterDemoObeysTheFormat:
     def test_demo_has_records_to_check(self):
         assert len(self.LINES) > 20
 
-    def test_no_silently_dropped_words(self):
-        offenders = []
+    def test_every_line_strict_parses_as_v2(self):
+        bad = []
         for line in self.LINES:
-            field_part = line.partition("|")[0].partition(" ")[2]
-            stray = [p for p in field_part.split() if "=" not in p]
-            if stray:
-                offenders.append((line, stray))
-        assert not offenders, "\n".join(
-            "dropped %s from: %s" % (s, l) for l, s in offenders)
+            real = re.sub(r"\{\{[^}]+\}\}", "2026-09-12", line)
+            try:
+                ptos._parse_v2(real)
+            except ValueError as exc:
+                bad.append("%s (%s)" % (line, exc))
+        assert not bad, "\n".join(bad)
 
-    def test_no_space_inside_any_value(self):
-        offenders = [l for l in self.LINES
-                     if any(" " in p for p in l.partition("|")[0].split())]
-        assert not offenders, "\n".join(offenders)
-
-    def test_no_pipe_inside_the_field_part(self):
-        # A | is the note separator, so the field part can only hold the
-        # one trailing separator (checked separately) and never an interior one.
-        offenders = []
+    def test_every_line_is_canonical(self):
+        bad = []
         for line in self.LINES:
-            field_part = line.partition("|")[0]
-            for p in field_part.split():
-                if "|" in p:
-                    offenders.append(line)
-        assert not offenders, "\n".join(offenders)
+            real, rebuilt = _canonical(line)
+            if rebuilt != real:
+                bad.append("in:  %s\nout: %s" % (real, rebuilt))
+        assert not bad, "\n".join(bad)
 
     def test_every_line_starts_with_a_date_token(self):
         bad = [l for l in self.LINES
                if not re.match(r"^\{\{[^}]+\}\}\s", l)]
+        assert not bad, "\n".join(bad)
+
+    def test_type_is_the_second_token(self):
+        bad = [l for l in self.LINES
+               if not re.match(r"^\{\{[^}]+\}\}\s+type=\S+", l)]
         assert not bad, "\n".join(bad)
 
 
@@ -360,6 +370,5 @@ class TestTeachingNoteObeysTheFormat:
         examples = re.findall(r"^\d{4}-\d{2}-\d{2} type=.*$", text, re.M)
         assert examples, "the how_i_log note should show example records"
         for line in examples:
-            field_part = line.partition("|")[0]
-            stray = [p for p in field_part.split()[1:] if "=" not in p]
-            assert not stray, (line, stray)
+            date, kv, note = ptos._parse_v2(line)
+            assert ptos.build_record_line(date, kv, note or None) == line, line

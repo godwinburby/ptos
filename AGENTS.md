@@ -80,7 +80,7 @@ hidden/detached window may misreport — use the whole-suite command.
 - `starters/starter_*.toml` — default configs
 
 ### Data model
-- Records: plain `.log` files, one line per record, `key=value` format. Both halves of `key=value` are **single tokens** (spec: `FORMAT.md`) — see **Record format invariants** below; never reintroduce a space into a key or a value.
+- Records: plain `.log` files, one line per record. **v2 line shape** `YYYY-MM-DD type=<token> key=value … tag=<token> … note="…"` — `type` is the second token, free-text values are quoted, `note` is reserved and always last (spec: `FORMAT.md`; see **Record format invariants** below). v1 lines (`key=value` single tokens, `| note` tail) still read via fallback and are migrated with `ptos --migrate-format`.
 - Todos: `todo.txt` format (https://github.com/todotxt/todo.txt)
 - Config: TOML files
 - Schema: `schema.toml` defines record types, fields, validation
@@ -107,19 +107,61 @@ hidden/detached window may misreport — use the whole-suite command.
 The normative spec is `FORMAT.md` (committed). This section is the working summary — keep
 the two in sync, and change `FORMAT.md` first when the format itself changes.
 
-**Both halves of `key=value` are single tokens.** A space in either one is silently
-destroyed on the next read, because the field part is split on whitespace:
-`merchant=Big Bazaar` comes back as `merchant=Big` plus a discarded `Bazaar`; `unit price=50`
-comes back as `unit=price` with `50` dropped. There is no error and no warning — the value
-just reads shorter than intended. A `|` in a value is worse: it starts the note, so the
-whole rest of the field part is lost.
+**v2 line shape:** `YYYY-MM-DD type=<token> key=value … tag=<token> … note="…"`.
+`type` is always the **second token**, `note` (free text) is always **last** and is a
+reserved field name. Keys and *token* values (type, tag, option values) are single
+tokens; a *free-text* value is kept verbatim by **quoting** it when it contains
+whitespace, `"` or `\` (escaping `\"`/`\\`). Empty values are refused.
 
-- **`normalize_field_value(v)`** (`ptos.py`) is the single normalizer for values: `"_".join(str(v).split()).replace("|", "/")`. `build_record_line()` applies it to every value (scalars and each item of a list), applies **`clean_note(note)`** (`" ".join(n.splitlines()).strip() or None`) to the note — which keeps inner spaces, `|`, `=` and punctuation but flattens any line break to a space, because a record is one physical line — validates the `date` (strict `YYYY-MM-DD`, `parse_date` must accept it) and every key (`_invalid_record_key`: non-empty, no whitespace/`=`/`|`), and raises `PTOSError` otherwise. Both normalizers are idempotent, which is what lets the rebuild paths (`edit_record`, `advance_record`, `convert_record`) pass parsed kv back through the writer without rewriting files that are already conforming. `append_record()` is the last defence: it raises `PTOSError` (file untouched) for a line containing `\n`/`\r` or one `safe_parse_line` cannot read back. If you add a new write path, build its line with `build_record_line` and normalise values **before** `validate_record` so validation sees the shape that will be stored; do not concatenate `key=value` yourself (`tests/test_value_normalisation.py::TestOnlyTheEngineBuildsRecordLines` scans the non-engine modules for hand-built lines).
+- **Dual-read, v2-write.** `parse_line` tries **`_parse_v2`** (strict) first, then falls
+  back to **`_parse_v1`** (legacy: single-token values, `| note` tail, `type` anywhere) so
+  a not-yet-migrated file still reads. Writers only emit v2. `_parse_v2` uses
+  `_tokenize_v2_fields` + `_read_quoted`, requires the leading date and `type=` second,
+  pops `note` out-of-band, and returns `(date, kv, note)`.
+- **`build_record_line(date, record, note=None)`** (`ptos.py`) is the single assembler:
+  validates the `date` (strict `YYYY-MM-DD`, `parse_date` must accept it) and every key
+  (`_invalid_record_key`: non-empty, no whitespace/`=`/`|`), refuses a missing/empty/list
+  `type`, renders `type` first, then each other field in record-dict order, then `tag`s,
+  then `note` last. `_render_record_value` normalizes **`tag`** (spaces→`_`, never quoted)
+  and quotes any other value only when **`_needs_quote`** (whitespace/`"`/`\`); an empty
+  value raises `PTOSError`. **`normalize_field_value`** (`"_".join(str(v).split()).replace("|", "/")`)
+  now applies to keys, `type`, `tag` and token-field (option) values — **not** to free-text
+  values or the note, which keep their spaces via quoting. **`clean_note(note)`**
+  (`" ".join(n.splitlines()).strip() or None`) flattens any line break to a space (a record
+  is one physical line) and keeps inner `|`, `=` and punctuation. Both normalizers are
+  idempotent, so the rebuild paths (`edit_record`, `advance_record`, `convert_record`) never
+  rewrite an already-canonical line. `append_record()` is the last defence: it raises
+  `PTOSError` (file untouched) for a line containing `\n`/`\r` or one `safe_parse_line`
+  cannot read back. If you add a new write path, build its line with `build_record_line`
+  and normalise **token** values before `validate_record`; do not concatenate `key=value`
+  yourself (`tests/test_value_normalisation.py::TestOnlyTheEngineBuildsRecordLines` scans
+  the non-engine modules for hand-built lines).
+- **`is_token_field(schema, rtype, field, record=None)`** (`ptos.py`) is the single
+  resolver for "single-token vs free-text": true for `type`/`id`/`links`, `tag`, and any
+  field whose schema defines `options`; false for a plain string field. `apply_set` and the
+  web `_norm_form_value` normalize only token fields, so a free-text field keeps its spaces
+  (stored quoted). Values are shown **exactly as stored** — no `_`→space conversion in the
+  record table, board/entity cards, group/pivot rows, filter chips, Add/Edit option/tag
+  labels, or CLI table cells. `ptos._disp` / `ptos_service._disp` / the `|disp` Jinja filter
+  are kept **only for identifiers** (field-name column headers, metric/query/dashboard names,
+  cycle names); `is_token_field` is the resolver. `ptos --migrate-format` decodes v1 free-text
+  underscores back to spaces (token values untouched).
+- **`note` is reserved.** `RESERVED_FIELD_NAMES` / `reserved_field_error(name)`; enforced in
+  `invalid_schema_names._add`, `validate_schema_structure`, `add_type`, `add_type_field`,
+  `replace_type_fields`, and the append/`--required` build path. A schema field named `note`
+  would collide with the trailing note, so it is rejected.
 - **`validate_record` normalizes both sides** of an option comparison. A schema option *hand-edited* to `Big Bazaar` must still validate a stored `Big_Bazaar`, or an existing spaced option starts failing after the writer normalizes. This is the inverse case of the writer fix — keep them in sync.
+- **Legacy detection + migration.** `lint_records` / `lint_all_records` flag any line that
+  fails `_parse_v2` (i.e. only reads via the v1 fallback) as a legacy line to migrate.
+  **`migrate_record_format(dry_run=False)`** walks `RECORDS_DIR` (incl. log-group subdirs),
+  rebuilds each line via `build_record_line`, writes atomically per file, preserves blank
+  lines and `#` comments, leaves canonical lines byte-identical, skips non-`.log` files, and
+  reports unbUILDABLE lines (e.g. empty values) as errors. Exposed as `ptos --migrate-format`
+  (honours the global `--dry-run`). Tests: `tests/test_migrate_format.py`.
 - **Keys obey the same rule.** `is_valid_name(name)` / `NAME_RE` / `invalid_name_error(kind, name)` are the single source; `normalize_name(s)` is the coercing variant for UI. Matched with `fullmatch` so a trailing newline cannot sneak a name in. Do **not** add a private regex for a new name-creating path — the three that had drifted apart are gone.
 - **Where names are minted, and whether each end coerces or rejects** (deliberate, do not unify): Record Types (`/types`) and Query Builder coerce `my name` → `my_name` in JS as you type, because the name is fresh and nothing references it yet; the Schema Builder and the CLI reject, because they edit or script a schema where a surprise rename is harder to spot. Server-side coverage: `add_type`/`add_type_field` (`ptos.py`), `save_as_preset` (`ptos.py`), `save_queries_full` (`ptos_service.py` — queries, metrics, dashboards, aliases, boards, calendars, thresholds, **and** habits/projects/due, which were previously missed), `schema_builder_save` + `schema_builder_preview_lint` (`ptos_web.py`, via `ptos.invalid_schema_names`), `create_type_from_form`/`save_query` (normalizing variants).
 - **`validate_schema_structure()` checks name characters**, for `[types].allowed`, `[fields.*]`, `[global_fields.*]`, `[shared.*]`, `[type.*]` and `[type.*.fields.*]`. This is what makes `ptos --check-schema` (not `--lint`, which only walks records) catch a hand-edited schema field that no record could ever match. Note `add_type`/`add_type_field` filter issues to `f"'{name}'" in i`, so `invalid_name_error` must keep the offender in single quotes for that filter to work.
-- **Starter demo data is checked, not trusted.** `tests/test_record_format.py::TestStarterDemoObeysTheFormat` scans every seeded line in `starters/starter_demo.toml` for dropped words, spaces inside values, interior `|` and leading key names, and `TestTeachingNoteObeysTheFormat` checks the example records inside the `how_i_log` note. The demo originally shipped 17 violating lines (8 `task=`, 8 `position=`, 1 in the note) — do not reintroduce them.
+- **Starter demo data is checked, not trusted.** `tests/test_record_format.py::TestStarterDemoObeysTheFormat` unescapes each seeded line in `starters/starter_demo.toml` (TOML escapes `\"`), real-dates the `{{date}}` token, then asserts every line strict-parses via `_parse_v2` **and** re-emits byte-identical through `build_record_line` (canonical v2); `TestTeachingNoteObeysTheFormat` checks the example records inside the `how_i_log` note the same way. The demo originally shipped 17 violating lines (8 `task=`, 8 `position=`, 1 in the note) — do not reintroduce them.
 
 ### Error handling
 - Engine functions raise `sys.exit()` on errors

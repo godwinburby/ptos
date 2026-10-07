@@ -101,10 +101,10 @@ class TestApplySetNormalizesBeforeComparing:
         new, _ = ptos.apply_set(old, ["tag-=big shop"], None)
         assert new == "2026-03-13 type=expense tag=bus"
 
-    def test_assignment_normalizes(self):
+    def test_assignment_preserves_free_text(self):
         old = "2026-03-13 type=expense"
         new, _ = ptos.apply_set(old, ["merchant=Big Bazaar"], None)
-        assert new == "2026-03-13 type=expense merchant=Big_Bazaar"
+        assert new == '2026-03-13 type=expense merchant="Big Bazaar"'
 
 
 class TestOnlyTheEngineBuildsRecordLines:
