@@ -298,6 +298,42 @@ class TestDoctorReportsConflicts:
         assert len(conflict_warnings) >= 1
 
 
+class TestConflictsPageRenders:
+    @staticmethod
+    def _client():
+        from ptos_web import app
+        return app.test_client()
+
+    def test_records_edit_conflict_renders(self):
+        records_dir = ptos.RECORDS_DIR
+        os.makedirs(records_dir, exist_ok=True)
+        with open(os.path.join(records_dir, "2026.log"), "w") as f:
+            f.write("2026-01-01 type=expense amount=10\n")
+        with open(os.path.join(records_dir,
+                 "2026.sync-conflict-20260911-113533-XAJ7GJU.log"), "w") as f:
+            f.write("2026-01-01 type=expense amount=99\n")
+        resp = self._client().get("/conflicts")
+        assert resp.status_code == 200
+        html = resp.get_data(as_text=True)
+        assert "Keep original" in html
+        assert "Keep conflict" in html
+        assert "loop.parent" not in html
+        assert 'data-filetype="records"' in html
+        assert "conflict-edit-row" in html
+
+    def test_todo_edit_conflict_renders(self):
+        todo_dir = ptos.TODO_DIR
+        os.makedirs(todo_dir, exist_ok=True)
+        with open(os.path.join(todo_dir, "todo.txt"), "w") as f:
+            f.write("(A) Buy milk due:2026-01-05\n")
+        with open(os.path.join(todo_dir,
+                 "todo.sync-conflict-20260827-111614-K4BHCH2.txt"), "w") as f:
+            f.write("(B) Buy milk due:2026-01-06\n")
+        resp = self._client().get("/conflicts")
+        assert resp.status_code == 200
+        assert "resolveTodoChoice" in resp.get_data(as_text=True)
+
+
 class TestConflictFilterRecords:
     def test_get_log_files_excludes_conflict(self):
         records_dir = ptos.RECORDS_DIR
@@ -323,3 +359,171 @@ class TestConflictFilterRecords:
         names = [f["name"] for f in result["files"]]
         assert "meeting.md" in names
         assert not any("conflict" in n.lower() for n in names)
+
+
+def _write(rel_or_dir, name, content):
+    os.makedirs(rel_or_dir, exist_ok=True)
+    with open(os.path.join(rel_or_dir, name), "w", encoding="utf-8") as f:
+        f.write(content)
+
+
+def _records_conflict():
+    """A records conflict with one edit conflict and one unique line."""
+    _write(ptos.RECORDS_DIR, "2026.log",
+           "2026-01-01 type=expense amount=10\n"
+           "2026-01-05 type=income amount=50\n")
+    _write(ptos.RECORDS_DIR, "2026.sync-conflict-20260911-113533-XAJ7GJU.log",
+           "2026-01-01 type=expense amount=99\n"
+           "2026-01-08 type=expense amount=7\n")
+    orig = "records/2026.log"
+    conf = "records/2026.sync-conflict-20260911-113533-XAJ7GJU.log"
+    return orig, conf
+
+
+def _todo_conflict():
+    _write(ptos.TODO_DIR, "todo.txt",
+           "(A) Buy milk due:2026-01-05\nCall bob\n")
+    _write(ptos.TODO_DIR, "todo.sync-conflict-20260827-111614-K4BHCH2.txt",
+           "(B) Buy milk due:2026-01-06\nEmail alice\n")
+    orig = "todo/todo.txt"
+    conf = "todo/todo.sync-conflict-20260827-111614-K4BHCH2.txt"
+    return orig, conf
+
+
+def _read(rel):
+    with open(os.path.join(ptos.BASE_DIR, rel), encoding="utf-8") as f:
+        return f.read()
+
+
+class TestLineScopedResolution:
+    def test_keep_original_keeps_unique_lines(self):
+        orig, conf = _records_conflict()
+        key = "2026-01-01 type=expense amount=99"
+        resolved = ptos.resolve_edit_conflict(orig, conf, key, None, "records")
+        assert resolved is False
+        assert os.path.exists(os.path.join(ptos.BASE_DIR, conf))
+        orig_text = _read(orig)
+        assert "2026-01-01 type=expense amount=10" in orig_text
+        assert "amount=99" not in orig_text
+        assert "2026-01-08 type=expense amount=7" in _read(conf)
+
+    def test_keep_conflict_replaces_not_duplicates(self):
+        orig, conf = _records_conflict()
+        ptos.resolve_edit_conflict(
+            orig, conf, "2026-01-01 type=expense amount=99",
+            "2026-01-01 type=expense amount=99", "records")
+        text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
+        assert "amount=99" in text
+        assert "amount=10" not in text
+        assert text.count("2026-01-01 type=expense amount=99") == 1
+
+    def test_import_selected_finalizes_when_all_resolved(self):
+        orig, conf = _records_conflict()
+        ptos.resolve_edit_conflict(
+            orig, conf, "2026-01-01 type=expense amount=99", None, "records")
+        resolved = ptos.import_conflict_lines(
+            orig, conf, ["2026-01-08 type=expense amount=7"], "records")
+        assert resolved is True
+        assert not os.path.exists(os.path.join(ptos.BASE_DIR, conf))
+        text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
+        assert "2026-01-08 type=expense amount=7" in text
+        assert "amount=10" in text
+
+    def test_import_selected_keeps_file_when_edits_remain(self):
+        orig, conf = _records_conflict()
+        resolved = ptos.import_conflict_lines(
+            orig, conf, ["2026-01-08 type=expense amount=7"], "records")
+        assert resolved is False
+        assert os.path.exists(os.path.join(ptos.BASE_DIR, conf))
+        assert "2026-01-01 type=expense amount=99" in open(
+            os.path.join(ptos.BASE_DIR, conf), encoding="utf-8").read()
+
+    def test_import_all_replaces_edits_and_appends_unique(self):
+        orig, conf = _records_conflict()
+        ptos.import_all_conflict(orig, conf, "records")
+        assert not os.path.exists(os.path.join(ptos.BASE_DIR, conf))
+        text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
+        assert "amount=99" in text
+        assert "2026-01-08 type=expense amount=7" in text
+        assert text.count("2026-01-01 type=expense") == 1
+
+    def test_todo_edit_conflict_line_scoped(self):
+        orig, conf = _todo_conflict()
+        resolved = ptos.resolve_todo_edit_conflict(
+            orig, conf, "Buy milk", "original", "todo")
+        assert resolved is False
+        assert os.path.exists(os.path.join(ptos.BASE_DIR, conf))
+        assert "Buy milk due:2026-01-06" not in open(
+            os.path.join(ptos.BASE_DIR, conf), encoding="utf-8").read()
+        ptos.import_conflict_lines(orig, conf, ["Email alice"], "todo")
+        assert not os.path.exists(os.path.join(ptos.BASE_DIR, conf))
+        text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
+        assert "Buy milk due:2026-01-05" in text
+        assert "Email alice" in text
+
+
+class TestConflictApiLineScoped:
+    def _client(self):
+        from ptos_web import app
+        return app.test_client()
+
+    def _post(self, payload):
+        return self._client().post("/api/conflict/resolve", json=payload)
+
+    def test_edit_record_keep_original_preserves_unique(self):
+        orig, conf = _records_conflict()
+        d = self._post({
+            "action": "edit_record",
+            "conflict_path": conf,
+            "original_path": orig,
+            "file_type": "records",
+            "line": "2026-01-01 type=expense amount=99",
+            "choice": "original",
+        })
+        data = d.get_json()
+        assert data["ok"] is True
+        assert data["resolved"] is False
+        assert os.path.exists(os.path.join(ptos.BASE_DIR, conf))
+        text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
+        assert "amount=10" in text and "amount=99" not in text
+
+    def test_edit_record_keep_conflict_then_import_finalizes(self):
+        orig, conf = _records_conflict()
+        d = self._post({
+            "action": "edit_record",
+            "conflict_path": conf,
+            "original_path": orig,
+            "file_type": "records",
+            "line": "2026-01-01 type=expense amount=99",
+            "choice": "conflict",
+        })
+        assert d.get_json()["resolved"] is False
+        text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
+        assert text.count("amount=99") == 1 and "amount=10" not in text
+        d = self._post({
+            "action": "import_records",
+            "conflict_path": conf,
+            "original_path": orig,
+            "file_type": "records",
+            "lines": ["2026-01-08 type=expense amount=7"],
+        })
+        assert d.get_json()["resolved"] is True
+        assert not os.path.exists(os.path.join(ptos.BASE_DIR, conf))
+
+
+class TestCliResolveRecordConflict:
+    def test_keep_conflict_replaces_not_duplicates(self, monkeypatch):
+        import ptos_cli
+        orig, conf = _records_conflict()
+        c = {"original_path": orig, "conflict_path": conf, "file_type": "records"}
+        orig_full = os.path.join(ptos.BASE_DIR, orig)
+        conf_full = os.path.join(ptos.BASE_DIR, conf)
+        answers = iter(["c", "n"])
+        monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+        imported, skipped = ptos_cli._resolve_record_conflict(c, orig_full, conf_full)
+        text = open(orig_full, encoding="utf-8").read()
+        assert text.count("amount=99") == 1
+        assert "amount=10" not in text
+        assert imported == 1
+        assert skipped == 1
+        assert os.path.exists(conf_full)

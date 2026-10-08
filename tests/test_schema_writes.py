@@ -80,6 +80,18 @@ class TestAddFieldOption:
         result = ptos.add_field_option("expense", "category", "food", "flat")
         assert result["success"] == True
 
+    def test_flat_preserves_raw_value(self):
+        result = ptos.add_field_option("expense", "category", "Big Bazaar", "flat")
+        assert result["success"] == True
+        opts = self.saved[0]["type"]["expense"]["fields"]["category"]["options"]
+        assert "Big Bazaar" in opts
+        assert "Big_Bazaar" not in opts
+
+    def test_flat_trims_only_ends(self):
+        ptos.add_field_option("expense", "category", "  big bazaar  ", "flat")
+        opts = self.saved[0]["type"]["expense"]["fields"]["category"]["options"]
+        assert "big bazaar" in opts
+
     def test_flat_missing_type(self):
         result = ptos.add_field_option("nonexistent", "category", "x", "flat")
         assert result["success"] == False
@@ -107,6 +119,16 @@ class TestAddFieldOption:
         opts = self.saved[0]["type"]["expense"]["fields"]["vendor"]["options"]["food"]
         assert "deli" in opts
 
+    def test_parent_dependent_preserves_spaces(self):
+        result = ptos.add_field_option(
+            "expense", "vendor", "deli counter", "parent_dependent",
+            parent_value="food"
+        )
+        assert result["success"] == True
+        opts = self.saved[0]["type"]["expense"]["fields"]["vendor"]["options"]["food"]
+        assert "deli counter" in opts
+        assert "deli_counter" not in opts
+
     def test_parent_dependent_duplicate(self):
         result = ptos.add_field_option(
             "expense", "vendor", "restaurant", "parent_dependent",
@@ -126,6 +148,11 @@ class TestAddFieldOption:
         result = ptos.add_field_option("", "", "credit", "shared", shared_key="payment_method")
         assert result["success"] == True
         assert "credit" in self.saved[0]["shared"]["payment_method"]["options"]
+
+    def test_shared_preserves_spaces(self):
+        result = ptos.add_field_option("", "", "credit card", "shared", shared_key="payment_method")
+        assert result["success"] == True
+        assert "credit card" in self.saved[0]["shared"]["payment_method"]["options"]
 
     def test_shared_duplicate(self):
         result = ptos.add_field_option("", "", "cash", "shared", shared_key="payment_method")
@@ -163,6 +190,13 @@ class TestAddGlobalFieldOption:
         result = ptos.add_global_field_option("project", "proj_c")
         assert result["success"] == True
         assert "proj_c" in self.saved[0]["global_fields"]["project"]["options"]
+
+    def test_preserves_raw_value(self):
+        result = ptos.add_global_field_option("project", "Big Bazaar")
+        assert result["success"] == True
+        opts = self.saved[0]["global_fields"]["project"]["options"]
+        assert "Big Bazaar" in opts
+        assert "Big_Bazaar" not in opts
 
     def test_duplicate_is_noop(self):
         result = ptos.add_global_field_option("project", "proj_a")

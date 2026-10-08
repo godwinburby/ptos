@@ -106,7 +106,7 @@ source = "salary"
 
 [presets.sip]
 type       = "investment"
-instrument = "mutual_fund"
+instrument = "mutual fund"
 provider   = "app"
 amount     = 5000
 tag        = ["sip"]

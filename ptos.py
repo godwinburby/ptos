@@ -13,6 +13,7 @@ import tempfile
 import fnmatch
 import json
 import threading
+import copy
 
 if sys.stdout:
     sys.stdout.reconfigure(encoding="utf-8")
@@ -315,6 +316,158 @@ def diff_todos_conflict(original_path, conflict_path):
         "only_in_conflict": only_in_conflict,
         "only_in_original": only_in_original,
     }
+
+
+def _read_conflict_lines(conflict_path):
+    conf_full = os.path.join(BASE_DIR, conflict_path)
+    if not os.path.exists(conf_full):
+        return None
+    with open(conf_full, encoding="utf-8") as f:
+        return f.read().splitlines()
+
+
+def _append_line_if_absent(original_path, line):
+    orig_full = os.path.join(BASE_DIR, original_path)
+    existing = set()
+    if os.path.exists(orig_full):
+        with open(orig_full, encoding="utf-8") as f:
+            existing = {ln.rstrip("\n") for ln in f}
+    if line not in existing:
+        atomic_append(orig_full, line)
+        return True
+    return False
+
+
+def _replace_original_line(original_path, old_line, new_line):
+    """Replace old_line with new_line in the original, appending when the
+    exact line can't be located."""
+    orig_full = os.path.join(BASE_DIR, original_path)
+    try:
+        rewrite_line_in_file(orig_full, old_line, new_line)
+    except ValueError:
+        atomic_append(orig_full, new_line)
+
+
+def conflict_actionable_count(original_path, conflict_path, file_type):
+    """Number of items in the conflict file that still need a decision
+    (unique-to-conflict lines plus unresolved edit conflicts)."""
+    if _read_conflict_lines(conflict_path) is None:
+        return 0
+    if file_type in ("todo", "done"):
+        d = diff_todos_conflict(original_path, conflict_path)
+        return len(d["only_in_conflict"]) + len(d["edit_conflicts"])
+    d = diff_records_conflict(original_path, conflict_path)
+    return len(d["lines_only_in_conflict"]) + len(d["edit_conflicts"])
+
+
+def remove_conflict_lines(conflict_path, lines):
+    """Drop exact lines from the conflict file (delete it if it empties)."""
+    conf_full = os.path.join(BASE_DIR, conflict_path)
+    if not os.path.exists(conf_full):
+        return
+    remove = set(lines)
+    with open(conf_full, encoding="utf-8") as f:
+        kept = [ln for ln in f.read().splitlines() if ln not in remove]
+    if kept:
+        atomic_write(conf_full, "".join(ln + "\n" for ln in kept))
+    else:
+        os.remove(conf_full)
+
+
+def finalize_conflict_file(original_path, conflict_path, file_type):
+    """Remove the conflict file once every item is resolved.
+    Returns True when the file is gone (fully resolved)."""
+    conf_full = os.path.join(BASE_DIR, conflict_path)
+    if not os.path.exists(conf_full):
+        return True
+    if conflict_actionable_count(original_path, conflict_path, file_type) == 0:
+        os.remove(conf_full)
+        return True
+    return False
+
+
+def import_conflict_lines(original_path, conflict_path, lines, file_type):
+    """Append the selected conflict lines to the original and drop them from
+    the conflict file. Returns True when the conflict file is fully resolved."""
+    for line in lines:
+        _append_line_if_absent(original_path, line)
+    remove_conflict_lines(conflict_path, lines)
+    return finalize_conflict_file(original_path, conflict_path, file_type)
+
+
+def import_all_conflict(original_path, conflict_path, file_type):
+    """Take every item from the conflict file — unique lines are appended and
+    edit conflicts adopt the conflict version (replacing, not duplicating).
+    Removes the conflict file. Returns True."""
+    from ptos_todo import format_line
+    if file_type in ("todo", "done"):
+        d = diff_todos_conflict(original_path, conflict_path)
+        for o, c in d["edit_conflicts"]:
+            _replace_original_line(original_path, o.raw_line, format_line(c))
+        for t in d["only_in_conflict"]:
+            _append_line_if_absent(original_path, t.raw_line)
+    else:
+        d = diff_records_conflict(original_path, conflict_path)
+        for o, c in d["edit_conflicts"]:
+            _replace_original_line(original_path, o, c)
+        for line in d["lines_only_in_conflict"]:
+            _append_line_if_absent(original_path, line)
+    conf_full = os.path.join(BASE_DIR, conflict_path)
+    if os.path.exists(conf_full):
+        os.remove(conf_full)
+    return True
+
+
+def resolve_edit_conflict(original_path, conflict_path, key, replacement,
+                          file_type="records"):
+    """Resolve one edit conflict, line-scoped.
+
+    key: records — the conflict line; todo/done — the shared description.
+    replacement: the line to write into the original, or None to keep the
+    original version. The conflict's copy is dropped either way.
+    Returns True when the conflict file is fully resolved."""
+    if file_type in ("todo", "done"):
+        d = diff_todos_conflict(original_path, conflict_path)
+        orig_raw = None
+        conf_raw = None
+        k = key.strip().lower()
+        for o, c in d["edit_conflicts"]:
+            if o.description.strip().lower() == k:
+                orig_raw = o.raw_line
+                conf_raw = c.raw_line
+                break
+    else:
+        d = diff_records_conflict(original_path, conflict_path)
+        orig_raw = None
+        conf_raw = None
+        for o, c in d["edit_conflicts"]:
+            if c == key:
+                orig_raw = o
+                conf_raw = c
+                break
+    if replacement is not None and orig_raw is not None:
+        _replace_original_line(original_path, orig_raw, replacement)
+    if conf_raw is not None:
+        remove_conflict_lines(conflict_path, [conf_raw])
+    return finalize_conflict_file(original_path, conflict_path, file_type)
+
+
+def resolve_todo_edit_conflict(original_path, conflict_path, description, choice,
+                               file_type="todo"):
+    """Resolve one todo edit conflict. choice 'original'/'skip' keeps the
+    original; 'conflict' adopts the conflict version. The conflict's copy is
+    dropped either way. Returns True when the conflict file is fully resolved."""
+    from ptos_todo import format_line
+    replacement = None
+    if choice == "conflict":
+        d = diff_todos_conflict(original_path, conflict_path)
+        k = description.strip().lower()
+        for o, c in d["edit_conflicts"]:
+            if o.description.strip().lower() == k:
+                replacement = format_line(c)
+                break
+    return resolve_edit_conflict(original_path, conflict_path, description,
+                                 replacement, file_type)
 
 
 def get_backup_config():
@@ -3888,14 +4041,12 @@ def is_token_field(schema, rtype, field, record=None):
     """True if `field` holds a single token, so its value is normalized
     (spaces -> `_`) rather than quoted.
 
-    `type`, `tag`, `id`, and `links` are always tokens. A field with schema
-    `options` (directly, via `use`, or in `[global_fields]`) is a token; a
-    field with no options is free-text and keeps its spaces (quoted on write).
+    Only `type`, `tag`, `id`, and `links` are tokens. Every schema field —
+    including one with `options` — is free-text and keeps its spaces (quoted on
+    write), because an option value may itself contain a space
+    (``source="money received"``). `validate_record` still matches either form.
     """
-    if field in ("type", "tag", "id", "links"):
-        return True
-    tschema = (schema or {}).get("type", {}).get(rtype, {}) or {}
-    return _get_field_options(schema or {}, tschema, field, record or {}) is not None
+    return field in ("type", "tag", "id", "links")
 
 
 def validate_record(schema, record):
@@ -4366,9 +4517,161 @@ def lint_all_records():
     }
 
 
+def _collect_option_map(schema):
+    """Map each non-tag option value containing ``_`` to its spaced form.
+
+    Feeds the config rewrite (`queries.toml`, `presets.toml`) so a reference to
+    ``mutual_fund`` becomes ``mutual fund`` alongside the schema. Tag values and
+    ``[type.*.tags.*.options]`` value-lists are deliberately excluded — a tag
+    keeps its underscores.
+    """
+    m = {}
+
+    def add(opts):
+        if isinstance(opts, list):
+            for v in opts:
+                if isinstance(v, str) and "_" in v:
+                    m[v] = v.replace("_", " ")
+        elif isinstance(opts, dict):
+            for k, v in opts.items():
+                if isinstance(k, str) and "_" in k:
+                    m[k] = k.replace("_", " ")
+                add(v)
+
+    for sdef in schema.get("shared", {}).values():
+        if isinstance(sdef, dict):
+            add(sdef.get("options"))
+    for td in schema.get("type", {}).values():
+        for fd in (td.get("fields") or {}).values():
+            if "use" not in fd:
+                add(fd.get("options"))
+        for tf in (td.get("tags") or {}).values():
+            opts = (tf or {}).get("options")
+            if isinstance(opts, dict):
+                for k in opts:
+                    if isinstance(k, str) and "_" in k:
+                        m[k] = k.replace("_", " ")
+    for gdef in schema.get("global_fields", {}).values():
+        if isinstance(gdef, dict):
+            add(gdef.get("options"))
+    return m
+
+
+def _decode_schema_options(schema):
+    """Decode ``_`` -> space in every non-tag option value, in place.
+
+    Covers `[shared.*]`, `[global_fields.*]`, each `[type.*.fields.*]` (a list,
+    or a parent-dependent dict), and the **keys** of a tag group
+    (`[type.*.tags.*.options]`) — a key is itself a record field value. A tag
+    group's value-lists are left untouched. Returns the number of values changed.
+    """
+    changed = 0
+
+    def dec(opts):
+        nonlocal changed
+        if isinstance(opts, list):
+            for i, v in enumerate(opts):
+                if isinstance(v, str) and "_" in v:
+                    opts[i] = v.replace("_", " ")
+                    changed += 1
+        elif isinstance(opts, dict):
+            items = list(opts.items())
+            opts.clear()
+            for k, v in items:
+                dec(v)
+                nk = k.replace("_", " ") if isinstance(k, str) and "_" in k else k
+                opts[nk] = v
+                if nk != k:
+                    changed += 1
+
+    for sdef in schema.get("shared", {}).values():
+        if isinstance(sdef, dict) and sdef.get("options") is not None:
+            dec(sdef["options"])
+    for td in schema.get("type", {}).values():
+        for fd in (td.get("fields") or {}).values():
+            if "use" not in fd and fd.get("options") is not None:
+                dec(fd["options"])
+        for tf in (td.get("tags") or {}).values():
+            opts = (tf or {}).get("options")
+            if isinstance(opts, dict):
+                items = list(opts.items())
+                opts.clear()
+                for k, v in items:
+                    nk = k.replace("_", " ") if isinstance(k, str) and "_" in k else k
+                    opts[nk] = v
+                    if nk != k:
+                        changed += 1
+    for gdef in schema.get("global_fields", {}).values():
+        if isinstance(gdef, dict) and gdef.get("options") is not None:
+            dec(gdef["options"])
+    return changed
+
+
+def _rewrite_option_refs(text, option_map):
+    """Replace whole-token non-tag option values in a config string.
+
+    A replacement that is the right-hand side of a filter operator is quoted
+    (`result="not interested"`); a bare token is left unquoted (e.g. an item in
+    an `exclude_results` list). Returns ``(new_text, changed)``.
+    """
+    changed = False
+    for old in sorted(option_map, key=len, reverse=True):
+        new = option_map[old]
+        pattern = re.compile(r"(?<![\w])" + re.escape(old) + r"(?![\w])")
+        if not pattern.search(text):
+            continue
+        def repl(match):
+            if re.search(r"(?:=~|!~|!=|>=|<=|=|>|<|~)\s*$", text[:match.start()]):
+                return '"' + new + '"'
+            return new
+        text = pattern.sub(repl, text)
+        changed = True
+    return text, changed
+
+
+def _migrate_toml_refs(path, resource, option_map, dry_run):
+    """Decode non-tag option values inside one config file. Returns change count.
+
+    Every string is checked: an exact option value is swapped; any embedded
+    reference (a `where`/`filters` expression) has whole-token values rewritten
+    and re-quoted as needed. A `list` of values (e.g. `exclude_results`) is
+    handled by the exact-match case on each item.
+    """
+    if not os.path.exists(path):
+        return 0
+    import tomli_w
+    try:
+        with open(path, "rb") as f:
+            data = tomllib.load(f)
+    except (OSError, tomllib.TOMLDecodeError):
+        return 0
+    count = [0]
+
+    def walk(node):
+        if isinstance(node, dict):
+            return {k: walk(v) for k, v in node.items()}
+        if isinstance(node, list):
+            return [walk(v) for v in node]
+        if isinstance(node, str):
+            if node in option_map:
+                count[0] += 1
+                return option_map[node]
+            new, hit = _rewrite_option_refs(node, option_map)
+            if hit:
+                count[0] += 1
+                return new
+        return node
+
+    new_data = walk(data)
+    if count[0] and not dry_run:
+        with AtomicWrite(path, resource) as w:
+            tomli_w.dump(new_data, w.stream)
+    return count[0]
+
+
 def migrate_record_format(dry_run=False):
     """Rewrite every record line to the v2 grammar (date, type=, quoted values,
-    note= last).
+    note= last) and decode ``_`` -> space in every non-tag option value.
 
     Walks ``records/`` including log-group subdirectories. Each line is parsed
     (v2 first, then the v1 fallback) and rebuilt with build_record_line; a line
@@ -4376,20 +4679,38 @@ def migrate_record_format(dry_run=False):
     preserved. A line that cannot be rebuilt (e.g. an empty value, which v2
     refuses) is reported and left untouched for manual fixing.
 
-    As part of the rebuild, a **free-text** value keeps its spaces: the v1
-    writer encoded spaces as ``_``, so a schema field with no ``options`` is
-    decoded back (``_`` -> space) here and re-quoted by build_record_line.
-    Token fields (``type``/``tag``/``id``/``links`` and any option-bearing
-    field) and unknown fields are left untouched — the decode is lossy for a
-    literal underscore in free text (e.g. an email), which is intended.
+    Any non-token value keeps its spaces: the v1 writer encoded spaces as ``_``,
+    so every schema field value (free text **and** option values) is decoded back
+    (``_`` -> space) here and re-quoted by build_record_line. Token fields
+    (``type``/``tag``/``id``/``links``) and unknown fields are left untouched —
+    the decode is lossy for a literal underscore in free text (e.g. an email),
+    which is intended.
+
+    The same decode is applied to the schema's option values and to config
+    references (`queries.toml`, `presets.toml`), so a query filter pointing at
+    ``mutual_fund`` follows the value it names.
 
     With dry_run=True nothing is written. Returns a summary dict:
-    ``{files, lines, changed, errors}``.
+    ``{files, lines, changed, errors, schema_changed, config_changed}``.
     """
-    summary = {"files": 0, "lines": 0, "changed": 0, "errors": []}
-    if not os.path.isdir(RECORDS_DIR):
-        return summary
+    summary = {"files": 0, "lines": 0, "changed": 0, "errors": [],
+               "schema_changed": 0, "config_changed": 0}
     schema = get_schema()
+    option_map = _collect_option_map(schema)
+    if option_map:
+        new_schema = copy.deepcopy(schema)
+        summary["schema_changed"] = _decode_schema_options(new_schema)
+        if summary["schema_changed"] and not dry_run:
+            _save_schema(new_schema)
+        summary["config_changed"] = (
+            _migrate_toml_refs(QUERIES_PATH, "queries", option_map, dry_run)
+            + _migrate_toml_refs(PRESETS_PATH, "presets", option_map, dry_run)
+            + _migrate_toml_refs(CONFIG_PATH, "config", option_map, dry_run))
+    if not os.path.isdir(RECORDS_DIR):
+        if not dry_run:
+            _invalidate_all()
+            rebaseline_external_watch()
+        return summary
     for dirpath, _dirs, files in os.walk(RECORDS_DIR):
         for fname in files:
             if not fname.endswith(".log"):
@@ -4416,9 +4737,13 @@ def migrate_record_format(dry_run=False):
                     if rtype:
                         known = set(filter_fields_for_type(rtype, schema))
                         for k, v in kv.items():
-                            if (isinstance(v, str) and "_" in v and k in known
-                                    and not is_token_field(schema, rtype, k)):
-                                kv[k] = v.replace("_", " ")
+                            if k in known and not is_token_field(schema, rtype, k):
+                                if isinstance(v, str) and "_" in v:
+                                    kv[k] = v.replace("_", " ")
+                                elif isinstance(v, list):
+                                    kv[k] = [x.replace("_", " ")
+                                             if isinstance(x, str) and "_" in x
+                                             else x for x in v]
                     new = build_record_line(d, kv, note or None)
                 except Exception as e:
                     summary["errors"].append((path, f"{stripped!r}: {e}"))
@@ -5335,7 +5660,7 @@ def add_field_option(type_name, field_name, new_option, option_source,
                     parent_field="", parent_value="", shared_key=""):
     """Add a new option to schema.toml and save."""
     schema = get_schema()
-    new_opt = new_option.strip().replace(" ", "_")
+    new_opt = new_option.strip()
     if not new_opt:
         return {"success": False, "error": "Empty option"}
     
@@ -5401,7 +5726,7 @@ def add_field_option(type_name, field_name, new_option, option_source,
 def add_global_field_option(field_name, new_option):
     """Add a new option to a global field in schema.toml."""
     schema = get_schema()
-    new_opt = new_option.strip().replace(" ", "_")
+    new_opt = new_option.strip()
     if not new_opt:
         return {"success": False, "error": "Empty option"}
     

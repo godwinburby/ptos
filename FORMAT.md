@@ -119,20 +119,21 @@ whenever the value contains a space.
 
 ### Token fields vs free-text fields
 
-Your schema decides whether a field is a **token field** (an `options` dropdown, a
-`tag`, or the engine-reserved `type`/`id`/`links`) or a **free-text field** (a string
-with no options). PTOS treats them differently on write:
+Your schema decides whether a field is a **token field** (the engine-reserved
+`type`/`tag`/`id`/`links`) or a **free-text field** (every schema field, including one
+with an `options` dropdown). PTOS treats them differently on write:
 
-- **Token fields never carry spaces.** If you type `Big Bazaar` into an option field,
-  PTOS stores `Big_Bazaar` (a space becomes `_`, a `|` becomes `/`). Matching an
-  option value to a stored value normalises both sides, so a schema option written as
-  `Big Bazaar` still validates a stored `Big_Bazaar`.
-- **Free-text fields keep spaces**, via quoting, exactly as typed. `merchant` in a
-  schema with no `options` accepts `merchant="Big Bazaar"`.
+- **Token fields never carry spaces.** If you type `Big Bazaar` into a `tag`, PTOS
+  stores `Big_Bazaar` (a space becomes `_`, a `|` becomes `/`). Matching an option value
+  to a stored value normalises both sides, so a schema option written as `Big Bazaar`
+  still validates a stored `Big_Bazaar`.
+- **Every schema field keeps spaces**, via quoting, exactly as typed — including an
+  `options` field. A schema option `money received` is stored as
+  `source="money received"`, and `merchant` in a schema with no `options` likewise
+  accepts `merchant="Big Bazaar"`.
 
-Underscores in a *free-text* value are therefore literal — unlike v1, PTOS no longer
-converts a space in a free-text field to `_`. If you want a literal space, a free-text
-field preserves it.
+Underscores in a schema value are therefore literal — unlike v1, PTOS no longer converts
+a space to `_`. If you want a literal space, the value preserves it.
 
 ---
 
@@ -211,14 +212,17 @@ idempotent), preserves blank lines and `#` comments, and only touches `.log` fil
 `ptos --lint` reports any line that still only reads via the v1 fallback so you can
 find the stragglers.
 
-The migrator also **decodes** a v1 free-text value: the v1 writer encoded spaces as
-`_`, so any schema field with no `options` (a free-text field) has its underscores
-turned back into spaces and re-quoted — `merchant=Big_Bazaar` becomes
-`merchant="Big Bazaar"`. Token values (`type`/`tag`/`id`/`links` and every
-option-bearing field) and fields not defined in the schema are left untouched. The
-decode is **lossy for a literal underscore** in free text (e.g. an email address or a
-code); that is intended — free-text values are expected to hold real spaces. A value
-written after this change keeps its underscores literal (only the migrator decodes).
+The migrator also **decodes** every schema value: the v1 writer encoded spaces as
+`_`, so each schema field value — free text **and** an `options` value — has its
+underscores turned back into spaces and re-quoted, e.g. `merchant=Big_Bazaar` becomes
+`merchant="Big Bazaar"` and `source=money_received` becomes `source="money received"`.
+The same decode is applied to the schema's own option values and to config references
+(`queries.toml`, `presets.toml`), so a query filter naming `money_received` follows the
+value it points at. Token values (`type`/`tag`/`id`/`links`) and fields not defined in
+the schema are left untouched. The decode is **lossy for a literal underscore** (e.g. an
+email address or a code); that is intended — schema values are expected to hold real
+spaces. A value written after this change keeps its underscores literal (only the
+migrator decodes).
 
 ---
 

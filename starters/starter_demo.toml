@@ -53,7 +53,7 @@ lines = [
   "{{-18d}} type=expense domain=home category=child amount=200 tag=toy tag=__demo__ note=\"Kid's toy\"",
   "{{-6d}} type=income source=freelance amount=15000 tag=project tag=__demo__ note=\"Small consulting gig\"",
   "{{-10d}} type=investment instrument=rd provider=bank amount=5000 tag=__demo__ note=\"Recurring deposit\"",
-  "{{-10d}} type=investment instrument=mutual_fund provider=app amount=3000 tag=sip tag=__demo__ note=\"Index fund SIP\"",
+  "{{-10d}} type=investment instrument=\"mutual fund\" provider=app amount=3000 tag=sip tag=__demo__ note=\"Index fund SIP\"",
   # ── Health / habits across ~2 weeks (heatmaps + streaks) ───────────────
   "{{-1d}} type=exercise activity=run duration=25 tag=__demo__ note=\"Evening run\"",
   "{{-3d}} type=exercise activity=strength duration=45 tag=__demo__ note=\"Gym session\"",

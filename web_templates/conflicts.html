@@ -19,7 +19,7 @@
 </div>
 
 {% for c in conflicts %}
-<div class="card conflict-card" id="conflict-{{ loop.index }}" data-path="{{ c.conflict_path }}" data-original="{{ c.original_path }}">
+<div class="card conflict-card" id="conflict-{{ loop.index }}" data-path="{{ c.conflict_path }}" data-original="{{ c.original_path }}" data-filetype="{{ c.file_type }}">
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
     <div>
       <div style="font-size:15px;font-weight:700;">{{ c.original_path }}</div>
@@ -53,7 +53,7 @@
       ⚠ {{ edit_conf|length }} edit conflict{{ 's' if edit_conf|length != 1 }} — same date+type, different content
     </div>
     {% for orig_l, conf_l in edit_conf %}
-    <div style="display:flex;gap:8px;margin-bottom:6px;font-size:12px;">
+    <div class="conflict-edit-row" style="display:flex;gap:8px;margin-bottom:6px;font-size:12px;">
       <div style="flex:1;padding:6px 8px;background:var(--bg);border-radius:6px;font-family:monospace;word-break:break-all;">
         <span style="color:var(--sub);font-size:10px;">Original:</span><br>{{ orig_l }}
       </div>
@@ -61,14 +61,15 @@
         <span style="color:var(--warn);font-size:10px;">Conflict:</span><br>{{ conf_l }}
       </div>
       <div style="display:flex;flex-direction:column;gap:4px;">
-        <button class="btn btn-sm" onclick="resolveEditConflict(this, 'original', {{ loop.parent.loop.index }}, '{{ orig_l | e }}')" style="font-size:11px;">Keep original</button>
-        <button class="btn btn-sm" onclick="resolveEditConflict(this, 'conflict', {{ loop.parent.loop.index }}, '{{ conf_l | e }}')" style="font-size:11px;">Keep conflict</button>
+        <button class="btn btn-sm" onclick="resolveEditConflict(this, 'original', '{{ conf_l | e }}')" style="font-size:11px;">Keep original</button>
+        <button class="btn btn-sm" onclick="resolveEditConflict(this, 'conflict', '{{ conf_l | e }}')" style="font-size:11px;">Keep conflict</button>
       </div>
     </div>
     {% endfor %}
     {% endif %}
 
     {% if unique_conf %}
+    <div class="conflict-unique-section">
     <div style="font-size:13px;font-weight:600;color:var(--text);margin:10px 0 8px;">
       {{ unique_conf|length }} record{{ 's' if unique_conf|length != 1 }} only in conflict file:
     </div>
@@ -84,6 +85,7 @@
       <button class="btn btn-primary btn-sm" onclick="importSelected(this)" style="font-size:12px;">Import selected</button>
       <button class="btn btn-sm" onclick="importAllRecords(this)" style="font-size:12px;">Import all</button>
       <button class="btn btn-sm" onclick="keepOriginal(this)" style="font-size:12px;color:var(--sub);">Keep original (skip all)</button>
+    </div>
     </div>
     {% endif %}
 
@@ -108,7 +110,7 @@
       ⚠ {{ edit_conf|length }} task{{ 's' if edit_conf|length != 1 }} differ
     </div>
     {% for orig_t, conf_t in edit_conf %}
-    <div style="padding:8px;margin-bottom:8px;border:1px solid var(--border);border-radius:8px;">
+    <div class="conflict-edit-row" style="padding:8px;margin-bottom:8px;border:1px solid var(--border);border-radius:8px;">
       <div style="font-size:13px;font-weight:600;margin-bottom:6px;">{{ orig_t.description }}</div>
       <div style="display:flex;gap:8px;font-size:12px;">
         <div style="flex:1;padding:6px 8px;background:var(--bg);border-radius:6px;">
@@ -134,6 +136,7 @@
     {% endif %}
 
     {% if only_conf %}
+    <div class="conflict-unique-section">
     <div style="font-size:13px;font-weight:600;color:var(--text);margin:10px 0 8px;">
       {{ only_conf|length }} task{{ 's' if only_conf|length != 1 }} only in conflict file:
     </div>
@@ -149,6 +152,7 @@
       <button class="btn btn-primary btn-sm" onclick="importSelectedTodos(this)" style="font-size:12px;">Import selected</button>
       <button class="btn btn-sm" onclick="importAllTodos(this)" style="font-size:12px;">Import all</button>
       <button class="btn btn-sm" onclick="keepOriginal(this)" style="font-size:12px;color:var(--sub);">Keep original (skip all)</button>
+    </div>
     </div>
     {% endif %}
 
@@ -185,8 +189,9 @@
 function getCard(btn) { return btn.closest('.conflict-card'); }
 function getPath(btn, attr) { return getCard(btn).getAttribute(attr); }
 
-function apiCall(btn, body) {
+function apiCall(btn, body, onResolved) {
   var card = getCard(btn);
+  body.file_type = card.getAttribute("data-filetype");
   btn.disabled = true;
   fetch("/api/conflict/resolve", {
     method: "POST",
@@ -195,19 +200,27 @@ function apiCall(btn, body) {
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
-    if (d.ok) {
-      card.style.transition = "opacity 0.3s";
-      card.style.opacity = "0.3";
-      setTimeout(function() { card.remove(); checkEmpty(); }, 300);
-      if (d.remaining !== undefined) updateConflictBanner(d.remaining);
-    } else {
+    if (!d.ok) {
       alert("Error: " + (d.error || "Unknown error"));
       btn.disabled = false;
+      return;
     }
+    if (onResolved) onResolved(card, btn);
+    if (d.remaining !== undefined) updateConflictBanner(d.remaining);
+    if (d.resolved === false) { btn.disabled = false; return; }
+    card.style.transition = "opacity 0.3s";
+    card.style.opacity = "0.3";
+    setTimeout(function() { card.remove(); checkEmpty(); }, 300);
   })
   .catch(function(e) {
     alert("Error: " + e);
     btn.disabled = false;
+  });
+}
+
+function removeEmptyUniqueSections(card) {
+  card.querySelectorAll(".conflict-unique-section").forEach(function(sec) {
+    if (!sec.querySelector("input[type=checkbox]")) sec.remove();
   });
 }
 
@@ -216,7 +229,10 @@ function importSelected(btn) {
   var cbs = card.querySelectorAll(".conflict-line-cb:checked");
   var lines = Array.from(cbs).map(function(cb) { return cb.value; });
   if (!lines.length) { alert("Select at least one record."); return; }
-  apiCall(btn, {action: "import_records", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), lines: lines});
+  apiCall(btn, {action: "import_records", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), lines: lines}, function(card) {
+    cbs.forEach(function(cb) { var l = cb.closest("label"); if (l) l.remove(); });
+    removeEmptyUniqueSections(card);
+  });
 }
 
 function importAllRecords(btn) {
@@ -228,7 +244,10 @@ function importSelectedTodos(btn) {
   var cbs = card.querySelectorAll(".conflict-todo-cb:checked");
   var lines = Array.from(cbs).map(function(cb) { return cb.value; });
   if (!lines.length) { alert("Select at least one todo."); return; }
-  apiCall(btn, {action: "import_records", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), lines: lines});
+  apiCall(btn, {action: "import_records", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), lines: lines}, function(card) {
+    cbs.forEach(function(cb) { var l = cb.closest("label"); if (l) l.remove(); });
+    removeEmptyUniqueSections(card);
+  });
 }
 
 function importAllTodos(btn) {
@@ -247,12 +266,16 @@ function removeConflict(btn) {
   apiCall(btn, {action: "remove_conflict", conflict_path: getPath(btn, "data-path")});
 }
 
-function resolveEditConflict(btn, choice, conflictIdx, line) {
-  apiCall(btn, {action: "edit_record", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), line: choice === 'conflict' ? line : ''});
+function resolveEditConflict(btn, choice, line) {
+  apiCall(btn, {action: "edit_record", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), line: line, choice: choice}, function(card, btn) {
+    var row = btn.closest(".conflict-edit-row"); if (row) row.remove();
+  });
 }
 
 function resolveTodoChoice(btn, choice, desc) {
-  apiCall(btn, {action: "resolve_todo_choice", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), choice: choice, description: desc});
+  apiCall(btn, {action: "resolve_todo_choice", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), choice: choice, description: desc}, function(card, btn) {
+    var row = btn.closest(".conflict-edit-row"); if (row) row.remove();
+  });
 }
 
 function updateConflictBanner(count) {

@@ -316,7 +316,7 @@ function removeField(i) {
 }
 
 function addOpt(fi, inputEl) {
-  var v = inputEl.value.trim().toLowerCase().replace(/\s+/g, "_");
+  var v = inputEl.value.trim();
   if (!v) return;
   if (!_fields[fi].options) _fields[fi].options = [];
   _fields[fi].options.push(v);

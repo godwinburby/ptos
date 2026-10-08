@@ -5,6 +5,32 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-08
+
+### Schema option values keep their spaces
+
+- **An `options` field is free text too.** `is_token_field` now returns true only for `type`/`tag`/`id`/`links`, so a schema field value is stored verbatim by quoting whenever it contains a space — even when the schema defines an `options` dropdown. A schema option `money received` is written `source="money received"` instead of `source=money_received`.
+- **`--migrate-format` decodes the schema and the config alongside the records.** The migrator now also rewrites underscores to spaces in the schema's option values (`[shared.*]`, `[global_fields.*]`, each `[type.*.fields.*]`, and the **keys** of `[type.*.tags.*.options]` — tag value-lists stay underscored) and in the references inside `queries.toml`/`presets.toml`/`config.toml` (an exact value, or a whole-token reference inside a `where`/`filters` expression, quoted when it follows an operator). The summary reports `schema_changed` and `config_changed`.
+- **Tags are unchanged.** `tag=water_metro` stays underscored; the decode is intentionally lossy for a literal underscore in a non-tag value.
+- **Starters realigned** — `starter_schema.toml` (`mutual fund`, `audio book`, `no response`, and the quoted `"mutual fund"` tag-group key), `starter_demo.toml`, `starter_presets.toml` and `starter_queries.toml` carry the spaced forms.
+- **Docs** — `FORMAT.md` (token vs free-text), `README.md`, and the record-format invariants in `AGENTS.md` describe the new rule; `tests/test_migrate_format.py` pins record, schema and config decoding plus the dry-run guarantee.
+- **The option editors store the raw value.** Adding an option in the Schema Builder (per-type, parent-dependent, shared and **global**), the Record Types page, or the record-form "new option" prompt no longer lowercases and underscores it — the value is trimmed and stored exactly as typed, e.g. `Big Bazaar`. Tag words are still normalised (`tag` values stay single tokens). `add_field_option`/`add_global_field_option` keep the raw value server-side. Option values containing spaces/quotes are safely encoded in the editor's element ids and inline handlers; this also repairs the parent-dependent chip **remove** button (it had been passing the chip index where the parent value was expected).
+
+### Sync Conflicts page no longer 500s on an edit conflict
+
+- **Removed Django-only template syntax.** `web_templates/conflicts.html` used `{{ loop.parent.loop.index }}` to pass a card index into `resolveEditConflict`, but Jinja2's `loop` has no `.parent`, so the page raised `UndefinedError` and returned 500 as soon as a **records** conflict contained an edit conflict (same date+type, different content). The argument was dead — the handler derives the paths from the button's `data-` attributes — so it and the unused `conflictIdx` parameter were dropped.
+- **Test** — `tests/test_sync_conflicts.py::TestConflictsPageRenders` renders `/conflicts` for a records edit conflict and a todo edit conflict and asserts 200 (and that `loop.parent` is gone).
+
+### Conflict resolution is line-scoped (no silent data loss)
+
+- **A conflict file is only removed once every item is decided.** Resolving one edit conflict — or importing a subset of the conflict-only lines — used to delete the whole conflict file, silently discarding any conflict-only records and other edit conflicts that were never imported. The web handler and the CLI now drop only the handled line from the conflict file and delete it only when nothing actionable remains (`only_in_conflict` + `edit_conflicts` for todos, `lines_only_in_conflict` + `edit_conflicts` for records). New engine helpers (`ptos.import_conflict_lines`, `ptos.import_all_conflict`, `ptos.resolve_edit_conflict`, `ptos.resolve_todo_edit_conflict`, `ptos.finalize_conflict_file`, `ptos.remove_conflict_lines`) back both callers.
+- **"Keep conflict" replaces, it no longer duplicates.** Adopting the conflict version of an edit conflict now rewrites the original's matching line instead of appending a second copy; "Import all" likewise adopts edit conflicts by replacement while still appending the genuinely unique lines.
+- **The page updates in place.** `POST /api/conflict/resolve` now returns `resolved`, and `conflicts.html` removes just the handled row (and the now-empty unique section) while keeping the card until the file is fully resolved; whole-file actions still fade the card out. The card carries `data-filetype` so the shared `import_records` action knows whether it is merging records or todos.
+- **CLI** — `_resolve_record_conflict` replaces (not appends) on "keep conflict"/"edit", and `_handle_resolve_conflicts` keeps a conflict file whenever anything was skipped. Incidentally fixes "All remaining" appending one blank-line-joined blob.
+- **Tests** — `tests/test_sync_conflicts.py` gains `TestLineScopedResolution` (engine) and `TestConflictApiLineScoped` (web endpoint), plus a CLI replacement test.
+
+---
+
 ## 2026-10-07
 
 ### Record format v2: quoted values, `type` second, `note=`

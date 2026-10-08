@@ -256,6 +256,23 @@ var _state = {
 };
 var _currentType = null;
 
+// Safe id token for values that may contain spaces/quotes (option values are raw)
+function _idTok(s) {
+  return encodeURIComponent(String(s));
+}
+// Encode a JS string literal for an inline onclick/onkeydown attribute
+function _jsArg(s) {
+  return JSON.stringify(String(s))
+    .replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+// Encode plain text for an HTML attribute value
+function _esc(s) {
+  return String(s)
+    .replace(/&/g, "&amp;").replace(/"/g, "&quot;")
+    .replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+
 // ── Boot: load from server schema ────────────────────────────────────────────
 (function() {
   var schema = {{ schema | tojson }};
@@ -664,8 +681,8 @@ function makeFieldRow(fname, fdef) {
       childOpts.forEach(function(opt, i) {
         var chip = document.createElement("span");
         chip.className = "opt-chip";
-        chip.innerHTML = opt + ' <button onclick="removeParentOpt(\'' +
-          fname + '\',\'' + pval + '\',' + i + ')">×</button>';
+chip.innerHTML = opt + ' <button onclick="removeParentOpt(' +
+        _jsArg(fname) + ',' + _jsArg(pval) + ',' + i + ')">×</button>';
         _makeDraggable(chip, childOpts, i, function() { renderFields(ts()); }, ".opt-chip");
         chipsDiv.appendChild(chip);
       });
@@ -674,12 +691,12 @@ function makeFieldRow(fname, fdef) {
       // add input
       var addRow = document.createElement("div");
       addRow.style.cssText = "display:flex;gap:8px;";
-      var inpId = "pdep-inp-" + fname + "-" + pval;
+      var inpId = "pdep-inp-" + fname + "-" + _idTok(pval);
       addRow.innerHTML =
-        '<input type="text" id="' + inpId + '" placeholder="add option for ' + pval + '…" ' +
+        '<input type="text" id="' + inpId + '" placeholder="add option for ' + _esc(pval) + '…" ' +
         'style="flex:1;font-size:12px;" ' +
-        'onkeydown="if(event.key===\'Enter\') addParentOpt(\'' + fname + '\',\'' + pval + '\')">' +
-        '<button onclick="addParentOpt(\'' + fname + '\',\'' + pval + '\')" ' +
+        'onkeydown="if(event.key===\'Enter\') addParentOpt(' + _jsArg(fname) + ',' + _jsArg(pval) + ')">' +
+        '<button onclick="addParentOpt(' + _jsArg(fname) + ',' + _jsArg(pval) + ')" ' +
         'class="btn btn-ghost btn-sm" style="font-size:11px;">Add</button>';
       section.appendChild(addRow);
       div.appendChild(section);
@@ -877,7 +894,7 @@ function convertToSharedField(fname) {
 
 function addOption(fname) {
   var inp = document.getElementById("opt-inp-" + fname);
-  var val = inp.value.trim().toLowerCase().replace(/\s+/g,"_");
+  var val = inp.value.trim();
   if (!val) return;
   var opts = ts().fields[fname].options;
   if (!opts.includes(val)) { opts.push(val); renderFields(ts()); }
@@ -891,10 +908,10 @@ function removeOption(fname, idx) {
 
 // ── Parent-dependent field helpers ────────────────────────────────────────────
 function addParentOpt(fname, pval) {
-  var inpId = "pdep-inp-" + fname + "-" + pval;
+  var inpId = "pdep-inp-" + fname + "-" + _idTok(pval);
   var inp = document.getElementById(inpId);
   if (!inp) return;
-  var val = inp.value.trim().toLowerCase().replace(/\s+/g, "_");
+  var val = inp.value.trim();
   if (!val) return;
   var byParent = ts().fields[fname].options_by_parent;
   if (!byParent[pval]) byParent[pval] = [];
@@ -912,7 +929,7 @@ function removeParentOpt(fname, pval, idx) {
 function addParentValue(fname) {
   var inp = document.getElementById("pdep-pval-" + fname);
   if (!inp) return;
-  var val = inp.value.trim().toLowerCase().replace(/\s+/g, "_");
+  var val = inp.value.trim();
   if (!val) return;
   var byParent = ts().fields[fname].options_by_parent;
   if (!byParent[val]) {
@@ -1008,8 +1025,8 @@ function makeTagRule(tfield, rule) {
     tags.forEach(function(tag, ti) {
       var chip = document.createElement("span");
       chip.className = "opt-chip";
-      chip.innerHTML = tag + ' <button onclick="removeTag(\'' +
-        tfield + '\',\'' + fval + '\',' + ti + ')">×</button>';
+      chip.innerHTML = tag + ' <button onclick="removeTag(' +
+        _jsArg(tfield) + ',' + _jsArg(fval) + ',' + ti + ')">×</button>';
       _makeDraggable(chip, tags, ti, function() { renderTags(ts()); }, ".opt-chip");
       chipDiv.appendChild(chip);
     });
@@ -1018,10 +1035,10 @@ function makeTagRule(tfield, rule) {
     var addRow = document.createElement("div");
     addRow.style.cssText = "display:flex;gap:6px;";
     addRow.innerHTML =
-      '<input type="text" id="tag-inp-' + tfield + '-' + fval + '" ' +
+      '<input type="text" id="tag-inp-' + tfield + '-' + _idTok(fval) + '" ' +
       'placeholder="tag name…" style="flex:1;font-size:13px;" ' +
-      'onkeydown="if(event.key===\'Enter\') addTag(\'' + tfield + '\',\'' + fval + '\')">' +
-      '<button onclick="addTag(\'' + tfield + '\',\'' + fval + '\')" ' +
+      'onkeydown="if(event.key===\'Enter\') addTag(' + _jsArg(tfield) + ',' + _jsArg(fval) + ')">' +
+      '<button onclick="addTag(' + _jsArg(tfield) + ',' + _jsArg(fval) + ')" ' +
       'class="btn btn-ghost btn-sm">Add</button>';
     row.appendChild(addRow);
     div.appendChild(row);
@@ -1043,7 +1060,7 @@ function deleteTagRule(tfield) {
 }
 
 function addTag(tfield, fval) {
-  var inp = document.getElementById("tag-inp-" + tfield + "-" + fval);
+  var inp = document.getElementById("tag-inp-" + tfield + "-" + _idTok(fval));
   var val = inp.value.trim().toLowerCase().replace(/\s+/g,"_");
   if (!val) return;
   if (!ts().tags[tfield][fval]) ts().tags[tfield][fval] = [];
@@ -1163,7 +1180,7 @@ function deleteGlobalField(fname) {
 
 function addGlobalOption(fname) {
   var inp = document.getElementById("gf-inp-" + fname);
-  var val = inp.value.trim().toLowerCase().replace(/\s+/g, "_");
+  var val = inp.value.trim();
   if (!val) return;
   var opts = _state.global_fields[fname].options;
   if (!opts.includes(val)) { opts.push(val); renderGlobalFields(); }
@@ -1491,7 +1508,7 @@ function deleteSharedDef(sname) {
 }
 function addSharedOption(sname) {
   var inp = document.getElementById("sd-inp-" + sname);
-  var val = inp.value.trim().toLowerCase().replace(/\s+/g, "_");
+  var val = inp.value.trim();
   if (!val) return;
   var opts = _state.shared_defs[sname].options;
   if (!opts.includes(val)) { opts.push(val); renderSharedDefs(); }

@@ -238,13 +238,13 @@ Records may also carry two schema-free tokens: `id=<id>` (a unique link target) 
 A record missing a tag or note is valid but weak — Lint will warn you.
 A record missing a date or type is broken — Lint will error.
 
-**One rule matters more than the rest:** keys and token-field values are single tokens,
-so they cannot contain a space — write `category=Big_Bazaar`, not `category=Big Bazaar`.
-A free-text value *may* contain a space: it is wrapped in quotes, e.g.
-`merchant="Big Bazaar"`. The app shows every value exactly as stored, so a token
-value like `category=Big_Bazaar` keeps its underscore on screen; `ptos --migrate-format`
-decodes v1 free-text underscores back to spaces (`merchant=Big_Bazaar` becomes
-`merchant="Big Bazaar"`).
+**One rule matters more than the rest:** keys and the token values `type`/`tag`/`id`/`links`
+are single tokens, so a `tag` cannot contain a space — write `tag=Big_Bazaar`, not
+`tag=Big Bazaar`. Every schema field value *may* contain a space: it is wrapped in quotes,
+e.g. `merchant="Big Bazaar"` or `category="Big Bazaar"`. The app shows every value exactly
+as stored, so `ptos --migrate-format` decodes underscores back to spaces in every non-tag
+schema value and in the schema's own option values (`source=money_received` becomes
+`source="money received"`).
 
 [FORMAT.md](FORMAT.md) is the complete specification of that line: the grammar, every
 key, values and schema types, the note, the full table of what does *not* work, and how
@@ -678,6 +678,7 @@ types, and conditions. Features:
 - Schema-wide settings (Global Fields, Shared Definitions, Global Derived Fields)
   remain collapsed by default
 - Reuse option lists via **Shared Definitions** (`[shared.*]`) with `use = "shared.name"`
+- **Option values are stored as typed** — spaces and case are preserved (e.g. `Big Bazaar`), not lowercased or underscored. Tags remain single tokens; field *names* are still normalized
 
 See [Adding a new record type](#adding-a-new-record-type) and [Derived fields](#derived-fields).
 

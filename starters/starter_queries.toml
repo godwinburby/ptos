@@ -215,7 +215,7 @@ type            = "jobsearch"
 key             = "position"
 sort_by         = "status"
 days            = 7
-exclude_results = ["accepted", "rejected", "no_response"]
+exclude_results = ["accepted", "rejected", "no response"]
 
 # ══════════════════════════════════════════════════════════════════════════════
 # PROJECTS

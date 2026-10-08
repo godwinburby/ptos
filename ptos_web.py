@@ -2619,6 +2619,16 @@ def share_schema():
 # Sync conflicts (Syncthing / any file-sync tool)
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _conflict_file_type(conflict_path):
+    rel = (conflict_path or "").replace("\\", "/")
+    base = rel.rsplit("/", 1)[-1]
+    if rel.startswith("notes/") or base.endswith(".md"):
+        return "notes"
+    if rel.startswith("todo/"):
+        return "done" if base.startswith("done") else "todo"
+    return "records"
+
+
 @app.route("/conflicts")
 def conflicts_page():
     conflicts = ptos.find_sync_conflicts()
@@ -2651,13 +2661,14 @@ def conflicts_page():
 
 @app.route("/api/conflict/resolve", methods=["POST"])
 def api_conflict_resolve():
-    from ptos_todo import parse_todo_line, format_line, save_todos
+    from ptos_todo import parse_todo_line, save_todos
     data = request.get_json(force=True)
     action = data.get("action")
     conflict_path = data.get("conflict_path", "")
     original_path = data.get("original_path", "")
     conf_full = os.path.join(ptos.BASE_DIR, conflict_path)
     orig_full = os.path.join(ptos.BASE_DIR, original_path)
+    file_type = data.get("file_type") or _conflict_file_type(conflict_path)
 
     if not os.path.exists(conf_full):
         return jsonify(ok=False, error="Conflict file not found"), 404
@@ -2665,71 +2676,43 @@ def api_conflict_resolve():
     try:
         if action == "import_records":
             lines = data.get("lines", [])
-            for line in lines:
-                ptos.atomic_append(orig_full, line)
-            os.remove(conf_full)
+            resolved = ptos.import_conflict_lines(
+                original_path, conflict_path, lines, file_type)
             remaining = len(ptos.find_sync_conflicts())
-            return jsonify(ok=True, remaining=remaining)
+            return jsonify(ok=True, resolved=resolved, remaining=remaining)
 
         elif action == "import_all_records":
-            result = ptos.diff_records_conflict(original_path, conflict_path)
-            lines = result["lines_only_in_conflict"]
-            for orig_l, conf_l in result["edit_conflicts"]:
-                lines.append(conf_l)
-            for line in lines:
-                ptos.atomic_append(orig_full, line)
-            os.remove(conf_full)
+            ptos.import_all_conflict(original_path, conflict_path, file_type)
             remaining = len(ptos.find_sync_conflicts())
-            return jsonify(ok=True, imported=len(lines), remaining=remaining)
+            return jsonify(ok=True, resolved=True, remaining=remaining)
 
         elif action == "keep_original":
             os.remove(conf_full)
             remaining = len(ptos.find_sync_conflicts())
-            return jsonify(ok=True, remaining=remaining)
+            return jsonify(ok=True, resolved=True, remaining=remaining)
 
         elif action == "keep_conflict":
             shutil.copy2(conf_full, orig_full)
             os.remove(conf_full)
             remaining = len(ptos.find_sync_conflicts())
-            return jsonify(ok=True, remaining=remaining)
+            return jsonify(ok=True, resolved=True, remaining=remaining)
 
         elif action == "edit_record":
             line = data.get("line", "")
-            if line:
-                ptos.atomic_append(orig_full, line)
-            os.remove(conf_full)
+            keep = data.get("choice", "original")
+            replacement = line if keep == "conflict" else None
+            resolved = ptos.resolve_edit_conflict(
+                original_path, conflict_path, line, replacement, file_type)
             remaining = len(ptos.find_sync_conflicts())
-            return jsonify(ok=True, remaining=remaining)
+            return jsonify(ok=True, resolved=resolved, remaining=remaining)
 
         elif action == "resolve_todo_choice":
             choice = data.get("choice")  # "original" | "conflict" | "skip"
             desc = data.get("description", "")
-            orig_todos = []
-            with open(orig_full, encoding="utf-8") as f:
-                for line in f:
-                    line = line.rstrip("\n")
-                    if line.strip():
-                        orig_todos.append(parse_todo_line(line))
-            if choice == "conflict":
-                conf_todos = []
-                with open(conf_full, encoding="utf-8") as f:
-                    for line in f:
-                        line = line.rstrip("\n")
-                        if line.strip():
-                            conf_todos.append(parse_todo_line(line))
-                conf_by_desc = {t.description.strip().lower(): t for t in conf_todos}
-                for i, t in enumerate(orig_todos):
-                    if t.description.strip().lower() == desc.strip().lower():
-                        if desc.strip().lower() in conf_by_desc:
-                            orig_todos[i] = conf_by_desc[desc.strip().lower()]
-                        break
-                save_todos(orig_full, orig_todos)
-            # original/skip: original file is already correct, no save needed
-            # always delete the conflict file to resolve
-            if os.path.exists(conf_full):
-                os.remove(conf_full)
+            resolved = ptos.resolve_todo_edit_conflict(
+                original_path, conflict_path, desc, choice, file_type)
             remaining = len(ptos.find_sync_conflicts())
-            return jsonify(ok=True, remaining=remaining)
+            return jsonify(ok=True, resolved=resolved, remaining=remaining)
 
         elif action == "add_todo":
             todo_line = data.get("line", "")
@@ -2746,28 +2729,9 @@ def api_conflict_resolve():
             return jsonify(ok=True, remaining=remaining)
 
         elif action == "import_all_todos":
-            conf_todos = []
-            with open(conf_full, encoding="utf-8") as f:
-                for line in f:
-                    line = line.rstrip("\n")
-                    if line.strip():
-                        conf_todos.append(parse_todo_line(line))
-            orig_todos = []
-            with open(orig_full, encoding="utf-8") as f:
-                for line in f:
-                    line = line.rstrip("\n")
-                    if line.strip():
-                        orig_todos.append(parse_todo_line(line))
-            orig_descs = {t.description.strip().lower() for t in orig_todos}
-            added = 0
-            for t in conf_todos:
-                if t.description.strip().lower() not in orig_descs:
-                    orig_todos.append(t)
-                    added += 1
-            save_todos(orig_full, orig_todos)
-            os.remove(conf_full)
+            ptos.import_all_conflict(original_path, conflict_path, file_type)
             remaining = len(ptos.find_sync_conflicts())
-            return jsonify(ok=True, added=added, remaining=remaining)
+            return jsonify(ok=True, resolved=True, remaining=remaining)
 
         elif action == "save_merged_note":
             content = data.get("content", "")
@@ -2775,12 +2739,12 @@ def api_conflict_resolve():
                 f.write(content)
             os.remove(conf_full)
             remaining = len(ptos.find_sync_conflicts())
-            return jsonify(ok=True, remaining=remaining)
+            return jsonify(ok=True, resolved=True, remaining=remaining)
 
         elif action == "remove_conflict":
             os.remove(conf_full)
             remaining = len(ptos.find_sync_conflicts())
-            return jsonify(ok=True, remaining=remaining)
+            return jsonify(ok=True, resolved=True, remaining=remaining)
 
         else:
             return jsonify(ok=False, error=f"Unknown action: {action}"), 400

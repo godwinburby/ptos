@@ -91,7 +91,7 @@ function addGlobalFieldOption(fieldName, selectId) {
     const newVal = prompt('Enter new option for ' + fieldName + ':');
     if (!newVal || !newVal.trim()) return;
     
-    const val = newVal.trim().toLowerCase().replace(/\s+/g, "_");
+    const val = newVal.trim();
     const select = document.getElementById(selectId);
     
     // Check if option already exists
@@ -125,7 +125,7 @@ function addNewOption(fieldName) {
     const newVal = prompt('Enter new option for ' + fieldName + ':');
     if (!newVal || !newVal.trim()) return;
     
-    const val = newVal.trim().toLowerCase().replace(/\s+/g, "_");
+    const val = newVal.trim();
     const fieldInfo = getFieldInfo(fieldName);
     const select = document.getElementById('field-' + fieldName);
     const currentOptions = fieldInfo.options || [];

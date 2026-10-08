@@ -284,8 +284,9 @@ def build_parser(cycles):
     utl.add_argument("--fix",           action="store_true", help="With --lint: open files with errors in editor")
     utl.add_argument("--migrate-format", dest="migrate_format", action="store_true",
                      help="Rewrite every record line to the current v2 format\n"
-                          "  (date, type=, quoted free-text values, note= last;\n"
-                          "  combine with --dry-run to preview)")
+                          "  (date, type=, quoted values, note= last) and decode\n"
+                          "  '_' to space in every non-tag field value, schema option\n"
+                          "  and config reference; combine with --dry-run to preview)")
     utl.add_argument("-j", "--journal", nargs="?", const="today", default=None, metavar="DATE",
                      help="Open a journal file (default: today; accepts today/yesterday/YYYY-MM-DD)")
     utl.add_argument("-e", "--edit",    nargs="?", const="records", metavar="TARGET",
@@ -2805,14 +2806,14 @@ def _handle_resolve_conflicts(args):
             imported, skipped = _resolve_record_conflict(c, orig_full, conf_full)
             total_imported += imported
             total_skipped += skipped
-            if imported > 0 or skipped == 0:
+            if skipped == 0:
                 resolved_files.append(c["conflict_path"])
 
         elif c["file_type"] in ("todo", "done"):
             imported, skipped = _resolve_todo_conflict(c, orig_full, conf_full)
             total_imported += imported
             total_skipped += skipped
-            if imported > 0 or skipped == 0:
+            if skipped == 0:
                 resolved_files.append(c["conflict_path"])
 
         elif c["file_type"] == "notes":
@@ -2944,12 +2945,12 @@ def _resolve_record_conflict(c, orig_full, conf_full):
             if ans == "o":
                 pass  # keep original, do nothing
             elif ans == "c":
-                ptos.atomic_append(orig_full, conf_line)
+                ptos._replace_original_line(c["original_path"], orig_line, conf_line)
                 imported += 1
             elif ans == "e":
                 edited = _edit_line(conf_line)
                 if edited is not None:
-                    ptos.atomic_append(orig_full, edited)
+                    ptos._replace_original_line(c["original_path"], orig_line, edited)
                     imported += 1
                 else:
                     skipped += 1
@@ -2965,7 +2966,8 @@ def _resolve_record_conflict(c, orig_full, conf_full):
             ans = input("    [Y] Import / [N] Skip / [E] Edit / [A] All remaining / [Q] Quit: ").strip().lower()
             if ans == "a":
                 # import all remaining
-                ptos.atomic_append(orig_full, "\n".join(unique_conf[unique_conf.index(line):]))
+                for remaining in unique_conf[unique_conf.index(line):]:
+                    ptos._append_line_if_absent(c["original_path"], remaining)
                 imported += len(unique_conf) - unique_conf.index(line)
                 break
             elif ans == "q":
@@ -2974,12 +2976,12 @@ def _resolve_record_conflict(c, orig_full, conf_full):
             elif ans == "e":
                 edited = _edit_line(line)
                 if edited is not None:
-                    ptos.atomic_append(orig_full, edited)
+                    ptos._append_line_if_absent(c["original_path"], edited)
                     imported += 1
                 else:
                     skipped += 1
             elif ans == "y" or ans == "":
-                ptos.atomic_append(orig_full, line)
+                ptos._append_line_if_absent(c["original_path"], line)
                 imported += 1
             else:
                 skipped += 1
@@ -3493,6 +3495,9 @@ def main():
         verb = "would change" if dry else "changed"
         print(f"Scanned {summary['files']} record file(s), {summary['lines']} line(s).")
         print(f"{verb.capitalize()} {summary['changed']} line(s).")
+        if summary.get("schema_changed") or summary.get("config_changed"):
+            print(f"{verb.capitalize()} {summary['schema_changed']} schema value(s) "
+                  f"and {summary['config_changed']} config reference(s).")
         if summary["errors"]:
             print(f"\n{len(summary['errors'])} line(s) could not be rebuilt:")
             for path, err in summary["errors"][:20]:
