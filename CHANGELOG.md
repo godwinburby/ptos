@@ -18,6 +18,14 @@ Format: `[version or date] — description`
 - **A line break inside a field value is collapsed to one space.** Only the note flattened its line breaks; a value like `{"title": "a\nb"}` produced a two-line "record" that `append_record` then refused. Every value now collapses `\r\n`/`\r`/`\n` runs to a single space before quoting, so a built line is always one physical line. `FORMAT.md` says so.
 - **Tests** — `tests/test_parse.py::TestBuildRecordLine` (empty/whitespace tags refused; `\n`, `\r\n`, `\r`, `\n\n` collapse to one space and round-trip; `append_record` accepts the built line).
 
+### Conflict resolution is line-scoped and duplicate-safe
+
+- **The diff is a multiset, not a set.** `diff_records_conflict` (and `diff_todos_conflict`) now compares the two files with `Counter`, keeping duplicates and file order, so two identical records on one day are two conflict lines, not one — and adding them can't silently drop one. Previously a set difference collapsed identical lines, and the helpers that removed a "handled" line removed **every** copy of it.
+- **Add is the default and never replaces.** `import_all_conflict` / `import_conflict_lines` append conflict-only lines verbatim (a line identical to one already present is appended again); "take all" therefore can no longer overwrite an original. `remove_conflict_lines` is count-aware, so handling one of two identical conflict lines leaves the other in place.
+- **Replace is explicit and line-scoped.** New `replace_conflict_line()` rewrites exactly one chosen original line (targeting the first occurrence by index) and `skip_conflict_line()` drops a conflict line without importing it. A conflict line that shares an `id=` with an original is an **edit candidate with no default** — the CLI offers Add / Replace / Skip (`_resolve_record_conflict`, `_resolve_todo_conflict`), the web page shows the original alongside it, and `POST /api/conflict/resolve` gains `replace_record` + `skip_record`. Two lines that merely share a date+type are only a hint, never auto-paired.
+- **A conflict file is deleted only when nothing actionable remains** — every conflict-only line is now one actionable item (`conflict_actionable_count` counts them all), so resolving a single line keeps the file and the rest of its lines.
+- **Tests** — new `tests/test_conflict_multiset.py` (duplicate survival, file order, Add/Rename/Skip semantics, count-aware removal, deletion only when empty, todo multiset, and a randomized multiset-union property test); the stale set-based expectations in `tests/test_sync_conflicts.py` were rewritten.
+
 ---
 
 ## 2026-10-08

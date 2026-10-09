@@ -210,51 +210,87 @@ def _classify_conflict(file_type, fname):
     return file_type
 
 
+def _record_id_of(line):
+    """The `id=` value of a record line, or None. Used to pair a conflict-only
+    line with the original it supersedes."""
+    for tok in line.split():
+        if tok.startswith("id=") and len(tok) > 3:
+            return tok[3:]
+    return None
+
+
+def _record_key(line):
+    """(date, type) of a record line, or None. A display hint only — never the
+    basis for an automatic pairing (same-shaped records are not the same
+    record)."""
+    m = re.match(r'(\d{4}-\d{2}-\d{2})\s+type=(\S+)', line)
+    return (m.group(1), m.group(2)) if m else None
+
+
+def _multiset_only_in(a, b):
+    """Items (in list order, with multiplicity) present in `a` but not `b`.
+    Unlike a set difference this keeps duplicates, so two identical records on
+    one day survive a sync as two records."""
+    from collections import Counter
+    remaining = Counter(a) - Counter(b)
+    out = []
+    for item in a:
+        if remaining[item] > 0:
+            out.append(item)
+            remaining[item] -= 1
+    return out
+
+
 def diff_records_conflict(original_path, conflict_path):
     """Diff two record log files for conflict resolution.
     Returns dict with:
-      lines_only_in_conflict: list of raw lines to import
-      lines_only_in_original: list of raw lines already present
-      edit_conflicts: list of (original_line, conflict_line) where same
-                      date+type exist but content differs
+      lines_only_in_conflict: conflict-only lines, in file order, WITH
+                              duplicates (a multiset — every line here needs a
+                              decision: Add, Replace or Skip)
+      lines_only_in_original: original-only lines, likewise
+      edit_conflicts: (original_line, conflict_line) pairs that share an
+                      `id=` — an explicit Replace candidate with NO default
+      hints: (original_line, conflict_line) pairs that share a date+type but no
+             id= — display only, never an automatic pairing
     Paths are relative to BASE_DIR."""
     orig_full = os.path.join(BASE_DIR, original_path)
     conf_full = os.path.join(BASE_DIR, conflict_path)
-    orig_lines = set()
-    conf_lines = set()
     try:
         with open(orig_full, encoding="utf-8") as f:
-            for line in f:
-                orig_lines.add(line.rstrip("\n"))
+            orig_lines = f.read().splitlines()
         with open(conf_full, encoding="utf-8") as f:
-            for line in f:
-                conf_lines.add(line.rstrip("\n"))
+            conf_lines = f.read().splitlines()
     except Exception:
         return {"lines_only_in_conflict": [], "lines_only_in_original": [],
-                "edit_conflicts": []}
-    only_conf = sorted(conf_lines - orig_lines)
-    only_orig = sorted(orig_lines - conf_lines)
-    # detect edit conflicts: same date+type prefix, different content
-    def _line_key(line):
-        m = re.match(r'(\d{4}-\d{2}-\d{2})\s+type=(\S+)', line)
-        return (m.group(1), m.group(2)) if m else None
-    orig_by_key = {}
+                "edit_conflicts": [], "hints": []}
+    only_conf = _multiset_only_in(conf_lines, orig_lines)
+    only_orig = _multiset_only_in(orig_lines, conf_lines)
+    orig_by_id = {}
     for line in only_orig:
-        k = _line_key(line)
-        if k:
-            orig_by_key[k] = line
+        rid = _record_id_of(line)
+        if rid and rid not in orig_by_id:
+            orig_by_id[rid] = line
     edit_conflicts = []
-    remaining_conf = []
+    hints = []
+    claimed = set()
     for line in only_conf:
-        k = _line_key(line)
-        if k and k in orig_by_key:
-            edit_conflicts.append((orig_by_key.pop(k), line))
-        else:
-            remaining_conf.append(line)
+        rid = _record_id_of(line)
+        if rid and rid in orig_by_id and orig_by_id[rid] not in claimed:
+            edit_conflicts.append((orig_by_id[rid], line))
+            claimed.add(orig_by_id[rid])
+            continue
+        key = _record_key(line)
+        if key:
+            for orig_line in only_orig:
+                if orig_line not in claimed and _record_key(orig_line) == key:
+                    hints.append((orig_line, line))
+                    claimed.add(orig_line)
+                    break
     return {
-        "lines_only_in_conflict": remaining_conf,
-        "lines_only_in_original": list(orig_by_key.values()),
+        "lines_only_in_conflict": only_conf,
+        "lines_only_in_original": only_orig,
         "edit_conflicts": edit_conflicts,
+        "hints": hints,
     }
 
 
@@ -262,11 +298,13 @@ def diff_todos_conflict(original_path, conflict_path):
     """Diff two todo.txt files for conflict resolution.
     Returns dict with:
       identical: list of Todo objects present in both (exact match)
-      edit_conflicts: list of (original_todo, conflict_todo) pairs
-      only_in_conflict: list of Todo objects unique to conflict
+      edit_conflicts: list of (original_todo, conflict_todo) pairs (same id=,
+                      or same description — still no default action)
+      only_in_conflict: list of Todo objects unique to conflict (multiset)
       only_in_original: list of Todo objects unique to original
     Paths are relative to BASE_DIR."""
-    from ptos_todo import parse_todo_line, format_line
+    from collections import Counter
+    from ptos_todo import parse_todo_line
     orig_full = os.path.join(BASE_DIR, original_path)
     conf_full = os.path.join(BASE_DIR, conflict_path)
     orig_todos = []
@@ -284,37 +322,57 @@ def diff_todos_conflict(original_path, conflict_path):
                     conf_todos.append(parse_todo_line(line))
     except Exception:
         return {"identical": [], "edit_conflicts": [], "only_in_conflict": [],
-                "only_in_original": []}
-    def _desc_key(t):
-        return (t.description or "").strip().lower()
-    orig_by_desc = {}
-    for t in orig_todos:
-        k = _desc_key(t)
-        if k:
-            orig_by_desc[k] = t
-    conf_by_desc = {}
+                "only_in_original": [], "hints": []}
+    orig_raw = [t.raw_line for t in orig_todos]
+    conf_raw = [t.raw_line for t in conf_todos]
+    only_conf_raw = _multiset_only_in(conf_raw, orig_raw)
+    only_orig_raw = _multiset_only_in(orig_raw, conf_raw)
+    only_conf_left = Counter(only_conf_raw)
+    only_in_conflict = []
     for t in conf_todos:
-        k = _desc_key(t)
-        if k:
-            conf_by_desc[k] = t
+        if only_conf_left[t.raw_line] > 0:
+            only_in_conflict.append(t)
+            only_conf_left[t.raw_line] -= 1
+    only_orig_left = Counter(only_orig_raw)
+    only_in_original = []
+    for t in orig_todos:
+        if only_orig_left[t.raw_line] > 0:
+            only_in_original.append(t)
+            only_orig_left[t.raw_line] -= 1
+    identical_left = Counter(conf_raw) - Counter(only_conf_raw)
     identical = []
+    for t in orig_todos:
+        if identical_left[t.raw_line] > 0:
+            identical.append(t)
+            identical_left[t.raw_line] -= 1
+
+    def _desc(t):
+        return (t.description or "").strip().lower()
+
+    orig_by_id = {}
+    for t in only_in_original:
+        if t.id and t.id not in orig_by_id:
+            orig_by_id[t.id] = t
     edit_conflicts = []
-    for desc_key, conf_todo in conf_by_desc.items():
-        if desc_key in orig_by_desc:
-            orig_todo = orig_by_desc[desc_key]
-            if format_line(orig_todo) == format_line(conf_todo):
-                identical.append(orig_todo)
-            else:
-                edit_conflicts.append((orig_todo, conf_todo))
-    only_in_conflict = [t for t in conf_todos
-                        if _desc_key(t) not in orig_by_desc]
-    only_in_original = [t for t in orig_todos
-                        if _desc_key(t) not in conf_by_desc]
+    claimed = set()
+    for t in only_in_conflict:
+        partner = None
+        if t.id and t.id in orig_by_id and id(orig_by_id[t.id]) not in claimed:
+            partner = orig_by_id[t.id]
+        else:
+            for o in only_in_original:
+                if id(o) not in claimed and _desc(o) and _desc(o) == _desc(t):
+                    partner = o
+                    break
+        if partner is not None:
+            edit_conflicts.append((partner, t))
+            claimed.add(id(partner))
     return {
         "identical": identical,
         "edit_conflicts": edit_conflicts,
         "only_in_conflict": only_in_conflict,
         "only_in_original": only_in_original,
+        "hints": [],
     }
 
 
@@ -339,35 +397,52 @@ def _append_line_if_absent(original_path, line):
 
 
 def _replace_original_line(original_path, old_line, new_line):
-    """Replace old_line with new_line in the original, appending when the
-    exact line can't be located."""
+    """Replace the first occurrence of old_line with new_line in the original,
+    appending when the exact line can't be located. Targets by index so a
+    duplicated original line is not an error."""
     orig_full = os.path.join(BASE_DIR, original_path)
     try:
-        rewrite_line_in_file(orig_full, old_line, new_line)
-    except ValueError:
+        with open(orig_full, encoding="utf-8") as f:
+            lines = f.readlines()
+    except Exception:
         atomic_append(orig_full, new_line)
+        return
+    for i, line in enumerate(lines):
+        if line.strip() == old_line:
+            rewrite_line_in_file(orig_full, old_line, new_line, lineno=i)
+            return
+    atomic_append(orig_full, new_line)
 
 
 def conflict_actionable_count(original_path, conflict_path, file_type):
-    """Number of items in the conflict file that still need a decision
-    (unique-to-conflict lines plus unresolved edit conflicts)."""
+    """Number of conflict-only items that still need a decision. Every
+    conflict-only line is one item (edit candidates are a subset), so a file
+    counts down to zero exactly when all of them are handled."""
     if _read_conflict_lines(conflict_path) is None:
         return 0
     if file_type in ("todo", "done"):
         d = diff_todos_conflict(original_path, conflict_path)
-        return len(d["only_in_conflict"]) + len(d["edit_conflicts"])
+        return len(d["only_in_conflict"])
     d = diff_records_conflict(original_path, conflict_path)
-    return len(d["lines_only_in_conflict"]) + len(d["edit_conflicts"])
+    return len(d["lines_only_in_conflict"])
 
 
 def remove_conflict_lines(conflict_path, lines):
-    """Drop exact lines from the conflict file (delete it if it empties)."""
+    """Drop lines from the conflict file, one occurrence per listed line
+    (delete the file if it empties). Count-aware, so two identical conflict
+    lines are not both removed when only one was handled."""
+    from collections import Counter
     conf_full = os.path.join(BASE_DIR, conflict_path)
     if not os.path.exists(conf_full):
         return
-    remove = set(lines)
+    remove = Counter(lines)
     with open(conf_full, encoding="utf-8") as f:
-        kept = [ln for ln in f.read().splitlines() if ln not in remove]
+        kept = []
+        for ln in f.read().splitlines():
+            if remove[ln] > 0:
+                remove[ln] -= 1
+            else:
+                kept.append(ln)
     if kept:
         atomic_write(conf_full, "".join(ln + "\n" for ln in kept))
     else:
@@ -387,40 +462,58 @@ def finalize_conflict_file(original_path, conflict_path, file_type):
 
 
 def import_conflict_lines(original_path, conflict_path, lines, file_type):
-    """Append the selected conflict lines to the original and drop them from
-    the conflict file. Returns True when the conflict file is fully resolved."""
+    """Add the selected conflict lines to the original — appended verbatim, so
+    an identical line that already exists is duplicated rather than suppressed
+    — and drop exactly those occurrences from the conflict file. Returns True
+    when the conflict file is fully resolved."""
+    orig_full = os.path.join(BASE_DIR, original_path)
     for line in lines:
-        _append_line_if_absent(original_path, line)
+        if line.strip():
+            atomic_append(orig_full, line)
     remove_conflict_lines(conflict_path, lines)
     return finalize_conflict_file(original_path, conflict_path, file_type)
 
 
 def import_all_conflict(original_path, conflict_path, file_type):
-    """Take every item from the conflict file — unique lines are appended and
-    edit conflicts adopt the conflict version (replacing, not duplicating).
-    Removes the conflict file. Returns True."""
-    from ptos_todo import format_line
+    """Take every conflict-only item as an Add — appended, never replacing an
+    original line — then remove the conflict file. Returns True."""
+    orig_full = os.path.join(BASE_DIR, original_path)
     if file_type in ("todo", "done"):
         d = diff_todos_conflict(original_path, conflict_path)
-        for o, c in d["edit_conflicts"]:
-            _replace_original_line(original_path, o.raw_line, format_line(c))
         for t in d["only_in_conflict"]:
-            _append_line_if_absent(original_path, t.raw_line)
+            atomic_append(orig_full, t.raw_line)
     else:
         d = diff_records_conflict(original_path, conflict_path)
-        for o, c in d["edit_conflicts"]:
-            _replace_original_line(original_path, o, c)
         for line in d["lines_only_in_conflict"]:
-            _append_line_if_absent(original_path, line)
+            if line.strip():
+                atomic_append(orig_full, line)
     conf_full = os.path.join(BASE_DIR, conflict_path)
     if os.path.exists(conf_full):
         os.remove(conf_full)
     return True
 
 
+def replace_conflict_line(original_path, conflict_path, conflict_line,
+                          replace_line, file_type="records"):
+    """Replace `replace_line` in the original with `conflict_line`, then drop
+    the conflict's copy. Used for an explicit Replace decision. Returns True
+    when the conflict file is fully resolved."""
+    _replace_original_line(original_path, replace_line, conflict_line)
+    remove_conflict_lines(conflict_path, [conflict_line])
+    return finalize_conflict_file(original_path, conflict_path, file_type)
+
+
+def skip_conflict_line(original_path, conflict_path, conflict_line,
+                       file_type="records"):
+    """Drop one conflict-only line without importing it. Returns True when the
+    conflict file is fully resolved."""
+    remove_conflict_lines(conflict_path, [conflict_line])
+    return finalize_conflict_file(original_path, conflict_path, file_type)
+
+
 def resolve_edit_conflict(original_path, conflict_path, key, replacement,
                           file_type="records"):
-    """Resolve one edit conflict, line-scoped.
+    """Resolve one edit candidate, line-scoped.
 
     key: records — the conflict line; todo/done — the shared description.
     replacement: the line to write into the original, or None to keep the
@@ -447,8 +540,8 @@ def resolve_edit_conflict(original_path, conflict_path, key, replacement,
                 break
     if replacement is not None and orig_raw is not None:
         _replace_original_line(original_path, orig_raw, replacement)
-    if conf_raw is not None:
-        remove_conflict_lines(conflict_path, [conf_raw])
+    remove_conflict_lines(conflict_path,
+                          [conf_raw if conf_raw is not None else key])
     return finalize_conflict_file(original_path, conflict_path, file_type)
 
 

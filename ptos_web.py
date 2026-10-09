@@ -2737,6 +2737,21 @@ def api_conflict_resolve():
             remaining = len(ptos.find_sync_conflicts())
             return jsonify(ok=True, resolved=True, remaining=remaining)
 
+        elif action == "replace_record":
+            line = data.get("line", "")
+            target = data.get("target", "")
+            resolved = ptos.replace_conflict_line(
+                original_path, conflict_path, line, target, file_type)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, resolved=resolved, remaining=remaining)
+
+        elif action == "skip_record":
+            line = data.get("line", "")
+            resolved = ptos.skip_conflict_line(
+                original_path, conflict_path, line, file_type)
+            remaining = len(ptos.find_sync_conflicts())
+            return jsonify(ok=True, resolved=resolved, remaining=remaining)
+
         elif action == "keep_original":
             os.remove(conf_full)
             remaining = len(ptos.find_sync_conflicts())

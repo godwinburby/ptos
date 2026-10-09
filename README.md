@@ -1631,18 +1631,25 @@ ptos --resolve-conflicts           # resolve all conflicts
 ptos --resolve-conflicts --records # only record conflicts
 ptos --resolve-conflicts --todo    # only todo/done conflicts
 ```
-Lists detected conflict files, then for each: shows unique lines and edit
-conflicts (same date+type, different content). Per-item choices:
-- **Records:** import unique lines from the conflict file, keep the original,
-  keep the conflict version, or open in editor for manual merge
-- **Todos:** side-by-side comparison with keep-original / keep-conflict / skip
-  per item; done.txt supersedes todo.txt (done items auto-resolve)
+Lists detected conflict files, then handles each conflict-only line (duplicates
+kept — two identical records on one day survive a sync as two records). Per-item
+choices:
+- **Records:** each conflict-only line is **Add** (append, the default), **Replace**
+  (rewrite a chosen original line — offered with no default when the conflict line
+  and an original share an `id=`), or **Skip**; two lines that merely share a
+  date+type are only a hint, never auto-paired. "Add all" appends every conflict
+  line and never removes an original.
+- **Todos:** side-by-side comparison with Add (default) / Replace / Skip per item;
+  done.txt supersedes todo.txt (done items auto-resolve)
 - **Notes:** side-by-side content comparison with merge or keep options
+
+A conflict file is removed only once every conflict-only line has been handled
+(added, replaced or skipped), so resolving one line never discards the rest.
 
 **Web UI** (`/conflicts`):
 - Amber banner appears below the main content on every page when conflicts exist
-- Resolution page with per-record checkboxes, import-all button, side-by-side
-  todo comparison, note diff view, and save/delete actions
+- Resolution page with Add / Replace / Skip per conflict line, Add-all button,
+  side-by-side todo comparison, note diff view, and save/delete actions
 
 **Doctor warning:** `ptos --doctor` detects conflict files and suggests running
 `--resolve-conflicts`.

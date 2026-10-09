@@ -2928,86 +2928,109 @@ def run_sync_status():
     print()
 
 
+def _prompt(prompt, allowed, default=None):
+    """Read a lowercased answer, re-asking until it is in `allowed`. A blank
+    answer is accepted only when `default` is set (returned). Returns the
+    default on EOF so a non-interactive run can't hang."""
+    while True:
+        try:
+            ans = input(prompt).strip().lower()
+        except EOFError:
+            return default
+        if ans == "":
+            if default is not None:
+                return default
+            continue
+        if ans in allowed:
+            return ans
+
+
 def _resolve_record_conflict(c, orig_full, conf_full):
-    """Resolve a records conflict interactively. Returns (imported, skipped)."""
+    """Resolve a records conflict interactively, line-scoped. Every
+    conflict-only line is handled as Add (default), Replace (explicit target)
+    or Skip; Replace is offered with no default for a line that shares an
+    ``id=`` with an original. Returns (imported, skipped)."""
     result = ptos.diff_records_conflict(c["original_path"], c["conflict_path"])
-    edit_conflicts = result["edit_conflicts"]
-    unique_conf = result["lines_only_in_conflict"]
+    only_conf = list(result["lines_only_in_conflict"])
+    partner = {conf_line: orig_line
+               for orig_line, conf_line in result["edit_conflicts"]}
 
     imported = 0
     skipped = 0
 
-    # handle edit conflicts first
-    if edit_conflicts:
-        print(f"  {len(edit_conflicts)} edit conflict(s) — same date+type, different content:\n")
-        for orig_line, conf_line in edit_conflicts:
-            print(f"    Original:  {orig_line}")
-            print(f"    Conflict:  {conf_line}")
-            ans = input("    [O]riginal / [C]onflict / [E]dit / [S]kip: ").strip().lower()
-            if ans == "o":
-                pass  # keep original, do nothing
-            elif ans == "c":
-                ptos._replace_original_line(c["original_path"], orig_line, conf_line)
+    if not only_conf:
+        print("  Files are identical. Conflict file can be safely removed.")
+        return imported, skipped
+
+    print(f"  {len(only_conf)} record(s) only in conflict file:\n")
+    idx = 0
+    while idx < len(only_conf):
+        line = only_conf[idx]
+        print(f"    {line}")
+        if line in partner:
+            print(f"      same id as original: {partner[line]}")
+            ans = _prompt("    [A]dd / [R]eplace original / [S]kip: ",
+                          ("a", "r", "s"))
+            if ans == "r":
+                ptos.replace_conflict_line(c["original_path"],
+                                           c["conflict_path"], line,
+                                           partner[line], c["file_type"])
                 imported += 1
-            elif ans == "e":
-                edited = _edit_line(conf_line)
-                if edited is not None:
-                    ptos._replace_original_line(c["original_path"], orig_line, edited)
-                    imported += 1
-                else:
-                    skipped += 1
+            elif ans == "a":
+                ptos.atomic_append(orig_full, line)
+                imported += 1
+                ptos.remove_conflict_lines(c["conflict_path"], [line])
             else:
                 skipped += 1
-            print()
-
-    # handle unique conflict lines
-    if unique_conf:
-        print(f"  {len(unique_conf)} record(s) only in conflict file:\n")
-        for line in unique_conf:
-            print(f"    {line}")
-            ans = input("    [Y] Import / [N] Skip / [E] Edit / [A] All remaining / [Q] Quit: ").strip().lower()
-            if ans == "a":
-                # import all remaining
-                for remaining in unique_conf[unique_conf.index(line):]:
-                    ptos._append_line_if_absent(c["original_path"], remaining)
-                imported += len(unique_conf) - unique_conf.index(line)
+                ptos.remove_conflict_lines(c["conflict_path"], [line])
+        else:
+            ans = _prompt(
+                "    [A]dd / [S]kip / [E]dit / [L] all remaining: ",
+                ("a", "s", "e", "l"), default="a")
+            if ans == "l":
+                rest = only_conf[idx:]
+                for remaining in rest:
+                    ptos.atomic_append(orig_full, remaining)
+                ptos.import_all_conflict(c["original_path"],
+                                         c["conflict_path"], c["file_type"])
+                imported += len(rest)
                 break
-            elif ans == "q":
-                skipped += len(unique_conf) - unique_conf.index(line) - 1
-                break
+            elif ans == "s":
+                skipped += 1
+                ptos.remove_conflict_lines(c["conflict_path"], [line])
             elif ans == "e":
                 edited = _edit_line(line)
                 if edited is not None:
-                    ptos._append_line_if_absent(c["original_path"], edited)
+                    ptos.atomic_append(orig_full, edited)
                     imported += 1
                 else:
                     skipped += 1
-            elif ans == "y" or ans == "":
-                ptos._append_line_if_absent(c["original_path"], line)
-                imported += 1
+                ptos.remove_conflict_lines(c["conflict_path"], [line])
             else:
-                skipped += 1
-        print()
-
-    if imported == 0 and skipped == 0 and not edit_conflicts and not unique_conf:
-        print("  Files are identical. Conflict file can be safely removed.")
-
+                ptos.atomic_append(orig_full, line)
+                imported += 1
+                ptos.remove_conflict_lines(c["conflict_path"], [line])
+        idx += 1
+    print()
+    ptos.finalize_conflict_file(c["original_path"], c["conflict_path"],
+                                c["file_type"])
     return imported, skipped
 
 
 def _resolve_todo_conflict(c, orig_full, conf_full):
-    """Resolve a todo conflict interactively. Returns (imported, skipped)."""
+    """Resolve a todo conflict interactively, line-scoped. Unique tasks are
+    added (default) or skipped; a task matching an original (same ``id:`` or
+    description) is an explicit Add/Replace/Skip with no default. Returns
+    (imported, skipped)."""
     from ptos_todo import parse_todo_line, format_line, save_todos
 
     result = ptos.diff_todos_conflict(c["original_path"], c["conflict_path"])
-    edit_conflicts = result["edit_conflicts"]
-    only_conf = result["only_in_conflict"]
-    only_orig = result["only_in_original"]
+    only_conf = list(result["only_in_conflict"])
+    partner_for = {id(conf_t): orig_t for orig_t, conf_t in result["edit_conflicts"]}
 
     imported = 0
     skipped = 0
 
-    # load originals for modification
     orig_todos = []
     try:
         with open(orig_full, encoding="utf-8") as f:
@@ -3019,50 +3042,46 @@ def _resolve_todo_conflict(c, orig_full, conf_full):
         print(f"  Error reading original: {e}")
         return 0, 0
 
-    # handle edit conflicts
-    if edit_conflicts:
-        print(f"  {len(edit_conflicts)} edit conflict(s):\n")
-        for orig_t, conf_t in edit_conflicts:
-            print(f"    Task: \"{orig_t.description}\"")
-            print(f"      Original:  due={orig_t.due or 'none'}  pri={orig_t.priority or 'none'}")
-            print(f"      Conflict:  due={conf_t.due or 'none'}  pri={conf_t.priority or 'none'}")
-            ans = input("    [O]riginal / [C]onflict / [E]dit / [S]kip: ").strip().lower()
-            if ans == "o":
-                pass  # keep original
-            elif ans == "c":
-                # replace original with conflict version
-                for i, t in enumerate(orig_todos):
-                    if t.description.strip().lower() == orig_t.description.strip().lower():
-                        orig_todos[i] = conf_t
+    if not only_conf:
+        print("  Files are identical. Conflict file can be safely removed.")
+        return imported, skipped
+
+    print(f"  {len(only_conf)} task(s) only in conflict file:\n")
+    idx = 0
+    while idx < len(only_conf):
+        t = only_conf[idx]
+        print(f"    {format_line(t)}")
+        if id(t) in partner_for:
+            orig_t = partner_for[id(t)]
+            print(f"      same task as: {format_line(orig_t)}")
+            ans = _prompt("    [A]dd / [R]eplace original / [S]kip: ",
+                          ("a", "r", "s"))
+            if ans == "r":
+                for i, existing in enumerate(orig_todos):
+                    if existing.raw_line == orig_t.raw_line:
+                        orig_todos[i] = t
                         break
                 imported += 1
-            elif ans == "e":
-                edited = _edit_todo_line(conf_t)
-                if edited is not None:
-                    for i, t in enumerate(orig_todos):
-                        if t.description.strip().lower() == orig_t.description.strip().lower():
-                            orig_todos[i] = edited
-                            break
-                    imported += 1
-                else:
-                    skipped += 1
+            elif ans == "a":
+                orig_todos.append(t)
+                imported += 1
             else:
                 skipped += 1
-            print()
-
-    # handle unique conflict todos
-    if only_conf:
-        print(f"  {len(only_conf)} task(s) only in conflict file:\n")
-        for t in only_conf:
-            print(f"    {format_line(t)}")
-            ans = input("    [Y] Add / [N] Skip / [E] Edit / [A] All remaining / [Q] Quit: ").strip().lower()
-            if ans == "a":
-                orig_todos.extend(only_conf[only_conf.index(t):])
-                imported += len(only_conf) - only_conf.index(t)
+            ptos.remove_conflict_lines(c["conflict_path"], [t.raw_line])
+        else:
+            ans = _prompt(
+                "    [A]dd / [S]kip / [E]dit / [L] all remaining: ",
+                ("a", "s", "e", "l"), default="a")
+            if ans == "l":
+                rest = only_conf[idx:]
+                orig_todos.extend(rest)
+                ptos.remove_conflict_lines(
+                    c["conflict_path"], [x.raw_line for x in rest])
+                imported += len(rest)
                 break
-            elif ans == "q":
-                skipped += len(only_conf) - only_conf.index(t) - 1
-                break
+            elif ans == "s":
+                skipped += 1
+                ptos.remove_conflict_lines(c["conflict_path"], [t.raw_line])
             elif ans == "e":
                 edited = _edit_todo_line(t)
                 if edited is not None:
@@ -3070,23 +3089,18 @@ def _resolve_todo_conflict(c, orig_full, conf_full):
                     imported += 1
                 else:
                     skipped += 1
-            elif ans == "y" or ans == "":
+                ptos.remove_conflict_lines(c["conflict_path"], [t.raw_line])
+            else:
                 orig_todos.append(t)
                 imported += 1
-            else:
-                skipped += 1
-        print()
+                ptos.remove_conflict_lines(c["conflict_path"], [t.raw_line])
+        idx += 1
 
-    # for done.txt superset: offer to remove conflict file
-    if c["file_type"] == "done" and not only_conf and not edit_conflicts:
-        print("  Current file is already complete. Conflict file can be safely removed.")
-        imported = 0  # nothing to import
-
-    # save if any changes were made
     if imported > 0:
         save_todos(orig_full, orig_todos)
         print(f"  Saved {orig_full} ({len(orig_todos)} tasks)")
-
+    ptos.finalize_conflict_file(c["original_path"], c["conflict_path"],
+                                c["file_type"])
     return imported, skipped
 
 

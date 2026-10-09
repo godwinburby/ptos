@@ -176,7 +176,7 @@ class TestDiffRecordsConflict:
         assert "2026-01-02" in result["lines_only_in_original"][0]
         assert len(result["edit_conflicts"]) == 0
 
-    def test_edit_conflict(self):
+    def test_same_date_type_is_a_hint_not_an_edit(self):
         records_dir = ptos.RECORDS_DIR
         os.makedirs(records_dir, exist_ok=True)
         orig = os.path.join(records_dir, "2026.log")
@@ -186,6 +186,26 @@ class TestDiffRecordsConflict:
             f.write("2026-01-01 type=expense amount=10\n")
         with open(conf, "w") as f:
             f.write("2026-01-01 type=expense amount=20\n")
+        orig_rel = os.path.relpath(orig, ptos.BASE_DIR).replace("\\", "/")
+        conf_rel = os.path.relpath(conf, ptos.BASE_DIR).replace("\\", "/")
+        result = diff_records_conflict(orig_rel, conf_rel)
+        assert result["edit_conflicts"] == []
+        assert len(result["hints"]) == 1
+        assert "amount=10" in result["hints"][0][0]
+        assert "amount=20" in result["hints"][0][1]
+        assert result["lines_only_in_conflict"] == [
+            "2026-01-01 type=expense amount=20"]
+
+    def test_same_id_is_an_edit_candidate(self):
+        records_dir = ptos.RECORDS_DIR
+        os.makedirs(records_dir, exist_ok=True)
+        orig = os.path.join(records_dir, "2026.log")
+        conf = os.path.join(records_dir,
+                 "2026.sync-conflict-20260911-113533-XAJ7GJU.log")
+        with open(orig, "w") as f:
+            f.write("2026-01-01 type=expense id=abc amount=10\n")
+        with open(conf, "w") as f:
+            f.write("2026-01-01 type=expense id=abc amount=20\n")
         orig_rel = os.path.relpath(orig, ptos.BASE_DIR).replace("\\", "/")
         conf_rel = os.path.relpath(conf, ptos.BASE_DIR).replace("\\", "/")
         result = diff_records_conflict(orig_rel, conf_rel)
@@ -304,22 +324,23 @@ class TestConflictsPageRenders:
         from ptos_web import app
         return app.test_client()
 
-    def test_records_edit_conflict_renders(self):
+    def test_records_conflict_renders_actions(self):
         records_dir = ptos.RECORDS_DIR
         os.makedirs(records_dir, exist_ok=True)
         with open(os.path.join(records_dir, "2026.log"), "w") as f:
-            f.write("2026-01-01 type=expense amount=10\n")
+            f.write("2026-01-01 type=expense id=abc amount=10\n")
         with open(os.path.join(records_dir,
                  "2026.sync-conflict-20260911-113533-XAJ7GJU.log"), "w") as f:
-            f.write("2026-01-01 type=expense amount=99\n")
+            f.write("2026-01-01 type=expense id=abc amount=99\n")
         resp = self._client().get("/conflicts")
         assert resp.status_code == 200
         html = resp.get_data(as_text=True)
-        assert "Keep original" in html
-        assert "Keep conflict" in html
+        assert "Add" in html
+        assert "Replace" in html
+        assert "Skip" in html
         assert "loop.parent" not in html
         assert 'data-filetype="records"' in html
-        assert "conflict-edit-row" in html
+        assert "conflict-row" in html
 
     def test_todo_edit_conflict_renders(self):
         todo_dir = ptos.TODO_DIR
@@ -407,11 +428,11 @@ class TestLineScopedResolution:
         assert "amount=99" not in orig_text
         assert "2026-01-08 type=expense amount=7" in _read(conf)
 
-    def test_keep_conflict_replaces_not_duplicates(self):
+    def test_replace_replaces_not_duplicates(self):
         orig, conf = _records_conflict()
-        ptos.resolve_edit_conflict(
+        ptos.replace_conflict_line(
             orig, conf, "2026-01-01 type=expense amount=99",
-            "2026-01-01 type=expense amount=99", "records")
+            "2026-01-01 type=expense amount=10", "records")
         text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
         assert "amount=99" in text
         assert "amount=10" not in text
@@ -438,14 +459,15 @@ class TestLineScopedResolution:
         assert "2026-01-01 type=expense amount=99" in open(
             os.path.join(ptos.BASE_DIR, conf), encoding="utf-8").read()
 
-    def test_import_all_replaces_edits_and_appends_unique(self):
+    def test_import_all_appends_and_never_replaces(self):
         orig, conf = _records_conflict()
         ptos.import_all_conflict(orig, conf, "records")
         assert not os.path.exists(os.path.join(ptos.BASE_DIR, conf))
         text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
         assert "amount=99" in text
+        assert "amount=10" in text  # the original line is never removed
         assert "2026-01-08 type=expense amount=7" in text
-        assert text.count("2026-01-01 type=expense") == 1
+        assert text.count("amount=99") == 1
 
     def test_todo_edit_conflict_line_scoped(self):
         orig, conf = _todo_conflict()
@@ -487,15 +509,15 @@ class TestConflictApiLineScoped:
         text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
         assert "amount=10" in text and "amount=99" not in text
 
-    def test_edit_record_keep_conflict_then_import_finalizes(self):
+    def test_replace_record_then_import_finalizes(self):
         orig, conf = _records_conflict()
         d = self._post({
-            "action": "edit_record",
+            "action": "replace_record",
             "conflict_path": conf,
             "original_path": orig,
             "file_type": "records",
             "line": "2026-01-01 type=expense amount=99",
-            "choice": "conflict",
+            "target": "2026-01-01 type=expense amount=10",
         })
         assert d.get_json()["resolved"] is False
         text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
@@ -510,20 +532,71 @@ class TestConflictApiLineScoped:
         assert d.get_json()["resolved"] is True
         assert not os.path.exists(os.path.join(ptos.BASE_DIR, conf))
 
+    def test_skip_record_removes_without_import(self):
+        orig, conf = _records_conflict()
+        d = self._post({
+            "action": "skip_record",
+            "conflict_path": conf,
+            "original_path": orig,
+            "file_type": "records",
+            "line": "2026-01-01 type=expense amount=99",
+        })
+        assert d.get_json()["resolved"] is False
+        text = open(os.path.join(ptos.BASE_DIR, orig), encoding="utf-8").read()
+        assert "amount=99" not in text and "amount=10" in text
+
 
 class TestCliResolveRecordConflict:
-    def test_keep_conflict_replaces_not_duplicates(self, monkeypatch):
+    def _conflict(self, orig_lines, conf_lines):
+        _write(ptos.RECORDS_DIR, "2026.log", "".join(l + "\n" for l in orig_lines))
+        _write(ptos.RECORDS_DIR,
+               "2026.sync-conflict-20260911-113533-XAJ7GJU.log",
+               "".join(l + "\n" for l in conf_lines))
+        return "records/2026.log", "records/2026.sync-conflict-20260911-113533-XAJ7GJU.log"
+
+    def test_replace_is_explicit_and_finalizes(self, monkeypatch):
         import ptos_cli
-        orig, conf = _records_conflict()
+        orig, conf = self._conflict(
+            ["2026-01-01 type=expense id=abc amount=10"],
+            ["2026-01-01 type=expense id=abc amount=99"])
         c = {"original_path": orig, "conflict_path": conf, "file_type": "records"}
         orig_full = os.path.join(ptos.BASE_DIR, orig)
         conf_full = os.path.join(ptos.BASE_DIR, conf)
-        answers = iter(["c", "n"])
-        monkeypatch.setattr("builtins.input", lambda *a: next(answers))
+        monkeypatch.setattr("builtins.input", lambda *a: "r")
         imported, skipped = ptos_cli._resolve_record_conflict(c, orig_full, conf_full)
         text = open(orig_full, encoding="utf-8").read()
         assert text.count("amount=99") == 1
         assert "amount=10" not in text
+        assert imported == 1 and skipped == 0
+        assert not os.path.exists(conf_full)
+
+    def test_plain_conflict_defaults_to_add(self, monkeypatch):
+        import ptos_cli
+        orig, conf = self._conflict(
+            ["2026-01-01 type=expense amount=10"],
+            ["2026-01-08 type=expense amount=7"])
+        c = {"original_path": orig, "conflict_path": conf, "file_type": "records"}
+        orig_full = os.path.join(ptos.BASE_DIR, orig)
+        conf_full = os.path.join(ptos.BASE_DIR, conf)
+        monkeypatch.setattr("builtins.input", lambda *a: "")
+        imported, skipped = ptos_cli._resolve_record_conflict(c, orig_full, conf_full)
+        text = open(orig_full, encoding="utf-8").read()
+        assert "2026-01-08 type=expense amount=7" in text
+        assert "amount=10" in text
+        assert imported == 1 and skipped == 0
+        assert not os.path.exists(conf_full)
+
+    def test_same_id_add_keeps_both(self, monkeypatch):
+        import ptos_cli
+        orig, conf = self._conflict(
+            ["2026-01-01 type=expense id=abc amount=10"],
+            ["2026-01-01 type=expense id=abc amount=99"])
+        c = {"original_path": orig, "conflict_path": conf, "file_type": "records"}
+        orig_full = os.path.join(ptos.BASE_DIR, orig)
+        conf_full = os.path.join(ptos.BASE_DIR, conf)
+        monkeypatch.setattr("builtins.input", lambda *a: "a")
+        imported, skipped = ptos_cli._resolve_record_conflict(c, orig_full, conf_full)
+        text = open(orig_full, encoding="utf-8").read()
+        assert "amount=10" in text and "amount=99" in text
         assert imported == 1
-        assert skipped == 1
-        assert os.path.exists(conf_full)
+        assert not os.path.exists(conf_full)

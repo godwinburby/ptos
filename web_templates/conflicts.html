@@ -37,66 +37,63 @@
 
   {% if c.file_type == 'records' %}
     {% set d = diffs.get(c.conflict_path, {}) %}
-    {% set unique_conf = d.get('lines_only_in_conflict', []) %}
+    {% set only_conf = d.get('lines_only_in_conflict', []) %}
     {% set edit_conf = d.get('edit_conflicts', []) %}
-    {% set unique_orig = d.get('lines_only_in_original', []) %}
+    {% set hints = d.get('hints', []) %}
+    {% set edit_map = {} %}
+    {% for o, cl in edit_conf %}{% set _ = edit_map.update({cl: o}) %}{% endfor %}
+    {% set hint_map = {} %}
+    {% for o, cl in hints %}{% set _ = hint_map.update({cl: o}) %}{% endfor %}
 
-    {% if not unique_conf and not edit_conf %}
+    {% if not only_conf %}
     <div style="font-size:13px;color:var(--sub);margin-bottom:10px;">
       Files are identical. Conflict file can be safely removed.
     </div>
     <button class="btn btn-sm" onclick="removeConflict(this)" style="font-size:12px;">Remove conflict file</button>
     {% else %}
 
-    {% if edit_conf %}
-    <div style="font-size:13px;font-weight:600;color:var(--warn);margin-bottom:8px;">
-      ⚠ {{ edit_conf|length }} edit conflict{{ 's' if edit_conf|length != 1 }} — same date+type, different content
+    <div style="font-size:13px;font-weight:600;color:var(--text);margin-bottom:8px;">
+      {{ only_conf|length }} record{{ 's' if only_conf|length != 1 }} only in conflict file — Add (append), Replace, or Skip each:
     </div>
-    {% for orig_l, conf_l in edit_conf %}
-    <div class="conflict-edit-row" style="display:flex;gap:8px;margin-bottom:6px;font-size:12px;">
-      <div style="flex:1;padding:6px 8px;background:var(--bg);border-radius:6px;font-family:monospace;word-break:break-all;">
-        <span style="color:var(--sub);font-size:10px;">Original:</span><br>{{ orig_l }}
+    <div style="max-height:360px;overflow-y:auto;margin-bottom:10px;">
+      {% for line in only_conf %}
+      {% set target = edit_map.get(line) or hint_map.get(line) %}
+      <div class="conflict-row" style="display:flex;gap:8px;margin-bottom:6px;font-size:12px;align-items:stretch;">
+        <div style="flex:1;padding:6px 8px;background:var(--warn-lt);border-radius:6px;font-family:monospace;word-break:break-all;">
+          <span style="color:var(--warn);font-size:10px;">Conflict:</span><br>{{ line }}
+        </div>
+        {% if target %}
+        <div style="flex:1;padding:6px 8px;background:var(--bg);border-radius:6px;font-family:monospace;word-break:break-all;">
+          <span style="color:var(--sub);font-size:10px;">{% if line in edit_map %}Same id as{% else %}Same date+type as{% endif %}:</span><br>{{ target }}
+        </div>
+        {% endif %}
+        <div style="display:flex;flex-direction:column;gap:4px;">
+          <button class="btn btn-sm" onclick="recordAction(this, 'import_records', '{{ line | e }}')" style="font-size:11px;">Add</button>
+          {% if target %}
+          <button class="btn btn-sm" data-target="{{ target | e }}" onclick="recordAction(this, 'replace_record', '{{ line | e }}')" style="font-size:11px;">Replace</button>
+          {% endif %}
+          <button class="btn btn-sm" onclick="recordAction(this, 'skip_record', '{{ line | e }}')" style="font-size:11px;color:var(--sub);">Skip</button>
+        </div>
       </div>
-      <div style="flex:1;padding:6px 8px;background:var(--warn-lt);border-radius:6px;font-family:monospace;word-break:break-all;">
-        <span style="color:var(--warn);font-size:10px;">Conflict:</span><br>{{ conf_l }}
-      </div>
-      <div style="display:flex;flex-direction:column;gap:4px;">
-        <button class="btn btn-sm" onclick="resolveEditConflict(this, 'original', '{{ conf_l | e }}')" style="font-size:11px;">Keep original</button>
-        <button class="btn btn-sm" onclick="resolveEditConflict(this, 'conflict', '{{ conf_l | e }}')" style="font-size:11px;">Keep conflict</button>
-      </div>
-    </div>
-    {% endfor %}
-    {% endif %}
-
-    {% if unique_conf %}
-    <div class="conflict-unique-section">
-    <div style="font-size:13px;font-weight:600;color:var(--text);margin:10px 0 8px;">
-      {{ unique_conf|length }} record{{ 's' if unique_conf|length != 1 }} only in conflict file:
-    </div>
-    <div style="max-height:300px;overflow-y:auto;margin-bottom:10px;">
-      {% for line in unique_conf %}
-      <label style="display:flex;align-items:flex-start;gap:8px;padding:4px 0;border-bottom:1px solid var(--border);font-size:12px;">
-        <input type="checkbox" class="conflict-line-cb" value="{{ line }}" checked style="margin-top:3px;">
-        <span style="font-family:monospace;word-break:break-all;">{{ line }}</span>
-      </label>
       {% endfor %}
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;">
-      <button class="btn btn-primary btn-sm" onclick="importSelected(this)" style="font-size:12px;">Import selected</button>
-      <button class="btn btn-sm" onclick="importAllRecords(this)" style="font-size:12px;">Import all</button>
+      <button class="btn btn-primary btn-sm" onclick="importAllRecords(this)" style="font-size:12px;">Add all</button>
       <button class="btn btn-sm" onclick="keepOriginal(this)" style="font-size:12px;color:var(--sub);">Keep original (skip all)</button>
     </div>
-    </div>
-    {% endif %}
 
     {% endif %}
 
   {% elif c.file_type in ('todo', 'done') %}
     {% set d = diffs.get(c.conflict_path, {}) %}
     {% set edit_conf = d.get('edit_conflicts', []) %}
-    {% set only_conf = d.get('only_in_conflict', []) %}
+    {% set only_conf_all = d.get('only_in_conflict', []) %}
     {% set only_orig = d.get('only_in_original', []) %}
     {% set identical = d.get('identical', []) %}
+    {% set edit_lines = [] %}
+    {% for o, ct in edit_conf %}{% set _ = edit_lines.append(ct.raw_line) %}{% endfor %}
+    {% set only_conf = [] %}
+    {% for t in only_conf_all %}{% if t.raw_line not in edit_lines %}{% set _ = only_conf.append(t) %}{% endif %}{% endfor %}
 
     {% if c.file_type == 'done' and not only_conf and not edit_conf %}
     <div style="font-size:13px;color:var(--sub);margin-bottom:10px;">
@@ -224,19 +221,18 @@ function removeEmptyUniqueSections(card) {
   });
 }
 
-function importSelected(btn) {
-  var card = getCard(btn);
-  var cbs = card.querySelectorAll(".conflict-line-cb:checked");
-  var lines = Array.from(cbs).map(function(cb) { return cb.value; });
-  if (!lines.length) { alert("Select at least one record."); return; }
-  apiCall(btn, {action: "import_records", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), lines: lines}, function(card) {
-    cbs.forEach(function(cb) { var l = cb.closest("label"); if (l) l.remove(); });
-    removeEmptyUniqueSections(card);
-  });
-}
-
 function importAllRecords(btn) {
   apiCall(btn, {action: "import_all_records", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original")});
+}
+
+function recordAction(btn, action, line) {
+  var body = {action: action, conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original")};
+  if (action === "import_records") body.lines = [line];
+  else body.line = line;
+  if (action === "replace_record") body.target = btn.getAttribute("data-target");
+  apiCall(btn, body, function(card, btn) {
+    var row = btn.closest(".conflict-row"); if (row) row.remove();
+  });
 }
 
 function importSelectedTodos(btn) {
@@ -264,12 +260,6 @@ function keepConflict(btn) {
 
 function removeConflict(btn) {
   apiCall(btn, {action: "remove_conflict", conflict_path: getPath(btn, "data-path")});
-}
-
-function resolveEditConflict(btn, choice, line) {
-  apiCall(btn, {action: "edit_record", conflict_path: getPath(btn, "data-path"), original_path: getPath(btn, "data-original"), line: line, choice: choice}, function(card, btn) {
-    var row = btn.closest(".conflict-edit-row"); if (row) row.remove();
-  });
 }
 
 function resolveTodoChoice(btn, choice, desc) {
