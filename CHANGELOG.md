@@ -5,6 +5,15 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-09
+
+### Record parsing gets its speed back
+
+- **`parse_line` tries a fast path before the strict v2 tokenizer.** The strict reader (`_parse_v2`/`_tokenize_v2_fields`) is a character-by-character Python loop and was tried first on every line, so an already-migrated v2 line paid the loop cost and a legacy v1 line paid it *plus* the v1 parse — roughly 3 to 5 times the previous release's parse time. The new `_parse_v2_fast` handles the two common shapes directly (plain single-token lines via one `split()` + `partition("=")`; quoted lines via one compiled regex per field) and delegates anything unusual to the strict `_parse_v2`, which stays the single source of truth; a line it can prove is not v2 falls through to `_parse_v1` exactly as before. Measured on 3,000 lines: v2 about 16.3 ms → 9.0 ms, v1 about 17.6 ms → 4.4 ms.
+- **Tests** — `tests/test_parse_fast.py`: a fuzz equivalence test (5,000 generated lines + a fixed exotic list — NBSP, vertical tab, control characters, stray/bad quotes, empty values, wrong `type` position, `a=b=c`) asserting `parse_line` matches the strict reader on result **or** exception type; a machine-independent speed guard (the fast path is never slower than the pre-change strict-first parse on the same corpus); and an end-to-end `scan_records` check on a mixed corpus.
+
+---
+
 ## 2026-10-08
 
 ### Schema option values keep their spaces

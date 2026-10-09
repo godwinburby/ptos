@@ -2694,6 +2694,82 @@ def _parse_v2(line):
     return parse_date(date), kv, (note or "")
 
 
+_FAST_DATE = re.compile(r'\d{4}-\d{2}-\d{2}(?=[ \t]|\Z)')
+_FAST_DATE_FULL = re.compile(r'\d{4}-\d{2}-\d{2}\Z')
+_FAST_FIELD = re.compile(
+    r'[ \t]+([^= \t]+)=(?:"((?:[^"\\]|\\["\\])*)"|([^\s"\\]+))(?=[ \t]|\Z)')
+_FAST_NOEQ = re.compile(r'[ \t]+[^\s=]+(?=[ \t]|\Z)')
+_FAST_UNESC = re.compile(r'\\(["\\])')
+_FAST_ODD_WS = re.compile(r'[^\S \t]')
+
+
+def _parse_v2_fast(line):
+    """Fast path for `_parse_v2`. Same result, returns None when certainly v1.
+
+    Handles the two common shapes directly (plain single-token lines and
+    quoted lines) and delegates anything unusual to the strict `_parse_v2`,
+    which stays the single source of truth. Returning None means the line is
+    certainly not v2, so the caller falls back to the v1 parser.
+    """
+    s = line.strip()
+    if '"' not in s and "\\" not in s and not _FAST_ODD_WS.search(s):
+        if " | " in s:
+            return None
+        parts = s.split()
+        if not parts or len(parts[0]) != 10 or not _FAST_DATE_FULL.match(parts[0]):
+            return _parse_v2(line)
+        if len(parts) < 2:
+            return _parse_v2(line)
+        kv, note = {}, None
+        for i in range(1, len(parts)):
+            k, eq, v = parts[i].partition("=")
+            if not eq or not k or not v:
+                return None
+            if i == 1 and k != "type":
+                return None
+            if k == "note":
+                note = v
+            elif k not in kv:
+                kv[k] = v
+            elif isinstance(kv[k], list):
+                kv[k].append(v)
+            else:
+                kv[k] = [kv[k], v]
+        return parse_date(parts[0]), kv, (note or "")
+    m = _FAST_DATE.match(s)
+    if not m:
+        return _parse_v2(line)
+    pos, n = m.end(), len(s)
+    kv, note, first = {}, None, True
+    while pos < n:
+        fm = _FAST_FIELD.match(s, pos)
+        if fm is None:
+            if _FAST_NOEQ.match(s, pos):
+                return None
+            return _parse_v2(line)
+        key = fm.group(1)
+        q = fm.group(2)
+        val = fm.group(3) if q is None else (_FAST_UNESC.sub(r"\1", q) if "\\" in q else q)
+        if val == "":
+            return _parse_v2(line)
+        if first:
+            if key != "type":
+                return _parse_v2(line)
+            first = False
+        if key == "note":
+            note = val
+        elif key not in kv:
+            kv[key] = val
+        elif isinstance(kv[key], list):
+            kv[key].append(val)
+        else:
+            kv[key] = [kv[key], val]
+        pos = fm.end()
+    if first:
+        return _parse_v2(line)
+    return parse_date(s[:10]), kv, (note or "")
+
+
 def _parse_v1(line):
     """Legacy v1 parse: single-token values, `|` note tail, type anywhere."""
     main, _, note = line.partition("|")
@@ -2718,16 +2794,17 @@ def _parse_v1(line):
 def parse_line(line):
     """Parse a log line into ``(date, kv_dict, note)``.
 
-    Tries the v2 grammar first (leading date, ``type=`` next, quoted free-text,
-    ``note=`` field), then falls back to v1 (unquoted single-token values with
-    a `| note` tail) so a not-yet-migrated file still reads. Writers only emit
-    v2.
+    Tries the v2 grammar first via `_parse_v2_fast` (which handles the common
+    shapes directly and delegates odd lines to the strict `_parse_v2`), then
+    falls back to v1 (unquoted single-token values with a `| note` tail) so a
+    not-yet-migrated file still reads. Writers only emit v2.
     """
     line = line.rstrip("\r\n")
     try:
-        return _parse_v2(line)
+        r = _parse_v2_fast(line)
     except ValueError:
-        return _parse_v1(line)
+        r = None
+    return r if r is not None else _parse_v1(line)
 
 def safe_parse_line(line):
     """Like parse_line but returns None on any error instead of raising."""

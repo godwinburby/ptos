@@ -114,11 +114,16 @@ tokens; every **schema field value** (free text **and** an `options` value) is k
 verbatim by **quoting** it when it contains whitespace, `"` or `\` (escaping `\"`/`\\`).
 Empty values are refused.
 
-- **Dual-read, v2-write.** `parse_line` tries **`_parse_v2`** (strict) first, then falls
-  back to **`_parse_v1`** (legacy: single-token values, `| note` tail, `type` anywhere) so
-  a not-yet-migrated file still reads. Writers only emit v2. `_parse_v2` uses
+- **Dual-read, v2-write.** `parse_line` tries **`_parse_v2_fast`** first — a fast path
+  that handles plain single-token lines (one `split()` + `partition("=")`) and quoted lines
+  (one compiled regex per field) directly, delegates anything unusual to the strict
+  **`_parse_v2`**, and returns `None` for a line it can prove is not v2 — then falls back
+  to **`_parse_v1`** (legacy: single-token values, `| note` tail, `type` anywhere) so a
+  not-yet-migrated file still reads. `_parse_v2` stays the single source of truth and uses
   `_tokenize_v2_fields` + `_read_quoted`, requires the leading date and `type=` second,
-  pops `note` out-of-band, and returns `(date, kv, note)`.
+  pops `note` out-of-band, and returns `(date, kv, note)`. The fast path is pinned by
+  `tests/test_parse_fast.py` (fuzz equivalence + a machine-independent speed ratio). Writers
+  only emit v2.
 - **`build_record_line(date, record, note=None)`** (`ptos.py`) is the single assembler:
   validates the `date` (strict `YYYY-MM-DD`, `parse_date` must accept it) and every key
   (`_invalid_record_key`: non-empty, no whitespace/`=`/`|`), refuses a missing/empty/list
