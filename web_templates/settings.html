@@ -125,31 +125,6 @@
     </div>
 {% endif %}
   </div>
-  {% if syncthing_status.ok and syncthing_status.folder %}
-  <details id="sync-setup-guide" {% if syncthing_status.devices_connected == 0 %}open{% endif %}>
-    <summary style="cursor:pointer;font-size:0.9em;margin-top:12px;">Set up sync between two devices
-      <span style="color:var(--text-secondary,#888);">(one-time)</span></summary>
-    <ol style="margin:8px 0 0 18px;font-size:0.9em;line-height:1.6;">
-      <li>Syncthing is running here (see the status above). On the <strong>other</strong> device, start Syncthing
-          too, open its UI at <code>http://127.0.0.1:8384</code>, and go to <em>Actions → Show ID</em>. Copy that ID.</li>
-      <li>On this machine's Syncthing UI, click <em>Add Remote Device</em> and paste the other device's ID.
-          On the <strong>other device</strong>, do the same with <strong>this</strong> device's ID (in the table
-          above — press Copy). Pairing is <strong>mutual</strong>: both devices must have each other.</li>
-      <li>On this machine, click <em>Add Folder</em>. Set Folder ID to <code>{{ syncthing_status.folder.id }}</code>
-          (it must <strong>match on both devices</strong>), path to <code>{{ base_dir }}</code>, and under
-          <em>Sharing</em> add the paired device with <strong>Send &amp; Receive</strong>.</li>
-      <li>On the other device, <strong>accept the incoming folder</strong> and set its path to <em>that device's
-          own</em> ptos-data directory (e.g. <code>~/storage/shared/ptos-data</code> on Android — the paths may
-          differ per device; the folder ID is what syncs, not the path).</li>
-      <li>Press <em>Refresh</em> here — you should see both devices connected and the folder at 100%.</li>
-    </ol>
-    <div style="margin:8px 0 0 18px;font-size:0.85em;color:var(--text-secondary,#888);">
-      Stuck on "0 of 1 other device connected"? Check both IDs were exchanged in <em>both</em> directions and that the
-      devices can reach each other (same Wi‑Fi, or open the firewall/relay on Syncthing's <em>Settings</em> tab).
-      This card only observes Syncthing — PTOS never syncs anything itself.
-    </div>
-  </details>
-  {% endif %}
 </div>
 
 {% if dashboards %}
@@ -437,6 +412,31 @@
     {% endif %}
   {% endif %}
   </div>
+  {% if syncthing_status.ok and syncthing_status.folder %}
+  <details id="sync-setup-guide" {% if syncthing_status.devices_connected == 0 %}open{% endif %}>
+    <summary style="cursor:pointer;font-size:0.9em;margin-top:12px;">Set up sync between two devices
+      <span style="color:var(--text-secondary,#888);">(one-time)</span></summary>
+    <ol style="margin:8px 0 0 18px;font-size:0.9em;line-height:1.6;">
+      <li>Syncthing is running here (see the status above). On the <strong>other</strong> device, start Syncthing
+          too, open its UI at <code>http://127.0.0.1:8384</code>, and go to <em>Actions → Show ID</em>. Copy that ID.</li>
+      <li>On this machine's Syncthing UI, click <em>Add Remote Device</em> and paste the other device's ID.
+          On the <strong>other device</strong>, do the same with <strong>this</strong> device's ID (in the table
+          above — press Copy). Pairing is <strong>mutual</strong>: both devices must have each other.</li>
+      <li>On this machine, click <em>Add Folder</em>. Set Folder ID to <code>{{ syncthing_status.folder.id }}</code>
+          (it must <strong>match on both devices</strong>), path to <code>{{ base_dir }}</code>, and under
+          <em>Sharing</em> add the paired device with <strong>Send &amp; Receive</strong>.</li>
+      <li>On the other device, <strong>accept the incoming folder</strong> and set its path to <em>that device's
+          own</em> ptos-data directory (e.g. <code>~/storage/shared/ptos-data</code> on Android — the paths may
+          differ per device; the folder ID is what syncs, not the path).</li>
+      <li>Press <em>Refresh</em> here — you should see both devices connected and the folder at 100%.</li>
+    </ol>
+    <div style="margin:8px 0 0 18px;font-size:0.85em;color:var(--text-secondary,#888);">
+      Stuck on "0 of 1 other device connected"? Check both IDs were exchanged in <em>both</em> directions and that the
+      devices can reach each other (same Wi‑Fi, or open the firewall/relay on Syncthing's <em>Settings</em> tab).
+      This card only observes Syncthing — PTOS never syncs anything itself.
+    </div>
+  </details>
+  {% endif %}
 </div>
 
 
@@ -778,6 +778,11 @@ function refreshSyncthing() {
       }
     }
     body.innerHTML = h;
+    var guide = document.getElementById("sync-setup-guide");
+    if (guide) {
+      guide.style.display = (s.ok && s.folder) ? "" : "none";
+      if (s.ok && s.folder) guide.open = (s.devices_connected === 0);
+    }
   })
   .catch(function(err) {
     body.innerHTML = '<div style="color:var(--error,#c0392b);">Could not reach PTOS: ' + esc(err.message) + "</div>";

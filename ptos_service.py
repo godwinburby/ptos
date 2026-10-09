@@ -6420,6 +6420,43 @@ def _last_sync_from_log():
     return None
 
 
+def _relative_time(local_dt):
+    """Human 'how long ago' label for a local datetime, or an absolute date."""
+    delta = dt.datetime.now() - local_dt
+    secs = delta.total_seconds()
+    if secs < 0:
+        return "just now"
+    if secs < 60:
+        return "just now"
+    if secs < 3600:
+        mins = int(secs // 60)
+        return f"{mins} min ago"
+    if secs < 86400:
+        hrs = int(secs // 3600)
+        return f"{hrs} hr ago"
+    return ptos.fmt_datetime(local_dt)
+
+
+def get_last_change():
+    """When the data folder was last touched, for the shell indicator.
+
+    Reads the newest mtime across records/todo/journal/notes/config (see
+    ``ptos.latest_data_mtime``). Returns a dict with a short ``label`` for the
+    topbar, an ``exact`` local timestamp for the tooltip, and ``epoch``/``iso``
+    for anything that wants the raw value. All None when the folder is empty.
+    """
+    mtime = ptos.latest_data_mtime()
+    if not mtime:
+        return {"label": None, "exact": None, "epoch": None, "iso": None}
+    local = dt.datetime.fromtimestamp(mtime)
+    return {
+        "label": _relative_time(local),
+        "exact": ptos.fmt_datetime(local),
+        "epoch": int(mtime),
+        "iso": local.isoformat(),
+    }
+
+
 def _fmt_sync_time(value):
     """Local, human-readable time from Syncthing's ISO/RFC3339 or log stamps.
 

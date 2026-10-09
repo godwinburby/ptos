@@ -26,6 +26,12 @@ Format: `[version or date] — description`
 - **A conflict file is deleted only when nothing actionable remains** — every conflict-only line is now one actionable item (`conflict_actionable_count` counts them all), so resolving a single line keeps the file and the rest of its lines.
 - **Tests** — new `tests/test_conflict_multiset.py` (duplicate survival, file order, Add/Rename/Skip semantics, count-aware removal, deletion only when empty, todo multiset, and a randomized multiset-union property test); the stale set-based expectations in `tests/test_sync_conflicts.py` were rewritten.
 
+### Last-change indicator, and the Syncthing guide moves to its own card
+
+- **The two-device setup guide no longer renders inside the Dashboard card.** In `settings.html` the `<details id="sync-setup-guide">` block sat between the Dashboard field group and the Dashboard card's closing tag, so it appeared under Dashboard. It now lives in the Syncthing card, *after* `#syncthing-status-body` (so `refreshSyncthing()`'s innerHTML rebuild can't wipe it); that rebuild also re-evaluates the guide's `open`/visibility from the fresh device count.
+- **A persistent "last change" indicator shows in the shell.** New `ptos.latest_data_mtime()` returns the newest mtime across `records/`, `todo/`, `journal/`, `notes/` and the config files (skipping `.bak`/`.tmp`), cached for a few seconds and reset by every write/external-change path so it stays fresh. `ptos_service.get_last_change()` turns it into a short label ("just now", "N min ago", "N hr ago", else the configured absolute date) plus an exact tooltip. The web context processor injects it; `base.html` renders it in the mobile topbar and at the top of the desktop sidebar (under the brand, not the footer — the sidebar scrolls, so the footer was easy to miss). Because Syncthing preserves the sender's mtime, it also reflects a change made on another device without any Syncthing API call.
+- **Tests** — `tests/test_last_change.py` (newest-mtime selection, `.bak`/`.tmp` skipping, cache reset, `None` on an empty folder, relative/absolute labels); `tests/test_syncthing_status.py` pins the guide inside `#sec-syncthing` and the `.last-change` marker.
+
 ---
 
 ## 2026-10-08

@@ -202,12 +202,17 @@ def _inject_globals():
         sync_conflict_count = len(ptos.find_sync_conflicts())
     except Exception:
         sync_conflict_count = 0
+    try:
+        last_change = svc.get_last_change()
+    except Exception:
+        last_change = {"label": None, "exact": None, "epoch": None, "iso": None}
     return {
         "frozen": bool(getattr(sys, "frozen", False)),
         "desktop_mode": os.environ.get("DESKTOP_MODE") == "1",
         "pomo_minutes": pomo.get("duration_minutes", 25),
         "pomo_log": bool(pomo.get("log_sessions", True)),
         "sync_conflict_count": sync_conflict_count,
+        "last_change": last_change,
         "nav_sections": [
             ("log", "Log", [
                 ("",            "home",    "home",      "Home",        "H"),

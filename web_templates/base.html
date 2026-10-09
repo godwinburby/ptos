@@ -25,13 +25,16 @@
            style="flex:1;padding:6px 10px;font-size:13px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);margin:0;">
     <button type="submit" style="background:none;border:1px solid var(--border);border-radius:6px;padding:6px 10px;cursor:pointer;color:var(--text);font-size:13px;">Search</button>
   </form>
-  <div class="topbar-date">{{ now }}</div>
+  <div class="topbar-date">{{ now }}
+    {% if last_change.label %}<span class="last-change" title="Data last changed: {{ last_change.exact }}">· changed {{ last_change.label }}</span>{% endif %}
+  </div>
 </div>
 
 <aside class="sidebar">
   <div class="sidebar-brand">
     <a href="/" style="text-decoration:none"><span class="brand">PTOS</span></a>
     <span class="brand-tag">Plain Text Operating System</span>
+    {% if last_change.label %}<div class="last-change" title="Data last changed: {{ last_change.exact }}">Last change: {{ last_change.label }}</div>{% endif %}
   </div>
   <form action="/search" method="GET" class="sidebar-search">
     <input type="text" name="q" id="sidebar-search" placeholder="Search records, journal, todos, notes… (/)" autocomplete="off">

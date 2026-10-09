@@ -1653,6 +1653,11 @@ PRESETS_PATH = os.path.join(CONFIG_DIR, "presets.toml")
 
 _CACHE = {}
 
+# Newest data-file mtime, cached briefly so the per-request "last change"
+# indicator never re-walks the tree on every page render.
+_LAST_CHANGE_TTL = 5.0
+_LAST_CHANGE_CACHE = {"stamp": 0.0, "value": None}
+
 # Maps resource names to the cache keys they depend on
 _CACHE_DEPS = {
     "schema":  ["schema", "derived_fields", "numeric_fields", "datetime_fields"],
@@ -1781,6 +1786,51 @@ def _diff_signature(old, new):
     return sorted(changed)
 
 
+def _reset_last_change():
+    """Drop the cached newest-data-mtime so the next read re-walks the tree."""
+    _LAST_CHANGE_CACHE["stamp"] = 0.0
+    _LAST_CHANGE_CACHE["value"] = None
+
+
+def latest_data_mtime():
+    """Newest mtime (epoch seconds) across the data folder, or None if empty.
+
+    Walks records/, todo/, journal/ and notes/ plus the config files, skipping
+    ``.bak``/``.tmp`` leftovers. The result is cached for a few seconds so a
+    page render does not re-walk the tree on every request. Syncthing preserves
+    the sender's mtime, so the newest mtime here also reflects a change made on
+    another device.
+    """
+    now = time.monotonic()
+    if now - _LAST_CHANGE_CACHE["stamp"] < _LAST_CHANGE_TTL:
+        return _LAST_CHANGE_CACHE["value"]
+    newest = None
+    for root_dir in (RECORDS_DIR, TODO_DIR, JOURNAL_DIR, NOTES_DIR):
+        if not root_dir or not os.path.isdir(root_dir):
+            continue
+        for root, _dirs, files in os.walk(root_dir):
+            for name in files:
+                if name.endswith(".bak") or name.endswith(".tmp"):
+                    continue
+                try:
+                    m = os.stat(os.path.join(root, name)).st_mtime
+                except OSError:
+                    continue
+                if newest is None or m > newest:
+                    newest = m
+    for rel in _EXT_CONFIG_KEYS:
+        path = os.path.join(CONFIG_DIR, os.path.basename(rel))
+        try:
+            m = os.stat(path).st_mtime
+        except OSError:
+            continue
+        if newest is None or m > newest:
+            newest = m
+    _LAST_CHANGE_CACHE["stamp"] = now
+    _LAST_CHANGE_CACHE["value"] = newest
+    return newest
+
+
 def _pop_cache_keys(keys):
     popped = []
     for key in keys:
@@ -1801,6 +1851,7 @@ def _pop_cache_prefixes(prefixes):
 
 def _invalidate_from_changes(changed):
     """Drop the cache keys invalidated by a set of changed data files."""
+    _reset_last_change()
     popped = []
     if "config/schema.toml" in changed:
         # Field definitions changed, so parsed records, suggestions, and the
@@ -1879,6 +1930,7 @@ def reset_external_watch():
     """
     _EXT_WATCH_STATE["signature"] = None
     _EXT_WATCH_STATE["last_check"] = 0.0
+    _reset_last_change()
 
 
 def rebaseline_external_watch():
@@ -1896,6 +1948,7 @@ def rebaseline_external_watch():
         _log_error(f"External watch re-baseline failed: {e}")
         _EXT_WATCH_STATE["signature"] = None
     _EXT_WATCH_STATE["last_check"] = 0.0
+    _reset_last_change()
 
 
 def _load(key, path):

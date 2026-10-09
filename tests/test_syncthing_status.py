@@ -618,11 +618,16 @@ class TestWeb:
         assert "refreshSyncthing()" in html
         assert "/api/syncthing/status" in html
         assert "syncthing-status-body" in html
+        assert "last-change" in html
         assert 'id="sync-setup-guide"' in html
         assert "Set up sync between two devices" in html
         assert "Add Remote Device" in html
         assert 'id="sync-setup-guide" open' not in html
         assert "1 of 1 other device(s) connected" in html
+        # The setup guide belongs in the Syncthing card, not the Dashboard card.
+        assert html.find('id="sec-syncthing"') < html.find('id="sync-setup-guide"')
+        assert html.find('id="sec-dashboard"') < html.find('id="sec-highlights"') \
+            < html.find('id="sec-syncthing"') < html.find('id="sync-setup-guide"')
 
     def test_settings_page_no_config(self, tmp_path, monkeypatch):
         from ptos_web import app
