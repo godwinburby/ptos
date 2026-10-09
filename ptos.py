@@ -2927,17 +2927,23 @@ def _render_record_value(key, value):
     """Render one `key=value` pair for a v2 line.
 
     `tag` values keep the single-token rule (spaces -> `_`, never quoted).
-    Any other value is quoted only when it needs it. An empty value is refused
-    — omit the field instead.
+    Any other value is quoted only when it needs it. A line break in any value
+    is collapsed to a single space (a record is one physical line). An empty
+    value is refused — omit the field instead.
     """
     if key == "tag":
         val = normalize_field_value(value)
+        if val == "":
+            raise PTOSError(
+                f"Invalid empty tag value {value!r} — omit the tag instead.")
         if _needs_quote(val):
             raise PTOSError(
                 f"Invalid tag value {value!r} — a tag is a single token with "
                 "no quotes or backslashes.")
         return "tag=" + val
     val = str(value)
+    if "\n" in val or "\r" in val:
+        val = re.sub(r"[\r\n]+", " ", val)
     if val == "":
         raise PTOSError(
             f"Invalid empty value for field '{key}' — omit the field instead.")

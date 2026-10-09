@@ -12,6 +12,12 @@ Format: `[version or date] — description`
 - **`parse_line` tries a fast path before the strict v2 tokenizer.** The strict reader (`_parse_v2`/`_tokenize_v2_fields`) is a character-by-character Python loop and was tried first on every line, so an already-migrated v2 line paid the loop cost and a legacy v1 line paid it *plus* the v1 parse — roughly 3 to 5 times the previous release's parse time. The new `_parse_v2_fast` handles the two common shapes directly (plain single-token lines via one `split()` + `partition("=")`; quoted lines via one compiled regex per field) and delegates anything unusual to the strict `_parse_v2`, which stays the single source of truth; a line it can prove is not v2 falls through to `_parse_v1` exactly as before. Measured on 3,000 lines: v2 about 16.3 ms → 9.0 ms, v1 about 17.6 ms → 4.4 ms.
 - **Tests** — `tests/test_parse_fast.py`: a fuzz equivalence test (5,000 generated lines + a fixed exotic list — NBSP, vertical tab, control characters, stray/bad quotes, empty values, wrong `type` position, `a=b=c`) asserting `parse_line` matches the strict reader on result **or** exception type; a machine-independent speed guard (the fast path is never slower than the pre-change strict-first parse on the same corpus); and an end-to-end `scan_records` check on a mixed corpus.
 
+### Two write-path gaps closed
+
+- **An empty tag can no longer produce `tag=`.** `_render_record_value` normalises a tag (`Big Bazaar` → `Big_Bazaar`), and a whitespace-only or empty tag normalised to the empty string, so the builder emitted a bare `tag=` that the strict v2 reader rejects (the line then only read through the v1 fallback). An empty normalised tag now raises `PTOSError`, the same as any other empty value — omit the tag instead.
+- **A line break inside a field value is collapsed to one space.** Only the note flattened its line breaks; a value like `{"title": "a\nb"}` produced a two-line "record" that `append_record` then refused. Every value now collapses `\r\n`/`\r`/`\n` runs to a single space before quoting, so a built line is always one physical line. `FORMAT.md` says so.
+- **Tests** — `tests/test_parse.py::TestBuildRecordLine` (empty/whitespace tags refused; `\n`, `\r\n`, `\r`, `\n\n` collapse to one space and round-trip; `append_record` accepts the built line).
+
 ---
 
 ## 2026-10-08

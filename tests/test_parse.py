@@ -81,6 +81,31 @@ class TestBuildRecordLine:
         line = build_record_line("2026-01-15", {"type": "expense"}, note="  spaced  ")
         assert line == "2026-01-15 type=expense note=spaced"  # surrounding space trimmed
 
+    def test_empty_and_whitespace_tags_are_refused(self):
+        for bad in ("", " ", "   ", "\t", "\n"):
+            with pytest.raises(ptos.PTOSError):
+                build_record_line("2026-01-15", {"type": "expense", "tag": bad})
+
+    def test_newline_in_value_collapses_to_one_space(self):
+        cases = {
+            "a\nb": "a b",
+            "a\r\nb": "a b",
+            "a\rb": "a b",
+            "a\n\nb": "a b",
+        }
+        for raw, expected in cases.items():
+            line = build_record_line("2026-01-15", {"type": "expense", "title": raw})
+            assert "\n" not in line and "\r" not in line
+            d, kv, note = parse_line(line)
+            assert kv["title"] == expected
+
+    def test_newline_in_value_round_trips_through_append(self):
+        line = build_record_line("2026-01-15", {"type": "expense", "title": "a\nb"})
+        assert line == '2026-01-15 type=expense title="a b"'
+        ptos.append_record(line)
+        results = ptos.scan_records(dt.date(2026, 1, 1), dt.date(2026, 12, 31), [], None)
+        assert any("a b" in r for r in results[0])
+
 
 class TestApplySet:
     def test_set_simple(self):

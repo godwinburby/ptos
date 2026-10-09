@@ -112,7 +112,8 @@ the two in sync, and change `FORMAT.md` first when the format itself changes.
 reserved field name. Keys and the *token* values `type`/`tag`/`id`/`links` are single
 tokens; every **schema field value** (free text **and** an `options` value) is kept
 verbatim by **quoting** it when it contains whitespace, `"` or `\` (escaping `\"`/`\\`).
-Empty values are refused.
+Empty values are refused, and any line break in a value is collapsed to a single space
+(a record is one physical line).
 
 - **Dual-read, v2-write.** `parse_line` tries **`_parse_v2_fast`** first — a fast path
   that handles plain single-token lines (one `split()` + `partition("=")`) and quoted lines
@@ -130,7 +131,8 @@ Empty values are refused.
   `type`, renders `type` first, then each other field in record-dict order, then `tag`s,
   then `note` last. `_render_record_value` normalizes **`tag`** (spaces→`_`, never quoted)
   and quotes any other value only when **`_needs_quote`** (whitespace/`"`/`\`); an empty
-  value raises `PTOSError`. **`normalize_field_value`** (`"_".join(str(v).split()).replace("|", "/")`)
+  value — including a whitespace-only tag that normalises to `""` — raises `PTOSError`,
+  and a line break in any value is collapsed to one space before quoting. **`normalize_field_value`** (`"_".join(str(v).split()).replace("|", "/")`)
   now applies to keys and the token values `type`/`tag`/`id`/`links` — **not** to schema
   field values or the note, which keep their spaces via quoting. **`clean_note(note)`**
   (`" ".join(n.splitlines()).strip() or None`) flattens any line break to a space (a record

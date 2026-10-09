@@ -148,7 +148,9 @@ The note is the free text at the end of a record, written as the final `note=` f
 Everything inside the quotes is the note. It may contain spaces, `=`, `|`, commas,
 punctuation and even an escaped `\"`. Line breaks are not allowed inside a record;
 if a note is given with embedded newlines when a record is built, they are collapsed
-to a single space (a record is one physical line).
+to a single space (a record is one physical line). The same rule holds for **any
+field value**: a newline in a value is collapsed to a single space, so no field can
+ever split a record across two lines.
 
 `note` is a **reserved key**: it can never be a schema field name. This does not
 change the parsed shape — `parse_line` still returns the note as a separate third
