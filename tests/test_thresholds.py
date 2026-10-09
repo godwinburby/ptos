@@ -241,6 +241,55 @@ class TestGetThresholdStatus:
         assert status["target"] == 8000
         assert status["status"] == "met"
 
+    def test_reports_metric_and_kind_for_query_ref(self):
+        _write_queries(EXPENSE_THRESHOLD)
+        _write_records([])
+        status = svc.get_threshold_status("food_spend")
+        assert status["metric"] == "food_q"
+        assert status["metric_kind"] == "q"
+
+    def test_reports_metric_and_kind_for_metric_ref(self):
+        _write_queries(
+            '[food_q]\n'
+            'where = "type=expense AND category=food"\n'
+            'time = "this-month"\n'
+            'sum = true\n'
+            '\n'
+            '[metrics.food_total]\n'
+            'sum = "food_q"\n'
+            'field = "amount"\n'
+            '\n'
+            '["threshold.food_spend"]\n'
+            'metric = "food_total"\n'
+            'agg = "sum"\n'
+            'sum_field = "amount"\n'
+            'value = 5000\n'
+            'direction = "max"\n'
+            'time = "this-month"\n'
+        )
+        _write_records([])
+        status = svc.get_threshold_status("food_spend")
+        assert status["metric"] == "food_total"
+        assert status["metric_kind"] == "m"
+
+    def test_time_is_config_default_and_caller_override(self):
+        _write_queries(EXPENSE_THRESHOLD)
+        _write_records([])
+        assert svc.get_threshold_status("food_spend")["time"] == "this-month"
+        assert svc.get_threshold_status("food_spend", time="tm")["time"] == "tm"
+
+    def test_error_row_still_has_metric_key(self):
+        _write_queries(
+            '["threshold.broken"]\n'
+            'metric = "ghost"\n'
+            'value = 10\n'
+            'direction = "max"\n'
+        )
+        results = svc.get_all_threshold_status()
+        assert results[0]["name"] == "broken"
+        assert results[0]["status"] == "error"
+        assert results[0]["metric"] == ""
+
 
 class TestGetAllThresholdStatus:
     def test_returns_all(self):

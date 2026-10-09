@@ -3064,6 +3064,32 @@ def _collapse_spaced_ops(tokens):
     return out
 
 
+def quote_filter_value(value):
+    """Quote a field value so it survives one filter-expression parse.
+
+    _tok_where splits on whitespace, so ``name=cerena binu`` tokenizes as
+    ``name=cerena`` + ``binu`` and never matches the stored value (the bare
+    token has no operator, so _eval_cond silently skips it). Wrapping the
+    value keeps it in one token; _eval_cond strips the quotes again before
+    comparing, so a value that needs no quoting is returned untouched --
+    existing filter strings, and the frwl:/recs: cache keys built from them,
+    stay byte-identical.
+
+    _tok_where toggles its in-quote state on ``"`` and ``'`` alike, so the
+    wrapper must be a character the value does not contain. A value holding
+    both quote characters has no representable quoting and is returned
+    unchanged (no worse than the unquoted behaviour it had before).
+    """
+    v = str(value)
+    if not (any(c.isspace() for c in v) or "(" in v or ")" in v):
+        return v
+    if '"' not in v:
+        return f'"{v}"'
+    if "'" not in v:
+        return f"'{v}'"
+    return v
+
+
 def _eval_cond(kv, cond):
     """Evaluate a single condition string against kv dict.
     Operators: =  !=  >  <  >=  <=  ~(contains)  !~(not contains)

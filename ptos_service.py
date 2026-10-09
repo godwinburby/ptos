@@ -1450,14 +1450,20 @@ def get_threshold_status(name, time=None, from_date=None, to_date=None):
     """Evaluate a single threshold and return its status.
 
     Returns:
-      {name, raw, target, direction, pct, unit, status}
+      {name, raw, target, direction, pct, unit, status, agg, sum_field,
+       metric, metric_kind, time}
       status: ok | warning | over | met
+      metric_kind: "m" when metric names a metrics.* entry, else "q"
+      time: the effective window the value was computed over (config `time`
+            unless the caller overrode it) — callers use it to build a
+            matching /queries deep link
     """
     thresholds = ptos.get_thresholds()
     t = thresholds.get(name)
     if not t:
         raise PTOSError(f"Threshold '{name}' not found")
 
+    metric = t.get("metric", "")
     resolved_time = time or t.get("time", "tm")
     raw = _resolve_value(t["metric"], t, resolved_time, from_date, to_date)
     if raw is None:
@@ -1489,7 +1495,18 @@ def get_threshold_status(name, time=None, from_date=None, to_date=None):
         "status": status,
         "agg": t.get("agg", "sum"),
         "sum_field": t.get("sum_field"),
+        "metric": metric,
+        "metric_kind": _metric_kind(metric),
+        "time": resolved_time,
     }
+
+
+def _metric_kind(ref_name):
+    """Return 'm' when ref_name is a metrics.* entry, 'q' otherwise."""
+    try:
+        return "m" if ref_name in ptos.get_queries().get("metrics", {}) else "q"
+    except Exception:
+        return "q"
 
 
 def get_all_threshold_status(time=None, from_date=None, to_date=None):
@@ -1502,7 +1519,7 @@ def get_all_threshold_status(time=None, from_date=None, to_date=None):
         except Exception:
             results.append({"name": name, "raw": 0, "target": 0,
                             "direction": "max", "pct": 0, "unit": "",
-                            "status": "error"})
+                            "status": "error", "metric": ""})
     return results
 
 
@@ -1534,7 +1551,7 @@ def get_matching_thresholds(record):
                 status = get_threshold_status(name)
             except Exception:
                 status = {"name": name, "raw": 0, "target": 0, "direction": "max",
-                          "pct": 0, "unit": "", "status": "error"}
+                          "pct": 0, "unit": "", "status": "error", "metric": ""}
             matches.append(status)
     return matches
 
@@ -1646,6 +1663,7 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
         
         if item_name in metrics:
             item = get_metric(item_name, item_time, from_date=from_date, to_date=to_date)
+            item["raw_name"] = item_name
             item["kind"] = "metric"
             item["item_time"] = item_time
             item["item_period"] = item_period
@@ -3354,7 +3372,7 @@ def get_entity_data(field, value, type_filter=None, time="all"):
     Returns dict with entity info, records, summary stats, and type breakdown.
     Used by /entity (web) and --entity (CLI).
     """
-    filters = [f"{field}={value}"]
+    filters = [f"{field}={ptos.quote_filter_value(value)}"]
 
     # Always fetch ALL records first to get the full column union
     result_all = get_records(filters, time, sort="date")

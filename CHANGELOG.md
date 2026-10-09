@@ -29,6 +29,19 @@ Format: `[version or date] — description`
 - **CLI** — `_resolve_record_conflict` replaces (not appends) on "keep conflict"/"edit", and `_handle_resolve_conflicts` keeps a conflict file whenever anything was skipped. Incidentally fixes "All remaining" appending one blank-line-joined blob.
 - **Tests** — `tests/test_sync_conflicts.py` gains `TestLineScopedResolution` (engine) and `TestConflictApiLineScoped` (web endpoint), plus a CLI replacement test.
 
+### Entity lookup finds values that contain spaces
+
+- **`/entity?field=name&value=cerena binu` returned zero records.** `get_entity_data` built the filter as `f"{field}={value}"`, and `_tok_where` splits on whitespace — so `name=cerena binu` became `name=cerena` (which doesn't match the stored value) plus a bare `binu` token that `_eval_cond` silently skips as unparseable. Every record was compared against `cerena` and none matched, so a spaced value always looked like a missing entity. The filter is now built with the new engine helper `ptos.quote_filter_value(value)`, which wraps a value containing whitespace or parens in quotes (`"` — or `'` when the value already holds a `"`). The parser already honoured quotes, so no tokenizer change was needed, and a value that needs no quoting is passed through untouched, keeping existing filter strings and the `frwl:`/`recs:` cache keys byte-identical.
+- **URL encoding followed the same hole.** `/api/entity/run` built its redirect with an f-string (a value containing `&` or `#` truncated the params) and the type badges, RecordTable `returnTo` and `exportName` in `entity.html` interpolated `field`/`value` raw. They now use `url_for` and `| urlencode`.
+- **CLI** — `--entity "name=cerena binu"` is fixed by the same service change, and `run_entity` strips a matching pair of surrounding quotes so `--entity 'name="cerena binu"'` works too.
+- **Tests** — `tests/test_entity.py` gains `TestQuoteFilterValue` (helper units + a round-trip through `apply_where`), spaced-value lookups at the service, web and CLI levels, an exact-match guard (`name=cerena` still only matches `cerena`), the encoded API redirect, and a markup pin for the encoded badge links.
+
+### Thresholds and dashboard cards link through to their query
+
+- **Clicking a threshold runs its metric.** Every row on `/thresholds` and the home threshold widget is now a link that opens `/queries?run=<metric>&kind=<q|m>` — the same interaction the dashboard stat cards have — with `&time=` set to the window the number was computed over (the page time-picker override if one is active, otherwise the threshold's own `time`). `get_threshold_status()` now reports `metric`, `metric_kind` (`m` for a `metrics.*` entry, else `q`) and the effective `time`; `ptos_web._threshold_query_url()` builds the link and normalizes long time keywords to picker codes (`this-month`→`tm`, `2026-10`→`time=month&custom_time=2026-10`). Error rows (unresolvable metric) render as plain, unlinked bars.
+- **Metric dashboard cards actually run now.** Home stat cards built `/queries?run=<name>` from the display name and without a kind, so a metric card (e.g. `total_income` → `total income`) silently no-op'd on the Queries page. `get_dashboard()` now attaches `raw_name` to metric items (the query branch already did) and the URL is suffixed `&kind=m` for metrics.
+- **Tests** — `tests/test_thresholds.py` (new status keys, query-vs-metric kind, caller-time override, error-row `metric` key), `tests/test_configure_links.py::TestThresholdRunLinks` (both pages, long-keyword normalization, literal month, error row unlinked), `tests/test_dashboards.py::TestDashboardCardLinks` (metric `raw_name` + `&kind=m` on the home card).
+
 ---
 
 ## 2026-10-07

@@ -310,3 +310,33 @@ class TestMergeBehavior:
         q = ptos.get_queries()
         assert "board.kanban" in q
         assert "habit.exercise" in q
+
+
+class TestDashboardCardLinks:
+    """Home stat cards deep-link to /queries. Metrics need `&kind=m` and their
+    raw config name (get_metric returns only the display name)."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        _write_queries(QUERIES + '\n[dashboards.metric_db]\nmetrics = ["food_ratio"]\n')
+
+    def test_metric_item_carries_raw_name(self):
+        db = ptos_service.get_dashboard("metric_db")
+        item = db["items"][0]
+        assert item["kind"] == "metric"
+        assert item["raw_name"] == "food_ratio"
+
+    def test_query_item_carries_raw_name(self):
+        db = ptos_service.get_dashboard("legacy")
+        assert [i["raw_name"] for i in db["items"]] == ["income", "expenses"]
+
+    def test_home_metric_card_links_with_kind(self):
+        from ptos_web import app
+        html = app.test_client().get("/?dashboard=metric_db").data.decode()
+        assert "/queries?run=food_ratio&amp;kind=m" in html
+
+    def test_home_query_card_links_without_kind(self):
+        from ptos_web import app
+        html = app.test_client().get("/?dashboard=legacy").data.decode()
+        assert "/queries?run=income" in html
+        assert "run=income&amp;kind" not in html

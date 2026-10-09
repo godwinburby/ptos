@@ -773,7 +773,8 @@ Kanban board view for tracking records across workflow stages. Configured in
 Cross-type lookup: view every record matching a single `field=value` pair across
 all record types at once. Navigate with `G V`. Features:
 - **Landing** — field chips (schema fields shared by 2+ types) with distinct-value
-  counts; pick a field, pick a value, or type your own
+  counts; pick a field, pick a value, or type your own — values containing
+  spaces (e.g. `name=cerena binu`) are matched in full
 - **Summary card** — identity (`field=value`), auto-detected name, total records,
   distinct types, date range, aggregated numeric totals
 - **Type badges** — one per record type with counts; click to filter the table
@@ -808,6 +809,9 @@ Configured in `queries.toml` under `[threshold.NAME]`. Features:
 - **Direction** — `max` (stay under budget: warning at 80%, over at 100%) or
   `min` (minimum target: warning below 50%, met at 100%)
 - **Web page** (`/thresholds`) — progress bars with color-coded status
+- **Click-through** — clicking a threshold (on the page or the home widget) opens
+  the referenced query/metric on the Queries page, in the same time window, just
+  like a dashboard stat card
 - **Add-form integration** — shows match bars when a record would trigger a
   threshold
 - **Home dashboard widget** — compact threshold card with live values

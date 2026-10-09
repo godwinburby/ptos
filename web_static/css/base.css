@@ -535,6 +535,10 @@
   .thr-status.met { background:#3498DB22;color:#3498DB; }
   .thr-status.error { background:#95A5A622;color:#95A5A6; }
   .thr-card { background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px; }
+  .thr-link { display:block;text-decoration:none;color:inherit; }
+  .thr-link:hover .thr-card { border-color:var(--accent); }
+  .thr-go { font-size:11px;color:var(--accent);font-weight:700;opacity:.55; }
+  .thr-link:hover .thr-go { opacity:1; }
   .thr-row { display:flex;align-items:center;gap:16px;flex-wrap:wrap; }
   .thr-name { font-size:15px;font-weight:700;min-width:160px; }
   .thr-bar-wrap { flex:1;min-width:200px; }

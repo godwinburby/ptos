@@ -1,20 +1,26 @@
 {# Reusable threshold bar. Usage:
      {% include '_threshold_bar.html' with context %}
-   Expects `t` in context: {name, raw, target, pct, status, direction, unit}
+   Expects `t` in context: {name, raw, target, pct, status, direction, unit,
+                             query_url}
+   `query_url` (built by ptos_web._decorate_thresholds) makes the whole bar a
+   link that runs the referenced query/metric on /queries.
    Set `compact=true` for home page (smaller, no status badge)
 #}
 {% if compact %}
+{% if t.query_url %}<a class="thr-link" href="{{ t.query_url }}">{% endif %}
 <div style="display:flex;align-items:center;gap:12px;margin-bottom:8px;">
-  <span style="font-size:13px;font-weight:600;min-width:120px;">{{ t.name | replace('_',' ') }}</span>
+  <span style="font-size:13px;font-weight:600;min-width:120px;">{{ t.name | replace('_',' ') }}{% if t.query_url %} <span class="thr-go">→</span>{% endif %}</span>
   <div style="flex:1;min-width:120px;height:14px;background:var(--border);border-radius:7px;overflow:hidden;">
     <div class="thr-bar-fill {{ t.status }}" style="height:100%;border-radius:7px;width:{{ [t.pct, 100] | min }}%"></div>
   </div>
   <span style="font-size:12px;color:var(--sub);white-space:nowrap;">{{ '%.0f' | format(t.pct) }}% &nbsp; {{ t.raw }}/{{ t.target }}{% if t.unit %} {{ t.unit }}{% endif %}</span>
 </div>
+{% if t.query_url %}</a>{% endif %}
 {% else %}
+{% if t.query_url %}<a class="thr-link" href="{{ t.query_url }}">{% endif %}
 <div class="thr-card">
   <div class="thr-row">
-    <span class="thr-name">{{ t.name | replace('_',' ') }}</span>
+    <span class="thr-name">{{ t.name | replace('_',' ') }}{% if t.query_url %} <span class="thr-go">→</span>{% endif %}</span>
     <div class="thr-bar-wrap">
       <div class="thr-bar-bg">
         <div class="thr-bar-fill {{ t.status }}" style="width:{{ [t.pct, 100] | min }}%"></div>
@@ -34,4 +40,5 @@
     </span>
   </div>
 </div>
+{% if t.query_url %}</a>{% endif %}
 {% endif %}

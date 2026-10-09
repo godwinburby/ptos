@@ -154,6 +154,64 @@ class TestEmptyStateLinks:
         assert "/query-builder?section=due" in html
 
 
+class TestThresholdRunLinks:
+    """Threshold rows on both /thresholds and home link through to /queries,
+    running the referenced query/metric in the same window (config `time`
+    normalized to a picker code)."""
+
+    @pytest.fixture(autouse=True)
+    def _setup(self):
+        _write_queries(QUERIES)
+
+    def test_thresholds_page_links_metric_ref(self):
+        html = _client().get("/thresholds").data.decode()
+        assert '/queries?run=food_spend&amp;kind=m&amp;time=tm' in html
+
+    def test_home_page_links_metric_ref(self):
+        html = _client().get("/").data.decode()
+        assert '/queries?run=food_spend&amp;kind=m&amp;time=tm' in html
+
+    def test_query_ref_uses_kind_q(self):
+        _write_queries(QUERIES + (
+            '\n["threshold.plain"]\n'
+            'metric = "all_expenses"\n'
+            'agg = "sum"\n'
+            'sum_field = "amount"\n'
+            'value = 100\n'
+            'direction = "max"\n'
+            'time = "tm"\n'
+        ))
+        html = _client().get("/thresholds").data.decode()
+        assert '/queries?run=all_expenses&amp;kind=q&amp;time=tm' in html
+
+    def test_literal_month_time_becomes_custom(self):
+        _write_queries(
+            '[all_expenses]\n'
+            'where = "type=expense"\n'
+            'time = "this-month"\n'
+            'sum = true\n'
+            '\n'
+            '["threshold.dated"]\n'
+            'metric = "all_expenses"\n'
+            'value = 100\n'
+            'direction = "max"\n'
+            'time = "2026-10"\n'
+        )
+        html = _client().get("/thresholds").data.decode()
+        assert '/queries?run=all_expenses&amp;kind=q&amp;time=month&amp;custom_time=2026-10' in html
+
+    def test_error_row_is_not_a_link(self):
+        _write_queries(
+            '["threshold.broken"]\n'
+            'metric = "ghost"\n'
+            'value = 10\n'
+            'direction = "max"\n'
+        )
+        html = _client().get("/thresholds").data.decode()
+        assert "/queries?run=" not in html
+        assert 'class="thr-link"' not in html
+
+
 class TestQueryBuilderDeepLinkGate:
     """The boot gate is client-side JS with no JS test runner in the repo, so
     these pin the exact structure that makes ?section= work on its own and

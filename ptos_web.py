@@ -12,6 +12,7 @@ import ptos_service as svc
 import ptos
 from ptos import _glob_match
 from ptos_service import PTOSError
+from urllib.parse import quote
 
 from flask import (Flask, render_template, request, redirect,
                    url_for, jsonify, send_file, Response)
@@ -528,6 +529,55 @@ def _build_period_label(time_code, custom_time, cycles, from_date=None, to_date=
 
     return "Custom"
 
+_TIME_LONG_TO_SHORT = {long: short for short, long in ptos._TIME_ALIASES.items()}
+
+def _picker_time_params(time_code):
+    """Map a configured/effective time keyword to the (time, custom_time)
+    query params the Queries time picker understands, or (None, None).
+
+    Threshold config stores long keywords (`time = "this-month"`) that
+    `resolve_time` accepts but `TimePicker.setTime` silently drops (it only
+    matches `<select>` option values), so a raw value would run the query in
+    the picker's default window instead of the threshold's. Literal
+    YYYY/YYYY-MM/YYYY-MM-DD become the picker's year/month/date modes plus a
+    `custom_time`; `range` is omitted (we hold no from/to dates)."""
+    if not time_code:
+        return None, None
+    code = _TIME_LONG_TO_SHORT.get(time_code, time_code)
+    if re.fullmatch(r"\d{4}", code):
+        return "year", code
+    if re.fullmatch(r"\d{4}-\d{2}", code):
+        return "month", code
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", code):
+        return "date", code
+    valid = {c for _, c in _build_time_options()}
+    if code in valid:
+        return code, None
+    return None, None
+
+def _threshold_query_url(t):
+    """Deep link that runs a threshold's referenced query/metric on /queries,
+    in the same window the status was computed over. Empty string when the
+    threshold has no usable metric (error rows render as plain divs)."""
+    metric = (t.get("metric") or "").strip()
+    if not metric:
+        return ""
+    kind = t.get("metric_kind") or "q"
+    url = f"/queries?run={quote(metric)}&kind={kind}"
+    picker, custom = _picker_time_params(t.get("time"))
+    if picker:
+        url += f"&time={picker}"
+        if custom:
+            url += f"&custom_time={quote(custom)}"
+    return url
+
+def _decorate_thresholds(data):
+    """Attach query_url to each threshold status dict (shared by home and
+    /thresholds so both render the same clickable rows)."""
+    for t in data:
+        t["query_url"] = _threshold_query_url(t)
+    return data
+
 def _build_field_types(schema):
     ft = {}
     def _set(fname, ftype):
@@ -875,7 +925,8 @@ def home():
                 }
                 raw_name = item.get("raw_name", item["name"])
                 if kind in ("query", "metric"):
-                    stat["query_url"] = f"/queries?run={raw_name}"
+                    suffix = "&kind=m" if kind == "metric" else ""
+                    stat["query_url"] = f"/queries?run={quote(raw_name)}{suffix}"
                 return stat
             stats = [_to_stat(it) for it in db["items"]]
             if db.get("groups"):
@@ -898,10 +949,10 @@ def home():
     freq, rem = svc.get_frequent_presets(quick_n)
 
     try:
-        threshold_data = svc.get_all_threshold_status(
+        threshold_data = _decorate_thresholds(svc.get_all_threshold_status(
             time=time_code if 'time_code' in locals() else None,
             from_date=from_date if 'from_date' in locals() else None,
-            to_date=to_date if 'to_date' in locals() else None)
+            to_date=to_date if 'to_date' in locals() else None))
         selected_thr = cfg.get("home", {}).get("thresholds")
         if selected_thr:
             lookup = {t["name"]: t for t in threshold_data}
@@ -3100,7 +3151,8 @@ def thresholds_page(time=None):
     else:
         resolved_time = time_param
     try:
-        data = svc.get_all_threshold_status(time=resolved_time, from_date=from_date, to_date=to_date)
+        data = _decorate_thresholds(svc.get_all_threshold_status(
+            time=resolved_time, from_date=from_date, to_date=to_date))
     except Exception:
         data = []
     return render_template("thresholds.html",
@@ -3458,7 +3510,7 @@ def entity_run():
     value = data.get("value", "").strip()
     if not field or not value:
         return jsonify(ok=False, error="Field and value are required")
-    return jsonify(ok=True, redirect=f"/entity?field={field}&value={value}")
+    return jsonify(ok=True, redirect=url_for("entity_page", field=field, value=value))
 
 
 @app.route("/api/entity/field-values/<field>")

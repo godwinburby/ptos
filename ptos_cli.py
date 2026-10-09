@@ -1614,6 +1614,8 @@ def run_entity(arg):
         field, value = arg.split("=", 1)
         field = field.strip()
         value = value.strip()
+    if len(value) > 1 and value[0] == value[-1] and value[0] in "\"'":
+        value = value[1:-1].strip()
     if not field or not value:
         sys.exit("Field and value are required.")
 

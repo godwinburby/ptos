@@ -299,10 +299,10 @@
 {# ── Type badges ──────────────────────────────────────────────────────── #}
 <div class="entity-controls">
   <div class="entity-types">
-    <a href="/entity?field={{ field }}&value={{ value }}{% if time %}&time={{ time }}{% endif %}"
+    <a href="/entity?field={{ field | urlencode }}&value={{ value | urlencode }}{% if time %}&time={{ time | urlencode }}{% endif %}"
        class="entity-type-badge {{ 'active' if not entity.type_filter }}">All <span class="count">{{ entity.count }}</span></a>
     {% for type_name, count in entity.types.items() | sort %}
-    <a href="/entity?field={{ field }}&value={{ value }}&type={{ type_name }}{% if time %}&time={{ time }}{% endif %}"
+    <a href="/entity?field={{ field | urlencode }}&value={{ value | urlencode }}&type={{ type_name | urlencode }}{% if time %}&time={{ time | urlencode }}{% endif %}"
        class="entity-type-badge {{ 'active' if entity.type_filter == type_name }}">{{ type_name | replace('_',' ') }} <span class="count">{{ count }}</span></a>
     {% endfor %}
   </div>
@@ -442,9 +442,9 @@
   var cols = {{ entity.columns | tojson }};
   _tbl = new RecordTable({
     containerId: 'record-table',
-    returnTo: '/entity?field={{ field }}&value={{ value }}',
+    returnTo: '/entity?field={{ field | urlencode }}&value={{ value | urlencode }}',
     enableBulk: true,
-    exportName: 'entity_{{ field }}_{{ value }}',
+    exportName: 'entity_{{ field | urlencode }}_{{ value | urlencode }}',
   });
   _tbl.render({ records: records, columns: cols, count: {{ entity.count }} });
   {% endif %}

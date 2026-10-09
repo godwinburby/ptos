@@ -18,6 +18,35 @@ def _clean_cache():
     ptos._CACHE.clear()
 
 
+class TestQuoteFilterValue:
+    def test_plain_value_untouched(self):
+        assert ptos.quote_filter_value("vka7") == "vka7"
+        assert ptos.quote_filter_value("cerena") == "cerena"
+        assert ptos.quote_filter_value(100) == "100"
+
+    def test_spaced_value_quoted(self):
+        assert ptos.quote_filter_value("cerena binu") == '"cerena binu"'
+
+    def test_parens_quoted(self):
+        assert ptos.quote_filter_value("john (jr)") == '"john (jr)"'
+
+    def test_value_with_double_quote_uses_single_quotes(self):
+        assert ptos.quote_filter_value('say "hi" now') == "'say \"hi\" now'"
+
+    def test_value_with_both_quotes_left_alone(self):
+        v = 'a"b\'c d'
+        assert ptos.quote_filter_value(v) == v
+
+    def test_round_trips_through_the_filter_parser(self):
+        kv = {"name": "cerena binu"}
+        assert ptos.apply_where(
+            kv, [f"name={ptos.quote_filter_value('cerena binu')}"])
+        assert not ptos.apply_where(
+            {"name": "cerena"}, [f"name={ptos.quote_filter_value('cerena binu')}"])
+        assert not ptos.apply_where(
+            kv, [f"name={ptos.quote_filter_value('cerena')}"])
+
+
 class TestGetEntityData:
     def test_basic_entity(self):
         _clean_cache()
@@ -111,6 +140,41 @@ class TestGetEntityData:
         assert data["amount_by_type"]["income"] == 95750
         assert data["amount_by_type"]["expense"] == 10000
 
+    def test_value_with_spaces(self):
+        _clean_cache()
+        today = dt.date.today()
+        _write_records([
+            f'{today} type=expense client_code=c1 name="cerena binu" amount=100',
+            f"{today} type=expense client_code=c2 name=cerena amount=50",
+            f'{today} type=expense client_code=c3 name="binu thomas" amount=10',
+        ])
+        data = svc.get_entity_data("name", "cerena binu")
+        assert data["count"] == 1
+        assert data["records"][0]["client_code"] == "c1"
+        assert data["label"] == "cerena binu"
+
+    def test_value_with_spaces_stays_exact(self):
+        _clean_cache()
+        today = dt.date.today()
+        _write_records([
+            f'{today} type=expense client_code=c1 name="cerena binu" amount=100',
+            f"{today} type=expense client_code=c2 name=cerena amount=50",
+        ])
+        data = svc.get_entity_data("name", "cerena")
+        assert data["count"] == 1
+        assert data["records"][0]["client_code"] == "c2"
+
+    def test_value_with_spaces_type_filter(self):
+        _clean_cache()
+        today = dt.date.today()
+        _write_records([
+            f'{today} type=expense client_code=c1 name="cerena binu" amount=100',
+            f'{today} type=income client_code=c1 name="cerena binu" amount=500',
+        ])
+        data = svc.get_entity_data("name", "cerena binu", type_filter="expense")
+        assert data["count"] == 1
+        assert data["types"] == {"expense": 1}
+
 
 class TestEntityWebRoute:
     def test_entity_page_basic(self):
@@ -166,6 +230,35 @@ class TestEntityWebRoute:
         data = resp.get_json()
         assert data["ok"] is False
         assert "required" in data["error"].lower()
+
+    def test_entity_api_run_encodes_spaced_value(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/entity/run",
+                           json={"field": "name", "value": "cerena binu"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["redirect"].startswith("/entity?")
+        assert "value=cerena+binu" in data["redirect"]
+
+    def test_entity_page_value_with_spaces(self):
+        _clean_cache()
+        today = dt.date.today()
+        _write_records([
+            f'{today} type=expense client_code=c1 name="cerena binu" amount=100',
+            f"{today} type=expense client_code=c2 name=cerena amount=50",
+        ])
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/entity", query_string={"field": "name",
+                                                   "value": "cerena binu"})
+        assert resp.status_code == 200
+        html = resp.data.decode()
+        assert "cerena binu" in html
+        assert "client_code" in html
+        assert "value=cerena%20binu" in html
+        assert "entity_name_cerena%20binu" in html
+        assert "value=cerena binu" not in html
 
 
 class TestFunnelStrip:
@@ -235,6 +328,33 @@ class TestCLIEntity:
         monkeypatch.setattr("sys.argv", ["ptos", "--entity", "vka7"])
         with pytest.raises(SystemExit):
             ptos_cli.main()
+
+    def test_entity_cli_value_with_spaces(self, monkeypatch, capsys):
+        _clean_cache()
+        today = dt.date.today()
+        _write_records([
+            f'{today} type=expense client_code=c1 name="cerena binu" amount=100',
+            f"{today} type=expense client_code=c2 name=cerena amount=50",
+        ])
+        monkeypatch.setattr("sys.argv", ["ptos", "--entity", "name=cerena binu"])
+        ptos_cli.main()
+        out = capsys.readouterr().out
+        assert "name=cerena binu" in out
+        assert "1 record" in out
+        assert "cerena binu" in out
+
+    def test_entity_cli_quoted_value_with_spaces(self, monkeypatch, capsys):
+        _clean_cache()
+        today = dt.date.today()
+        _write_records([
+            f'{today} type=expense client_code=c1 name="cerena binu" amount=100',
+        ])
+        monkeypatch.setattr("sys.argv",
+                            ["ptos", "--entity", 'name="cerena binu"'])
+        ptos_cli.main()
+        out = capsys.readouterr().out
+        assert "1 record" in out
+        assert "cerena binu" in out
 
 
 class TestEntitySuggestions:
