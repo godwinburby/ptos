@@ -412,17 +412,18 @@
     {% endif %}
   {% endif %}
   </div>
-  {% if syncthing_status.ok and syncthing_status.folder %}
-  <details id="sync-setup-guide" {% if syncthing_status.devices_connected == 0 %}open{% endif %}>
+  <details id="sync-setup-guide" {% if syncthing_status.ok and syncthing_status.folder and syncthing_status.devices_connected == 0 %}open{% endif %}>
     <summary style="cursor:pointer;font-size:0.9em;margin-top:12px;">Set up sync between two devices
       <span style="color:var(--text-secondary,#888);">(one-time)</span></summary>
     <ol style="margin:8px 0 0 18px;font-size:0.9em;line-height:1.6;">
-      <li>Syncthing is running here (see the status above). On the <strong>other</strong> device, start Syncthing
-          too, open its UI at <code>http://127.0.0.1:8384</code>, and go to <em>Actions → Show ID</em>. Copy that ID.</li>
-      <li>On this machine's Syncthing UI, click <em>Add Remote Device</em> and paste the other device's ID.
-          On the <strong>other device</strong>, do the same with <strong>this</strong> device's ID (in the table
-          above — press Copy). Pairing is <strong>mutual</strong>: both devices must have each other.</li>
-      <li>On this machine, click <em>Add Folder</em>. Set Folder ID to <code>{{ syncthing_status.folder.id }}</code>
+      <li>Install and start Syncthing on <strong>each</strong> device that should share the data
+          (this one included). Open its UI at <code>http://127.0.0.1:8384</code>, go to
+          <em>Actions → Show ID</em>, and copy each device's ID.</li>
+      <li>On the first device's Syncthing UI, click <em>Add Remote Device</em> and paste the other
+          device's ID. On the <strong>other</strong> device, do the same with the first device's ID.
+          Pairing is <strong>mutual</strong>: both devices must have each other.</li>
+      <li>On the device that holds the ptos-data folder, click <em>Add Folder</em>. Set Folder ID to
+          <code>{% if syncthing_status.folder %}{{ syncthing_status.folder.id }}{% else %}ptos-data{% endif %}</code>
           (it must <strong>match on both devices</strong>), path to <code>{{ base_dir }}</code>, and under
           <em>Sharing</em> add the paired device with <strong>Send &amp; Receive</strong>.</li>
       <li>On the other device, <strong>accept the incoming folder</strong> and set its path to <em>that device's
@@ -436,7 +437,6 @@
       This card only observes Syncthing — PTOS never syncs anything itself.
     </div>
   </details>
-  {% endif %}
 </div>
 
 
@@ -779,9 +779,8 @@ function refreshSyncthing() {
     }
     body.innerHTML = h;
     var guide = document.getElementById("sync-setup-guide");
-    if (guide) {
-      guide.style.display = (s.ok && s.folder) ? "" : "none";
-      if (s.ok && s.folder) guide.open = (s.devices_connected === 0);
+    if (guide && s.ok && s.folder) {
+      guide.open = (s.devices_connected === 0);
     }
   })
   .catch(function(err) {

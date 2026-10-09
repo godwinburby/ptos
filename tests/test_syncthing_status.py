@@ -638,6 +638,10 @@ class TestWeb:
         resp = client.get("/settings")
         html = resp.get_data(as_text=True)
         assert "config.xml not found" in html
+        # The setup guide is always available (folded) so it shows on a device
+        # where Syncthing isn't detected yet.
+        assert 'id="sync-setup-guide"' in html
+        assert 'id="sync-setup-guide" open' not in html
 
     def test_settings_page_fully_in_sync_branch(self, tmp_path, monkeypatch):
         from ptos_web import app
@@ -672,6 +676,8 @@ class TestWeb:
         client = app.test_client()
         html = client.get("/settings").get_data(as_text=True)
         assert "No configured Syncthing folder matches this data folder" in html
+        assert 'id="sync-setup-guide"' in html
+        assert 'id="sync-setup-guide" open' not in html
 
     def test_settings_page_has_no_serve_control(self, tmp_path, monkeypatch):
         from ptos_web import app
@@ -704,3 +710,14 @@ class TestWeb:
         resp = client.post("/settings/save", json={"syncthing_serve": True, "user_name": "Ada"})
         assert resp.get_json()["ok"] is True
         assert "syncthing" not in ptos_service.get_config()
+
+    def test_refresh_syncthing_never_hides_the_guide(self):
+        import pathlib
+        tpl = pathlib.Path(__file__).resolve().parent.parent / "web_templates" / "settings.html"
+        text = tpl.read_text(encoding="utf-8")
+        # The guide is always rendered; a refresh only sets its open state and
+        # must never toggle it off (which hid the help on a device with no
+        # Syncthing detected).
+        assert "guide.style.display" not in text
+        assert 'id="sync-setup-guide"' in text
+        assert "{% if syncthing_status.ok and syncthing_status.folder %}" not in text

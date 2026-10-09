@@ -40,6 +40,12 @@ Format: `[version or date] — description`
 - **Queries page: a query/metric click scrolls to the results on mobile.** `queries.html` gains `_scrollToResults()`, called from `_selectChip` and `_selectThreshold`, which brings `#result-area` into view when the viewport is ≤767px so the table is reached without manual scrolling.
 - **Tests** — `tests/test_last_change.py` gains `TestLastChangeMarkup` (data-epoch/data-prefix, the `av()` include, the ticker's 30s/visibility/pageshow hooks, no Jinja, hour+minute phrasing) and `TestQueriesScrollsToResults`, plus an hour-band label case; `tests/test_web_perf.py`'s external-script list/order includes `last_change.js`.
 
+### The Syncthing setup guide is always available
+
+- **The two-device setup guide no longer disappears when Syncthing isn't detected.** In `settings.html` the `<details id="sync-setup-guide">` block was gated behind `syncthing_status.ok and syncthing_status.folder` (and `refreshSyncthing()` set its `display` to `none` in the same case), so on a device that runs PTOS but not Syncthing — e.g. the phone's own instance — the help was never rendered. The guide now always renders, folded by default, and opens automatically only when Syncthing is detected with nothing connected yet.
+- **The steps are self-contained.** The wording no longer assumes Syncthing is already running on this device; it walks through installing and starting it on each device, and falls back to a generic Folder ID (`ptos-data`) when no folder is configured.
+- **Tests** — `tests/test_syncthing_status.py::TestWeb` asserts the guide is present and folded on the no-config and unmatched-folder pages, and that `refreshSyncthing()` no longer toggles `guide.style.display`.
+
 ---
 
 ## 2026-10-08
