@@ -6433,7 +6433,8 @@ def _relative_time(local_dt):
         return f"{mins} min ago"
     if secs < 86400:
         hrs = int(secs // 3600)
-        return f"{hrs} hr ago"
+        mins = int((secs % 3600) // 60)
+        return f"{hrs} hr {mins} min ago" if mins else f"{hrs} hr ago"
     return ptos.fmt_datetime(local_dt)
 
 

@@ -1,8 +1,11 @@
 import os
+import re
 import time
 
 import ptos
 from ptos_service import get_last_change
+
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _all_data_files():
@@ -99,3 +102,58 @@ class TestGetLastChange:
         result = get_last_change()
         assert result["label"] == result["exact"]
         assert "ago" not in result["label"]
+
+    def test_hour_label_shows_minutes(self):
+        os.makedirs(ptos.RECORDS_DIR, exist_ok=True)
+        rp = os.path.join(ptos.RECORDS_DIR, "2026.log")
+        with open(rp, "w", encoding="utf-8") as f:
+            f.write("2026-10-09 type=x\n")
+        _set_all_mtime(time.time() - 3900)
+        ptos._reset_last_change()
+        assert get_last_change()["label"] == "1 hr 5 min ago"
+
+
+class TestLastChangeMarkup:
+    def _read(self, *parts):
+        with open(os.path.join(REPO, *parts), encoding="utf-8") as f:
+            return f.read()
+
+    def test_base_carries_epoch_and_prefix(self):
+        base = self._read("web_templates", "base.html")
+        assert 'class="last-change" data-epoch="{{ last_change.epoch }}"' in base
+        assert 'data-prefix="· changed "' in base
+        assert 'data-prefix="Last change: "' in base
+
+    def test_base_loads_the_ticker_via_av(self):
+        base = self._read("web_templates", "base.html")
+        assert base.count("av('/static/js/last_change.js')") == 1
+
+    def test_ticker_recomputes_from_the_epoch(self):
+        js = self._read("web_static", "js", "last_change.js")
+        assert ".last-change[data-epoch]" in js
+        assert "getAttribute(\"data-epoch\")" in js
+        assert "setInterval(refresh, 30000)" in js
+        assert "visibilitychange" in js
+        assert "pageshow" in js
+
+    def test_ticker_mirrors_the_hour_minute_phrasing(self):
+        js = self._read("web_static", "js", "last_change.js")
+        assert '" hr "' in js
+        assert '" min ago"' in js
+
+    def test_ticker_has_no_jinja(self):
+        js = self._read("web_static", "js", "last_change.js")
+        assert "{{" not in js
+        assert "{%" not in js
+
+
+class TestQueriesScrollsToResults:
+    def test_mobile_scroll_helper_wired_into_chip_and_threshold(self):
+        html = open(os.path.join(REPO, "web_templates", "queries.html"),
+                    encoding="utf-8").read()
+        assert "function _scrollToResults()" in html
+        assert "max-width: 767px" in html
+        chip = re.search(r"function _selectChip\b.*?\n}", html, re.S).group(0)
+        assert "_scrollToResults()" in chip
+        thr = re.search(r"function _selectThreshold\b.*?\n}", html, re.S).group(0)
+        assert "_scrollToResults()" in thr

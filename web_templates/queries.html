@@ -78,6 +78,13 @@ function _selectChip(kind, name) {
   _qName = name;
   _renderAllChips();
   runQuery();
+  _scrollToResults();
+}
+
+function _scrollToResults() {
+  if (!window.matchMedia || !window.matchMedia("(max-width: 767px)").matches) return;
+  var area = document.getElementById("result-area");
+  if (area) area.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
 function _selectThreshold(name) {
@@ -96,6 +103,7 @@ function _selectThreshold(name) {
     .catch(function(e) { area.innerHTML = errorCard(String(e)); });
   var builderLink = document.getElementById("builder-link");
   if (builderLink) builderLink.href = "/query-builder?section=thresholds";
+  _scrollToResults();
 }
 
 function toggleSection(el) {
