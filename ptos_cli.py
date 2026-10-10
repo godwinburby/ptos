@@ -1376,16 +1376,9 @@ def run_backlinks(subject):
 def run_find(query):
     hits = 0
     print("\nRecords:")
-    for fname in ptos.get_log_files():
-        path = os.path.join(ptos.RECORDS_DIR, fname)
-        try:
-            with open(path, encoding="utf-8") as f:
-                for i, line in enumerate(f, 1):
-                    if _glob_match(query, line):
-                        print(f"  {fname}:{i}: {line.rstrip()}")
-                        hits += 1
-        except Exception:
-            pass
+    for fname, lineno, line in ptos.search_records(query):
+        print(f"  {fname}:{lineno}: {line.rstrip()}")
+        hits += 1
     print("\nJournal:")
     try:
         for root, _, fnames in os.walk(ptos.JOURNAL_DIR):

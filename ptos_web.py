@@ -1922,15 +1922,8 @@ def search_page():
             tab="search", title="Search", now=_now_str(), query="",
             records=[], journal=[], todo=[])
     records = []
-    for fname in ptos.get_log_files():
-        path = os.path.join(svc.RECORDS_DIR, fname)
-        try:
-            with open(path, encoding="utf-8") as f:
-                for i, line in enumerate(f, 1):
-                    if _glob_match(q, line):
-                        records.append({"file": fname, "line": i, "text": line.rstrip()})
-        except Exception:
-            pass
+    for fname, lineno, line in ptos.search_records(q):
+        records.append({"file": fname, "line": lineno, "text": line.rstrip()})
     journal = []
     try:
         for dirpath, _, fnames in os.walk(svc.JOURNAL_DIR):

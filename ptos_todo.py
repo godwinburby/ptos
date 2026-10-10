@@ -340,25 +340,53 @@ def format_line(todo):
 
 # ── file I/O ────────────────────────────────────────────────────────────────
 
+# Read cache for load_todos — stat-validated exactly like ptos._parsed_file,
+# so a todo file edited by any tool (PTOS, a text editor, folder sync) is
+# re-read on the next access without an invalidation hook anywhere. Keys are
+# the absolute path; values are (stat_sig|None, todos, errors).
+_TODO_LOAD_CACHE = {}
+
+
+def _todo_file_sig(path):
+    """(mtime_ns, size) for a file, or None when it does not exist."""
+    try:
+        st = os.stat(path)
+        return (st.st_mtime_ns, st.st_size)
+    except OSError:
+        return None
+
+
 def load_todos(path):
-    """Load todos from a file.  Bad lines are skipped and collected."""
+    """Load todos from a file.  Bad lines are skipped and collected.
+
+    Re-reads only when the file's (mtime, size) changes, so repeated loads in
+    one process are free while a hand-edit, folder-sync delivery, or PTOS
+    write is picked up immediately (the next access sees a new stat). The
+    lists handed back are fresh copies each call — callers can pop/append to
+    them freely without poisoning the cache, and the shared Todo objects are
+    effectively read-only: every mutating op (add/complete/undo/edit/batch/
+    rewrite) rewrites its file before returning, which flips the cached stat
+    and forces a re-parse on the next load.
+    """
+    sig = _todo_file_sig(path)
+    cached = _TODO_LOAD_CACHE.get(path)
+    if cached is not None and cached[0] == sig:
+        return list(cached[1]), list(cached[2])
     todos = []
     errors = []
-    if not os.path.exists(path):
-        return todos, errors
-
-    with open(path, "r", encoding="utf-8") as f:
-        for i, raw in enumerate(f, start=1):
-            raw = raw.rstrip("\n")
-            if not raw.strip():
-                continue
-            t = safe_parse_todo_line(raw, line_no=i)
-            if t is None:
-                errors.append((i, raw))
-            else:
-                todos.append(t)
-
-    return todos, errors
+    if sig is not None:
+        with open(path, "r", encoding="utf-8") as f:
+            for i, raw in enumerate(f, start=1):
+                raw = raw.rstrip("\n")
+                if not raw.strip():
+                    continue
+                t = safe_parse_todo_line(raw, line_no=i)
+                if t is None:
+                    errors.append((i, raw))
+                else:
+                    todos.append(t)
+    _TODO_LOAD_CACHE[path] = (sig, todos, errors)
+    return list(todos), list(errors)
 
 
 def save_todos(path, todos):

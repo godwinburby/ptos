@@ -40,7 +40,7 @@ def _run(monkeypatch, *argv):
 
 class TestCliFind:
     def test_across_all_sources(self, monkeypatch, capsys):
-        _write_records("type=exercise notes=running today")
+        _write_records("2026-08-17 type=exercise notes=running today")
         _write_journal("2026-08-17", "went running in the park")
         _write_todo("todo.txt", "(A) jogging done today\n")
         _write_notes("log.md", "my running log\n")

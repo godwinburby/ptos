@@ -5,6 +5,24 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-10
+
+### Universal search stops re-reading the corpus
+
+- **One engine search path, one parse.** `ptos.search_records(query)` glob-matches a query against every `records/*.log` through the shared `_parsed_file` corpus and returns `(fname, 1-based lineno, line)` hits. The web `/search` records section and the CLI `--find` records section both previously re-opened and re-parsed every log per request (115 opens on the real corpus); both now delegate to the helper, so a search pays zero extra reads on top of whatever else the request already parsed. Journal/todo/notes branches are untouched, and demo rows still appear in results exactly as before.
+- **Tests** — `tests/test_search_records.py` (substring/glob matches, physical line numbers counting blank/comment rows, comments never matching, demo-group files reachable, two searches sharing a single corpus open, a foreign hand-append picked up with no invalidation, and the `/search` page rendering `file:line` hits).
+
+### Todo list gets a stat-validated read cache
+
+- **`load_todos` no longer re-reads the file per call.** A module-level `_TODO_LOAD_CACHE` (keyed by path) serves cached parses until the file's `(mtime_ns, size)` changes — the same footprint trick as `_parsed_file` — so repeated loads in one process (web page render, due checks, the 5-minute notification thread) are free, while a hand-edit, folder-sync delivery, or a PTOS write is re-read on the next access with no invalidation hook anywhere. The returned lists are fresh copies each call and the shared `Todo` objects are read-only to callers: every mutating op (`add`/`complete`/`undo`/`edit`/`batch`/`rewrite`) rewrites its file before returning, which flips the cached stat and forces a re-parse of the next load.
+- **Tests** — `tests/test_todo.py::TestLoadTodosCache` (parse count of one while the file is unchanged, external hand-edit picked up, `save_todos` rewrites refreshing `line_no`, returned lists isolated from the cache, a missing file self-healing on first append, and `complete_todo` behaving correctly after prior cached reads).
+
+### `.stignore` also ignores `.bak`
+
+- **Every atomic write briefly leaves a `.bak` next to its target.** The `*.tmp` rule already kept the temp copies out of sync, but the backup copies were not ignored. `--init` now writes `*.tmp` and `*.bak` into `.stignore` so neither transient stage ever syncs. Existing installs keep any `.stignore` already present (`--init` never overwrites); users whose data folder has none (or an older one) can re-run `--init` or add the line by hand.
+
+---
+
 ## 2026-10-09
 
 ### Read-side caching: one parse for the whole request

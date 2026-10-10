@@ -1599,8 +1599,8 @@ connected and the folder at 100%.
   mix of Send-only / Receive-only.
 
 **Ignore rules:** `--init` writes a `.stignore` file in the data folder
-(initially just `*.tmp`) so transient files never sync. Sync tools may also
-leave conflict files (see [Conflict Resolution](#conflict-resolution)).
+(pattern `*.tmp` and `*.bak`) so transient files never sync. Sync tools may
+also leave conflict files (see [Conflict Resolution](#conflict-resolution)).
 
 **Status:** PTOS never syncs anything itself, so `--sync-status` (and the
 Syncthing card in Settings) reads **Syncthing's own** REST API and log to report

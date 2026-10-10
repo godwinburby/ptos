@@ -54,6 +54,7 @@ class TestInitPtos:
         stignore = ptos_home / ".stignore"
         assert stignore.exists()
         assert "*.tmp" in stignore.read_text()
+        assert "*.bak" in stignore.read_text()
 
     def test_stignore_idempotent(self, ptos_home):
         ptos.init_ptos()

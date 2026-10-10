@@ -3906,6 +3906,27 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None,
         out.append(parsed)
     return tuple(out)
 
+
+def search_records(query):
+    """Glob-match ``query`` against every record line, in file order.
+
+    Returns a list of ``(fname, lineno, line)`` for every hit, with ``lineno``
+    1-based exactly as a text editor would number the file. Iterates
+    ``_parsed_file`` so one read+parse of each ``records/*.log`` is shared with
+    every other scan in the request — the previous per-surface loops re-read
+    and re-parsed the whole corpus on every search. Like the record-table
+    surfaces, demo rows are never hidden from search here; the caller governs
+    that. ``_parsed_file`` skips blank, comment and unterminated lines, so a
+    query can only match record lines — same practical results as the loops it
+    replaces.
+    """
+    hits = []
+    for fname in get_log_files():
+        for idx, _d, _kv, _note, line in _parsed_file(fname):
+            if _glob_match(query, line):
+                hits.append((fname, idx + 1, line))
+    return hits
+
 # --------------------------------------------------
 # Cross-record links (type:id)
 # --------------------------------------------------
@@ -7572,6 +7593,7 @@ def _confirm_demo_seed():
 
 _STIGNORE = """# PTOS/Syncthing ignore rules — transient files that must never sync
 *.tmp
+*.bak
 """
 
 

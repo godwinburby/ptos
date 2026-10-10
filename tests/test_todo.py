@@ -1634,3 +1634,64 @@ class TestScrapeTodoText:
     def test_existing_plus_project(self):
         result = self._pp("call supplier +HearingCare")
         assert "+HearingCare" in result
+
+
+# ── stat-validated read cache ───────────────────────────────────────────────
+
+class TestLoadTodosCache:
+    """load_todos re-reads only when the file's (mtime, size) changes."""
+
+    def test_parse_runs_once_while_file_unchanged(self, tmpdir, monkeypatch):
+        path = _write_todo(tmpdir)
+        calls = []
+        orig = ptos_todo.safe_parse_todo_line
+        monkeypatch.setattr(
+            ptos_todo, "safe_parse_todo_line",
+            lambda raw, line_no=None: (calls.append(line_no) or orig(raw, line_no=line_no)))
+        first, _ = load_todos(path)
+        second, _ = load_todos(path)
+        assert len(second) == len(first) == len(SAMPLE_TODO_LINES)
+        assert len(calls) == len(SAMPLE_TODO_LINES)  # parsed only on first load
+
+    def test_external_edit_picked_up_immediately(self, tmpdir):
+        path = _write_todo(tmpdir)
+        first, _ = load_todos(path)
+        assert len(first) == len(SAMPLE_TODO_LINES)
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("Walk the dog +Home @errand\n")  # hand-edit, no PTOS write path
+        second, _ = load_todos(path)
+        assert len(second) == len(SAMPLE_TODO_LINES) + 1
+
+    def test_save_rewrite_refreshes_line_numbers(self, tmpdir):
+        path = _write_todo(tmpdir)
+        todos, _ = load_todos(path)
+        assert todos[0].line_no == 1
+        save_todos(path, todos[1:])  # a PTOS write path rewrites the file
+        fresh, _ = load_todos(path)
+        assert fresh[0].line_no == 1  # re-parsed from the new file state
+        assert fresh[0].description == todos[1].description
+
+    def test_returned_lists_are_isolated_copies(self, tmpdir):
+        path = _write_todo(tmpdir)
+        first, _ = load_todos(path)
+        first.pop(0)
+        second, _ = load_todos(path)
+        assert len(second) == len(SAMPLE_TODO_LINES)
+
+    def test_missing_file_then_created(self, tmpdir):
+        path = os.path.join(str(tmpdir), "missing.txt")
+        assert load_todos(path) == ([], [])
+        add_todo(path, "Buy milk +Home @errand")
+        loaded, errors = load_todos(path)
+        assert len(loaded) == 1 and not errors
+
+    def test_mutating_ops_still_behave_after_cached_reads(self, tmpdir):
+        path = _write_todo(tmpdir)
+        load_todos(path)  # warm the cache
+        complete_todo(load_todos(path)[0][0], todo_path=path,
+                      done_path=os.path.join(str(tmpdir), "done.txt"))
+        open_todos, _ = load_todos(path)
+        assert all(not t.done for t in open_todos)
+        done_path = os.path.join(str(tmpdir), "done.txt")
+        done, _ = load_todos(done_path)
+        assert len(done) == 1 and done[0].completed_date is not None
