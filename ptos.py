@@ -1662,7 +1662,7 @@ _LAST_CHANGE_CACHE = {"stamp": 0.0, "value": None}
 _CACHE_DEPS = {
     "schema":  ["schema", "derived_fields", "numeric_fields", "datetime_fields"],
     "queries": ["queries"],
-    "config":  ["config"],
+    "config":  ["config", "date_fmt"],
     "presets": ["presets"],
 }
 
@@ -1694,8 +1694,8 @@ def _invalidate(resource):
         _CACHE.pop(key, None)
     # Any data write can change what a browse query returns — record content
     # itself, or config/schema-driven row formatting — so drop the record-result
-    # cache and bump the generation token.
-    _pop_cache_prefixes(("recs:",))
+    # cache, the shared per-file parse cache, and bump the generation token.
+    _pop_cache_prefixes(("recs:", "pf:", "row:"))
     bump_records_gen()
 
 
@@ -1732,7 +1732,7 @@ _EXT_WATCH_STATE = {"signature": None, "last_check": 0.0}
 _EXT_CHECK_INTERVAL = 1.0
 
 # Cache keys derived from record files.
-_EXT_RECORD_PREFIXES = ("frwl:", "recs:", "history:", "habit:", "calendar:")
+_EXT_RECORD_PREFIXES = ("frwl:", "recs:", "pf:", "row:", "history:", "habit:", "calendar:")
 # Config file -> the resource key it feeds.
 _EXT_CONFIG_KEYS = {
     "config/schema.toml": "schema",
@@ -1874,7 +1874,7 @@ def _invalidate_from_changes(changed):
     elif "config/queries.toml" in changed or "config/config.toml" in changed:
         # Time-cycle resolution (queries) and row date formatting (config) both
         # feed browse results, so drop the record-result cache too.
-        popped += _pop_cache_prefixes(("recs:",))
+        popped += _pop_cache_prefixes(("recs:", "row:"))
         bump_records_gen()
     return popped
 
@@ -2315,8 +2315,10 @@ def fmt_avg(n):
 
 
 def date_format():
-    """Get configured date format for display."""
-    return get_config().get("display", {}).get("date_format", "indian")
+    """Get configured date format for display (cached; cleared with config)."""
+    if "date_fmt" not in _CACHE:
+        _CACHE["date_fmt"] = get_config().get("display", {}).get("date_format", "indian")
+    return _CACHE["date_fmt"]
 
 
 def fmt_date(date_obj):
@@ -3521,21 +3523,12 @@ def find_records_with_location(filters, search=None, start=None, end=None,
         if not include_demo and is_demo_logfile(fname):
             continue
         base = os.path.basename(fname)
-        if base[:4].isdigit():
+        if base[:4].isdigit() and start is not None and end is not None:
             year = int(base[:4])
             if year < start.year or year > end.year:
                 continue
         path = os.path.join(RECORDS_DIR, fname)
-        with open(path, encoding="utf-8") as f:
-            lines = f.readlines()
-        for idx, raw in enumerate(lines):
-            line = raw.strip()
-            if not line or line.startswith("#"):
-                continue
-            try:
-                d, kv, note = parse_line(line)
-            except (ValueError, IndexError):
-                continue
+        for idx, d, kv, note, line in _parsed_file(fname):
             if not (start <= d <= end):
                 continue
             if search and search.lower() not in line.lower():
@@ -3802,6 +3795,51 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
 # Query engine
 # --------------------------------------------------
 
+def _parsed_file(fname):
+    """Parsed rows for one records/ file, cached until the file changes.
+
+    Returns a list of ``(lineno, date, kv, note, line)`` for every non-blank,
+    non-comment line, in file order. One read+parse of each file is shared by
+    every query, metric, threshold, board and habit scan in a request — the
+    previous code re-read and re-parsed the same files once per query (a
+    dashboard with N queries parsed the corpus ~N×).
+
+    The entry is validated against the file's ``(mtime_ns, size)`` on every
+    call, so a plain-text edit, a folder-sync delivery, or a rewritten file is
+    picked up without waiting for an invalidation (a generation stamp alone
+    would miss a same-process write that bypasses the write paths). Keys are
+    ``pf:<fname>`` and are dropped by the same prefix sweep as ``recs:``.
+    """
+    key = "pf:" + fname
+    path = os.path.join(RECORDS_DIR, fname)
+    try:
+        st = os.stat(path)
+    except OSError:
+        return []
+    sig = (st.st_mtime_ns, st.st_size)
+    cached = _CACHE.get(key)
+    if cached is not None and cached[0] == sig:
+        return cached[1]
+    rows = []
+    try:
+        with open(path, encoding="utf-8") as f:
+            for idx, raw in enumerate(f):
+                line = raw.strip()
+                if not line or line.startswith("#"):
+                    continue
+                try:
+                    d, kv, note = parse_line(line)
+                except (ValueError, IndexError):
+                    continue  # skip malformed lines silently
+                rows.append((idx, d, kv, note, line))
+        st2 = os.stat(path)
+        sig = (st2.st_mtime_ns, st2.st_size)
+    except OSError:
+        return rows
+    _CACHE[key] = (sig, rows)
+    return rows
+
+
 def scan_records(start, end, filters, search, from_file=None, sum_field=None,
                  return_locations=False, include_demo=None, return_parsed=False):
     """Scan log files and return (matching_lines, numeric_total).
@@ -3814,6 +3852,9 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None,
     return_parsed: if True, append a parsed list to the return tuple — the
         (date, kv, note) for each match, aligned with results/locations, so a
         caller can build rows without re-parsing every line.
+
+    Parsing is shared across calls via ``_parsed_file``; the per-call work is
+    only the window/search/where filter and the numeric sum.
     """
     if include_demo is None:
         include_demo = include_demo_records()
@@ -3840,32 +3881,24 @@ def scan_records(start, end, filters, search, from_file=None, sum_field=None,
             if year < start.year or year > end.year:
                 continue
         path = os.path.join(RECORDS_DIR, fname)
-        with open(path, encoding="utf-8") as f:
-            for idx, raw in enumerate(f):
-                line = raw.strip()
-                if not line or line.startswith("#"):
-                    continue
-                try:
-                    d, kv, note = parse_line(line)
-                except (ValueError, IndexError):
-                    continue  # skip malformed lines silently
-                if not (start <= d <= end):
-                    continue
-                if search and not _glob_match(search, line):
-                    continue
-                # inject date for derived field date arithmetic
-                kv_with_date = dict(kv)
-                kv_with_date["_date"] = d
-                if not apply_where(kv_with_date, filters):
-                    continue
-                results.append(line)
-                if return_locations:
-                    locations.append((path, idx, line))
-                if return_parsed:
-                    parsed.append((d, kv, note))
-                val = numeric_value_for(kv, sum_field) if sum_field else numeric_value(kv)
-                if val is not None:
-                    total += val
+        for idx, d, kv, note, line in _parsed_file(fname):
+            if not (start <= d <= end):
+                continue
+            if search and not _glob_match(search, line):
+                continue
+            # inject date for derived field date arithmetic
+            kv_with_date = dict(kv)
+            kv_with_date["_date"] = d
+            if not apply_where(kv_with_date, filters):
+                continue
+            results.append(line)
+            if return_locations:
+                locations.append((path, idx, line))
+            if return_parsed:
+                parsed.append((d, kv, note))
+            val = numeric_value_for(kv, sum_field) if sum_field else numeric_value(kv)
+            if val is not None:
+                total += val
     out = [results, total]
     if return_locations:
         out.append(locations)
@@ -5182,16 +5215,46 @@ def _run_base_query(name, queries, start, end, cycles, sum_field=None):
                                   include_demo=include_demo_records())
     return len(results), total
 
-def _run_base_query_lines(name, queries, start, end, cycles):
+def _run_base_query_lines(name, queries, start, end, cycles, return_parsed=False):
     """Run a named base query. Returns (raw_lines, total_sum).
-    Unlike _run_base_query, returns full raw log lines for post-processing."""
+    Unlike _run_base_query, returns full raw log lines for post-processing.
+    With return_parsed=True returns (raw_lines, total_sum, parsed) where parsed
+    holds the (date, kv, note) triple per matching line, aligned with
+    raw_lines — so a weighted-avg or max/min metric never re-parses what the
+    shared ``_parsed_file`` scan already parsed.
+    """
     q = queries[name]
     where = q.get("where", "") if isinstance(q, dict) else ""
     if not isinstance(where, str):
         sys.exit(f"Query '{name}': 'where' must be a string, got {type(where).__name__}")
     filters = [where] if where.strip() else []
-    return scan_records(start, end, filters, None,
-                        include_demo=include_demo_records())
+    out = scan_records(start, end, filters, None,
+                       include_demo=include_demo_records(),
+                       return_parsed=return_parsed)
+    if return_parsed:
+        if len(out) == 3:
+            return out
+        # A mocked/older scan_records ignores return_parsed and returns 2 —
+        # keep the 3-tuple contract and let _metric_kvs re-parse the lines.
+        lines, total = out
+        return lines, total, []
+    return out[:2]
+
+def _metric_kvs(lines, parsed):
+    """Yield per-line kv dicts for a metric's post-processing pass.
+
+    Prefers the parsed rows returned alongside scan_records (aligned with
+    ``lines``), and falls back to re-parsing the raw lines — which is what a
+    mocked ``scan_records`` leaves behind.
+    """
+    if parsed:
+        for _d, kv, _note in parsed:
+            yield kv
+        return
+    for line in lines:
+        p = safe_parse_line(line)
+        if p:
+            yield p[1]
 
 def run_metric(name, queries, start, end, cycles, color="", reset=""):
     """Compute and print a named metric. Returns True if found, False if not.
@@ -5245,13 +5308,13 @@ def run_metric(name, queries, start, end, cycles, color="", reset=""):
         unit_weights = m.get("unit_weights")
         if unit_field and unit_weights:
             # weighted average: divide total by sum of per-record unit weights
-            lines, total = _run_base_query_lines(m["avg"], queries, start, end, cycles)
+            lines, total, parsed = _run_base_query_lines(m["avg"], queries, start, end, cycles,
+                                                         return_parsed=True)
             if not lines:
                 print(f"{_lbl(name)} no data")
                 return True
             units = 0
-            for line in lines:
-                _, kv, _ = parse_line(line)
+            for kv in _metric_kvs(lines, parsed):
                 val = kv.get(unit_field, "")
                 if isinstance(val, list):
                     val = val[0]
@@ -5273,13 +5336,13 @@ def run_metric(name, queries, start, end, cycles, color="", reset=""):
 
     if "max" in m or "min" in m:
         key      = "max" if "max" in m else "min"
-        lines, _ = _run_base_query_lines(m[key], queries, start, end, cycles)
+        lines, _, parsed = _run_base_query_lines(m[key], queries, start, end, cycles,
+                                                 return_parsed=True)
         if not lines:
             print(f"{_lbl(name)} no data")
             return True
         values = []
-        for line in lines:
-            _, kv, _ = parse_line(line)
+        for kv in _metric_kvs(lines, parsed):
             v = numeric_value(kv)
             if v is not None:
                 values.append(v)

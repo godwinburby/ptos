@@ -26,7 +26,6 @@ import re
 import glob
 import time
 import json
-import copy
 import datetime as dt
 import dataclasses
 import urllib.request
@@ -135,7 +134,7 @@ def _invalidate_history_cache(rtype=None, rtypes=None):
     """
     for key in list(ptos._CACHE.keys()):
         if (key.startswith(("history:", "habit:", "calendar:",
-                            "frwl:", "recs:"))
+                            "frwl:", "recs:", "pf:", "row:"))
                 or key in ("log_files", "demo_has_real")):
             ptos._CACHE.pop(key, None)
             _SUGGESTION_STAMP.pop(key, None)
@@ -172,6 +171,43 @@ def _recs_put(key, value):
                  if isinstance(k, str) and k.startswith("recs:")]
     for old in recs_keys[:-_RECS_MAX]:
         ptos._CACHE.pop(old, None)
+
+
+def _copy_records_result(result):
+    """Isolated copy of a get_records result for a caller to decorate.
+
+    The top-level dict and each row dict (plus the column/records lists) are
+    copied so callers can add ``kind``/``query_name`` keys or mutate a row
+    without touching the cached object. Row values are shared by reference, so
+    the copy is O(rows) but does not touch field values.
+    """
+    out = dict(result)
+    if isinstance(result.get("records"), list):
+        out["records"] = [dict(r) for r in result["records"]]
+    if isinstance(result.get("columns"), list):
+        out["columns"] = list(result["columns"])
+    return out
+
+
+def _row_from_parsed_cached(line, d, kv, note, dt_fields):
+    """Built UI row body for one record, memoized by raw line content.
+
+    A row is a pure function of the record's line (its fields + date, the
+    configured date format, and the schema's derived-field rules), so the raw
+    line is a complete cache key: two identical records share one row, and an
+    edited record yields a new key instead of a stale hit. Schema/config
+    changes clear ``row:`` keys through the same invalidation sweep as
+    ``recs:``. Callers must copy the returned dict (get_records attaches the
+    per-occurrence location) and never mutate it.
+    """
+    key = "row:" + line
+    base = ptos._CACHE.get(key)
+    if base is None:
+        base = _build_row_from_parsed(d, kv, note, dt_fields=dt_fields)
+        if not base:
+            return None
+        ptos._CACHE[key] = base
+    return base
 
 
 # ── Suggestion cache TTL ──────────────────────────────────────────────────────
@@ -246,14 +282,14 @@ def _parse_record(line, format_date=True):
     return _build_row_from_parsed(*parsed, format_date=format_date)
 
 
-def _build_row_from_parsed(d, kv, note, format_date=True):
+def _build_row_from_parsed(d, kv, note, format_date=True, dt_fields=None):
     """Build a UI row dict from an already-parsed (date, kv, note) triple.
 
     Mirrors _parse_record but skips re-parsing the raw line, so callers that
     already parsed a line (scan_records(return_parsed=True)) pay the cost once.
     """
     row = {"date": fmt_date(d) if format_date else str(d)}
-    _dt_fields = set(ptos.datetime_fields())
+    _dt_fields = dt_fields if dt_fields is not None else set(ptos.datetime_fields())
     for k, v in kv.items():
         raw = ", ".join(v) if isinstance(v, list) else str(v)
         if k in _dt_fields and raw:
@@ -815,7 +851,7 @@ def get_records(filters, time="tm", search=None, sort=None,
     )
     cached = _recs_get(cache_key)
     if cached is not None:
-        return copy.deepcopy(cached)
+        return _copy_records_result(cached)
     stamp = ptos.records_gen()
     try:
         if from_date:
@@ -834,43 +870,38 @@ def get_records(filters, time="tm", search=None, sort=None,
     except Exception as e:
         raise PTOSError(str(e))
 
-    # build line→filepath map for edit/delete support
-    try:
-        line_to_filepath = {line: fp   for fp, idx, line in loc_matches}
-        line_to_lineno   = {line: idx  for fp, idx, line in loc_matches}
-    except Exception:
-        line_to_filepath = {}
-        line_to_lineno   = {}
-
-    parsed_by_line = {line: p for line, p in zip(raw, parsed)}
+    # results / parsed / locations are aligned; keep duplicates and file order.
+    triples = list(zip(raw, parsed, loc_matches))
 
     if sort:
-        def _sk(line):
-            p = parsed_by_line.get(line)
-            if not p: return (1, 0, "")
-            # date is in p[0], other fields in p[1]
+        def _sk(t):
+            d, kv = t[1][0], t[1][1]
             if sort == "date":
-                return (0, p[0], "")
-            v = p[1].get(sort, "")
-            if isinstance(v, list): v = v[0] if v else ""
-            try:    return (0, int(v), "")
-            except: return (1, 0, str(v).lower())
-        raw = sorted(raw, key=_sk)
+                return (0, d, "")
+            v = kv.get(sort, "")
+            if isinstance(v, list):
+                v = v[0] if v else ""
+            try:
+                return (0, int(v), "")
+            except Exception:
+                return (1, 0, str(v).lower())
+        triples.sort(key=_sk)
 
     records = []
     col_seen = []
     col_set  = set()
+    dt_fields = set(ptos.datetime_fields())
 
-    for line in raw:
-        p = parsed_by_line.get(line)
-        if not p:
+    for line, p, loc in triples:
+        d, kv, note = p
+        fpath, idx, _l = loc
+        base = _row_from_parsed_cached(line, d, kv, note, dt_fields)
+        if not base:
             continue
-        row = _build_row_from_parsed(*p)
-        if not row:
-            continue
+        row = dict(base)
         row["_line"]     = line
-        row["_filepath"] = line_to_filepath.get(line, "")
-        row["_lineno"]   = line_to_lineno.get(line, -1)
+        row["_filepath"] = fpath
+        row["_lineno"]   = idx
         records.append(row)
         for k in row:
             if k not in col_set and not k.startswith("_"):
@@ -899,7 +930,7 @@ def get_records(filters, time="tm", search=None, sort=None,
     }
     if ptos.records_gen() == stamp:
         _recs_put(cache_key, result)
-    return copy.deepcopy(result)
+    return _copy_records_result(result)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1258,12 +1289,12 @@ def get_metric(name, time="tm", from_date=None, to_date=None):
             unit_field = m.get("unit_field")
             unit_weights = m.get("unit_weights")
             if unit_field and unit_weights:
-                lines, total = ptos._run_base_query_lines(m["avg"], queries, start, end, cycles)
+                lines, total, parsed = ptos._run_base_query_lines(
+                    m["avg"], queries, start, end, cycles, return_parsed=True)
                 if not lines:
                     return {"name": _disp(name), "value": "no data", "raw": None}
                 units = 0
-                for line in lines:
-                    kv = (ptos.safe_parse_line(line) or (None, {}, None))[1]
+                for kv in ptos._metric_kvs(lines, parsed):
                     val = kv.get(unit_field, "")
                     if isinstance(val, list):
                         val = val[0]
@@ -1279,11 +1310,10 @@ def get_metric(name, time="tm", from_date=None, to_date=None):
 
         if "max" in m or "min" in m:
             key = "max" if "max" in m else "min"
-            lines, _ = ptos._run_base_query_lines(m[key], queries, start, end, cycles)
-            values = [ptos.numeric_value(
-                (ptos.safe_parse_line(l) or (None,{},None))[1])
-                for l in lines]
-            values = [v for v in values if v is not None]
+            lines, _, parsed = ptos._run_base_query_lines(
+                m[key], queries, start, end, cycles, return_parsed=True)
+            values = [v for kv in ptos._metric_kvs(lines, parsed)
+                      if (v := ptos.numeric_value(kv)) is not None]
             if not values:
                 return {"name": _disp(name), "value": "no data", "raw": None}
             raw = max(values) if key == "max" else min(values)
@@ -5403,8 +5433,7 @@ def fmt_date(date_obj):
     or custom strftime pattern.
     """
     import datetime as dt
-    cfg = get_config()
-    fmt = cfg.get("display", {}).get("date_format", "indian")
+    fmt = ptos.date_format()
     
     if fmt == "indian":
         return date_obj.strftime("%d/%m/%Y")
