@@ -5,6 +5,19 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-12
+
+### Record and todo appends become a true append-only write
+
+- **Adding a record no longer rewrites its file.** `ptos.append_line_fast(filepath, line)` opens the file for atomic append and writes the whole line in a single append write, so two processes adding at once can never lose each other's lines. The old path read the file, rewrote it end to end, and renamed — a race between two writers silently dropped one another's records (measured 400/4000 lost). Existing bytes are never touched, so an append leaves no `.bak`/`.tmp` behind. `append_record` and `ptos_todo.add_todo` both use it; every other write (edit/delete/advance/convert, `save_todos`, config) still uses `.bak`+`.tmp`+rename.
+- **Windows needed a different append primitive.** The C runtime's `O_APPEND` is a *seek to EOF, then write* pair, so two processes can seek to the same end and the second write **overwrites** the first's line (no duplicate, an arbitrary line lost, exit code 0). POSIX `O_APPEND` is atomic; on Windows PTOS now opens a `FILE_APPEND_DATA` `CreateFileW` handle and writes via `WriteFile`, where the kernel positions each write at the true end of file. A stress of 4 writers × 200 lines × 40 trials (32,000 appends) now loses zero lines, zero duplicates.
+- **A torn or interrupted tail is isolated, never deleted.** If a file's last byte is not a newline (an interrupted write, or a hand edit that stripped it), the new line is written after a leading newline so the two can never glue together; nothing is truncated. A failed/partial write is rolled back only when the fragment is provably our own (`_rollback_after_failed_write`), so another writer's data is never cut.
+- **The readers refuse a half-written line.** `ptos._parsed_file` and `ptos_todo.load_todos` already re-read when a file's `(mtime_ns, size)` changes; they now also drop a final line that lacks its terminating newline. A write that starts before the read and finishes after it leaves both bracket stats equal, so the tail check is what stops a parseable-but-wrong row from being served or cached during a concurrent append.
+- **`ptos --lint` (and `lint_all_records`) flags an unterminated tail** as a warning ("file does not end with a newline — leftover append fragment, isolated") via `find_unterminated_tail_files()`.
+- **`append_record(..., return_position=True)` returns the physical line index** (via `_physical_lineno`, a chunked newline count) for the appended line. Tests: `tests/test_tail_append.py` (two-process and four-process races, reader-during-append, rollback of short/failed/foreign-adjacent writes, CRLF and mixed endings, parity with the old writer, physical lineno semantics, no `.bak`/`.tmp`, H1 cache behavior, lint warning).
+
+---
+
 ## 2026-10-10
 
 ### Universal search stops re-reading the corpus

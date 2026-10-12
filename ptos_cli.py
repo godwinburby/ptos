@@ -3525,6 +3525,11 @@ def main():
         results, _ = scan_records(dt.date.min, dt.date.max, [], None,
                                  include_demo=True)
         error_files = lint_records(results, schema)
+        for fname, last_lineno in ptos.find_unterminated_tail_files():
+            print(
+                f"\n═ {fname}:{last_lineno}\n"
+                f"  ⚠ file does not end with a newline — "
+                f"leftover append fragment, isolated")
         if getattr(args, "fix", False) and error_files:
             editor = resolve_editor()
             print(f"Opening {len(error_files)} file(s) with errors...\n")

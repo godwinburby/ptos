@@ -1502,6 +1502,17 @@ Every write operation follows this sequence:
 This applies to adding records, editing records, saving presets, saving journal
 entries, and Log Editor saves.
 
+### Appends (append-only, no rewrite)
+
+Adding a record and adding a todo do **not** rewrite the file — they append one
+line in a single OS append write (`ptos.append_line_fast`), so two writers can
+never lose one another's lines. POSIX uses an `O_APPEND` descriptor; Windows
+uses a `FILE_APPEND_DATA` handle (the C runtime's `O_APPEND` is a seek-then-write
+pair and would race). Existing bytes are never touched, so no `.bak`/`.tmp` is
+left behind. A tail missing its final newline (an interrupted write, or a hand
+edit that stripped it) is isolated by writing a newline first rather than being
+deleted, and `ptos --lint` flags such a file.
+
 ### Backup creation (`.tmp` + verify pattern)
 
 1. Write backup to `*.tmp` file

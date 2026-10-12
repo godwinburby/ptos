@@ -1052,6 +1052,195 @@ def atomic_append(filepath, content):
         _log_error(f"Atomic append failed for {filepath}: {e}")
         raise
 
+
+def _os_write(fd, payload):
+    """Single append write — isolated so tests can simulate a partial write.
+
+    On Windows the CRT's ``_write`` on an ``O_APPEND`` handle is *seek to EOF,
+    then write* — two syscalls, so two processes can seek to the same position
+    and the second write overwrites the first's line. A ``FILE_APPEND_DATA``
+    handle makes the kernel position each write at the true end of file
+    atomically, matching POSIX ``O_APPEND`` semantics, so the Windows path
+    goes through ``WriteFile`` on such a handle.
+    """
+    if os.name == "nt":
+        from ctypes import create_string_buffer, byref
+        from ctypes import windll, wintypes, get_last_error
+        written = wintypes.DWORD(0)
+        buf = create_string_buffer(payload, len(payload))
+        if not windll.kernel32.WriteFile(
+                fd, buf, len(payload), byref(written), None):
+            raise OSError(get_last_error(), "WriteFile failed")
+        return written.value
+    return os.write(fd, payload)
+
+
+_ctypes_loaded = False
+
+
+def _win_kernel():
+    import ctypes
+    global _ctypes_loaded
+    if not _ctypes_loaded:
+        import ctypes.wintypes as wt
+        ctypes.windll.kernel32.GetFileSizeEx.restype = wt.BOOL
+        ctypes.windll.kernel32.SetFilePointerEx.restype = wt.BOOL
+        ctypes.windll.kernel32.ReadFile.restype = wt.BOOL
+        ctypes.windll.kernel32.WriteFile.restype = wt.BOOL
+        ctypes.windll.kernel32.CreateFileW.restype = wt.HANDLE
+        ctypes.windll.kernel32.CloseHandle.restype = wt.BOOL
+        _ctypes_loaded = True
+    import ctypes.wintypes as wt
+    return ctypes, wt
+
+
+def _win_open_append(path):
+    ctypes, wt = _win_kernel()
+    FILE_READ_DATA = 0x0001
+    FILE_APPEND_DATA = 0x0004
+    FILE_SHARE_READ = 0x0001
+    FILE_SHARE_WRITE = 0x0002
+    FILE_SHARE_DELETE = 0x0004
+    OPEN_ALWAYS = 4
+    FILE_ATTRIBUTE_NORMAL = 0x80
+    h = ctypes.windll.kernel32.CreateFileW(
+        wt.LPCWSTR(path),
+        FILE_READ_DATA | FILE_APPEND_DATA,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        None, OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, None)
+    if not h or h == ctypes.c_void_p(-1).value:
+        raise OSError(ctypes.get_last_error(), f"CreateFileW failed: {path}")
+    return wt.HANDLE(h)
+
+
+def _win_handle_size(fd):
+    ctypes, wt = _win_kernel()
+    size = wt.LARGE_INTEGER()
+    if not ctypes.windll.kernel32.GetFileSizeEx(fd, ctypes.byref(size)):
+        raise OSError(ctypes.get_last_error(), "GetFileSizeEx failed")
+    return size.value
+
+
+def _win_read_at(fd, pos, n):
+    ctypes, wt = _win_kernel()
+    k = ctypes.windll.kernel32
+    pt = wt.LARGE_INTEGER()
+    pt.value = pos
+    if not k.SetFilePointerEx(fd, pt, None, 0):
+        raise OSError(ctypes.get_last_error(), "SetFilePointerEx failed")
+    buf = ctypes.create_string_buffer(n)
+    read = wt.DWORD(0)
+    if not k.ReadFile(fd, buf, n, ctypes.byref(read), None):
+        raise OSError(ctypes.get_last_error(), "ReadFile failed")
+    return buf.raw[:read.value]
+
+
+def _win_close_handle(fd):
+    ctypes, wt = _win_kernel()
+    ctypes.windll.kernel32.CloseHandle(fd)
+
+
+def _open_append_handle(filepath):
+    if os.name == "nt":
+        return _win_open_append(filepath)
+    return os.open(filepath, os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_BINARY, 0o666)
+
+
+def _handle_size(fd):
+    if os.name == "nt":
+        return _win_handle_size(fd)
+    return os.fstat(fd).st_size
+
+
+def _handle_read_at(fd, pos, n):
+    if os.name == "nt":
+        return _win_read_at(fd, pos, n)
+    os.lseek(fd, pos, os.SEEK_SET)
+    return os.read(fd, n)
+
+
+def _handle_close(fd):
+    if os.name == "nt":
+        _win_close_handle(fd)
+    else:
+        os.close(fd)
+
+
+def _rollback_after_failed_write(fd, filepath, pre_size, payload, written):
+    """Best-effort cleanup of a failed/partial append write.
+
+    Truncate back to ``pre_size`` only when the fragment on disk is provably
+    ours: either ``written`` is known and the file is exactly
+    ``pre_size + written`` bytes, or ``written`` is unknown and the current
+    tail byte-matches the start of our own payload. Either way a foreign
+    append in between skips the rollback so another writer's lines are never
+    cut. Any fragment that stays is isolated by the leading ``\\n`` of the
+    next ``append_line_fast`` call, so a skipped rollback is safe. The cut
+    goes through ``os.truncate`` (path-based) because a Windows
+    ``FILE_APPEND_DATA`` handle cannot ``SetEndOfFile``.
+    """
+    try:
+        now = _handle_size(fd)
+        if written is None:
+            delta = now - pre_size
+            if not 0 < delta <= len(payload):
+                return
+            if _handle_read_at(fd, pre_size, delta) != payload[:delta]:
+                return
+        elif now != pre_size + written:
+            return
+        os.truncate(filepath, pre_size)
+    except OSError:
+        pass
+
+
+def append_line_fast(filepath, line):
+    """Append one pre-validated text line with a single append-mode write.
+
+    Unlike ``atomic_write``/``atomic_append`` (full-file ``.bak``/``.tmp``/
+    rename rewrites), this never rewrites existing bytes, so concurrent
+    writers cannot lose one another's lines: the OS positions the write at
+    the true end of file — POSIX via an ``O_APPEND`` descriptor, Windows via
+    a ``FILE_APPEND_DATA`` handle that writes atomically at EOF where the
+    CRT's seek-then-write ``O_APPEND`` would race — and the whole line lands
+    in one write. A tail that does not end in a newline (a torn fragment from
+    an interrupted write, or a hand edit that stripped the final newline) is
+    isolated rather than deleted — a leading ``\\n`` is written so the new
+    line can never glue onto the fragment. A failed or partial write is
+    rolled back via ``_rollback_after_failed_write`` (guarded so another
+    writer's data is never cut). Callers keep their own validation; this is
+    the last write, not a format law.
+    """
+    data = line.encode("utf-8") + b"\n"
+    d = os.path.dirname(filepath)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    fd = None
+    try:
+        fd = _open_append_handle(filepath)
+        pre_size = _handle_size(fd)
+        prefix = b""
+        if pre_size:
+            if _handle_read_at(fd, pre_size - 1, 1) != b"\n":
+                prefix = b"\n"
+        payload = prefix + data
+        try:
+            n = _os_write(fd, payload)
+        except OSError:
+            _rollback_after_failed_write(fd, filepath, pre_size, payload, None)
+            raise
+        if n != len(payload):
+            _rollback_after_failed_write(fd, filepath, pre_size, payload, n)
+            raise OSError(
+                f"Append to {filepath} wrote {n} of {len(payload)} bytes")
+    finally:
+        if fd is not None:
+            try:
+                _handle_close(fd)
+            except OSError:
+                pass
+
+
 def _log_error(message):
     """Log error to ptos_error.log."""
     try:
@@ -3795,6 +3984,9 @@ def run_set(filters, start, end, set_args, new_note, do_delete, do_all):
 # Query engine
 # --------------------------------------------------
 
+_PARSE_STABLE_ATTEMPTS = 8
+
+
 def _parsed_file(fname):
     """Parsed rows for one records/ file, cached until the file changes.
 
@@ -3809,35 +4001,70 @@ def _parsed_file(fname):
     picked up without waiting for an invalidation (a generation stamp alone
     would miss a same-process write that bypasses the write paths). Keys are
     ``pf:<fname>`` and are dropped by the same prefix sweep as ``recs:``.
+
+    Because ``append_line_fast`` mutates a file in place, a scan can read a
+    file while an append is landing. The read is therefore bracketed by two
+    stats and only cached/returned when the ``(mtime_ns, size)`` pair is
+    unchanged across the whole read — an equal pair proves no write syscall
+    completed mid-read, so the rows describe a clean snapshot, never a torn
+    tail. A changing file is re-read (bounded); if it never settles, nothing
+    is returned or cached, so a parseable-but-wrong row from a half-write is
+    never served.
+
+    The one hole a matching pair cannot prove closed is a write that starts
+    before the read and completes after it (both brackets observe the same
+    mid-write size). A write that has begun is visible as an unterminated
+    tail — every ``append_line_fast`` write ends in ``\\n`` — so when the
+    file's last byte is not a line terminator the final (partial) line is
+    dropped from the snapshot instead of being served as a parseable row. The
+    partial line's own completion flips the signature and the next call
+    re-reads, so nothing is permanently hidden; a legacy file that simply
+    lacks a trailing newline keeps all of its complete lines and is flagged by
+    lint instead of silently losing lines.
     """
     key = "pf:" + fname
     path = os.path.join(RECORDS_DIR, fname)
-    try:
-        st = os.stat(path)
-    except OSError:
-        return []
-    sig = (st.st_mtime_ns, st.st_size)
-    cached = _CACHE.get(key)
-    if cached is not None and cached[0] == sig:
-        return cached[1]
-    rows = []
-    try:
-        with open(path, encoding="utf-8") as f:
-            for idx, raw in enumerate(f):
-                line = raw.strip()
-                if not line or line.startswith("#"):
-                    continue
-                try:
-                    d, kv, note = parse_line(line)
-                except (ValueError, IndexError):
-                    continue  # skip malformed lines silently
-                rows.append((idx, d, kv, note, line))
-        st2 = os.stat(path)
-        sig = (st2.st_mtime_ns, st2.st_size)
-    except OSError:
-        return rows
-    _CACHE[key] = (sig, rows)
-    return rows
+    not_stable = 0
+    while True:
+        try:
+            st = os.stat(path)
+        except OSError:
+            return []
+        sig = (st.st_mtime_ns, st.st_size)
+        cached = _CACHE.get(key)
+        if cached is not None and cached[0] == sig:
+            return cached[1]
+        rows = []
+        try:
+            with open(path, encoding="utf-8") as f:
+                data = f.read()
+        except OSError:
+            return []
+        complete = data.endswith("\n")
+        lines = data.split("\n")
+        last = len(lines) - 1
+        for idx, raw in enumerate(lines):
+            if (not complete) and idx == last:
+                continue  # partial tail from an in-flight append — never serve
+            line = raw.strip()
+            if not line or line.startswith("#"):
+                continue
+            try:
+                d, kv, note = parse_line(line)
+            except (ValueError, IndexError):
+                continue  # skip malformed lines silently
+            rows.append((idx, d, kv, note, line))
+        try:
+            st2 = os.stat(path)
+        except OSError:
+            return rows
+        if (st2.st_mtime_ns, st2.st_size) == sig:
+            _CACHE[key] = (sig, rows)
+            return rows
+        not_stable += 1
+        if not_stable >= _PARSE_STABLE_ATTEMPTS:
+            return []
+        time.sleep(0.001)
 
 
 def scan_records(start, end, filters, search, from_file=None, sum_field=None,
@@ -4264,10 +4491,25 @@ def _resolve_record_path(line):
     return os.path.join(RECORDS_DIR, f"{year}.log")
 
 
+def _physical_lineno(path):
+    """0-based physical line index of a file's final line."""
+    count = 0
+    try:
+        with open(path, "rb") as f:
+            while True:
+                chunk = f.read(1 << 20)
+                if not chunk:
+                    break
+                count += chunk.count(b"\n")
+    except OSError:
+        return 0
+    return max(0, count - 1)
+
+
 def append_record(line, return_position=False):
     """Append a single log line to the correct yearly file.
     Extracts the year from the line's first 4 characters,
-    routes to records/<YEAR>.log, and writes atomically.
+    routes to records/<YEAR>.log, and appends with one write.
     Creates the records directory and yearly file if missing.
 
     If return_position=True, returns (filepath, lineno) of the
@@ -4285,26 +4527,11 @@ def append_record(line, return_position=False):
     path = _resolve_record_path(line)
     file_existed = os.path.exists(path)
 
-    # Read existing content and prepare new content
-    existing = ""
-    if file_existed:
-        with open(path, "r", encoding="utf-8") as f:
-            existing = f.read()
-    
-    # Strip trailing blank lines and append
-    stripped = existing.rstrip("\n\r ")
-    if stripped != existing:
-        new_content = stripped + "\n" + line + "\n"
-    else:
-        new_content = existing + line + "\n"
-    
-    # The appended line is the last physical line before the trailing ""
-    lineno = len(new_content.split("\n")) - 2
-    atomic_write(path, new_content)
+    append_line_fast(path, line)
     if not file_existed:
         _CACHE.pop("log_files", None)
     if return_position:
-        return path, lineno
+        return path, _physical_lineno(path)
 
 # --------------------------------------------------
 # Validation
@@ -4712,6 +4939,38 @@ def lint_records(records, schema):
     print()
     return error_files
 
+def find_unterminated_tail_files():
+    """Record files whose last byte is not a newline.
+
+    PTOS writers always newline-terminate, so a file ending mid-line is the
+    mark of an interrupted append — its fragment is isolated, never deleted,
+    by ``append_line_fast`` — or a hand edit that stripped the final newline.
+    Returns ``[(filepath, lineno_of_last_line), ...]`` for lint to flag.
+    """
+    found = []
+    for fname in get_log_files():
+        path = os.path.join(RECORDS_DIR, fname)
+        try:
+            with open(path, "rb") as f:
+                f.seek(0, os.SEEK_END)
+                if not f.tell():
+                    continue
+                f.seek(-1, os.SEEK_END)
+                if f.read(1) == b"\n":
+                    continue
+        except OSError:
+            continue
+        last_lineno = 0
+        try:
+            with open(path, encoding="utf-8") as f:
+                for last_lineno, _ in enumerate(f, 1):
+                    pass
+        except OSError:
+            continue
+        found.append((fname, last_lineno))
+    return found
+
+
 def lint_all_records():
     """Lint all records and return structured data for web UI.
     Returns dict with: clean, checked, error_count, warning_count, type_counts, errors, warnings
@@ -4802,6 +5061,15 @@ def lint_all_records():
                         "filepath": fname,
                         "lineno": lineno
                     })
+
+    for fname, last_lineno in find_unterminated_tail_files():
+        total_warnings += 1
+        warnings_list.append({
+            "line": "(end of file)",
+            "problems": ["file does not end with a newline — leftover append fragment, isolated"],
+            "filepath": fname,
+            "lineno": last_lineno,
+        })
 
     for link_issue in check_dangling_links():
         total_errors += 1

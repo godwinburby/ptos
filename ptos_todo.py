@@ -8,11 +8,11 @@ Run:  python ptos_todo.py              (list open todos)
       python ptos_todo.py done N        (mark line N complete)
 """
 
-import os, re, sys, calendar, datetime as dt, dataclasses
+import os, re, sys, time, calendar, datetime as dt, dataclasses
 from dataclasses import dataclass, field
 from typing import Optional, List
 
-from ptos import BASE_DIR, TODO_DIR, TODO_PATH, DONE_PATH
+from ptos import BASE_DIR, TODO_DIR, TODO_PATH, DONE_PATH, append_line_fast
 
 # ── errors ──────────────────────────────────────────────────────────────────
 
@@ -367,16 +367,36 @@ def load_todos(path):
     effectively read-only: every mutating op (add/complete/undo/edit/batch/
     rewrite) rewrites its file before returning, which flips the cached stat
     and forces a re-parse on the next load.
+
+    ``add_todo`` now appends in place, so a load can race the tail write; the
+    read is bracketed by two stats and only cached/returned when they match,
+    so a half-written line is never served as a parseable Todo. A file that
+    never settles is not cached (bounded retries). A write that starts before
+    the read and completes after it leaves both stats equal, so the final
+    line is also dropped when the file does not end in a line terminator —
+    every ``append_line_fast`` write ends in ``\\n``, so an unterminated tail
+    is provably a partial line, never a complete one.
     """
-    sig = _todo_file_sig(path)
-    cached = _TODO_LOAD_CACHE.get(path)
-    if cached is not None and cached[0] == sig:
-        return list(cached[1]), list(cached[2])
-    todos = []
-    errors = []
-    if sig is not None:
-        with open(path, "r", encoding="utf-8") as f:
-            for i, raw in enumerate(f, start=1):
+    not_stable = 0
+    while True:
+        sig = _todo_file_sig(path)
+        cached = _TODO_LOAD_CACHE.get(path)
+        if cached is not None and cached[0] == sig:
+            return list(cached[1]), list(cached[2])
+        todos = []
+        errors = []
+        if sig is not None:
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = f.read()
+            except OSError:
+                break
+            complete = data.endswith("\n")
+            lines = data.split("\n")
+            last = len(lines) - 1
+            for i, raw in enumerate(lines, start=1):
+                if (not complete) and i == last + 1:
+                    continue  # partial tail — never serve
                 raw = raw.rstrip("\n")
                 if not raw.strip():
                     continue
@@ -385,6 +405,16 @@ def load_todos(path):
                     errors.append((i, raw))
                 else:
                     todos.append(t)
+            if _todo_file_sig(path) == sig:
+                _TODO_LOAD_CACHE[path] = (sig, todos, errors)
+                return list(todos), list(errors)
+            not_stable += 1
+            if not_stable >= 8:
+                return [], []
+            time.sleep(0.001)
+        else:
+            _TODO_LOAD_CACHE[path] = (sig, todos, errors)
+            return list(todos), list(errors)
     _TODO_LOAD_CACHE[path] = (sig, todos, errors)
     return list(todos), list(errors)
 
@@ -432,43 +462,8 @@ def add_todo(path, line_text, line_no=0):
     if t.created_date is None:
         t.created_date = dt.date.today()
     formatted = format_line(t)
-    _atomic_append_text(path, formatted)
+    append_line_fast(path, formatted)
     return t
-
-
-def _atomic_append_text(filepath, content):
-    """Append a line atomically."""
-    import shutil
-    backup = filepath + ".bak"
-    tmp = filepath + ".tmp"
-
-    if os.path.exists(filepath):
-        shutil.copy2(filepath, backup)
-
-    try:
-        existing = ""
-        if os.path.exists(filepath):
-            with open(filepath, "r", encoding="utf-8") as f:
-                existing = f.read()
-
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as f:
-            if existing and not existing.endswith("\n"):
-                f.write(existing + "\n")
-            elif existing:
-                f.write(existing)
-            f.write(content + "\n")
-
-        os.replace(tmp, filepath)
-        if os.path.exists(backup):
-            os.remove(backup)
-    except Exception:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        if os.path.exists(backup):
-            shutil.copy2(backup, filepath)
-            os.remove(backup)
-        raise
 
 
 def _parse_rec_interval(rec):
