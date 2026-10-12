@@ -433,6 +433,44 @@ Features:
 - Search integration — notes appear in universal search results
 - Backlinks panel — see which journal entries, todos, and records reference a note
 
+### Embeds (live reports)
+
+Notes and journal entries can embed live widgets from `config/queries.toml`.
+Write a fenced code block tagged `ptos` containing TOML:
+
+````markdown
+```ptos
+name = "expenses_by_category"
+title = "Spend by category"
+```
+````
+
+The markdown preview replaces the block with a read-only card showing the
+query result, a **⟳** refresh button, and an **Open →** link to the full page.
+Recognized keys:
+
+| Key | Meaning |
+|-----|---------|
+| `name` | The query / metric / dashboard / threshold to show (required) |
+| `view` | `records`, `group`, `pivot`, `trend`, `metric`, `dashboard`, or `threshold`. Omit to infer from `queries.toml` (dashboard → metric → threshold → query) |
+| `time` | Time window (`td`, `tm`, `ty`, `all`, a cycle name, …) |
+| `from_date` / `to_date` | Explicit inclusive date range (overrides `time`) |
+| `limit` | Truncate a records/group result to N rows |
+| `title` | Card heading (defaults to `name`) |
+
+Embeds are read-only — use **Open →** to edit/delete/export the underlying data
+on its own page. A fresh install's `Demo/welcome.md` note includes a worked
+example.
+
+**Tip:** instead of writing the block by hand, type `/` at the start of a line
+in any note or journal editor — a Notion/Logseq-style menu lists every
+query/metric/dashboard/threshold; pick one and the block is inserted at the
+caret. Keep typing to filter, ↑/↓ to navigate, Enter to insert. The menu also
+carries a **Format** group on top with markdown helpers — type `/h1` or
+`/heading` for a heading, `/todo` for a checkbox task, `/table`, `/bold`,
+`/code`, `/link`, and so on (aliases like `h2`, `ul`, `ol`, `quote`, `hr`,
+`b`, `i`, `s` work too).
+
 ### Convert Records
 
 Convert a record from one type to another. Click the `⇄` button on any record

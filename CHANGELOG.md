@@ -7,6 +7,19 @@ Format: `[version or date] — description`
 
 ## 2026-10-12
 
+### Live embeds in notes and journals
+
+- **Markdown pages can embed live reports.** A fenced ```` ```ptos ```` block containing TOML renders in the note/journal preview as a read-only widget instead of a code block. `ptos_service.resolve_embed(spec)` validates the spec, infers the kind from `queries.toml` (dashboard → metric → threshold → base query) when `view` is omitted, calls the matching service function, and attaches a `title` and an **Open →** link to the full page. Supported `view` values: `records`/`group`/`pivot`/`trend`, `metric`, `dashboard`, `threshold`. Optional `time`/`from_date`/`to_date` choose the window and `limit` truncates a records result.
+- **Server route.** `POST /api/embed/resolve` parses the block body with `tomllib` and returns `{ok, data}` / `{ok: False, error}`; bad or empty TOML maps to a user-facing message. The client injects only server-derived strings and the server escapes them.
+- **Shared renderers extracted.** The query/dashboard/threshold render helpers moved out of `queries.html` into `web_static/js/widgets.js` (which `queries.html` now loads) plus a new `web_static/js/embeds.js` mounter; `_markdown_editor.html` loads both via `av()` and calls `mountEmbeds(pane)` after `marked.parse`. Records embeds use a new `renderRecordsStatic` (a flat read-only table — no `RecordTable`, CSV, sort, or inline edit/delete). `Demo/welcome.md` in the starter gained a worked example.
+- **`/` slash command to insert an embed.** Typing `/` at the start of a line (or after whitespace) in the note/journal editor opens a Notion/Logseq-style menu listing every embeddable query, metric, dashboard and threshold (`web_static/js/slash_embed.js`); it filters live as you type, navigates with ↑/↓+Enter/Tab, and inserts a `name = "…"` block at the caret, then re-renders the preview. Candidates come from `GET /api/embed/candidates` → `svc.get_embed_candidates()`, which reuses the exact filtering the `/queries` page applies (`queries_get` now reads the same helper, so the page and the menu can't drift). CLI-parity note: this is a UI-inherent autocomplete; the engine/service side is the read-only candidates helper, and it lands with tests.
+- **`/` slot also inserts markdown formatting helpers.** The same menu opens with a client-side **Format** group on top of the embed candidates: headings (`/h1`–`/h3`), bulleted/numbered/task lists (`/ul`/`/ol`/`/todo`), quote, code block, divider, table, and inline styling (bold/italic/strikethrough/inline-code/link). Each helper inserts its markdown at the line start (or wraps the caret) and positions the caret where typing continues; the embeddable groups sit below. Purely client-side — no engine change.
+- **Tests** — `tests/test_embed.py`.
+
+### `get_trend` could not run (missing `_prior_periods`)
+
+- **Trend queries raised `AttributeError`.** `ptos_service.get_trend` called `ptos._prior_periods`, which only existed in `ptos_cli.py`, so any trend result (the Queries page and the new trend embeds) failed with `module 'ptos' has no attribute '_prior_periods'`. `_prior_periods` now lives in `ptos.py` (single source) and `ptos_cli.py` imports it, so the CLI and web share one implementation.
+
 ### Record and todo appends become a true append-only write
 
 - **Adding a record no longer rewrites its file.** `ptos.append_line_fast(filepath, line)` opens the file for atomic append and writes the whole line in a single append write, so two processes adding at once can never lose each other's lines. The old path read the file, rewrote it end to end, and renamed — a race between two writers silently dropped one another's records (measured 400/4000 lost). Existing bytes are never touched, so an append leaves no `.bak`/`.tmp` behind. `append_record` and `ptos_todo.add_todo` both use it; every other write (edit/delete/advance/convert, `save_todos`, config) still uses `.bak`+`.tmp`+rename.

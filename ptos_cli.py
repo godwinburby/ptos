@@ -69,7 +69,7 @@ from ptos import (
     generate_unique_id, append_links_to_line, append_record_id,
     append_todo_id, append_links_to_todo_line,
     # Date helpers
-    month_range, quarter_range, resolve_cycle,
+    month_range, quarter_range, resolve_cycle, _prior_periods,
     # Internal helpers used by CLI
     _disp, filters_to_expr, resolve_editor, _TIME_ALIASES, _glob_match,
 )
@@ -486,82 +486,8 @@ def resolve_query_context(args, queries):
 # Trend engine
 # --------------------------------------------------
 
-def _prior_periods(time_keyword, n, cycles):
-    """
-    Return list of (label, start, end) for the N most recent periods
-    ending with the one resolved by time_keyword, oldest first.
-    ending with the one resolved by time_keyword, oldest first.
-    Supports: clinic/custom cycles, this-month, last-month,
-              this-week, this-quarter, YYYY-MM.
-    """
-    time_keyword = _TIME_ALIASES.get(time_keyword, time_keyword)
-    periods = []
-
-    # custom cycle  e.g. "clinic"
-    for name, start_day in cycles.items():
-        if re.fullmatch(rf"{name}(?:-\d+)?", time_keyword):
-            for i in range(n - 1, -1, -1):
-                s, e = resolve_cycle(start_day, i)
-                label = name if i == 0 else f"{name}-{i}"
-                periods.append((label, s, e))
-            return periods
-
-    # YYYY-MM
-    if re.fullmatch(r"\d{4}-\d{2}", time_keyword):
-        year, month = map(int, time_keyword.split("-"))
-        for i in range(n - 1, -1, -1):
-            m = month - i
-            y = year
-            while m < 1:
-                m += 12
-                y -= 1
-            s, e = month_range(y, m)
-            periods.append((f"{y}-{m:02d}", s, e))
-        return periods
-
-    now = today()
-
-    if time_keyword in ("this-month", "last-month"):
-        ref = now.replace(day=1)
-        if time_keyword == "last-month":
-            ref = (ref - dt.timedelta(days=1)).replace(day=1)
-        for i in range(n - 1, -1, -1):
-            d = ref.replace(day=1)
-            for _ in range(i):
-                d = (d - dt.timedelta(days=1)).replace(day=1)
-            s, e = month_range(d.year, d.month)
-            periods.append((d.strftime("%Y-%m"), s, e))
-        return periods
-
-    if time_keyword in ("this-week", "last-week"):
-        ref_end = now - dt.timedelta(days=now.weekday() + 1)  # last Sunday
-        if time_keyword == "this-week":
-            ref_end = now - dt.timedelta(days=now.weekday() - 6)  # this Sunday
-        for i in range(n - 1, -1, -1):
-            end   = ref_end - dt.timedelta(weeks=i)
-            start = end - dt.timedelta(days=6)
-            periods.append((start.strftime("%b %d"), start, end))
-        return periods
-
-    if time_keyword in ("this-quarter", "last-quarter"):
-        q   = (now.month - 1) // 3
-        yr  = now.year
-        if time_keyword == "last-quarter":
-            q -= 1
-            if q < 0:
-                q, yr = 3, yr - 1
-        for i in range(n - 1, -1, -1):
-            qi = q - i
-            yi = yr
-            while qi < 0:
-                qi += 4
-                yi -= 1
-            s, e = quarter_range(yi, qi)
-            periods.append((f"Q{qi+1} {yi}", s, e))
-        return periods
-
-    # fallback — can't generate prior periods for this keyword
-    return []
+# _prior_periods lives in ptos.py (single source); imported at the top of
+# this module so run_trend and the web trend path share one implementation.
 
 
 def run_trend(filters, time_keyword, n, cycles):

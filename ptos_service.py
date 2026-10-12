@@ -1952,6 +1952,116 @@ def run_query(name, time=None, from_date=None, to_date=None):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Embed widgets (markdown ```ptos blocks)
+# ══════════════════════════════════════════════════════════════════════════════
+
+def resolve_embed(spec):
+    """Resolve a markdown embed spec into widget data.
+
+    `spec` is the dict parsed from a fenced ```ptos TOML block. Recognized
+    keys: view, name, time, from_date, to_date, limit, title.
+
+    `view` is optional — when omitted the kind is inferred from which
+    queries.toml section holds `name` (dashboard → metric → threshold →
+    base query). Returns the underlying result dict with `title` and
+    `link` attached; raises PTOSError on bad input or an unknown name.
+    """
+    if not isinstance(spec, dict):
+        raise PTOSError("Embed must be a TOML table")
+    name = str(spec.get("name") or "").strip()
+    if not name:
+        raise PTOSError("Embed is missing 'name'")
+    view = str(spec.get("view") or "").strip().lower()
+    time = spec.get("time") or None
+    from_date = spec.get("from_date") or None
+    to_date = spec.get("to_date") or None
+    title = spec.get("title") or name
+
+    try:
+        queries = ptos.get_queries()
+    except PTOSError:
+        raise
+    except Exception as e:
+        raise PTOSError(str(e))
+
+    def _section_has(section, key):
+        sec = queries.get(section)
+        return isinstance(sec, dict) and key in sec
+
+    if not view:
+        if _section_has("dashboards", name):
+            view = "dashboard"
+        elif _section_has("metrics", name):
+            view = "metric"
+        elif name in ptos.get_thresholds():
+            view = "threshold"
+        elif isinstance(queries.get(name), dict) and name not in ("metrics", "dashboards"):
+            view = "query"
+        else:
+            raise PTOSError(
+                f"Embed references unknown query/metric/dashboard/threshold '{name}'")
+
+    if view == "dashboard":
+        result = get_dashboard(name, time or "tm", use_dashboard_time=True,
+                               from_date=from_date, to_date=to_date)
+        result["kind"] = "dashboard"
+        link = "/queries?run=" + urllib.parse.quote(name) + "&kind=d"
+    elif view == "metric":
+        result = get_metric(name, time or "tm", from_date=from_date, to_date=to_date)
+        result["kind"] = "metric"
+        link = "/queries?run=" + urllib.parse.quote(name) + "&kind=m"
+    elif view == "threshold":
+        status = get_threshold_status(name, time, from_date, to_date)
+        result = {"kind": "threshold", "name": name, "thresholds": [status]}
+        link = "/thresholds"
+    elif view in ("query", "records", "group", "pivot", "trend"):
+        result = run_query(name, time, from_date=from_date, to_date=to_date)
+        link = "/queries?run=" + urllib.parse.quote(name)
+    else:
+        raise PTOSError(f"Unknown embed view '{view}'")
+
+    limit = spec.get("limit")
+    if limit and isinstance(result.get("records"), list):
+        try:
+            n = int(limit)
+        except (TypeError, ValueError):
+            raise PTOSError(f"Embed 'limit' must be a whole number, got {limit!r}")
+        if n > 0:
+            result["records"] = result["records"][:n]
+            result["count"] = len(result["records"])
+
+    result["title"] = title
+    result["link"] = link
+    return result
+
+
+def get_embed_candidates():
+    """Return the embeddable names grouped by kind, for the ``/`` menu.
+
+    Lists base queries, metrics, dashboards and thresholds that a
+    ```ptos embed can reference. Mirrors the filtering the /queries page
+    uses so the page and the editor menu can never drift apart.
+    """
+    try:
+        all_q = get_queries()
+    except Exception:
+        all_q = {}
+    queries = [k for k in all_q
+               if k not in ("metrics", "dashboards", "due")
+               and not k.startswith(("board.", "habit.", "calendar.",
+                                     "due.", "threshold."))
+               and not (isinstance(all_q[k], dict) and "alias" in all_q[k])]
+    thresholds = [k[10:] for k in all_q
+                  if k.startswith("threshold.") and isinstance(all_q[k], dict)]
+    return {
+        "queries": queries,
+        "metrics": list((all_q.get("metrics") or {}).keys()),
+        "dashboards": list((all_q.get("dashboards") or {}).keys()),
+        "thresholds": thresholds,
+    }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Save query
 # ══════════════════════════════════════════════════════════════════════════════
 

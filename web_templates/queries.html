@@ -61,6 +61,7 @@
 
 <div id="result-area"></div>
 
+<script src="{{ av('/static/js/widgets.js') }}"></script>
 <script src="{{ av('/static/js/record_table.js') }}"></script>
 <script src="{{ av('/static/js/time_picker.js') }}"></script>
 <script src="{{ av('/static/js/chips.js') }}"></script>
@@ -207,161 +208,12 @@ function clearOut() {
   _renderAllChips();
 }
 
-function errorCard(msg) {
-  return `<div class="card"><div class="msg msg-error">${msg}</div></div>`;
-}
-
-function renderResult(d) {
-  if (!d) return errorCard("No data");
-  switch(d.kind) {
-    case "dashboard": return renderDashboard(d);
-    case "metric":    return renderMetric(d);
-    case "group":     return renderGroup(d);
-    case "pivot":     return renderPivot(d);
-    case "trend":     return renderTrend(d);
-    case "records":   return renderRecords(d);
-    default:          return errorCard("Unknown result type");
-  }
-}
-
-function exprBadge(d) {
-  if (!d.where_expr && !d.query_name) return "";
-  const name = d.query_name ? `<strong>${d.query_name}</strong>` : "";
-  const expr = d.where_expr
-    ? `<code style="font-size:11px;background:var(--bg);padding:2px 8px;
-         border-radius:4px;color:var(--sub);word-break:break-all;">${d.where_expr}</code>`
-    : "";
-
-  // Build extras
-  const parts = [];
-  if (d.query_group) parts.push(`<span style="color:var(--accent);">⬇ ${Array.isArray(d.query_group) ? d.query_group.join(", ") : d.query_group}</span>`);
-  if (d.query_sort) parts.push(`<span style="color:var(--warn);">⬆ ${d.query_sort}</span>`);
-  if (d.query_sum) parts.push(`<span>∑</span>`);
-  if (d.query_search) parts.push(`<span>🔍 "${d.query_search}"</span>`);
-  if (d.query_pivot) parts.push(`<span>⊞</span>`);
-  if (d.query_trend) parts.push(`<span>↗ ${d.query_trend}</span>`);
-
-  return `<div style="font-size:13px;color:var(--sub);margin-bottom:10px;">
-    <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-      ${name}${expr}
-    </div>
-    ${parts.length ? `<div style="margin-top:6px;font-size:12px;display:flex;gap:10px;flex-wrap:wrap;">${parts.join("")}</div>` : ""}
-  </div>`;
-}
-
-function renderDashboard(d) {
-  const items = (d.items||[]).map(i =>
-    `<div class="stat-card">
-      <div class="stat-label">${i.name.replace(/_/g," ")}</div>
-      <div class="stat-value" style="font-size:20px;">${i.value}</div>
-      <div class="stat-sub">${d.time_label||""}</div>
-    </div>`).join("");
-  return `<div class="card"><div class="card-title">Dashboard · ${d.name}</div>
-    ${exprBadge(d)}
-    <div class="stat-grid">${items}</div></div>`;
-}
-
-function renderMetric(d) {
-  return `<div class="card">
-    <div class="card-title">Metric</div>
-    ${exprBadge(d)}
-    <div style="font-size:28px;font-weight:800;color:var(--accent);">${d.value}</div>
-    <div style="font-size:13px;color:var(--sub);margin-top:4px;">${d.name.replace(/_/g," ")}</div>
-  </div>`;
-}
-
-function renderGroup(d) {
-  const hasTot = d.has_amount;
-  const heads  = hasTot
-    ? `<th>Group</th><th class="numeric">Count</th><th class="numeric">Total</th>`
-    : `<th>Group</th><th class="numeric">Count</th>`;
-  const rows = (d.rows||[]).map(r => hasTot
-    ? `<tr><td>${r.key}</td><td class="numeric">${r.count}</td><td class="numeric">${r.total_fmt}</td></tr>`
-    : `<tr><td>${r.key}</td><td class="numeric">${r.count}</td></tr>`).join("");
-  const foot = hasTot
-    ? `<tr class="total-row"><td>Total</td><td class="numeric">${d.grand_count}</td><td class="numeric">${d.grand_total_fmt}</td></tr>`
-    : `<tr class="total-row"><td>Total</td><td class="numeric">${d.grand_count}</td></tr>`;
-  return `<div class="card">
-    <div class="card-title">Grouped by ${(d.fields||[]).join(", ")} · ${d.time_label}</div>
-    ${exprBadge(d)}
-    <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${heads}</tr></thead><tbody>${rows}${foot}</tbody></table></div>
-    ${summaryBar(d)}
-  </div>`;
-}
-
-function renderPivot(d) {
-  const cols  = d.cols || [];
-  const heads = `<th>${d.row_field}</th>${cols.map(c=>`<th class="numeric">${c}</th>`).join("")}<th class="numeric">Total</th>`;
-  const rows  = (d.rows||[]).map(r => {
-    const cells = cols.map(c=>`<td class="numeric">${r[c]||0}</td>`).join("");
-    return `<tr><td>${r.label}</td>${cells}<td class="numeric" style="font-weight:700">${r.total}</td></tr>`;
-  }).join("");
-  const totCells = cols.map(c=>`<td class="numeric" style="font-weight:700">${(d.col_totals||{})[c]||0}</td>`).join("");
-  const foot = `<tr class="total-row"><td>Total</td>${totCells}<td class="numeric">${d.grand}</td></tr>`;
-  return `<div class="card">
-    <div class="card-title">Pivot · ${d.row_field} × ${d.col_field} · ${d.time_label}</div>
-    ${exprBadge(d)}
-    <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${heads}</tr></thead><tbody>${rows}${foot}</tbody></table></div>
-  </div>`;
-}
-
-function renderTrend(d) {
-  const has  = d.has_amount;
-  const head = has
-    ? `<th>Period</th><th class="numeric">Count</th><th class="numeric">Total</th><th class="numeric">Avg</th>`
-    : `<th>Period</th><th class="numeric">Count</th>`;
-  const rows = (d.periods||[]).map(p => has
-    ? `<tr><td>${p.label}</td><td class="numeric">${p.count}</td><td class="numeric">${p.total_fmt}</td><td class="numeric">${p.avg_fmt}</td></tr>`
-    : `<tr><td>${p.label}</td><td class="numeric">${p.count}</td></tr>`).join("");
-  return `<div class="card">
-    <div class="card-title">Trend · ${d.filter_str}</div>
-    ${exprBadge(d)}
-    <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${head}</tr></thead><tbody>${rows}</tbody></table></div>
-  </div>`;
-}
-
-function renderThresholdResult(thresholds) {
-  if (!thresholds || !thresholds.length) return '<div class="card" style="color:var(--sub);">No thresholds configured.</div>';
-  var statusLabel = function(t) {
-    if (t.direction === "max") {
-      return t.status === "over" ? "OVER" : t.status === "warning" ? "WARN" : "OK";
-    } else {
-      return t.status === "met" ? "MET" : t.status === "warning" ? "WARN" : "OK";
-    }
-  };
-  var bars = thresholds.map(function(t) {
-    var pct = Math.min(t.pct || 0, 100);
-    return '<div class="thr-card" style="margin-bottom:8px;">' +
-      '<div class="thr-row">' +
-        '<span class="thr-name">' + (t.name||'').replace(/_/g,' ') + '</span>' +
-        '<div class="thr-bar-wrap">' +
-          '<div class="thr-bar-bg">' +
-            '<div class="thr-bar-fill ' + (t.status||'') + '" style="width:' + pct + '%"></div>' +
-          '</div>' +
-        '</div>' +
-        '<span class="thr-vals">' +
-          pct.toFixed(0) + '% &nbsp; ' + (t.raw||0) + ' / ' + (t.target||0) +
-          (t.unit ? ' (' + t.unit + ')' : '') +
-          (t.direction === 'max' ? ' max' : ' min') +
-        '</span>' +
-        '<span class="thr-status ' + (t.status||'') + '">' + statusLabel(t) + '</span>' +
-      '</div>' +
-    '</div>';
-  }).join("");
-  return '<div class="card"><div class="card-title">Thresholds</div>' + bars + '</div>';
-}
-
-// ── Records: delegated to RecordTable ────────────────────────────────────────
-function summaryBar(d) {
-  const parts = [];
-  if (d.count !== undefined) parts.push(`<span>${d.count} records</span>`);
-  if (d.total_fmt) parts.push(`<span>Total: <strong>${d.total_fmt}</strong></span>`);
-  if (d.avg_fmt)   parts.push(`<span>Avg: <strong>${d.avg_fmt}</strong></span>`);
-  if (d.time_label) parts.push(`<span style="color:var(--sub)">${d.time_label}</span>`);
-  return parts.length
-    ? `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin-bottom:8px;">${parts.join("")}</div>`
-    : "";
-}
+// errorCard, renderResult, exprBadge, renderDashboard, renderMetric,
+// renderGroup, renderPivot, renderTrend, renderThresholdResult and
+// summaryBar live in web_static/js/widgets.js (loaded above) so the Queries
+// page and the markdown embed mounter (embeds.js) share one implementation.
+// renderResult dispatches 'records' to renderRecordsStatic there; this page
+// keeps its own renderRecords so the interactive RecordTable still drives it.
 
 function renderRecords(d) {
   var area = document.getElementById("result-area");

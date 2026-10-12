@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, glob, fnmatch, datetime as dt, json, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil, gzip as _gzip, hmac
+import sys, os, re, glob, fnmatch, datetime as dt, json, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil, gzip as _gzip, hmac, tomllib
 from collections import OrderedDict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -3686,25 +3686,19 @@ def query_builder_item(kind):
 @app.route("/queries")
 def queries_get():
     try:
-        all_q = svc.get_queries()
+        cand = svc.get_embed_candidates()
         schema = svc.get_schema()
         field_types = _build_field_types(schema)
     except Exception:
         log.exception("Failed to load schema/queries for queries page")
-        all_q = {}
+        cand = {"queries": [], "metrics": [], "dashboards": [], "thresholds": []}
         field_types = {}
-    named = [k for k in all_q
-             if k not in ("metrics","dashboards","due")
-             and not k.startswith(("board.","habit.","calendar.","due.","threshold."))
-             and not (isinstance(all_q[k], dict) and "alias" in all_q[k])]
-    threshold_names = [k[10:] for k in all_q
-                       if k.startswith("threshold.") and isinstance(all_q[k], dict)]
     return render_template("queries.html",
         tab="queries", title="Queries", now=_now_str(),
-        queries=named,
-        metrics=list(all_q.get("metrics",{}).keys()),
-        dashboards=list(all_q.get("dashboards",{}).keys()),
-        thresholds=threshold_names,
+        queries=cand["queries"],
+        metrics=cand["metrics"],
+        dashboards=cand["dashboards"],
+        thresholds=cand["thresholds"],
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
         current_time=request.args.get("time", ""),
         custom_time=request.args.get("custom_time", ""),
@@ -3750,6 +3744,43 @@ def queries_run():
         return jsonify(ok=False, error=str(e))
     except Exception as e:
         return jsonify(ok=False, error=str(e))
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Markdown embeds (```ptos TOML blocks)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@app.route("/api/embed/resolve", methods=["POST"])
+def api_embed_resolve():
+    data = request.get_json(silent=True) or {}
+    body = data.get("body", "")
+    if not isinstance(body, str) or not body.strip():
+        return jsonify(ok=False, error="Empty embed")
+    try:
+        spec = tomllib.loads(body)
+    except Exception as e:
+        return jsonify(ok=False, error="Invalid embed TOML: " + str(e))
+    try:
+        return jsonify(ok=True, data=svc.resolve_embed(spec))
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/embed/candidates", methods=["GET"])
+def api_embed_candidates():
+    try:
+        cand = svc.get_embed_candidates()
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+    groups = [
+        {"kind": "q", "label": "Queries", "items": cand["queries"]},
+        {"kind": "m", "label": "Metrics", "items": cand["metrics"]},
+        {"kind": "d", "label": "Dashboards", "items": cand["dashboards"]},
+        {"kind": "t", "label": "Thresholds", "items": cand["thresholds"]},
+    ]
+    return jsonify(ok=True, groups=groups)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

@@ -40,6 +40,9 @@
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="{{ av('/static/js/widgets.js') }}"></script>
+<script src="{{ av('/static/js/embeds.js') }}"></script>
+<script src="{{ av('/static/js/slash_embed.js') }}"></script>
 
 <style>
   #preview-pane h1,#preview-pane h2,#preview-pane h3,#preview-pane h4 {
@@ -78,6 +81,34 @@
     padding:8px 10px;border:1px solid var(--border);text-align:left;
   }
   #preview-pane th { background:var(--bg);font-weight:700; }
+  .md-embed { margin:14px 0; }
+  .md-embed-loading { color:var(--sub);font-size:13px;padding:10px 0; }
+  .md-embed-head {
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    margin:0 0 6px;font-size:12px;color:var(--sub);
+  }
+  .md-embed-title { font-weight:700;color:var(--text); }
+  .md-embed-actions { display:flex;align-items:center;gap:10px; }
+  .md-embed-link { color:var(--accent);text-decoration:none; }
+  .md-embed-refresh {
+    border:1px solid var(--border);background:var(--bg);color:var(--text);
+    border-radius:6px;cursor:pointer;font-size:13px;line-height:1;
+    padding:3px 7px;
+  }
+  .md-embed-refresh:hover { border-color:var(--accent);color:var(--accent); }
+  .md-embed-body .card { margin:0; }
+  .slash-ac-list {
+    display:none;position:fixed;z-index:60;width:320px;max-height:280px;
+    overflow-y:auto;background:var(--card);border:1px solid var(--border);
+    border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.18);
+  }
+  .slash-ac-list.open { display:block; }
+  .slash-ac-group {
+    padding:6px 12px 4px;font-size:11px;font-weight:800;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--sub);
+    background:var(--bg);border-bottom:1px solid var(--border);
+  }
+  .slash-ac-empty { padding:10px 12px;font-size:13px;color:var(--sub); }
   @media (min-width:768px) { #btn-split { display:inline-flex !important; } }
   @media (max-width:767px) {
     #editor-wrap.stacked { flex-direction:column; }
@@ -112,6 +143,7 @@
       ? marked.parse(typeof preprocessLinks === "function" ? preprocessLinks(src) : src)
       : "<pre style='white-space:pre-wrap'>" +
           src.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>";
+    if (typeof window.mountEmbeds === "function") window.mountEmbeds(pane);
   };
 
   window.setMode = function(m) {
@@ -163,6 +195,9 @@
     var _mdEl = document.getElementById(_eid);
     if (_mdEl && typeof attachBracketAutocomplete === "function") {
       attachBracketAutocomplete(_mdEl);
+    }
+    if (_mdEl && typeof attachSlashEmbed === "function") {
+      attachSlashEmbed(_mdEl);
     }
   }, 0);
 

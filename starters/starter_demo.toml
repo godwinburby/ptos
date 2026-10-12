@@ -335,6 +335,26 @@ you type is a real file on disk — no database, no cloud, just `.log` files,
 Try typing `[[high output management]]` in a journal entry or note — the
 `[[brackets]]` create searchable cross-links.
 
+**Live reports**
+
+Notes and journals can embed live widgets from `config/queries.toml`. Open
+this note's preview to see the blocks below render as tables — the same
+query that powers the Queries page:
+
+```ptos
+name = "expenses_by_category"
+title = "Spend by category"
+```
+
+```ptos
+name = "balance"
+view = "metric"
+```
+
+```ptos
+name = "food_spend"
+```
+
 Seeded sample data can be removed anytime:  `ptos --remove-demo-data`
 """
 
