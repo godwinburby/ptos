@@ -40,6 +40,13 @@ Format: `[version or date] — description`
 - **⊞ Insert view.** A new toolbar button in the note/journal markdown editor calls the existing `/` slash menu, so the whole picker — the Format helpers plus every embeddable query/metric/dashboard/threshold/board/habit/calendar/due/project — is reachable without typing `/`. `window.openSlashMenu(el)` in `web_static/js/slash_embed.js` focuses the textarea, inserts a `/` at the caret (prepending a newline when the caret isn't at line start/after whitespace, so the menu's token matches), dispatches an `input` event, and lets the attached menu take over; no second picker is defined. Clicking the button blurred the textarea, and the editor's `blur` handler was closing the menu 150 ms later — the pending close is now cancelled whenever the menu opens (and skipped if focus returned to the textarea), and the button switches back to Edit first when clicked from Preview/Colour mode. UI-inherent — the engine/service side is the read-only candidates helper it reuses.
 - **Tests** — `tests/test_embed.py` pins the toolbar wiring and the `openSlashMenu` helper.
 
+### Android widget always checks for updates
+
+- **A widget tap no longer waits out the 6-hour throttle.** `run_ptos_android.sh` wrote a plain copy of itself to `~/.shortcuts/run_ptos.sh`, and a widget launch passed no arguments — so it hit the "already checked recently" branch and pulled nothing until the window elapsed. The shortcut is now a tiny wrapper that `exec`s the real launcher with `--update`, so every home-screen tap fetches (still bounded to `timeout 8`); running `bash run_ptos_android.sh` directly stays throttled.
+- **Failed fetches are reported honestly.** Both launchers compared `HEAD` against the *local* `origin/main` after a fetch whose exit status was discarded (and whose errors were sent to `/dev/null`), so a dead or slow network printed "Already on latest version." even when the remote had moved. The fetch's status is now checked: genuine failures print "Update check failed (offline?) — continuing with local version.", and the skip branch hints "run with `--update` to check now".
+- **The run copies track the latest launcher.** `~/run_ptos_android.sh` and `~/.shortcuts/run_ptos.sh` were written *before* the git pull, so they always lagged one launch; they are now written after it.
+- **Tests** — `tests/test_launch_scripts.py` pins the fetch-failure message on both scripts and the widget wrapper's `exec … --update`; README notes the `--update` escape hatch.
+
 
 ---
 

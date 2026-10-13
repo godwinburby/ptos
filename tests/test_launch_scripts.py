@@ -49,6 +49,13 @@ class TestAndroidLauncher:
         assert '"--update"' in self.text
         assert "Skipping update check (checked recently)" in self.text
 
+    def test_fetch_failure_is_reported(self):
+        assert "Update check failed (offline?)" in self.text
+
+    def test_widget_shortcut_forces_update(self):
+        assert ".shortcuts/run_ptos.sh" in self.text
+        assert 'exec bash \\"$PTOS_DIR/run_ptos_android.sh\\" --update' in self.text
+
     def test_no_hardcoded_port(self):
         assert "localhost:5000" not in self.text
         assert "http://localhost:5000" not in self.text
@@ -98,6 +105,9 @@ class TestLinuxLauncher:
         assert ".ptos_last_update" in self.text
         assert '"--update"' in self.text
         assert "Skipping update check (checked recently)" in self.text
+
+    def test_fetch_failure_is_reported(self):
+        assert "Update check failed (offline?)" in self.text
 
     def test_no_hardcoded_port(self):
         assert "localhost:5000" not in self.text

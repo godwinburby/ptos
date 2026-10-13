@@ -153,7 +153,7 @@ Run the **same script** — it checks for updates and launches the server:
 | Linux / macOS | `bash run_ptos_linux.sh` |
 | Android/Termux | `bash run_ptos_android.sh` |
 
-Safe to re-run anytime — setup steps are skipped once done.
+Safe to re-run anytime — setup steps are skipped once done. The update check runs at most once every 6 hours; add `--update` (e.g. `bash run_ptos_android.sh --update`) to force one now. The Android home-screen widget always checks on launch.
 
 ### Alternative — git clone directly
 

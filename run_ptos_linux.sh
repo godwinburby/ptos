@@ -149,24 +149,30 @@ if [ -d ".git" ]; then
         # Bound the check so a dead network can't stall the launcher. Without
         # timeout we skip the check entirely rather than fetch unbounded.
         if command -v timeout >/dev/null 2>&1; then
-            GIT_TERMINAL_PROMPT=0 timeout 8 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 fetch --quiet origin main 2>/dev/null
-            LOCAL=$(git rev-parse HEAD 2>/dev/null)
-            REMOTE=$(git rev-parse origin/main 2>/dev/null)
-            if [ "$LOCAL" = "$REMOTE" ]; then
-                echo "Already on latest version."
-            else
-                echo "Updating..."
-                if timeout 30 git pull --ff-only origin main; then
-                    echo "Updated to latest version."
+            # Distinguish a failed fetch from a genuine "up to date": comparing
+            # HEAD against a stale origin/main after a silent fetch failure used
+            # to print "Already on latest version." while the remote had moved.
+            if GIT_TERMINAL_PROMPT=0 timeout 8 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 fetch --quiet origin main 2>/dev/null; then
+                LOCAL=$(git rev-parse HEAD 2>/dev/null)
+                REMOTE=$(git rev-parse origin/main 2>/dev/null)
+                if [ "$LOCAL" = "$REMOTE" ]; then
+                    echo "Already on latest version."
                 else
-                    echo "Could not reach GitHub — continuing with local version."
+                    echo "Updating..."
+                    if timeout 30 git pull --ff-only origin main; then
+                        echo "Updated to latest version."
+                    else
+                        echo "Could not reach GitHub — continuing with local version."
+                    fi
                 fi
+            else
+                echo "Update check failed (offline?) — continuing with local version."
             fi
         else
             echo "Skipping update check ('timeout' not available)."
         fi
     else
-        echo "Skipping update check (checked recently)."
+        echo "Skipping update check (checked recently) — run with --update to check now."
     fi
 else
     echo "Not a git repo — skipping update check."
