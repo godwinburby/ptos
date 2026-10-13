@@ -306,6 +306,10 @@ class TestTwoProcessRace:
         assert len(lines) == 200
 
 
+def _o_append():
+    return os.O_WRONLY | os.O_APPEND | getattr(os, "O_BINARY", 0)
+
+
 class TestReaderDuringAppends:
     """H1: scans during in-place appends never serve a parseable-but-wrong
     row, and never cache a torn read under the finished file's signature."""
@@ -317,7 +321,7 @@ class TestReaderDuringAppends:
         errors = []
 
         def writer():
-            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_BINARY)
+            fd = os.open(path, _o_append())
             try:
                 for i in range(400):
                     part1 = f"2026-10-12 type=scan n={i:04d} ".encode()
@@ -390,7 +394,7 @@ class TestLoadTodosBracket:
         served = []
 
         def writer():
-            fd = os.open(path, os.O_WRONLY | os.O_APPEND | os.O_BINARY)
+            fd = os.open(path, _o_append())
             try:
                 for i in range(300):
                     os.write(fd, f"(B) task number {i:04d} +p ".encode())

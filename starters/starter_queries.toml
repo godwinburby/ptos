@@ -203,6 +203,7 @@ time      = "this-month"
 ["calendar.personal"]
 filters     = ["type=income OR type=expense OR type=exercise"]
 time_window = "this-month"
+# display_fields = ["name", "amount"]   # optional: record values shown per day, in order
 
 # ══════════════════════════════════════════════════════════════════════════════
 # DUE

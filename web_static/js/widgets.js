@@ -25,6 +25,11 @@ function renderResult(d) {
     case "trend":     return renderTrend(d);
     case "threshold": return renderThresholdResult(d.thresholds || []);
     case "records":   return renderRecordsStatic(d);
+    case "board":     return renderBoard(d);
+    case "habit":     return renderHabit(d);
+    case "calendar":  return renderCalendar(d);
+    case "due":       return renderDue(d);
+    case "project":   return renderProject(d);
     default:          return errorCard("Unknown result type");
   }
 }
@@ -186,5 +191,145 @@ function renderRecordsStatic(d) {
     '<div style="overflow-x:auto;max-height:420px;">' +
       '<table class="data-table"><thead><tr>' + heads + '</tr></thead><tbody>' + rows + '</tbody></table>' +
     '</div>' +
+  '</div>';
+}
+
+function _fmt(n) {
+  var x = Number(n);
+  if (isNaN(x)) return String(n == null ? "" : n);
+  return Number.isInteger(x) ? x.toLocaleString() : x.toFixed(2);
+}
+
+function _monthName(m) {
+  return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][(m || 1) - 1] || "";
+}
+
+// ── Phase 2 embed kinds (board / habit / calendar / due / project) ─────────────
+// Read-only compact renderers. Lane chips, mini month grids and stat rows
+// reuse the .emb-* classes defined in the markdown-editor partial.
+
+function renderBoard(d) {
+  var cols = d.columns || [];
+  var chips = cols.map(function (col) {
+    var lane = (d.lanes && d.lanes[col]) || {};
+    var label = lane.label || String(col).replace(/_/g, " ");
+    var count = (d.counts || {})[col] || 0;
+    var rollup = "";
+    var rv = (d.rollups || {})[col];
+    if (rv !== undefined && rv !== null) {
+      var op = d.rollup_op || "count";
+      var txt = op === "avg" ? "avg " + _fmt(rv) : op === "sum" ? _fmt(rv) : "count " + _fmt(rv);
+      rollup = '<div class="emb-chip-sub">' + esc(txt) + '</div>';
+    }
+    return '<div class="emb-chip"><div class="emb-chip-name">' + esc(label) + '</div>' +
+      '<div class="emb-chip-count">' + _fmt(count) + '</div>' + rollup + '</div>';
+  }).join("");
+  var matched = (d.match_field && d.grid_rows) ? d.grid_rows.length : null;
+  return '<div class="card">' +
+    '<div class="card-title">Board · ' + esc(String(d.board_name || "").replace(/_/g, " ")) + '</div>' +
+    '<div class="emb-chip-row">' + chips + '</div>' +
+    (matched !== null ? '<div class="emb-kicker" style="margin-top:8px;">' + _fmt(matched) + ' matched across columns</div>' : '') +
+  '</div>';
+}
+
+function renderHabit(d) {
+  var blk = (d.months && d.months.length) ? d.months[d.months.length - 1] : null;
+  var wd = ["M", "T", "W", "T", "F", "S", "S"];
+  var monthHtml = "";
+  if (blk) {
+    var cells = (blk.days || []).map(function (day) {
+      if (!day || !day.date) return '<td class="emb-cal-cell"></td>';
+      var dnum = parseInt(day.date.slice(8, 10), 10);
+      var on = day.present ? " cnt" : "";
+      var out = day.is_today ? " today" : "";
+      return '<td class="emb-cal-cell' + on + out + '">' + dnum + '</td>';
+    });
+    var rows = [];
+    for (var i = 0; i < cells.length; i += 7) rows.push("<tr>" + cells.slice(i, i + 7).join("") + "</tr>");
+    monthHtml = '<div style="margin-top:8px;">' +
+      '<div class="emb-kicker">' + esc(blk.name) + '</div>' +
+      '<table class="emb-cal"><thead><tr>' + wd.map(function (w) { return '<th class="emb-cal-wd">' + w + '</th>'; }).join("") +
+      '</tr></thead><tbody>' + rows.join("") + '</tbody></table></div>';
+  }
+  return '<div class="card">' +
+    '<div class="card-title">Habit · ' + esc(String(d.habit_name || "").replace(/_/g, " ")) + '</div>' +
+    '<div class="emb-stat">' +
+      '<span><b>' + _fmt(d.streak || 0) + '</b>-day streak</span>' +
+      '<span>' + esc((d.days_done || 0) + " of " + (d.total_days || 0) + " days") + '</span>' +
+      (d.range_label ? '<span>' + esc(d.range_label) + '</span>' : '') +
+    '</div>' + monthHtml +
+  '</div>';
+}
+
+function renderCalendar(d) {
+  var weeks = d.weeks || [];
+  var wd = ["M", "T", "W", "T", "F", "S", "S"];
+  var today = new Date();
+  var t = { y: today.getFullYear(), m: today.getMonth() + 1, d: today.getDate() };
+  var rows = weeks.map(function (week) {
+    var cells = (week || []).map(function (cell) {
+      if (!cell) return '<td class="emb-calc-cell empty"></td>';
+      var cls = "emb-calc-cell";
+      if (cell.count > 0) cls += " cnt";
+      if (cell.day === t.d && d.year === t.y && d.month === t.m) cls += " today";
+      var inner = '<div class="emb-calc-day">' + cell.day + '</div>';
+      var recs = cell.records || [];
+      recs.slice(0, 3).forEach(function (r) {
+        var label = [r.type].concat(r.fields || []).filter(function (x) { return x; }).join(" · ");
+        inner += '<div class="emb-calc-chip" title="' + esc(label) + '">' + esc(label) + '</div>';
+      });
+      if (recs.length > 3) inner += '<div class="emb-calc-more">+' + (recs.length - 3) + ' more</div>';
+      return '<td class="' + cls + '">' + inner + '</td>';
+    }).join("");
+    return "<tr>" + cells + "</tr>";
+  }).join("");
+  var label = d.calendar_name === "__all__" ? "All records" : String(d.calendar_name || "");
+  return '<div class="card">' +
+    '<div class="card-title">Calendar · ' + esc(label) + '</div>' +
+    '<div class="emb-kicker">' + esc(_monthName(d.month) + " " + d.year) + '</div>' +
+    '<table class="emb-cal emb-cal-rec-grid"><thead><tr>' + wd.map(function (w) { return '<th class="emb-cal-wd">' + w + '</th>'; }).join("") +
+    '</tr></thead><tbody>' + rows + '</tbody></table>' +
+    '<div class="emb-stat"><span><b>' + _fmt(d.total_records || 0) + '</b> records</span></div>' +
+  '</div>';
+}
+
+function renderDue(d) {
+  var rows = d.rows || [];
+  if (!rows.length) {
+    return '<div class="card"><div class="card-title">Due</div>' +
+      '<div class="msg" style="color:var(--sub);">Nothing outstanding.</div></div>';
+  }
+  var heatColor = { hot: "var(--error)", warm: "var(--warn)", cool: "var(--accent)" };
+  var list = rows.map(function (r) {
+    var hc = heatColor[r.heat] || "var(--sub)";
+    var note = r.note ? '<span style="color:var(--sub);">— ' + esc(r.note) + '</span>' : "";
+    return '<div class="emb-due-row">' +
+      '<span class="emb-heat" style="background:' + hc + ';"></span>' +
+      '<span class="emb-name">' + esc(r.name) + '</span>' +
+      '<span class="emb-due-gap">' + _fmt(r.days) + 'd</span>' + note +
+    '</div>';
+  }).join("");
+  var count = d.count == null ? rows.length : d.count;
+  return '<div class="card"><div class="card-title">Due</div>' + list +
+    '<div class="emb-stat" style="margin-top:8px;"><span><b>' + _fmt(count) + '</b> overdue</span></div>' +
+  '</div>';
+}
+
+function renderProject(d) {
+  var heatColor = { hot: "var(--error)", warm: "var(--warn)", cool: "var(--accent)" };
+  var hc = heatColor[d.heat] || "var(--sub)";
+  var lines = [
+    '<span>drift: <b style="color:' + hc + ';">' + esc(d.drift || "ok") + '</b></span>',
+    '<span>stale <b>' + esc(d.stale_days || 0) + '</b>d</span>',
+    '<span>' + _fmt(d.open_todos || 0) + ' open · ' + _fmt(d.overdue_todos || 0) + ' overdue todos</span>',
+    '<span>' + _fmt(d.record_count || 0) + ' records</span>',
+  ];
+  if (d.has_board && d.board_stalls) {
+    lines.push('<span>' + _fmt(d.board_stalls) + ' stalled</span>');
+  }
+  var label = d.label || d.name || "";
+  return '<div class="card">' +
+    '<div class="card-title">Project · ' + esc(label) + '</div>' +
+    '<div class="emb-stat">' + lines.join("") + '</div>' +
   '</div>';
 }

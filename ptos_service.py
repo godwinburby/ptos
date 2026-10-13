@@ -1963,8 +1963,11 @@ def resolve_embed(spec):
 
     `view` is optional — when omitted the kind is inferred from which
     queries.toml section holds `name` (dashboard → metric → threshold →
-    base query). Returns the underlying result dict with `title` and
-    `link` attached; raises PTOSError on bad input or an unknown name.
+    board → habit → calendar → due → project → base query); inference
+    succeeds only when exactly one section owns `name` (an ambiguous name
+    raises PTOSError listing the candidates). Returns the
+    underlying result dict with `title` and `link` attached; raises
+    PTOSError on bad input or an unknown name.
     """
     if not isinstance(spec, dict):
         raise PTOSError("Embed must be a TOML table")
@@ -1988,18 +1991,42 @@ def resolve_embed(spec):
         sec = queries.get(section)
         return isinstance(sec, dict) and key in sec
 
+    def _dotted_has(prefix):
+        return isinstance(queries.get(f"{prefix}.{name}"), dict)
+
     if not view:
+        owners = []
         if _section_has("dashboards", name):
-            view = "dashboard"
-        elif _section_has("metrics", name):
-            view = "metric"
-        elif name in ptos.get_thresholds():
-            view = "threshold"
-        elif isinstance(queries.get(name), dict) and name not in ("metrics", "dashboards"):
-            view = "query"
-        else:
+            owners.append("dashboard")
+        if _section_has("metrics", name):
+            owners.append("metric")
+        if name in ptos.get_thresholds():
+            owners.append("threshold")
+        if _dotted_has("board"):
+            owners.append("board")
+        if _dotted_has("habit"):
+            owners.append("habit")
+        if _dotted_has("calendar") or name == "__all__":
+            if "calendar" not in owners:
+                owners.append("calendar")
+        if _dotted_has("due") or name in ("default", "__DEFAULT__"):
+            if "due" not in owners:
+                owners.append("due")
+        if _dotted_has("project"):
+            owners.append("project")
+        if isinstance(queries.get(name), dict) and name not in ("metrics",
+                                                                "dashboards"):
+            owners.append("query")
+        if not owners:
             raise PTOSError(
-                f"Embed references unknown query/metric/dashboard/threshold '{name}'")
+                f"Embed references unknown query/metric/dashboard/threshold/"
+                f"board/habit/calendar/due/project '{name}'")
+        if len(owners) > 1:
+            raise PTOSError(
+                f"Embed '{name}' exists in multiple sections "
+                f"({', '.join(owners)}) — add an explicit view to pick one "
+                f'(e.g. view = "{owners[0]}")')
+        view = owners[0]
 
     if view == "dashboard":
         result = get_dashboard(name, time or "tm", use_dashboard_time=True,
@@ -2017,6 +2044,31 @@ def resolve_embed(spec):
     elif view in ("query", "records", "group", "pivot", "trend"):
         result = run_query(name, time, from_date=from_date, to_date=to_date)
         link = "/queries?run=" + urllib.parse.quote(name)
+    elif view == "board":
+        result = get_board_data(name, time, from_date=from_date, to_date=to_date)
+        result["kind"] = "board"
+        link = "/board?board=" + urllib.parse.quote(name)
+    elif view == "habit":
+        result = get_habit_data(name, time, from_date=from_date, to_date=to_date)
+        result["kind"] = "habit"
+        link = "/habits"
+    elif view == "calendar":
+        result = get_calendar_data(
+            name, *_calendar_embed_month(time, from_date))
+        result["kind"] = "calendar"
+        link = "/calendar" if name == "__all__" else \
+               "/calendar/" + urllib.parse.quote(name)
+    elif view == "due":
+        # The due window is config-driven (["due.*"] days); embed time specs
+        # are ignored so the widget always mirrors what /due shows.
+        result = get_due(config_name=name if name not in ("default",
+                                                          "__DEFAULT__") else None)
+        result["kind"] = "due"
+        link = "/due"
+    elif view == "project":
+        result = _project_embed_data(name)
+        result["kind"] = "project"
+        link = "/projects"
     else:
         raise PTOSError(f"Unknown embed view '{view}'")
 
@@ -2029,18 +2081,58 @@ def resolve_embed(spec):
         if n > 0:
             result["records"] = result["records"][:n]
             result["count"] = len(result["records"])
+    elif limit and isinstance(result.get("rows"), list):
+        try:
+            n = int(limit)
+        except (TypeError, ValueError):
+            raise PTOSError(f"Embed 'limit' must be a whole number, got {limit!r}")
+        if n > 0:
+            result["rows"] = result["rows"][:n]
+            result["count"] = len(result["rows"])
 
     result["title"] = title
     result["link"] = link
     return result
 
 
+def _calendar_embed_month(time, from_date):
+    """Resolve (year, month) for a calendar embed from its window spec.
+
+    from_date wins (its month is shown); otherwise `time` resolves to its
+    start month; with neither the current month is used. Resolution falls
+    back to today for an unparseable window, matching the calendar page.
+    """
+    ref = None
+    if from_date:
+        try:
+            ref = ptos.parse_from_to(from_date)
+        except Exception:
+            ref = None
+    if ref is None and time:
+        try:
+            ref = _resolve_time(time)[0]
+        except Exception:
+            ref = None
+    ref = ref or ptos.today()
+    return ref.year, ref.month
+
+
+def _project_embed_data(name):
+    """Return the drift signals for one configured ["project.NAME"] entry."""
+    overview = get_projects_overview()
+    for p in overview:
+        if p.get("name") == name:
+            return p
+    raise PTOSError(f"Project '{name}' not found in queries.toml")
+
+
 def get_embed_candidates():
     """Return the embeddable names grouped by kind, for the ``/`` menu.
 
-    Lists base queries, metrics, dashboards and thresholds that a
-    ```ptos embed can reference. Mirrors the filtering the /queries page
-    uses so the page and the editor menu can never drift apart.
+    Lists base queries, metrics, dashboards, thresholds, boards, habits,
+    calendars, due sections and projects that a ```ptos embed can
+    reference. Mirrors the filtering each owning page applies so the page
+    and the editor menu can never drift apart.
     """
     try:
         all_q = get_queries()
@@ -2049,15 +2141,30 @@ def get_embed_candidates():
     queries = [k for k in all_q
                if k not in ("metrics", "dashboards", "due")
                and not k.startswith(("board.", "habit.", "calendar.",
-                                     "due.", "threshold."))
+                                     "due.", "project.", "threshold."))
                and not (isinstance(all_q[k], dict) and "alias" in all_q[k])]
     thresholds = [k[10:] for k in all_q
                   if k.startswith("threshold.") and isinstance(all_q[k], dict)]
+    boards = [k[6:] for k in all_q
+              if k.startswith("board.") and isinstance(all_q[k], dict)]
+    calendars = [k[9:] for k in all_q
+                 if k.startswith("calendar.") and isinstance(all_q[k], dict)]
+    due = sorted(k[4:] for k in all_q
+                 if k.startswith("due.") and isinstance(all_q[k], dict))
+    projects = [k[8:] for k in all_q
+                if k.startswith("project.") and isinstance(all_q[k], dict)]
+    if "default" in due:
+        due = ["default"] + [d for d in due if d != "default"]
     return {
         "queries": queries,
         "metrics": list((all_q.get("metrics") or {}).keys()),
         "dashboards": list((all_q.get("dashboards") or {}).keys()),
         "thresholds": thresholds,
+        "boards": sorted(boards),
+        "habits": get_habit_names(),
+        "calendars": sorted(calendars),
+        "due": due,
+        "projects": sorted(projects),
     }
 
 
@@ -2705,12 +2812,18 @@ def get_calendar_data(name, year=None, month=None):
     config entry needed); any other name must match a [calendar.*] table.
     year/month default to the initial month from the calendar's time_window
     (falling back to the current month); pass explicit values to navigate
-    to a different month. Cached per (name, year, month) under key
-    calendar:{name}:{year}:{month}; dropped by _invalidate_history_cache()
-    after a record write and by ptos.check_external_changes() when a record
-    file changed outside PTOS."""
+    to a different month. An optional ``display_fields`` list on the calendar
+    config picks which record field values label each entry (in that order);
+    without it the first two non-reserved values are used. Cached per
+    (name, year, month, config fingerprint) under key
+    calendar:{name}:{year}:{month}:{fp}; the fingerprint folds in filters and
+    display_fields so a config change takes effect without waiting on an
+    invalidation. Dropped by _invalidate_history_cache() after a record write
+    and by ptos.check_external_changes() when a record file changed outside
+    PTOS."""
     y = year
     m = month
+    display_fields = None
 
     if name == "__all__":
         filters = []
@@ -2727,6 +2840,9 @@ def get_calendar_data(name, year=None, month=None):
         if not filters:
             raise PTOSError(f"Calendar '{name}' has no filters defined")
         time_window = cfg.get("time_window", "this-month")
+        df = cfg.get("display_fields")
+        if isinstance(df, list):
+            display_fields = [str(f).strip() for f in df if str(f).strip()]
 
     if y is None or m is None:
         try:
@@ -2739,7 +2855,10 @@ def get_calendar_data(name, year=None, month=None):
     # Key on the resolved month: a "current month" request (year/month None)
     # must carry the concrete year and month, or it would keep serving the
     # previous month after a rollover until some write cleared the cache.
-    cache_key = f"calendar:{name}:{y}:{m}"
+    import hashlib
+    _fp = hashlib.sha1(
+        repr((filters, display_fields)).encode("utf-8")).hexdigest()[:8]
+    cache_key = f"calendar:{name}:{y}:{m}:{_fp}"
     cached = ptos._CACHE.get(cache_key)
     if cached is not None:
         return cached
@@ -2752,22 +2871,42 @@ def get_calendar_data(name, year=None, month=None):
     matches = ptos.find_records_with_location(filters, start=start, end=end,)
 
     by_day = {}
+    _cal_skip = ("type", "tag", "id", "links", "note")
     for fp, idx, line in matches:
         try:
-            d, kv, _ = ptos.parse_line(line)
+            d, kv, note = ptos.parse_line(line)
         except Exception:
             continue
-        row = _parse_record(line) or {}
-        title = next((str(row[f]) for f in ("name", "client", "intent", "title", "subject")
-                      if row.get(f)), "")
-        if not title:
-            t = kv.get("type", "")
-            t = ", ".join(t) if isinstance(t, list) else str(t)
-            title = f"({t})" if t else ""
+        t = kv.get("type", "")
+        t = ", ".join(t) if isinstance(t, list) else str(t)
+        fields = []
+        if display_fields:
+            for fname in display_fields:
+                if fname == "note":
+                    val = note or ""
+                else:
+                    v = kv.get(fname)
+                    if v is None:
+                        continue
+                    val = ", ".join(v) if isinstance(v, list) else str(v)
+                if val == "":
+                    continue
+                fields.append(val)
+        else:
+            for k, v in kv.items():
+                if k in _cal_skip:
+                    continue
+                val = ", ".join(v) if isinstance(v, list) else str(v)
+                if val == "":
+                    continue
+                fields.append(val)
+                if len(fields) == 2:
+                    break
         by_day.setdefault(d.day, []).append({
             "line": line,
-            "title": title,
-            "note": row.get("note", ""),
+            "type": t,
+            "fields": fields,
+            "note": note or "",
         })
 
     weeks = []
@@ -4984,6 +5123,11 @@ def save_calendar(name, cfg):
     entry = {"filters": cfilters}
     if cfg.get("time_window"):
         entry["time_window"] = cfg["time_window"]
+    df = cfg.get("display_fields")
+    if isinstance(df, list):
+        df = [str(f).strip() for f in df if str(f).strip()]
+        if df:
+            entry["display_fields"] = df
     existing = _load_queries_toml()
     entry = _preserve_unknown(_lookup_entry(existing, "calendar", name), entry)
     _write_queries_toml_key(f"calendar.{name}", entry)
@@ -5453,6 +5597,11 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
             entry = {"filters": cfilters}
             if cal_cfg.get("time_window"):
                 entry["time_window"] = cal_cfg["time_window"]
+            df = cal_cfg.get("display_fields")
+            if isinstance(df, list):
+                df = [str(f).strip() for f in df if str(f).strip()]
+                if df:
+                    entry["display_fields"] = df
             # preserve unknown calendar fields from existing
             existing_cal = existing.get(f"calendar.{bare}", {})
             if isinstance(existing_cal, dict):

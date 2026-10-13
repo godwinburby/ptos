@@ -3606,6 +3606,7 @@ def query_builder():
             calendars[name] = {
                 "filters": v.get("filters", []),
                 "time_window": v.get("time_window", "this-month"),
+                "display_fields": v.get("display_fields", []),
             }
 
     thresholds = {}
@@ -3779,6 +3780,11 @@ def api_embed_candidates():
         {"kind": "m", "label": "Metrics", "items": cand["metrics"]},
         {"kind": "d", "label": "Dashboards", "items": cand["dashboards"]},
         {"kind": "t", "label": "Thresholds", "items": cand["thresholds"]},
+        {"kind": "b", "label": "Boards", "items": cand["boards"]},
+        {"kind": "h", "label": "Habits", "items": cand["habits"]},
+        {"kind": "c", "label": "Calendars", "items": cand["calendars"]},
+        {"kind": "u", "label": "Due", "items": cand["due"]},
+        {"kind": "p", "label": "Projects", "items": cand["projects"]},
     ]
     return jsonify(ok=True, groups=groups)
 

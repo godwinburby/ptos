@@ -89,12 +89,12 @@ time_window = "this-month"</pre>
           {% if cell.count %}<span class="cal-count">{{ cell.count }}</span>{% endif %}
         </div>
         {% for r in cell.records[:3] %}
-        <div class="cal-chip">{{ r.title }}</div>
+        <div class="cal-chip">{{ ([r.type] + r.fields) | select | join(' · ') }}</div>
         {% endfor %}
         <div class="cal-day-records">
           {% for r in cell.records %}
           <div class="cal-rec">
-            <span class="cal-rec-title">{{ r.title }}</span>
+            <span class="cal-rec-title">{{ ([r.type] + r.fields) | select | join(' · ') }}</span>
             {% if r.note %}<div class="cal-rec-note">{{ r.note }}</div>{% endif %}
           </div>
           {% endfor %}

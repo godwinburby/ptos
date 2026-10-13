@@ -1143,7 +1143,7 @@ def _win_close_handle(fd):
 def _open_append_handle(filepath):
     if os.name == "nt":
         return _win_open_append(filepath)
-    return os.open(filepath, os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_BINARY, 0o666)
+    return os.open(filepath, os.O_RDWR | os.O_APPEND | os.O_CREAT | getattr(os, "O_BINARY", 0), 0o666)
 
 
 def _handle_size(fd):

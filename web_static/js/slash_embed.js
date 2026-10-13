@@ -9,7 +9,9 @@
 // typed "/token" and dispatches an "input" event so the editor re-renders the
 // preview and autosaves.
 //
-// Exposes window.attachSlashEmbed(textareaEl). Loaded after embeds.js.
+// Exposes window.attachSlashEmbed(textareaEl) and window.openSlashMenu(el)
+// (the latter backs the editor's "Insert view" toolbar button). Loaded after
+// embeds.js.
 (function () {
   var _groups = null;        // cached /api/embed/candidates groups
   var _fetching = false;
@@ -97,6 +99,18 @@
     ],
   };
 
+  var _VIEWS = {
+    q: "query",
+    m: "metric",
+    d: "dashboard",
+    t: "threshold",
+    b: "board",
+    h: "habit",
+    c: "calendar",
+    u: "due",
+    p: "project",
+  };
+
   function _getSlashToken(el) {
     var val = el.value;
     var pos = el.selectionStart;
@@ -150,6 +164,7 @@
   }
 
   function _render(el, tok, list) {
+    if (list._blurTimer) { clearTimeout(list._blurTimer); list._blurTimer = null; }
     var groups = [_FORMAT_GROUP];
     if (_groups !== null) groups = groups.concat(_groups);
     var matched = _filter(groups, tok.query);
@@ -161,7 +176,7 @@
       g.items.forEach(function (it) {
         html += '<div class="bracket-ac-item slash-ac-item" data-idx="' +
           flat.length + '">' + _label(it) + "</div>";
-        flat.push(it);
+        flat.push(it.run ? it : { name: it, view: _VIEWS[g.kind] });
       });
     });
     if (_groups === null && _fetching) {
@@ -197,11 +212,13 @@
     else _insert(el, list._tok, it, list);
   }
 
-  function _insert(el, tok, name, list) {
+  function _insert(el, tok, item, list) {
     var before = el.value.slice(0, tok.start);
     var after = el.value.slice(tok.end);
     var lead = (before && !/\n$/.test(before)) ? "\n" : "";
-    var fence = '```ptos\nname = "' + name + '"\n```\n';
+    var fence = '```ptos\nname = "' + item.name + '"\n';
+    if (item.view) fence += 'view = "' + item.view + '"\n';
+    fence += '```\n';
     el.value = before + lead + fence + after;
     _finish(list, el, (before + lead + fence).length);
   }
@@ -259,11 +276,35 @@
     });
 
     el.addEventListener("blur", function () {
-      setTimeout(function () { _close(list); }, 150);
+      list._blurTimer = setTimeout(function () {
+        list._blurTimer = null;
+        if (document.activeElement === el) return;
+        _close(list);
+      }, 150);
     });
 
     el.addEventListener("scroll", function () {
       if (list.classList.contains("open")) _position(list, el);
     });
+  };
+
+  // Toolbar "Insert view" button: drop a "/" at the caret and let the
+  // attached slash menu take over (candidates, filtering, insertion). A
+  // safe anchor is guaranteed — the menu only opens when "/" is at the
+  // line start or after whitespace.
+  window.openSlashMenu = function (el) {
+    if (!el) return;
+    if (el.offsetParent === null && typeof window.setMode === "function") {
+      window.setMode("edit");
+    }
+    el.focus();
+    var pos = el.selectionStart;
+    var val = el.value;
+    var before = val.slice(0, pos);
+    var prefix = (pos === 0 || /\s$/.test(before)) ? "" : "\n";
+    el.value = before + prefix + "/" + val.slice(pos);
+    var caret = pos + prefix.length + 1;
+    el.setSelectionRange(caret, caret);
+    el.dispatchEvent(new Event("input", { bubbles: true }));
   };
 })();

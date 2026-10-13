@@ -13,9 +13,12 @@ def _write_records(year, lines):
         f.write("\n".join(lines) + "\n")
 
 
-def _add_calendar(name, filters, time_window="this-month"):
+def _add_calendar(name, filters, time_window="this-month", display_fields=None):
     queries = ptos.get_queries()
-    queries[f"calendar.{name}"] = {"filters": filters, "time_window": time_window}
+    entry = {"filters": filters, "time_window": time_window}
+    if display_fields is not None:
+        entry["display_fields"] = display_fields
+    queries[f"calendar.{name}"] = entry
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
         tomli_w.dump(queries, w.stream)
     ptos._invalidate_all()
@@ -46,8 +49,27 @@ class TestCalendarGrid:
         by_day = {c["day"]: c for c in cells}
         assert by_day[5]["count"] == 1
         assert by_day[21]["count"] == 1
-        assert by_day[5]["records"][0]["title"] == "(expense)"
+        assert by_day[5]["records"][0]["type"] == "expense"
+        assert by_day[5]["records"][0]["fields"] == ["100"]
         assert by_day[21]["records"][0]["note"] == ""
+
+    def test_record_shows_type_and_next_two_values(self):
+        _clean_cache()
+        _add_calendar("exp", ["type=expense"])
+        _write_records(2026, [
+            '2026-03-05 type=expense amount=100 category=food merchant="Big Bazaar" extra=9 tag=__demo__ note="hello world"',
+            "2026-03-06 type=expense",
+        ])
+        data = svc.get_calendar_data("exp", 2026, 3)
+        cells = [c for w in data["weeks"] for c in w if c]
+        by_day = {c["day"]: c for c in cells}
+        rec = by_day[5]["records"][0]
+        assert rec["type"] == "expense"
+        assert rec["fields"] == ["100", "food"]
+        assert rec["note"] == "hello world"
+        bare = by_day[6]["records"][0]
+        assert bare["type"] == "expense"
+        assert bare["fields"] == []
 
     def test_outside_month_record_excluded(self):
         _clean_cache()
@@ -93,6 +115,89 @@ class TestCalendarGrid:
         flattened = [c for w in data["weeks"] for c in w]
         assert len(flattened) % 7 == 0
         assert data["total_records"] == 0
+
+
+class TestCalendarDisplayFields:
+    def test_display_fields_order_honoured(self):
+        _clean_cache()
+        _add_calendar("exp", ["type=expense"], display_fields=["category", "amount"])
+        _write_records(2026, [
+            "2026-03-05 type=expense amount=100 category=food merchant=bigbazaar",
+        ])
+        data = svc.get_calendar_data("exp", 2026, 3)
+        cells = [c for w in data["weeks"] for c in w if c]
+        rec = {c["day"]: c for c in cells}[5]["records"][0]
+        assert rec["fields"] == ["food", "100"]
+
+    def test_display_fields_skips_missing_and_empty(self):
+        _clean_cache()
+        _add_calendar("exp", ["type=expense"],
+                      display_fields=["amount", "missing", "category"])
+        _write_records(2026, [
+            "2026-03-05 type=expense amount=100 category=food",
+            "2026-03-06 type=expense amount=50",
+        ])
+        data = svc.get_calendar_data("exp", 2026, 3)
+        cells = [c for w in data["weeks"] for c in w if c]
+        by_day = {c["day"]: c for c in cells}
+        assert by_day[5]["records"][0]["fields"] == ["100", "food"]
+        assert by_day[6]["records"][0]["fields"] == ["50"]
+
+    def test_display_fields_note_allowed(self):
+        _clean_cache()
+        _add_calendar("exp", ["type=expense"], display_fields=["amount", "note"])
+        _write_records(2026, [
+            '2026-03-05 type=expense amount=100 note="hello world"',
+        ])
+        data = svc.get_calendar_data("exp", 2026, 3)
+        cells = [c for w in data["weeks"] for c in w if c]
+        rec = {c["day"]: c for c in cells}[5]["records"][0]
+        assert rec["fields"] == ["100", "hello world"]
+
+    def test_absent_display_fields_falls_back_to_first_two(self):
+        _clean_cache()
+        _add_calendar("exp", ["type=expense"])
+        _write_records(2026, [
+            "2026-03-05 type=expense amount=100 category=food merchant=bigbazaar",
+        ])
+        data = svc.get_calendar_data("exp", 2026, 3)
+        cells = [c for w in data["weeks"] for c in w if c]
+        rec = {c["day"]: c for c in cells}[5]["records"][0]
+        assert rec["fields"] == ["100", "food"]
+
+    def test_all_view_ignores_display_fields(self):
+        _clean_cache()
+        _write_records(2026, [
+            "2026-03-05 type=expense amount=100 category=food",
+        ])
+        data = svc.get_calendar_data("__all__", 2026, 3)
+        cells = [c for w in data["weeks"] for c in w if c]
+        rec = {c["day"]: c for c in cells}[5]["records"][0]
+        assert rec["fields"] == ["100", "food"]
+
+    def test_config_change_takes_effect_without_invalidation(self):
+        _clean_cache()
+        queries = ptos.get_queries()
+        queries["calendar.exp"] = {"filters": ["type=expense"], "display_fields": ["amount"]}
+        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+            tomli_w.dump(queries, w.stream)
+        ptos._CACHE.clear()
+        _write_records(2026, [
+            "2026-03-05 type=expense amount=100 category=food",
+        ])
+        first = svc.get_calendar_data("exp", 2026, 3)
+        cells = [c for w in first["weeks"] for c in w if c]
+        assert {c["day"]: c for c in cells}[5]["records"][0]["fields"] == ["100"]
+        # Change the config WITHOUT clearing the calendar cache (mirrors a
+        # hand-edit / Syncthing delivery: the write path only invalidates the
+        # "queries" resource key, not calendar:*).
+        queries = ptos.get_queries()
+        queries["calendar.exp"] = {"filters": ["type=expense"], "display_fields": ["category"]}
+        with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
+            tomli_w.dump(queries, w.stream)
+        second = svc.get_calendar_data("exp", 2026, 3)
+        cells = [c for w in second["weeks"] for c in w if c]
+        assert {c["day"]: c for c in cells}[5]["records"][0]["fields"] == ["food"]
 
 
 class TestAllRecordsCalendar:
@@ -186,6 +291,30 @@ class TestCalendarConfig:
         queries = ptos.get_queries()
         assert queries["calendar.exp"] == {"filters": ["type=expense"], "time_window": "last-month"}
 
+    def test_save_queries_full_round_trips_display_fields(self):
+        _clean_cache()
+        svc.save_queries_full({}, {}, {},
+            raw_calendars={"exp": {"filters": ["type=expense"],
+                                   "display_fields": ["name", "amount"]}})
+        queries = ptos.get_queries()
+        assert queries["calendar.exp"]["display_fields"] == ["name", "amount"]
+
+    def test_save_queries_full_omits_empty_display_fields(self):
+        _clean_cache()
+        svc.save_queries_full({}, {}, {},
+            raw_calendars={"exp": {"filters": ["type=expense"], "display_fields": []}})
+        queries = ptos.get_queries()
+        assert "display_fields" not in queries["calendar.exp"]
+
+    def test_save_calendar_persists_and_preserves_display_fields(self):
+        _clean_cache()
+        svc.save_calendar("exp", {"filters": ["type=expense"],
+                                  "display_fields": ["amount"]})
+        assert ptos.get_queries()["calendar.exp"]["display_fields"] == ["amount"]
+        # A later save that omits display_fields must keep the existing value.
+        svc.save_calendar("exp", {"filters": ["type=expense"], "time_window": "tm"})
+        assert ptos.get_queries()["calendar.exp"]["display_fields"] == ["amount"]
+
     def test_save_queries_full_rejects_empty_filters(self):
         _clean_cache()
         with pytest.raises(svc.PTOSError):
@@ -226,9 +355,11 @@ class TestCalendarCaching:
         _write_records(today.year, [f"{today} type=expense amount=1"])
         data = svc.get_calendar_data("exp", today.year, today.month)
         assert data["total_records"] == 1
-        assert f"calendar:exp:{today.year}:{today.month}" in ptos._CACHE
+        assert any(k.startswith(f"calendar:exp:{today.year}:{today.month}:")
+                   for k in ptos._CACHE)
         svc.append_record(f"{today} type=expense amount=2")
-        assert f"calendar:exp:{today.year}:{today.month}" not in ptos._CACHE
+        assert not any(k.startswith(f"calendar:exp:{today.year}:{today.month}:")
+                       for k in ptos._CACHE)
         data2 = svc.get_calendar_data("exp", today.year, today.month)
         assert data2["total_records"] == 2
 
@@ -238,7 +369,8 @@ class TestCalendarCaching:
         today = dt.date.today()
         _write_records(today.year, [f"{today} type=expense amount=1"])
         svc.get_calendar_data("exp")
-        assert f"calendar:exp:{today.year}:{today.month}" in ptos._CACHE
+        assert any(k.startswith(f"calendar:exp:{today.year}:{today.month}:")
+                   for k in ptos._CACHE)
         assert not any(k.startswith("calendar:exp:None") for k in ptos._CACHE)
 
     def test_second_call_no_rescan(self, monkeypatch):
@@ -307,10 +439,10 @@ class TestCalendarWeb:
         from ptos_web import app
         client = app.test_client()
         html_all = client.get("/calendar").get_data(as_text=True)
-        assert "(prescription)" in html_all
+        assert "prescription · binaural" in html_all
         html_exp = client.get(
             f"/calendar/exp?year={today.year}&month={today.month}").get_data(as_text=True)
-        assert "(prescription)" not in html_exp
+        assert "prescription · binaural" not in html_exp
 
     def test_query_builder_includes_calendars(self):
         _clean_cache()
@@ -328,3 +460,4 @@ class TestCalendarWeb:
         assert "exp" in cals
         assert cals["exp"]["filters"] == ["type=expense"]
         assert cals["exp"]["time_window"] == "last-month"
+        assert cals["exp"]["display_fields"] == []

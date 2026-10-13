@@ -339,7 +339,10 @@ Try typing `[[high output management]]` in a journal entry or note — the
 
 Notes and journals can embed live widgets from `config/queries.toml`. Open
 this note's preview to see the blocks below render as tables — the same
-query that powers the Queries page:
+query that powers the Queries page. A block's kind comes from `view`; when
+omitted, the name must match exactly one query/metric/dashboard/threshold/
+board/habit/calendar/due/project. Typing `/` in an editor inserts both
+`name` and `view` for you:
 
 ```ptos
 name = "expenses_by_category"
@@ -353,6 +356,17 @@ view = "metric"
 
 ```ptos
 name = "food_spend"
+```
+
+Pages can embed their compact widgets too — a board lane strip and the due
+list, both read-only:
+
+```ptos
+name = "demo_job"
+```
+
+```ptos
+name = "default"
 ```
 
 Seeded sample data can be removed anytime:  `ptos --remove-demo-data`

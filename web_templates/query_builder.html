@@ -295,7 +295,7 @@ var _lastAggFields = [];
   var _bkCalendars = {{ calendars | tojson }};
   Object.entries(_bkCalendars).forEach(function(e) {
     var name = e[0].replace(/^calendar\./, '');
-    _st.calendars[name] = { filters: e[1].filters||[], time_window: e[1].time_window||'this-month' };
+    _st.calendars[name] = { filters: e[1].filters||[], time_window: e[1].time_window||'this-month', display_fields: e[1].display_fields||[] };
   });
   // Thresholds
   var _bkThresholds = {{ thresholds | tojson }};
@@ -495,7 +495,7 @@ function addEntry() {
   else if (section==="habits")
     _st.habits[name]   = {filters:[],weeks:12,toggleable:true};
   else if (section==="calendars")
-    _st.calendars[name] = {filters:[],time_window:'this-month'};
+    _st.calendars[name] = {filters:[],time_window:'this-month',display_fields:[]};
   else if (section==="thresholds")
     _st.thresholds[name] = {metric:"",agg:"sum",sum_field:"",value:"",direction:"max",time:"",unit:""};
   else
@@ -1505,7 +1505,7 @@ function buildCfgForSection(name) {
   }
   if (s === "calendars") {
     var c = _st.calendars[name];
-    return {filters:c.filters||[], time_window:c.time_window||"this-month"};
+    return {filters:c.filters||[], time_window:c.time_window||"this-month", display_fields:c.display_fields||[]};
   }
   if (s === "thresholds") {
     var t = _st.thresholds[name];
@@ -1853,8 +1853,9 @@ function showCalendarEditor() {
   ed.style.display = "block";
   empty.style.display = "none";
 
-  var cfg = _st.calendars[_cur.name] || {filters:[], time_window:'this-month'};
+  var cfg = _st.calendars[_cur.name] || {filters:[], time_window:'this-month', display_fields:[]};
   var filtersText = (cfg.filters || []).join(" ");
+  var dfText = (cfg.display_fields || []).join(", ");
 
   ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
@@ -1885,6 +1886,11 @@ function showCalendarEditor() {
         '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Which month loads first. Prev/next arrows navigate after that.</div>'+
       '</div>'+
     '</div>'+
+    '<div style="margin-bottom:14px;">'+
+      '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Display Fields</label>'+
+      '<input type="text" id="calendar-display-fields-input" value="'+_esc(dfText)+'" oninput="onCalendarDisplayFieldsChange()" placeholder="name, amount" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">'+
+      '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Comma-separated field names shown as each record\u2019s label, in order. Empty = first two values.</div>'+
+    '</div>'+
   '</div>';
 }
 
@@ -1899,6 +1905,13 @@ function onCalendarTimeWindowChange() {
   var cfg = _st.calendars[_cur.name];
   if (!cfg) return;
   cfg.time_window = document.getElementById("calendar-time-window").value;
+}
+
+function onCalendarDisplayFieldsChange() {
+  var cfg = _st.calendars[_cur.name];
+  if (!cfg) return;
+  var raw = document.getElementById("calendar-display-fields-input").value;
+  cfg.display_fields = raw.split(/[\s,]+/).filter(Boolean);
 }
 
 function onCalendarNameChange() {

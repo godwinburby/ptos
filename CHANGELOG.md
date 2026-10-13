@@ -5,6 +5,44 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-13
+
+### Calendar records show field values
+
+- **Day cells now label each record with its field values.** Calendar day records were titled with the first of `name`/`client`/`intent`/`title`/`subject`, falling back to `(type)`. Each record is now shown as its type plus the next 2 field values in line order (`type · value1 · value2`, e.g. `expense · 500 · food`, no field names), in both the collapsed day chips and the expanded per-day list. Empty fields and the reserved `tag`/`id`/`links`/`note` tokens are skipped.
+- **Calendar embed labels records inside the day cells.** The ` ```ptos ` calendar embed kept its month grid but showed only day counts; each day cell now shows the day number plus up to 3 records as `type · value1 · value2` (a `+N more` line when there are more), mirroring the page.
+
+### Calendar display fields
+
+- **Per-calendar `display_fields`.** A `["calendar.NAME"]` entry in `queries.toml` now takes an optional ordered `display_fields = ["name", "amount"]` list — the field **values** shown as each record's label (order preserved, missing/empty values skipped, `note` allowed). Without it the label falls back to the first two field values, exactly as before. Applies to both the `/calendar` page and the calendar embed, since both read `get_calendar_data`.
+- **Query Builder input.** The Calendars tab's editor gained a "Display Fields" text box (comma/space separated) alongside filters and initial month; it round-trips through `save_calendar`/`save_queries_full` and is preserved on saves that omit it. Hand-edits to `queries.toml` work too.
+- **Config changes take effect immediately.** The `get_calendar_data` cache key now folds in a fingerprint of the calendar's `filters` + `display_fields` (`calendar:{name}:{year}:{month}:{fp}`), so editing a calendar config — via the Query Builder, a hand-edit, or a Syncthing delivery — is no longer served stale from the previous render.
+- **Starter** ships a commented `display_fields` example under `["calendar.personal"]`.
+
+### Fix record saving on Android and Linux
+
+- **Appending any record raised `AttributeError` on POSIX.** `ptos.append_line_fast`'s POSIX open path combined the append flags with `os.O_BINARY`, which exists only on Windows — so on Android/Linux every `--add`, quick capture, habit toggle and web record save failed with "module 'os' has no attribute 'O_BINARY'" before writing a byte. The flag is now `getattr(os, "O_BINARY", 0)` (POSIX has no text-mode translation), restoring record/todo appends on every platform. The append-race tests used the same Windows-only flag on their raw `os.open` calls and now share a `_o_append()` helper so they run on Linux CI too.
+
+### Drag to reorder embedded widgets in the preview
+
+- **Embed cards can be reordered and the order is written back to the source.** In the note/journal preview, drag widget card A onto widget card B to **swap** the two fenced ```` ```ptos ```` regions in the markdown — a "swap pair" move: A's and B's fences exchange place, anything between them stays put. Cards also get ▲/▼ buttons in their header (touch-friendly; the buttons make the same swap Move in place of mouse drag). The move rewrites the textarea's value through a pure `swapRegions` helper and dispatches an `input` event, so the preview re-renders and the 2.5 s debounced autosave saves the new order exactly like typing; cards are matched back to their fence regions by rank after re-scanning the live text so a mid-edit drift can't address the wrong region. `_markdown_editor.html` passes the textarea to `mountEmbeds(pane, src, srcEl)`; without it cards render read-only with no reorder controls (reordering is UI-inherent — the engine/service side is untouched).
+- **Swap helpers are pure, newline-preserving and exposed for tests** — `window.swapEmbedRegions(text, a, b)` and `window.embedRegions(src)` in `embeds.js` keep LF vs CRLF, handle uneven region lengths and either drag direction, and a single-embed note is untouched. Verified with a `node` vm harness (13 cases).
+- **Tests** — `tests/test_embed.py` markup pins: the editor passes `document.getElementById(_eid)` to `mountEmbeds`, embeds.js ships `embedRegions`/`swapRegions`/`_wireReorder`/the `drag-over`+`dragging` classes and the `input` dispatch, and the partial styles `.dragging`/`.drag-over`/`.md-embed-move`.
+
+### Static syntax colour view in the markdown editor
+
+- **The markdown editor shows colour on demand, not while typing.** Notes and journals now have a 🎨 **Colour** toolbar button that swaps the plain `<textarea>` for a read-only coloured view of the same source — headings, bold/italic/strikethrough, inline code, `[links]`, `[[cross-links]]`, list markers, blockquotes, rules, task boxes, and TOML inside fenced ```` ```ptos ```` blocks. Clicking the coloured view returns to editing and focuses the textarea. This replaces the earlier always-on colour overlay, which rebuilt a highlight mirror on every keystroke — a measured ~1.3 ms at 50 lines and ~44 ms at 2000 lines of `innerHTML` re-parse and layout for no benefit the on-demand view lacks.
+- **The editor stays a plain `<textarea>`.** Editing is unchanged: bracket `[[` autocomplete, the `/` slash-embed menu, live embeds and the 2.5 s debounced autosave all read and write the same textarea. `web_static/js/md_highlight.js` now exports only the pure tokenizers (`mdHighlight.markdown` / `mdHighlight.toml`); the overlay mirror, its metric-copying/scroll-sync plumbing, the trailing-newline shim and the `.md-hl*` CSS are all gone, and the textarea keeps its simple `line-height:1.85` style.
+- **Tests** — `tests/test_md_highlight.py` rewritten: tokenizer purity and span classes are pinned, and the partial is pinned to the static view (a `<pre id="md-syntax" class="md-syntax">`, the 🎨 toggle, `setMode("syntax")` rendering via `mdHighlight.markdown`) with the overlay CSS/`attachMdHighlight` asserted absent.
+
+### Insert a view or embed from the editor toolbar
+
+- **⊞ Insert view.** A new toolbar button in the note/journal markdown editor calls the existing `/` slash menu, so the whole picker — the Format helpers plus every embeddable query/metric/dashboard/threshold/board/habit/calendar/due/project — is reachable without typing `/`. `window.openSlashMenu(el)` in `web_static/js/slash_embed.js` focuses the textarea, inserts a `/` at the caret (prepending a newline when the caret isn't at line start/after whitespace, so the menu's token matches), dispatches an `input` event, and lets the attached menu take over; no second picker is defined. Clicking the button blurred the textarea, and the editor's `blur` handler was closing the menu 150 ms later — the pending close is now cancelled whenever the menu opens (and skipped if focus returned to the textarea), and the button switches back to Edit first when clicked from Preview/Colour mode. UI-inherent — the engine/service side is the read-only candidates helper it reuses.
+- **Tests** — `tests/test_embed.py` pins the toolbar wiring and the `openSlashMenu` helper.
+
+
+---
+
 ## 2026-10-12
 
 ### Live embeds in notes and journals
@@ -15,6 +53,14 @@ Format: `[version or date] — description`
 - **`/` slash command to insert an embed.** Typing `/` at the start of a line (or after whitespace) in the note/journal editor opens a Notion/Logseq-style menu listing every embeddable query, metric, dashboard and threshold (`web_static/js/slash_embed.js`); it filters live as you type, navigates with ↑/↓+Enter/Tab, and inserts a `name = "…"` block at the caret, then re-renders the preview. Candidates come from `GET /api/embed/candidates` → `svc.get_embed_candidates()`, which reuses the exact filtering the `/queries` page applies (`queries_get` now reads the same helper, so the page and the menu can't drift). CLI-parity note: this is a UI-inherent autocomplete; the engine/service side is the read-only candidates helper, and it lands with tests.
 - **`/` slot also inserts markdown formatting helpers.** The same menu opens with a client-side **Format** group on top of the embed candidates: headings (`/h1`–`/h3`), bulleted/numbered/task lists (`/ul`/`/ol`/`/todo`), quote, code block, divider, table, and inline styling (bold/italic/strikethrough/inline-code/link). Each helper inserts its markdown at the line start (or wraps the caret) and positions the caret where typing continues; the embeddable groups sit below. Purely client-side — no engine change.
 - **Tests** — `tests/test_embed.py`.
+
+### Embeds grow the board, habit, calendar, due and project widgets
+
+- **Five new embeddable kinds** mirror the pages they came from: `board` (`["board.NAME"]` → lane chips with counts + rollups + matched-clients count), `habit` (`["habit.NAME"]` → streak + mini month heat grid), `calendar` (`["calendar.NAME"]` or the reserved global `__all__` → one mini month with per-day record counts), `due` (`["due.NAME"]`, `default` → the default for the `[due.*]` sections → an overdue strip with heat dots) and `project` (`["project.NAME"]` → a drift/stall/todo/record stat card). Each links back to its real page ("Open →"); all are read-only compact versions of the existing pages, rendered by new `renderBoard`/`renderHabit`/`renderCalendar`/`renderDue`/`renderProject` helpers in `web_static/js/widgets.js` on top of a small `.emb-*` CSS block in the markdown-editor partial.
+- **Kind inference extends to dotted sections.** When `view` is omitted, `resolve_embed` now checks dashboards → metrics → thresholds → `board.` → `habit.` → `calendar.`/`__all__` → `due.`/`default` → `project.` → base query. The `[calendar.*]` sections and `__all__`'s link use `urlencode`d names; unknown dotted prefixes and an unknown project name raise `PTOSError`. The calendar month is resolved from `from_date`, else the start of the `time` window, else the current month; `due` deliberately ignores `time`/`from_date`/`to_date` (its window is the config-driven `[due.*] days`), and `limit` truncates a due `rows` list while updating `count`.
+- **The `/` menu gains the new groups.** `get_embed_candidates` now returns nine groups — queries, metrics, dashboards, thresholds, boards, habits, calendars, due (`default` first) and projects (dotted prefixes stripped) — and `GET /api/embed/candidates` emits them under kinds `q`/`m`/`d`/`t`/`b`/`h`/`c`/`u`/`p`, so a `/board`… `/project` pick works like the first four. Picking any item now inserts **`name` plus the group's explicit `view`** (`view = "query"`, `view = "calendar"`, …), so a menu-authored embed carries its own type and never needs inference.
+- **Bare-`name` embeds infer only when unambiguous.** Inference still checks dashboards → metrics → thresholds → `board.` → `habit.` → `calendar.`/`__all__` → `due.`/`default` → `project.` → base query, but a name owned by **more than one** section (e.g. a base query `prescription` and a `["calendar.prescription"]`) now raises `PTOSError` naming the candidates with the fix (`add view = "…"`) instead of silently rendering the earlier section — so adding a dotted section later can never quietly change an existing embed's meaning.
+- **Tests** — new inference/dispatch/route serialization tests for the five kinds in `tests/test_embed.py` (including the calendar month mappings, due-ignores-time and due `limit`), collision tests for bare-`name` ambiguity (raises; explicit `view` resolves to either side), an extended candidates + markup scan (the `/` menu ships the nine kind→view mappings), plus the explicit-view insertion pin; `node --check` clean.
 
 ### `get_trend` could not run (missing `_prior_periods`)
 

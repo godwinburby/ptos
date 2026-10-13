@@ -12,9 +12,13 @@
 {% set _ph  = placeholder | default("Start writing\u2026") %}
 {% set _h   = height | default("65vh") %}
 
-<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;">
+<div style="display:flex;gap:8px;margin-bottom:12px;align-items:center;flex-wrap:wrap;">
   <button id="btn-edit"    onclick="setMode('edit')"    class="btn btn-sm btn-primary">✎ Edit</button>
+  <button id="btn-syntax"  onclick="toggleSyntax()"     class="btn btn-sm btn-ghost"
+          title="Colour view (rendered once, not live)">🎨 Colour</button>
   <button id="btn-preview" onclick="setMode('preview')" class="btn btn-sm btn-ghost">👁 Preview</button>
+  <button id="btn-insert"  onclick="openSlashMenu(document.getElementById('{{ _eid }}'))"
+          class="btn btn-sm btn-ghost" title="Insert a query or view embed">⊞ Insert view</button>
   <button id="btn-split"   onclick="setMode('split')"   class="btn btn-sm btn-ghost"
           style="display:none;">⬛ Split</button>
 </div>
@@ -30,6 +34,8 @@
              resize:vertical;outline:none;"
       placeholder="{{ _ph }}"
       oninput="onEditorInput()">{{ content }}</textarea>
+    <pre id="md-syntax" class="md-syntax" onclick="setMode('edit');document.getElementById('{{ _eid }}').focus();"
+         title="Click to edit"></pre>
   </div>
   <div id="preview-pane"
        style="display:none;flex:1;min-width:0;padding:18px;
@@ -43,6 +49,7 @@
 <script src="{{ av('/static/js/widgets.js') }}"></script>
 <script src="{{ av('/static/js/embeds.js') }}"></script>
 <script src="{{ av('/static/js/slash_embed.js') }}"></script>
+<script src="{{ av('/static/js/md_highlight.js') }}"></script>
 
 <style>
   #preview-pane h1,#preview-pane h2,#preview-pane h3,#preview-pane h4 {
@@ -81,8 +88,46 @@
     padding:8px 10px;border:1px solid var(--border);text-align:left;
   }
   #preview-pane th { background:var(--bg);font-weight:700; }
-  .md-embed { margin:14px 0; }
+  .md-embed { margin:14px 0; cursor:grab; }
+  .md-embed.dragging { opacity:.55; }
+  .md-embed.drag-over { outline:2px dashed var(--accent);outline-offset:3px;border-radius:8px; }
+  .md-embed-move {
+    border:1px solid var(--border);background:var(--bg);color:var(--sub);
+    border-radius:6px;cursor:pointer;font-size:11px;line-height:1;
+    padding:3px 6px;
+  }
+  .md-embed-move:hover { border-color:var(--accent);color:var(--accent); }
   .md-embed-loading { color:var(--sub);font-size:13px;padding:10px 0; }
+  .md-syntax {
+    display:none; margin:0; padding:16px; box-sizing:border-box;
+    width:100%; min-height:{{ _h }};
+    font-family:'Consolas','Courier New',monospace; font-size:16px;
+    line-height:1.85;
+    background:var(--card); color:var(--text);
+    border:1.5px solid var(--border); border-radius:10px;
+    white-space:pre-wrap; word-wrap:break-word; overflow-wrap:break-word;
+    overflow-y:auto; cursor:pointer;
+  }
+  .md-h1,.md-h2,.md-h3,.md-h4,.md-h5,.md-h6 { color:var(--accent); font-weight:800; }
+  .mh-q { color:var(--sub); font-weight:700; }
+  .mh-hr { color:var(--border); }
+  .mh-op { color:var(--accent); font-weight:700; }
+  .mh-task { color:var(--accent); }
+  .mh-b { font-weight:700; color:var(--accent); }
+  .mh-i { color:var(--sub); font-style:italic; }
+  .mh-s { color:var(--sub); text-decoration:line-through; }
+  .mh-c {
+    font-family:'Consolas','Courier New',monospace; color:var(--accent);
+    background:var(--bg); border-radius:4px; padding:0 3px;
+  }
+  .mh-br { color:var(--accent); }
+  .mh-link { color:var(--accent); text-decoration:underline; }
+  .mh-fence { color:var(--sub); }
+  .mh-fence-open { color:var(--sub); font-weight:700; }
+  .mh-tk-key { color:var(--accent); font-weight:700; }
+  .mh-tk-punct { color:var(--sub); }
+  .mh-tk-str { color:#1E8E5A; }
+  .mh-tk-num { color:#B57400; }
   .md-embed-head {
     display:flex;align-items:center;justify-content:space-between;gap:10px;
     margin:0 0 6px;font-size:12px;color:var(--sub);
@@ -97,6 +142,32 @@
   }
   .md-embed-refresh:hover { border-color:var(--accent);color:var(--accent); }
   .md-embed-body .card { margin:0; }
+  .emb-kicker { font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sub);margin-bottom:4px; }
+  .emb-chip-row { display:flex;gap:6px;flex-wrap:wrap;margin-top:8px; }
+  .emb-chip { padding:8px 12px;border-radius:10px;background:var(--bg);border:1px solid var(--border);text-align:center;min-width:64px; }
+  .emb-chip-name { font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--sub); }
+  .emb-chip-count { font-size:20px;font-weight:800;margin-top:2px; }
+  .emb-chip-sub { font-size:11px;color:var(--sub);margin-top:2px; }
+  .emb-cal { border-collapse:separate;border-spacing:2px; }
+  .emb-cal th.emb-cal-wd { font-size:10px;color:var(--sub);padding:2px;text-align:center;font-weight:700; }
+  .emb-cal td.emb-cal-cell { width:26px;height:26px;text-align:center;font-size:12px;color:var(--sub);background:var(--bg);border-radius:6px;vertical-align:middle; }
+  .emb-cal td.emb-cal-cell.cnt { background:var(--accent);color:#fff;font-weight:700; }
+  .emb-cal td.emb-cal-cell.today { outline:2px solid var(--text); }
+  .emb-cal-rec-grid { table-layout:fixed;width:100%; }
+  .emb-calc-cell { height:52px;vertical-align:top;text-align:left;padding:3px 4px;background:var(--bg);border-radius:6px; }
+  .emb-calc-cell.empty { background:transparent; }
+  .emb-calc-cell.cnt { background:var(--accent-lt); }
+  .emb-calc-cell.today { outline:2px solid var(--text); }
+  .emb-calc-day { font-size:11px;font-weight:700;color:var(--sub); }
+  .emb-calc-chip { font-size:10px;line-height:1.25;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text); }
+  .emb-calc-more { font-size:10px;color:var(--sub);margin-top:2px; }
+  .emb-stat { display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin:6px 0 2px; }
+  .emb-stat b { color:var(--text); }
+  .emb-due-row { display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px; }
+  .emb-due-row:last-child { border-bottom:none; }
+  .emb-heat { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
+  .emb-name { font-weight:700;color:var(--text); }
+  .emb-due-gap { color:var(--accent);font-weight:600; }
   .slash-ac-list {
     display:none;position:fixed;z-index:60;width:320px;max-height:280px;
     overflow-y:auto;background:var(--card);border:1px solid var(--border);
@@ -143,34 +214,51 @@
       ? marked.parse(typeof preprocessLinks === "function" ? preprocessLinks(src) : src)
       : "<pre style='white-space:pre-wrap'>" +
           src.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>";
-    if (typeof window.mountEmbeds === "function") window.mountEmbeds(pane);
+    if (typeof window.mountEmbeds === "function")
+      window.mountEmbeds(pane, src, document.getElementById(_eid));
   };
 
   window.setMode = function(m) {
     _mode = m;
-    ["edit","preview","split"].forEach(function(id) {
+    ["edit","syntax","preview","split"].forEach(function(id) {
       var btn = document.getElementById("btn-"+id);
       if (btn) btn.className = "btn btn-sm " + (m===id ? "btn-primary" : "btn-ghost");
     });
     var wrap = document.getElementById("editor-wrap");
     var ep = document.getElementById("editor-pane");
     var pp = document.getElementById("preview-pane");
-    if (m === "stacked") {
+    var ta = document.getElementById(_eid);
+    var syn = document.getElementById("md-syntax");
+    var isSyntax = (m === "syntax");
+    if (ta) ta.style.display = isSyntax ? "none" : "block";
+    if (syn) syn.style.display = isSyntax ? "block" : "none";
+    if (isSyntax) {
+      wrap.className = "";
+      ep.style.display="block"; pp.style.display="none";
+      syn.innerHTML = (typeof mdHighlight !== "undefined")
+        ? mdHighlight.markdown(ta ? ta.value : "")
+        : (ta ? ta.value : "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      syn.scrollTop = 0;
+    } else if (m === "stacked") {
       wrap.className = "stacked";
       renderPreview();
       ep.style.display="block"; pp.style.display="block";
-    } else if (m === "edit") {
-      wrap.className = "";
-      ep.style.display="block"; pp.style.display="none";
     } else if (m === "preview") {
       wrap.className = "";
       renderPreview();
       ep.style.display="none"; pp.style.display="block";
-    } else {
+    } else if (m === "split") {
       wrap.className = "";
       renderPreview();
       ep.style.display="block"; pp.style.display="block";
+    } else {
+      wrap.className = "";
+      ep.style.display="block"; pp.style.display="none";
     }
+  };
+
+  window.toggleSyntax = function() {
+    setMode(_mode === "syntax" ? "edit" : "syntax");
   };
 
   function _doSave(silent) {

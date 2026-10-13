@@ -451,12 +451,27 @@ Recognized keys:
 
 | Key | Meaning |
 |-----|---------|
-| `name` | The query / metric / dashboard / threshold to show (required) |
-| `view` | `records`, `group`, `pivot`, `trend`, `metric`, `dashboard`, or `threshold`. Omit to infer from `queries.toml` (dashboard → metric → threshold → query) |
-| `time` | Time window (`td`, `tm`, `ty`, `all`, a cycle name, …) |
+| `name` | The query / metric / dashboard / threshold / board / habit / calendar / due / project to show (required) |
+| `view` | `records`, `group`, `pivot`, `trend`, `metric`, `dashboard`, `threshold`, `board`, `habit`, `calendar`, `due`, or `project`. Omit to infer from `queries.toml` — the name must exist in exactly one section (dashboard → metric → threshold → board → habit → calendar → due → project → query), otherwise the embed errors and asks for an explicit `view` |
+| `time` | Time window (`td`, `tm`, `ty`, `all`, a cycle name, …); for a calendar embed this also picks the month (unless `from_date` is set) |
 | `from_date` / `to_date` | Explicit inclusive date range (overrides `time`) |
-| `limit` | Truncate a records/group result to N rows |
+| `limit` | Truncate a records/group result to N rows, or a due list to N items |
 | `title` | Card heading (defaults to `name`) |
+
+Embeddable kinds and their links back to the full pages:
+
+| `view` | Where the name lives | Card shows | Link |
+|--------|----------------------|------------|------|
+| `board` | `[board.NAME]` | Lane chips with counts + rollups | `/board?board=NAME` |
+| `habit` | `[habit.NAME]` | Streak + mini month heat grid | `/habits` |
+| `calendar` | `[calendar.NAME]` (or `__all__` for every record) | Mini month grid with `type · value1 · value2` labels inside each day cell (`display_fields` picks the values) | `/calendar` |
+| `due` | `[due.NAME]` (`default` = the default due view) | Overdue strip with heat dots | `/due` |
+| `project` | `[project.NAME]` | Drift / stall / todo / record stat card | `/projects` |
+
+A habit embed fills the month from `time`/`from_date` like the page; a calendar
+embed renders the one month that `from_date`, then `time`, then today picks. A
+due embed deliberately ignores `time` — its window is the config-driven
+`[due.*] days`, so the widget always matches the `/due` page.
 
 Embeds are read-only — use **Open →** to edit/delete/export the underlying data
 on its own page. A fresh install's `Demo/welcome.md` note includes a worked
@@ -464,12 +479,27 @@ example.
 
 **Tip:** instead of writing the block by hand, type `/` at the start of a line
 in any note or journal editor — a Notion/Logseq-style menu lists every
-query/metric/dashboard/threshold; pick one and the block is inserted at the
-caret. Keep typing to filter, ↑/↓ to navigate, Enter to insert. The menu also
-carries a **Format** group on top with markdown helpers — type `/h1` or
-`/heading` for a heading, `/todo` for a checkbox task, `/table`, `/bold`,
-`/code`, `/link`, and so on (aliases like `h2`, `ul`, `ol`, `quote`, `hr`,
-`b`, `i`, `s` work too).
+query/metric/dashboard/threshold/board/habit/calendar/due/project; pick one and
+the block is inserted at the caret — with `name` *and* the explicit `view`, so
+what you clicked is what renders, no inference needed. Keep typing to filter,
+↑/↓ to navigate, Enter to insert. The menu also carries a **Format** group on
+top with markdown helpers — type `/h1` or `/heading` for a heading, `/todo` for
+a checkbox task, `/table`, `/bold`, `/code`, `/link`, and so on (aliases like
+`h2`, `ul`, `ol`, `quote`, `hr`, `b`, `i`, `s` work too).
+
+In the preview, embed cards can be **reordered**: drag card A onto card B to
+swap their fenced blocks in the source (anything between them stays put), or
+use the ▲/▼ buttons in each card's header on touch screens. The swap rewrites
+the editor and autosaves the new order — same path as typing.
+
+The markdown **source editor has a colour view**: the 🎨 **Colour** toolbar
+button (next to Edit/Preview) swaps the plain text area for a read-only
+colour-coded view of the same source — headings, bold/italic, links,
+`[[cross-links]]`, lists, quotes, tasks and ` ```ptos ` blocks (highlighted as
+TOML inside the fence). Click it to return to editing. The text area itself
+stays plain while you type, so `[[` autocomplete, `/` insert, embeds and
+autosave all work exactly as before; the **⊞ Insert view** button opens the same
+`/` menu without typing `/`.
 
 ### Convert Records
 
@@ -539,6 +569,9 @@ named filtered calendars via `["calendar.NAME"]` in `queries.toml`. Features:
 - `/calendar` — "All records" month grid (default)
 - `/calendar/<name>` — named filtered view
 - Click a day to expand its records inline with a "Open day in Browse" link
+- Each record shows its type plus field values (`type · value1 · value2`) — configure
+  which fields with `display_fields = ["name", "amount"]` on the calendar entry
+  (order matters; empty falls back to the first two values)
 - Switcher dropdown to toggle between global and named views
 - Prev/next navigation across months
 - **CLI**: `ptos --calendars [NAME]`
