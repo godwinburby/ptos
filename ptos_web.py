@@ -3786,7 +3786,13 @@ def api_embed_candidates():
         {"kind": "u", "label": "Due", "items": cand["due"]},
         {"kind": "p", "label": "Projects", "items": cand["projects"]},
     ]
-    return jsonify(ok=True, groups=groups)
+    _skip_time = {"year", "month", "date", "range"}
+    time_options = [
+        {"label": label, "value": code}
+        for label, code in _get_time_options()
+        if code not in _skip_time
+    ]
+    return jsonify(ok=True, groups=groups, time_options=time_options)
 
 
 # ══════════════════════════════════════════════════════════════════════════════

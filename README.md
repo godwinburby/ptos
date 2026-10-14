@@ -446,8 +446,7 @@ title = "Spend by category"
 ````
 
 The markdown preview replaces the block with a read-only card showing the
-query result, a **⟳** refresh button, and an **Open →** link to the full page.
-Recognized keys:
+query result and an **Open →** link to the full page. Recognized keys:
 
 | Key | Meaning |
 |-----|---------|
@@ -464,7 +463,7 @@ Embeddable kinds and their links back to the full pages:
 |--------|----------------------|------------|------|
 | `board` | `[board.NAME]` | Lane chips with counts + rollups | `/board?board=NAME` |
 | `habit` | `[habit.NAME]` | Streak + mini month heat grid | `/habits` |
-| `calendar` | `[calendar.NAME]` (or `__all__` for every record) | Mini month grid with `type · value1 · value2` labels inside each day cell (`display_fields` picks the values) | `/calendar` |
+| `calendar` | `[calendar.NAME]` (or `__all__` for every record) | Mini month grid with `type · value1 · value2` labels inside each day cell (`display_fields` picks the values), plus a per-day detail list under the grid (date + each record's full label/note + a **Browse →** link for that day) | `/calendar` |
 | `due` | `[due.NAME]` (`default` = the default due view) | Overdue strip with heat dots | `/due` |
 | `project` | `[project.NAME]` | Drift / stall / todo / record stat card | `/projects` |
 
@@ -473,24 +472,29 @@ embed renders the one month that `from_date`, then `time`, then today picks. A
 due embed deliberately ignores `time` — its window is the config-driven
 `[due.*] days`, so the widget always matches the `/due` page.
 
-Embeds are read-only — use **Open →** to edit/delete/export the underlying data
-on its own page. A fresh install's `Demo/welcome.md` note includes a worked
-example.
+Embeds are read-only *data* widgets — use **Open →** to edit/delete/export the
+underlying records on its own page. A fresh install's `Demo/welcome.md` note
+includes a worked example.
 
 **Tip:** instead of writing the block by hand, type `/` at the start of a line
 in any note or journal editor — a Notion/Logseq-style menu lists every
 query/metric/dashboard/threshold/board/habit/calendar/due/project; pick one and
 the block is inserted at the caret — with `name` *and* the explicit `view`, so
-what you clicked is what renders, no inference needed. Keep typing to filter,
-↑/↓ to navigate, Enter to insert. The menu also carries a **Format** group on
+what you clicked is what renders, no inference needed. For a kind that honours
+`time` (query, metric, dashboard, threshold, board, habit, calendar), the menu
+first asks for a **time window** — "Default (as configured)" or one of the
+named windows (today, this/last month, this year, all time, your cycles) —
+and adds `time = "..."` to the block; `due` and `project` skip that step
+because they ignore `time`. Keep typing to filter, ↑/↓ to navigate,
+Enter to confirm. The menu also carries a **Format** group on
 top with markdown helpers — type `/h1` or `/heading` for a heading, `/todo` for
 a checkbox task, `/table`, `/bold`, `/code`, `/link`, and so on (aliases like
 `h2`, `ul`, `ol`, `quote`, `hr`, `b`, `i`, `s` work too).
 
-In the preview, embed cards can be **reordered**: drag card A onto card B to
-swap their fenced blocks in the source (anything between them stays put), or
-use the ▲/▼ buttons in each card's header on touch screens. The swap rewrites
-the editor and autosaves the new order — same path as typing.
+The preview is a **pure render** of the finished page — the same card you'd get
+if you published the note. It has no controls: to reorder, edit or retarget an
+embed, switch to **Blocks mode** (below), which owns every edit / move control
+and writes the change back into the same source the Edit view uses.
 
 The markdown **source editor has a colour view**: the 🎨 **Colour** toolbar
 button (next to Edit/Preview) swaps the plain text area for a read-only
@@ -500,6 +504,27 @@ TOML inside the fence). Click it to return to editing. The text area itself
 stays plain while you type, so `[[` autocomplete, `/` insert, embeds and
 autosave all work exactly as before; the **⊞ Insert view** button opens the same
 `/` menu without typing `/`.
+
+**Blocks mode** turns the same source into a block editor. The **⬚ Blocks**
+button (next to Preview) renders the note as a vertical list of *top-level
+blocks* — each markdown element (heading, paragraph, list, quote, table,
+divider, code fence) and each ```` ```ptos ```` widget — and every block carries
+**＋ ✎ ⇄ ▲ ▼ ✕**: **＋** inserts a block after it (a persistent **＋ Add block**
+row does the same at the end), **✎** edits just that block in place, **⇄**
+re-opens the picker to change the block's *type or content*, **▲/▼**
+and dragging reorder, **✕** deletes. Adding a widget opens the *same* picker
+the `/` menu uses — every configured query, metric, dashboard, threshold,
+board, habit, calendar, due section and project, then the time-window step —
+so you choose a real name instead of hand-writing TOML, while **✎** still
+gives you the raw box when you want to tune `limit` or `title`. **⇄** turns a
+paragraph into a heading, a bullet, a quote, a code block or bold *without
+losing the text* — it re-styles the block in place (turning `Hello` into
+`# Hello` or `- Hello`), and swapping a widget just replaces it. Format
+helpers create a block pre-wrapped (bold, quote, task list, …) with the caret
+parked where you start typing. Every edit is written straight back into the
+same text source the Edit view uses, so autosave, `[[` links and backlinks
+behave exactly as before; the document reflows to one blank line between
+blocks after the first change.
 
 ### Convert Records
 

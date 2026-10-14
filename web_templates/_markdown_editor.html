@@ -17,6 +17,8 @@
   <button id="btn-syntax"  onclick="toggleSyntax()"     class="btn btn-sm btn-ghost"
           title="Colour view (rendered once, not live)">🎨 Colour</button>
   <button id="btn-preview" onclick="setMode('preview')" class="btn btn-sm btn-ghost">👁 Preview</button>
+  <button id="btn-blocks"  onclick="setMode('blocks')"  class="btn btn-sm btn-ghost"
+          title="Edit as blocks — add, edit, move and delete">⬚ Blocks</button>
   <button id="btn-insert"  onclick="openSlashMenu(document.getElementById('{{ _eid }}'))"
           class="btn btn-sm btn-ghost" title="Insert a query or view embed">⊞ Insert view</button>
   <button id="btn-split"   onclick="setMode('split')"   class="btn btn-sm btn-ghost"
@@ -43,12 +45,19 @@
               border-radius:10px;min-height:{{ _h }};overflow-y:auto;
               font-size:16px;line-height:1.85;">
   </div>
+  <div id="blocks-pane"
+       style="display:none;flex:1;min-width:0;padding:18px;
+              background:var(--card);border:1px solid var(--border);
+              border-radius:10px;min-height:{{ _h }};overflow-y:auto;
+              font-size:16px;line-height:1.85;">
+  </div>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
 <script src="{{ av('/static/js/widgets.js') }}"></script>
 <script src="{{ av('/static/js/embeds.js') }}"></script>
 <script src="{{ av('/static/js/slash_embed.js') }}"></script>
+<script src="{{ av('/static/js/md_blocks.js') }}"></script>
 <script src="{{ av('/static/js/md_highlight.js') }}"></script>
 
 <style>
@@ -88,15 +97,7 @@
     padding:8px 10px;border:1px solid var(--border);text-align:left;
   }
   #preview-pane th { background:var(--bg);font-weight:700; }
-  .md-embed { margin:14px 0; cursor:grab; }
-  .md-embed.dragging { opacity:.55; }
-  .md-embed.drag-over { outline:2px dashed var(--accent);outline-offset:3px;border-radius:8px; }
-  .md-embed-move {
-    border:1px solid var(--border);background:var(--bg);color:var(--sub);
-    border-radius:6px;cursor:pointer;font-size:11px;line-height:1;
-    padding:3px 6px;
-  }
-  .md-embed-move:hover { border-color:var(--accent);color:var(--accent); }
+  .md-embed { margin:14px 0; }
   .md-embed-loading { color:var(--sub);font-size:13px;padding:10px 0; }
   .md-syntax {
     display:none; margin:0; padding:16px; box-sizing:border-box;
@@ -133,14 +134,18 @@
     margin:0 0 6px;font-size:12px;color:var(--sub);
   }
   .md-embed-title { font-weight:700;color:var(--text); }
-  .md-embed-actions { display:flex;align-items:center;gap:10px; }
   .md-embed-link { color:var(--accent);text-decoration:none; }
-  .md-embed-refresh {
-    border:1px solid var(--border);background:var(--bg);color:var(--text);
-    border-radius:6px;cursor:pointer;font-size:13px;line-height:1;
-    padding:3px 7px;
+  /* Blocks mode (md_blocks.js) reuses the three classes below for its own
+     inline editor — they are not preview controls. */
+  .md-embed-edit-hint { font-size:11px;color:var(--sub);margin-top:6px; }
+  .md-embed-edit-save,.md-embed-edit-cancel {
+    border:1px solid var(--border);background:var(--bg);cursor:pointer;
+    border-radius:6px;font-size:12px;line-height:1;padding:4px 8px;
   }
-  .md-embed-refresh:hover { border-color:var(--accent);color:var(--accent); }
+  .md-embed-edit-save { border-color:var(--accent);color:var(--accent);font-weight:700; }
+  .md-embed-edit-save:hover { background:var(--accent-lt); }
+  .md-embed-edit-cancel { color:var(--sub); }
+  .md-embed-edit-cancel:hover { border-color:var(--danger,#e55);color:var(--danger,#e55); }
   .md-embed-body .card { margin:0; }
   .emb-kicker { font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sub);margin-bottom:4px; }
   .emb-chip-row { display:flex;gap:6px;flex-wrap:wrap;margin-top:8px; }
@@ -161,6 +166,16 @@
   .emb-calc-day { font-size:11px;font-weight:700;color:var(--sub); }
   .emb-calc-chip { font-size:10px;line-height:1.25;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text); }
   .emb-calc-more { font-size:10px;color:var(--sub);margin-top:2px; }
+  .emb-cal-day-list { margin-top:10px;border-top:1px solid var(--border);padding-top:8px; }
+  .emb-cal-day { padding:6px 0;border-bottom:1px solid var(--border); }
+  .emb-cal-day:last-child { border-bottom:none; }
+  .emb-cal-day-head { display:flex;justify-content:space-between;align-items:center;font-size:11px;font-weight:700;color:var(--sub);margin-bottom:3px; }
+  .emb-cal-browse { font-size:11px;color:var(--accent);text-decoration:none;font-weight:600; }
+  .emb-cal-browse:hover { text-decoration:underline; }
+  .emb-cal-rec { font-size:12px;color:var(--text);padding:2px 0; }
+  .emb-cal-rec-label { font-weight:600; }
+  .emb-cal-rec-note { font-size:11px;color:var(--sub); }
+  .emb-cal-empty { font-size:12px;margin-top:8px; }
   .emb-stat { display:flex;gap:14px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin:6px 0 2px; }
   .emb-stat b { color:var(--text); }
   .emb-due-row { display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px; }
@@ -180,6 +195,74 @@
     background:var(--bg);border-bottom:1px solid var(--border);
   }
   .slash-ac-empty { padding:10px 12px;font-size:13px;color:var(--sub); }
+  .md-block {
+    border:1px solid var(--border);border-radius:10px;background:var(--bg);
+    margin:12px 0;padding:11px 13px;
+  }
+  .md-block-widget { background:var(--card); }
+  .md-block.dragging { opacity:.55; }
+  .md-block.drag-over { outline:2px dashed var(--accent);outline-offset:3px; }
+  .md-block-head {
+    display:flex;align-items:center;justify-content:space-between;gap:10px;
+    margin:0 0 8px;font-size:11px;font-weight:800;letter-spacing:.04em;
+    text-transform:uppercase;color:var(--sub);
+  }
+  .md-block-actions { display:flex;align-items:center;gap:5px; }
+  .md-block-btn {
+    border:1px solid var(--border);background:var(--card);color:var(--text);
+    border-radius:6px;cursor:pointer;font-size:13px;line-height:1;padding:3px 7px;
+  }
+  .md-block-btn:hover { border-color:var(--accent);color:var(--accent); }
+  .md-block-body { font-size:16px;line-height:1.85; }
+  .md-block-body h1,.md-block-body h2,.md-block-body h3,.md-block-body h4 {
+    font-weight:800;margin:6px 0 8px;color:var(--text);line-height:1.3;
+  }
+  .md-block-body h1 { font-size:22px;border-bottom:2px solid var(--border);padding-bottom:6px; }
+  .md-block-body h2 { font-size:18px;color:var(--accent); }
+  .md-block-body h3 { font-size:16px; }
+  .md-block-body p  { margin:4px 0; }
+  .md-block-body ul,.md-block-body ol { margin:6px 0 6px 22px; }
+  .md-block-body li { margin:4px 0; }
+  .md-block-body li input[type=checkbox] {
+    margin-right:7px;accent-color:var(--accent);
+    width:16px;height:16px;vertical-align:middle;
+  }
+  .md-block-body code {
+    font-family:'Consolas','Courier New',monospace;font-size:14px;
+    background:var(--card);padding:2px 6px;border-radius:4px;color:var(--accent);
+  }
+  .md-block-body pre {
+    background:var(--card);padding:14px;border-radius:8px;overflow-x:auto;margin:8px 0;
+  }
+  .md-block-body pre code { background:none;padding:0;color:var(--text);font-size:14px; }
+  .md-block-body blockquote {
+    border-left:3px solid var(--accent);padding:6px 14px;margin:8px 0;
+    color:var(--sub);font-style:italic;background:var(--accent-lt);
+    border-radius:0 8px 8px 0;
+  }
+  .md-block-body hr  { border:none;border-top:2px solid var(--border);margin:8px 0; }
+  .md-block-body strong { font-weight:700; }
+  .md-block-body em     { font-style:italic;color:var(--sub); }
+  .md-block-body a      { color:var(--accent);text-decoration:none; }
+  .md-block-body table  { width:100%;border-collapse:collapse;font-size:14px;margin:8px 0; }
+  .md-block-body th,.md-block-body td {
+    padding:8px 10px;border:1px solid var(--border);text-align:left;
+  }
+  .md-block-body th { background:var(--card);font-weight:700; }
+  .md-block-add-row {
+    display:block;width:100%;margin:14px 0 4px;padding:10px;
+    border:1.5px dashed var(--border);border-radius:10px;background:none;
+    color:var(--sub);cursor:pointer;font-size:13px;font-weight:700;
+  }
+  .md-block-add-row:hover { border-color:var(--accent);color:var(--accent); }
+  .md-block-edit-box {
+    box-sizing:border-box;width:100%;min-height:96px;padding:9px 10px;
+    font-family:'Consolas','Courier New',monospace;font-size:14px;
+    line-height:1.7;background:var(--card);color:var(--text);
+    border:1.5px solid var(--accent);border-radius:8px;
+    resize:vertical;outline:none;
+  }
+  .md-block-edit-actions { display:flex;gap:8px;margin-top:8px; }
   @media (min-width:768px) { #btn-split { display:inline-flex !important; } }
   @media (max-width:767px) {
     #editor-wrap.stacked { flex-direction:column; }
@@ -207,6 +290,8 @@
   var _mode = window.innerWidth < 768 ? "stacked" : "edit";
   var _saveTimer = null, _dirty = false;
 
+  if (typeof mdBlocks !== "undefined" && mdBlocks.init) mdBlocks.init(_eid);
+
   window.renderPreview = function() {
     var src = document.getElementById(_eid).value;
     var pane = document.getElementById("preview-pane");
@@ -214,23 +299,27 @@
       ? marked.parse(typeof preprocessLinks === "function" ? preprocessLinks(src) : src)
       : "<pre style='white-space:pre-wrap'>" +
           src.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>";
-    if (typeof window.mountEmbeds === "function")
-      window.mountEmbeds(pane, src, document.getElementById(_eid));
+    if (typeof window.mountEmbeds === "function") window.mountEmbeds(pane);
   };
 
   window.setMode = function(m) {
     _mode = m;
-    ["edit","syntax","preview","split"].forEach(function(id) {
+    ["edit","syntax","preview","blocks","split"].forEach(function(id) {
       var btn = document.getElementById("btn-"+id);
       if (btn) btn.className = "btn btn-sm " + (m===id ? "btn-primary" : "btn-ghost");
     });
+    if (m !== "blocks" && typeof mdBlocks !== "undefined" && mdBlocks.exit) {
+      mdBlocks.exit();
+    }
     var wrap = document.getElementById("editor-wrap");
     var ep = document.getElementById("editor-pane");
     var pp = document.getElementById("preview-pane");
+    var bp = document.getElementById("blocks-pane");
     var ta = document.getElementById(_eid);
     var syn = document.getElementById("md-syntax");
     var isSyntax = (m === "syntax");
-    if (ta) ta.style.display = isSyntax ? "none" : "block";
+    if (bp) bp.style.display = "none";
+    if (ta) ta.style.display = (isSyntax || m === "blocks") ? "none" : "block";
     if (syn) syn.style.display = isSyntax ? "block" : "none";
     if (isSyntax) {
       wrap.className = "";
@@ -239,6 +328,11 @@
         ? mdHighlight.markdown(ta ? ta.value : "")
         : (ta ? ta.value : "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
       syn.scrollTop = 0;
+    } else if (m === "blocks") {
+      wrap.className = "";
+      ep.style.display="none"; pp.style.display="none";
+      if (bp) bp.style.display="block";
+      if (typeof mdBlocks !== "undefined" && mdBlocks.enter) mdBlocks.enter();
     } else if (m === "stacked") {
       wrap.className = "stacked";
       renderPreview();
@@ -268,7 +362,7 @@
 
   window.onEditorInput = function() {
     _dirty = true;
-    if (_mode !== "edit") renderPreview();
+    if (_mode !== "edit" && _mode !== "blocks") renderPreview();
     clearTimeout(_saveTimer);
     _saveTimer = setTimeout(function() { _doSave(true); }, 2500);
   };

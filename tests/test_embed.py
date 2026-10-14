@@ -533,6 +533,25 @@ class TestEmbedCandidatesRoute:
         assert kinds["u"] == ["default", "weekly"]
         assert kinds["p"] == ["wob"]
 
+    def test_time_options_present_and_filtered(self):
+        _clean()
+        _set_queries(_rich_queries())
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/api/embed/candidates")
+        data = resp.get_json()
+        assert "time_options" in data
+        values = [t["value"] for t in data["time_options"]]
+        assert "tm" in values
+        assert "lm" in values
+        assert "ty" in values
+        assert "all" in values
+        for bad in ("year", "month", "date", "range"):
+            assert bad not in values, bad
+        for entry in data["time_options"]:
+            assert "label" in entry
+            assert "value" in entry
+
 
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -574,12 +593,60 @@ class TestEmbedMarkup:
         assert "item.name" in js
         assert "item.name" in js
 
-    def test_editor_passes_source_to_mountembeds(self):
+    def test_embed_cards_are_read_only(self):
+        # The preview is a render of the finished page. Every edit / move /
+        # add control lives in Blocks mode (md_blocks.js), so the preview
+        # mounter keeps no source and writes nothing back.
+        path = os.path.join(_REPO_ROOT, "web_static", "js", "embeds.js")
+        with open(path, encoding="utf-8") as f:
+            js = f.read()
+        assert "window.mountEmbeds = function (pane)" in js
+        for gone in ("function swapRegions", "function replaceRegion",
+                     "_wireReorder", "_swapWith", "_moveBy", "_editWidget",
+                     "_applyEdit", "_cancelEdit", "_fenceLines",
+                     "window.swapEmbedRegions", "window.replaceEmbedRegion",
+                     "srcEl", "draggable"):
+            assert gone not in js, gone
+        # embedRegions stays — Blocks mode cuts fences with it.
+        assert "function embedRegions" in js
+        assert "window.embedRegions = embedRegions" in js
+
+    def test_preview_card_shows_title_and_link_only(self):
+        path = os.path.join(_REPO_ROOT, "web_static", "js", "embeds.js")
+        with open(path, encoding="utf-8") as f:
+            js = f.read()
+        assert "md-embed-title" in js
+        assert "md-embed-link" in js
+        for gone in ("md-embed-move-up", "md-embed-move-down", "md-embed-edit\"",
+                     "md-embed-refresh", "Edit this widget", "_headActions",
+                     "_wireActions"):
+            assert gone not in js, gone
+
+    def test_preview_ships_no_control_css(self):
+        # The preview keeps only its render styles; the edit box, refresh and
+        # move buttons are gone. (The md-embed-edit-{hint,save,cancel} trio
+        # stays because md_blocks.js reuses it.)
         path = os.path.join(_REPO_ROOT, "web_templates",
                             "_markdown_editor.html")
         with open(path, encoding="utf-8") as f:
             html = f.read()
-        assert "mountEmbeds(pane, src, document.getElementById(_eid))" in html
+        for gone in (".md-embed.dragging", ".md-embed.drag-over",
+                     ".md-embed-move", ".md-embed-refresh", ".md-embed-edit {",
+                     ".md-embed-edit-box", ".md-embed-actions"):
+            assert gone not in html, gone
+        for cls in (".md-embed {", ".md-embed-head", ".md-embed-title",
+                    ".md-embed-link", ".md-embed-body",
+                    ".md-embed-edit-hint", ".md-embed-edit-save",
+                    ".md-embed-edit-cancel"):
+            assert cls in html, cls
+
+    def test_editor_passes_pane_only_to_mountembeds(self):
+        path = os.path.join(_REPO_ROOT, "web_templates",
+                            "_markdown_editor.html")
+        with open(path, encoding="utf-8") as f:
+            html = f.read()
+        assert "mountEmbeds(pane)" in html
+        assert "mountEmbeds(pane, src" not in html
 
     def test_toolbar_insert_view_button_calls_slash_menu(self):
         path = os.path.join(_REPO_ROOT, "web_templates",
@@ -606,32 +673,6 @@ class TestEmbedMarkup:
         assert "clearTimeout(list._blurTimer)" in js
         assert "document.activeElement === el" in js
         assert 'window.setMode("edit")' in js
-
-    def test_embeds_ships_reorder_helpers(self):
-        path = os.path.join(_REPO_ROOT, "web_static", "js", "embeds.js")
-        with open(path, encoding="utf-8") as f:
-            js = f.read()
-        for fn in ("function embedRegions", "function swapRegions",
-                   "_wireReorder", "_swapWith"):
-            assert fn in js, fn
-        assert "window.swapEmbedRegions = swapRegions" in js
-        assert "window.embedRegions = embedRegions" in js
-        assert "mountEmbeds = function (pane, src, srcEl)" in js
-        assert "container.draggable = true" in js
-        assert "classList.add(\"drag-over\")" in js
-        assert "classList.add(\"dragging\")" in js
-        assert ".md-embed-move-up" in js
-        assert ".md-embed-move-down" in js
-        assert "dispatchEvent(new Event(\"input\", { bubbles: true }))" in js
-
-    def test_markdown_editor_ships_reorder_css(self):
-        path = os.path.join(_REPO_ROOT, "web_templates",
-                            "_markdown_editor.html")
-        with open(path, encoding="utf-8") as f:
-            html = f.read()
-        for cls in (".md-embed.dragging", ".md-embed.drag-over",
-                    ".md-embed-move"):
-            assert cls in html, cls
 
     def test_queries_page_uses_shared_renderers(self):
         path = os.path.join(_REPO_ROOT, "web_templates", "queries.html")
@@ -663,6 +704,23 @@ class TestEmbedMarkup:
         assert "r.fields" in cal
         assert "emb-calc-chip" in cal
         assert "emb-cal-rec-grid" in cal
+        assert "emb-cal-day-list" in cal
+        assert "emb-cal-rec" in cal
+
+    def test_calendar_embed_shows_per_day_details(self):
+        path = os.path.join(_REPO_ROOT, "web_static", "js", "widgets.js")
+        with open(path, encoding="utf-8") as f:
+            js = f.read()
+        start = js.index("function renderCalendar")
+        end = js.index("function renderDue")
+        cal = js[start:end]
+        assert "emb-cal-day-list" in cal
+        assert "emb-cal-day-head" in cal
+        assert "emb-cal-browse" in cal
+        assert "r.note" in cal
+        assert "emb-cal-rec-note" in cal
+        assert "/browse?time=range" in cal
+        assert "_pad2" in cal
 
     def test_markdown_editor_ships_embed_css(self):
         path = os.path.join(_REPO_ROOT, "web_templates",
@@ -670,5 +728,39 @@ class TestEmbedMarkup:
         with open(path, encoding="utf-8") as f:
             html = f.read()
         for cls in (".emb-chip", ".emb-cal", ".emb-due-row",
-                    ".emb-heat", ".emb-stat", ".emb-calc-cell"):
+                    ".emb-heat", ".emb-stat", ".emb-calc-cell",
+                    ".emb-cal-day-list", ".emb-cal-day",
+                    ".emb-cal-day-head", ".emb-cal-browse",
+                    ".emb-cal-rec", ".emb-cal-rec-note"):
             assert cls in html, cls
+
+    def test_slash_menu_supports_time_window(self):
+        path = os.path.join(_REPO_ROOT, "web_static", "js", "slash_embed.js")
+        with open(path, encoding="utf-8") as f:
+            js = f.read()
+        assert "_TIME_CAPABLE" in js
+        assert "_openTimeStep" in js
+        assert 'time = "' in js
+        assert "_pendingItem" in js
+        for kind in ("query", "metric", "dashboard", "threshold",
+                     "board", "habit", "calendar"):
+            assert kind in js, kind
+        assert "due" not in js.split("_TIME_CAPABLE")[1].split("}")[0]
+        assert "project" not in js.split("_TIME_CAPABLE")[1].split("}")[0]
+        assert "list._mode = \"time\"" in js
+        assert "list._mode = \"embed\"" in js
+
+    def test_embed_error_card_keeps_its_name_but_no_edit(self):
+        path = os.path.join(_REPO_ROOT, "web_static", "js", "embeds.js")
+        with open(path, encoding="utf-8") as f:
+            js = f.read()
+        assert "function _paintError" in js
+        # a failed resolve still paints a card with the widget's name from
+        # its TOML so you can tell which fence broke; the fix is Blocks mode
+        assert "_paintError(container, res.error)" in js
+        assert '"Failed to load widget"' in js
+        assert "error: String(e)" in js
+        assert "md-embed-title" in js
+        # but no ✎ — the preview never edits
+        assert "md-embed-edit" not in js
+

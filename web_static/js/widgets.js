@@ -204,6 +204,11 @@ function _monthName(m) {
   return ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"][(m || 1) - 1] || "";
 }
 
+function _pad2(n) {
+  n = Number(n);
+  return (n < 10 ? "0" : "") + n;
+}
+
 // ── Phase 2 embed kinds (board / habit / calendar / due / project) ─────────────
 // Read-only compact renderers. Lane chips, mini month grids and stat rows
 // reuse the .emb-* classes defined in the markdown-editor partial.
@@ -283,12 +288,35 @@ function renderCalendar(d) {
     }).join("");
     return "<tr>" + cells + "</tr>";
   }).join("");
+  var detailDays = [];
+  weeks.forEach(function (week) {
+    (week || []).forEach(function (cell) {
+      if (cell && cell.records && cell.records.length) detailDays.push(cell);
+    });
+  });
+  var details = detailDays.map(function (cell) {
+    var iso = d.year + "-" + _pad2(d.month) + "-" + _pad2(cell.day);
+    var recs = cell.records.map(function (r) {
+      var label = [r.type].concat(r.fields || []).filter(function (x) { return x; }).join(" · ");
+      var note = r.note ? '<div class="emb-cal-rec-note">' + esc(r.note) + '</div>' : "";
+      return '<div class="emb-cal-rec"><span class="emb-cal-rec-label">' + esc(label) + '</span>' + note + '</div>';
+    }).join("");
+    return '<div class="emb-cal-day">' +
+      '<div class="emb-cal-day-head">' +
+        '<span>' + esc(iso) + '</span>' +
+        '<a class="emb-cal-browse" href="/browse?time=range&from_date=' + encodeURIComponent(iso) + '&to_date=' + encodeURIComponent(iso) + '">Browse →</a>' +
+      '</div>' + recs + '</div>';
+  }).join("");
   var label = d.calendar_name === "__all__" ? "All records" : String(d.calendar_name || "");
+  var detailBlock = detailDays.length
+    ? '<div class="emb-cal-day-list">' + details + '</div>'
+    : '<div class="msg emb-cal-empty" style="color:var(--sub);">No records this month.</div>';
   return '<div class="card">' +
     '<div class="card-title">Calendar · ' + esc(label) + '</div>' +
     '<div class="emb-kicker">' + esc(_monthName(d.month) + " " + d.year) + '</div>' +
     '<table class="emb-cal emb-cal-rec-grid"><thead><tr>' + wd.map(function (w) { return '<th class="emb-cal-wd">' + w + '</th>'; }).join("") +
     '</tr></thead><tbody>' + rows + '</tbody></table>' +
+    detailBlock +
     '<div class="emb-stat"><span><b>' + _fmt(d.total_records || 0) + '</b> records</span></div>' +
   '</div>';
 }
