@@ -244,6 +244,7 @@ function toggleMoreMenu(e) {
     "g y": "/calendar",
     "g r": "/thresholds",
     "g v": "/entity",
+    "g f": "/favorites",
   };
 
   // Help overlay HTML
@@ -296,6 +297,7 @@ function toggleMoreMenu(e) {
           <tr><td><kbd>Y</kbd></td><td>Calendar</td></tr>
           <tr><td><kbd>R</kbd></td><td>Thresholds</td></tr>
           <tr><td><kbd>V</kbd></td><td>Entity</td></tr>
+          <tr><td><kbd>F</kbd></td><td>Favorites</td></tr>
           <tr><td><kbd>U</kbd></td><td>Query Builder</td></tr>
           <tr><td><kbd>C</kbd></td><td>Schema Builder</td></tr>
           <tr><td><kbd>E</kbd></td><td>Log Editor</td></tr>

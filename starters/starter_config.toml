@@ -106,3 +106,9 @@ quick_presets = 10
 #   always  - always count them
 #   never   - never count them
 show = "auto"
+
+[favorites]
+# Bookmarked PTOS pages, shown in the sidebar and on the Favorites page.
+# Star any page with the ★ button, or manage them at /favorites (G F).
+# Each entry is { name, url }; url is an internal path + optional query.
+items = []

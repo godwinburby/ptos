@@ -206,6 +206,10 @@ def _inject_globals():
         last_change = svc.get_last_change()
     except Exception:
         last_change = {"label": None, "exact": None, "epoch": None, "iso": None}
+    try:
+        favorites = svc.get_favorites()
+    except Exception:
+        favorites = []
     return {
         "frozen": bool(getattr(sys, "frozen", False)),
         "desktop_mode": os.environ.get("DESKTOP_MODE") == "1",
@@ -213,6 +217,10 @@ def _inject_globals():
         "pomo_log": bool(pomo.get("log_sessions", True)),
         "sync_conflict_count": sync_conflict_count,
         "last_change": last_change,
+        "favorites": favorites,
+        # Rendered through Jinja's |tojson (which escapes <, >, &, ...) so a
+        # synced-in URL containing "</script>" can never break out of the shim.
+        "fav_urls": [f["url"] for f in favorites],
         "nav_sections": [
             ("log", "Log", [
                 ("",            "home",    "home",      "Home",        "H"),
@@ -3146,6 +3154,55 @@ def habit_toggle():
         return jsonify(ok=False, error=str(e))
     except Exception as e:
         log.exception("Habit toggle failed")
+        return jsonify(ok=False, error=str(e))
+
+
+# ── Favorites (bookmarks) ─────────────────────────────────────────────────────
+
+@app.route("/favorites")
+def favorites_page():
+    return render_template("favorites.html", tab="favorites",
+                           title="Favorites", now=_now_str(),
+                           favorites=svc.get_favorites())
+
+
+@app.route("/api/favorites/add", methods=["POST"])
+def api_favorite_add():
+    data = request.get_json(force=True) or {}
+    try:
+        items = svc.add_favorite(data.get("name", ""), data.get("url", ""))
+        return jsonify(ok=True, favorites=items)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/favorites/remove", methods=["POST"])
+def api_favorite_remove():
+    data = request.get_json(force=True) or {}
+    try:
+        items = svc.remove_favorite(data.get("url", ""))
+        return jsonify(ok=True, favorites=items)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/favorites/rename", methods=["POST"])
+def api_favorite_rename():
+    data = request.get_json(force=True) or {}
+    try:
+        items = svc.rename_favorite(data.get("url", ""), data.get("name", ""))
+        return jsonify(ok=True, favorites=items)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/favorites/move", methods=["POST"])
+def api_favorite_move():
+    data = request.get_json(force=True) or {}
+    try:
+        items = svc.move_favorite(data.get("url", ""), data.get("direction", ""))
+        return jsonify(ok=True, favorites=items)
+    except PTOSError as e:
         return jsonify(ok=False, error=str(e))
 
 

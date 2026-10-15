@@ -8093,6 +8093,95 @@ def set_user_name(name):
     print(f"User name set to: {name}")
 
 
+# --------------------------------------------------
+# Favorites (bookmarks) — surgical [favorites] block writer
+# --------------------------------------------------
+
+# Matches the section header whether or not the key is quoted, with any
+# surrounding whitespace. Quoted form ("favorites") is legal TOML and can
+# appear if a user hand-edited the file.
+_FAVORITES_HEADER_RE = re.compile(r'^\s*\[\"?favorites\"?\]\s*$')
+# Any table header line (used to find where the current section ends).
+_TABLE_HEADER_RE = re.compile(r"^\s*\[")
+
+
+def _favorites_block(items):
+    """Render the [favorites] section as a list of text lines (no newline).
+
+    One inline-table entry per line, so the file stays one-favourite-per-line
+    and hand editing is obvious. json.dumps produces TOML-compatible basic
+    string escapes for the name/url values.
+    """
+    if not items:
+        return ["[favorites]", "items = []"]
+    lines = ["[favorites]", "items = ["]
+    for it in items:
+        name = json.dumps(str(it.get("name", "")), ensure_ascii=False)
+        url = json.dumps(str(it.get("url", "")), ensure_ascii=False)
+        lines.append(f"  {{ name = {name}, url = {url} }},")
+    lines.append("]")
+    return lines
+
+
+def save_favorites(items):
+    """Rewrite only the [favorites] block in config.toml.
+
+    Everything outside the block — comments, hand formatting, other
+    sections — stays byte-identical. The block itself is regenerated, so
+    comments *inside* [favorites] are replaced (the deliberate trade-off:
+    a full tomli_w rewrite would drop every comment in the file, and
+    favourites are saved often). Missing section is appended at EOF;
+    empty list writes an empty items array. Preserves the file's LF/CRLF
+    style and trailing newline, writes atomically, then invalidates all
+    caches (config changes feed time cycles, row formatting, …) and
+    rebaselines the external-change watcher so our own write is not
+    reported as foreign.
+    """
+    if not os.path.exists(CONFIG_PATH):
+        sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
+
+    with open(CONFIG_PATH, "r", encoding="utf-8", newline="") as f:
+        text = f.read()
+
+    newline = "\r\n" if "\r\n" in text else "\n"
+    lines = text.split(newline)
+
+    block = _favorites_block(items)
+
+    start = None
+    for i, line in enumerate(lines):
+        if _FAVORITES_HEADER_RE.match(line):
+            start = i
+            break
+
+    if start is None:
+        # Append at EOF, with one blank line of separation when the file
+        # does not already end with a blank line.
+        if lines and lines[-1].strip():
+            lines.append("")
+        lines.extend(block)
+    else:
+        end = len(lines)
+        for j in range(start + 1, len(lines)):
+            if _TABLE_HEADER_RE.match(lines[j]):
+                end = j
+                break
+        # Walk back over the trailing blank/comment run before the next
+        # header: those lines read as the *next* section's preamble, so
+        # they must survive (deleting them would eat a user's comment on
+        # every star). Only the favourites' own body is regenerated.
+        while end > start + 1 and (
+            not lines[end - 1].strip()
+            or lines[end - 1].lstrip().startswith("#")
+        ):
+            end -= 1
+        lines[start:end] = block
+
+    with AtomicWrite(CONFIG_PATH, "config") as w:
+        w.stream.write((newline.join(lines)).encode("utf-8"))
+    _invalidate_all()
+
+
 def validate_date_format(fmt):
     """Validate date format string.
     

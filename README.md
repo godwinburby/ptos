@@ -433,6 +433,32 @@ Features:
 - Search integration — notes appear in universal search results
 - Backlinks panel — see which journal entries, todos, and records reference a note
 
+### Favorites (bookmarks)
+
+Markdown files buried in folders are hard to reach. Favorites lets you
+bookmark **any PTOS page** — a deep note, a filtered Browse view, a board,
+a journal date — and jump back in one click.
+
+- **★ star button** on every page (topbar on mobile, sidebar header on
+  desktop) bookmarks the current URL — path plus query string — after a
+  one-word name prompt. Click the filled star again to remove it.
+- **Sidebar group** lists all favorites on every page, with the current
+  page highlighted; the mobile **More menu** has the same list.
+- **`/favorites` page** (shortcut `G F`) manages them: add by name + path,
+  rename, reorder with ▲▼, remove.
+- Stored as a `[favorites]` section in `config.toml`, one entry per line:
+
+  ```toml
+  [favorites]
+  items = [
+    { name = "Northside clinic note", url = "/notes/edit/clients/northside/clinic.md" },
+    { name = "This month expenses", url = "/browse?type=expense&time=tm" },
+  ]
+  ```
+
+  Saving rewrites **only that block** — comments and formatting in the rest
+  of `config.toml` stay byte-identical.
+
 ### Embeds (live reports)
 
 Notes and journal entries can embed live widgets from `config/queries.toml`.

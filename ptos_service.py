@@ -343,6 +343,119 @@ def save_config(config_dict):
         return {"ok": False, "message": str(e)}
 
 
+# ── Favorites (bookmarks) ─────────────────────────────────────────────────────
+
+_FAV_MAX = 100
+
+
+def _valid_fav_url(url):
+    """Internal PTOS path + optional query, same rule as _safe_return_to."""
+    if not isinstance(url, str):
+        return False
+    url = url.strip()
+    if not url.startswith("/") or url.startswith("//") or len(url) > 2048:
+        return False
+    return True
+
+
+def _valid_fav_name(name):
+    if not isinstance(name, str):
+        return False
+    name = name.strip()
+    return bool(name) and len(name) <= 200
+
+
+def _clean_fav_items(items):
+    """Filter a raw config items list down to valid {name, url} dicts."""
+    out = []
+    if not isinstance(items, list):
+        return out
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        name, url = it.get("name"), it.get("url")
+        if _valid_fav_name(name) and _valid_fav_url(url):
+            out.append({"name": name.strip(), "url": url.strip()})
+    return out
+
+
+def get_favorites():
+    """List configured favourites, in display order.
+
+    Defensive: a hand-edited or synced-in bad entry is skipped rather
+    than breaking the sidebar.
+    """
+    cfg = ptos.get_config()
+    return _clean_fav_items(cfg.get("favorites", {}).get("items"))
+
+
+def _save_fav_items(items):
+    ptos.save_favorites(items)
+    return get_favorites()
+
+
+def add_favorite(name, url):
+    """Add (or rename-by-re-starring) a favourite; URL is the identity."""
+    if not _valid_fav_name(name):
+        raise PTOSError("Favorite name cannot be empty.")
+    if not _valid_fav_url(url):
+        raise PTOSError("Favorite path must start with '/' (a PTOS page).")
+    name, url = name.strip(), url.strip()
+    items = get_favorites()
+    for it in items:
+        if it["url"] == url:
+            it["name"] = name
+            return _save_fav_items(items)
+    if len(items) >= _FAV_MAX:
+        raise PTOSError(f"Too many favorites (max {_FAV_MAX}).")
+    items.append({"name": name, "url": url})
+    return _save_fav_items(items)
+
+
+def remove_favorite(url):
+    """Remove the favourite pointing at url (no-op if absent)."""
+    if not _valid_fav_url(url):
+        raise PTOSError("Favorite path must start with '/' (a PTOS page).")
+    url = url.strip()
+    items = [it for it in get_favorites() if it["url"] != url]
+    return _save_fav_items(items)
+
+
+def rename_favorite(url, name):
+    """Rename the favourite pointing at url."""
+    if not _valid_fav_url(url):
+        raise PTOSError("Favorite path must start with '/' (a PTOS page).")
+    if not _valid_fav_name(name):
+        raise PTOSError("Favorite name cannot be empty.")
+    url, name = url.strip(), name.strip()
+    items = get_favorites()
+    found = False
+    for it in items:
+        if it["url"] == url:
+            it["name"] = name
+            found = True
+    if not found:
+        raise PTOSError("Favorite not found.")
+    return _save_fav_items(items)
+
+
+def move_favorite(url, direction):
+    """Move one favourite up or down the list."""
+    if not _valid_fav_url(url):
+        raise PTOSError("Favorite path must start with '/' (a PTOS page).")
+    if direction not in ("up", "down"):
+        raise PTOSError("Direction must be 'up' or 'down'.")
+    url = url.strip()
+    items = get_favorites()
+    idx = next((i for i, it in enumerate(items) if it["url"] == url), -1)
+    if idx < 0:
+        raise PTOSError("Favorite not found.")
+    j = idx - 1 if direction == "up" else idx + 1
+    if 0 <= j < len(items):
+        items[idx], items[j] = items[j], items[idx]
+    return _save_fav_items(items)
+
+
 def get_schema():
     """Get record schema definition.
     

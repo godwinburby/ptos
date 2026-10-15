@@ -179,7 +179,7 @@
       .sidebar-section:hover { color: var(--text); }
       .sidebar-section:hover::after { border-top-color: var(--text); }
       .sidebar-section + .sidebar-section { margin-top: 4px; }
-      .sidebar-nav-group { overflow: hidden; transition: max-height .2s ease; }
+      .sidebar-nav-group { flex-shrink: 0; overflow: hidden; transition: max-height .2s ease; }
       .sidebar-nav-group.collapsed { max-height: 0 !important; }
       .sidebar-nav kbd {
         margin-left: auto; font-size: 10px; font-family: monospace; font-weight: 700;
@@ -197,6 +197,23 @@
         width: 100%; padding: 8px 12px; font-size: 13px;
         border-radius: 8px; border: 1.5px solid var(--border);
         background: var(--bg); color: var(--text); outline: none;
+      }
+
+      /* ── Favorites (bookmarks) ── */
+      .fav-item {
+        display: block; padding: 7px 20px 7px 20px; font-size: 13px;
+        font-weight: 600; color: var(--sub); text-decoration: none;
+        border-left: 3px solid transparent;
+        white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+      }
+      .fav-item:hover { background: var(--bg); color: var(--text); }
+      .fav-item.fav-active {
+        color: var(--accent); border-left-color: var(--accent);
+        background: var(--accent-lt);
+      }
+      .fav-item.fav-manage { font-style: italic; font-weight: 500; opacity: .8; }
+      .fav-empty {
+        padding: 6px 20px 10px; font-size: 11px; color: var(--sub); opacity: .7;
       }
       .sidebar-search input:focus { border-color: var(--accent); }
       .main { padding: 28px 32px; }
@@ -544,3 +561,10 @@
   .thr-row { display:flex;align-items:center;gap:16px;flex-wrap:wrap; }
   .thr-name { font-size:15px;font-weight:700;min-width:160px; }
   .thr-bar-wrap { flex:1;min-width:200px; }
+
+  /* ── Favorites star button (topbar on mobile, sidebar header on desktop) ── */
+  .fav-star {
+    background: none; border: none; cursor: pointer; padding: 0 2px;
+    font-size: 15px; line-height: 1; color: var(--sub); margin-left: auto;
+  }
+  .fav-star:hover, .fav-star.on { color: var(--accent); }

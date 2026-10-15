@@ -16,12 +16,13 @@
 <body>
 
 <!-- Values the extracted JS files read (see web_static/js/) -->
-<script>window.PTOS={frozen:{{ 1 if frozen else 0 }},desktop:{{ 1 if desktop_mode else 0 }},pomoMinutes:{{ pomo_minutes|default(25) }},pomoLog:{{ 1 if pomo_log else 0 }}};</script>
+<script>window.PTOS={frozen:{{ 1 if frozen else 0 }},desktop:{{ 1 if desktop_mode else 0 }},pomoMinutes:{{ pomo_minutes|default(25) }},pomoLog:{{ 1 if pomo_log else 0 }},favUrls:{{ fav_urls|default([], true)|tojson }}};</script>
 
 <div class="topbar">
   <div><a href="/" style="text-decoration:none"><span class="brand">PTOS</span></a><span class="brand-tag">Plain Text OS</span></div>
   <div class="topbar-date">{{ now }}
     {% if last_change.label %}<span class="last-change" data-epoch="{{ last_change.epoch }}" data-prefix="· changed " title="Data last changed: {{ last_change.exact }}">· changed {{ last_change.label }}</span>{% endif %}
+    <button id="fav-star-top" class="fav-star" onclick="toggleFav()" title="Star this page">&#9734;</button>
   </div>
 </div>
 
@@ -35,12 +36,22 @@
     <input type="text" name="q" id="sidebar-search" placeholder="Search records, journal, todos, notes… (/)" autocomplete="off">
   </form>
   <script src="{{ av('/static/js/sidebar_search.js') }}"></script>
+  <div class="sidebar-section" data-section="favorites">
+    Favorites <button id="fav-star-side" class="fav-star" onclick="event.stopPropagation();toggleFav()" title="Star this page">&#9734;</button>
+  </div>
+  <div class="sidebar-nav-group" data-group="favorites" id="fav-group">
+    {% for fav in favorites %}
+    <a href="{{ fav.url }}" class="fav-item" data-url="{{ fav.url }}">{{ fav.name }}</a>
+    {% endfor %}
+    <a href="/favorites" class="fav-item fav-manage">Manage favorites…</a>
+    {% if not favorites %}<div class="fav-empty">Star any page with ★</div>{% endif %}
+  </div>
   <nav class="sidebar-nav">
     {% for sec_id, sec_name, items in nav_sections %}
     <div class="sidebar-section" data-section="{{ sec_id }}">{{ sec_name }}</div>
     <div class="sidebar-nav-group" data-group="{{ sec_id }}">
     {% for url_path, tab_name, icon_name, label, kbd in items %}
-    <a href="/{{ url_path }}" class="{% if tab==tab_name %}active{% endif %}">{% include 'icons/' ~ icon_name ~ '.html' ignore missing %} {{ label }} <kbd>{{ kbd }}</kbd></a>
+    <a href="/{{ url_path }}" class="{% if tab==tab_name %}active{% endif %}">{% include 'icons/' ~ icon_name ~ '.html' ignore missing %} {{ label }}{% if kbd %} <kbd>{{ kbd }}</kbd>{% endif %}</a>
     {% endfor %}
     </div>
     {% endfor %}
@@ -157,6 +168,11 @@
     </a>
     {% endfor %}
     {% endfor %}
+    <div class="more-menu-section">Favorites</div>
+    {% for fav in favorites %}
+    <a href="{{ fav.url }}" class="more-menu-item fav-more-item">{{ fav.name }}</a>
+    {% endfor %}
+    <a href="/favorites" class="more-menu-item fav-more-manage">Manage favorites…</a>
     <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
     <a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>
@@ -194,6 +210,9 @@
 
 <!-- Live-updating "last change" label -->
 <script src="{{ av('/static/js/last_change.js') }}"></script>
+
+<!-- Favorites star + sidebar list -->
+<script src="{{ av('/static/js/favorites.js') }}"></script>
 
 {% block scripts %}{% endblock %}
 <script>
