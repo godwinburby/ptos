@@ -102,12 +102,12 @@ if [ ! -d "$DATA_DIR/config" ]; then
     fi
 fi
 
-# ── Install Flask + tomli-w if missing ──────────────────────────────────────
+# ── Install runtime dependencies if missing ──────────────────────────────────
 if ! $PYTHON -c "import flask" 2>/dev/null; then
     echo ""
-    echo "--- Installing Flask and tomli-w ---"
-    $PYTHON -m pip install flask tomli-w --break-system-packages --quiet
-    echo "Flask installed."
+    echo "--- Installing runtime dependencies (flask, tomli-w) ---"
+    $PYTHON -m pip install -r requirements.txt --break-system-packages --quiet
+    echo "Dependencies installed."
 fi
 
 # ── First-time init (only if config/ doesn't exist) ─────────────────────────

@@ -123,21 +123,21 @@ if (Test-Path $homeFile) {
 # -- 5. Set PTOS_HOME for this session --
 $env:PTOS_HOME = $dataDir
 
-# -- 7. Install Flask + tomli-w --
+# -- 7. Install runtime dependencies (requirements.txt) --
 & $python -c "import flask" 2>$null
 if ($LASTEXITCODE -ne 0) {
-    Write-Step "Installing Flask and tomli-w"
-    & $python -m pip install flask tomli-w --quiet
+    Write-Step "Installing runtime dependencies (flask, tomli-w)"
+    & $python -m pip install -r "$ptosDir\requirements.txt" --quiet
     if ($LASTEXITCODE -ne 0) {
-        & $python -m pip install flask tomli-w
+        & $python -m pip install -r "$ptosDir\requirements.txt"
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "WARNING: Flask/tomli-w install may have failed."
-            Write-Host "You can try manually:  $python -m pip install flask tomli-w"
+            Write-Host "WARNING: dependency install may have failed."
+            Write-Host "You can try manually:  $python -m pip install -r `"$ptosDir\requirements.txt`""
         } else {
-            Write-Host "Flask installed."
+            Write-Host "Dependencies installed."
         }
     } else {
-        Write-Host "Flask ready."
+        Write-Host "Dependencies ready."
     }
 }
 

@@ -6142,7 +6142,7 @@ def _save_schema(schema):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     toml_path = os.path.join(CONFIG_DIR, "schema.toml")
     with AtomicWrite(toml_path, "schema") as w:
@@ -6659,7 +6659,7 @@ def save_query(name, args, extra_filters):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     queries = get_queries()
     if name in queries:
@@ -6726,7 +6726,7 @@ def save_as_preset(name, record, note=None, instant=False):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     presets_path = os.path.join(CONFIG_DIR, "presets.toml")
 
@@ -6767,7 +6767,7 @@ def delete_preset(name):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     presets_path = os.path.join(CONFIG_DIR, "presets.toml")
     if not os.path.exists(presets_path):
@@ -6797,7 +6797,7 @@ def set_preset_instant(name, instant):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     presets_path = os.path.join(CONFIG_DIR, "presets.toml")
     if not os.path.exists(presets_path):
@@ -8070,7 +8070,7 @@ def set_user_name(name):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     if not name or not name.strip():
         sys.exit("Error: Name cannot be empty.")
@@ -8242,7 +8242,7 @@ def set_date_format(fmt):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     if fmt is None or not isinstance(fmt, str):
         sys.exit("Error: Date format must be a string.")
@@ -8279,7 +8279,7 @@ def set_currency(symbol):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     if not symbol or not symbol.strip():
         sys.exit("Error: Currency symbol cannot be empty.")
@@ -8307,7 +8307,7 @@ def add_cycle(name, day):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     name = name.strip()
     if not re.match(r"^[a-z][a-z0-9_-]*$", name):
@@ -8421,7 +8421,7 @@ def set_auth(username, password):
     try:
         import tomli_w
     except ImportError:
-        raise RuntimeError("tomli-w not installed: pip install tomli-w")
+        sys.exit("tomli-w not installed: pip install tomli-w")
 
     if not username or not username.strip():
         sys.exit("Error: Username cannot be empty.")

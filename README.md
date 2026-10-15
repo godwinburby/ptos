@@ -88,8 +88,19 @@ The web app is the primary interface. The CLI is the engine underneath — avail
 ## Requirements
 
 - Python 3.11+ (uses `tomllib` from the standard library)
-- Flask and tomli-w for the web UI: `pip install flask tomli-w`
 - Works on Windows, Linux, macOS, Android (Termux)
+
+### Web UI
+
+```bash
+python -m venv .venv
+# activate it: .venv\Scripts\activate (Windows) — source .venv/bin/activate (Linux/macOS)
+pip install -r requirements.txt
+```
+
+### CLI only
+
+No install needed for reading, querying and adding records. `pip install tomli-w` enables the commands that write TOML (`--set-config`, `--set-name`, presets, schema edits).
 
 ---
 
@@ -2587,7 +2598,7 @@ from ptos_web import app as application
 ```
 
 5. Add static files mapping: URL `/static/` → `/home/yourusername/ptos/web_static/`
-6. Install Flask: `pip install flask --user`
+6. Install dependencies: `pip install -r requirements.txt --user`
 7. Hit **Reload**
 
 The `PTOS_HOME` environment variable tells PTOS where its data lives regardless

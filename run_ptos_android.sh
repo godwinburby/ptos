@@ -100,10 +100,10 @@ if [ ! -d "$DATA_DIR/config" ]; then
     fi
 fi
 
-# ── Install Flask + tomli-w if missing ─────────────────────────────────────
+# ── Install runtime dependencies if missing ──────────────────────────────────
 if ! python -c "import flask" 2>/dev/null; then
-    echo "Installing Flask and tomli-w..."
-    python -m pip install flask tomli-w --quiet
+    echo "Installing runtime dependencies (flask, tomli-w)..."
+    python -m pip install -r "$PTOS_DIR/requirements.txt" --quiet
 fi
 
 # ── Warn if termux-api missing ─────────────────────────────────────────────

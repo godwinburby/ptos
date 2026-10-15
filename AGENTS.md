@@ -43,6 +43,7 @@ ptos-backups/    → ZIP backups (sibling to ptos-data, outside sync scope)
 ## Tech stack
 
 - Python 3.11+ (uses `tomllib` from stdlib)
+- Dependencies: `requirements.txt` (runtime: flask, werkzeug, tomli-w) / `requirements-dev.txt` (adds pytest, pyyaml; CI installs from this). Drift-guarded by `tests/test_ci_workflow.py`, which AST-scans every `*.py` in the repo root, `scripts/` and `tests/` and asserts each non-stdlib import is declared — `pystray`/`PIL` (optional desktop tray) and `tomli` (pre-3.11 fallback only) are the deliberate exemptions. The CLI core stays stdlib-only; missing `tomli-w` surfaces as a one-line `sys.exit` message, never a traceback.
 - Flask (web framework)
 - Jinja2 (templates)
 - Vanilla CSS/JS (no build step, no npm)
