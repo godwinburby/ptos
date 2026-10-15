@@ -28,11 +28,13 @@ sum   = true
 where = "type=expense"
 time  = "this-month"
 group = "category"
+chart = "hbar"
 
 [expenses_by_domain]
 where = "type=expense"
 time  = "this-month"
 group = "domain"
+chart = "bar"
 
 [food_this_month]
 where = "type=expense AND category=food"
@@ -60,6 +62,7 @@ sum   = true
 where = "type=income"
 time  = "this-month"
 group = "source"
+chart = "bar"
 
 # ── INVESTMENT QUERIES ───────────────────────────────────────────────────────
 

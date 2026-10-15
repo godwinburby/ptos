@@ -395,6 +395,9 @@ Filter, search, and group records. Features:
 Run any named query, metric, or dashboard from `queries.toml`. Choose a query from
 the list, optionally override the time window, and run. Results render inline:
 records as a table, groups as a summary, metrics as a value, dashboards as a card grid.
+Group, trend and pivot results can render as inline SVG charts (bar, horizontal bar,
+line, stacked) — a **Chart | Table** toggle appears whenever the saved query sets
+`chart`, and markdown embeds honor a `chart = "…"` override.
 
 <img src="images/ptos_queries.png" width="260" alt="Queries screen showing expense query results with totals and record table">
 
@@ -482,6 +485,7 @@ query result and an **Open →** link to the full page. Recognized keys:
 | `from_date` / `to_date` | Explicit inclusive date range (overrides `time`) |
 | `limit` | Truncate a records/group result to N rows, or a due list to N items |
 | `title` | Card heading (defaults to `name`) |
+| `chart` | Override the saved query's chart for this embed (`bar`, `hbar`, `line`, `stacked`); only valid when the underlying result is a group/trend/pivot |
 
 Embeddable kinds and their links back to the full pages:
 
@@ -1518,6 +1522,7 @@ sum   = true
 where = "type=income"
 time  = "this-month"
 group = "source"
+chart = "bar"
 
 [exp_cat]
 where = "type=expense"
@@ -1529,7 +1534,31 @@ group = ["category"]
 where = "type=sale"
 time  = "this-month"
 trend = 6
+chart = "line"
+y     = "total"
 ```
+
+### Charts — inline SVG over group, trend and pivot results
+
+Set `chart` on a saved query and its results render as a chart (with a
+**Chart | Table** toggle above the data):
+
+| `chart`   | works on   | value plotted                          |
+|-----------|------------|----------------------------------------|
+| `bar`     | group, trend, pivot | group: total (or count); trend: the `y` series; pivot: column totals |
+| `hbar`    | group      | same as bar, horizontal (auto-used for >8 categories) |
+| `line`    | trend      | the `y` series                         |
+| `stacked` | pivot      | rows as colored series over columns (top 12 + Other) |
+
+- `y = "count" | "total" | "avg"` picks the trend series (default: total when the
+  query sums, else count).
+- Charts are pure inline SVG — no chart library, no build step. Colors come from
+  the `--chart-1`…`--chart-8` CSS variables in `web_static/css/base.css`.
+- Markdown embeds accept `chart = "hbar"` as an override:
+  ```` ```ptos name = "expenses_by_category" view = "group" chart = "hbar" ````.
+- Invalid combos (e.g. `chart = "stacked"` on a group query, or `chart` on a plain
+  records query) are rejected when saved; a hand-edited invalid value at runtime
+  quietly falls back to the table.
 
 ---
 

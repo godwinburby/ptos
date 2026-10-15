@@ -17,6 +17,15 @@
       --nav-h:     60px;
       --safe-b:    env(safe-area-inset-bottom, 0px);
       --sidebar-w: 220px;
+      --chart-1:    #4F6BED;
+      --chart-2:    #E8803A;
+      --chart-3:    #2E9E63;
+      --chart-4:    #C0392B;
+      --chart-5:    #8B5CF6;
+      --chart-6:    #14A8A0;
+      --chart-7:    #E0538E;
+      --chart-8:    #64748B;
+      --chart-other:#B3BDCC;
     }
     html, body { height: 100%; }
     body {

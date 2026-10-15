@@ -189,6 +189,7 @@
 <script src="{{ av('/static/js/record_table.js') }}"></script>
 <script src="{{ av('/static/js/time_picker.js') }}"></script>
 <script src="{{ av('/static/js/drag.js') }}"></script>
+<script src="{{ av('/static/js/widgets.js') }}"></script>
 <script>
 var _st = { queries:{}, metrics:{}, dashboards:{}, aliases:{}, due:{}, boards:{}, habits:{}, calendars:{}, thresholds:{} };
 var _cur = null;
@@ -221,6 +222,48 @@ var _liveTimer = null;
 var _lastAllFields = [];
 var _lastAggFields = [];
 
+// Chart dropdown helpers — mirror the server's chart/view compatibility
+// matrix (group → bar/hbar, trend → bar/line, pivot → stacked/bar) so an
+// invalid combo can never reach save_query_entry. Declared BEFORE the boot
+// IIFE: var assignments don't hoist, and boot calls select() → the editor
+// synchronously, so defining these further down throws on page load.
+var _CHART_OPTS = { group:["bar","hbar"], trend:["bar","line"], pivot:["stacked","bar"] };
+var _CHART_LABELS = { bar:"Bar", hbar:"Horizontal bar", line:"Line", stacked:"Stacked" };
+
+function _chartViewKind(q) {
+  if (!q) return "";
+  if (q.group) return "group";
+  var parts = String(q.pivot||"").split(",").map(function(s){ return s.trim(); }).filter(Boolean);
+  if (parts.length >= 2) return "pivot";
+  if (parseInt(q.trend, 10) >= 1) return "trend";
+  return "";
+}
+
+function _chartOptsHtml(q) {
+  var view = _chartViewKind(q);
+  var allowed = _CHART_OPTS[view] || [];
+  var opts = ['<option value=""'+(q.chart?"":" selected")+'>— none —</option>'];
+  allowed.forEach(function(o) {
+    opts.push('<option value="'+o+'"'+(o===q.chart?" selected":"")+'>'+_CHART_LABELS[o]+'</option>');
+  });
+  return opts.join("");
+}
+
+function _refreshChartSelect() {
+  if (!_cur || _cur.section !== "queries") return;
+  var q = _st.queries[_cur.name];
+  if (!q) return;
+  var view = _chartViewKind(q);
+  if (q.chart && (!_CHART_OPTS[view] || _CHART_OPTS[view].indexOf(q.chart) === -1)) {
+    q.chart = "";
+  }
+  var sel = document.getElementById("qb-chart");
+  if (sel) sel.innerHTML = _chartOptsHtml(q);
+  var yWrap = document.getElementById("qb-y-wrap");
+  if (yWrap) yWrap.style.display = view === "trend" ? "flex" : "none";
+  if (view !== "trend" && q.y) q.y = "";
+}
+
 // ── Boot ──────────────────────────────────────────────────────────────────────
 (function() {
   var q = {{ queries | tojson }};
@@ -245,6 +288,10 @@ var _lastAggFields = [];
       group:        Array.isArray(v.group)?v.group[0]:(v.group||""),
       search:       v.search||"",
       sort:         v.sort||"",
+      trend:        (v.trend!=null && v.trend!=="") ? String(v.trend) : "",
+      pivot:        Array.isArray(v.pivot) ? v.pivot.join(", ") : (v.pivot||""),
+      chart:        v.chart||"",
+      y:            v.y||"",
       _chips:       parsed.chips,
       _exprManual:  parsed.manual,
       _activeField: null,
@@ -483,7 +530,7 @@ function addEntry() {
   if (!name) return;
   if (_st[section] && _st[section][name]) { alert("'"+name+"' already exists."); return; }
   if (section==="queries")
-    _st.queries[name]    = {where:"",time:"tm",sum:false,group:"",search:"",_chips:[],_exprManual:"",_activeField:null};
+    _st.queries[name]    = {where:"",time:"tm",sum:false,group:"",search:"",trend:"",pivot:"",chart:"",y:"",_chips:[],_exprManual:"",_activeField:null};
   else if (section==="metrics")
     _st.metrics[name]    = {kind:"avg",base:"",base2:""};
   else if (section==="aliases")
@@ -644,6 +691,7 @@ function _buildQueryEditor(container, name) {
   // 6. Options
   var c6 = document.createElement("div");
   c6.className = "card"; c6.style.marginBottom = "10px";
+  var _view6 = _chartViewKind(q);
   c6.innerHTML =
     '<label>Options</label>'+
     '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:6px;">'+
@@ -664,7 +712,37 @@ function _buildQueryEditor(container, name) {
           '<option value="">— select —</option>'+
         '</select>'+
       '</div>'+
-    '</div>';
+    '</div>'+
+    '<div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:10px;">'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<label style="font-weight:600;white-space:nowrap;">Trend</label>'+
+        '<input type="number" id="qb-trend" min="1" placeholder="periods" value="'+_esc(q.trend||"")+'"'+
+        ' oninput="_updateQ(\'trend\',this.value)"'+
+        ' style="width:88px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<label style="font-weight:600;white-space:nowrap;">Pivot</label>'+
+        '<input type="text" id="qb-pivot" placeholder="row, col" value="'+_esc(q.pivot||"")+'"'+
+        ' oninput="_updateQ(\'pivot\',this.value)"'+
+        ' style="width:150px;padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">'+
+      '</div>'+
+      '<div style="display:flex;align-items:center;gap:8px;">'+
+        '<label style="font-weight:600;white-space:nowrap;">Chart</label>'+
+        '<select id="qb-chart" onchange="_updateQ(\'chart\',this.value)" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">'+
+          _chartOptsHtml(q)+
+        '</select>'+
+      '</div>'+
+      '<div id="qb-y-wrap" style="display:'+(_view6==="trend"?"flex":"none")+';align-items:center;gap:8px;">'+
+        '<label style="font-weight:600;white-space:nowrap;">Y</label>'+
+        '<select id="qb-y" onchange="_updateQ(\'y\',this.value)" style="padding:4px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);">'+
+          '<option value=""'+(q.y?"":" selected")+'>— default —</option>'+
+          '<option value="count"'+(q.y==="count"?" selected":"")+'>count</option>'+
+          '<option value="total"'+(q.y==="total"?" selected":"")+'>total</option>'+
+          '<option value="avg"'+(q.y==="avg"?" selected":"")+'>avg</option>'+
+        '</select>'+
+      '</div>'+
+    '</div>'+
+    '<div class="hint" style="margin-top:6px;">Chart needs a Group by, Trend or Pivot. Group → bar/hbar; trend → bar/line; pivot → stacked/bar.</div>';
   container.appendChild(c6);
 
   // 7. Preview
@@ -812,6 +890,7 @@ function _getContextStr(q) {
 function _updateQ(field, val) {
   if (!_cur||_cur.section!=="queries") return;
   _st.queries[_cur.name][field] = val;
+  if (field==="group"||field==="trend"||field==="pivot") _refreshChartSelect();
   _updatePreview(_st.queries[_cur.name]);
   triggerLivePreview();
 }
@@ -973,6 +1052,14 @@ function _updatePreview(q) {
     lines.push('search = <span class="p-opt">"'+_esc(q.search)+'"</span>');
   if (q.sum)
     lines.push('sum   = <span class="p-opt">true</span>');
+  if (q.trend)
+    lines.push('trend = <span class="p-opt">'+_esc(q.trend)+'</span>');
+  if (q.pivot)
+    lines.push('pivot = <span class="p-opt">["'+_esc(q.pivot)+'"]</span>');
+  if (q.chart)
+    lines.push('chart = <span class="p-opt">"'+_esc(q.chart)+'"</span>');
+  if (q.y)
+    lines.push('y     = <span class="p-opt">"'+_esc(q.y)+'"</span>');
   el.innerHTML = lines.join("<br>");
   
   // Sync FilterBuilder textarea with updated expression
@@ -1477,7 +1564,8 @@ function buildCfgForSection(name) {
   if (s === "queries") {
     var q = _st.queries[name];
     q.where = _buildWhereExpr(q);
-    return {where:q.where, time:q.time, sum:q.sum, group:q.group, search:q.search, sort:q.sort};
+    return {where:q.where, time:q.time, sum:q.sum, group:q.group, search:q.search, sort:q.sort,
+            trend:q.trend||"", pivot:q.pivot||"", chart:q.chart||"", y:q.y||""};
   }
   if (s === "metrics") {
     var m = _st.metrics[name];
@@ -1644,7 +1732,6 @@ function triggerLivePreview() {
   _liveTimer = setTimeout(function() {
     var area = document.getElementById("qb-live-area");
     if (!area) return;
-    _initQbRt();
     var q = _st.queries[_cur.name];
     var grpEl = document.getElementById("qb-group");
     var sortEl = document.getElementById("qb-sort");
@@ -1656,38 +1743,40 @@ function triggerLivePreview() {
       var r = window._qb_tp ? window._qb_tp.getRange() : null;
       if (r) { from_date = r.from; to_date = r.to; }
     }
+    var view = _chartViewKind(q);
     area.innerHTML = '<div style="color:var(--sub);padding:16px;">Loading…</div>';
+    if (view === "group" || view === "trend" || view === "pivot") {
+      // Aggregated views run the UNSAVED spec through the real query
+      // pipeline (same payloads as the Queries page), so group/trend/pivot
+      // and the Chart | Table toggle work before saving.
+      fetch("/api/query-builder/run", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify({where:_buildChipFilters(q), expr:q._exprManual||"",
+          search:q.search||"", time:time, from_date:from_date, to_date:to_date,
+          group:group, sort:sort, sum:!!q.sum, trend:q.trend||"",
+          pivot:q.pivot||"", chart:q.chart||"", y:q.y||"", name:_cur.name})
+      })
+      .then(function(r){ return r.json(); })
+      .then(function(d) {
+        if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
+        area.innerHTML = renderResult(d.data);
+      })
+      .catch(function(e){ area.innerHTML = errorCard(String(e)); });
+      return;
+    }
+    _initQbRt();
     fetch("/browse/run", {
       method:"POST", headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({where:_buildChipFilters(q), expr:q._exprManual||"", search:q.search||"", time:time, group:group, sort:sort, from_date:from_date, to_date:to_date})
+      body: JSON.stringify({where:_buildChipFilters(q), expr:q._exprManual||"", search:q.search||"", time:time, group:"", sort:sort, from_date:from_date, to_date:to_date})
     })
     .then(function(r){ return r.json(); })
     .then(function(d) {
-      if (!d.ok) { area.innerHTML = '<div style="color:var(--error);padding:16px;">'+_esc(d.error)+'</div>'; return; }
-      var recs = d.data;
-      if (recs.kind === "group") {
-        var hasTot = recs.has_amount;
-        var head = '<th>Group</th><th>Count</th>'+(hasTot?'<th style="text-align:right">Total</th>':'');
-        var rows = (recs.rows||[]).map(function(r){
-          return '<tr><td>'+_esc(r.key)+'</td><td>'+r.count+'</td>'+(hasTot?'<td style="text-align:right">'+(r.total_fmt||'')+'</td>':'')+'</tr>';
-        }).join('');
-        area.innerHTML = summaryBar(recs)+
-          '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>'+head+'</tr></thead><tbody>'+rows+'</tbody></table></div>';
-      } else {
-        area.innerHTML = "";
-        _qbRt.render(recs);
-      }
+      if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
+      area.innerHTML = "";
+      _qbRt.render(d.data);
     })
-    .catch(function(e){ area.innerHTML = '<div style="color:var(--error);padding:16px;">'+_esc(String(e))+'</div>'; });
+    .catch(function(e){ area.innerHTML = errorCard(String(e)); });
   }, 400);
-}
-
-function summaryBar(d) {
-  var parts = [];
-  if (d.total_fmt) parts.push('<span>Total: <strong>'+d.total_fmt+'</strong></span>');
-  if (d.avg_fmt)   parts.push('<span>Avg: <strong>'+d.avg_fmt+'</strong></span>');
-  if (d.time_label) parts.push('<span style="color:var(--sub);">'+d.time_label+'</span>');
-  return parts.length ? '<div style="display:flex;gap:12px;">' + parts.join('') + '</div>' : '';
 }
 
 var _qbSortCol = null;

@@ -89,10 +89,15 @@ function renderGroup(d) {
   const foot = hasTot
     ? '<tr class="total-row"><td>Total</td><td class="numeric">' + esc(d.grand_count) + '</td><td class="numeric">' + esc(d.grand_total_fmt) + '</td></tr>'
     : '<tr class="total-row"><td>Total</td><td class="numeric">' + esc(d.grand_count) + '</td></tr>';
+  const table = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + heads + '</tr></thead><tbody>' + rows + foot + '</tbody></table></div>';
+  const body = d.chart
+    ? qtWrap(renderChart(d.chart, _groupChartData(d),
+        { label: "Grouped by " + (d.fields || []).join(", ") }), table)
+    : table;
   return '<div class="card">' +
     '<div class="card-title">Grouped by ' + esc((d.fields || []).join(", ")) + ' · ' + esc(d.time_label) + '</div>' +
     exprBadge(d) +
-    '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + heads + '</tr></thead><tbody>' + rows + foot + '</tbody></table></div>' +
+    body +
     summaryBar(d) +
   '</div>';
 }
@@ -106,10 +111,18 @@ function renderPivot(d) {
   }).join("");
   const totCells = cols.map(c => '<td class="numeric" style="font-weight:700">' + esc((d.col_totals || {})[c] || 0) + '</td>').join("");
   const foot = '<tr class="total-row"><td>Total</td>' + totCells + '<td class="numeric">' + esc(d.grand) + '</td></tr>';
+  const table = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + heads + '</tr></thead><tbody>' + rows + foot + '</tbody></table></div>';
+  const label = "Pivot · " + d.row_field + " × " + d.col_field;
+  let body = table;
+  if (d.chart === "stacked") {
+    body = qtWrap(chartStacked(_pivotStackedData(d), { label: label }), table);
+  } else if (d.chart === "bar") {
+    body = qtWrap(renderChart("bar", _pivotBarData(d), { label: label }), table);
+  }
   return '<div class="card">' +
     '<div class="card-title">Pivot · ' + esc(d.row_field) + ' × ' + esc(d.col_field) + ' · ' + esc(d.time_label) + '</div>' +
     exprBadge(d) +
-    '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + heads + '</tr></thead><tbody>' + rows + foot + '</tbody></table></div>' +
+    body +
   '</div>';
 }
 
@@ -121,10 +134,15 @@ function renderTrend(d) {
   const rows = (d.periods || []).map(p => has
     ? '<tr><td>' + esc(p.label) + '</td><td class="numeric">' + esc(p.count) + '</td><td class="numeric">' + esc(p.total_fmt) + '</td><td class="numeric">' + esc(p.avg_fmt) + '</td></tr>'
     : '<tr><td>' + esc(p.label) + '</td><td class="numeric">' + esc(p.count) + '</td></tr>').join("");
+  const table = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
+  const body = d.chart
+    ? qtWrap(renderChart(d.chart, _trendChartData(d),
+        { label: "Trend " + (d.filter_str || "") }), table)
+    : table;
   return '<div class="card">' +
     '<div class="card-title">Trend · ' + esc(d.filter_str) + '</div>' +
     exprBadge(d) +
-    '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>' +
+    body +
   '</div>';
 }
 
@@ -169,6 +187,304 @@ function summaryBar(d) {
     ? '<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin-bottom:8px;">' + parts.join("") + '</div>'
     : "";
 }
+
+// ── Charts (inline SVG over group/trend/pivot results) ────────────────────────
+// Pure string builders over the payload run_query already returns; no new
+// dependencies, no canvas. Colors come from the --chart-N CSS variables so a
+// theme change only touches base.css. Every label is esc()'d; every svg
+// carries role="img" + an aria-label summary, and each bar/point gets a
+// <title> tooltip.
+
+var CHART_MAX_BARS = 12;
+
+function _chartNum(x) {
+  var n = Number(x);
+  return isFinite(n) ? n : 0;
+}
+
+function _chartTick(v) {
+  var a = Math.abs(v);
+  if (a >= 1e9) return (v / 1e9).toFixed(1).replace(/\.0$/, "") + "B";
+  if (a >= 1e6) return (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (a >= 1e4) return (v / 1e3).toFixed(1).replace(/\.0$/, "") + "K";
+  if (Number.isInteger(v)) return String(v);
+  return v.toFixed(a < 10 ? 1 : 0);
+}
+
+function _chartDomain(values) {
+  var lo = Math.min.apply(null, values.concat([0]));
+  var hi = Math.max.apply(null, values.concat([0]));
+  if (lo === hi) hi = lo + 1;
+  var span = hi - lo;
+  var raw = span / 3 || 1;
+  var step = Math.pow(10, Math.floor(Math.log10(raw)));
+  var r = raw / step;
+  step *= r > 5 ? 10 : r > 2 ? 5 : r > 1 ? 2 : 1;
+  return { lo: Math.floor(lo / step) * step, hi: Math.ceil(hi / step) * step, step: step };
+}
+
+function _chartY(dom, v, h) {
+  return (dom.hi - v) / (dom.hi - dom.lo) * h;
+}
+
+function _chartX(dom, v, w) {
+  return (v - dom.lo) / (dom.hi - dom.lo) * w;
+}
+
+function _chartTrunc(s, n) {
+  s = String(s == null ? "" : s);
+  return s.length > n ? s.slice(0, n - 1) + "…" : s;
+}
+
+function _chartFill(i, other) {
+  if (other) return "var(--chart-other)";
+  return "var(--chart-" + ((i % 8) + 1) + ")";
+}
+
+function _chartCap(items) {
+  if (items.length <= CHART_MAX_BARS) return items;
+  var sorted = items.slice().sort(function (a, b) { return Math.abs(b.value) - Math.abs(a.value); });
+  var top = sorted.slice(0, CHART_MAX_BARS - 1);
+  var rest = sorted.slice(CHART_MAX_BARS - 1);
+  var sum = rest.reduce(function (s, it) { return s + it.value; }, 0);
+  top.push({ label: "Other (" + rest.length + ")", value: sum, other: true });
+  return top;
+}
+
+function _chartGrid(W, ml, mr, dom, ph, mt) {
+  var svg = "";
+  for (var t = dom.lo; t <= dom.hi + 1e-9; t += dom.step) {
+    var gy = Math.round(_chartY(dom, t, ph) * 100) / 100 + mt;
+    svg += '<line x1="' + ml + '" y1="' + gy + '" x2="' + (W - mr) + '" y2="' + gy +
+      '" stroke="var(--border)" stroke-width="1"/>' +
+      '<text x="' + (ml - 6) + '" y="' + (gy + 3.5) + '" text-anchor="end" font-size="10" fill="var(--sub)">' +
+      esc(_chartTick(t)) + '</text>';
+  }
+  return svg;
+}
+
+function _svgWrap(W, H, label, inner, maxH) {
+  return '<svg viewBox="0 0 ' + W + ' ' + H + '" style="width:100%;height:auto' +
+    (maxH ? ";max-height:" + maxH + "px" : "") +
+    ';" role="img" aria-label="' + esc(label) + '">' + inner + '</svg>';
+}
+
+function chartBar(data, opts) {
+  opts = opts || {};
+  var W = 640, H = 240, ml = 52, mr = 8, mt = 10, mb = 34;
+  var pw = W - ml - mr, ph = H - mt - mb;
+  var vals = data.map(function (d) { return _chartNum(d.value); });
+  var dom = _chartDomain(vals);
+  var step = pw / Math.max(1, data.length);
+  var bw = Math.max(2, Math.min(48, step * 0.65));
+  var svg = _chartGrid(W, ml, mr, dom, ph, mt);
+  var y0 = _chartY(dom, 0, ph) + mt;
+  data.forEach(function (d, i) {
+    var v = _chartNum(d.value);
+    var x = ml + i * step + (step - bw) / 2;
+    var y1 = _chartY(dom, v, ph) + mt;
+    svg += '<rect x="' + x + '" y="' + Math.min(y0, y1) + '" width="' + bw +
+      '" height="' + Math.max(1, Math.abs(y1 - y0)) +
+      '" rx="2" fill="' + _chartFill(i, d.other) + '">' +
+      '<title>' + esc(d.label) + ': ' + esc(_chartNum(v).toLocaleString()) + '</title></rect>';
+    if (step >= 26 || i % 2 === 0) {
+      svg += '<text x="' + (x + bw / 2) + '" y="' + (H - 10) +
+        '" text-anchor="middle" font-size="10" fill="var(--sub)">' +
+        esc(_chartTrunc(d.label, step >= 40 ? 12 : 8)) + '</text>';
+    }
+  });
+  return _svgWrap(W, H, opts.label || "Bar chart", svg, 280);
+}
+
+function chartHBar(data, opts) {
+  opts = opts || {};
+  var rowH = 26, ml = 132, mr = 60, mt = 8, mb = 8;
+  var W = 640;
+  var pw = W - ml - mr;
+  var H = mt + mb + data.length * rowH;
+  var vals = data.map(function (d) { return _chartNum(d.value); });
+  var dom = _chartDomain(vals);
+  var svg = "";
+  for (var t = dom.lo; t <= dom.hi + 1e-9; t += dom.step) {
+    var gx = Math.round((ml + _chartX(dom, t, pw)) * 100) / 100;
+    svg += '<line x1="' + gx + '" y1="' + mt + '" x2="' + gx + '" y2="' + (H - mb) +
+      '" stroke="var(--border)" stroke-width="1"/>' +
+      '<text x="' + gx + '" y="' + (H - 1) + '" text-anchor="middle" font-size="9" fill="var(--sub)">' +
+      esc(_chartTick(t)) + '</text>';
+  }
+  var x0 = ml + _chartX(dom, 0, pw);
+  data.forEach(function (d, i) {
+    var v = _chartNum(d.value);
+    var y = mt + i * rowH + 3;
+    var bh = rowH - 8;
+    var x1 = ml + _chartX(dom, v, pw);
+    svg += '<text x="' + (ml - 8) + '" y="' + (y + bh / 2 + 3.5) +
+      '" text-anchor="end" font-size="11" fill="var(--text)">' +
+      esc(_chartTrunc(d.label, 16)) + '</text>' +
+      '<rect x="' + Math.min(x0, x1) + '" y="' + y + '" width="' + Math.max(1, Math.abs(x1 - x0)) +
+      '" height="' + bh + '" rx="2" fill="' + _chartFill(i, d.other) + '">' +
+      '<title>' + esc(d.label) + ': ' + esc(v.toLocaleString()) + '</title></rect>' +
+      '<text x="' + (Math.max(x0, x1) + 6) + '" y="' + (y + bh / 2 + 3.5) +
+      '" font-size="10" fill="var(--sub)">' + esc(_chartTick(v)) + '</text>';
+  });
+  return _svgWrap(W, H, opts.label || "Horizontal bar chart", svg, Math.min(400, H + 12));
+}
+
+function chartLine(data, opts) {
+  opts = opts || {};
+  var W = 640, H = 240, ml = 52, mr = 12, mt = 10, mb = 34;
+  var pw = W - ml - mr, ph = H - mt - mb;
+  var vals = data.map(function (d) { return _chartNum(d.value); });
+  var dom = _chartDomain(vals);
+  var svg = _chartGrid(W, ml, mr, dom, ph, mt);
+  var step = data.length > 1 ? pw / (data.length - 1) : 0;
+  var pts = data.map(function (d, i) {
+    return [ml + (data.length > 1 ? i * step : pw / 2),
+            _chartY(dom, _chartNum(d.value), ph) + mt];
+  });
+  if (data.length > 1) {
+    svg += '<polyline fill="none" stroke="var(--chart-1)" stroke-width="2" stroke-linejoin="round" points="' +
+      pts.map(function (p) { return p[0] + "," + p[1]; }).join(" ") + '"/>';
+  }
+  data.forEach(function (d, i) {
+    var p = pts[i];
+    svg += '<circle cx="' + p[0] + '" cy="' + p[1] + '" r="3.5" fill="var(--chart-1)">' +
+      '<title>' + esc(d.label) + ': ' + esc(_chartNum(d.value).toLocaleString()) + '</title></circle>';
+    if (step >= 26 || i % 2 === 0 || data.length <= 2) {
+      svg += '<text x="' + p[0] + '" y="' + (H - 10) +
+        '" text-anchor="middle" font-size="10" fill="var(--sub)">' +
+        esc(_chartTrunc(d.label, step >= 40 ? 12 : 10)) + '</text>';
+    }
+  });
+  return _svgWrap(W, H, opts.label || "Line chart", svg, 280);
+}
+
+function _stackLegend(series) {
+  return '<div class="qt-legend">' + series.map(function (s, i) {
+    return '<span class="qt-leg"><span class="qt-swatch" style="background:' +
+      _chartFill(i, s.other) + '"></span>' + esc(s.label) + '</span>';
+  }).join("") + '</div>';
+}
+
+function chartStacked(pd, opts) {
+  opts = opts || {};
+  var cols = pd.cols || [], series = pd.series || [];
+  var W = 640, H = 240, ml = 52, mr = 8, mt = 10, mb = 34;
+  var pw = W - ml - mr, ph = H - mt - mb;
+  var totals = cols.map(function (c, ci) {
+    return series.reduce(function (s, ser) { return s + _chartNum(ser.values[ci]); }, 0);
+  });
+  var dom = _chartDomain(totals);
+  var step = pw / Math.max(1, cols.length);
+  var bw = Math.max(2, Math.min(56, step * 0.7));
+  var svg = _chartGrid(W, ml, mr, dom, ph, mt);
+  cols.forEach(function (c, ci) {
+    var acc = 0;
+    var x = ml + ci * step + (step - bw) / 2;
+    series.forEach(function (ser, si) {
+      var v = _chartNum(ser.values[ci]);
+      if (!v) return;
+      var yTop = _chartY(dom, acc + v, ph) + mt;
+      var hgt = Math.abs(_chartY(dom, 0, ph) - _chartY(dom, v, ph));
+      svg += '<rect x="' + x + '" y="' + yTop + '" width="' + bw + '" height="' + Math.max(1, hgt) +
+        '" fill="' + _chartFill(si, ser.other) + '">' +
+        '<title>' + esc(ser.label) + ' · ' + esc(c) + ': ' + esc(v.toLocaleString()) + '</title></rect>';
+      acc += v;
+    });
+    if (step >= 26 || ci % 2 === 0) {
+      svg += '<text x="' + (x + bw / 2) + '" y="' + (H - 10) +
+        '" text-anchor="middle" font-size="10" fill="var(--sub)">' +
+        esc(_chartTrunc(c, step >= 40 ? 12 : 8)) + '</text>';
+    }
+  });
+  return _svgWrap(W, H, opts.label || "Stacked chart", svg, 280) + _stackLegend(series);
+}
+
+function renderChart(kind, data, opts) {
+  opts = opts || {};
+  if (!data || !data.length) {
+    return '<div class="qt-empty">No data to chart.</div>';
+  }
+  if (kind === "bar" && data.length > 8) kind = "hbar";
+  if (kind === "bar") return chartBar(data, opts);
+  if (kind === "hbar") return chartHBar(data, opts);
+  if (kind === "line") return chartLine(data, opts);
+  if (kind === "stacked") return chartStacked({ cols: data.map(function (d) { return d.label; }),
+    series: [{ label: "Value", values: data.map(function (d) { return d.value; }) }] }, opts);
+  return "";
+}
+
+function qtWrap(chartHtml, tableHtml) {
+  return '<div class="view-toggle qt-toggle">' +
+    '<button type="button" class="qt-btn active" data-view="chart">Chart</button>' +
+    '<button type="button" class="qt-btn" data-view="table">Table</button></div>' +
+    '<div class="qt-body" data-qt-body="chart">' + chartHtml + '</div>' +
+    '<div class="qt-body" data-qt-body="table" style="display:none;">' + tableHtml + '</div>';
+}
+
+function _groupChartData(d) {
+  return _chartCap((d.rows || []).map(function (r) {
+    return {
+      label: String(r.key),
+      value: d.has_amount ? _chartNum(r.total) : _chartNum(r.count)
+    };
+  }));
+}
+
+function _trendChartData(d, y) {
+  y = y || d.y || (d.has_amount ? "total" : "count");
+  return (d.periods || []).map(function (p) {
+    var v;
+    if (y === "total") v = _chartNum(p.total);
+    else if (y === "avg") {
+      var c = _chartNum(p.count);
+      v = c ? _chartNum(p.total) / c : 0;
+    } else v = _chartNum(p.count);
+    return { label: String(p.label), value: v };
+  });
+}
+
+function _pivotStackedData(d) {
+  var cols = d.cols || [];
+  var rows = (d.rows || []).slice().sort(function (a, b) {
+    return _chartNum(b.total) - _chartNum(a.total);
+  });
+  var top = rows.slice(0, CHART_MAX_BARS - 1);
+  var rest = rows.slice(CHART_MAX_BARS - 1);
+  var series = top.map(function (r) {
+    return { label: String(r.label), values: cols.map(function (c) { return _chartNum(r[c]); }) };
+  });
+  if (rest.length) {
+    series.push({
+      label: "Other (" + rest.length + ")",
+      values: cols.map(function (c) {
+        return rest.reduce(function (s, r) { return s + _chartNum(r[c]); }, 0);
+      }),
+      other: true
+    });
+  }
+  return { cols: cols, series: series };
+}
+
+function _pivotBarData(d) {
+  return (d.cols || []).map(function (c) {
+    return { label: String(c), value: _chartNum((d.col_totals || {})[c]) };
+  });
+}
+
+document.addEventListener("click", function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest(".qt-btn") : null;
+  if (!btn) return;
+  var toggle = btn.closest(".qt-toggle");
+  if (!toggle || !toggle.parentElement) return;
+  var view = btn.getAttribute("data-view");
+  var btns = toggle.querySelectorAll(".qt-btn");
+  for (var i = 0; i < btns.length; i++) btns[i].classList.toggle("active", btns[i] === btn);
+  var bodies = toggle.parentElement.querySelectorAll(".qt-body");
+  for (var j = 0; j < bodies.length; j++) {
+    bodies[j].style.display = bodies[j].getAttribute("data-qt-body") === view ? "" : "none";
+  }
+});
 
 function renderRecordsStatic(d) {
   var cols = d.columns || [];

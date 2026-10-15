@@ -1952,7 +1952,149 @@ def run_lint():
 # Query runner (resolves saved query to correct call)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def run_query(name, time=None, from_date=None, to_date=None):
+_CHART_KINDS   = ("bar", "hbar", "line", "stacked")
+_CHART_BY_VIEW = {"group": ("bar", "hbar"),
+                  "trend": ("bar", "line"),
+                  "pivot": ("stacked", "bar")}
+_Y_KINDS       = ("count", "total", "avg")
+_CHART_KEYS    = ("trend", "pivot", "chart", "y")
+
+
+def _query_view_kind(entry):
+    """Which chartable view a query entry is: group | trend | pivot | None.
+
+    Dispatch order matches run_query (group wins over pivot wins over trend).
+    """
+    if not isinstance(entry, dict):
+        return None
+    if entry.get("group"):
+        return "group"
+    if entry.get("pivot") and len(entry["pivot"]) >= 2:
+        return "pivot"
+    if entry.get("trend") not in (None, ""):
+        return "trend"
+    return None
+
+
+def _validate_chart(chart, view):
+    """Strict chart check for save paths and embed overrides.
+
+    Returns the normalized chart name, or None for empty/"none".
+    Raises PTOSError on unknown values or view-incompatible combos.
+    """
+    chart = str(chart or "").strip().lower()
+    if not chart or chart == "none":
+        return None
+    if chart not in _CHART_KINDS:
+        raise PTOSError(
+            f"Unknown chart '{chart}' — use "
+            + ", ".join(_CHART_KINDS) + " (or none)")
+    allowed = _CHART_BY_VIEW.get(view)
+    if not allowed:
+        raise PTOSError(
+            "chart requires a group, trend or pivot query — "
+            "records, metric and dashboard results have no chart")
+    if chart not in allowed:
+        raise PTOSError(
+            f"Chart '{chart}' is not valid for a {view} query — use "
+            + ", ".join(allowed))
+    return chart
+
+
+def _validate_y(y, view):
+    """Strict y check (trend series selector) for save paths.
+
+    Returns the normalized y name, or None for empty/"default".
+    """
+    y = str(y or "").strip().lower()
+    if not y or y == "default":
+        return None
+    if y not in _Y_KINDS:
+        raise PTOSError(
+            f"Unknown y '{y}' — use " + ", ".join(_Y_KINDS) + " (or default)")
+    if view != "trend":
+        raise PTOSError("y (count/total/avg) only applies to trend queries")
+    return y
+
+
+def _coerce_chart(value, view):
+    """Lenient chart check for hand-edited saved config at run time.
+
+    Invalid values fall back to the table (None) instead of raising.
+    """
+    try:
+        return _validate_chart(value, view)
+    except PTOSError:
+        return None
+
+
+def _coerce_y(value, view):
+    """Lenient y check for hand-edited saved config at run time."""
+    try:
+        return _validate_y(value, view)
+    except PTOSError:
+        return None
+
+
+def _reject_chart_overrides(chart, y):
+    """Explicit chart/y overrides are illegal on non-chartable kinds."""
+    _validate_chart(chart, None)
+    if y is not None:
+        _validate_y(y, None)
+
+
+def _apply_chart_keys(entry, cfg):
+    """Write trend/pivot/chart/y from a UI-style cfg onto a query entry.
+
+    Keys present in cfg (even when empty) are *owned* by the form: an empty
+    value deletes the key instead of preserving the old one, so clearing
+    Trend/Pivot/Chart in the Query Builder actually removes it from
+    queries.toml. Returns the owned-key set for the caller's preserve loop.
+    Raises PTOSError on malformed trend/pivot values or invalid chart/y.
+    """
+    owned = {k for k in _CHART_KEYS if k in cfg}
+    if "trend" in owned:
+        raw = cfg.get("trend")
+        if isinstance(raw, str):
+            raw = raw.strip()
+        if raw in (None, "", 0, "0"):
+            pass  # cleared — omit key
+        else:
+            try:
+                n = int(raw)
+            except (TypeError, ValueError):
+                raise PTOSError(f"trend must be a number of periods, got {raw!r}")
+            if n < 1:
+                raise PTOSError(f"trend must be at least 1 period, got {n}")
+            entry["trend"] = n
+    if "pivot" in owned:
+        raw = cfg.get("pivot")
+        parts = None
+        if isinstance(raw, str):
+            parts = [p.strip() for p in raw.split(",") if p.strip()]
+        elif isinstance(raw, (list, tuple)):
+            parts = [str(p).strip() for p in raw if str(p).strip()]
+        if parts:
+            if len(parts) < 2:
+                raise PTOSError(
+                    "pivot needs two fields (row, column), got "
+                    + repr(raw))
+            entry["pivot"] = parts[:2]
+    if "chart" in owned or "y" in owned:
+        view = _query_view_kind(entry)
+        if "chart" in owned:
+            c = _validate_chart(cfg.get("chart"), view)
+            if c:
+                entry["chart"] = c
+        if "y" in owned:
+            y = _validate_y(cfg.get("y"), view)
+            if y:
+                entry["y"] = y
+    return owned
+
+
+def run_query(name, time=None, from_date=None, to_date=None,
+              chart=None, y=None):
     """
     Resolves a named query and returns structured data.
     Returns a dict with a 'kind' key indicating the result type:
@@ -1962,6 +2104,12 @@ def run_query(name, time=None, from_date=None, to_date=None):
       kind='trend'     → get_trend() result
       kind='metric'    → get_metric() result
       kind='dashboard' → get_dashboard() result
+
+    `chart` / `y` override the saved query's chart config (embed path);
+    an explicit override is validated strictly (bad values raise), while a
+    hand-edited saved value that fails validation falls back to the table.
+    group/pivot/trend results carry `chart` (and trend also `y`) in the
+    payload when set.
     """
     try:
         queries    = ptos.get_queries()
@@ -1973,12 +2121,14 @@ def run_query(name, time=None, from_date=None, to_date=None):
         raise PTOSError(str(e))
 
     if name in dashboards:
+        _reject_chart_overrides(chart, y)
         result = get_dashboard(name, time or "tm",
                                from_date=from_date, to_date=to_date)
         result["kind"] = "dashboard"
         return result
 
     if name in metrics:
+        _reject_chart_overrides(chart, y)
         result = get_metric(name, time or "tm",
                             from_date=from_date, to_date=to_date)
         result["kind"] = "metric"
@@ -1998,6 +2148,20 @@ def run_query(name, time=None, from_date=None, to_date=None):
         if not isinstance(q, dict):
             raise PTOSError(f"Query '{name}' not found")
 
+    return _run_query_spec(q, name, time, from_date, to_date, chart, y)
+
+
+def _run_query_spec(q, name, time, from_date, to_date, chart, y):
+    """Execute one resolved query-config dict (shared by run_query and the
+    ad-hoc QB preview). `q` is a saved-shape spec: where (str or list),
+    time, group (list), pivot (list), trend (int), sort, search, sum,
+    sum_field, and optionally saved chart/y.
+
+    `chart` / `y` are explicit overrides (embed path / unsaved QB state):
+    an explicit non-None value is validated strictly (bad values raise),
+    while a hand-edited saved value that fails validation falls back to
+    the table.
+    """
     effective_time = time or q.get("time", "tm")
 
     raw_where = q.get("where")
@@ -2025,6 +2189,10 @@ def run_query(name, time=None, from_date=None, to_date=None):
         result["query_sort"] = q.get("sort")
         result["query_sum"] = q.get("sum")
         result["query_search"] = q.get("search")
+        eff_chart = (_validate_chart(chart, "group") if chart is not None
+                     else _coerce_chart(q.get("chart"), "group"))
+        if eff_chart:
+            result["chart"] = eff_chart
         return result
 
     if "pivot" in q and len(q["pivot"]) >= 2:
@@ -2040,6 +2208,10 @@ def run_query(name, time=None, from_date=None, to_date=None):
         result["query_sort"] = q.get("sort")
         result["query_sum"] = q.get("sum")
         result["query_search"] = q.get("search")
+        eff_chart = (_validate_chart(chart, "pivot") if chart is not None
+                     else _coerce_chart(q.get("chart"), "pivot"))
+        if eff_chart:
+            result["chart"] = eff_chart
         return result
 
     if "trend" in q:
@@ -2050,8 +2222,17 @@ def run_query(name, time=None, from_date=None, to_date=None):
         result["query_time"] = q.get("time", "tm")
         result["query_trend"] = q.get("trend")
         result["query_sum"] = q.get("sum")
+        eff_chart = (_validate_chart(chart, "trend") if chart is not None
+                     else _coerce_chart(q.get("chart"), "trend"))
+        if eff_chart:
+            result["chart"] = eff_chart
+        eff_y = (_validate_y(y, "trend") if y is not None
+                 else _coerce_y(q.get("y"), "trend"))
+        if eff_y:
+            result["y"] = eff_y
         return result
 
+    _reject_chart_overrides(chart, y)
     result = get_records(filters, effective_time, search=effective_search,
                          from_date=from_date, to_date=to_date)
     result["kind"]       = "records"
@@ -2064,6 +2245,71 @@ def run_query(name, time=None, from_date=None, to_date=None):
     return result
 
 
+def run_adhoc_query(cfg, time=None, from_date=None, to_date=None):
+    """Run an UNSAVED query spec (Query Builder editor state) through the
+    same pipeline as `run_query`, without reading or writing queries.toml.
+
+    `cfg` mirrors the QB form: where (list of chip strings or expr string),
+    expr (the expression box, merged with where like /browse/run), search,
+    sort, group (single field name), sum, trend ("" / number-string),
+    pivot ("row, col" string or 2-item list), sum_field, chart, y, name.
+    An explicit non-empty `chart`/`y` is validated strictly; empty means
+    "no chart". The result dict matches run_query's per-kind shape (plus
+    `chart`/`y` when set), so the client renders it with the same
+    `renderResult` used on the Queries page.
+    """
+    if not isinstance(cfg, dict):
+        raise PTOSError("Query config must be a table")
+
+    where = cfg.get("where") or []
+    if isinstance(where, str):
+        where = [where] if where.strip() else []
+    expr = str(cfg.get("expr") or "").strip()
+    if expr and where:
+        combined = ptos.filters_to_expr(where)
+        filters = [f"({combined}) AND ({expr})"] if combined else [expr]
+    elif expr:
+        filters = [expr]
+    else:
+        filters = where
+
+    spec = {"where": filters[0] if filters else "",
+            "time": time or cfg.get("time") or "tm",
+            "search": cfg.get("search") or None,
+            "sort": cfg.get("sort") or None,
+            "sum_field": cfg.get("sum_field") or None}
+    if cfg.get("sum"):
+        spec["sum"] = True
+
+    group = str(cfg.get("group") or "").strip()
+    if group:
+        spec["group"] = [group]
+
+    pivot = cfg.get("pivot")
+    if isinstance(pivot, str):
+        pivot = [p.strip() for p in pivot.split(",") if p.strip()]
+    elif isinstance(pivot, (list, tuple)):
+        pivot = [str(p).strip() for p in pivot if str(p).strip()]
+    else:
+        pivot = []
+    if len(pivot) >= 2:
+        spec["pivot"] = pivot[:2]
+
+    trend = cfg.get("trend")
+    try:
+        trend_n = int(trend) if trend not in (None, "") else 0
+    except (TypeError, ValueError):
+        trend_n = 0
+    if trend_n >= 1:
+        spec["trend"] = trend_n
+
+    chart = cfg.get("chart") or None
+    y     = cfg.get("y") or None
+    return _run_query_spec(spec, str(cfg.get("name") or ""),
+                           time or spec["time"], from_date, to_date,
+                           chart, y)
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Embed widgets (markdown ```ptos blocks)
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2072,7 +2318,7 @@ def resolve_embed(spec):
     """Resolve a markdown embed spec into widget data.
 
     `spec` is the dict parsed from a fenced ```ptos TOML block. Recognized
-    keys: view, name, time, from_date, to_date, limit, title.
+    keys: view, name, time, from_date, to_date, limit, title, chart.
 
     `view` is optional — when omitted the kind is inferred from which
     queries.toml section holds `name` (dashboard → metric → threshold →
@@ -2155,7 +2401,8 @@ def resolve_embed(spec):
         result = {"kind": "threshold", "name": name, "thresholds": [status]}
         link = "/thresholds"
     elif view in ("query", "records", "group", "pivot", "trend"):
-        result = run_query(name, time, from_date=from_date, to_date=to_date)
+        result = run_query(name, time, from_date=from_date, to_date=to_date,
+                           chart=spec.get("chart"))
         link = "/queries?run=" + urllib.parse.quote(name)
     elif view == "board":
         result = get_board_data(name, time, from_date=from_date, to_date=to_date)
@@ -4965,9 +5212,13 @@ def save_query_entry(name, cfg):
         entry["search"] = cfg["search"] if isinstance(cfg["search"], str) else str(cfg["search"])
     if cfg.get("sum"):
         entry["sum"] = True
+    owned = _apply_chart_keys(entry, cfg)
     existing = _load_queries_toml()
-    entry = _preserve_unknown(existing.get(name, {}), entry)
-    _write_queries_toml_key(name, entry)
+    merged = _preserve_unknown(existing.get(name, {}), entry)
+    for k in owned:
+        if k not in entry:
+            merged.pop(k, None)
+    _write_queries_toml_key(name, merged)
     return {"ok": True, "name": name}
 
 
@@ -5503,11 +5754,13 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
             entry["search"] = q["search"] if isinstance(q["search"], str) else str(q["search"])
         if q.get("sum"):
             entry["sum"] = True
-        # preserve unknown query fields from existing
+        owned = _apply_chart_keys(entry, q)
+        # preserve unknown query fields from existing, minus form-owned keys
+        # the form deliberately cleared
         existing_q = existing.get(name, {})
         if isinstance(existing_q, dict):
             for ek, ev in existing_q.items():
-                if ek not in entry:
+                if ek not in entry and ek not in owned:
                     entry[ek] = ev
         data[name] = entry
 

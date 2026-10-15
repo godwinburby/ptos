@@ -3737,6 +3737,20 @@ def query_builder_item(kind):
         return jsonify(ok=False, error=str(e))
 
 
+@app.route("/api/query-builder/run", methods=["POST"])
+def query_builder_run():
+    """Run an unsaved QB query spec (group/trend/pivot + chart) live."""
+    data = request.get_json(silent=True) or {}
+    try:
+        result = svc.run_adhoc_query(data)
+        return jsonify(ok=True, data=result)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        log.exception("Ad-hoc query run failed")
+        return jsonify(ok=False, error=str(e))
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # Queries
 # ══════════════════════════════════════════════════════════════════════════════
