@@ -8098,9 +8098,12 @@ def set_user_name(name):
 # --------------------------------------------------
 
 # Matches the section header whether or not the key is quoted, with any
-# surrounding whitespace. Quoted form ("favorites") is legal TOML and can
-# appear if a user hand-edited the file.
-_FAVORITES_HEADER_RE = re.compile(r'^\s*\[\"?favorites\"?\]\s*$')
+# surrounding whitespace, inner spaces, and a trailing comment — all legal
+# TOML (`[favorites] # links`, `[ "favorites" ]`) that a user can hand-edit.
+# Missing any of these used to make save_favorites append a SECOND
+# [favorites] table, leaving config.toml unparseable ("Cannot declare
+# ('favorites',) twice") and taking the whole app's config down.
+_FAVORITES_HEADER_RE = re.compile(r'^\s*\[\s*"?favorites"?\s*\]\s*(#.*)?$')
 # Any table header line (used to find where the current section ends).
 _TABLE_HEADER_RE = re.compile(r"^\s*\[")
 
@@ -8177,8 +8180,25 @@ def save_favorites(items):
             end -= 1
         lines[start:end] = block
 
+    new_text = newline.join(lines)
+    # Safety net, regardless of the header regex: the rewritten file must
+    # parse, and must round-trip the exact item list we are saving. Any
+    # mismatch means a header form the regex still missed (or a value that
+    # does not serialize cleanly) — refuse the write and leave the file
+    # untouched rather than produce a config.toml the app cannot load.
+    try:
+        parsed = tomllib.loads(new_text)
+    except tomllib.TOMLDecodeError as e:
+        raise PTOSError(
+            f"config.toml could not be updated safely; favorites unchanged ({e})")
+    saved = parsed.get("favorites", {})
+    saved_items = saved.get("items") if isinstance(saved, dict) else None
+    if saved_items != items:
+        raise PTOSError(
+            "config.toml could not be updated safely; favorites unchanged")
+
     with AtomicWrite(CONFIG_PATH, "config") as w:
-        w.stream.write((newline.join(lines)).encode("utf-8"))
+        w.stream.write(new_text.encode("utf-8"))
     _invalidate_all()
 
 

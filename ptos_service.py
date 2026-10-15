@@ -349,13 +349,25 @@ _FAV_MAX = 100
 
 
 def _valid_fav_url(url):
-    """Internal PTOS path + optional query, same rule as _safe_return_to."""
+    r"""Internal PTOS path + optional query — the single internal-URL
+    validator, shared with `_safe_return_to`.
+
+    Browsers treat `\` like `/` and strip tab/newline/control characters,
+    so `/\evil.com` or `/<TAB>/evil.com` would resolve off-site when
+    rendered as `a.href`; both are rejected here, along with any URL that
+    parses with a scheme or netloc.
+    """
     if not isinstance(url, str):
         return False
     url = url.strip()
     if not url.startswith("/") or url.startswith("//") or len(url) > 2048:
         return False
-    return True
+    if "\\" in url:
+        return False
+    if any(ord(c) < 32 or ord(c) == 127 for c in url):
+        return False
+    parts = urllib.parse.urlsplit(url)
+    return not parts.scheme and not parts.netloc
 
 
 def _valid_fav_name(name):

@@ -12,7 +12,7 @@ import ptos_service as svc
 import ptos
 from ptos import _glob_match
 from ptos_service import PTOSError
-from urllib.parse import quote
+from urllib.parse import quote, urlsplit
 
 from flask import (Flask, render_template, request, redirect,
                    url_for, jsonify, send_file, Response)
@@ -371,6 +371,32 @@ def require_auth():
             {'WWW-Authenticate': 'Basic realm="PTOS"'}
         )
 
+_STATE_CHANGING_METHODS = ("POST", "PUT", "PATCH", "DELETE")
+
+@app.before_request
+def _reject_cross_origin_writes():
+    """CSRF guard: a state-changing request from another origin is refused.
+
+    Cross-site `text/plain` POSTs need no CORS preflight and the browser
+    attaches cached Basic-auth credentials, so JSON-only parsing alone
+    cannot stop a drive-by form post. When an `Origin` header is present
+    it must match this host (netloc, case-insensitive, including port);
+    requests with no Origin — curl, CLI tools, non-browser clients — pass
+    through, and a `null` Origin (sandboxed iframe) is rejected.
+    """
+    if request.method not in _STATE_CHANGING_METHODS:
+        return None
+    origin = request.headers.get("Origin")
+    if not origin:
+        return None
+    try:
+        netloc = urlsplit(origin).netloc
+    except ValueError:
+        netloc = ""
+    if not netloc or netloc.lower() != request.host.lower():
+        return jsonify(ok=False, error="Cross-origin request rejected"), 403
+    return None
+
 @app.before_request
 def _activate_error_trap():
     sys.exit = svc._safe_exit
@@ -430,10 +456,16 @@ def _greeting():
     return "morning" if h < 12 else "afternoon" if h < 17 else "evening"
 
 def _safe_return_to(raw, default="/"):
-    """Validate a return_to value, falling back to `default` when unusable."""
-    if not raw or not raw.startswith("/") or raw.startswith("//"):
+    r"""Validate a return_to value, falling back to `default` when unusable.
+
+    Delegates to the shared internal-URL validator (`svc._valid_fav_url`)
+    so return_to and favourites can never drift: backslashes and control
+    characters are rejected (browsers treat `\` like `/` and strip
+    tabs/newlines, so `/\evil.com` would resolve off-site).
+    """
+    if not raw or not isinstance(raw, str) or not svc._valid_fav_url(raw):
         return default
-    return raw
+    return raw.strip()
 
 def _after_save_target(raw):
     """Where to send the user once a record add/edit/convert is done.
@@ -1526,9 +1558,9 @@ def add_get():
         ts = schema.get("type", {}).get(selected_type, {})
         tag_options = svc.resolve_tags(schema, ts, initial_context)
         tag_context = svc.get_tag_context(selected_type, field_values)
-    return_to = request.args.get("return_to") or request.referrer or url_for("browse_get")
-    if not return_to.startswith("/") or return_to.startswith("//"):
-        return_to = url_for("browse_get")
+    return_to = _safe_return_to(
+        request.args.get("return_to") or request.referrer,
+        default=url_for("browse_get"))
     return render_template("add.html",
         tab="add", title="Add Record", now=_now_str(),
         types=types, frequent_presets=freq_presets, remaining_presets=rem_presets,
@@ -1592,9 +1624,8 @@ def add_post():
         record["links"] = ",".join(ptos.normalize_field_value(t)
                                    for t in links_val.split(",") if t.strip())
     
-    return_to = request.form.get("return_to", "") or url_for("browse_get")
-    if not return_to.startswith("/") or return_to.startswith("//"):
-        return_to = url_for("browse_get")
+    return_to = _safe_return_to(request.form.get("return_to", ""),
+                                default=url_for("browse_get"))
     after_save = _after_save_target(return_to)
     try:   problems = svc.validate_record(schema, record)
     except PTOSError as e: problems = [str(e)]
@@ -2719,7 +2750,9 @@ def conflicts_page():
 @app.route("/api/conflict/resolve", methods=["POST"])
 def api_conflict_resolve():
     from ptos_todo import parse_todo_line, save_todos
-    data = request.get_json(force=True)
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(ok=False, error="JSON body required"), 400
     action = data.get("action")
     conflict_path = data.get("conflict_path", "")
     original_path = data.get("original_path", "")
@@ -3168,7 +3201,9 @@ def favorites_page():
 
 @app.route("/api/favorites/add", methods=["POST"])
 def api_favorite_add():
-    data = request.get_json(force=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(ok=False, error="JSON body required"), 400
     try:
         items = svc.add_favorite(data.get("name", ""), data.get("url", ""))
         return jsonify(ok=True, favorites=items)
@@ -3178,7 +3213,9 @@ def api_favorite_add():
 
 @app.route("/api/favorites/remove", methods=["POST"])
 def api_favorite_remove():
-    data = request.get_json(force=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(ok=False, error="JSON body required"), 400
     try:
         items = svc.remove_favorite(data.get("url", ""))
         return jsonify(ok=True, favorites=items)
@@ -3188,7 +3225,9 @@ def api_favorite_remove():
 
 @app.route("/api/favorites/rename", methods=["POST"])
 def api_favorite_rename():
-    data = request.get_json(force=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(ok=False, error="JSON body required"), 400
     try:
         items = svc.rename_favorite(data.get("url", ""), data.get("name", ""))
         return jsonify(ok=True, favorites=items)
@@ -3198,7 +3237,9 @@ def api_favorite_rename():
 
 @app.route("/api/favorites/move", methods=["POST"])
 def api_favorite_move():
-    data = request.get_json(force=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(ok=False, error="JSON body required"), 400
     try:
         items = svc.move_favorite(data.get("url", ""), data.get("direction", ""))
         return jsonify(ok=True, favorites=items)

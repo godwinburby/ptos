@@ -1,4 +1,5 @@
 import os
+import re
 import tomllib
 
 import pytest
@@ -27,6 +28,13 @@ def _load_config():
 
 def _fav(name, url):
     return {"name": name, "url": url}
+
+
+def _fav_header_count(text):
+    return len(re.findall(r'(?m)^\s*\[\s*"?favorites"?\s*\]', text))
+
+
+_REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 # ── engine: surgical block writer ─────────────────────────────────────────────
@@ -111,6 +119,95 @@ class TestSaveFavoritesWriter:
         first = _read_config_text()
         ptos.save_favorites([_fav("A", "/a")])
         assert _read_config_text() == first
+
+    def test_header_with_trailing_comment(self):
+        # A commented header is legal TOML; missing it used to append a
+        # second [favorites] table and brick the whole config file.
+        _write_config_text("[user]\nname = \"T\"\n\n[favorites]  # my links\nitems = []\n\n[server]\nport = 5000\n")
+        ptos.save_favorites([_fav("A", "/a")])
+        cfg = _load_config()
+        assert cfg["favorites"]["items"] == [_fav("A", "/a")]
+        assert _fav_header_count(_read_config_text()) == 1
+
+    def test_header_with_inner_spaces(self):
+        _write_config_text("[ favorites ]\nitems = []\n")
+        ptos.save_favorites([_fav("A", "/a")])
+        assert _load_config()["favorites"]["items"] == [_fav("A", "/a")]
+        assert _fav_header_count(_read_config_text()) == 1
+
+    def test_header_quoted_with_spaces(self):
+        _write_config_text('[ "favorites" ]\nitems = []\n')
+        ptos.save_favorites([_fav("A", "/a")])
+        assert _load_config()["favorites"]["items"] == [_fav("A", "/a")]
+        assert _fav_header_count(_read_config_text()) == 1
+
+    def test_header_trailing_comment_crlf(self):
+        _write_config_text(
+            "[user]\r\nname = \"T\"\r\n\r\n[favorites] # links\r\nitems = []\r\n\r\n[server]\r\nport = 5000\r\n"
+        )
+        ptos.save_favorites([_fav("A", "/a")])
+        text = _read_config_text()
+        assert "\r\n" in text
+        assert _load_config()["favorites"]["items"] == [_fav("A", "/a")]
+        assert _fav_header_count(text) == 1
+
+    def test_favorites_as_last_section(self):
+        _write_config_text("[user]\nname = \"T\"\n\n[favorites] # last\nitems = []\n")
+        ptos.save_favorites([_fav("A", "/a")])
+        assert _load_config()["favorites"]["items"] == [_fav("A", "/a")]
+        assert _fav_header_count(_read_config_text()) == 1
+
+    def test_favorites_before_comment_block_then_table(self):
+        _write_config_text(
+            "[favorites]\nitems = []\n\n"
+            "# a comment block\n# between sections\n\n"
+            "[server]\nport = 5000\n"
+        )
+        ptos.save_favorites([_fav("A", "/a")])
+        text = _read_config_text()
+        assert "# a comment block" in text
+        assert 'port = 5000' in text
+        assert _fav_header_count(text) == 1
+
+    def test_every_header_variant_leaves_parseable_single_table(self):
+        for header in ("[favorites]", "[favorites] # c", "[ favorites ]",
+                       '["favorites"]', '[ "favorites" ]', "[favorites ]"):
+            _write_config_text(header + "\nitems = []\n\n[server]\nport = 5000\n")
+            ptos.save_favorites([_fav("A", "/a")])
+            cfg = tomllib.loads(_read_config_text())
+            assert cfg["favorites"]["items"] == [_fav("A", "/a")]
+            assert _fav_header_count(_read_config_text()) == 1
+
+
+class TestSaveFavoritesGuard:
+    def test_pre_corrupted_double_table_refused(self, tmp_path):
+        # A file that already has two [favorites] tables cannot be parsed;
+        # the guard must refuse and leave the bytes untouched.
+        bad = ("[favorites]\nitems = []\n\n[favorites]\nitems = []\n"
+               "[server]\nport = 5000\n")
+        _write_config_text(bad)
+        with pytest.raises(svc.PTOSError):
+            ptos.save_favorites([_fav("A", "/a")])
+        assert _read_config_text() == bad
+
+    def test_unmatchable_header_refused(self, monkeypatch):
+        # Simulate a header form the regex cannot see: the section is
+        # present in the file, the matcher misses it, so the rewrite would
+        # append a duplicate table — the parse-before-write net catches it.
+        text = "[favorites]\nitems = []\n\n[server]\nport = 5000\n"
+        _write_config_text(text)
+        monkeypatch.setattr(ptos, "_FAVORITES_HEADER_RE",
+                            re.compile(r"^\s*\[never_matches\]\s*$"))
+        with pytest.raises(svc.PTOSError):
+            ptos.save_favorites([_fav("A", "/a")])
+        assert _read_config_text() == text
+
+    def test_error_message_says_unchanged(self, monkeypatch):
+        _write_config_text("[favorites]\nitems = []\n")
+        monkeypatch.setattr(ptos, "_FAVORITES_HEADER_RE",
+                            re.compile(r"^\s*\[never_matches\]\s*$"))
+        with pytest.raises(svc.PTOSError, match="favorites unchanged"):
+            ptos.save_favorites([_fav("A", "/a")])
 
 
 # ── service: CRUD ─────────────────────────────────────────────────────────────
@@ -429,3 +526,142 @@ class TestStarterFavorites:
         with open(path, encoding="utf-8") as f:
             text = f.read()
         assert "# Star any page" in text
+
+
+# ── shared internal-URL validator ─────────────────────────────────────────────
+
+_ACCEPT_URLS = ["/", "/browse", "/browse?q=a&b=c", "/notes/My%20Note"]
+_REJECT_URLS = [
+    "//evil.com",
+    "/\\evil.com",
+    "/\\\\evil.com",
+    "/\t/evil.com",
+    "/\n/evil.com",
+    "/\r/evil.com",
+    "/\x00/evil.com",
+    "javascript:alert(1)",
+    "http://evil.com",
+    "https://evil.com",
+    "",
+    "   ",
+    None,
+    123,
+    ["x"],
+    "x" * 2049,
+]
+
+
+class TestInternalUrlValidator:
+    @pytest.mark.parametrize("url", _ACCEPT_URLS)
+    def test_fav_url_accepts(self, url):
+        assert svc._valid_fav_url(url) is True
+
+    @pytest.mark.parametrize("url", _REJECT_URLS)
+    def test_fav_url_rejects(self, url):
+        assert svc._valid_fav_url(url) is False
+
+    @pytest.mark.parametrize("url", _ACCEPT_URLS)
+    def test_return_to_accepts(self, url):
+        from ptos_web import _safe_return_to
+        assert _safe_return_to(url) == url.strip()
+
+    @pytest.mark.parametrize("url", _REJECT_URLS)
+    def test_return_to_rejects(self, url):
+        from ptos_web import _safe_return_to
+        assert _safe_return_to(url, default="/fallback") == "/fallback"
+
+    def test_backslash_favorites_dropped_on_load(self):
+        _write_config_text(
+            "[favorites]\nitems = [\n"
+            "  { name = \"Good\", url = \"/good\" },\n"
+            "  { name = \"Evil\", url = \"/\\\\evil.com\" },\n"
+            "  { name = \"Tab\", url = \"/\\t/evil.com\" },\n"
+            "]\n"
+        )
+        assert svc.get_favorites() == [_fav("Good", "/good")]
+
+
+# ── JSON Content-Type hardening ───────────────────────────────────────────────
+
+class TestJsonContentType:
+    FAV_ENDPOINTS = ["/api/favorites/add", "/api/favorites/remove",
+                     "/api/favorites/rename", "/api/favorites/move"]
+
+    @pytest.fixture()
+    def client(self):
+        from ptos_web import app
+        app.config["TESTING"] = True
+        return app.test_client()
+
+    @pytest.mark.parametrize("path", FAV_ENDPOINTS + ["/api/conflict/resolve"])
+    def test_plain_text_post_rejected(self, client, path):
+        # force=True used to accept text/plain, which needs no CORS
+        # preflight — a cross-site form post with cached Basic auth.
+        before = svc.get_favorites()
+        resp = client.post(path, data='{"name":"A","url":"/a"}',
+                           content_type="text/plain")
+        assert resp.status_code == 400
+        assert resp.get_json()["ok"] is False
+        assert svc.get_favorites() == before
+
+    def test_json_add_still_works(self, client):
+        resp = client.post("/api/favorites/add",
+                           json={"name": "A", "url": "/a"})
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+        assert svc.get_favorites() == [_fav("A", "/a")]
+
+    def test_json_remove_still_works(self, client):
+        svc.add_favorite("A", "/a")
+        resp = client.post("/api/favorites/remove", json={"url": "/a"})
+        assert resp.get_json()["ok"] is True
+        assert svc.get_favorites() == []
+
+    def test_no_force_true_in_web_module(self):
+        path = os.path.join(_REPO_ROOT, "ptos_web.py")
+        with open(path, encoding="utf-8") as f:
+            text = f.read()
+        assert "force=True" not in text
+
+
+# ── cross-origin write guard ──────────────────────────────────────────────────
+
+class TestOriginGuard:
+    @pytest.fixture()
+    def client(self):
+        from ptos_web import app
+        app.config["TESTING"] = True
+        return app.test_client()
+
+    def test_cross_origin_write_rejected(self, client):
+        resp = client.post("/api/favorites/add",
+                           json={"name": "A", "url": "/a"},
+                           headers={"Origin": "http://evil.example"})
+        assert resp.status_code == 403
+        assert resp.get_json()["ok"] is False
+        assert svc.get_favorites() == []
+
+    def test_same_origin_write_allowed(self, client):
+        resp = client.post("/api/favorites/add",
+                           json={"name": "A", "url": "/a"},
+                           headers={"Origin": "http://localhost"})
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+
+    def test_no_origin_allowed(self, client):
+        resp = client.post("/api/favorites/add",
+                           json={"name": "A", "url": "/a"})
+        assert resp.status_code == 200
+        assert resp.get_json()["ok"] is True
+
+    def test_null_origin_rejected(self, client):
+        resp = client.post("/api/favorites/add",
+                           json={"name": "A", "url": "/a"},
+                           headers={"Origin": "null"})
+        assert resp.status_code == 403
+        assert svc.get_favorites() == []
+
+    def test_get_with_foreign_origin_untouched(self, client):
+        resp = client.get("/favorites",
+                          headers={"Origin": "http://evil.example"})
+        assert resp.status_code == 200
