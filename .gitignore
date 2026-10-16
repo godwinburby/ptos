@@ -16,6 +16,7 @@ templates/
 ptos_error.log
 *.tmp
 *.bak
+*.lock
 
 # Bootstrap
 .version

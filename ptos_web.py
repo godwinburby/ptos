@@ -265,6 +265,11 @@ def _wants_json():
 
 @app.errorhandler(PTOSError)
 def handle_ptos_error(e):
+    if isinstance(e, ptos.FileBusyError):
+        # Another writer holds this file's sidecar lock — a busy signal, not a
+        # fault. Callers surface str(e) ("... is busy; try again") through
+        # their existing per-request error display.
+        return jsonify(ok=False, success=False, error=str(e)), 423
     app.logger.warning(f"PTOSError on {request.path}: {e}")
     if _wants_json():
         return jsonify({"success": False, "error": str(e)}), 500

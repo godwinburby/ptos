@@ -1772,8 +1772,17 @@ connected and the folder at 100%.
   mix of Send-only / Receive-only.
 
 **Ignore rules:** `--init` writes a `.stignore` file in the data folder
-(pattern `*.tmp` and `*.bak`) so transient files never sync. Sync tools may
-also leave conflict files (see [Conflict Resolution](#conflict-resolution)).
+(patterns `*.tmp`, `*.bak` and `*.lock`) so transient files never sync. Sync
+tools may also leave conflict files (see [Conflict Resolution](#conflict-resolution)).
+If your `.stignore` predates the locking feature, add `*.lock` to it by hand.
+
+**Locking scope:** PTOS takes an exclusive sidecar lock (`<file>.lock`) around
+every read-modify-write so two processes **on the same machine** cannot lose
+each other's writes. Locks are per machine only — two devices editing the same
+file through Syncthing are still handled by the conflict logic below, not by
+the lock. Locks are released automatically if a process dies; a write that
+finds the file busy fails with `` `<path> is busy; try again` `` (the web UI
+answers HTTP 423).
 
 **Status:** PTOS never syncs anything itself, so `--sync-status` (and the
 Syncthing card in Settings) reads **Syncthing's own** REST API and log to report

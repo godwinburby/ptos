@@ -12,7 +12,8 @@ import os, re, sys, time, calendar, datetime as dt, dataclasses
 from dataclasses import dataclass, field
 from typing import Optional, List
 
-from ptos import BASE_DIR, TODO_DIR, TODO_PATH, DONE_PATH, append_line_fast
+from ptos import (BASE_DIR, TODO_DIR, TODO_PATH, DONE_PATH, append_line_fast,
+                  file_lock, _make_temp_file, _fsync_dir)
 
 # ── errors ──────────────────────────────────────────────────────────────────
 
@@ -426,28 +427,40 @@ def save_todos(path, todos):
 
 
 def _atomic_write_text(filepath, content):
-    """Atomic write with .bak rollback, same pattern as ptos.py."""
+    """Atomic write under the file's sidecar lock: unique temp, fsync,
+    rename. A .bak recovery copy is taken under the lock and removed on
+    success; a failure leaves the live file untouched (no copy-back)."""
     import shutil
-    backup = filepath + ".bak"
-    tmp = filepath + ".tmp"
-
-    if os.path.exists(filepath):
-        shutil.copy2(filepath, backup)
-
-    try:
-        os.makedirs(os.path.dirname(filepath), exist_ok=True)
-        with open(tmp, "w", encoding="utf-8") as f:
-            f.write(content)
-        os.replace(tmp, filepath)
+    with file_lock(filepath):
+        backup = filepath + ".bak"
+        if os.path.exists(filepath):
+            shutil.copy2(filepath, backup)
+        os.makedirs(os.path.dirname(filepath) or ".", exist_ok=True)
+        fd, tmp = _make_temp_file(filepath)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp, filepath)
+        except Exception:
+            if os.path.exists(tmp):
+                try:
+                    os.remove(tmp)
+                except OSError:
+                    pass
+            if os.path.exists(backup):
+                try:
+                    os.remove(backup)
+                except OSError:
+                    pass
+            raise
+        _fsync_dir(os.path.dirname(filepath) or ".")
         if os.path.exists(backup):
-            os.remove(backup)
-    except Exception:
-        if os.path.exists(tmp):
-            os.remove(tmp)
-        if os.path.exists(backup):
-            shutil.copy2(backup, filepath)
-            os.remove(backup)
-        raise
+            try:
+                os.remove(backup)
+            except OSError:
+                pass
 
 # ── CRUD ────────────────────────────────────────────────────────────────────
 
@@ -600,46 +613,48 @@ def archive_done_todos(done_path, threshold_months=6):
     if not os.path.exists(done_path):
         return 0
 
-    done, _ = load_todos(done_path)
-    if not done:
-        return 0
+    with file_lock(done_path):
+        done, _ = load_todos(done_path)
+        if not done:
+            return 0
 
-    cutoff = dt.date.today() - dt.timedelta(days=threshold_months * 30)
+        cutoff = dt.date.today() - dt.timedelta(days=threshold_months * 30)
 
-    recent = []
-    old_by_year = {}
-    archived_count = 0
+        recent = []
+        old_by_year = {}
+        archived_count = 0
 
-    for t in done:
-        if t.completed_date and t.completed_date < cutoff:
-            year = t.completed_date.year
-            old_by_year.setdefault(year, []).append(t)
-            archived_count += 1
-        else:
-            recent.append(t)
+        for t in done:
+            if t.completed_date and t.completed_date < cutoff:
+                year = t.completed_date.year
+                old_by_year.setdefault(year, []).append(t)
+                archived_count += 1
+            else:
+                recent.append(t)
 
-    if not old_by_year:
-        return 0
+        if not old_by_year:
+            return 0
 
-    # append old items to year archive files
-    done_dir = os.path.dirname(done_path)
-    for year, items in sorted(old_by_year.items()):
-        archive_path = os.path.join(done_dir, f"done.{year}.txt")
-        # load existing archive to preserve line numbers, then just append raw lines
-        existing_lines = ""
-        if os.path.exists(archive_path):
-            with open(archive_path, "r", encoding="utf-8") as f:
-                existing_lines = f.read()
-        with open(archive_path, "a", encoding="utf-8") as f:
-            for item in items:
-                line = format_line(item)
-                if existing_lines and not existing_lines.endswith("\n"):
-                    f.write("\n")
-                existing_lines = ""  # only check first item
-                f.write(line + "\n")
+        # append old items to year archive files
+        done_dir = os.path.dirname(done_path)
+        for year, items in sorted(old_by_year.items()):
+            archive_path = os.path.join(done_dir, f"done.{year}.txt")
+            with file_lock(archive_path):
+                # load existing archive to preserve line numbers, then just append raw lines
+                existing_lines = ""
+                if os.path.exists(archive_path):
+                    with open(archive_path, "r", encoding="utf-8") as f:
+                        existing_lines = f.read()
+                with open(archive_path, "a", encoding="utf-8") as f:
+                    for item in items:
+                        line = format_line(item)
+                        if existing_lines and not existing_lines.endswith("\n"):
+                            f.write("\n")
+                        existing_lines = ""  # only check first item
+                        f.write(line + "\n")
 
-    # rewrite done.txt with only recent items
-    save_todos(done_path, recent)
+        # rewrite done.txt with only recent items
+        save_todos(done_path, recent)
 
     return archived_count
 

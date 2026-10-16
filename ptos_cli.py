@@ -1636,10 +1636,9 @@ def _set_config(key, value):
     cfg_path = ptos.CONFIG_PATH
     if not os.path.exists(cfg_path):
         sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
-    with open(cfg_path, "rb") as f:
-        config = tomllib.load(f)
-    _set_config_in_memory(config, key, _coerce(value))
     with AtomicWrite(cfg_path, "config") as w:
+        config = tomllib.loads(w.read_text())
+        _set_config_in_memory(config, key, _coerce(value))
         tomli_w.dump(config, w.stream)
     ptos._invalidate_all()
     print(f"Saved config: {key}={value}")
@@ -2635,31 +2634,32 @@ def _handle_migrate_log_group(rtype):
         fpath = os.path.join(ptos.RECORDS_DIR, fname)
         if fname.startswith(log_group + "/"):
             continue
-        with open(fpath, encoding="utf-8") as f:
-            lines = f.readlines()
-        keep = []
-        for line in lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith("#"):
-                keep.append(line)
-                continue
-            try:
-                d, kv, note = ptos.parse_line(stripped)
-            except (ValueError, IndexError):
-                keep.append(line)
-                continue
-            if kv.get("type") != rtype:
-                keep.append(line)
-                continue
-            ptos.append_record(ptos.build_record_line(d.isoformat(), kv, note))
-            moved += 1
-            source_files.add(fpath)
-        if len(keep) != len(lines):
-            new_content = "".join(keep)
-            if new_content.strip():
-                ptos.atomic_write(fpath, new_content)
-            else:
-                os.remove(fpath)
+        with ptos.file_lock(fpath):
+            with open(fpath, encoding="utf-8") as f:
+                lines = f.readlines()
+            keep = []
+            for line in lines:
+                stripped = line.strip()
+                if not stripped or stripped.startswith("#"):
+                    keep.append(line)
+                    continue
+                try:
+                    d, kv, note = ptos.parse_line(stripped)
+                except (ValueError, IndexError):
+                    keep.append(line)
+                    continue
+                if kv.get("type") != rtype:
+                    keep.append(line)
+                    continue
+                ptos.append_record(ptos.build_record_line(d.isoformat(), kv, note))
+                moved += 1
+                source_files.add(fpath)
+            if len(keep) != len(lines):
+                new_content = "".join(keep)
+                if new_content.strip():
+                    ptos.atomic_write(fpath, new_content)
+                else:
+                    os.remove(fpath)
     if moved == 0:
         print(f"No records of type '{rtype}' found in flat log files.")
     else:

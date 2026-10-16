@@ -24,6 +24,7 @@ import sys
 import os
 import re
 import glob
+import functools
 import time
 import json
 import datetime as dt
@@ -2778,19 +2779,20 @@ def increment_preset_use(name):
         path = ptos.PRESETS_PATH
         if not os.path.exists(path):
             return
-        with open(path, "rb") as f:
-            try:
-                import tomllib
-            except ImportError:
-                import tomli as tomllib
-            data = tomllib.load(f)
-        presets = data.get("presets", {})
-        if name not in presets:
-            return
-        presets[name]["use_count"] = presets[name].get("use_count", 0) + 1
-        data["presets"] = presets
-        with ptos.AtomicWrite(path, "presets") as w:
-            tomli_w.dump(data, w.stream)
+        with ptos.file_lock(path):
+            with open(path, "rb") as f:
+                try:
+                    import tomllib
+                except ImportError:
+                    import tomli as tomllib
+                data = tomllib.load(f)
+            presets = data.get("presets", {})
+            if name not in presets:
+                return
+            presets[name]["use_count"] = presets[name].get("use_count", 0) + 1
+            data["presets"] = presets
+            with ptos.AtomicWrite(path, "presets") as w:
+                tomli_w.dump(data, w.stream)
     except Exception:
         pass
 
@@ -5154,6 +5156,19 @@ def _write_queries(data):
         tomli_w.dump(data, w.stream)
 
 
+def _locked_queries(fn):
+    """Run *fn* under queries.toml's sidecar lock, so its whole
+    load → mutate → write span cannot interleave with another writer.
+    Reentrant (a nested lock on the same path is a no-op); the path is
+    resolved at call time so tests that repoint ptos.QUERIES_PATH work."""
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        with ptos.file_lock(ptos.QUERIES_PATH):
+            return fn(*args, **kwargs)
+    return wrapper
+
+
+@_locked_queries
 def _write_queries_toml_key(key, value):
     """Set ``data[key] = value`` (or delete if *value* is None) and write back.
 
@@ -5206,6 +5221,7 @@ def _preserve_unknown(existing_entry, new_entry):
 
 # ── Query ───────────────────────────────────────────────────────────────────
 
+@_locked_queries
 def save_query_entry(name, cfg):
     """Write/update a single bare-key query entry in queries.toml."""
     name = _validate_name(name)
@@ -5234,6 +5250,7 @@ def save_query_entry(name, cfg):
     return {"ok": True, "name": name}
 
 
+@_locked_queries
 def delete_query_entry(name):
     """Remove a single bare-key query from queries.toml."""
     name = _validate_name(name)
@@ -5281,6 +5298,7 @@ def _build_metric_entry(cfg, existing_entry=None):
     return entry
 
 
+@_locked_queries
 def save_metric(name, cfg):
     """Write/update a single [metrics.NAME] entry in queries.toml."""
     name = _validate_name(name)
@@ -5293,6 +5311,7 @@ def save_metric(name, cfg):
     return {"ok": True, "name": name}
 
 
+@_locked_queries
 def delete_metric(name):
     """Remove a single [metrics.NAME] entry from queries.toml."""
     name = _validate_name(name)
@@ -5336,6 +5355,7 @@ def _build_dashboard_entry(cfg, existing_entry=None):
     return entry
 
 
+@_locked_queries
 def save_dashboard(name, cfg):
     """Write/update a single [dashboards.NAME] entry in queries.toml."""
     name = _validate_name(name)
@@ -5348,6 +5368,7 @@ def save_dashboard(name, cfg):
     return {"ok": True, "name": name}
 
 
+@_locked_queries
 def delete_dashboard(name):
     """Remove a single [dashboards.NAME] entry from queries.toml."""
     name = _validate_name(name)
@@ -5366,6 +5387,7 @@ def delete_dashboard(name):
 
 # ── Alias ───────────────────────────────────────────────────────────────────
 
+@_locked_queries
 def save_alias(name, cfg):
     """Write/update a single alias entry in queries.toml."""
     name = _validate_name(name)
@@ -5378,6 +5400,7 @@ def save_alias(name, cfg):
     return {"ok": True, "name": name}
 
 
+@_locked_queries
 def delete_alias(name):
     """Remove a single alias entry from queries.toml."""
     name = _validate_name(name)
@@ -5391,6 +5414,7 @@ def delete_alias(name):
 
 # ── Board ───────────────────────────────────────────────────────────────────
 
+@_locked_queries
 def save_board(name, cfg):
     """Write/update a single ["board.NAME"] entry in queries.toml.
 
@@ -5443,6 +5467,7 @@ def save_board(name, cfg):
     return {"ok": True, "name": name}
 
 
+@_locked_queries
 def delete_board(name):
     """Remove a single ["board.NAME"] entry from queries.toml."""
     name = _validate_name(name)
@@ -5458,6 +5483,7 @@ def delete_board(name):
 
 # ── Habit ───────────────────────────────────────────────────────────────────
 
+@_locked_queries
 def save_habit(name, cfg):
     """Write/update a single ["habit.NAME"] entry in queries.toml."""
     name = _validate_name(name)
@@ -5475,6 +5501,7 @@ def save_habit(name, cfg):
     return {"ok": True, "name": name}
 
 
+@_locked_queries
 def delete_habit(name):
     """Remove a single ["habit.NAME"] entry from queries.toml."""
     name = _validate_name(name)
@@ -5490,6 +5517,7 @@ def delete_habit(name):
 
 # ── Calendar ────────────────────────────────────────────────────────────────
 
+@_locked_queries
 def save_calendar(name, cfg):
     """Write/update a single ["calendar.NAME"] entry in queries.toml."""
     name = _validate_name(name)
@@ -5510,6 +5538,7 @@ def save_calendar(name, cfg):
     return {"ok": True, "name": name}
 
 
+@_locked_queries
 def delete_calendar(name):
     """Remove a single ["calendar.NAME"] entry from queries.toml."""
     name = _validate_name(name)
@@ -5525,6 +5554,7 @@ def delete_calendar(name):
 
 # ── Threshold ───────────────────────────────────────────────────────────────
 
+@_locked_queries
 def save_threshold(name, cfg):
     """Write/update a single ["threshold.NAME"] entry in queries.toml."""
     name = _validate_name(name)
@@ -5551,6 +5581,7 @@ def save_threshold(name, cfg):
     return {"ok": True, "name": name}
 
 
+@_locked_queries
 def delete_threshold(name):
     """Remove a single ["threshold.NAME"] entry from queries.toml."""
     name = _validate_name(name)
@@ -5566,6 +5597,7 @@ def delete_threshold(name):
 
 # ── Due ─────────────────────────────────────────────────────────────────────
 
+@_locked_queries
 def save_due(name, cfg):
     """Write/update a single ["due.NAME"] entry in queries.toml."""
     name = _validate_name(name)
@@ -5586,6 +5618,7 @@ def save_due(name, cfg):
     return {"ok": True, "name": name}
 
 
+@_locked_queries
 def delete_due(name):
     """Remove a single ["due.NAME"] entry from queries.toml."""
     name = _validate_name(name)
@@ -5601,6 +5634,7 @@ def delete_due(name):
 
 # ── Project ─────────────────────────────────────────────────────────────────
 
+@_locked_queries
 def save_project(name, cfg):
     """Write/update a single ["project.NAME"] entry in queries.toml.
     Atomic write. Validates label is present.
@@ -5638,21 +5672,23 @@ def _ensure_project_notes_hub(notes_path, label):
     os.makedirs(full_dir, exist_ok=True)
     index_rel = os.path.join(notes_path, "index.md").replace("\\", "/")
     full_index = ptos._safe_path(index_rel)
-    if os.path.exists(full_index):
-        return
-    tpl = ptos.resolve_new_file_template(notes_path)
-    if tpl and tpl.get("source") == "local":
-        content = tpl.get("content", "")
-    elif tpl and tpl.get("parent"):
-        content = tpl["parent"].get("content", "")
-    else:
-        content = ptos._load_starter("project_note") or f"# {label}\n\n"
-    today = dt.date.today().isoformat()
-    content = content.replace("{{ project name }}", label).replace("{{ date }}", today)
-    with ptos.AtomicWrite(full_index, "notes") as w:
-        w.stream.write(content.encode("utf-8"))
+    with ptos.file_lock(full_index):
+        if os.path.exists(full_index):
+            return
+        tpl = ptos.resolve_new_file_template(notes_path)
+        if tpl and tpl.get("source") == "local":
+            content = tpl.get("content", "")
+        elif tpl and tpl.get("parent"):
+            content = tpl["parent"].get("content", "")
+        else:
+            content = ptos._load_starter("project_note") or f"# {label}\n\n"
+        today = dt.date.today().isoformat()
+        content = content.replace("{{ project name }}", label).replace("{{ date }}", today)
+        with ptos.AtomicWrite(full_index, "notes") as w:
+            w.stream.write(content.encode("utf-8"))
 
 
+@_locked_queries
 def delete_project(name):
     """Remove a single ["project.NAME"] entry from queries.toml. Atomic write."""
     name = _validate_name(name)
@@ -5670,6 +5706,7 @@ def delete_project(name):
 # Query TOML management (full write — RETIRED, use scoped functions above)
 # ══════════════════════════════════════════════════════════════════════════════
 
+@_locked_queries
 def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None, raw_due=None, raw_boards=None, raw_habits=None, raw_calendars=None, raw_thresholds=None, raw_projects=None):
     """Build and write queries.toml using tomli-w with atomic write.
 

@@ -1,5 +1,8 @@
 import argparse
+import contextlib
+import errno
 import os
+import socket
 import sys
 import datetime as dt
 import time
@@ -80,6 +83,11 @@ def _glob_match(pattern, text):
 
 class PTOSError(Exception):
     """Raised instead of sys.exit() so callers can handle gracefully."""
+    pass
+
+
+class FileBusyError(PTOSError):
+    """file_lock could not be acquired within its timeout (web: HTTP 423)."""
     pass
 
 
@@ -386,14 +394,15 @@ def _read_conflict_lines(conflict_path):
 
 def _append_line_if_absent(original_path, line):
     orig_full = os.path.join(BASE_DIR, original_path)
-    existing = set()
-    if os.path.exists(orig_full):
-        with open(orig_full, encoding="utf-8") as f:
-            existing = {ln.rstrip("\n") for ln in f}
-    if line not in existing:
-        atomic_append(orig_full, line)
-        return True
-    return False
+    with file_lock(orig_full):
+        existing = set()
+        if os.path.exists(orig_full):
+            with open(orig_full, encoding="utf-8") as f:
+                existing = {ln.rstrip("\n") for ln in f}
+        if line not in existing:
+            atomic_append(orig_full, line)
+            return True
+        return False
 
 
 def _replace_original_line(original_path, old_line, new_line):
@@ -401,17 +410,18 @@ def _replace_original_line(original_path, old_line, new_line):
     appending when the exact line can't be located. Targets by index so a
     duplicated original line is not an error."""
     orig_full = os.path.join(BASE_DIR, original_path)
-    try:
-        with open(orig_full, encoding="utf-8") as f:
-            lines = f.readlines()
-    except Exception:
-        atomic_append(orig_full, new_line)
-        return
-    for i, line in enumerate(lines):
-        if line.strip() == old_line:
-            rewrite_line_in_file(orig_full, old_line, new_line, lineno=i)
+    with file_lock(orig_full):
+        try:
+            with open(orig_full, encoding="utf-8") as f:
+                lines = f.readlines()
+        except Exception:
+            atomic_append(orig_full, new_line)
             return
-    atomic_append(orig_full, new_line)
+        for i, line in enumerate(lines):
+            if line.strip() == old_line:
+                rewrite_line_in_file(orig_full, old_line, new_line, lineno=i)
+                return
+        atomic_append(orig_full, new_line)
 
 
 def conflict_actionable_count(original_path, conflict_path, file_type):
@@ -433,32 +443,34 @@ def remove_conflict_lines(conflict_path, lines):
     lines are not both removed when only one was handled."""
     from collections import Counter
     conf_full = os.path.join(BASE_DIR, conflict_path)
-    if not os.path.exists(conf_full):
-        return
-    remove = Counter(lines)
-    with open(conf_full, encoding="utf-8") as f:
-        kept = []
-        for ln in f.read().splitlines():
-            if remove[ln] > 0:
-                remove[ln] -= 1
-            else:
-                kept.append(ln)
-    if kept:
-        atomic_write(conf_full, "".join(ln + "\n" for ln in kept))
-    else:
-        os.remove(conf_full)
+    with file_lock(conf_full):
+        if not os.path.exists(conf_full):
+            return
+        remove = Counter(lines)
+        with open(conf_full, encoding="utf-8") as f:
+            kept = []
+            for ln in f.read().splitlines():
+                if remove[ln] > 0:
+                    remove[ln] -= 1
+                else:
+                    kept.append(ln)
+        if kept:
+            atomic_write(conf_full, "".join(ln + "\n" for ln in kept))
+        else:
+            os.remove(conf_full)
 
 
 def finalize_conflict_file(original_path, conflict_path, file_type):
     """Remove the conflict file once every item is resolved.
     Returns True when the file is gone (fully resolved)."""
     conf_full = os.path.join(BASE_DIR, conflict_path)
-    if not os.path.exists(conf_full):
-        return True
-    if conflict_actionable_count(original_path, conflict_path, file_type) == 0:
-        os.remove(conf_full)
-        return True
-    return False
+    with file_lock(conf_full):
+        if not os.path.exists(conf_full):
+            return True
+        if conflict_actionable_count(original_path, conflict_path, file_type) == 0:
+            os.remove(conf_full)
+            return True
+        return False
 
 
 def import_conflict_lines(original_path, conflict_path, lines, file_type):
@@ -634,9 +646,11 @@ def write_backup_state(snapshot=None):
     try:
         os.makedirs(BACKUP_DIR, exist_ok=True)
         path = _backup_state_path()
-        tmp = path + ".tmp"
-        with open(tmp, "w", encoding="utf-8") as f:
+        fd, tmp = _make_temp_file(path)
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
             json.dump(_scan_backup_files() if snapshot is None else snapshot, f)
+            f.flush()
+            os.fsync(f.fileno())
         os.replace(tmp, path)
     except Exception as e:
         _log_error(f"Could not record backup state: {e}")
@@ -977,80 +991,358 @@ def init_version():
         save_current_version(sha)
 
 # --------------------------------------------------
+# File locking (sidecar .lock files)
+# --------------------------------------------------
+# Every read-modify-write helper holds an exclusive lock on a sidecar
+# ``<path>.lock`` for its whole read-compute-write span, so a concurrent
+# editor or append cannot be silently lost. Locks never touch the data file
+# itself (its inode is replaced by os.replace). The OS backend (fcntl /
+# msvcrt) is released by the kernel if a process dies, so no stale locks in
+# the primary mode; a pid-based O_EXCL fallback covers filesystems where the
+# OS lock is unsupported (``PTOS_LOCK_MODE=lockfile`` also forces it, e.g.
+# for tests or a misbehaving mount). Reentrancy: a thread that already holds
+# a path acquires it again as a no-op (separate fds in one process would
+# otherwise block each other).
+
+_LOCK_RETRY_SECONDS = 0.025
+_LOCK_TIMEOUT = 10.0
+_LOCK_STALE_SECONDS = 60.0
+_LOCK_MODE = {}
+_LOCK_FALLBACK_LOGGED = False
+_lock_state = threading.local()
+
+
+def _lock_held_paths():
+    held = getattr(_lock_state, "held", None)
+    if held is None:
+        held = _lock_state.held = set()
+    return held
+
+
+def file_lock_mode():
+    """Active backend: 'fcntl', 'msvcrt' or 'lockfile' (for --doctor)."""
+    if "mode" not in _LOCK_MODE:
+        forced = os.environ.get("PTOS_LOCK_MODE", "").strip().lower()
+        if forced in ("lockfile", "fcntl", "msvcrt"):
+            _LOCK_MODE["mode"] = forced
+        else:
+            try:
+                if os.name == "nt":
+                    import msvcrt  # noqa: F401
+                    _LOCK_MODE["mode"] = "msvcrt"
+                else:
+                    import fcntl  # noqa: F401
+                    _LOCK_MODE["mode"] = "fcntl"
+            except ImportError:
+                _LOCK_MODE["mode"] = "lockfile"
+    return _LOCK_MODE["mode"]
+
+
+def _log_lock_fallback(reason):
+    global _LOCK_FALLBACK_LOGGED
+    if not _LOCK_FALLBACK_LOGGED:
+        _LOCK_FALLBACK_LOGGED = True
+        _log_error(
+            f"File locking using the lockfile fallback ({reason}); "
+            "set PTOS_LOCK_MODE to choose a backend explicitly")
+
+
+def _lock_busy(err):
+    return err.errno in (errno.EACCES, errno.EAGAIN, errno.EDEADLK,
+                         getattr(errno, "EWOULDBLOCK", -1))
+
+
+def _lock_unsupported(err):
+    return err.errno in (getattr(errno, "ENOLCK", -1), errno.EBADF,
+                         getattr(errno, "EOPNOTSUPP", -1),
+                         getattr(errno, "ENOTSUP", -1), errno.ENOSYS)
+
+
+def _os_lock(fd, backend):
+    if backend == "msvcrt":
+        import msvcrt
+        os.lseek(fd, 0, os.SEEK_SET)
+        msvcrt.locking(fd, msvcrt.LK_NBLCK, 1)
+    else:
+        import fcntl
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+
+def _pid_alive(pid):
+    if pid <= 0:
+        return False
+    if os.name == "nt":
+        import ctypes
+        from ctypes import wintypes
+        kernel32 = ctypes.windll.kernel32
+        PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+        STILL_ACTIVE = 259
+        INVALID_PARAMETER = 87
+        handle = kernel32.OpenProcess(
+            PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+        if handle:
+            code = wintypes.DWORD()
+            kernel32.GetExitCodeProcess(handle, ctypes.byref(code))
+            kernel32.CloseHandle(handle)
+            return code.value == STILL_ACTIVE
+        return kernel32.GetLastError() != INVALID_PARAMETER
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except OSError:
+        return True
+    return True
+
+
+def _pid_lock_is_stale(lock_path):
+    """Age-gated: only after _LOCK_STALE_SECONDS, and only when the owner is
+    verifiably dead on this host (or never wrote an owner line)."""
+    try:
+        mtime = os.path.getmtime(lock_path)
+    except OSError:
+        return False
+    if time.time() - mtime < _LOCK_STALE_SECONDS:
+        return False
+    try:
+        with open(lock_path, "r", encoding="utf-8", errors="replace") as f:
+            lines = f.read().splitlines()
+        pid = int(lines[0].strip())
+        host = lines[1].strip() if len(lines) > 1 else ""
+    except (OSError, ValueError, IndexError):
+        return True
+    if host != socket.gethostname():
+        return False
+    return not _pid_alive(pid)
+
+
+def _acquire_pid_lock(lock_path, display_path, deadline):
+    while True:
+        try:
+            fd = os.open(lock_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+        except FileExistsError:
+            if _pid_lock_is_stale(lock_path):
+                try:
+                    os.remove(lock_path)
+                except OSError:
+                    pass
+                continue
+            if time.monotonic() >= deadline:
+                raise FileBusyError(f"{display_path} is busy; try again")
+            time.sleep(_LOCK_RETRY_SECONDS)
+            continue
+        try:
+            owner = f"{os.getpid()}\n{socket.gethostname()}\n"
+            os.write(fd, owner.encode("utf-8"))
+        except OSError:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            try:
+                os.remove(lock_path)
+            except OSError:
+                pass
+            raise
+        return ("pid", fd, lock_path)
+
+
+def _acquire_sidecar(lock_path, display_path, timeout, deadline):
+    while True:
+        if file_lock_mode() == "lockfile":
+            return _acquire_pid_lock(lock_path, display_path, deadline)
+        fd = os.open(lock_path, os.O_RDWR | os.O_CREAT, 0o666)
+        try:
+            _os_lock(fd, file_lock_mode())
+            return ("os", fd, lock_path)
+        except OSError as e:
+            try:
+                os.close(fd)
+            except OSError:
+                pass
+            if _lock_unsupported(e):
+                _LOCK_MODE["mode"] = "lockfile"
+                _log_lock_fallback(e.strerror or str(e))
+                continue
+            if _lock_busy(e):
+                if time.monotonic() >= deadline:
+                    raise FileBusyError(f"{display_path} is busy; try again")
+                time.sleep(_LOCK_RETRY_SECONDS)
+                continue
+            raise
+
+
+def _release_sidecar(holder):
+    kind, fd, lock_path = holder
+    try:
+        os.close(fd)
+    except OSError:
+        pass
+    if kind == "pid":
+        try:
+            os.remove(lock_path)
+        except OSError:
+            pass
+
+
+def _acquire_file_lock(path, timeout=_LOCK_TIMEOUT):
+    """Acquire the sidecar lock for *path*.
+
+    Returns a release callable, or None when the lock is already held by
+    this thread (reentrancy — the caller must only call release when it is
+    not None). Raises FileBusyError after *timeout* seconds."""
+    key = os.path.normcase(os.path.abspath(path))
+    held = _lock_held_paths()
+    if key in held:
+        return None
+    lock_path = path + ".lock"
+    parent = os.path.dirname(lock_path)
+    if parent:
+        os.makedirs(parent, exist_ok=True)
+    deadline = time.monotonic() + timeout
+    holder = _acquire_sidecar(lock_path, path, timeout, deadline)
+    held.add(key)
+
+    def release():
+        held.discard(key)
+        _release_sidecar(holder)
+
+    return release
+
+
+@contextlib.contextmanager
+def file_lock(path, timeout=_LOCK_TIMEOUT):
+    """Hold an exclusive lock on ``path`` for the duration of the block.
+
+    Locks a sidecar ``path + ".lock"`` (never the data file itself — its
+    inode is replaced on rename). Reentrant per thread and path. Raises
+    FileBusyError (a PTOSError) after ``timeout`` seconds; the kernel
+    releases OS-backend locks if the holder dies, and pid-mode locks are
+    reclaimed after _LOCK_STALE_SECONDS when the owner is dead.
+    """
+    release = _acquire_file_lock(path, timeout)
+    try:
+        yield
+    finally:
+        if release is not None:
+            release()
+
+
+# --------------------------------------------------
 # Atomic write operations
 # --------------------------------------------------
 
-def atomic_write(filepath, content):
-    """Write file atomically with .bak backup for rollback on failure."""
-    backup_path = filepath + ".bak"
-    temp_path = filepath + ".tmp"
-    
-    # Create .bak backup
-    if os.path.exists(filepath):
-        shutil.copy2(filepath, backup_path)
-    
+def _make_temp_file(path):
+    """Create a unique temp file beside *path*: returns (fd, temp_path).
+
+    The unique name means two writers can never collide on the same ``.tmp``
+    even if a lock backend is ever bypassed (defence in depth)."""
+    dirname = os.path.dirname(path) or "."
+    fd, temp_path = tempfile.mkstemp(
+        dir=dirname, prefix=os.path.basename(path) + ".", suffix=".tmp")
+    return fd, temp_path
+
+
+def _fsync_dir(dirname):
+    """Best-effort fsync of a directory (POSIX) so a rename survives power
+    loss; a no-op on Windows and on filesystems that refuse directory fsync."""
+    if os.name != "posix":
+        return
     try:
-        # Write to .tmp
-        with open(temp_path, "w", encoding="utf-8") as f:
-            f.write(content)
-        
-        # Atomic rename
-        os.replace(temp_path, filepath)
-        
-        # Success - remove .bak
+        dfd = os.open(dirname or ".", os.O_RDONLY)
+    except OSError:
+        return
+    try:
+        os.fsync(dfd)
+    except OSError:
+        pass
+    finally:
+        try:
+            os.close(dfd)
+        except OSError:
+            pass
+
+
+def atomic_write(filepath, content):
+    """Write file atomically: sidecar lock, unique temp, fsync, rename.
+
+    A .bak recovery copy is taken under the lock and removed on success.
+    A failure before os.replace leaves the live file untouched (the rename
+    is the only mutation), so there is no copy-back restore step."""
+    with file_lock(filepath):
+        backup_path = filepath + ".bak"
+        if os.path.exists(filepath):
+            shutil.copy2(filepath, backup_path)
+        fd, temp_path = _make_temp_file(filepath)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(content)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, filepath)
+        except Exception as e:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+            if os.path.exists(backup_path):
+                try:
+                    os.remove(backup_path)
+                except OSError:
+                    pass
+            _log_error(f"Atomic write failed for {filepath}: {e}")
+            raise
+        _fsync_dir(os.path.dirname(filepath) or ".")
         if os.path.exists(backup_path):
-            os.remove(backup_path)
-            
-    except Exception as e:
-        # Failure - cleanup temp, restore .bak
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        if os.path.exists(backup_path):
-            shutil.copy2(backup_path, filepath)
-            os.remove(backup_path)
-        _log_error(f"Atomic write failed for {filepath}: {e}")
-        raise
+            try:
+                os.remove(backup_path)
+            except OSError:
+                pass
 
 def atomic_append(filepath, content):
-    """Append to file atomically with .bak backup for rollback on failure."""
-    backup_path = filepath + ".bak"
-    temp_path = filepath + ".tmp"
-    
-    # Create .bak backup
-    if os.path.exists(filepath):
-        shutil.copy2(filepath, backup_path)
-    
-    try:
-        # Read existing content
+    """Append a line to a file atomically.
+
+    The read-modify-write span runs under the file's sidecar lock, so two
+    appenders can never lose each other's lines. Temp/backup/rollback rules
+    match atomic_write."""
+    with file_lock(filepath):
+        backup_path = filepath + ".bak"
         existing = ""
         if os.path.exists(filepath):
+            shutil.copy2(filepath, backup_path)
             with open(filepath, "r", encoding="utf-8") as f:
                 existing = f.read()
-        
-        # Write to .tmp with appended content
-        with open(temp_path, "w", encoding="utf-8") as f:
-            if existing and not existing.endswith("\n"):
-                f.write(existing + "\n")
-            elif existing:
-                f.write(existing)
-            f.write(content + "\n")
-        
-        # Atomic rename
-        os.replace(temp_path, filepath)
-        
-        # Success - remove .bak
+        fd, temp_path = _make_temp_file(filepath)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                if existing and not existing.endswith("\n"):
+                    f.write(existing + "\n")
+                elif existing:
+                    f.write(existing)
+                f.write(content + "\n")
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(temp_path, filepath)
+        except Exception as e:
+            if os.path.exists(temp_path):
+                try:
+                    os.remove(temp_path)
+                except OSError:
+                    pass
+            if os.path.exists(backup_path):
+                try:
+                    os.remove(backup_path)
+                except OSError:
+                    pass
+            _log_error(f"Atomic append failed for {filepath}: {e}")
+            raise
+        _fsync_dir(os.path.dirname(filepath) or ".")
         if os.path.exists(backup_path):
-            os.remove(backup_path)
-            
-    except Exception as e:
-        # Failure - restore .bak
-        if os.path.exists(temp_path):
-            os.remove(temp_path)
-        if os.path.exists(backup_path):
-            shutil.copy2(backup_path, filepath)
-            os.remove(backup_path)
-        _log_error(f"Atomic append failed for {filepath}: {e}")
-        raise
+            try:
+                os.remove(backup_path)
+            except OSError:
+                pass
 
 
 def _os_write(fd, payload):
@@ -1203,42 +1495,47 @@ def append_line_fast(filepath, line):
     the true end of file — POSIX via an ``O_APPEND`` descriptor, Windows via
     a ``FILE_APPEND_DATA`` handle that writes atomically at EOF where the
     CRT's seek-then-write ``O_APPEND`` would race — and the whole line lands
-    in one write. A tail that does not end in a newline (a torn fragment from
-    an interrupted write, or a hand edit that stripped the final newline) is
-    isolated rather than deleted — a leading ``\\n`` is written so the new
-    line can never glue onto the fragment. A failed or partial write is
-    rolled back via ``_rollback_after_failed_write`` (guarded so another
-    writer's data is never cut). Callers keep their own validation; this is
-    the last write, not a format law.
+    in one write. The operation additionally holds the file's sidecar lock
+    for its duration, so an append can never land between a rewriting
+    editor's read and its rename (the lock the rewriters hold too; one
+    exclusive mode on both sides because ``msvcrt`` has no shared
+    byte-range lock). A tail that does not end in a newline (a torn
+    fragment from an interrupted write, or a hand edit that stripped the
+    final newline) is isolated rather than deleted — a leading ``\\n`` is
+    written so the new line can never glue onto the fragment. A failed or
+    partial write is rolled back via ``_rollback_after_failed_write``
+    (guarded so another writer's data is never cut). Callers keep their
+    own validation; this is the last write, not a format law.
     """
     data = line.encode("utf-8") + b"\n"
     d = os.path.dirname(filepath)
     if d:
         os.makedirs(d, exist_ok=True)
-    fd = None
-    try:
-        fd = _open_append_handle(filepath)
-        pre_size = _handle_size(fd)
-        prefix = b""
-        if pre_size:
-            if _handle_read_at(fd, pre_size - 1, 1) != b"\n":
-                prefix = b"\n"
-        payload = prefix + data
+    with file_lock(filepath):
+        fd = None
         try:
-            n = _os_write(fd, payload)
-        except OSError:
-            _rollback_after_failed_write(fd, filepath, pre_size, payload, None)
-            raise
-        if n != len(payload):
-            _rollback_after_failed_write(fd, filepath, pre_size, payload, n)
-            raise OSError(
-                f"Append to {filepath} wrote {n} of {len(payload)} bytes")
-    finally:
-        if fd is not None:
+            fd = _open_append_handle(filepath)
+            pre_size = _handle_size(fd)
+            prefix = b""
+            if pre_size:
+                if _handle_read_at(fd, pre_size - 1, 1) != b"\n":
+                    prefix = b"\n"
+            payload = prefix + data
             try:
-                _handle_close(fd)
+                n = _os_write(fd, payload)
             except OSError:
-                pass
+                _rollback_after_failed_write(fd, filepath, pre_size, payload, None)
+                raise
+            if n != len(payload):
+                _rollback_after_failed_write(fd, filepath, pre_size, payload, n)
+                raise OSError(
+                    f"Append to {filepath} wrote {n} of {len(payload)} bytes")
+        finally:
+            if fd is not None:
+                try:
+                    _handle_close(fd)
+                except OSError:
+                    pass
 
 
 def _log_error(message):
@@ -1261,51 +1558,129 @@ def _backup_file(path):
 
 
 class AtomicWrite:
-    """Context manager for atomic file writes with backup and cache invalidation.
+    """Context manager for atomic file writes under the path's sidecar lock.
 
     Usage:
         with AtomicWrite(path, "queries") as w:
+            data = tomllib.loads(w.read_text())
+            ...mutate data...
             tomli_w.dump(data, w.stream)
 
-    On success: writes via temp file + atomic rename, removes .bak, invalidates cache.
-    On failure: removes temp, restores from .bak, logs error.
+    The exclusive lock is taken in __enter__ (before the .bak copy) and
+    released in __exit__ AFTER os.replace and cache invalidation, so a
+    waiting writer re-reads both the new bytes and fresh caches. A nested
+    file_lock on the same path is a reentrancy no-op. read_text()/
+    read_bytes() read the live file inside the lock.
+
+    On success: unique same-directory temp + fsync + atomic rename, .bak
+    removed, cache invalidated. On failure: the temp is removed and the
+    error logged — the live file was never touched (the rename is the only
+    mutation), so there is no copy-back restore.
     """
 
     def __init__(self, path, resource=None):
         self.path = path
         self.resource = resource
         self.backup_path = path + ".bak"
-        self.temp_path = path + ".tmp"
+        self.temp_path = None
         self._stream = None
+        self._release = None
 
     def __enter__(self):
-        if os.path.exists(self.path):
-            shutil.copy2(self.path, self.backup_path)
+        self._release = _acquire_file_lock(self.path)
+        try:
+            if os.path.exists(self.path):
+                shutil.copy2(self.path, self.backup_path)
+        except BaseException:
+            if self._release is not None:
+                self._release()
+                self._release = None
+            raise
         return self
+
+    def read_text(self, encoding="utf-8"):
+        """Read the live file — call inside the block (the lock is held).
+        Returns "" when the file does not exist yet. Newlines are kept
+        untranslated (newline="") so CRLF-preserving writers see the
+        original bytes as text."""
+        if not os.path.exists(self.path):
+            return ""
+        with open(self.path, "r", encoding=encoding, newline="") as f:
+            return f.read()
+
+    def read_bytes(self):
+        """Binary twin of read_text(); b"" when the file does not exist."""
+        if not os.path.exists(self.path):
+            return b""
+        with open(self.path, "rb") as f:
+            return f.read()
 
     @property
     def stream(self):
         if self._stream is None:
-            self._stream = open(self.temp_path, "wb")
+            fd, self.temp_path = _make_temp_file(self.path)
+            self._stream = os.fdopen(fd, "wb")
         return self._stream
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        if self._stream is not None:
-            self._stream.close()
+        try:
+            self._finish(exc_type, exc_val)
+        finally:
+            if self._release is not None:
+                self._release()
+                self._release = None
+        return False
 
-        if exc_type is None:
+    def _finish(self, exc_type, exc_val):
+        started = self._stream is not None
+        if self._stream is not None:
+            try:
+                self._stream.flush()
+                os.fsync(self._stream.fileno())
+            except (OSError, ValueError):
+                pass
+            try:
+                self._stream.close()
+            finally:
+                self._stream = None
+
+        if exc_type is not None:
+            self._remove_temp()
+            self._remove_backup()
+            if started:
+                _log_error(f"Atomic write failed for {self.path}: {exc_val}")
+            return
+
+        if self.temp_path is None:
+            self._remove_backup()
+            return
+
+        try:
             os.replace(self.temp_path, self.path)
-            if os.path.exists(self.backup_path):
-                os.remove(self.backup_path)
-            if self.resource:
-                _invalidate(self.resource)
-        else:
-            if os.path.exists(self.temp_path):
+        except Exception as e:
+            self._remove_temp()
+            self._remove_backup()
+            _log_error(f"Atomic write failed for {self.path}: {e}")
+            raise
+        _fsync_dir(os.path.dirname(self.path) or ".")
+        self._remove_backup()
+        if self.resource:
+            _invalidate(self.resource)
+
+    def _remove_temp(self):
+        if self.temp_path and os.path.exists(self.temp_path):
+            try:
                 os.remove(self.temp_path)
-            if os.path.exists(self.backup_path):
-                shutil.copy2(self.backup_path, self.path)
+            except OSError:
+                pass
+        self.temp_path = None
+
+    def _remove_backup(self):
+        if os.path.exists(self.backup_path):
+            try:
                 os.remove(self.backup_path)
-            _log_error(f"Atomic write failed for {self.path}: {exc_val}")
+            except OSError:
+                pass
 
 # --------------------------------------------------
 # Doctor — check PTOS health
@@ -1333,7 +1708,14 @@ def doctor_check(verbose=False, fix=False, json_output=False):
         messages.append(("Flask", f"Flask installed"))
     except ImportError:
         errors.append("Flask not installed. Run: pip install flask")
-    
+
+    # File locking backend
+    _lock_labels = {"fcntl": "flock", "msvcrt": "msvcrt",
+                    "lockfile": "lockfile fallback"}
+    messages.append(("File locking",
+                     _lock_labels.get(file_lock_mode(), file_lock_mode())
+                     + " (sidecar .lock files)"))
+
     # Config folder check
     if not os.path.isdir(CONFIG_DIR):
         errors.append(f"Config folder missing at {CONFIG_DIR}")
@@ -3810,37 +4192,38 @@ def rewrite_line_in_file(filepath, old_line, new_line, lineno=None):
     Backs up the file before writing.
     Raises ValueError if the line cannot be found or verified.
     """
-    with open(filepath, encoding="utf-8") as f:
-        lines = f.readlines()
+    with file_lock(filepath):
+        with open(filepath, encoding="utf-8") as f:
+            lines = f.readlines()
 
-    if lineno is not None:
-        # precise index — verify content matches as a safety check
-        if lineno >= len(lines):
-            raise ValueError(f"Line {lineno} out of range in {filepath}")
-        if lines[lineno].strip() != old_line:
-            raise ValueError(
-                f"Line {lineno} content mismatch in {filepath}.\n"
-                f"  Expected: {old_line}\n"
-                f"  Found:    {lines[lineno].strip()}"
-            )
-        idx = lineno
-    else:
-        hits = [i for i, l in enumerate(lines) if l.strip() == old_line]
-        if not hits:
-            raise ValueError(f"Line not found in {filepath}:\n  {old_line}")
-        if len(hits) > 1:
-            raise ValueError(
-                f"Line appears {len(hits)} times in {filepath} — "
-                f"use lineno to target a specific occurrence.\n  {old_line}"
-            )
-        idx = hits[0]
+        if lineno is not None:
+            # precise index — verify content matches as a safety check
+            if lineno >= len(lines):
+                raise ValueError(f"Line {lineno} out of range in {filepath}")
+            if lines[lineno].strip() != old_line:
+                raise ValueError(
+                    f"Line {lineno} content mismatch in {filepath}.\n"
+                    f"  Expected: {old_line}\n"
+                    f"  Found:    {lines[lineno].strip()}"
+                )
+            idx = lineno
+        else:
+            hits = [i for i, l in enumerate(lines) if l.strip() == old_line]
+            if not hits:
+                raise ValueError(f"Line not found in {filepath}:\n  {old_line}")
+            if len(hits) > 1:
+                raise ValueError(
+                    f"Line appears {len(hits)} times in {filepath} — "
+                    f"use lineno to target a specific occurrence.\n  {old_line}"
+                )
+            idx = hits[0]
 
-    if new_line is None:
-        lines.pop(idx)
-    else:
-        lines[idx] = new_line + "\n"
+        if new_line is None:
+            lines.pop(idx)
+        else:
+            lines[idx] = new_line + "\n"
 
-    atomic_write(filepath, "".join(lines))
+        atomic_write(filepath, "".join(lines))
 
 
 def _set_value_is_token(field, rtype, kv):
@@ -5288,32 +5671,33 @@ def _migrate_toml_refs(path, resource, option_map, dry_run):
     if not os.path.exists(path):
         return 0
     import tomli_w
-    try:
-        with open(path, "rb") as f:
-            data = tomllib.load(f)
-    except (OSError, tomllib.TOMLDecodeError):
-        return 0
-    count = [0]
+    with file_lock(path):
+        try:
+            with open(path, "rb") as f:
+                data = tomllib.load(f)
+        except (OSError, tomllib.TOMLDecodeError):
+            return 0
+        count = [0]
 
-    def walk(node):
-        if isinstance(node, dict):
-            return {k: walk(v) for k, v in node.items()}
-        if isinstance(node, list):
-            return [walk(v) for v in node]
-        if isinstance(node, str):
-            if node in option_map:
-                count[0] += 1
-                return option_map[node]
-            new, hit = _rewrite_option_refs(node, option_map)
-            if hit:
-                count[0] += 1
-                return new
-        return node
+        def walk(node):
+            if isinstance(node, dict):
+                return {k: walk(v) for k, v in node.items()}
+            if isinstance(node, list):
+                return [walk(v) for v in node]
+            if isinstance(node, str):
+                if node in option_map:
+                    count[0] += 1
+                    return option_map[node]
+                new, hit = _rewrite_option_refs(node, option_map)
+                if hit:
+                    count[0] += 1
+                    return new
+            return node
 
-    new_data = walk(data)
-    if count[0] and not dry_run:
-        with AtomicWrite(path, resource) as w:
-            tomli_w.dump(new_data, w.stream)
+        new_data = walk(data)
+        if count[0] and not dry_run:
+            with AtomicWrite(path, resource) as w:
+                tomli_w.dump(new_data, w.stream)
     return count[0]
 
 
@@ -5366,44 +5750,45 @@ def migrate_record_format(dry_run=False):
             path = os.path.join(dirpath, fname)
             summary["files"] += 1
             try:
-                with open(path, encoding="utf-8") as f:
-                    lines = f.readlines()
+                with file_lock(path):
+                    with open(path, encoding="utf-8") as f:
+                        lines = f.readlines()
+                    out = []
+                    file_changed = 0
+                    for raw in lines:
+                        stripped = raw.rstrip("\r\n")
+                        if not stripped.strip() or stripped.lstrip().startswith("#"):
+                            out.append(raw)
+                            continue
+                        summary["lines"] += 1
+                        try:
+                            d, kv, note = parse_line(stripped)
+                            rtype = kv.get("type")
+                            if rtype:
+                                known = set(filter_fields_for_type(rtype, schema))
+                                for k, v in kv.items():
+                                    if k in known and not is_token_field(schema, rtype, k):
+                                        if isinstance(v, str) and "_" in v:
+                                            kv[k] = v.replace("_", " ")
+                                        elif isinstance(v, list):
+                                            kv[k] = [x.replace("_", " ")
+                                                     if isinstance(x, str) and "_" in x
+                                                     else x for x in v]
+                            new = build_record_line(d, kv, note or None)
+                        except Exception as e:
+                            summary["errors"].append((path, f"{stripped!r}: {e}"))
+                            out.append(raw)
+                            continue
+                        if new != stripped:
+                            file_changed += 1
+                        out.append(new + "\n")
+                    if file_changed:
+                        summary["changed"] += file_changed
+                        if not dry_run:
+                            atomic_write(path, "".join(out))
             except OSError as e:
                 summary["errors"].append((path, str(e)))
                 continue
-            out = []
-            file_changed = 0
-            for raw in lines:
-                stripped = raw.rstrip("\r\n")
-                if not stripped.strip() or stripped.lstrip().startswith("#"):
-                    out.append(raw)
-                    continue
-                summary["lines"] += 1
-                try:
-                    d, kv, note = parse_line(stripped)
-                    rtype = kv.get("type")
-                    if rtype:
-                        known = set(filter_fields_for_type(rtype, schema))
-                        for k, v in kv.items():
-                            if k in known and not is_token_field(schema, rtype, k):
-                                if isinstance(v, str) and "_" in v:
-                                    kv[k] = v.replace("_", " ")
-                                elif isinstance(v, list):
-                                    kv[k] = [x.replace("_", " ")
-                                             if isinstance(x, str) and "_" in x
-                                             else x for x in v]
-                    new = build_record_line(d, kv, note or None)
-                except Exception as e:
-                    summary["errors"].append((path, f"{stripped!r}: {e}"))
-                    out.append(raw)
-                    continue
-                if new != stripped:
-                    file_changed += 1
-                out.append(new + "\n")
-            if file_changed:
-                summary["changed"] += file_changed
-                if not dry_run:
-                    atomic_write(path, "".join(out))
     if not dry_run:
         _invalidate_all()
         rebaseline_external_watch()
@@ -6706,9 +7091,9 @@ def save_query(name, args, extra_filters):
     if getattr(args, "sum", False):
         entry["sum"] = True
 
-    queries[name] = entry
-
     with AtomicWrite(QUERIES_PATH, "queries") as w:
+        queries = get_queries()
+        queries[name] = entry
         tomli_w.dump(queries, w.stream)
 
     print(f"\nQuery '{name}' saved to queries.toml")
@@ -6730,19 +7115,6 @@ def save_as_preset(name, record, note=None, instant=False):
 
     presets_path = os.path.join(CONFIG_DIR, "presets.toml")
 
-    # Load existing data
-    data = {"presets": {}}
-    if os.path.exists(presets_path):
-        with open(presets_path, "rb") as f:
-            try:
-                import tomllib
-            except ImportError:
-                import tomli as tomllib
-            data = tomllib.load(f)
-
-    if "presets" not in data:
-        data["presets"] = {}
-
     # Build new preset entry
     entry = {}
     for k, v in record.items():
@@ -6755,9 +7127,11 @@ def save_as_preset(name, record, note=None, instant=False):
     if instant:
         entry["instant"] = True
 
-    data["presets"][name] = entry
-
     with AtomicWrite(presets_path, "presets") as w:
+        data = tomllib.loads(w.read_text())
+        if "presets" not in data:
+            data["presets"] = {}
+        data["presets"][name] = entry
         tomli_w.dump(data, w.stream)
     print(f"Preset '{name}' saved to presets.toml")
 
@@ -6773,21 +7147,13 @@ def delete_preset(name):
     if not os.path.exists(presets_path):
         return
 
-    with open(presets_path, "rb") as f:
-        try:
-            import tomllib
-        except ImportError:
-            import tomli as tomllib
-        data = tomllib.load(f)
-
-    presets = data.get("presets", {})
-    if name not in presets:
-        raise ValueError(f"Preset '{name}' not found")
-
-    del presets[name]
-    data["presets"] = presets
-
     with AtomicWrite(presets_path, "presets") as w:
+        data = tomllib.loads(w.read_text())
+        presets = data.get("presets", {})
+        if name not in presets:
+            raise ValueError(f"Preset '{name}' not found")
+        del presets[name]
+        data["presets"] = presets
         tomli_w.dump(data, w.stream)
     print(f"Preset '{name}' deleted from presets.toml")
 
@@ -6803,25 +7169,18 @@ def set_preset_instant(name, instant):
     if not os.path.exists(presets_path):
         raise ValueError(f"Preset '{name}' not found")
 
-    with open(presets_path, "rb") as f:
-        try:
-            import tomllib
-        except ImportError:
-            import tomli as tomllib
-        data = tomllib.load(f)
-
-    presets = data.get("presets", {})
-    if name not in presets:
-        raise ValueError(f"Preset '{name}' not found")
-
-    entry = presets[name]
-    if instant:
-        entry["instant"] = True
-    else:
-        entry.pop("instant", None)
-    data["presets"] = presets
-
     with AtomicWrite(presets_path, "presets") as w:
+        data = tomllib.loads(w.read_text())
+        presets = data.get("presets", {})
+        if name not in presets:
+            raise ValueError(f"Preset '{name}' not found")
+
+        entry = presets[name]
+        if instant:
+            entry["instant"] = True
+        else:
+            entry.pop("instant", None)
+        data["presets"] = presets
         tomli_w.dump(data, w.stream)
 
 
@@ -7933,6 +8292,7 @@ def _confirm_demo_seed():
 _STIGNORE = """# PTOS/Syncthing ignore rules — transient files that must never sync
 *.tmp
 *.bak
+*.lock
 """
 
 
@@ -8080,14 +8440,11 @@ def set_user_name(name):
     if not os.path.exists(CONFIG_PATH):
         sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
 
-    with open(CONFIG_PATH, "rb") as f:
-        config = tomllib.load(f)
-
-    if "user" not in config:
-        config["user"] = {}
-    config["user"]["name"] = name
-
     with AtomicWrite(CONFIG_PATH, "config") as w:
+        config = tomllib.loads(w.read_text())
+        if "user" not in config:
+            config["user"] = {}
+        config["user"]["name"] = name
         tomli_w.dump(config, w.stream)
 
     print(f"User name set to: {name}")
@@ -8143,63 +8500,64 @@ def save_favorites(items):
     if not os.path.exists(CONFIG_PATH):
         sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
 
-    with open(CONFIG_PATH, "r", encoding="utf-8", newline="") as f:
-        text = f.read()
+    with file_lock(CONFIG_PATH):
+        with open(CONFIG_PATH, "r", encoding="utf-8", newline="") as f:
+            text = f.read()
 
-    newline = "\r\n" if "\r\n" in text else "\n"
-    lines = text.split(newline)
+        newline = "\r\n" if "\r\n" in text else "\n"
+        lines = text.split(newline)
 
-    block = _favorites_block(items)
+        block = _favorites_block(items)
 
-    start = None
-    for i, line in enumerate(lines):
-        if _FAVORITES_HEADER_RE.match(line):
-            start = i
-            break
-
-    if start is None:
-        # Append at EOF, with one blank line of separation when the file
-        # does not already end with a blank line.
-        if lines and lines[-1].strip():
-            lines.append("")
-        lines.extend(block)
-    else:
-        end = len(lines)
-        for j in range(start + 1, len(lines)):
-            if _TABLE_HEADER_RE.match(lines[j]):
-                end = j
+        start = None
+        for i, line in enumerate(lines):
+            if _FAVORITES_HEADER_RE.match(line):
+                start = i
                 break
-        # Walk back over the trailing blank/comment run before the next
-        # header: those lines read as the *next* section's preamble, so
-        # they must survive (deleting them would eat a user's comment on
-        # every star). Only the favourites' own body is regenerated.
-        while end > start + 1 and (
-            not lines[end - 1].strip()
-            or lines[end - 1].lstrip().startswith("#")
-        ):
-            end -= 1
-        lines[start:end] = block
 
-    new_text = newline.join(lines)
-    # Safety net, regardless of the header regex: the rewritten file must
-    # parse, and must round-trip the exact item list we are saving. Any
-    # mismatch means a header form the regex still missed (or a value that
-    # does not serialize cleanly) — refuse the write and leave the file
-    # untouched rather than produce a config.toml the app cannot load.
-    try:
-        parsed = tomllib.loads(new_text)
-    except tomllib.TOMLDecodeError as e:
-        raise PTOSError(
-            f"config.toml could not be updated safely; favorites unchanged ({e})")
-    saved = parsed.get("favorites", {})
-    saved_items = saved.get("items") if isinstance(saved, dict) else None
-    if saved_items != items:
-        raise PTOSError(
-            "config.toml could not be updated safely; favorites unchanged")
+        if start is None:
+            # Append at EOF, with one blank line of separation when the file
+            # does not already end with a blank line.
+            if lines and lines[-1].strip():
+                lines.append("")
+            lines.extend(block)
+        else:
+            end = len(lines)
+            for j in range(start + 1, len(lines)):
+                if _TABLE_HEADER_RE.match(lines[j]):
+                    end = j
+                    break
+            # Walk back over the trailing blank/comment run before the next
+            # header: those lines read as the *next* section's preamble, so
+            # they must survive (deleting them would eat a user's comment on
+            # every star). Only the favourites' own body is regenerated.
+            while end > start + 1 and (
+                not lines[end - 1].strip()
+                or lines[end - 1].lstrip().startswith("#")
+            ):
+                end -= 1
+            lines[start:end] = block
 
-    with AtomicWrite(CONFIG_PATH, "config") as w:
-        w.stream.write(new_text.encode("utf-8"))
-    _invalidate_all()
+        new_text = newline.join(lines)
+        # Safety net, regardless of the header regex: the rewritten file must
+        # parse, and must round-trip the exact item list we are saving. Any
+        # mismatch means a header form the regex still missed (or a value that
+        # does not serialize cleanly) — refuse the write and leave the file
+        # untouched rather than produce a config.toml the app cannot load.
+        try:
+            parsed = tomllib.loads(new_text)
+        except tomllib.TOMLDecodeError as e:
+            raise PTOSError(
+                f"config.toml could not be updated safely; favorites unchanged ({e})")
+        saved = parsed.get("favorites", {})
+        saved_items = saved.get("items") if isinstance(saved, dict) else None
+        if saved_items != items:
+            raise PTOSError(
+                "config.toml could not be updated safely; favorites unchanged")
+
+        with AtomicWrite(CONFIG_PATH, "config") as w:
+            w.stream.write(new_text.encode("utf-8"))
+        _invalidate_all()
 
 
 def validate_date_format(fmt):
@@ -8259,16 +8617,13 @@ def set_date_format(fmt):
     if not os.path.exists(CONFIG_PATH):
         sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
 
-    with open(CONFIG_PATH, "rb") as f:
-        config = tomllib.load(f)
-
-    if "display" not in config:
-        config["display"] = {}
-        if "currency" not in config.get("display", {}):
-            config["display"]["currency"] = "₹"
-    config["display"]["date_format"] = fmt
-
     with AtomicWrite(CONFIG_PATH, "config") as w:
+        config = tomllib.loads(w.read_text())
+        if "display" not in config:
+            config["display"] = {}
+            if "currency" not in config.get("display", {}):
+                config["display"]["currency"] = "₹"
+        config["display"]["date_format"] = fmt
         tomli_w.dump(config, w.stream)
 
     print(f"Date format set to: {fmt}")
@@ -8288,14 +8643,11 @@ def set_currency(symbol):
     if not os.path.exists(CONFIG_PATH):
         sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
 
-    with open(CONFIG_PATH, "rb") as f:
-        config = tomllib.load(f)
-
-    if "display" not in config:
-        config["display"] = {}
-    config["display"]["currency"] = symbol
-
     with AtomicWrite(CONFIG_PATH, "config") as w:
+        config = tomllib.loads(w.read_text())
+        if "display" not in config:
+            config["display"] = {}
+        config["display"]["currency"] = symbol
         tomli_w.dump(config, w.stream)
 
     print(f"Currency symbol set to: {symbol}")
@@ -8322,14 +8674,11 @@ def add_cycle(name, day):
     if not os.path.exists(CONFIG_PATH):
         sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
 
-    with open(CONFIG_PATH, "rb") as f:
-        config = tomllib.load(f)
-
-    if "cycles" not in config or not isinstance(config.get("cycles"), dict):
-        config["cycles"] = {}
-    config["cycles"][name] = day
-
     with AtomicWrite(CONFIG_PATH, "config") as w:
+        config = tomllib.loads(w.read_text())
+        if "cycles" not in config or not isinstance(config.get("cycles"), dict):
+            config["cycles"] = {}
+        config["cycles"][name] = day
         tomli_w.dump(config, w.stream)
 
     print(f"Cycle '{name}' set to start on day {day}.")
@@ -8398,16 +8747,15 @@ def upgrade_auth_password(username, password):
     except ImportError:
         return False
     try:
-        with open(CONFIG_PATH, "rb") as f:
-            config = tomllib.load(f)
-        auth = config.get("auth") or {}
-        if auth.get("username") != username:
-            return False
-        if is_hashed_password(auth.get("password")):
-            return False
-        auth["password"] = hash_password(password)
-        config["auth"] = auth
         with AtomicWrite(CONFIG_PATH, "config") as w:
+            config = tomllib.loads(w.read_text())
+            auth = config.get("auth") or {}
+            if auth.get("username") != username:
+                return False
+            if is_hashed_password(auth.get("password")):
+                return False
+            auth["password"] = hash_password(password)
+            config["auth"] = auth
             tomli_w.dump(config, w.stream)
         return True
     except Exception:
@@ -8431,15 +8779,12 @@ def set_auth(username, password):
     if not os.path.exists(CONFIG_PATH):
         sys.exit("Error: config.toml not found. Run 'ptos --init' first.")
 
-    with open(CONFIG_PATH, "rb") as f:
-        config = tomllib.load(f)
-
-    auth = config.setdefault("auth", {})
-    enabled = auth.get("enabled", True)
-    auth.update({"enabled": enabled, "username": username.strip(),
-                 "password": hash_password(password)})
-
     with AtomicWrite(CONFIG_PATH, "config") as w:
+        config = tomllib.loads(w.read_text())
+        auth = config.setdefault("auth", {})
+        enabled = auth.get("enabled", True)
+        auth.update({"enabled": enabled, "username": username.strip(),
+                     "password": hash_password(password)})
         tomli_w.dump(config, w.stream)
 
     print("Auth credentials set.")
