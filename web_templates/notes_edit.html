@@ -31,22 +31,76 @@
 </div>
 
 <script>
-window._mdSaveFn = function(silent) {
+var _baseRev = {{ rev|tojson }};
+
+window._mdSaveFn = function(silent, opts) {
   var content = document.getElementById("md-editor").value;
-  if (silent && !content.trim()) return;
-  fetch("/notes/save", {
+  if (silent && !content.trim()) return Promise.resolve({ok: true, skipped: true});
+  var btn = document.querySelector(".btn-success");
+  var force = !!(opts && opts.force);
+  return fetch("/notes/save", {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({path: "{{ rel_path }}", content: content})
+    body: JSON.stringify({
+      path: "{{ rel_path }}",
+      content: content,
+      base_rev: (opts && opts.rev) ? opts.rev : _baseRev,
+      force: force
+    })
   })
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    if (!silent) {
-      var btn = document.querySelector(".btn-success");
-      if (btn) {
-        btn.textContent = d.ok ? "\u2714 Saved" : "Error \u2014 retry";
-        setTimeout(function() { btn.textContent = "Save Note"; }, d.ok ? 2000 : 3000);
+  .then(function(r) {
+    return r.json().then(function(d) {
+      if (r.status === 409) throw {status: 409, rev: d.rev, error: d.error};
+      if (r.status === 423) throw {status: 423, error: d.error};
+      if (!r.ok || !d.ok) throw {status: r.status || 500, error: d.error || "Save failed"};
+      _baseRev = d.rev;
+      if (!silent && btn) {
+        btn.textContent = "\u2714 Saved";
+        setTimeout(function() { btn.textContent = "Save Note"; }, 2000);
       }
+      return {ok: true, rev: d.rev};
+    }, function() {
+      throw {status: r.status || 500, error: "Bad response from server"};
+    });
+  })
+  .catch(function(e) {
+    if (e && e.status !== undefined) {
+      if (e.status !== 409 && e.status !== 423 && !silent && btn) {
+        btn.textContent = "Error \u2014 retry";
+        setTimeout(function() { btn.textContent = "Save Note"; }, 3000);
+      }
+      throw e;
     }
+    if (!silent && btn) {
+      btn.textContent = "Error \u2014 retry";
+      setTimeout(function() { btn.textContent = "Save Note"; }, 3000);
+    }
+    throw {status: 0, error: String(e && e.message || e)};
+  });
+};
+
+window._mdCopyFn = function() {
+  var content = document.getElementById("md-editor").value;
+  var p = "{{ rel_path }}";
+  var slash = p.lastIndexOf("/");
+  var dir = slash >= 0 ? p.slice(0, slash + 1) : "";
+  var base = slash >= 0 ? p.slice(slash + 1) : p;
+  if (base.slice(-3) === ".md") base = base.slice(0, -3);
+  function pad(n) { return (n < 10 ? "0" : "") + n; }
+  var d = new Date();
+  var stamp = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" +
+              pad(d.getDate()) + " " + pad(d.getHours()) + pad(d.getMinutes());
+  var copyPath = dir + base + " (my edits " + stamp + ").md";
+  return fetch("/notes/save", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: copyPath, content: content, base_rev: "absent"})
+  })
+  .then(function(r) {
+    return r.json().then(function(d2) {
+      if (!r.ok || !d2.ok) throw {error: d2.error || "Couldn't save a copy"};
+      return d2;
+    }, function() {
+      throw {error: "Bad response from server"};
+    });
   });
 };
 

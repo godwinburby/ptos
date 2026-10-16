@@ -1821,12 +1821,13 @@ def notes_browse_path(rel_path):
 
 @app.route("/notes/edit/<path:rel_path>")
 def notes_edit(rel_path):
-    content = svc.svc_read_file(rel_path)
-    if content is None:
+    note = svc.svc_read_file(rel_path)
+    if note is None:
         return "Note not found", 404
     parent_dir = str(os.path.dirname(rel_path)).replace("\\", "/")
     return render_template("notes_edit.html", rel_path=rel_path,
-                           content=content,
+                           content=note["content"],
+                           rev=note["rev"],
                            breadcrumbs=_notes_breadcrumbs(rel_path),
                            parent_dir=parent_dir)
 
@@ -1916,12 +1917,22 @@ def notes_delete():
 
 @app.route("/notes/save", methods=["POST"])
 def notes_save():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(ok=False, error="JSON body required"), 400
     rel_path = data.get("path", "")
     content = data.get("content", "")
+    base_rev = data.get("base_rev")
+    force = bool(data.get("force"))
     try:
-        svc.svc_save_file(rel_path, content)
-        return jsonify(ok=True)
+        result = svc.svc_save_file(rel_path, content,
+                                   base_rev=base_rev, force=force)
+        return jsonify(ok=True, rev=result["rev"])
+    except svc.NoteConflictError as e:
+        return jsonify(ok=False, conflict=True, rev=e.rev,
+                       error=str(e)), 409
+    except ptos.FileBusyError as e:
+        return jsonify(ok=False, error=str(e)), 423
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
@@ -2802,7 +2813,10 @@ def api_conflict_resolve():
             return jsonify(ok=True, resolved=True, remaining=remaining)
 
         elif action == "keep_conflict":
-            shutil.copy2(conf_full, orig_full)
+            with open(conf_full, "rb") as fh:
+                data = fh.read()
+            with ptos.AtomicWrite(orig_full) as w:
+                w.stream.write(data)
             os.remove(conf_full)
             remaining = len(ptos.find_sync_conflicts())
             return jsonify(ok=True, resolved=True, remaining=remaining)
@@ -2845,8 +2859,8 @@ def api_conflict_resolve():
 
         elif action == "save_merged_note":
             content = data.get("content", "")
-            with open(orig_full, "w", encoding="utf-8") as f:
-                f.write(content)
+            with ptos.AtomicWrite(orig_full) as w:
+                w.stream.write(content.encode("utf-8"))
             os.remove(conf_full)
             remaining = len(ptos.find_sync_conflicts())
             return jsonify(ok=True, resolved=True, remaining=remaining)

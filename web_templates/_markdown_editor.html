@@ -5,7 +5,12 @@
      placeholder — textarea placeholder (default: "Start writing…")
      height      — textarea min-height (default: "65vh")
 
-   Parent template must define: window._mdSaveFn(silent) — called on save/autosave.
+   Parent template must define:
+     window._mdSaveFn(silent, opts) — returns a Promise resolving {ok, rev}
+       or rejecting {status, rev?, error}; opts = {force:true, rev} resends
+       an overwrite. Called on save/autosave.
+     window._mdCopyFn()             — optional; returns a Promise that saves
+       the current text as a copy (conflict banner action).
 #}
 
 {% set _eid = editor_id | default("md-editor") %}
@@ -24,6 +29,19 @@
   <button id="btn-split"   onclick="setMode('split')"   class="btn btn-sm btn-ghost"
           style="display:none;">⬛ Split</button>
 </div>
+
+<div id="md-conflict-banner" class="md-conflict" style="display:none;">
+  <div class="md-conflict-msg">
+    This note changed elsewhere (another tab, a synced device, or a link id).
+    Nothing was overwritten — your edits are still here.
+  </div>
+  <div class="md-conflict-actions">
+    <button type="button" id="md-conflict-reload" class="btn btn-sm btn-ghost">Reload</button>
+    <button type="button" id="md-conflict-copy" class="btn btn-sm btn-ghost">Save mine as a copy</button>
+    <button type="button" id="md-conflict-overwrite" class="btn btn-sm btn-primary">Overwrite</button>
+  </div>
+</div>
+<div id="md-save-status" class="md-save-status" style="display:none;"></div>
 
 <div id="editor-wrap" style="display:flex;gap:12px;">
   <div id="editor-pane" style="flex:1;min-width:0;">
@@ -146,6 +164,17 @@
   .md-embed-edit-save:hover { background:var(--accent-lt); }
   .md-embed-edit-cancel { color:var(--sub); }
   .md-embed-edit-cancel:hover { border-color:var(--danger,#e55);color:var(--danger,#e55); }
+  .md-conflict {
+    display:flex;justify-content:space-between;align-items:center;gap:10px;
+    flex-wrap:wrap;margin:0 0 12px;padding:10px 14px;border-radius:10px;
+    border:1px solid #b58900;background:#fff7e0;color:#5c4a00;
+  }
+  .md-conflict-msg { font-size:14px;font-weight:600; }
+  .md-conflict-actions { display:flex;gap:8px;flex-wrap:wrap; }
+  .md-save-status {
+    margin:0 0 10px;font-size:13px;font-weight:600;
+    color:var(--danger,#e55);
+  }
   .md-embed-body .card { margin:0; }
   .emb-kicker { font-size:11px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;color:var(--sub);margin-bottom:4px; }
   .emb-chip-row { display:flex;gap:6px;flex-wrap:wrap;margin-top:8px; }
@@ -289,6 +318,9 @@
   var _eid = "{{ _eid }}";
   var _mode = window.innerWidth < 768 ? "stacked" : "edit";
   var _saveTimer = null, _dirty = false;
+  var _editGen = 0;          // bumped per keystroke; a save clears _dirty only if unchanged
+  var _conflictRev = null;   // set while the conflict banner is open (autosave frozen)
+  var _retried423 = false;
 
   if (typeof mdBlocks !== "undefined" && mdBlocks.init) mdBlocks.init(_eid);
 
@@ -355,21 +387,97 @@
     setMode(_mode === "syntax" ? "edit" : "syntax");
   };
 
-  function _doSave(silent) {
-    clearTimeout(_saveTimer); _dirty = false;
-    if (window._mdSaveFn) window._mdSaveFn(silent);
+  function _setStatus(msg) {
+    var el = document.getElementById("md-save-status");
+    if (!el) return;
+    if (msg) { el.textContent = msg; el.style.display = "block"; }
+    else { el.style.display = "none"; el.textContent = ""; }
+  }
+
+  function _showConflict(rev) {
+    _conflictRev = rev || "";
+    clearTimeout(_saveTimer);
+    var el = document.getElementById("md-conflict-banner");
+    if (el) el.style.display = "flex";
+  }
+
+  function _hideConflict() {
+    _conflictRev = null;
+    var el = document.getElementById("md-conflict-banner");
+    if (el) el.style.display = "none";
+  }
+
+  function _doSave(silent, opts, isRetry) {
+    clearTimeout(_saveTimer);
+    if (!isRetry) _retried423 = false;
+    if (_conflictRev !== null && !(opts && opts.force)) return;
+    if (!window._mdSaveFn) { _dirty = false; return; }
+    var gen = _editGen;
+    var p;
+    try { p = window._mdSaveFn(silent, opts); }
+    catch (e) { p = Promise.reject({status: 0, error: String(e && e.message || e)}); }
+    if (!p || typeof p.then !== "function") { _dirty = false; return; }
+    p.then(function(res) {
+      if (gen === _editGen) _dirty = false;
+      _retried423 = false;
+      _setStatus("");
+      _hideConflict();
+      return res;
+    }, function(err) {
+      var st = err && err.status;
+      if (st === 409) {
+        _showConflict(err.rev);
+        return;
+      }
+      if (st === 423) {
+        _setStatus("Couldn't save, retrying");
+        if (!_retried423) {
+          _retried423 = true;
+          _saveTimer = setTimeout(function() { _doSave(silent, opts, true); }, 1500);
+          return;
+        }
+        _dirty = true;
+        return;
+      }
+      _dirty = true;
+      if (!silent) _setStatus(err && err.error ? String(err.error) : "Save failed");
+    });
   }
 
   window.onEditorInput = function() {
+    _editGen++;
     _dirty = true;
     if (_mode !== "edit" && _mode !== "blocks") renderPreview();
     clearTimeout(_saveTimer);
+    if (_conflictRev !== null) return;
     _saveTimer = setTimeout(function() { _doSave(true); }, 2500);
   };
 
   window._mdEditorGetDirty = function() { return _dirty; };
   window._mdEditorClearDirty = function() { _dirty = false; };
   window._mdEditorTriggerSave = function(silent) { _doSave(silent); };
+
+  var _btnConflictReload = document.getElementById("md-conflict-reload");
+  if (_btnConflictReload) _btnConflictReload.addEventListener("click", function() {
+    window._mdEditorClearDirty();
+    location.reload();
+  });
+  var _btnConflictCopy = document.getElementById("md-conflict-copy");
+  if (_btnConflictCopy) _btnConflictCopy.addEventListener("click", function() {
+    if (!window._mdCopyFn) return;
+    _btnConflictCopy.disabled = true;
+    window._mdCopyFn().then(function() {
+      window._mdEditorClearDirty();
+      location.reload();
+    }, function(e) {
+      _btnConflictCopy.disabled = false;
+      alert(typeof e === "string" ? e : (e && e.error) || "Couldn't save a copy");
+    });
+  });
+  var _btnConflictOverwrite = document.getElementById("md-conflict-overwrite");
+  if (_btnConflictOverwrite) _btnConflictOverwrite.addEventListener("click", function() {
+    _doSave(false, {force: true, rev: _conflictRev});
+  });
 
   setMode(_mode);
 

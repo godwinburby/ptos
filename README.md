@@ -447,6 +447,15 @@ Features:
 - Search integration — notes appear in universal search results
 - Backlinks panel — see which journal entries, todos, and records reference a note
 
+**Concurrent editing.** Every note save holds an exclusive `.lock` sidecar and
+stages through a temp file + rename, and each load hands the editor a version
+token (`rev`, a hash of the file's exact bytes). If the file changes while you
+have it open — a second tab, an id added from another note, a change synced in
+from your other device — your save is **rejected instead of overwriting**: a
+banner offers **Reload**, **Save mine as a copy**, or **Overwrite**. A save that
+hits HTTP 423 means another writer briefly holds the lock; the editor retries
+once on its own, and the CLI prints the same "… is busy; try again" message.
+
 ### Favorites (bookmarks)
 
 Markdown files buried in folders are hard to reach. Favorites lets you

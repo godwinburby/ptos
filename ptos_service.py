@@ -53,6 +53,15 @@ import ptos
 PTOSError = ptos.PTOSError
 
 
+class NoteConflictError(PTOSError):
+    """svc_save_file's base_rev no longer matches the file (another tab, a
+    synced device, or an id insertion). Carries the current rev so the
+    client can offer Overwrite/Reload — web maps it to HTTP 409."""
+    def __init__(self, msg, rev):
+        super().__init__(msg)
+        self.rev = rev
+
+
 # ══════════════════════════════════════════════════════════════════════
 # Path constants (read-only aliases to engine paths)
 # ══════════════════════════════════════════════════════════════════════
@@ -2873,9 +2882,18 @@ def restore_config(zip_path):
                 shutil.rmtree(config_bak)
             os.rename(config_path, config_bak)
         
-        # Copy new config
+        # Copy new config — each file under its sidecar lock, atomically,
+        # so a settings/schema save racing this restore serializes.
         try:
-            shutil.copytree(temp_config, config_path)
+            os.makedirs(config_path, exist_ok=True)
+            for f in os.listdir(temp_config):
+                src_f = os.path.join(temp_config, f)
+                if not os.path.isfile(src_f):
+                    continue
+                with open(src_f, "rb") as fh:
+                    data = fh.read()
+                with ptos.AtomicWrite(os.path.join(config_path, f)) as w:
+                    w.stream.write(data)
         except Exception:
             # Rollback: restore config.bak
             if os.path.exists(config_bak):
@@ -6476,17 +6494,55 @@ def check_note_delete_links(rel_path):
 
 
 def svc_read_file(rel_path):
+    """Read a note. Returns None when absent, else {"content", "rev"}.
+
+    The file is read once as bytes so the returned rev always describes
+    exactly the content returned; line breaks are normalized to \\n the
+    way the old text-mode read did, so editors see unchanged text."""
     full = ptos._safe_path(rel_path)
     if not os.path.isfile(full):
         return None
-    with open(full, encoding="utf-8") as f:
-        return f.read()
+    with open(full, "rb") as f:
+        raw = f.read()
+    content = raw.decode("utf-8").replace("\r\n", "\n").replace("\r", "\n")
+    return {"content": content, "rev": ptos.note_rev(raw)}
 
 
-def svc_save_file(rel_path, content):
+def svc_save_file(rel_path, content, base_rev=None, force=False):
+    """Atomically save a note; returns {"rev": <new version token>}.
+
+    base_rev enables optimistic concurrency: when it no longer matches
+    the file (another tab, a synced device, or an id insertion) a
+    NoteConflictError carrying the current rev is raised instead of
+    overwriting — unless force is set. A save whose bytes already equal
+    the file succeeds without rewriting. The file's ptos-id first line is
+    re-prepended whenever the incoming content dropped it, so an editor
+    save can never lose the id. Missing base_rev (CLI, older clients)
+    writes as before — still locked and atomic."""
     full = ptos._safe_path(rel_path)
-    with open(full, "w", encoding="utf-8") as f:
-        f.write(content)
+    parent = os.path.dirname(full)
+    if parent and not os.path.isdir(parent):
+        raise FileNotFoundError(2, os.strerror(2), full)
+    with ptos.file_lock(full):
+        exists = os.path.isfile(full)
+        raw = b""
+        if exists:
+            with open(full, "rb") as f:
+                raw = f.read()
+        cur_rev = ptos.note_rev(raw) if exists else "absent"
+        if base_rev is not None and not force and base_rev != cur_rev:
+            if exists and raw == content.encode("utf-8"):
+                return {"rev": cur_rev}
+            raise NoteConflictError("This note changed elsewhere", rev=cur_rev)
+        if exists:
+            prefix = ptos.note_id_prefix(raw[:200].decode("utf-8", "replace"))
+            if prefix and not ptos.note_id_prefix(content):
+                content = prefix + "\n" + content
+        with ptos.AtomicWrite(full) as w:
+            w.stream.write(content.encode("utf-8"))
+        with open(full, "rb") as f:
+            new_raw = f.read()
+        return {"rev": ptos.note_rev(new_raw)}
 
 
 def svc_resolve_template(rel_path):

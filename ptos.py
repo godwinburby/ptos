@@ -81,6 +81,27 @@ def _glob_match(pattern, text):
     return re.search(regex, text.lower())
 
 
+def _is_writer_leftover(name):
+    """True for file-writer leftovers a walk must ignore: .bak recovery
+    copies, unique .tmp temps, and sidecar .lock files (locks of a note,
+    todo or config file being rewritten right now)."""
+    return (name.endswith(".bak") or name.endswith(".tmp")
+            or name.endswith(".lock"))
+
+
+def _sweep_writer_leftovers(root):
+    """Delete writer leftovers anywhere under *root* — backups made before
+    the walks skipped .lock could carry sidecar files, and restoring them
+    would drop stale locks next to live data."""
+    for walk_root, _dirs, files in os.walk(root):
+        for f in files:
+            if _is_writer_leftover(f):
+                try:
+                    os.remove(os.path.join(walk_root, f))
+                except OSError:
+                    pass
+
+
 class PTOSError(Exception):
     """Raised instead of sys.exit() so callers can handle gracefully."""
     pass
@@ -619,7 +640,7 @@ def _scan_backup_files():
         folder_path = os.path.join(BASE_DIR, folder)
         for root, _dirs, files in os.walk(folder_path):
             for name in files:
-                if name.endswith(".bak") or name.endswith(".tmp"):
+                if _is_writer_leftover(name):
                     continue
                 path = os.path.join(root, name)
                 try:
@@ -720,8 +741,8 @@ def should_backup():
         if os.path.exists(folder_path):
             for root, dirs, files in os.walk(folder_path):
                 for file in files:
-                    # Skip .bak and .tmp files
-                    if file.endswith(".bak") or file.endswith(".tmp"):
+                    # Skip .bak, .tmp and .lock files
+                    if _is_writer_leftover(file):
                         continue
                     file_path = os.path.join(root, file)
                     try:
@@ -785,8 +806,8 @@ def get_backup_preview():
         # Count files and size in this folder
         for root, dirs, files in os.walk(folder_path):
             for file in files:
-                # Skip .bak and .tmp files (same as backup logic)
-                if file.endswith(".bak") or file.endswith(".tmp"):
+                # Skip .bak, .tmp and .lock files (same as backup logic)
+                if _is_writer_leftover(file):
                     continue
                     
                 file_path = os.path.join(root, file)
@@ -1958,8 +1979,8 @@ def backup_data(force=False):
                 if os.path.exists(folder_path):
                     for root, dirs, files in os.walk(folder_path):
                         for file in files:
-                            # Skip .bak and .tmp files
-                            if file.endswith(".bak") or file.endswith(".tmp"):
+                            # Skip .bak, .tmp and .lock files
+                            if _is_writer_leftover(file):
                                 continue
                             file_path = os.path.join(root, file)
                             arcname = os.path.relpath(file_path, BASE_DIR)
@@ -2059,6 +2080,7 @@ def restore_data(zip_path):
                 if not member_path.startswith(real_temp + os.sep) and member_path != real_temp:
                     raise Exception(f"Invalid backup: path traversal detected in {info.filename}")
             zf.extractall(temp_dir)
+        _sweep_writer_leftovers(temp_dir)
         
         folders_in_zip = {item for item in os.listdir(temp_dir) if os.path.isdir(os.path.join(temp_dir, item))}
         
@@ -2108,6 +2130,7 @@ def restore_config(zip_path):
                 if not member_path.startswith(real_temp + os.sep) and member_path != real_temp:
                     raise Exception(f"Invalid backup: path traversal detected in {info.filename}")
             zf.extractall(temp_dir)
+        _sweep_writer_leftovers(temp_dir)
         
         config_temp = os.path.join(temp_dir, "config")
         if not os.path.isdir(config_temp):
@@ -2116,7 +2139,19 @@ def restore_config(zip_path):
         config_dst = os.path.join(BASE_DIR, "config")
         if os.path.exists(config_dst):
             shutil.rmtree(config_dst)
-        shutil.copytree(config_temp, config_dst)
+        os.makedirs(config_dst, exist_ok=True)
+        # Per-file, sidecar-locked, atomic: a settings/schema save racing
+        # this restore serializes on the same lock it uses for its writes.
+        for walk_root, _dirs, files in os.walk(config_temp):
+            rel_root = os.path.relpath(walk_root, config_temp)
+            dst_root = (config_dst if rel_root == "."
+                        else os.path.join(config_dst, rel_root))
+            os.makedirs(dst_root, exist_ok=True)
+            for fname in files:
+                with open(os.path.join(walk_root, fname), "rb") as fh:
+                    data = fh.read()
+                with AtomicWrite(os.path.join(dst_root, fname)) as w:
+                    w.stream.write(data)
         
         _invalidate("config")
 
@@ -2381,7 +2416,7 @@ def latest_data_mtime():
             continue
         for root, _dirs, files in os.walk(root_dir):
             for name in files:
-                if name.endswith(".bak") or name.endswith(".tmp"):
+                if _is_writer_leftover(name):
                     continue
                 try:
                     m = os.stat(os.path.join(root, name)).st_mtime
@@ -7456,11 +7491,12 @@ def create_file(rel_path, name, content):
     if not name.endswith(".md"):
         name += ".md"
     full = _safe_path(os.path.join(rel_path, name))
-    if os.path.exists(full):
-        raise PTOSError(f"'{name}' already exists")
     os.makedirs(os.path.dirname(full), exist_ok=True)
-    with open(full, "w", encoding="utf-8") as f:
-        f.write(content)
+    with file_lock(full):
+        if os.path.exists(full):
+            raise PTOSError(f"'{name}' already exists")
+        with AtomicWrite(full) as w:
+            w.stream.write(content.encode("utf-8"))
 
 
 def rename_note(rel_path, new_name):
@@ -7473,7 +7509,16 @@ def rename_note(rel_path, new_name):
     new_full = _safe_path((parent + "/" + new_name) if parent else new_name)
     if os.path.exists(new_full):
         raise PTOSError(f"'{new_name}' already exists")
-    os.rename(full, new_full)
+    with file_lock(full):
+        os.rename(full, new_full)
+    try:
+        if os.path.exists(full + ".lock"):
+            os.remove(full + ".lock")
+    except OSError:
+        pass
+
+
+_NOTE_ID_RE = re.compile(r'<!--\s*ptos-id:\s*(\S+)\s*-->')
 
 
 def note_id_of(fpath):
@@ -7482,7 +7527,7 @@ def note_id_of(fpath):
     try:
         with open(fpath, encoding="utf-8") as f:
             first_line = f.readline()
-        m = re.match(r'<!--\s*ptos-id:\s*(\S+)\s*-->', first_line)
+        m = _NOTE_ID_RE.match(first_line)
         if m:
             return m.group(1)
     except Exception:
@@ -7493,20 +7538,44 @@ def note_id_of(fpath):
 _note_id_of = note_id_of
 
 
+def note_id_prefix(text):
+    """The leading ptos-id comment of *text* (no trailing newline), or
+    None when it doesn't start with one. Callers slice a small head of
+    the file first, so whole files never need decoding for this check."""
+    m = _NOTE_ID_RE.match(text)
+    return m.group(0) if m else None
+
+
+def note_rev(raw):
+    """Version token for note content: first 16 hex characters of the
+    SHA-256 of the file's exact bytes. Bytes, not mtime — mtime is coarse
+    on Android shared storage and FAT-style filesystems. Notes are small,
+    so hashing on every load/save is cheap."""
+    import hashlib
+    return hashlib.sha256(raw).hexdigest()[:16]
+
+
 def ensure_note_id(rel_path):
     """Return this note's id, generating and writing one as the first
     line if it doesn't already have one. Called only when a note is
-    about to become a link target — never on note creation."""
+    about to become a link target — never on note creation.
+
+    The read-check-write span runs under the note's sidecar lock and the
+    write is atomic, so a concurrent save can neither lose the id nor be
+    lost by it. A note that already has one is returned untouched."""
     full = _safe_path(rel_path)
-    with open(full, encoding="utf-8") as f:
-        content = f.read()
-    m = re.match(r'<!--\s*ptos-id:\s*(\S+)\s*-->', content)
-    if m:
-        return m.group(1)
-    new_id = generate_unique_id()
-    with open(full, "w", encoding="utf-8") as f:
-        f.write(f"<!-- ptos-id: {new_id} -->\n" + content)
-    return new_id
+    if not os.path.exists(full):
+        raise FileNotFoundError(2, os.strerror(2), full)
+    with file_lock(full):
+        with open(full, "rb") as f:
+            raw = f.read()
+        m = _NOTE_ID_RE.match(raw.decode("utf-8", "replace"))
+        if m:
+            return m.group(1)
+        new_id = generate_unique_id()
+        with AtomicWrite(full) as w:
+            w.stream.write(f"<!-- ptos-id: {new_id} -->\n".encode("utf-8") + raw)
+        return new_id
 
 
 def delete_note_entry(rel_path):
@@ -7514,10 +7583,18 @@ def delete_note_entry(rel_path):
     delete is destructive and irreversible — route layer must require
     explicit confirmation before calling this."""
     full = _safe_path(rel_path)
-    if os.path.isdir(full):
-        shutil.rmtree(full)
-    else:
-        os.remove(full)
+    if not os.path.exists(full):
+        raise FileNotFoundError(2, os.strerror(2), full)
+    with file_lock(full):
+        if os.path.isdir(full):
+            shutil.rmtree(full)
+        else:
+            os.remove(full)
+    try:
+        if os.path.exists(full + ".lock"):
+            os.remove(full + ".lock")
+    except OSError:
+        pass
 
 
 def find_parent_template(rel_path):
@@ -7752,10 +7829,10 @@ def _demo_fresh():
                 if open(os.path.join(TODO_DIR, f), "rb").read().strip():
                     return False
     if os.path.isdir(JOURNAL_DIR):
-        if os.listdir(JOURNAL_DIR):
+        if any(not _is_writer_leftover(f) for f in os.listdir(JOURNAL_DIR)):
             return False
     if os.path.isdir(NOTES_DIR):
-        if os.listdir(NOTES_DIR):
+        if any(not _is_writer_leftover(f) for f in os.listdir(NOTES_DIR)):
             return False
     return True
 
@@ -7969,8 +8046,10 @@ def _count_seeded():
                     counts["records"] += sum(1 for line in fh if line.strip())
     counts["todos"] = _line_count(os.path.join(TODO_DIR, "todo.txt"))
     counts["done"] = _line_count(os.path.join(TODO_DIR, "done.txt"))
-    counts["journal"] = sum(len(files) for _, _, files in os.walk(JOURNAL_DIR))
-    counts["notes"] = sum(len(files) for _, _, files in os.walk(NOTES_DIR))
+    counts["journal"] = sum(1 for _, _, files in os.walk(JOURNAL_DIR)
+                            for f in files if not _is_writer_leftover(f))
+    counts["notes"] = sum(1 for _, _, files in os.walk(NOTES_DIR)
+                          for f in files if not _is_writer_leftover(f))
     return counts
 
 

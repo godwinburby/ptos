@@ -3055,15 +3055,17 @@ def _resolve_notes_conflict(c, orig_full, conf_full):
     if ans == "o":
         return True  # keep original, remove conflict
     elif ans == "c":
-        with open(orig_full, "w", encoding="utf-8") as f:
-            f.write(conf_content)
+        with open(conf_full, "rb") as f:
+            data = f.read()
+        with ptos.AtomicWrite(orig_full) as w:
+            w.stream.write(data)
         print(f"  Replaced with conflict version.")
         return True
     elif ans == "e":
         merged = _edit_text(conf_content)
         if merged is not None:
-            with open(orig_full, "w", encoding="utf-8") as f:
-                f.write(merged)
+            with ptos.AtomicWrite(orig_full) as w:
+                w.stream.write(merged.encode("utf-8"))
             print(f"  Saved merged version.")
             return True
     return False

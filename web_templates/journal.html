@@ -51,25 +51,40 @@
 </div>
 
 <script>
-window._mdSaveFn = function(silent) {
+window._mdSaveFn = function(silent, opts) {
   var content = document.getElementById("md-editor").value;
-  if (silent && !content.trim()) return;
+  if (silent && !content.trim()) return Promise.resolve({ok: true, skipped: true});
   var btn = document.getElementById("save-btn-2");
-  if (!silent && btn) { btn.disabled=true; btn.textContent="Saving…"; }
-  fetch("/journal/save", {
-    method:"POST", headers:{"Content-Type":"application/json"},
+  if (!silent && btn) { btn.disabled = true; btn.textContent = "Saving…"; }
+  return fetch("/journal/save", {
+    method:"POST", headers: {"Content-Type":"application/json"},
     body: JSON.stringify({date:"{{ date }}", content:content})
   })
-  .then(function(r){ return r.json(); })
-  .then(function(d){
-    if (!silent && btn) {
-      btn.disabled = false;
-      btn.textContent = d.ok ? "✔ Saved" : "Error — retry";
-      setTimeout(function(){ btn.textContent = "Save Journal"; }, d.ok ? 2000 : 3000);
-    }
+  .then(function(r) {
+    return r.json().then(function(d) {
+      if (btn) btn.disabled = false;
+      if (!r.ok || !d.ok) throw {status: r.status || 500, error: d.error || "Save failed"};
+      if (!silent && btn) {
+        btn.textContent = "✔ Saved";
+        setTimeout(function(){ btn.textContent = "Save Journal"; }, 2000);
+      }
+      return {ok: true};
+    }, function() {
+      if (btn) btn.disabled = false;
+      throw {status: r.status || 500, error: "Bad response from server"};
+    });
   })
-  .catch(function(){
-    if (!silent && btn) { btn.disabled=false; btn.textContent="Save Journal"; }
+  .catch(function(e) {
+    if (btn) btn.disabled = false;
+    if (e && e.status !== undefined) {
+      if (!silent && btn) {
+        btn.textContent = "Error — retry";
+        setTimeout(function(){ btn.textContent = "Save Journal"; }, 3000);
+      }
+      throw e;
+    }
+    if (!silent && btn) btn.textContent = "Save Journal";
+    throw {status: 0, error: String(e && e.message || e)};
   });
 };
 function deleteJournal() {
