@@ -13,7 +13,7 @@ from dataclasses import dataclass, field
 from typing import Optional, List
 
 from ptos import (BASE_DIR, TODO_DIR, TODO_PATH, DONE_PATH, append_line_fast,
-                  file_lock, _make_temp_file, _fsync_dir)
+                  file_lock, _make_temp_file, _fsync_dir, replace_with_retry)
 
 # ── errors ──────────────────────────────────────────────────────────────────
 
@@ -442,7 +442,7 @@ def _atomic_write_text(filepath, content):
                 f.write(content)
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(tmp, filepath)
+            replace_with_retry(tmp, filepath)
         except Exception:
             if os.path.exists(tmp):
                 try:

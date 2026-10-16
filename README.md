@@ -447,14 +447,15 @@ Features:
 - Search integration — notes appear in universal search results
 - Backlinks panel — see which journal entries, todos, and records reference a note
 
-**Concurrent editing.** Every note save holds an exclusive `.lock` sidecar and
-stages through a temp file + rename, and each load hands the editor a version
-token (`rev`, a hash of the file's exact bytes). If the file changes while you
-have it open — a second tab, an id added from another note, a change synced in
-from your other device — your save is **rejected instead of overwriting**: a
-banner offers **Reload**, **Save mine as a copy**, or **Overwrite**. A save that
-hits HTTP 423 means another writer briefly holds the lock; the editor retries
-once on its own, and the CLI prints the same "… is busy; try again" message.
+**Concurrent editing.** Every note and journal save holds an exclusive `.lock`
+sidecar and stages through a temp file + rename, and each load hands the
+editor a version token (`rev`, a hash of the file's exact bytes). If the file
+changes while you have it open — a second tab, an id added from another note,
+a change synced in from your other device — your save is **rejected instead
+of overwriting**: a banner offers **Reload**, **Save mine as a copy**, or
+**Overwrite**. A save that hits HTTP 423 means another writer briefly holds
+the lock; the editor retries once on its own, and the CLI prints the same
+"… is busy; try again" message.
 
 ### Favorites (bookmarks)
 
@@ -1661,17 +1662,42 @@ records = ["exercise_walk", "stoicism_podcast"]
 
 PTOS ensures data safety through atomic write operations at every level.
 
-### File writes (`.bak` + `.tmp` pattern)
+### File writes (sidecar lock + unique temp + atomic rename)
 
-Every write operation follows this sequence:
-1. Copy current file to `*.bak`
-2. Write new content to `*.tmp`
-3. Atomic rename `.tmp` → final file
-4. On success: delete `.bak`
-5. On failure: restore from `.bak`, delete `.bak`
+Every rewrite — records, todos, notes, journals, config, schema, queries —
+follows this sequence:
 
-This applies to adding records, editing records, saving presets, saving journal
-entries, and Log Editor saves.
+1. Take the file's **sidecar lock** (`<file>.lock`, never the data file
+   itself): an OS advisory lock (`flock` on Linux/macOS, `msvcrt` on
+   Windows) with a pid+host lockfile fallback for filesystems where locking
+   is unavailable or unproven. Locks are per machine only — they never cross
+   devices. A lock older than 10 minutes is stale and may be broken; a
+   Windows sharing violation on the rename is retried for ~2 seconds and
+   then reported as "file is in use" (HTTP 423 in the web UI).
+2. Copy the current file to `*.bak` (removed again on every exit path).
+3. Write the new content to a **unique** same-directory temp
+   (`<name>.<random>.tmp`), created with the target's permissions (or the
+   process umask for a new file), so the atomic swap cannot silently drop a
+   file's mode.
+4. `fsync` the temp file, then atomically rename it over the live file.
+5. On success: delete the `.bak`. On failure before the rename: delete the
+   temp and leave the live file **untouched** — there is no copy-back
+   restore step, because the rename is the only mutation.
+
+| Platform | Sidecar backend | Notes |
+|----------|----------------|-------|
+| Linux / macOS | `flock` | Probed at first use; falls back if the filesystem lies |
+| Windows | `msvcrt` (byte-range lock) | Sharing violations on rename retried ~2 s |
+| Any | pid+host lockfile | Automatic fallback; a lock >10 min old is always stale |
+
+On first lock use (and on every `ptos --doctor` run) PTOS **proves** the
+backend actually excludes a second handle on the same file; a filesystem
+that lets two handles lock at once is downgraded to the lockfile fallback
+with a logged warning.
+
+**Line endings.** PTOS writes notes and journal entries with LF line
+endings on every platform; a pre-existing CRLF file is converted on its
+first PTOS save.
 
 ### Appends (append-only, no rewrite)
 
@@ -1702,10 +1728,10 @@ deleted, and `ptos --lint` flags such a file.
 
 ### Crash safety
 
-If PTOS crashes mid-write, the original file is preserved (still in `.bak`),
-the incomplete `.tmp` is cleaned up, and on next run PTOS restores from `.bak`.
-
-Add `*.bak` and `*.tmp` to your `.gitignore` and Syncthing ignore patterns.
+If PTOS crashes mid-write, the live file is intact: the rename in step 4 is
+the only mutation, and a crash before it leaves the original in place. Any
+leftover `*.tmp`/`*.bak` is harmless — they are uniquely named and never
+synced (see `.stignore` below) — and can be deleted at will.
 
 ---
 
@@ -1725,6 +1751,10 @@ Health checks after every AI-assisted session, before trusting the result:
 4. **Data sanity** — flags 0-byte log files (possible data loss) and empty
    config/todo directories
 5. **Install completeness** — Python version, Flask, required folders/files
+6. **Lock health** — active backend (`flock`/`msvcrt`/lockfile fallback) and
+   the exclusion probe result (a FAIL means two handles could lock at once)
+7. **`.stignore` completeness** — warns when `*.tmp`/`*.bak`/`*.lock` are
+   missing; `--fix` appends them idempotently
 
 ---
 
@@ -1783,7 +1813,8 @@ connected and the folder at 100%.
 **Ignore rules:** `--init` writes a `.stignore` file in the data folder
 (patterns `*.tmp`, `*.bak` and `*.lock`) so transient files never sync. Sync
 tools may also leave conflict files (see [Conflict Resolution](#conflict-resolution)).
-If your `.stignore` predates the locking feature, add `*.lock` to it by hand.
+If your `.stignore` predates the locking feature, `ptos --doctor` warns about
+the missing patterns and `ptos --doctor --fix` appends them.
 
 **Locking scope:** PTOS takes an exclusive sidecar lock (`<file>.lock`) around
 every read-modify-write so two processes **on the same machine** cannot lose
@@ -1791,7 +1822,10 @@ each other's writes. Locks are per machine only — two devices editing the same
 file through Syncthing are still handled by the conflict logic below, not by
 the lock. Locks are released automatically if a process dies; a write that
 finds the file busy fails with `` `<path> is busy; try again` `` (the web UI
-answers HTTP 423).
+answers HTTP 423). A lock older than 10 minutes is always treated as stale
+(a recycled pid can no longer lock a file forever), and the first lock use
+proves the backend really excludes a second handle — a filesystem that lies
+is downgraded to the lockfile fallback.
 
 **Status:** PTOS never syncs anything itself, so `--sync-status` (and the
 Syncthing card in Settings) reads **Syncthing's own** REST API and log to report

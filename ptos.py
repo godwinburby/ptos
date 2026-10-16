@@ -672,7 +672,7 @@ def write_backup_state(snapshot=None):
             json.dump(_scan_backup_files() if snapshot is None else snapshot, f)
             f.flush()
             os.fsync(f.fileno())
-        os.replace(tmp, path)
+        replace_with_retry(tmp, path)
     except Exception as e:
         _log_error(f"Could not record backup state: {e}")
 
@@ -1028,6 +1028,7 @@ def init_version():
 _LOCK_RETRY_SECONDS = 0.025
 _LOCK_TIMEOUT = 10.0
 _LOCK_STALE_SECONDS = 60.0
+_LOCK_MAX_AGE_SECONDS = 600.0
 _LOCK_MODE = {}
 _LOCK_FALLBACK_LOGGED = False
 _lock_state = threading.local()
@@ -1056,6 +1057,7 @@ def file_lock_mode():
                     _LOCK_MODE["mode"] = "fcntl"
             except ImportError:
                 _LOCK_MODE["mode"] = "lockfile"
+    _ensure_lock_probe()
     return _LOCK_MODE["mode"]
 
 
@@ -1089,6 +1091,83 @@ def _os_lock(fd, backend):
         fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
 
 
+def _ensure_lock_probe():
+    """Once per process: prove the active sidecar backend actually excludes
+    a second handle on the same file.
+
+    Filesystems that lie about locking (some FUSE mounts, network shares)
+    would otherwise give every writer a green light and no mutual exclusion
+    at all. A failed probe downgrades to the lockfile (pid+host O_EXCL)
+    backend, which only needs O_EXCL to be honest; a lockfile-mode probe
+    that fails is logged but has nowhere lower to go. --doctor surfaces
+    the result; a probe that cannot even run (read-only temp dir) is
+    skipped rather than breaking locking."""
+    if "probe_done" in _LOCK_MODE:
+        return
+    _LOCK_MODE["probe_done"] = True
+    try:
+        _run_lock_probe(_LOCK_MODE.get("mode", "lockfile"))
+    except OSError:
+        pass
+
+
+def _run_lock_probe(mode):
+    import tempfile
+    fd1, probe_path = tempfile.mkstemp(
+        prefix="ptos-lockprobe-", suffix=".lock")
+    fd2 = -1
+    try:
+        if mode == "lockfile":
+            os.close(fd1)
+            fd1 = -1
+            try:
+                os.remove(probe_path)
+            except OSError:
+                pass
+            fd2 = os.open(probe_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+            try:
+                try:
+                    fd_extra = os.open(
+                        probe_path, os.O_CREAT | os.O_EXCL | os.O_RDWR)
+                except FileExistsError:
+                    _LOCK_MODE["exclusion_ok"] = True
+                else:
+                    _LOCK_MODE["exclusion_ok"] = False
+                    try:
+                        os.close(fd_extra)
+                    except OSError:
+                        pass
+                    _log_error(
+                        "Lock exclusion probe: O_EXCL is not exclusive on "
+                        "this filesystem; sidecar locks are unreliable")
+            finally:
+                os.close(fd2)
+                fd2 = -1
+            return
+        fd2 = os.open(probe_path, os.O_RDWR)
+        _os_lock(fd1, mode)
+        try:
+            _os_lock(fd2, mode)
+        except OSError:
+            _LOCK_MODE["exclusion_ok"] = True
+        else:
+            _LOCK_MODE["exclusion_ok"] = False
+            _LOCK_MODE["mode"] = "lockfile"
+            _log_lock_fallback(
+                "sidecar exclusion probe failed (two handles locked at once)")
+    finally:
+        for fd in (fd2, fd1):
+            if fd >= 0:
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+        try:
+            os.remove(probe_path)
+        except OSError:
+            pass
+
+
 def _pid_alive(pid):
     if pid <= 0:
         return False
@@ -1118,13 +1197,20 @@ def _pid_alive(pid):
 
 def _pid_lock_is_stale(lock_path):
     """Age-gated: only after _LOCK_STALE_SECONDS, and only when the owner is
-    verifiably dead on this host (or never wrote an owner line)."""
+    verifiably dead on this host (or never wrote an owner line). A lock older
+    than _LOCK_MAX_AGE_SECONDS is stale regardless of owner liveness or host:
+    writers hold locks for milliseconds, so anything older is a killed
+    process whose pid was recycled (or a foreign-host sidecar that was never
+    meant to be seen here), and it would otherwise block every write until
+    deleted by hand."""
     try:
-        mtime = os.path.getmtime(lock_path)
+        age = time.time() - os.path.getmtime(lock_path)
     except OSError:
         return False
-    if time.time() - mtime < _LOCK_STALE_SECONDS:
+    if age < _LOCK_STALE_SECONDS:
         return False
+    if age >= _LOCK_MAX_AGE_SECONDS:
+        return True
     try:
         with open(lock_path, "r", encoding="utf-8", errors="replace") as f:
             lines = f.read().splitlines()
@@ -1253,15 +1339,78 @@ def file_lock(path, timeout=_LOCK_TIMEOUT):
 # Atomic write operations
 # --------------------------------------------------
 
+_TMPNAME_ATTEMPTS = 100
+
+
 def _make_temp_file(path):
     """Create a unique temp file beside *path*: returns (fd, temp_path).
 
     The unique name means two writers can never collide on the same ``.tmp``
-    even if a lock backend is ever bypassed (defence in depth)."""
+    even if a lock backend is ever bypassed (defence in depth). Created with
+    mode 0o666 (honouring the umask) instead of mkstemp's fixed 0600, then
+    copymode'd from the target when it exists — the atomic swap replaces the
+    live file's inode with this temp, so a 0600 temp would silently drop a
+    group-readable log to owner-only on every save. New files get the normal
+    umask-respecting mode rather than 0600."""
     dirname = os.path.dirname(path) or "."
-    fd, temp_path = tempfile.mkstemp(
-        dir=dirname, prefix=os.path.basename(path) + ".", suffix=".tmp")
-    return fd, temp_path
+    base = os.path.basename(path)
+    for _ in range(_TMPNAME_ATTEMPTS):
+        temp_path = os.path.join(
+            dirname, f"{base}.{os.urandom(4).hex()}.tmp")
+        try:
+            fd = os.open(temp_path, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o666)
+        except FileExistsError:
+            continue
+        if os.path.exists(path):
+            try:
+                shutil.copymode(path, temp_path)
+            except OSError:
+                pass
+        return fd, temp_path
+    raise PTOSError(f"Could not create a temp file beside {path}")
+
+
+_REPLACE_RETRY_DELAY = 0.02
+_REPLACE_RETRY_TOTAL = 2.0
+
+
+def _retry_windows_sharing(op, src, dst):
+    deadline = time.monotonic() + _REPLACE_RETRY_TOTAL
+    while True:
+        try:
+            op(src, dst)
+            return
+        except PermissionError as e:
+            if getattr(e, "winerror", None) not in (5, 32, 33):
+                raise
+            if time.monotonic() >= deadline:
+                raise FileBusyError(
+                    f"{dst} is in use by another program; try again")
+            time.sleep(_REPLACE_RETRY_DELAY)
+
+
+def replace_with_retry(src, dst):
+    """os.replace that survives Windows sharing violations.
+
+    On Windows a target another process holds open without FILE_SHARE_DELETE
+    (antivirus, indexer, a viewer) makes the rename fail with PermissionError
+    winerror 5/32/33; retrying for a couple of seconds rides out the
+    transient, and a persistent one raises FileBusyError (web: HTTP 423)
+    with the temp file left in place for the next attempt. POSIX passes
+    through — a rename there cannot fail with a sharing violation."""
+    if os.name != "nt":
+        os.replace(src, dst)
+        return
+    _retry_windows_sharing(os.replace, src, dst)
+
+
+def rename_with_retry(src, dst):
+    """os.rename with the same Windows sharing-violation retry as
+    replace_with_retry (rename fails where replace would overwrite)."""
+    if os.name != "nt":
+        os.rename(src, dst)
+        return
+    _retry_windows_sharing(os.rename, src, dst)
 
 
 def _fsync_dir(dirname):
@@ -1300,7 +1449,7 @@ def atomic_write(filepath, content):
                 f.write(content)
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(temp_path, filepath)
+            replace_with_retry(temp_path, filepath)
         except Exception as e:
             if os.path.exists(temp_path):
                 try:
@@ -1344,7 +1493,7 @@ def atomic_append(filepath, content):
                 f.write(content + "\n")
                 f.flush()
                 os.fsync(f.fileno())
-            os.replace(temp_path, filepath)
+            replace_with_retry(temp_path, filepath)
         except Exception as e:
             if os.path.exists(temp_path):
                 try:
@@ -1677,7 +1826,7 @@ class AtomicWrite:
             return
 
         try:
-            os.replace(self.temp_path, self.path)
+            replace_with_retry(self.temp_path, self.path)
         except Exception as e:
             self._remove_temp()
             self._remove_backup()
@@ -1733,9 +1882,46 @@ def doctor_check(verbose=False, fix=False, json_output=False):
     # File locking backend
     _lock_labels = {"fcntl": "flock", "msvcrt": "msvcrt",
                     "lockfile": "lockfile fallback"}
+    mode = file_lock_mode()
+    exclusion = _LOCK_MODE.get("exclusion_ok")
+    if exclusion is True:
+        excl_txt = "exclusion probe passed"
+    elif exclusion is False:
+        excl_txt = "exclusion probe FAILED"
+    else:
+        excl_txt = "exclusion not probed"
     messages.append(("File locking",
-                     _lock_labels.get(file_lock_mode(), file_lock_mode())
-                     + " (sidecar .lock files)"))
+                     f"{_lock_labels.get(mode, mode)} "
+                     f"(sidecar .lock files, {excl_txt})"))
+
+    # .stignore: sidecars and temp files must never sync between devices
+    stignore_path = os.path.join(BASE_DIR, ".stignore")
+    required_ignores = ("*.tmp", "*.bak", "*.lock")
+    if not os.path.exists(stignore_path):
+        warnings.append(
+            ".stignore missing — transient *.tmp/*.bak/*.lock files may "
+            "sync between devices (run --doctor --fix)")
+        if fix:
+            with open(stignore_path, "w", encoding="utf-8") as f:
+                f.write(_STIGNORE)
+            fixes_applied.append("Created .stignore")
+    else:
+        with open(stignore_path, encoding="utf-8", errors="replace") as f:
+            existing = f.read()
+        have = set(existing.splitlines())
+        missing = [p for p in required_ignores if p not in have]
+        if missing:
+            warnings.append(
+                ".stignore is missing: " + ", ".join(missing)
+                + " — transient files may sync (run --doctor --fix)")
+            if fix:
+                with open(stignore_path, "a", encoding="utf-8") as f:
+                    if existing and not existing.endswith("\n"):
+                        f.write("\n")
+                    for pattern in missing:
+                        f.write(pattern + "\n")
+                fixes_applied.append(
+                    "Appended " + ", ".join(missing) + " to .stignore")
 
     # Config folder check
     if not os.path.isdir(CONFIG_DIR):
@@ -1993,7 +2179,7 @@ def backup_data(force=False):
                 raise Exception(f"ZIP verification failed: {bad_file}")
         
         # Atomic rename to final location
-        os.replace(temp_path, final_path)
+        replace_with_retry(temp_path, final_path)
         
         # Clean up old backups if limit exceeded
         _cleanup_old_backups()
@@ -2049,7 +2235,7 @@ def backup_config():
                 raise Exception(f"ZIP verification failed: {bad_file}")
         
         # Atomic rename to final location
-        os.replace(temp_path, final_path)
+        replace_with_retry(temp_path, final_path)
         
         # Clean up old backups if limit exceeded
         _cleanup_old_backups()
@@ -4704,7 +4890,10 @@ def resolve_link(target):
     if rtype == "journal":
         if not (len(rid) == 10 and rid[4] == "-" and rid[7] == "-"):
             return None
-        path = _journal_path(rid)
+        try:
+            path = _journal_path(rid)
+        except PTOSError:
+            return None
         if not os.path.isfile(path):
             return None
         return {"kind": "journal", "type": "journal", "id": rid,
@@ -7352,6 +7541,46 @@ def quick_add(args):
 # Journal
 # --------------------------------------------------
 
+def _path_within(full, root):
+    """True when *full* resolves inside *root* (symlinks followed).
+
+    Both arguments may be absolute or relative; the comparison runs on the
+    realpath pair so `..` segments, symlink escapes, and Windows tricks
+    cannot fake containment. Different drives (ValueError from commonpath
+    on Windows) are outside."""
+    try:
+        root_real = os.path.realpath(root)
+        return os.path.commonpath([os.path.realpath(full), root_real]) == root_real
+    except ValueError:
+        return False
+
+
+def _valid_backup_name(name):
+    """True for a plain backup filename (no separators or `..`) that looks
+    like a PTOS backup zip."""
+    return (isinstance(name, str) and name == os.path.basename(name)
+            and name.startswith("ptos-backup-") and name.endswith(".zip"))
+
+
+def parse_journal_date(value):
+    """Strict YYYY-MM-DD validator for user-supplied journal dates.
+
+    Accepts exactly a calendar date in ISO form — nothing else. Path
+    separators, `..` segments, whitespace padding, NUL bytes, relaxed
+    3.11 forms (basic format, week dates) and fractional suffixes all
+    raise PTOSError, so every journal path built from the result is a
+    fixed three-component relative path under JOURNAL_DIR."""
+    if not isinstance(value, str):
+        raise PTOSError(f"Invalid journal date: {value!r}")
+    try:
+        d = dt.date.fromisoformat(value)
+    except ValueError:
+        raise PTOSError(f"Invalid journal date: {value!r}") from None
+    if d.isoformat() != value:
+        raise PTOSError(f"Invalid journal date: {value!r}")
+    return d
+
+
 def slugify(text):
     """Convert text to a filename-safe slug. 'Hello World!' -> 'hello-world'"""
     text = text.lower().strip()
@@ -7388,10 +7617,12 @@ def get_journal_path(date_str):
     """Return the path to a journal file for the given YYYY-MM-DD date,
     creating it from template if it doesn't exist.
     Creates year/month subdirectory as needed."""
-    date_str = date_str[:10]
+    date_str = parse_journal_date(date_str).isoformat()
     month_dir = os.path.join(JOURNAL_DIR, date_str[:4], date_str[5:7])
-    os.makedirs(month_dir, exist_ok=True)
     path = os.path.join(month_dir, f"{date_str}.md")
+    if not _path_within(path, JOURNAL_DIR):
+        raise PTOSError(f"Invalid journal date: {date_str!r}")
+    os.makedirs(month_dir, exist_ok=True)
     if not os.path.exists(path):
         content = get_note_template("daily", {"date": date_str})
         with open(path, "w", encoding="utf-8") as f:
@@ -7401,12 +7632,17 @@ def get_journal_path(date_str):
 
 def get_journal_template_content(date_str):
     """Return template content for a journal date without writing to disk."""
+    date_str = parse_journal_date(date_str).isoformat()
     return get_note_template("daily", {"date": date_str})
 
 
 def journal_path(date_str):
-    """Return the file path for a journal date."""
-    return os.path.join(JOURNAL_DIR, date_str[:4], date_str[5:7], f"{date_str}.md")
+    """Return the file path for a journal date (no writes)."""
+    date_str = parse_journal_date(date_str).isoformat()
+    path = os.path.join(JOURNAL_DIR, date_str[:4], date_str[5:7], f"{date_str}.md")
+    if not _path_within(path, JOURNAL_DIR):
+        raise PTOSError(f"Invalid journal date: {date_str!r}")
+    return path
 
 
 _journal_path = journal_path
@@ -7510,7 +7746,7 @@ def rename_note(rel_path, new_name):
     if os.path.exists(new_full):
         raise PTOSError(f"'{new_name}' already exists")
     with file_lock(full):
-        os.rename(full, new_full)
+        rename_with_retry(full, new_full)
     try:
         if os.path.exists(full + ".lock"):
             os.remove(full + ".lock")

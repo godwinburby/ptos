@@ -51,24 +51,35 @@
 </div>
 
 <script>
+var _baseRev = {{ rev|tojson }};
+
 window._mdSaveFn = function(silent, opts) {
   var content = document.getElementById("md-editor").value;
   if (silent && !content.trim()) return Promise.resolve({ok: true, skipped: true});
   var btn = document.getElementById("save-btn-2");
+  var force = !!(opts && opts.force);
   if (!silent && btn) { btn.disabled = true; btn.textContent = "Saving…"; }
   return fetch("/journal/save", {
     method:"POST", headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({date:"{{ date }}", content:content})
+    body: JSON.stringify({
+      date:"{{ date }}",
+      content:content,
+      base_rev: (opts && opts.rev) ? opts.rev : _baseRev,
+      force: force
+    })
   })
   .then(function(r) {
     return r.json().then(function(d) {
       if (btn) btn.disabled = false;
+      if (r.status === 409) throw {status: 409, rev: d.rev, error: d.error};
+      if (r.status === 423) throw {status: 423, error: d.error};
       if (!r.ok || !d.ok) throw {status: r.status || 500, error: d.error || "Save failed"};
+      _baseRev = d.rev;
       if (!silent && btn) {
         btn.textContent = "✔ Saved";
         setTimeout(function(){ btn.textContent = "Save Journal"; }, 2000);
       }
-      return {ok: true};
+      return {ok: true, rev: d.rev};
     }, function() {
       if (btn) btn.disabled = false;
       throw {status: r.status || 500, error: "Bad response from server"};
@@ -77,7 +88,7 @@ window._mdSaveFn = function(silent, opts) {
   .catch(function(e) {
     if (btn) btn.disabled = false;
     if (e && e.status !== undefined) {
-      if (!silent && btn) {
+      if (e.status !== 409 && e.status !== 423 && !silent && btn) {
         btn.textContent = "Error — retry";
         setTimeout(function(){ btn.textContent = "Save Journal"; }, 3000);
       }
@@ -87,16 +98,36 @@ window._mdSaveFn = function(silent, opts) {
     throw {status: 0, error: String(e && e.message || e)};
   });
 };
+
+window._mdCopyFn = function() {
+  var content = document.getElementById("md-editor").value;
+  return fetch("/journal/copy", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({date: "{{ date }}", content: content})
+  })
+  .then(function(r) {
+    return r.json().then(function(d2) {
+      if (!r.ok || !d2.ok) throw {error: d2.error || "Couldn't save a copy"};
+      return d2;
+    }, function() {
+      throw {error: "Bad response from server"};
+    });
+  });
+};
+
 function deleteJournal() {
   if (!confirm("Delete this journal entry?")) return;
   fetch("/journal/delete", {
     method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({date:"{{ date }}"})
+    body: JSON.stringify({date:"{{ date }}", base_rev: _baseRev})
   })
-  .then(function(r){ return r.json(); })
-  .then(function(d){
-    if (d.ok) window.location.href = "/journal?date={{ today }}";
-    else alert(d.error || "Delete failed");
+  .then(function(r){ return r.json().then(function(d){ return {status: r.status, d: d}; }); })
+  .then(function(res){
+    if (res.d.ok) window.location.href = "/journal?date={{ today }}";
+    else if (res.status === 409) {
+      alert("This entry changed elsewhere — reload the page and try again.");
+    }
+    else alert(res.d.error || "Delete failed");
   })
   .catch(function(){ alert("Delete failed"); });
 }

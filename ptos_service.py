@@ -586,6 +586,8 @@ def get_restore_preview(filename):
         dict: Preview information about backup contents.
     """
     try:
+        if not ptos._valid_backup_name(filename):
+            raise PTOSError(f"Invalid backup name: {filename!r}")
         backup_path = os.path.join(ptos.BACKUP_DIR, filename)
         preview = ptos.get_restore_preview(backup_path)
         return {"ok": True, "preview": preview}
@@ -2724,7 +2726,7 @@ def bulk_delete(records):
         by_file[r["filepath"]].append(r)
 
     for filepath, recs in by_file.items():
-        if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+        if not ptos._path_within(filepath, ptos.RECORDS_DIR):
             errors.append(f"Invalid filepath: {filepath}")
             continue
         # Delete in reverse lineno order so indices stay valid
@@ -2758,7 +2760,7 @@ def bulk_set(records, set_args):
         by_file[r["filepath"]].append(r)
 
     for filepath, recs in by_file.items():
-        if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+        if not ptos._path_within(filepath, ptos.RECORDS_DIR):
             errors.append(f"Invalid filepath: {filepath}")
             continue
         for r in recs:
@@ -2880,7 +2882,7 @@ def restore_config(zip_path):
         if os.path.exists(config_path):
             if os.path.exists(config_bak):
                 shutil.rmtree(config_bak)
-            os.rename(config_path, config_bak)
+            ptos.rename_with_retry(config_path, config_bak)
         
         # Copy new config — each file under its sidecar lock, atomically,
         # so a settings/schema save racing this restore serializes.
@@ -2899,7 +2901,7 @@ def restore_config(zip_path):
             if os.path.exists(config_bak):
                 if os.path.exists(config_path):
                     shutil.rmtree(config_path)
-                os.rename(config_bak, config_path)
+                ptos.rename_with_retry(config_bak, config_path)
             raise
         
         # Success: delete config.bak
@@ -4324,7 +4326,7 @@ def board_move_record(board_name, filepath, old_line, lineno, target_lane):
         raise PTOSError(f"Board '{board_name}' is not a status board (no set_field)")
     set_field = set_field.strip()
 
-    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+    if not ptos._path_within(filepath, ptos.RECORDS_DIR):
         raise PTOSError("Invalid filepath")
 
     lanes = _normalize_board_lanes(cfg.get("columns", []), set_field)
@@ -4477,7 +4479,7 @@ def convert_record(filepath, old_line, lineno, target_type, kv_overrides=None, k
     if draft["missing_required"]:
         raise PTOSError(
             "Convert blocked — target type requires: " + ", ".join(draft["missing_required"]))
-    if not os.path.abspath(filepath).startswith(os.path.abspath(ptos.RECORDS_DIR)):
+    if not ptos._path_within(filepath, ptos.RECORDS_DIR):
         raise PTOSError("Invalid filepath")
     try:
         new_filepath, new_lineno = ptos.append_record(draft["new_line"], return_position=True)
@@ -6425,16 +6427,72 @@ def get_today_journal():
     return ptos.get_today_journal()
 
 
-def save_journal(date_str, content):
-    """Save journal content for a given date."""
-    month_dir = os.path.join(JOURNAL_DIR, date_str[:4], date_str[5:7])
+def _journal_full(date_str):
+    """Validated absolute path for a journal date (no writes)."""
+    date = ptos.parse_journal_date(date_str).isoformat()
+    full = os.path.join(ptos.JOURNAL_DIR, date[:4], date[5:7], f"{date}.md")
+    if not ptos._path_within(full, ptos.JOURNAL_DIR):
+        raise PTOSError(f"Invalid journal date: {date_str!r}")
+    return date, full
+
+
+def save_journal(date_str, content, base_rev=None, force=False):
+    """Save journal content for a given date; returns {"rev": ...}.
+
+    base_rev enables the same optimistic concurrency as note saves — a
+    stale rev raises NoteConflictError (web: HTTP 409) instead of
+    overwriting, unless force is set."""
+    date, full = _journal_full(date_str)
+    month_dir = os.path.dirname(full)
     os.makedirs(month_dir, exist_ok=True)
-    write_file(os.path.join(month_dir, f"{date_str}.md"), content)
+    return _save_text_locked(full, content, base_rev, force)
 
 
-def delete_journal(date_str):
-    """Delete a journal file. Cleans empty year/month dirs."""
-    return ptos.delete_journal(date_str)
+def save_journal_copy(date_str, content):
+    """Write the journal conflict-copy beside the entry, under a
+    server-generated name (the date is validated; only the clock-derived
+    suffix varies). Returns {"rev", "filename"}."""
+    date, full = _journal_full(date_str)
+    stamp = dt.datetime.now().strftime("%H%M")
+    month_dir = os.path.dirname(full)
+    os.makedirs(month_dir, exist_ok=True)
+    copy_path = os.path.join(month_dir, f"{date} (my edits {stamp}).md")
+    if not ptos._path_within(copy_path, ptos.JOURNAL_DIR):
+        raise PTOSError(f"Invalid journal date: {date_str!r}")
+    result = _save_text_locked(copy_path, content)
+    result["filename"] = os.path.basename(copy_path)
+    return result
+
+
+def journal_rev(date_str):
+    """Current rev token for a journal date ('absent' when the file is
+    missing)."""
+    _, full = _journal_full(date_str)
+    if not os.path.isfile(full):
+        return "absent"
+    with open(full, "rb") as f:
+        return ptos.note_rev(f.read())
+
+
+def delete_journal(date_str, base_rev=None):
+    """Delete a journal file. Cleans empty year/month dirs. When base_rev
+    is given, a stale rev raises NoteConflictError instead of deleting."""
+    date, full = _journal_full(date_str)
+    if not os.path.isfile(full):
+        raise FileNotFoundError(f"Journal not found: {date_str}")
+    if base_rev is not None:
+        with ptos.file_lock(full):
+            if not os.path.isfile(full):
+                raise FileNotFoundError(f"Journal not found: {date_str}")
+            with open(full, "rb") as f:
+                cur_rev = ptos.note_rev(f.read())
+            if base_rev != cur_rev:
+                raise NoteConflictError(
+                    "This journal entry changed elsewhere", rev=cur_rev)
+            ptos.delete_journal(date)
+            return {"ok": True}
+    ptos.delete_journal(date)
+    return {"ok": True}
 
 
 def svc_list_dir(rel_path=""):
@@ -6508,21 +6566,29 @@ def svc_read_file(rel_path):
     return {"content": content, "rev": ptos.note_rev(raw)}
 
 
-def svc_save_file(rel_path, content, base_rev=None, force=False):
-    """Atomically save a note; returns {"rev": <new version token>}.
+def _same_text(raw, new):
+    """Byte equality modulo line endings.
 
-    base_rev enables optimistic concurrency: when it no longer matches
-    the file (another tab, a synced device, or an id insertion) a
-    NoteConflictError carrying the current rev is raised instead of
-    overwriting — unless force is set. A save whose bytes already equal
-    the file succeeds without rewriting. The file's ptos-id first line is
-    re-prepended whenever the incoming content dropped it, so an editor
-    save can never lose the id. Missing base_rev (CLI, older clients)
-    writes as before — still locked and atomic."""
-    full = ptos._safe_path(rel_path)
-    parent = os.path.dirname(full)
-    if parent and not os.path.isdir(parent):
-        raise FileNotFoundError(2, os.strerror(2), full)
+    svc_read_file normalizes CRLF/CR to LF, so a CRLF file loaded into an
+    editor and saved back unchanged would never match its own bytes —
+    the identical-content rescue must compare the text, not the encoding."""
+    if raw == new:
+        return True
+    return (raw.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+            == new.replace(b"\r\n", b"\n").replace(b"\r", b"\n"))
+
+
+def _save_text_locked(full, content, base_rev=None, force=False, prepare=None):
+    """Locked byte-atomic text save shared by notes and journals.
+
+    Returns {"rev": <new version token>}. base_rev enables optimistic
+    concurrency: when it no longer matches the file (another tab, a synced
+    device, or an id insertion) a NoteConflictError carrying the current rev
+    is raised instead of overwriting — unless force is set. A save whose
+    bytes already equal the file succeeds without rewriting. prepare(raw,
+    content) may rewrite the outgoing content from the on-disk bytes (the
+    notes id-prefix rule); None keeps content verbatim. Missing base_rev
+    (CLI, older clients) writes as before — still locked and atomic."""
     with ptos.file_lock(full):
         exists = os.path.isfile(full)
         raw = b""
@@ -6531,18 +6597,40 @@ def svc_save_file(rel_path, content, base_rev=None, force=False):
                 raw = f.read()
         cur_rev = ptos.note_rev(raw) if exists else "absent"
         if base_rev is not None and not force and base_rev != cur_rev:
-            if exists and raw == content.encode("utf-8"):
+            if exists and _same_text(raw, content.encode("utf-8")):
                 return {"rev": cur_rev}
             raise NoteConflictError("This note changed elsewhere", rev=cur_rev)
-        if exists:
-            prefix = ptos.note_id_prefix(raw[:200].decode("utf-8", "replace"))
-            if prefix and not ptos.note_id_prefix(content):
-                content = prefix + "\n" + content
+        if prepare is not None:
+            content = prepare(raw, content)
         with ptos.AtomicWrite(full) as w:
             w.stream.write(content.encode("utf-8"))
         with open(full, "rb") as f:
             new_raw = f.read()
         return {"rev": ptos.note_rev(new_raw)}
+
+
+def svc_save_file(rel_path, content, base_rev=None, force=False):
+    """Atomically save a note; returns {"rev": <new version token>}.
+
+    base_rev enables optimistic concurrency (see _save_text_locked). The
+    file's ptos-id first line is re-prepended whenever the incoming content
+    dropped it, so an editor save can never lose the id. Missing base_rev
+    (CLI, older clients) writes as before — still locked and atomic."""
+    full = ptos._safe_path(rel_path)
+    parent = os.path.dirname(full)
+    if parent and not os.path.isdir(parent):
+        raise FileNotFoundError(2, os.strerror(2), full)
+
+    def _keep_id_prefix(raw, content):
+        if not raw:
+            return content
+        prefix = ptos.note_id_prefix(raw[:200].decode("utf-8", "replace"))
+        if prefix and not ptos.note_id_prefix(content):
+            return prefix + "\n" + content
+        return content
+
+    return _save_text_locked(full, content, base_rev, force,
+                             prepare=_keep_id_prefix)
 
 
 def svc_resolve_template(rel_path):

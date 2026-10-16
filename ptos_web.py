@@ -1765,36 +1765,80 @@ def journal_get():
     path = ptos.journal_path(date_str)
     if os.path.exists(path):
         content = open(path, encoding="utf-8").read()
+        rev = svc.journal_rev(date_str)
     else:
         content = ptos.get_journal_template_content(date_str)
+        rev = "absent"
     return render_template("journal.html",
         tab="journal", title="Journal", now=_now_str(),
         date=date_str, today=today_d.isoformat(),
         prev_date=prev_date, next_date=next_date,
-        content=content, msg=None)
+        content=content, rev=rev, msg=None)
 
 @app.route("/journal/save", methods=["POST"])
 def journal_save():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(ok=False, error="JSON body required"), 400
     date = data.get("date", dt.date.today().isoformat())
     content = data.get("content", "")
+    base_rev = data.get("base_rev")
+    force = bool(data.get("force"))
     try:
-        svc.save_journal(date, content)
-        return jsonify(ok=True)
-    except svc.PTOSError as e:
+        ptos.parse_journal_date(date)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    try:
+        result = svc.save_journal(date, content,
+                                  base_rev=base_rev, force=force)
+        return jsonify(ok=True, rev=result["rev"])
+    except svc.NoteConflictError as e:
+        return jsonify(ok=False, conflict=True, rev=e.rev,
+                       error=str(e)), 409
+    except ptos.FileBusyError as e:
+        return jsonify(ok=False, error=str(e)), 423
+    except Exception as e:
         return jsonify(ok=False, error=str(e))
+
+@app.route("/journal/copy", methods=["POST"])
+def journal_copy():
+    """Write the conflict-copy beside a journal entry (server-named file)."""
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(ok=False, error="JSON body required"), 400
+    date = data.get("date", "")
+    content = data.get("content", "")
+    try:
+        ptos.parse_journal_date(date)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    try:
+        result = svc.save_journal_copy(date, content)
+        return jsonify(ok=True, rev=result["rev"], filename=result["filename"])
+    except ptos.FileBusyError as e:
+        return jsonify(ok=False, error=str(e)), 423
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
 @app.route("/journal/delete", methods=["POST"])
 def journal_delete():
-    data = request.get_json(silent=True) or {}
+    data = request.get_json(silent=True)
+    if data is None:
+        return jsonify(ok=False, error="JSON body required"), 400
     date = data.get("date", "")
+    base_rev = data.get("base_rev")
     try:
-        svc.delete_journal(date)
+        ptos.parse_journal_date(date)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    try:
+        svc.delete_journal(date, base_rev=base_rev)
         return jsonify(ok=True)
     except FileNotFoundError:
         return jsonify(ok=False, error="Journal not found")
+    except svc.NoteConflictError as e:
+        return jsonify(ok=False, conflict=True, rev=e.rev,
+                       error=str(e)), 409
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
@@ -2634,6 +2678,8 @@ def backup_restore():
     else:
         data = request.get_json(silent=True) or {}
         name = data.get("name", "")
+        if not ptos._valid_backup_name(name):
+            return jsonify(ok=False, error="Invalid backup name"), 400
         backup_path = os.path.join(svc.BACKUP_DIR, name)
         if not os.path.exists(backup_path):
             return jsonify(ok=False, error="Backup not found")
@@ -2774,6 +2820,10 @@ def api_conflict_resolve():
     original_path = data.get("original_path", "")
     conf_full = os.path.join(ptos.BASE_DIR, conflict_path)
     orig_full = os.path.join(ptos.BASE_DIR, original_path)
+    if not ptos._path_within(conf_full, ptos.BASE_DIR):
+        return jsonify(ok=False, error="Invalid conflict_path"), 400
+    if not ptos._path_within(orig_full, ptos.BASE_DIR):
+        return jsonify(ok=False, error="Invalid original_path"), 400
     file_type = data.get("file_type") or _conflict_file_type(conflict_path)
 
     if not os.path.exists(conf_full):
@@ -4004,11 +4054,21 @@ def browse_run():
 # Log Editor
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _valid_log_filename(name):
+    """A plain log filename: no path separators (either style, either OS),
+    not '.' or '..', not empty. The Log Editor only ever touches flat
+    *.log basenames inside RECORDS_DIR."""
+    return (bool(name) and "/" not in name and "\\" not in name
+            and name not in (".", ".."))
+
+
 @app.route("/editor")
 def editor_get():
     log_files = svc.get_log_files()
     current = request.args.get("file","")
     if not current and log_files: current = log_files[-1]
+    if current and not _valid_log_filename(current):
+        return "Invalid filename", 400
     content = ""
     if current:
         path = os.path.join(svc.RECORDS_DIR, current)
@@ -4022,7 +4082,7 @@ def editor_get():
 def editor_content():
     """Return file content for AJAX loading (used for goto line feature)."""
     file = request.args.get("file", "")
-    if not file or "/" in file or "\\" in file or " " in file:
+    if not _valid_log_filename(file):
         return "Invalid filename", 400
     path = os.path.join(svc.RECORDS_DIR, file)
     if not os.path.exists(path):
@@ -4034,7 +4094,7 @@ def editor_content():
 def editor_save():
     data = request.get_json(silent=True) or {}
     file = data.get("file",""); content = data.get("content","")
-    if not file or "/" in file or "\\" in file:
+    if not _valid_log_filename(file):
         return jsonify(ok=False, error="Invalid filename")
     path = os.path.join(svc.RECORDS_DIR, file)
     if not os.path.exists(path):
@@ -4459,7 +4519,7 @@ def edit_post():
     if not set_args and new_note is None:
         app.logger.debug("edit_post: no changes, redirect to %s", after_save)
         return redirect(after_save)
-    if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
+    if not ptos._path_within(filepath, svc.RECORDS_DIR):
         return redirect(after_save)
     try:
         svc.edit_record(filepath, old_line,
@@ -4541,7 +4601,7 @@ def api_records_edit():
         except Exception: lineno = None
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
-    if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
+    if not ptos._path_within(filepath, svc.RECORDS_DIR):
         return jsonify(ok=False, error="Invalid filepath")
     try:
         result = svc.edit_record(filepath, old_line,
@@ -4564,7 +4624,7 @@ def api_records_delete():
         except Exception: lineno = None
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
-    if not os.path.abspath(filepath).startswith(os.path.abspath(svc.RECORDS_DIR)):
+    if not ptos._path_within(filepath, svc.RECORDS_DIR):
         return jsonify(ok=False, error="Invalid filepath")
     try:
         result = svc.delete_record(filepath, old_line, lineno=lineno)
@@ -4589,8 +4649,7 @@ def api_records_bulk_delete():
     # Validate all filepaths before touching anything
     for r in records:
         fp = r.get("filepath", "")
-        if not fp or not os.path.abspath(fp).startswith(
-                os.path.abspath(svc.RECORDS_DIR)):
+        if not fp or not ptos._path_within(fp, svc.RECORDS_DIR):
             return jsonify(ok=False, error=f"Invalid filepath: {fp}")
     try:
         result = svc.bulk_delete(records)
@@ -4613,8 +4672,7 @@ def api_records_bulk_set():
     # Validate all filepaths
     for r in records:
         fp = r.get("filepath", "")
-        if not fp or not os.path.abspath(fp).startswith(
-                os.path.abspath(svc.RECORDS_DIR)):
+        if not fp or not ptos._path_within(fp, svc.RECORDS_DIR):
             return jsonify(ok=False, error=f"Invalid filepath: {fp}")
     try:
         result = svc.bulk_set(records, set_args)

@@ -422,9 +422,12 @@ class TestTemplatePins:
 
     def test_no_direct_text_writes_in_note_writers(self):
         import ptos_web
+        core_src = inspect.getsource(svc._save_text_locked)
+        assert "AtomicWrite" in core_src
+        save_src = inspect.getsource(svc.svc_save_file)
+        assert "_save_text_locked" in save_src
         for fn in (svc.svc_save_file, ptos.ensure_note_id, ptos.create_file):
             src = inspect.getsource(fn)
-            assert "AtomicWrite" in src, fn.__name__
             assert 'open(full, "w"' not in src, fn.__name__
         src = inspect.getsource(ptos_web.api_conflict_resolve)
         assert "shutil.copy2(conf_full" not in src

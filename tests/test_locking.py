@@ -313,6 +313,30 @@ class TestLockfileFallback:
             with ptos.file_lock(path, timeout=0.15):
                 pass
 
+    def test_ancient_live_owner_is_stolen(self, tmp_path, lockfile_mode):
+        path = str(tmp_path / "data.txt")
+        _write_owner(path + ".lock", os.getpid(), age=700.0)
+        with ptos.file_lock(path, timeout=5.0):
+            pass
+
+    def test_ancient_foreign_host_is_stolen(self, tmp_path, lockfile_mode):
+        path = str(tmp_path / "data.txt")
+        _write_owner(path + ".lock", _dead_pid(),
+                     host="some-other-host", age=700.0)
+        with ptos.file_lock(path, timeout=5.0):
+            pass
+
+    def test_recent_live_owner_respects_the_max_age_gate(
+            self, tmp_path, lockfile_mode):
+        path = str(tmp_path / "data.txt")
+        _write_owner(path + ".lock", os.getpid(), age=590.0)
+        with pytest.raises(ptos.FileBusyError):
+            with ptos.file_lock(path, timeout=0.15):
+                pass
+
+    def test_max_age_constant_is_ten_minutes(self):
+        assert ptos._LOCK_MAX_AGE_SECONDS == 600.0
+
     def test_editor_and_appender_race(self, tmp_path, lockfile_mode):
         path = str(tmp_path / "race.log")
         for i in range(25):
@@ -540,6 +564,315 @@ class TestRaceConfigWriters:
         assert items and items[0]["name"] == "fav9"
         assert data["display"]["currency"] in ("INR", "USD")
         _assert_no_leftovers(tmp_path)
+
+
+# ── temp-file permissions ─────────────────────────────────────────────────────
+
+def _current_umask():
+    mask = os.umask(0)
+    os.umask(mask)
+    return mask
+
+
+class TestTempFilePermissions:
+    def test_temp_names_are_unique_and_same_dir(self, tmp_path):
+        target = str(tmp_path / "data.txt")
+        seen = set()
+        for _ in range(5):
+            fd, tmp = ptos._make_temp_file(target)
+            os.close(fd)
+            assert os.path.dirname(tmp) == str(tmp_path)
+            assert tmp.endswith(".tmp")
+            assert tmp not in seen
+            seen.add(tmp)
+            os.unlink(tmp)
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits")
+    @pytest.mark.parametrize("mode", [0o640, 0o644, 0o600, 0o664])
+    def test_atomic_write_preserves_existing_mode(self, tmp_path, mode):
+        path = str(tmp_path / "data.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("old")
+        os.chmod(path, mode)
+        ptos.atomic_write(path, "new")
+        assert os.stat(path).st_mode & 0o777 == mode
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits")
+    def test_atomic_write_new_file_gets_umask_mode(self, tmp_path):
+        path = str(tmp_path / "fresh.txt")
+        ptos.atomic_write(path, "content")
+        assert os.stat(path).st_mode & 0o777 == 0o666 & ~_current_umask()
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits")
+    def test_atomicwrite_stream_preserves_mode(self, tmp_path):
+        path = str(tmp_path / "data.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("old")
+        os.chmod(path, 0o640)
+        with ptos.AtomicWrite(path) as w:
+            w.stream.write(b"new")
+        assert os.stat(path).st_mode & 0o777 == 0o640
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX mode bits")
+    def test_atomic_append_preserves_mode(self, tmp_path):
+        path = str(tmp_path / "data.txt")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write("old\n")
+        os.chmod(path, 0o644)
+        ptos.atomic_append(path, "line\n")
+        assert os.stat(path).st_mode & 0o777 == 0o644
+
+
+# ── sharing-violation retry on replace/rename ─────────────────────────────────
+
+def _sharing_error():
+    err = PermissionError(13, "sharing violation")
+    err.winerror = 32
+    return err
+
+
+class TestReplaceWithRetry:
+    def test_posix_passthrough_does_not_retry(self, monkeypatch):
+        if os.name == "nt":
+            pytest.skip("POSIX passthrough branch")
+        calls = []
+
+        def boom(src, dst):
+            calls.append(1)
+            raise PermissionError(13, "denied")
+
+        monkeypatch.setattr(os, "replace", boom)
+        with pytest.raises(PermissionError):
+            ptos.replace_with_retry("a", "b")
+        assert len(calls) == 1
+
+    def test_nt_retries_transient_sharing_violation(self, tmp_path, monkeypatch):
+        if os.name != "nt":
+            pytest.skip("Windows-only retry branch")
+        src = str(tmp_path / "src.txt")
+        dst = str(tmp_path / "dst.txt")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write("new")
+        with open(dst, "w", encoding="utf-8") as f:
+            f.write("old")
+        state = {"n": 0}
+        real = os.replace
+
+        def flaky(a, b):
+            state["n"] += 1
+            if state["n"] <= 2:
+                raise _sharing_error()
+            real(a, b)
+
+        monkeypatch.setattr(os, "replace", flaky)
+        ptos.replace_with_retry(src, dst)
+        assert state["n"] == 3
+        with open(dst, encoding="utf-8") as f:
+            assert f.read() == "new"
+
+    def test_nt_raises_file_busy_after_timeout(self, tmp_path, monkeypatch):
+        if os.name != "nt":
+            pytest.skip("Windows-only retry branch")
+        monkeypatch.setattr(ptos, "_REPLACE_RETRY_TOTAL", 0.05)
+
+        def always(a, b):
+            raise _sharing_error()
+
+        monkeypatch.setattr(os, "replace", always)
+        with pytest.raises(ptos.FileBusyError):
+            ptos.replace_with_retry(str(tmp_path / "s"), str(tmp_path / "d"))
+
+    def test_non_permission_errors_raise_immediately(self, tmp_path, monkeypatch):
+        if os.name != "nt":
+            pytest.skip("Windows-only retry branch")
+        calls = []
+
+        def boom(a, b):
+            calls.append(1)
+            raise OSError(5, "hard failure")
+
+        monkeypatch.setattr(os, "replace", boom)
+        with pytest.raises(OSError):
+            ptos.replace_with_retry(str(tmp_path / "s"), str(tmp_path / "d"))
+        assert len(calls) == 1
+
+    def test_rename_with_retry_nt_retries(self, tmp_path, monkeypatch):
+        if os.name != "nt":
+            pytest.skip("Windows-only retry branch")
+        src = str(tmp_path / "src.txt")
+        dst = str(tmp_path / "dst.txt")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write("x")
+        state = {"n": 0}
+        real = os.rename
+
+        def flaky(a, b):
+            state["n"] += 1
+            if state["n"] <= 1:
+                raise _sharing_error()
+            real(a, b)
+
+        monkeypatch.setattr(os, "rename", flaky)
+        ptos.rename_with_retry(src, dst)
+        assert state["n"] == 2
+        assert os.path.isfile(dst)
+
+    @pytest.mark.skipif(os.name != "nt", reason="needs Windows file handles")
+    def test_real_sharing_violation_then_release_succeeds(self, tmp_path):
+        import ctypes
+        src = str(tmp_path / "src.txt")
+        dst = str(tmp_path / "dst.txt")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write("new")
+        with open(dst, "w", encoding="utf-8") as f:
+            f.write("old")
+        kernel32 = ctypes.windll.kernel32
+        GENERIC_WRITE = 0x40000000
+        FILE_SHARE_READ = 0x1
+        OPEN_EXISTING = 3
+        handle = kernel32.CreateFileW(
+            dst, GENERIC_WRITE, FILE_SHARE_READ, None, OPEN_EXISTING, 0, None)
+        assert handle not in (0, -1)
+
+        def release_soon():
+            time.sleep(0.3)
+            kernel32.CloseHandle(handle)
+
+        t = threading.Thread(target=release_soon)
+        t.start()
+        ptos.replace_with_retry(src, dst)
+        t.join(5.0)
+        with open(dst, encoding="utf-8") as f:
+            assert f.read() == "new"
+
+    @pytest.mark.skipif(os.name != "nt", reason="needs Windows file handles")
+    def test_persistent_sharing_violation_raises_file_busy(self, tmp_path,
+                                                          monkeypatch):
+        import ctypes
+        monkeypatch.setattr(ptos, "_REPLACE_RETRY_TOTAL", 0.3)
+        src = str(tmp_path / "src.txt")
+        dst = str(tmp_path / "dst.txt")
+        with open(src, "w", encoding="utf-8") as f:
+            f.write("new")
+        with open(dst, "w", encoding="utf-8") as f:
+            f.write("old")
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.CreateFileW(
+            dst, 0x40000000, 0x1, None, 3, 0, None)
+        assert handle not in (0, -1)
+        try:
+            with pytest.raises(ptos.FileBusyError):
+                ptos.replace_with_retry(src, dst)
+            with open(dst, encoding="utf-8") as f:
+                assert f.read() == "old"
+        finally:
+            kernel32.CloseHandle(handle)
+
+
+class TestNoBareReplaceOutsideHelpers:
+    _ALLOWED = {"replace_with_retry", "rename_with_retry",
+                "_retry_windows_sharing"}
+
+    def _violations(self):
+        violations = []
+        for fname in ("ptos.py", "ptos_todo.py", "ptos_service.py"):
+            path = os.path.join(REPO, fname)
+            with open(path, encoding="utf-8") as f:
+                tree = ast.parse(f.read())
+            for fn in [n for n in ast.walk(tree)
+                       if isinstance(n, ast.FunctionDef)]:
+                if fn.name in self._ALLOWED:
+                    continue
+                for node in ast.walk(fn):
+                    if not isinstance(node, ast.Call):
+                        continue
+                    fobj = node.func
+                    if (isinstance(fobj, ast.Attribute)
+                            and fobj.attr in ("replace", "rename")
+                            and isinstance(fobj.value, ast.Name)
+                            and fobj.value.id == "os"):
+                        violations.append(f"{fname}:{fn.name}")
+        return violations
+
+    def test_every_replace_and_rename_goes_through_the_retry(self):
+        assert self._violations() == []
+
+
+# ── lock exclusion probe ──────────────────────────────────────────────────────
+
+class TestLockExclusionProbe:
+    def test_probe_passes_on_normal_fs(self, monkeypatch):
+        monkeypatch.setattr(ptos, "_LOCK_MODE", {})
+        assert ptos.file_lock_mode() in ("fcntl", "msvcrt", "lockfile")
+        assert ptos._LOCK_MODE.get("exclusion_ok") is True
+
+    def test_probe_downgrades_when_exclusion_lies(self, monkeypatch):
+        monkeypatch.setattr(ptos, "_LOCK_MODE", {})
+        forced = "msvcrt" if os.name == "nt" else "fcntl"
+        monkeypatch.setenv("PTOS_LOCK_MODE", forced)
+        monkeypatch.setattr(ptos, "_os_lock", lambda fd, backend: None)
+        assert ptos.file_lock_mode() == "lockfile"
+        assert ptos._LOCK_MODE.get("exclusion_ok") is False
+
+    def test_probe_runs_once_per_process(self, monkeypatch):
+        monkeypatch.setattr(ptos, "_LOCK_MODE", {})
+        ptos.file_lock_mode()
+        calls = []
+        monkeypatch.setattr(ptos, "_run_lock_probe",
+                            lambda mode: calls.append(mode))
+        ptos.file_lock_mode()
+        ptos.file_lock_mode()
+        assert calls == []
+
+    def test_lockfile_mode_probe_detects_honest_o_excl(self, monkeypatch):
+        monkeypatch.setattr(ptos, "_LOCK_MODE", {})
+        monkeypatch.setenv("PTOS_LOCK_MODE", "lockfile")
+        assert ptos.file_lock_mode() == "lockfile"
+        assert ptos._LOCK_MODE.get("exclusion_ok") is True
+
+    def test_doctor_reports_probe_result(self, monkeypatch):
+        monkeypatch.setattr(ptos, "_LOCK_MODE", {})
+        errs, warns, msgs, fixes = ptos.doctor_check()
+        locking = [m for m in msgs if m[0] == "File locking"]
+        assert locking and "exclusion probe" in locking[0][1]
+
+
+class TestDoctorStignore:
+    def test_doctor_warns_on_missing_stignore(self):
+        stignore = os.path.join(ptos.BASE_DIR, ".stignore")
+        if os.path.exists(stignore):
+            os.remove(stignore)
+        errs, warns, msgs, fixes = ptos.doctor_check()
+        assert any(".stignore missing" in w for w in warns)
+
+    def test_fix_creates_stignore_idempotent(self):
+        stignore = os.path.join(ptos.BASE_DIR, ".stignore")
+        if os.path.exists(stignore):
+            os.remove(stignore)
+        errs, warns, msgs, fixes = ptos.doctor_check(fix=True)
+        assert os.path.isfile(stignore)
+        with open(stignore, encoding="utf-8") as f:
+            text = f.read()
+        for pattern in ("*.tmp", "*.bak", "*.lock"):
+            assert pattern in text.splitlines()
+        first = text
+        errs, warns, msgs, fixes = ptos.doctor_check(fix=True)
+        with open(stignore, encoding="utf-8") as f:
+            assert f.read() == first
+        assert not any("stignore" in w for w in warns)
+
+    def test_fix_appends_only_missing_lines(self):
+        stignore = os.path.join(ptos.BASE_DIR, ".stignore")
+        with open(stignore, "w", encoding="utf-8") as f:
+            f.write("*.tmp\n")
+        errs, warns, msgs, fixes = ptos.doctor_check(fix=True)
+        with open(stignore, encoding="utf-8") as f:
+            lines = f.read().splitlines()
+        assert lines.count("*.tmp") == 1
+        assert "*.bak" in lines
+        assert "*.lock" in lines
+        errs, warns, msgs, fixes = ptos.doctor_check()
+        assert not any("stignore" in w for w in warns)
 
 
 # ── 8. static: no copy2(bak, live) rollback, reads inside the lock ───────────
