@@ -846,6 +846,75 @@ class TestBoardGridView:
         assert "_dropType" in html
 
 
+class TestBoardTouchDrag:
+    def _get(self, path):
+        from ptos_web import app
+        client = app.test_client()
+        return client.get(path).get_data(as_text=True)
+
+    def _board(self):
+        _write_queries({"b": {"columns": ["expense", "exercise"]}})
+        today = dt.date.today().isoformat()
+        _write_record(today, f"{today} type=expense amount=1")
+        _write_record(today, f"{today} type=exercise duration=10")
+
+    def test_drag_js_included_versioned(self):
+        self._board()
+        html = self._get("/board?board=b")
+        assert "/static/js/drag.js?v=" in html
+
+    def test_touch_listeners_present(self):
+        self._board()
+        html = self._get("/board?board=b")
+        for ev in ("touchstart", "touchmove", "touchend", "touchcancel"):
+            assert f"'{ev}'" in html
+        # the move listener must be able to preventDefault mid-drag
+        assert "passive: false" in html
+
+    def test_long_press_grab_with_slop_cancel(self):
+        self._board()
+        html = self._get("/board?board=b")
+        assert "_BT_HOLD_MS" in html
+        assert "setTimeout(_btGrab," in html
+        assert "_BT_SLOP_PX" in html
+        assert "st.moved" in html
+        # movement before the hold fires cancels the grab -> plain scroll
+        assert "it is a scroll, not a drag" in html
+
+    def test_shared_finish_drop_from_both_paths(self):
+        self._board()
+        html = self._get("/board?board=b")
+        assert "function finishDrop(" in html
+        assert "finishDrop(e.target)" in html
+        assert "finishDrop(hit)" in html
+
+    def test_capture_drag_shared_by_both_paths(self):
+        self._board()
+        html = self._get("/board?board=b")
+        assert "function _captureDrag(" in html
+        assert "_captureDrag(card)" in html
+        assert "_captureDrag(_btState.card)" in html
+
+    def test_touch_hit_testing_and_row_guard(self):
+        self._board()
+        html = self._get("/board?board=b&view=grid")
+        assert "_touchHit(" in html
+        # touch dragover highlight and drop both honor the same-row rule
+        assert "_dropAllowed(hit)" in html
+        assert "_dropAllowed(hitEl)" in html
+
+    def test_trailing_click_suppressed_after_drop(self):
+        self._board()
+        html = self._get("/board?board=b")
+        assert "_btClickSuppressUntil" in html
+        assert "_btSuppressNextClick" in html
+
+    def test_card_button_taps_left_alone(self):
+        self._board()
+        html = self._get("/board?board=b")
+        assert "'button, a, input, select, textarea'" in html
+
+
 # ── board_field_overlap endpoint ──────────────────────────────────────────────
 
 class TestBoardFieldOverlapEndpoint:

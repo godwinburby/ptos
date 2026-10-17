@@ -882,6 +882,11 @@ Kanban board view for tracking records across workflow stages. Configured in
   `assessment`, `prescription`, `fitting`)
 - **Drag cards between columns** — creates a new record of the target type with
   shared field values copied over; redirects to edit for missing required fields
+- **Touch drag on mobile** — long-press a card for a third of a second to grab
+  it, drag to the target column, release to drop (a light buzz confirms the
+  grab). Moving your finger before the hold fires just scrolls the board as
+  usual, so cards never trap page scrolling. Same rules as mouse drag: the
+  grid view stays within a client row and status boards rewrite `set_field`
 - **Configurable time window and card limit** per board
 - **Card title fields** — choose which record fields appear as the card header
   via a chip picker with drag priority (stored in `queries.toml`)

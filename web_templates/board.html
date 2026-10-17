@@ -350,6 +350,7 @@
 
 <div class="board-toast" id="board-toast"></div>
 
+<script src="{{ av('/static/js/drag.js') }}"></script>
 <script src="{{ av('/static/js/time_picker.js') }}"></script>
 <script>
 var tp;
@@ -437,27 +438,27 @@ function _sourceType(card) {
   return null;
 }
 
-function _dropEl(e) {
-  var cell = e.target.closest('.bg-cell');
+function _dropEl(el) {
+  if (!el || !el.closest) return null;
+  var cell = el.closest('.bg-cell');
   if (cell) return cell;
-  var lane = e.target.closest('.board-lane');
+  var lane = el.closest('.board-lane');
   if (lane) return lane.querySelector('.lane-dropzone') || lane;
-  var ulane = e.target.closest('.bg-unmatched-lane');
+  var ulane = el.closest('.bg-unmatched-lane');
   if (ulane) return ulane;
   return null;
 }
 
-function _dropType(e) {
-  var lane = e.target.closest('.board-lane');
+function _dropType(el) {
+  if (!el || !el.closest) return null;
+  var lane = el.closest('.board-lane');
   if (lane) return lane.dataset.type;
-  var el = e.target.closest('[data-col-type]');
-  if (el) return el.dataset.colType;
+  var cell = el.closest('[data-col-type]');
+  if (cell) return cell.dataset.colType;
   return null;
 }
 
-function onDragStart(e) {
-  var card = e.target.closest('.board-card');
-  if (!card) return;
+function _captureDrag(card) {
   var row = card.closest('.bg-row');
   _dragData = {
     line: card.dataset.line,
@@ -467,35 +468,41 @@ function onDragStart(e) {
     srcRow: row ? row.dataset.row : null,
   };
   card.classList.add('dragging');
+}
+
+function _dropAllowed(el) {
+  if (!_dragData || !el) return false;
+  if (!_dragData.srcRow) return true;
+  var targetCell = el.closest('.bg-cell');
+  var row = targetCell ? targetCell.closest('.bg-row') : null;
+  if (!targetCell || !row || row.dataset.row !== _dragData.srcRow) return false;
+  return true;
+}
+
+function onDragStart(e) {
+  var card = e.target.closest('.board-card');
+  if (!card) return;
+  _captureDrag(card);
   e.dataTransfer.effectAllowed = 'move';
 }
 
 function onDragEnd(e) {
-  document.querySelectorAll('.board-card.dragging').forEach(function(el) {
-    el.classList.remove('dragging');
-  });
-  document.querySelectorAll('.lane-dropzone.drag-over, .bg-cell.drag-over, .bg-unmatched-lane.drag-over').forEach(function(el) {
-    el.classList.remove('drag-over');
-  });
+  _btClearVisuals();
 }
 
 function onDragOver(e) {
-  var targetCell = e.target.closest('.bg-cell');
   if (_dragData && _dragData.srcRow) {
     // Matched card: only dropable within its own client row.
-    var row = targetCell ? targetCell.closest('.bg-row') : null;
-    if (!targetCell || !row || row.dataset.row !== _dragData.srcRow) {
-      return; // no preventDefault -> drop not allowed
-    }
+    if (!_dropAllowed(e.target)) return; // no preventDefault -> drop not allowed
   }
   e.preventDefault();
   e.dataTransfer.dropEffect = 'move';
-  var dropEl = _dropEl(e);
+  var dropEl = _dropEl(e.target);
   if (dropEl) dropEl.classList.add('drag-over');
 }
 
 function onDragLeave(e) {
-  var dropEl = _dropEl(e);
+  var dropEl = _dropEl(e.target);
   if (dropEl) {
     dropEl.classList.remove('drag-over');
   }
@@ -511,29 +518,23 @@ function showToast(msg, isError) {
   _boardToastTimer = setTimeout(function() { el.style.display = 'none'; }, 4000);
 }
 
-function onDrop(e) {
-  e.preventDefault();
+function finishDrop(hitEl) {
   document.querySelectorAll('.lane-dropzone.drag-over, .bg-cell.drag-over, .bg-unmatched-lane.drag-over').forEach(function(el) {
     el.classList.remove('drag-over');
   });
-  if (!_dragData) return;
-  var targetCell = e.target.closest('.bg-cell');
-  if (_dragData.srcRow) {
-    // Matched card: only dropable within its own client row.
-    var row = targetCell ? targetCell.closest('.bg-row') : null;
-    if (!targetCell || !row || row.dataset.row !== _dragData.srcRow) {
-      showToast('Advanced cards must stay within the same client row', true);
-      return;
-    }
+  if (!_dragData || !hitEl) return;
+  if (!_dropAllowed(hitEl)) {
+    showToast('Advanced cards must stay within the same client row', true);
+    return;
   }
-  var targetType = _dropType(e);
+  var targetType = _dropType(hitEl);
   if (!targetType) return;
   if (targetType === _dragData.sourceType) {
     showToast('Card is already in this column', true);
     return;
   }
 
-  var btn = e.target.closest('button');
+  var btn = hitEl.closest('button');
   if (btn) return;
 
   if (_boardSetField) {
@@ -611,6 +612,128 @@ function onDrop(e) {
     showToast('Network error', true);
   });
 }
+
+function onDrop(e) {
+  e.preventDefault();
+  finishDrop(e.target);
+}
+
+// ── Touch drag-and-drop (mobile) ─────────────────────────────────────────────
+// A touch that lands on a card arms a short hold-timer; holding still grabs
+// the card, while any real movement before the timer cancels it so ordinary
+// page/column scrolling keeps working (cards cover most of a lane, so an
+// immediate grab would make the board unscrollable).
+var _btState = null;
+var _btOver = null;
+var _btClickSuppressUntil = 0;
+var _BT_HOLD_MS = 350;
+var _BT_SLOP_PX = 10;
+var _BT_HIT_SEL = '.bg-cell, .board-lane, .bg-unmatched-lane';
+
+function _btHit(x, y) {
+  return _touchHit(x, y, _BT_HIT_SEL);
+}
+
+function _btClearVisuals() {
+  document.querySelectorAll('.board-card.dragging').forEach(function(el) {
+    el.classList.remove('dragging');
+  });
+  document.querySelectorAll('.lane-dropzone.drag-over, .bg-cell.drag-over, .bg-unmatched-lane.drag-over').forEach(function(el) {
+    el.classList.remove('drag-over');
+  });
+  _btOver = null;
+}
+
+function _btCleanup() {
+  if (_btState && _btState.timer) clearTimeout(_btState.timer);
+  _btClearVisuals();
+  _btState = null;
+  _dragData = null;
+}
+
+function _btSuppressNextClick() {
+  _btClickSuppressUntil = Date.now() + 500;
+}
+
+function _btGrab() {
+  if (!_btState || _btState.grabbed) return;
+  _btState.grabbed = true;
+  _captureDrag(_btState.card);
+  if (navigator.vibrate) { try { navigator.vibrate(10); } catch (err) {} }
+}
+
+document.addEventListener('click', function(ev) {
+  if (Date.now() < _btClickSuppressUntil) {
+    ev.stopPropagation();
+    ev.preventDefault();
+  }
+}, true);
+
+document.addEventListener('touchstart', function(e) {
+  if (e.touches.length !== 1) return;
+  var card = e.target.closest ? e.target.closest('.board-card') : null;
+  if (!card) return;
+  // Leave the card's own buttons/links to plain taps.
+  if (e.target.closest('button, a, input, select, textarea')) return;
+  var t = e.touches[0];
+  _btState = { card: card, startX: t.clientX, startY: t.clientY, grabbed: false, moved: false, timer: null };
+  _btState.timer = setTimeout(_btGrab, _BT_HOLD_MS);
+}, { passive: true });
+
+document.addEventListener('touchmove', function(e) {
+  var st = _btState;
+  if (!st) return;
+  var t = e.touches[0];
+  if (!t) return;
+  if (!st.grabbed) {
+    // Fingers moved before the hold fired -> it is a scroll, not a drag.
+    if (Math.abs(t.clientX - st.startX) > _BT_SLOP_PX ||
+        Math.abs(t.clientY - st.startY) > _BT_SLOP_PX) {
+      _btCleanup();
+    }
+    return;
+  }
+  if (Math.abs(t.clientX - st.startX) > _BT_SLOP_PX ||
+      Math.abs(t.clientY - st.startY) > _BT_SLOP_PX) {
+    st.moved = true;
+  }
+  e.preventDefault();
+  var hit = _btHit(t.clientX, t.clientY);
+  if (_btOver && _btOver !== hit) {
+    _btOver.classList.remove('drag-over');
+    _btOver = null;
+  }
+  if (!hit || !_dropAllowed(hit) || !_dropType(hit)) return;
+  var dropEl = _dropEl(hit);
+  if (dropEl) {
+    dropEl.classList.add('drag-over');
+    _btOver = dropEl;
+  }
+}, { passive: false });
+
+document.addEventListener('touchend', function(e) {
+  var st = _btState;
+  if (!st) return;
+  if (!st.grabbed) { _btCleanup(); return; }
+  // Grabbed but never moved: a hold-release, not a drop — no toast, no action.
+  if (!st.moved) {
+    _btSuppressNextClick();
+    _btCleanup();
+    return;
+  }
+  var t = e.changedTouches[0];
+  var hit = t ? _btHit(t.clientX, t.clientY) : null;
+  // The finger's resting spot may be a card button — tapping through after
+  // a drag would hit it, so swallow the trailing click.
+  _btSuppressNextClick();
+  _btClearVisuals();
+  if (hit) finishDrop(hit);
+  _btCleanup();
+}, { passive: true });
+
+document.addEventListener('touchcancel', function() {
+  _btCleanup();
+}, { passive: true });
 
 function editCard(btn) {
   var fp = btn.dataset.filepath;

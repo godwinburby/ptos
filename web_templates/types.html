@@ -130,6 +130,13 @@ function renderFieldRows() {
       '<button class="field-remove" onclick="removeField('+i+')" title="Remove field">&times;</button>';
     c.appendChild(row);
     _makeDraggable(row, _fields, i, renderFieldRows, ".field-row");
+    if (isStr && f.options && f.options.length) {
+      var optSel = '.opt-chip[data-fi="' + i + '"]';
+      row.querySelectorAll(optSel).forEach(function(chip) {
+        _makeDraggable(chip, f.options, parseInt(chip.dataset.oi, 10),
+                       renderFieldRows, optSel);
+      });
+    }
   });
   if (shared.length) {
     var sep = document.createElement("div");
