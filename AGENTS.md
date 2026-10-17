@@ -30,7 +30,7 @@ notes/           → Markdown notes (arbitrary folder depth, browsable as file e
 ptos-backups/    → ZIP backups (sibling to ptos-data, outside sync scope)
 ```
 
-> **Shelved: modularizing `ptos.py`.** A split of the 5,122-line engine into domain modules was planned but **deferred** (see `ptos-modularization-shelved.md`). Approved rule: do not start it without revisiting the decision. `ptos.py` stays a monolith for now.
+> **Shelved: modularizing `ptos.py`.** A split of the 5,122-line engine into domain modules was planned but **deferred** (see `docs/specs/ptos-modularization-shelved.md`). Approved rule: do not start it without revisiting the decision. `ptos.py` stays a monolith for now.
 >
 > **Deliberate property (do not break): CLI standalone portability.** `ptos.py` + `ptos_cli.py` are two standalone files (plus data files `schema.toml`/`config.toml`) that run the full engine with **no install step, no package manager, no dependency tree** — `ptos_cli.py` imports only `ptos` and the standard library. This is a valued property, not an accident; keep it intact in all future work. Any modularization must preserve it (e.g. via an amalgamation/reassembly step) or it is incomplete.
 >
