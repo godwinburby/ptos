@@ -7,6 +7,11 @@ Format: `[version or date] — description`
 
 ## 2026-10-17
 
+### Path containment — `\\?\` realpath race fixed
+
+- **`_path_within()` no longer spuriously rejects a legitimate path under concurrency.** On Windows, `os.path.realpath()` can nondeterministically return the `\\?\`-extended form for one argument and the plain form for the other while a file is being replaced concurrently (two writers racing on one journal entry); `os.path.commonpath()` then reports "Paths don't have the same drive", the `ValueError` is caught, and containment returns `False` — so a valid save failed with `Invalid journal date: '2026-10-17'`. This was the real cause of the flaky `test_thread_race_has_exactly_one_winner` (reproduced at ~1% of two-thread race iterations; the test is deterministic since the fix). The comparison now runs both sides through the new `_realpath_key()` — strips `\\?\` (and maps `\\?\UNC\…` → `\\…`) and applies `normcase` — so every `_path_within` caller is covered (journal save/delete/copy, the record-editor routes, conflict resolve).
+- **Tests:** `tests/test_journal_save.py` `TestPathWithinHelper` +3 — extended-prefix stripping, mixed-form containment still passes, prefixed escape still rejected (both via a monkeypatched `realpath`, so they run on Linux CI too); the two-thread race verified at 600 iterations green.
+
 ### Display size — per-device UI scaling (Android-friendly)
 
 - **A "Display size" setting scales the whole UI — 100% / 115% / 130% / 150% — and it's remembered per device.** Settings → Display gets a four-way segmented control with a live sample line; the sidebar footer gets an **`A−` / `A+`** pair (with a current-`%` label) so the size can be stepped from any page without opening Settings. The value applies as a CSS `zoom` on `<html>` — text, buttons, spacing and images scale together, like Android's own "Display size" — and a tiny script in `<head>` applies it **before the first stylesheet loads**, so a reload never flashes at the old size.

@@ -147,6 +147,35 @@ class TestPathWithinHelper:
         sibling = str(root) + "_evil"
         assert not ptos._path_within(os.path.join(sibling, "x.log"), root)
 
+    def test_realpath_key_strips_extended_prefix(self, monkeypatch):
+        monkeypatch.setattr(os.path, "realpath", lambda p: p)
+        assert ptos._realpath_key(r"\\?\C:\data\journal\x.md") == \
+            os.path.normcase(r"C:\data\journal\x.md")
+        assert ptos._realpath_key(r"\\?\UNC\srv\share\x") == \
+            os.path.normcase(r"\\srv\share\x")
+        assert ptos._realpath_key("/data/x") == os.path.normcase("/data/x")
+
+    def test_mixed_extended_prefix_forms_still_contain(self, monkeypatch):
+        root = os.path.join(os.sep + "data", "journal")
+        inside = os.path.join(root, "2026", "10", "x.md")
+
+        def fake_realpath(p):
+            return "\\\\?\\" + p if p == inside else p
+
+        monkeypatch.setattr(os.path, "realpath", fake_realpath)
+        assert ptos._path_within(inside, root)
+        assert ptos._path_within(root, root)
+
+    def test_prefixed_escape_is_still_outside(self, monkeypatch):
+        root = os.path.join(os.sep + "data", "journal")
+        outside = os.path.join(os.sep + "data", "journal_evil", "x.md")
+
+        def fake_realpath(p):
+            return "\\\\?\\" + p if p == outside else p
+
+        monkeypatch.setattr(os.path, "realpath", fake_realpath)
+        assert not ptos._path_within(outside, root)
+
 
 class TestBackupNameValidator:
     @pytest.mark.parametrize("name", [

@@ -7541,6 +7541,21 @@ def quick_add(args):
 # Journal
 # --------------------------------------------------
 
+def _realpath_key(path):
+    """realpath() normalized for comparison: strips the Windows
+    `\\\\?\\` extended-length prefix (and `\\\\?\\UNC\\` → `\\\\`) and
+    applies normcase. realpath() can nondeterministically return the
+    extended form for one path and the plain form for another while a
+    file is being replaced concurrently — commonpath then reports
+    "different drives" and containment fails spuriously."""
+    r = os.path.realpath(path)
+    if r.startswith("\\\\?\\UNC\\"):
+        r = "\\\\" + r[8:]
+    elif r.startswith("\\\\?\\"):
+        r = r[4:]
+    return os.path.normcase(r)
+
+
 def _path_within(full, root):
     """True when *full* resolves inside *root* (symlinks followed).
 
@@ -7549,8 +7564,8 @@ def _path_within(full, root):
     cannot fake containment. Different drives (ValueError from commonpath
     on Windows) are outside."""
     try:
-        root_real = os.path.realpath(root)
-        return os.path.commonpath([os.path.realpath(full), root_real]) == root_real
+        root_real = _realpath_key(root)
+        return os.path.commonpath([_realpath_key(full), root_real]) == root_real
     except ValueError:
         return False
 
