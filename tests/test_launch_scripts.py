@@ -43,18 +43,20 @@ class TestAndroidLauncher:
         assert "Skipping update check ('timeout' not available)" in self.text
         assert self.text.count("fetch --quiet origin main") == 1
 
-    def test_update_check_is_throttled(self):
-        assert "UPDATE_INTERVAL=21600" in self.text
-        assert ".ptos_last_update" in self.text
-        assert '"--update"' in self.text
-        assert "Skipping update check (checked recently)" in self.text
+    def test_update_check_runs_every_launch(self):
+        assert "UPDATE_INTERVAL" not in self.text
+        assert "UPDATE_STAMP" not in self.text
+        assert "FORCE_UPDATE" not in self.text
+        assert ".ptos_last_update" not in self.text
+        assert "--update" not in self.text
+        assert "Skipping update check (checked recently)" not in self.text
 
     def test_fetch_failure_is_reported(self):
         assert "Update check failed (offline?)" in self.text
 
-    def test_widget_shortcut_forces_update(self):
+    def test_widget_shortcut_wrapper(self):
         assert ".shortcuts/run_ptos.sh" in self.text
-        assert 'exec bash \\"$PTOS_DIR/run_ptos_android.sh\\" --update' in self.text
+        assert 'exec bash \\"$PTOS_DIR/run_ptos_android.sh\\"' in self.text
 
     def test_no_hardcoded_port(self):
         assert "localhost:5000" not in self.text
@@ -100,11 +102,13 @@ class TestLinuxLauncher:
         assert "Skipping update check ('timeout' not available)" in self.text
         assert self.text.count("fetch --quiet origin main") == 1
 
-    def test_update_check_is_throttled(self):
-        assert "UPDATE_INTERVAL=21600" in self.text
-        assert ".ptos_last_update" in self.text
-        assert '"--update"' in self.text
-        assert "Skipping update check (checked recently)" in self.text
+    def test_update_check_runs_every_launch(self):
+        assert "UPDATE_INTERVAL" not in self.text
+        assert "UPDATE_STAMP" not in self.text
+        assert "FORCE_UPDATE" not in self.text
+        assert ".ptos_last_update" not in self.text
+        assert "--update" not in self.text
+        assert "Skipping update check (checked recently)" not in self.text
 
     def test_fetch_failure_is_reported(self):
         assert "Update check failed (offline?)" in self.text
@@ -138,3 +142,43 @@ class TestLinuxLauncher:
                 assert "localhost:5000" not in line, line
                 if "http" in line:
                     assert "$PTOS_URL" in line, line
+
+
+class TestWindowsLauncher:
+    WINDOWS = os.path.join(ROOT, "run_ptos.ps1")
+
+    @pytest.fixture(autouse=True)
+    def _text(self):
+        self.text = _read(self.WINDOWS)
+
+    def test_update_check_is_bounded_and_conditional(self):
+        assert "http.lowSpeedLimit" in self.text
+        assert "fetch --quiet origin main" in self.text
+        assert "pull --ff-only origin main" in self.text
+        assert '2>$null | Out-Null' in self.text
+
+    def test_update_check_runs_every_launch(self):
+        assert "git pull 2>&1 | Out-Null" not in self.text
+        assert "UPDATE_INTERVAL" not in self.text
+        assert "--update" not in self.text
+
+    def test_messages_match_shell_launchers(self):
+        assert "Already on latest version." in self.text
+        assert "Updated to latest version." in self.text
+        assert "Update check failed (offline?)" in self.text
+        assert "Not a git repo - skipping update check." in self.text
+
+    def test_ps1_parses(self):
+        ps = shutil.which("powershell") or shutil.which("pwsh")
+        if ps is None:
+            pytest.skip("powershell not available")
+        script = (
+            "$tokens = $null; $errs = $null; "
+            "$null = [System.Management.Automation.Language.Parser]::ParseFile("
+            f"'{self.WINDOWS}', [ref]$tokens, [ref]$errs); "
+            "if ($errs -and $errs.Count -gt 0) { "
+            "$errs | ForEach-Object { Write-Output $_.Message }; exit 1 }; exit 0"
+        )
+        result = subprocess.run([ps, "-NoProfile", "-Command", script],
+                                capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr

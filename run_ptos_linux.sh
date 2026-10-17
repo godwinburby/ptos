@@ -128,51 +128,33 @@ if [ ! -d "$DATA_DIR/config" ]; then
     echo "PTOS initialised."
 fi
 
-# ── Git pull (if repo) ──────────────────────────────────────────────────────
+# ── Git pull (if repo) — checked on every launch ────────────────────────────
 if [ -d ".git" ]; then
-    UPDATE_STAMP="$PTOS_DIR/.ptos_last_update"
-    UPDATE_INTERVAL=21600
-    NOW=$(date +%s 2>/dev/null || echo 0)
-    LAST=0
-    if [ -f "$UPDATE_STAMP" ]; then
-        LAST=$(cat "$UPDATE_STAMP" 2>/dev/null || echo 0)
-    fi
-    case "$LAST" in ''|*[!0-9]*) LAST=0 ;; esac
-    FORCE_UPDATE=0
-    for arg in "$@"; do
-        if [ "$arg" = "--update" ]; then FORCE_UPDATE=1; fi
-    done
-    if [ "$FORCE_UPDATE" = "1" ] || [ $((NOW - LAST)) -ge "$UPDATE_INTERVAL" ]; then
-        echo "Checking for updates..."
-        # Stamp before the fetch so an offline check still waits out the interval.
-        echo "$NOW" > "$UPDATE_STAMP" 2>/dev/null || true
-        # Bound the check so a dead network can't stall the launcher. Without
-        # timeout we skip the check entirely rather than fetch unbounded.
-        if command -v timeout >/dev/null 2>&1; then
-            # Distinguish a failed fetch from a genuine "up to date": comparing
-            # HEAD against a stale origin/main after a silent fetch failure used
-            # to print "Already on latest version." while the remote had moved.
-            if GIT_TERMINAL_PROMPT=0 timeout 8 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 fetch --quiet origin main 2>/dev/null; then
-                LOCAL=$(git rev-parse HEAD 2>/dev/null)
-                REMOTE=$(git rev-parse origin/main 2>/dev/null)
-                if [ "$LOCAL" = "$REMOTE" ]; then
-                    echo "Already on latest version."
-                else
-                    echo "Updating..."
-                    if timeout 30 git pull --ff-only origin main; then
-                        echo "Updated to latest version."
-                    else
-                        echo "Could not reach GitHub — continuing with local version."
-                    fi
-                fi
+    echo "Checking for updates..."
+    # Bound the check so a dead network can't stall the launcher. Without
+    # timeout we skip the check entirely rather than fetch unbounded.
+    if command -v timeout >/dev/null 2>&1; then
+        # Distinguish a failed fetch from a genuine "up to date": comparing
+        # HEAD against a stale origin/main after a silent fetch failure used
+        # to print "Already on latest version." while the remote had moved.
+        if GIT_TERMINAL_PROMPT=0 timeout 8 git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 fetch --quiet origin main 2>/dev/null; then
+            LOCAL=$(git rev-parse HEAD 2>/dev/null)
+            REMOTE=$(git rev-parse origin/main 2>/dev/null)
+            if [ "$LOCAL" = "$REMOTE" ]; then
+                echo "Already on latest version."
             else
-                echo "Update check failed (offline?) — continuing with local version."
+                echo "Updating..."
+                if timeout 30 git pull --ff-only origin main; then
+                    echo "Updated to latest version."
+                else
+                    echo "Could not reach GitHub — continuing with local version."
+                fi
             fi
         else
-            echo "Skipping update check ('timeout' not available)."
+            echo "Update check failed (offline?) — continuing with local version."
         fi
     else
-        echo "Skipping update check (checked recently) — run with --update to check now."
+        echo "Skipping update check ('timeout' not available)."
     fi
 else
     echo "Not a git repo — skipping update check."
