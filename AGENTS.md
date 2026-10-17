@@ -323,21 +323,30 @@ x 2026-07-12 2026-07-10 Completed task
 
 ### Key functions (in `ptos.py`)
 - `_safe_path(rel_path)` — resolve relative path under NOTES_DIR, reject escapes. Windows-shaped paths (`C:\x`, `C:/x`, `\\server\share`, leading `\`) are rejected on **every** platform: on POSIX they are relative segments that would otherwise resolve harmlessly-but-wrongly *inside* NOTES_DIR instead of raising
-- `_validate_name(name)` — reject empty, `/`, `\`, `.`, `..`
+- `_validate_name(name)` — reject empty, `/`, `\`, all-dots (`.`, `..`, `...`), control characters (ord < 32/127), Windows-illegal `< > : " | ? *`, and a trailing space or dot (the Windows filename rule)
+- `note_title(name)` — display name for a note file: one human-facing string with a trailing `.md` stripped (used for visible labels only; hrefs/`data-path`/editor JS keep the real filename). Alias `notes/_note_title`
 - `note_id_of(fpath)` — extract `ptos-id` from a note's first-line HTML comment, or `None` (was `_note_id_of`; promoted to public — `_note_id_of` kept as an internal alias)
 - `ensure_note_id(rel_path)` — return note's id, generating+prepending `<!-- ptos-id: XXXXX -->` if absent (opt-in, never on creation)
-- `list_dir(rel_path="")` — return `{folders: [...], files: [...]}` for a directory
+- `list_dir(rel_path="")` — return `{folders: [...], files: [...]}` for a directory; every entry carries `display_name` (files: `note_title(name)`; folders unchanged) alongside the raw name — the notes web rows, rename-dialog prefill and browse views render `display_name`, never the raw `.md`
 - `create_folder(rel_path, name)` — mkdir under rel_path
 - `create_file(rel_path, name, content)` — create `name.md` (auto-append `.md`)
-- `rename_note(rel_path, new_name)` — rename file or folder
+- `rename_note(rel_path, new_name)` — rename file or folder. The name is trimmed; for a **file**, every trailing `.md` is stripped and re-appended (`clinic.md` and `clinic` both → `clinic.md`; `x.md.md` → `x.md`, the spec rule that a doubled extension is never produced) — validation runs on the stripped name; for a **folder** the name is used as typed (a folder named `x.md` stays a folder), so the typed name must already be clean. File-vs-folder is decided **server-side with `os.path.isdir`** (the client's `data-folder` hint is not trusted). Same-name = no-op (file untouched); case-only renames (samefile on a case-insensitive FS) go through a two-step temp under `file_lock`; missing source raises `Not found`. Returns the **new rel_path** (the route passes it to the client so it can navigate to the renamed note). See "Rename side-effects" for what runs after
 - `delete_note_entry(rel_path)` — delete file or recursive folder delete
 - `get_note_template(category, context)` — legacy template resolution (still available)
+
+### Rename side-effects (favorites + project links follow the rename)
+- `svc.svc_rename(rel_path, new_name)` (`ptos_service.py`) is the orchestrator the web route calls: detect folder-ness **before** renaming, run `ptos.rename_note`, then repair everything that pointed at the old path. It returns `{rel_path, favorites_updated, warning}` and **never undoes the rename** — a hook failure is logged (`ptos_service` module logger) and reported in `warning`
+- `update_favorites_after_rename(old_rel, new_rel, is_folder)` — retargets matching favorites via `_retarget_notes_url` (only `/notes/edit/…` and `/notes/browse/…` paths; whole-path match for files, **segment-aware prefix** for folders — renaming `Projects/Job` never touches `Projects/Job2`; `unquote`→match→`quote(safe="/")` so spaces/unicode round-trip; query + fragment preserved). Dedupe that collapses two favorites onto one URL keeps the **first** entry. **No config write at all when nothing matches** (mtime/bytes untouched); names/order/unrelated entries byte-identical
+- `_update_project_notes_path_after_rename(old_rel, new_rel)` — for folder renames, rewrites every `project.*.notes_path` pointing inside the folder (nested included) under `file_lock(QUERIES_PATH)` via `_write_queries_toml_key`
+- `_retarget_notes_url` is a pure helper (unit-testable, returns `None` for unrelated URLs) and the rewritten URL still passes `_valid_fav_url`
+- Both hooks are **non-blocking by design**: favorites/project repair failure must never fail the rename itself
 
 ### Web routes
 - `GET /notes` + `GET /notes/browse/<path>` — folder listing with breadcrumbs
 - `GET /notes/edit/<path>` — edit view (markdown editor + backlinks panel)
 - CRUD: `POST /notes/new-folder`, `/notes/new-file`, `/notes/rename`, `/notes/delete`, `/notes/save`, `/notes/template-check`, `/api/note-link-id`
 - Delete checks for backlinks first, returns `needs_confirm` if note has incoming links
+- `POST /notes/rename` returns `{ok, rel_path, favorites_updated, warning}` (the client navigates to `rel_path` and shows the favorites message before reloading)
 
 ### CLI (`--notes`)
 - Single `--notes ACTION...` entry point in `ptos_cli.py` (`_handle_notes`); the path argument must follow right after the action. Actions (thin wrappers over engine/service — no new logic in `ptos.py`):
@@ -348,12 +357,12 @@ x 2026-07-12 2026-07-10 Completed task
   - `edit PATH` — open in the configured editor (`resolve_editor()` + subprocess); covers `template.md` too
   - `delete PATH [--force]` — delete a note (`delete_note_entry`); if the note's base-name subject has backlinks and `--force` is absent, warns + prompts `[y/N]` (non-TTY: refuses, exits "Delete cancelled."); `--force` means the path must precede it (`--notes delete PATH --force`)
   - `id PATH` — print/generate the note's `ptos-id` (`ensure_note_id` writes `<!-- ptos-id: X -->` on line 1)
-- Backlink subject for notes is the **file base name without `.md`** (`_note_title`) — the same key the web backlinks panel uses (`breadcrumbs[-1].label`), not the `# H1` title. So `[[appointment]]` matches only a file named `appointment.md`. Note: `--notes id` prepends a ptos-id comment line which does NOT change the subject.
+- Backlink subject for notes is the **file base name without `.md`** (`ptos.note_title`) — the same key the web backlinks panel uses (`breadcrumbs[-1].label`), not the `# H1` title. So `[[appointment]]` matches only a file named `appointment.md`. Note: `--notes id` prepends a ptos-id comment line which does NOT change the subject.
 - Tested in `tests/test_notes_cli.py` (`TestNotesCli*`, 24 tests).
 
 ### Search integration
 - Universal search (`/search`) scans note content using `os.walk` + `_glob_match`
-- Results show `rel_path` with snippet, link to edit view
+- Results show the note's **display name** (`n.title`, no `.md`) as the link text with `rel_path` as a muted subtitle, linking to the edit view
 
 ### Concept tags
 - Notes `[[Target]]` tags reuse the bracket cross-linking infrastructure (see Bracket cross-linking section). `_iter_link_matches` scans `NOTES_DIR`; `template.md` is excluded.
@@ -395,7 +404,8 @@ x 2026-07-12 2026-07-10 Completed task
 
 ### Web (`ptos_web.py` + templates)
 - `_inject_globals()` injects `favorites` (list of `{name, url}`) and `fav_urls` (JSON array for star-state JS) into every page.
-- `GET /favorites` renders `web_templates/favorites.html` (add form, list with rename/▲▼/✕, all reload-after-POST). `POST /api/favorites/add|remove|rename|move` are standard `jsonify(ok=…)` JSON routes. All five state-changing JSON endpoints in the module — these four plus `/api/conflict/resolve` — parse with `get_json(silent=True)` and return `400 {ok: false, error: "JSON body required"}` on a non-JSON body; **never use `get_json(force=True)`** (it accepted `text/plain`, which needs no CORS preflight, so a cross-site form post rode in with the browser's cached Basic auth). Every front-end caller already sends `Content-Type: application/json`.
+- `GET /favorites` renders `web_templates/favorites.html` (add form, list with ▲▼/✕, all reload-after-POST). Renaming is **inline**: the name cell is clickable (`favRename` swaps in a text field, Enter/blur saves, Esc cancels — no `prompt()`, no reload) and the URL stays a read-only monospace link — the page exposes **no path input**, and `POST /api/favorites/rename` ignores any `new_url`/`path` a caller sends (names are the only mutable field). `POST /api/favorites/add|remove|rename|move` are standard `jsonify(ok=…)` JSON routes. All five state-changing JSON endpoints in the module — these four plus `/api/conflict/resolve` — parse with `get_json(silent=True)` and return `400 {ok: false, error: "JSON body required"}` on a non-JSON body; **never use `get_json(force=True)`** (it accepted `text/plain`, which needs no CORS preflight, so a cross-site form post rode in with the browser's cached Basic auth). Every front-end caller already sends `Content-Type: application/json`.
+- **Favorites follow note renames** — `svc.svc_rename` (see Notes module "Rename side-effects") retargets `/notes/edit/…` and `/notes/browse/…` favorites via `update_favorites_after_rename`; when nothing matches there is no config write at all. Hook failure is a logged warning on the rename response, never a rename rollback.
 - **Shell**: `base.html` renders a `FAVORITES ★` sidebar section directly under the search box (outside the `nav_sections` loop — favourites carry full URLs with query strings, so they don't go through the `/{{ url_path }}` nav-item template), a matching More-menu section, and a ★ in the mobile topbar. `web_static/js/favorites.js` (via `av()` after `last_change.js`) owns `window.toggleFav()`: stars/unstars `location.pathname + location.search`, `prompt()`s for the name (prefilled from `document.title`), and patches the sidebar/More-menu rows **in place** (habit-toggle precedent — no reload). A successful star also **expands the sidebar group if it was collapsed** — and so does **page load** whenever the group is collapsed *and* holds at least one `.fav-item[data-url]` (the header sits right next to the ★, so a stray click collapses it and `sidebar_collapse.js` remembers that; an empty collapsed group is left alone). Expansion **clicks the section header** rather than writing localStorage directly, so `sidebar_collapse.js`'s in-memory copy stays in sync and doesn't re-collapse on its next toggle; both scripts surface failures (`alert`/`favMsg`) instead of leaving a rejected `fetch` promise silent. `window.PTOS.favUrls` is the shim key (rendered with `|tojson`, so a synced-in URL containing `</script>` can't break out of the shim); the sidebar star sits inside the collapsible section header so its `onclick` carries `event.stopPropagation()`. `g f` → `/favorites` in `nav_chords.js` (free — `f` alone is Search).
 - **Starter parity**: `starters/starter_config.toml` ships a commented `[favorites]` block with `items = []`.
 

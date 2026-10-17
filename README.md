@@ -442,6 +442,9 @@ folder may contain a `template.md` that is applied to new files created in it.
 Features:
 - Arbitrary folder nesting — create any structure you need
 - New Folder / New File / Rename / Delete with confirmation dialogs
+- Note names display without the `.md` extension (links still use the real file)
+- Rename accepts the name with or without `.md` — it never doubles the extension
+- Renaming a note updates any favorites and project note links that pointed at it
 - Template resolution — nearest ancestor `template.md` auto-applies to new files
 - Live markdown preview with `[[bracket]]` cross-linking
 - Search integration — notes appear in universal search results
@@ -469,7 +472,9 @@ a journal date — and jump back in one click.
 - **Sidebar group** lists all favorites on every page, with the current
   page highlighted; the mobile **More menu** has the same list.
 - **`/favorites` page** (shortcut `G F`) manages them: add by name + path,
-  rename, reorder with ▲▼, remove.
+  rename by clicking the name (inline edit — the path stays a read-only link),
+  reorder with ▲▼, remove. Renaming a note behind a favorite repairs the
+  bookmark's path automatically.
 - Stored as a `[favorites]` section in `config.toml`, one entry per line:
 
   ```toml

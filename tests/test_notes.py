@@ -261,6 +261,36 @@ class TestValidateName:
     def test_valid_name(self):
         ptos._validate_name("my-note.md")
 
+    def test_rejects_colon(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name("a:b")
+
+    def test_rejects_pipe(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name("a|b")
+
+    def test_rejects_other_windows_chars(self):
+        for ch in '<>"?*':
+            with pytest.raises(ptos.PTOSError, match="Invalid name"):
+                ptos._validate_name(f"a{ch}b")
+
+    def test_rejects_trailing_space(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name("con ")
+
+    def test_rejects_trailing_dot(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name("name.")
+
+    def test_rejects_control_characters(self):
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos._validate_name("a\x01b")
+
+    def test_rejects_only_dots(self):
+        for name in ("...", "....."):
+            with pytest.raises(ptos.PTOSError, match="Invalid name"):
+                ptos._validate_name(name)
+
 
 class TestListDir:
     def test_empty_dir(self):
@@ -274,8 +304,10 @@ class TestListDir:
         result = ptos.list_dir("")
         assert len(result["folders"]) == 1
         assert result["folders"][0]["name"] == "sub"
+        assert result["folders"][0]["display_name"] == "sub"
         assert len(result["files"]) == 1
         assert result["files"][0]["name"] == "readme.md"
+        assert result["files"][0]["display_name"] == "readme"
 
     def test_template_md_is_shown(self):
         with open(os.path.join(ptos.NOTES_DIR, "template.md"), "w") as f:
@@ -345,13 +377,15 @@ class TestRename:
     def test_rename_file(self):
         with open(os.path.join(ptos.NOTES_DIR, "old.md"), "w") as f:
             f.write("content")
-        ptos.rename_note("old.md", "new.md")
+        new_rel = ptos.rename_note("old.md", "new.md")
+        assert new_rel == "new.md"
         assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "new.md"))
         assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "old.md"))
 
     def test_rename_folder(self):
         os.makedirs(os.path.join(ptos.NOTES_DIR, "old_folder"))
-        ptos.rename_note("old_folder", "new_folder")
+        new_rel = ptos.rename_note("old_folder", "new_folder")
+        assert new_rel == "new_folder"
         assert os.path.isdir(os.path.join(ptos.NOTES_DIR, "new_folder"))
         assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "old_folder"))
 
@@ -362,6 +396,99 @@ class TestRename:
             f.write("b")
         with pytest.raises(ptos.PTOSError, match="already exists"):
             ptos.rename_note("a.md", "b.md")
+
+    def test_rename_without_typed_extension(self):
+        with open(os.path.join(ptos.NOTES_DIR, "clinic.md"), "w") as f:
+            f.write("x")
+        new_rel = ptos.rename_note("clinic.md", "northside")
+        assert new_rel == "northside.md"
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "northside.md"))
+        assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "clinic.md"))
+
+    def test_rename_never_doubles_extension(self):
+        with open(os.path.join(ptos.NOTES_DIR, "note.md"), "w") as f:
+            f.write("x")
+        new_rel = ptos.rename_note("note.md", "other.md.md")
+        assert new_rel == "other.md"
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "other.md"))
+        listing = ptos.list_dir("")
+        assert not any(f["name"] == "other.md.md" for f in listing["files"])
+
+    def test_folder_named_with_md_stays_folder(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "x.md"))
+        new_rel = ptos.rename_note("x.md", "y.md")
+        assert new_rel == "y.md"
+        assert os.path.isdir(os.path.join(ptos.NOTES_DIR, "y.md"))
+        listing = ptos.list_dir("")
+        assert any(f["name"] == "y.md" for f in listing["folders"])
+
+    def test_same_name_is_noop_success(self):
+        with open(os.path.join(ptos.NOTES_DIR, "same.md"), "w") as f:
+            f.write("keep")
+        mtime = os.path.getmtime(os.path.join(ptos.NOTES_DIR, "same.md"))
+        new_rel = ptos.rename_note("same.md", "same")
+        assert new_rel == "same.md"
+        with open(os.path.join(ptos.NOTES_DIR, "same.md")) as f:
+            assert f.read() == "keep"
+        assert os.path.getmtime(os.path.join(ptos.NOTES_DIR, "same.md")) == mtime
+
+    def test_case_only_rename(self):
+        with open(os.path.join(ptos.NOTES_DIR, "clinic.md"), "w") as f:
+            f.write("body")
+        new_rel = ptos.rename_note("clinic.md", "Clinic.md")
+        assert new_rel == "Clinic.md"
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "Clinic.md"))
+        listing = ptos.list_dir("")
+        names = [f["name"] for f in listing["files"]]
+        assert "Clinic.md" in names
+        assert "clinic.md" not in names
+        with open(os.path.join(ptos.NOTES_DIR, "Clinic.md")) as f:
+            assert f.read() == "body"
+
+    def test_rename_nested_file_keeps_parent(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "proj"))
+        with open(os.path.join(ptos.NOTES_DIR, "proj", "a.md"), "w") as f:
+            f.write("x")
+        new_rel = ptos.rename_note("proj/a.md", "b")
+        assert new_rel == "proj/b.md"
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "proj", "b.md"))
+
+    def test_rejects_invalid_names(self):
+        with open(os.path.join(ptos.NOTES_DIR, "ok.md"), "w") as f:
+            f.write("x")
+        for bad in ("a:b", "a|b", "dots...", "a\x01b", "", "  "):
+            with pytest.raises(ptos.PTOSError, match="Invalid name"):
+                ptos.rename_note("ok.md", bad)
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "ok.md"))
+
+    def test_folder_rejects_trailing_dot(self):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "afolder"))
+        with pytest.raises(ptos.PTOSError, match="Invalid name"):
+            ptos.rename_note("afolder", "name.")
+        assert os.path.isdir(os.path.join(ptos.NOTES_DIR, "afolder"))
+
+    def test_rename_trims_typed_input(self):
+        with open(os.path.join(ptos.NOTES_DIR, "spaced.md"), "w") as f:
+            f.write("x")
+        new_rel = ptos.rename_note("spaced.md", "  trimmed  ")
+        assert new_rel == "trimmed.md"
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "trimmed.md"))
+
+    def test_rename_missing_source(self):
+        with pytest.raises(ptos.PTOSError, match="Not found"):
+            ptos.rename_note("ghost.md", "whatever")
+
+
+class TestNoteTitle:
+    def test_strips_md(self):
+        assert ptos.note_title("clinic.md") == "clinic"
+
+    def test_keeps_inner_dots(self):
+        assert ptos.note_title("v1.2.md") == "v1.2"
+
+    def test_passes_through_without_extension(self):
+        assert ptos.note_title("folder") == "folder"
+        assert ptos.note_title("file.txt") == "file.txt"
 
 
 class TestDeleteEntry:

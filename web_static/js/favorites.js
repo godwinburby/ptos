@@ -38,6 +38,7 @@
     t = t.replace(/^PTOS\s*[·|]\s*/, "").replace(/\s*[·|]\s*PTOS.*$/, "").trim();
     if (t && t !== "PTOS") return t;
     var seg = location.pathname.split("/").filter(Boolean).pop() || "Home";
+    try { seg = decodeURIComponent(seg); } catch (e) {}
     return seg.replace(/\.md$/, "").replace(/[-_]/g, " ");
   }
 

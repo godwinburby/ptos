@@ -105,7 +105,7 @@ function _blItemHref(key, item) {
 }
 
 function _blItemText(key, item) {
-  if (key === "notes")   return item.title || (item.rel_path || item.slug || "").split("/").pop();
+  if (key === "notes")   return item.title || (item.rel_path || item.slug || "").split("/").pop().replace(/\.md$/, "");
   if (key === "journal") return item.date;
   if (key === "todo")    return item.line || "line " + item.lineno + (item.done ? " (done)" : "");
   if (key === "records") return (item.date || "") + " · " + (item.type || "") + " · " + (item.field || "");

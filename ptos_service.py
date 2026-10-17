@@ -25,6 +25,7 @@ import os
 import re
 import glob
 import functools
+import logging
 import time
 import json
 import datetime as dt
@@ -51,6 +52,8 @@ def _safe_exit(msg=""):
 import ptos
 
 PTOSError = ptos.PTOSError
+
+log = logging.getLogger("ptos_service")
 
 
 class NoteConflictError(PTOSError):
@@ -476,6 +479,95 @@ def move_favorite(url, direction):
     if 0 <= j < len(items):
         items[idx], items[j] = items[j], items[idx]
     return _save_fav_items(items)
+
+
+def _retarget_notes_url(url, old_rel, new_rel, is_folder):
+    """Return url's notes path rewritten for a rename, or None if it
+    does not reference the renamed entry. Only the two notes prefixes
+    are handled; matching is on whole path segments after
+    percent-decoding, so Projects/Job never touches Projects/Job2."""
+    parts = urllib.parse.urlsplit(url)
+    if parts.scheme or parts.netloc:
+        return None
+    for prefix in ("/notes/edit/", "/notes/browse/"):
+        if not parts.path.startswith(prefix):
+            continue
+        rel = urllib.parse.unquote(parts.path[len(prefix):])
+        if is_folder:
+            if rel == old_rel:
+                new_path = new_rel
+            elif rel.startswith(old_rel + "/"):
+                new_path = new_rel + rel[len(old_rel):]
+            else:
+                continue
+        else:
+            if rel != old_rel:
+                continue
+            new_path = new_rel
+        rebuilt = prefix + urllib.parse.quote(new_path, safe="/")
+        if parts.query:
+            rebuilt += "?" + parts.query
+        if parts.fragment:
+            rebuilt += "#" + parts.fragment
+        return rebuilt
+    return None
+
+
+def update_favorites_after_rename(old_rel, new_rel, is_folder):
+    """Rewrite favorites that point at a renamed note or folder.
+    Returns how many favorites were updated; 0 (and no config write)
+    when nothing matches. Names, order and the rest of config.toml are
+    untouched — the existing surgical writer does the write. If a
+    rewritten URL collides with another favorite's URL, the later one
+    is dropped (the URL is the identity)."""
+    items = get_favorites()
+    rewritten = set()
+    out = []
+    for i, it in enumerate(items):
+        rebuilt = _retarget_notes_url(it["url"], old_rel, new_rel, is_folder)
+        if rebuilt is None:
+            out.append(it)
+            continue
+        rewritten.add(i)
+        out.append({"name": it["name"], "url": rebuilt})
+    if not rewritten:
+        return 0
+    seen = set()
+    deduped = []
+    kept_rewrites = 0
+    for i, it in enumerate(out):
+        if it["url"] in seen:
+            continue
+        seen.add(it["url"])
+        deduped.append(it)
+        if i in rewritten:
+            kept_rewrites += 1
+    _save_fav_items(deduped)
+    return kept_rewrites
+
+
+def _update_project_notes_path_after_rename(old_rel, new_rel):
+    """Rewrite any project notes_path that points at a renamed folder
+    (exact match or under old_rel/). Returns how many were updated."""
+    with ptos.file_lock(ptos.QUERIES_PATH):
+        data = _load_queries_toml()
+        updates = []
+        for key, entry in data.items():
+            if not key.startswith("project.") or not isinstance(entry, dict):
+                continue
+            notes_path = entry.get("notes_path", "")
+            if not isinstance(notes_path, str) or not notes_path:
+                continue
+            if notes_path == old_rel:
+                new_path = new_rel
+            elif notes_path.startswith(old_rel + "/"):
+                new_path = new_rel + notes_path[len(old_rel):]
+            else:
+                continue
+            updates.append((key, new_path))
+        for key, new_path in updates:
+            _write_queries_toml_key(key, {**data[key], "notes_path": new_path})
+    return len(updates)
 
 
 def get_schema():
@@ -6508,7 +6600,25 @@ def svc_create_file(rel_path, name, content):
 
 
 def svc_rename(rel_path, new_name):
-    ptos.rename_note(rel_path, new_name)
+    """Rename a note or folder, then retarget favorites (and any project
+    notes_path) that pointed at it. The rename is never undone: if a
+    follow-up config update fails, the rename stands and the caller
+    gets a warning. Returns {rel_path, favorites_updated, warning}."""
+    full = ptos._safe_path(rel_path)
+    was_folder = os.path.isdir(full)
+    new_rel = ptos.rename_note(rel_path, new_name)
+    favorites_updated = 0
+    warning = None
+    try:
+        favorites_updated = update_favorites_after_rename(
+            rel_path, new_rel, was_folder)
+        if was_folder:
+            _update_project_notes_path_after_rename(rel_path, new_rel)
+    except Exception as e:
+        log.exception("Rename succeeded but favorites update failed: %s", e)
+        warning = "Renamed, but favorites could not be updated"
+    return {"rel_path": new_rel, "favorites_updated": favorites_updated,
+            "warning": warning}
 
 
 def svc_delete(rel_path):

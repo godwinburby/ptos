@@ -34,22 +34,24 @@ class TestNotesCliList:
         _write_note("work/log.md", "hi")
         _run(monkeypatch, "--notes", "list")
         out = capsys.readouterr().out
-        assert "alpha.md" in out
+        assert "alpha" in out
+        assert "alpha.md" not in out
         assert "work/" in out
 
     def test_subfolder(self, monkeypatch, capsys):
         _write_note("work/log.md", "hi")
         _run(monkeypatch, "--notes", "list", "work")
         out = capsys.readouterr().out
-        assert "log.md" in out
+        assert "log" in out
+        assert "log.md" not in out
 
     def test_shows_template_md(self, monkeypatch, capsys):
         _write_note("work/template.md", "# tpl")
         _write_note("work/log.md", "hi")
         _run(monkeypatch, "--notes", "list", "work")
         out = capsys.readouterr().out
-        assert "template.md" in out
-        assert "log.md" in out
+        assert "template" in out
+        assert "log" in out
 
 
 class TestNotesCliNew:

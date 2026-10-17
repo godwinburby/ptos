@@ -1080,7 +1080,7 @@ def _yesno(prompt, default=False):
 def _note_title(rel_path):
     """Note subject for backlink matching: the file base name with no .md
     extension — the same key the web backlinks panel uses (breadcrumb label)."""
-    return os.path.splitext(os.path.basename(rel_path))[0]
+    return ptos.note_title(os.path.basename(rel_path))
 
 
 def _print_backlinks(bl):
@@ -1138,7 +1138,7 @@ def _handle_notes(args):
                 print()
             print("Files:")
             for f in listing["files"]:
-                print(f"  {f['name']}")
+                print(f"  {f.get('display_name', f['name'])}")
         if not listing["folders"] and not listing["files"]:
             print("  (empty)")
         print()

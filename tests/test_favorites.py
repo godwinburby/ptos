@@ -665,3 +665,161 @@ class TestOriginGuard:
         resp = client.get("/favorites",
                           headers={"Origin": "http://evil.example"})
         assert resp.status_code == 200
+
+
+# ── rename-aware favorites (note display names spec, section 2) ──────────────
+
+class TestRetargetNotesUrl:
+    def test_file_edit_favorite(self):
+        got = svc._retarget_notes_url("/notes/edit/a.md", "a.md", "b.md", False)
+        assert got == "/notes/edit/b.md"
+
+    def test_file_edit_encoded_spaces_and_unicode(self):
+        url = "/notes/edit/caf%C3%A9%20notes/clinic.md"
+        got = svc._retarget_notes_url(url, "caf\u00e9 notes/clinic.md",
+                                      "caf\u00e9 notes/dinner.md", False)
+        assert got == "/notes/edit/caf%C3%A9%20notes/dinner.md"
+
+    def test_query_and_fragment_preserved(self):
+        got = svc._retarget_notes_url("/notes/edit/a.md?run=x#sec",
+                                      "a.md", "b.md", False)
+        assert got == "/notes/edit/b.md?run=x#sec"
+
+    def test_folder_prefix_exact_and_nested(self):
+        assert svc._retarget_notes_url("/notes/browse/Old", "Old",
+                                       "New", True) == "/notes/browse/New"
+        assert svc._retarget_notes_url("/notes/edit/Old/inner.md",
+                                       "Old", "New", True) == \
+            "/notes/edit/New/inner.md"
+
+    def test_folder_prefix_is_segment_aware(self):
+        assert svc._retarget_notes_url("/notes/edit/Projects/Job2/x.md",
+                                       "Projects/Job", "Projects/Role",
+                                       True) is None
+
+    def test_unrelated_urls_pass_through(self):
+        for url in ("/browse?type=expense", "/notes/edit/other.md",
+                    "/habits", "https://example.com/notes/edit/a.md"):
+            assert svc._retarget_notes_url(url, "a.md", "b.md", False) is None
+
+    def test_rewritten_url_passes_validation(self):
+        got = svc._retarget_notes_url("/notes/edit/a.md?q=1#f",
+                                      "a.md", "b c/d.md", False)
+        assert svc._valid_fav_url(got)
+
+
+class TestUpdateFavoritesAfterRename:
+    def test_file_rename_updates_favorite(self):
+        svc.add_favorite("Note", "/notes/edit/old.md")
+        svc.add_favorite("Other", "/browse")
+        n = svc.update_favorites_after_rename("old.md", "new.md", False)
+        assert n == 1
+        urls = [f["url"] for f in svc.get_favorites()]
+        assert urls == ["/notes/edit/new.md", "/browse"]
+
+    def test_no_match_means_no_write(self, monkeypatch):
+        svc.add_favorite("Other", "/browse")
+        def boom(items):
+            raise AssertionError("save_favorites must not be called")
+        monkeypatch.setattr(ptos, "save_favorites", boom)
+        n = svc.update_favorites_after_rename("ghost.md", "x.md", False)
+        assert n == 0
+
+    def test_folder_rename_updates_browse_and_inside(self):
+        svc.add_favorite("Folder", "/notes/browse/Old")
+        svc.add_favorite("Inner", "/notes/edit/Old/deep/inner.md")
+        svc.add_favorite("Sibling", "/notes/browse/Old2")
+        n = svc.update_favorites_after_rename("Old", "New", True)
+        assert n == 2
+        urls = {f["name"]: f["url"] for f in svc.get_favorites()}
+        assert urls["Folder"] == "/notes/browse/New"
+        assert urls["Inner"] == "/notes/edit/New/deep/inner.md"
+        assert urls["Sibling"] == "/notes/browse/Old2"
+
+    def test_names_order_and_unrelated_untouched(self):
+        text_before = _read_config_text()
+        svc.add_favorite("A", "/notes/edit/a.md")
+        svc.add_favorite("B", "/browse")
+        svc.add_favorite("C", "/habits")
+        svc.update_favorites_after_rename("a.md", "z.md", False)
+        items = svc.get_favorites()
+        assert [f["name"] for f in items] == ["A", "B", "C"]
+        assert items[1]["url"] == "/browse"
+        assert items[2]["url"] == "/habits"
+
+    def test_duplicate_url_collapses_keeping_first(self):
+        svc.add_favorite("First", "/notes/edit/a.md")
+        svc.add_favorite("Second", "/notes/edit/z.md")
+        svc.update_favorites_after_rename("z.md", "a.md", False)
+        items = svc.get_favorites()
+        assert items == [_fav("First", "/notes/edit/a.md")]
+
+    def test_failure_keeps_rename_and_warns(self, monkeypatch):
+        with open(os.path.join(ptos.NOTES_DIR, "keep.md"), "w") as f:
+            f.write("x")
+        def boom(old_rel, new_rel, is_folder):
+            raise RuntimeError("config exploded")
+        monkeypatch.setattr(svc, "update_favorites_after_rename", boom)
+        result = svc.svc_rename("keep.md", "kept")
+        assert result["rel_path"] == "kept.md"
+        assert result["warning"] == "Renamed, but favorites could not be updated"
+        assert os.path.isfile(os.path.join(ptos.NOTES_DIR, "kept.md"))
+
+    def test_project_notes_path_updated_for_folder(self):
+        ptos.create_folder("", "Old")
+        ptos.create_folder("Old", "sub")
+        svc._write_queries_toml_key(
+            "project.ptest", {"label": "PT", "notes_path": "Old"})
+        svc._write_queries_toml_key(
+            "project.ptest2", {"label": "PT2", "notes_path": "Old/sub"})
+        svc._write_queries_toml_key(
+            "project.ptest3", {"label": "PT3", "notes_path": "Other"})
+        svc.svc_rename("Old", "New")
+        data = ptos.get_queries()
+        assert data["project.ptest"]["notes_path"] == "New"
+        assert data["project.ptest2"]["notes_path"] == "New/sub"
+        assert data["project.ptest3"]["notes_path"] == "Other"
+
+    def test_notes_path_untouched_for_file_rename(self):
+        svc._write_queries_toml_key(
+            "project.ptest", {"label": "PT", "notes_path": "Folder"})
+        svc.update_favorites_after_rename("a.md", "b.md", False)
+        data = ptos.get_queries()
+        assert data["project.ptest"]["notes_path"] == "Folder"
+
+
+class TestRenameRouteAndPage:
+    @pytest.fixture()
+    def client(self):
+        from ptos_web import app
+        app.config["TESTING"] = True
+        return app.test_client()
+
+    def test_rename_route_returns_rel_path_and_count(self, client):
+        ptos.create_file("", "star", "body")
+        svc.add_favorite("Star", "/notes/edit/star.md")
+        resp = client.post("/notes/rename",
+                           json={"path": "star.md", "new_name": "nova"})
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert data["rel_path"] == "nova.md"
+        assert data["favorites_updated"] == 1
+        assert data["warning"] is None
+
+    def test_rename_api_ignores_new_url(self, client):
+        svc.add_favorite("A", "/notes/edit/a.md")
+        resp = client.post("/api/favorites/rename",
+                           json={"url": "/notes/edit/a.md", "name": "Z",
+                                 "new_url": "/hacked", "path": "/hacked"})
+        assert resp.get_json()["ok"] is True
+        assert svc.get_favorites() == [_fav("Z", "/notes/edit/a.md")]
+
+    def test_page_has_no_path_input_and_inline_editor(self):
+        html = open(os.path.join(_REPO_ROOT, "web_templates",
+                                 "favorites.html"),
+                    encoding="utf-8").read()
+        assert "prompt(" not in html
+        assert 'input.type = "text"' in html
+        rows = re.findall(r'fav-row-url[^>]*>', html)
+        assert all("<input" not in r for r in rows)
+        assert 'class="fav-row-url"' in html

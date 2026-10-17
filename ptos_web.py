@@ -139,6 +139,7 @@ def av(path):
 
 
 app.jinja_env.filters["disp"] = ptos._disp
+app.jinja_env.filters["note_title"] = ptos.note_title
 
 
 @app.after_request
@@ -1921,8 +1922,8 @@ def notes_rename():
     if not new_name:
         return jsonify(ok=False, error="New name is required")
     try:
-        svc.svc_rename(rel_path, new_name)
-        return jsonify(ok=True)
+        result = svc.svc_rename(rel_path, new_name)
+        return jsonify(ok=True, **result)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
 
@@ -1985,9 +1986,12 @@ def _notes_breadcrumbs(rel_path):
     parts = rel_path.replace("\\", "/").split("/") if rel_path else []
     crumbs = [{"label": "Notes", "path": ""}]
     running = []
-    for part in parts:
+    for i, part in enumerate(parts):
         running.append(part)
-        crumbs.append({"label": part, "path": "/".join(running)})
+        label = part
+        if i == len(parts) - 1 and part.endswith(".md"):
+            label = ptos.note_title(part)
+        crumbs.append({"label": label, "path": "/".join(running)})
     return crumbs
 
 
@@ -2069,7 +2073,7 @@ def search_page():
                     continue
                 fpath = os.path.join(root, fname)
                 rel = os.path.relpath(fpath, ptos.NOTES_DIR)
-                title = fname[:-3]
+                title = ptos.note_title(fname)
                 try:
                     with open(fpath, encoding="utf-8") as f:
                         first_line = f.readline().strip()

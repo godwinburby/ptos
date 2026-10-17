@@ -216,7 +216,7 @@
         <div class="proj-section-body">
           {% for n in p.notes %}
           <div class="proj-ref-row">
-            <a href="/notes/edit/{{ n.path }}">📝 {{ n.path }}</a>
+            <a href="/notes/edit/{{ n.path }}">📝 {{ n.path|note_title }}</a>
             {% if n.snippet %}<div class="proj-ref-snippet">{{ n.snippet }}</div>{% endif %}
           </div>
           {% endfor %}

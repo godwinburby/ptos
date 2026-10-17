@@ -1,5 +1,4 @@
-"""Note save safety — locked atomic writes, rev conflicts, id preservation
-(ptos-notes-save-spec.md §5)."""
+"""Note save safety — locked atomic writes, rev conflicts, id preservation."""
 import inspect
 import os
 import subprocess
@@ -435,3 +434,53 @@ class TestTemplatePins:
         import ptos_cli
         src = inspect.getsource(ptos_cli._resolve_notes_conflict)
         assert 'open(orig_full, "w"' not in src
+
+
+# ── 11. note names render without .md ────────────────────────────────────────
+
+class TestNoteDisplayNames:
+    @pytest.fixture()
+    def client(self):
+        import ptos_web
+        return ptos_web.app.test_client()
+
+    def test_notes_list_shows_display_name(self, client):
+        _write("Clinic Note.md", "body")
+        html = client.get("/notes").get_data(as_text=True)
+        assert "&#128196; Clinic Note</a>" in html
+        assert "&#128196; Clinic Note.md</a>" not in html
+        assert 'href="/notes/edit/Clinic Note.md"' in html
+        assert 'data-name="Clinic Note"' in html
+        assert 'data-name="Clinic Note.md"' not in html
+
+    def test_edit_breadcrumb_shows_display_name(self, client):
+        _write("sub/Clinic Note.md", "body")
+        html = client.get("/notes/edit/sub/Clinic Note.md") \
+            .get_data(as_text=True)
+        assert ">Clinic Note</span>" in html
+        assert ">Clinic Note.md</span>" not in html
+        import ptos_web
+        crumbs = ptos_web._notes_breadcrumbs("sub/Clinic Note.md")
+        assert crumbs[-1]["label"] == "Clinic Note"
+
+    def test_search_result_title_has_no_md(self, client):
+        _write("findme.md", "uniquefindmebody")
+        html = client.get("/search?q=findmebody").get_data(as_text=True)
+        assert ";font-weight:600;\">findme</a>" in html
+        assert ";font-weight:600;\">findme.md</a>" not in html
+        assert "findme.md" in html
+
+    def test_projects_notes_list_has_no_md(self, client):
+        _write("job-hunt.md", "# Job Hunt\nMeeting [[PT Name]] next week\n")
+        svc._write_queries_toml_key(
+            "project.ptname", {"label": "PT Name", "todo_project": "ptname"})
+        html = client.get("/projects").get_data(as_text=True)
+        assert ">📝 job-hunt</a>" in html
+        assert ">📝 job-hunt.md</a>" not in html
+        assert 'href="/notes/edit/job-hunt.md"' in html
+
+    def test_rename_dialog_prefills_display_name(self, client):
+        _write("Prefill.md", "body")
+        html = client.get("/notes").get_data(as_text=True)
+        assert 'data-name="Prefill"' in html
+        assert 'data-name="Prefill.md"' not in html

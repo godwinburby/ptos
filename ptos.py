@@ -7689,14 +7689,32 @@ def _safe_path(rel_path):
 
 
 def _validate_name(name):
-    if not name or "/" in name or "\\" in name or name in (".", ".."):
+    if not name or "/" in name or "\\" in name or name.strip(".") == "":
         raise PTOSError("Invalid name")
+    if any(ord(c) < 32 or ord(c) == 127 for c in name):
+        raise PTOSError("Invalid name: control characters are not allowed")
+    if any(c in '<>:"|?*' for c in name):
+        raise PTOSError(
+            "Invalid name: < > : \" | ? * are not allowed")
+    if name != name.rstrip(" ."):
+        raise PTOSError(
+            "Invalid name: cannot end with a space or dot")
+
+
+def note_title(name):
+    """Display title for a note file name: drops one trailing .md.
+    Folders and extensionless names pass through unchanged."""
+    if name.endswith(".md"):
+        return name[:-3]
+    return name
 
 
 def list_dir(rel_path=""):
     """Return {folders: [...], files: [...]} for a directory under
-    NOTES_DIR. Each entry: {name, rel_path}. template.md is excluded
-    from the files list — it's a folder property, not a note."""
+    NOTES_DIR. Each entry: {name, display_name, rel_path} — name is the
+    real on-disk file name (used for paths), display_name drops a
+    trailing .md for files. template.md is shown like any other note
+    (it is a folder property, not excluded)."""
     full = _safe_path(rel_path)
     if not os.path.isdir(full):
         raise PTOSError("Folder not found")
@@ -7704,9 +7722,11 @@ def list_dir(rel_path=""):
     for name in sorted(os.listdir(full)):
         entry_rel = (rel_path + "/" + name) if rel_path else name
         if os.path.isdir(os.path.join(full, name)):
-            folders.append({"name": name, "rel_path": entry_rel})
+            folders.append({"name": name, "display_name": name,
+                            "rel_path": entry_rel})
         elif name.endswith(".md") and "conflict" not in name.lower():
-            files.append({"name": name, "rel_path": entry_rel})
+            files.append({"name": name, "display_name": note_title(name),
+                          "rel_path": entry_rel})
     return {"folders": folders, "files": files}
 
 
@@ -7736,22 +7756,61 @@ def create_file(rel_path, name, content):
 
 
 def rename_note(rel_path, new_name):
-    """Rename a file or a folder. Works identically for both."""
-    _validate_name(new_name)
+    """Rename a file or a folder and return the entry's new rel_path.
+
+    Decides by what is being renamed: a *file* gets the `.md`-extension
+    treatment (typing `clinic` and `clinic.md` both produce `clinic.md`;
+    the result is validated after the typed extension is removed, so the
+    rule can never double the extension); a *folder* keeps the name as
+    typed. Renaming to the same name is a no-op success. Case-only
+    renames (`Clinic` → `clinic`) go through a unique temp name because
+    the target "exists" on case-insensitive filesystems (Windows,
+    Android shared storage)."""
     full = _safe_path(rel_path)
+    if not os.path.exists(full):
+        raise PTOSError("Not found")
+    is_folder = os.path.isdir(full)
+    new_name = (new_name or "").strip()
+    if not is_folder:
+        while new_name.endswith(".md"):
+            new_name = new_name[:-3]
+        _validate_name(new_name)
+        new_name += ".md"
+    else:
+        _validate_name(new_name)
     parent = os.path.relpath(os.path.dirname(full), NOTES_DIR)
     if parent == ".":
         parent = ""
-    new_full = _safe_path((parent + "/" + new_name) if parent else new_name)
+    new_rel = (parent + "/" + new_name) if parent else new_name
+    new_full = _safe_path(new_rel)
+    if new_full == full:
+        return new_rel
     if os.path.exists(new_full):
-        raise PTOSError(f"'{new_name}' already exists")
-    with file_lock(full):
-        rename_with_retry(full, new_full)
+        try:
+            same_file = os.path.samefile(full, new_full)
+        except OSError:
+            same_file = False
+        if not same_file:
+            raise PTOSError(f"'{new_name}' already exists")
+        with file_lock(full):
+            tmp_name = (f".ptos-ren-{os.urandom(4).hex()}"
+                        + (".md" if not is_folder else ""))
+            tmp_full = os.path.join(os.path.dirname(full), tmp_name)
+            rename_with_retry(full, tmp_full)
+            try:
+                rename_with_retry(tmp_full, new_full)
+            except OSError:
+                rename_with_retry(tmp_full, full)
+                raise
+    else:
+        with file_lock(full):
+            rename_with_retry(full, new_full)
     try:
         if os.path.exists(full + ".lock"):
             os.remove(full + ".lock")
     except OSError:
         pass
+    return new_rel
 
 
 _NOTE_ID_RE = re.compile(r'<!--\s*ptos-id:\s*(\S+)\s*-->')

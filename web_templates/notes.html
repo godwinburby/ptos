@@ -38,9 +38,9 @@
 {% if listing.files %}
   {% for f in listing.files %}
   <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-hover,#f5f5f5)'" onmouseout="this.style.background=''">
-    <a href="/notes/edit/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128196; {{ f.name }}</a>
-    <button data-path="{{ f.rel_path }}" data-name="{{ f.name }}" data-folder="false" onclick="promptRename(this)" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
-    <button data-path="{{ f.rel_path }}" data-name="{{ f.name }}" data-folder="false" onclick="confirmDelete(this)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+    <a href="/notes/edit/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128196; {{ f.display_name }}</a>
+    <button data-path="{{ f.rel_path }}" data-name="{{ f.display_name }}" data-folder="false" onclick="promptRename(this)" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
+    <button data-path="{{ f.rel_path }}" data-name="{{ f.display_name }}" data-folder="false" onclick="confirmDelete(this)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
   </div>
   {% endfor %}
 {% endif %}
@@ -85,6 +85,7 @@
   <div style="background:var(--bg-card,var(--bg));border:1px solid var(--border,#ccc);border-radius:10px;padding:20px;min-width:320px;">
     <div style="font-size:15px;font-weight:700;margin-bottom:10px;">Rename</div>
     <input id="rn-name" type="text" placeholder="New name" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
+    <div id="rn-status" style="display:none;margin-top:8px;font-size:13px;color:var(--accent);"></div>
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
       <button onclick="closeDialog('rename-dialog')" class="btn btn-sm btn-ghost">Cancel</button>
       <button onclick="submitRename()" class="btn btn-sm btn-primary">Rename</button>
@@ -213,8 +214,18 @@ function submitRename() {
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
-    if (d.ok) window.location.reload();
-    else alert(d.error || "Failed");
+    if (!d.ok) { alert(d.error || "Failed"); return; }
+    var msg = d.warning || (d.favorites_updated
+      ? "Renamed. " + d.favorites_updated + " favorite" + (d.favorites_updated === 1 ? "" : "s") + " updated."
+      : "");
+    if (msg) {
+      var el = document.getElementById("rn-status");
+      el.textContent = msg;
+      el.style.display = "block";
+      setTimeout(function() { window.location.reload(); }, 900);
+    } else {
+      window.location.reload();
+    }
   });
 }
 

@@ -25,7 +25,8 @@
   <div class="card fav-row" data-url="{{ fav.url }}" style="margin-bottom:8px;padding:12px 16px;">
     <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
       <div style="flex:1;min-width:180px;">
-        <div class="fav-row-name" style="font-size:15px;font-weight:700;">{{ fav.name }}</div>
+        <div class="fav-row-name" onclick="favRename(this)" title="Click to rename"
+             style="font-size:15px;font-weight:700;cursor:pointer;">{{ fav.name }}</div>
         <a href="{{ fav.url }}" class="fav-row-url"
            style="font-size:12px;color:var(--sub);font-family:monospace;text-decoration:none;word-break:break-all;">{{ fav.url }}</a>
       </div>
@@ -93,15 +94,36 @@ function favRemove(el) {
 
 function favRename(el) {
   var row = favRow(el);
-  var old = row.querySelector(".fav-row-name").textContent;
-  var name = prompt("Rename favorite:", old);
-  if (name === null) return;
-  name = name.trim();
-  if (!name || name === old) return;
-  favPost("/api/favorites/rename", { url: favUrl(el), name: name }).then(function (res) {
-    if (res.ok) location.reload();
-    else favMsg(res.error || "Failed to rename", true);
+  var nameEl = row.querySelector(".fav-row-name");
+  if (!nameEl || nameEl.querySelector("input")) return;
+  var old = nameEl.textContent;
+  nameEl.textContent = "";
+  var input = document.createElement("input");
+  input.type = "text";
+  input.value = old;
+  input.style.cssText = "width:100%;padding:4px 6px;font-size:14px;font-weight:700;"
+    + "border:1.5px solid var(--accent);border-radius:6px;background:var(--bg);color:var(--text);"
+    + "box-sizing:border-box;";
+  nameEl.appendChild(input);
+  input.focus();
+  input.select();
+  var done = false;
+  function restore() { nameEl.textContent = old; }
+  function save() {
+    if (done) return;
+    done = true;
+    var name = input.value.trim();
+    if (!name || name === old) { restore(); return; }
+    favPost("/api/favorites/rename", { url: favUrl(el), name: name }).then(function (res) {
+      if (res.ok) location.reload();
+      else { favMsg(res.error || "Failed to rename", true); restore(); }
+    });
+  }
+  input.addEventListener("keydown", function (e) {
+    if (e.key === "Enter") { e.preventDefault(); save(); }
+    else if (e.key === "Escape") { e.preventDefault(); done = true; restore(); }
   });
+  input.addEventListener("blur", function () { if (!done) save(); });
 }
 
 function favMove(el, dir) {
