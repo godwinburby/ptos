@@ -6634,7 +6634,6 @@ def svc_ensure_note_id(rel_path):
 def check_note_delete_links(rel_path):
     """Check if a note (or folder of notes) has incoming backlinks.
     Returns a dict with ok=True if safe, or ok=False with warning details."""
-    import fnmatch
     full = ptos._safe_path(rel_path)
     notes_to_check = []
     if os.path.isdir(full):

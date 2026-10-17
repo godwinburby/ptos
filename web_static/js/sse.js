@@ -25,8 +25,7 @@ function _showTodoToast(tasks) {
 }
 (function(){
   try {
-    var es = new EventSource("/api/events");
-    es.onmessage = function(e) {
+    var onSseMessage = function(e) {
       try {
         var msg = JSON.parse(e.data);
         if (msg.type === "shutdown") {
@@ -67,5 +66,18 @@ function _showTodoToast(tasks) {
         }
       } catch(ex) {}
     };
+    var es = new EventSource("/api/events");
+    es.onmessage = onSseMessage;
+    window.addEventListener("pagehide", function() {
+      try { es.close(); } catch(ex) {}
+    });
+    window.addEventListener("pageshow", function(e) {
+      if (e.persisted) {
+        try {
+          es = new EventSource("/api/events");
+          es.onmessage = onSseMessage;
+        } catch(ex) {}
+      }
+    });
   } catch(ex) {}
 })();

@@ -1,4 +1,3 @@
-import argparse
 import contextlib
 import errno
 import os
@@ -1050,11 +1049,11 @@ def file_lock_mode():
         else:
             try:
                 if os.name == "nt":
-                    import msvcrt  # noqa: F401
-                    _LOCK_MODE["mode"] = "msvcrt"
+                    import msvcrt
+                    _LOCK_MODE["mode"] = "msvcrt" if msvcrt else "lockfile"
                 else:
-                    import fcntl  # noqa: F401
-                    _LOCK_MODE["mode"] = "fcntl"
+                    import fcntl
+                    _LOCK_MODE["mode"] = "fcntl" if fcntl else "lockfile"
             except ImportError:
                 _LOCK_MODE["mode"] = "lockfile"
     _ensure_lock_probe()
@@ -1114,7 +1113,7 @@ def _ensure_lock_probe():
 def _run_lock_probe(mode):
     import tempfile
     fd1, probe_path = tempfile.mkstemp(
-        prefix="ptos-lockprobe-", suffix=".lock")
+        prefix="ptos-lockprobe-", suffix=".lock", dir=BASE_DIR)
     fd2 = -1
     try:
         if mode == "lockfile":
@@ -1875,7 +1874,8 @@ def doctor_check(verbose=False, fix=False, json_output=False):
     # Flask check
     try:
         import flask
-        messages.append(("Flask", f"Flask installed"))
+        _ = flask
+        messages.append(("Flask", "Flask installed"))
     except ImportError:
         errors.append("Flask not installed. Run: pip install flask")
 
@@ -2900,9 +2900,6 @@ def export_schema_bundle(selected_types):
 
     Returns dict with keys: schema, queries, presets, config.
     """
-    import tomli_w
-    import io
-
     schema = get_schema()
     queries = get_queries()
     presets_raw = get_presets()

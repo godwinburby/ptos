@@ -48,8 +48,6 @@ def demo_home(tmp_path, monkeypatch):
     import ptos_todo
     import ptos_service as svc
     for mod in (ptos_todo,):
-        monkeypatch.setattr(mod, "BASE_DIR", str(base))
-        monkeypatch.setattr(mod, "TODO_DIR", str(base / "todo"))
         monkeypatch.setattr(mod, "TODO_PATH", str(base / "todo" / "todo.txt"))
         monkeypatch.setattr(mod, "DONE_PATH", str(base / "todo" / "done.txt"))
     for mod in (svc,):

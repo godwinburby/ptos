@@ -6,6 +6,7 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import tomllib
@@ -835,6 +836,24 @@ class TestLockExclusionProbe:
         errs, warns, msgs, fixes = ptos.doctor_check()
         locking = [m for m in msgs if m[0] == "File locking"]
         assert locking and "exclusion probe" in locking[0][1]
+
+    def test_probe_runs_in_the_data_folder(self, monkeypatch):
+        """The probe must exercise the data folder's filesystem — on Termux
+        shared storage the system temp dir is a different mount, where flock
+        can exclude while the data folder's does not."""
+        monkeypatch.setattr(ptos, "_LOCK_MODE", {})
+        seen = {}
+        real = tempfile.mkstemp
+
+        def spy(*args, **kwargs):
+            seen.update(kwargs)
+            return real(*args, **kwargs)
+
+        monkeypatch.setattr(tempfile, "mkstemp", spy)
+        ptos.file_lock_mode()
+        assert "dir" in seen
+        assert (os.path.normcase(os.path.abspath(seen["dir"])) ==
+                os.path.normcase(os.path.abspath(ptos.BASE_DIR)))
 
 
 class TestDoctorStignore:

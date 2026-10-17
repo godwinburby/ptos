@@ -1,4 +1,4 @@
-import sys, os, time, shutil, threading, socket, traceback
+import sys, os, time, threading, socket, traceback
 
 _log_path = os.path.join(os.environ.get("TEMP", "."), "ptos_desktop.log")
 
@@ -69,6 +69,7 @@ _stopping = False
 def _has_webview():
     try:
         import webview
+        _ = webview
         return True
     except ImportError:
         return False
@@ -81,8 +82,7 @@ class _Api:
         global _stopping
         _stopping = True
         try:
-    import ptos_service as svc
-    port = svc.get_config().get("server", {}).get("port", 5000)
+            import ptos_service as svc
             if svc.get_backup_config().get("auto_backup_on_startup", True):
                 svc.backup_if_needed()
         except Exception:
@@ -107,7 +107,6 @@ def _create_window(port):
         js_api=_Api(port),
     )
     def _on_closing():
-        global _window
         if _stopping:
             return True
         _window.hide()

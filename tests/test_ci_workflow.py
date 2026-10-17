@@ -26,7 +26,7 @@ _PACKAGE_OF = {"tomli_w": "tomli-w", "yaml": "pyyaml"}
 #   (logged, tray disabled)
 # - tomli: only reached on Python < 3.11 (the `except ImportError` fallback
 #   after `import tomllib`); the supported floor is 3.11, which ships tomllib
-_OPTIONAL = {"pystray", "PIL", "tomli"}
+_OPTIONAL = {"pystray", "PIL", "tomli", "webview"}
 
 _STDLIB = set(sys.stdlib_module_names) | {
     "ptos", "ptos_cli", "ptos_service", "ptos_todo", "ptos_web", "desktop_app"}

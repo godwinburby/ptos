@@ -8,11 +8,11 @@ Run:  python ptos_todo.py              (list open todos)
       python ptos_todo.py done N        (mark line N complete)
 """
 
-import os, re, sys, time, calendar, datetime as dt, dataclasses
+import os, re, sys, time, calendar, datetime as dt
 from dataclasses import dataclass, field
 from typing import Optional, List
 
-from ptos import (BASE_DIR, TODO_DIR, TODO_PATH, DONE_PATH, append_line_fast,
+from ptos import (TODO_PATH, DONE_PATH, append_line_fast,
                   file_lock, _make_temp_file, _fsync_dir, replace_with_retry)
 
 # ── errors ──────────────────────────────────────────────────────────────────

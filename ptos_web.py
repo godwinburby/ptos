@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, glob, fnmatch, datetime as dt, json, tempfile, platform, subprocess, urllib.request, atexit, queue, threading, time, logging, shutil, gzip as _gzip, hmac, tomllib
+import sys, os, re, glob, fnmatch, datetime as dt, json, platform, subprocess, atexit, queue, threading, time, logging, shutil, gzip as _gzip, hmac, tomllib
 from collections import OrderedDict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -289,9 +289,6 @@ def handle_unexpected_error(e):
         return jsonify({"success": False, "error": "Something went wrong."}), 500
     return render_template("error.html",
         message="Something went wrong. Check the server log for details."), 500
-
-from functools import wraps
-from flask import request, Response
 
 # ── Auth credential cache ────────────────────────────────────────────────────
 # Basic auth re-sends the password on every request, and PBKDF2-SHA256 at
@@ -4913,6 +4910,8 @@ def api_preset_instant():
 _sse_clients = []
 _sse_lock = threading.Lock()
 _pending_notifications = []
+_SSE_HEARTBEAT_SECONDS = 15
+_SSE_MAX_CLIENTS = 32
 
 def _sse_broadcast(event_type, data=""):
     payload = json.dumps({"type": event_type, "data": data})
@@ -4929,7 +4928,14 @@ def api_events():
         q = queue.Queue()
         with _sse_lock:
             _sse_clients.append(q)
+            while len(_sse_clients) > _SSE_MAX_CLIENTS:
+                evicted = _sse_clients.pop(0)
+                try:
+                    evicted.put_nowait(None)
+                except Exception:
+                    pass
         try:
+            yield "retry: 3000\n\n"
             yield "data: connected\n\n"
             with _sse_lock:
                 pending = list(_pending_notifications)
@@ -4938,7 +4944,11 @@ def api_events():
                 payload = json.dumps({"type": "todo-due", "data": tasks})
                 q.put_nowait(payload)
             while True:
-                msg = q.get()
+                try:
+                    msg = q.get(timeout=_SSE_HEARTBEAT_SECONDS)
+                except queue.Empty:
+                    yield ": ping\n\n"
+                    continue
                 if msg is None:
                     break
                 yield f"data: {msg}\n\n"
@@ -4948,7 +4958,10 @@ def api_events():
             with _sse_lock:
                 if q in _sse_clients:
                     _sse_clients.remove(q)
-    return Response(stream(), mimetype="text/event-stream")
+    resp = Response(stream(), mimetype="text/event-stream")
+    resp.headers["Cache-Control"] = "no-cache"
+    resp.headers["X-Accel-Buffering"] = "no"
+    return resp
 
 # ── Todo notification background thread ─────────────────────────────────────
 

@@ -15,39 +15,34 @@ import fnmatch
 import json
 import tomllib
 import datetime as dt
-import json
-import csv
 import re
 import argparse
 import subprocess
+import tempfile
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos
 from ptos import (
-    # Constants
-    BASE_DIR, RECORDS_DIR, BACKUP_DIR, EXPORTS_DIR,
-    SCHEMA_PATH, CONFIG_PATH, QUERIES_PATH, PRESETS_PATH, TODO_PATH,
-    TimeCode,
+    TODO_PATH, BACKUP_DIR, EXPORTS_DIR,
     # Config / schema helpers
-    get_config, get_schema, get_queries, get_presets,
+    get_config, get_schema, get_queries,
     # Record I/O
     scan_records, append_record, find_records_with_location,
     rewrite_line_in_file, run_set,
     # Validation / lint
-    validate_record, lint_all_records,
+    validate_record, lint_records,
     # Interactive helpers
-    interactive_add, quick_add, complete_record,
-    choose_from_list, choose_from_list_optional,
+    interactive_add, quick_add,
     # Query / metric / dashboard runners
     run_metric, run_dashboard,
     # Output helpers
     render_group, render_pivot, render_summary, show_fields,
-    fmt_date, fmt_datetime, currency,
+    fmt_datetime,
     # Preset / query management
     save_as_preset, delete_preset, save_query,
     # Misc
-    resolve_time, resolve_date, parse_date, today,
+    resolve_time, resolve_date, today,
     edit_target, init_ptos, set_home, set_user_name, set_date_format,
     remove_demo_data, reinstall_demo_data,
     set_currency, add_cycle, set_auth,
@@ -55,21 +50,21 @@ from ptos import (
     restore_data, restore_config,
     backup_data, backup_config, list_backups, delete_backup,
     doctor_check, print_doctor_results,
-    get_log_files, atomic_write, AtomicWrite,
+    AtomicWrite,
     # Output / rendering helpers
     group_results, pivot_results, detect_value_field,
-    fmt_avg, fmt, render_group, render_pivot,
+    fmt_avg, fmt,
     # Field introspection
     numeric_fields, non_dimension_fields, derived_fields,
     datetime_fields, compute_derived,
     # Record helpers
-    parse_line, lint_records, build_record_line,
+    parse_line, build_record_line,
     # Link helpers
-    resolve_link, list_link_ids, check_dangling_links,
+    resolve_link, list_link_ids,
     generate_unique_id, append_links_to_line, append_record_id,
     append_todo_id, append_links_to_todo_line,
     # Date helpers
-    month_range, quarter_range, resolve_cycle, _prior_periods,
+    _prior_periods,
     # Internal helpers used by CLI
     _disp, filters_to_expr, resolve_editor, _TIME_ALIASES, _glob_match,
 )
@@ -1539,7 +1534,6 @@ def run_entity(arg):
         sys.exit("Field and value are required.")
 
     # Resolve time from parent args (global -t/--time)
-    import argparse
     import sys as _sys
     time_code = None
     for i, a in enumerate(_sys.argv):
@@ -2586,12 +2580,12 @@ def _handle_retro_id(args):
         if not search:
             sys.exit("--retro-id note requires --search TEXT to find the note file")
         found = None
-        for root, _, files in os.walk(NOTES_DIR):
+        for root, _, files in os.walk(ptos.NOTES_DIR):
             for fname in files:
                 if fname == "template.md" or not fname.endswith(".md"):
                     continue
                 fpath = os.path.join(root, fname)
-                rel = os.path.relpath(fpath, NOTES_DIR).replace("\\", "/")
+                rel = os.path.relpath(fpath, ptos.NOTES_DIR).replace("\\", "/")
                 if _glob_match(search, fname.replace(".md", "")) or _glob_match(search, rel):
                     if found:
                         sys.exit(f"Multiple notes match '{search}' — be more specific.")
@@ -2602,7 +2596,7 @@ def _handle_retro_id(args):
         existing = ptos.note_id_of(fpath)
         if existing:
             sys.exit(f"Note already has id: note:{existing}")
-        nid = ensure_note_id(rel)
+        nid = ptos.ensure_note_id(rel)
         print(f"Added id:note:{nid} to {rel}")
         return
     filters = [item for group in (args.where or []) for item in group]
@@ -2670,9 +2664,6 @@ def _handle_migrate_log_group(rtype):
 
 def _handle_resolve_conflicts(args):
     """Review and merge sync conflict files interactively."""
-    import tempfile
-    from ptos_todo import parse_todo_line, format_line, save_todos
-
     conflicts = ptos.find_sync_conflicts()
     if not conflicts:
         print("No sync conflict files found.")
@@ -3091,10 +3082,11 @@ def _edit_line(line):
 
 def _edit_todo_line(todo):
     """Open a todo line in $EDITOR and return the parsed Todo, or None on cancel."""
-    edited = _edit_line(format_line(todo))
+    import ptos_todo
+    edited = _edit_line(ptos_todo.format_line(todo))
     if edited:
         try:
-            return parse_todo_line(edited)
+            return ptos_todo.parse_todo_line(edited)
         except Exception:
             return None
     return None
