@@ -306,7 +306,7 @@ class TestBaseTemplateUsesExternalScripts:
 
     FILES = ("sidebar_search.js", "sidebar_collapse.js", "date_picker.js",
              "nav_chords.js", "sse.js", "bracket_links.js", "pomodoro.js",
-             "last_change.js", "favorites.js")
+             "last_change.js", "favorites.js", "ui_scale.js")
     SHIM_KEYS = ("frozen", "desktop", "pomoMinutes", "pomoLog", "favUrls")
 
     def _base(self):

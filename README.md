@@ -1004,7 +1004,7 @@ groups = { "Revenue" = ["income_this_month", "total_income"],
 Configure user profile and app preferences. Sections:
 
 - **Profile**: user name
-- **Display**: currency symbol, date format (with live examples)
+- **Display**: currency symbol, date format (with live examples), display size (100% / 115% / 130% / 150% — scales text, buttons and spacing together, **stored per device** in the browser; a sidebar `A− / A+` pair steps through the same sizes from any page)
 - **Dashboard**: default dashboard selection
 - **Custom Cycles**: CRUD for billing cycles (day 1-31)
 - **Backup Folders**: core folders locked, custom folders editable
@@ -1013,7 +1013,9 @@ Configure user profile and app preferences. Sections:
 - **Sync conflicts**: conflicts detected in synced folders can be reviewed and resolved (via the `/conflicts` page and `--resolve-conflicts`). See [Conflict Resolution](#conflict-resolution).
 - **Server** (config only): `[server]` section in `config.toml` with `host` and `port` — default `127.0.0.1:5000`. Set `host = "0.0.0.0"` to expose on LAN or Tailscale. Always set `[auth]` before exposing publicly.
 
-Settings are stored in `config.toml` and editable via the UI.
+Settings are stored in `config.toml` and editable via the UI — except
+**Display size**, which is kept in the browser's `localStorage` so your phone
+and desktop can differ (config syncs between devices, a shared size would not).
 
 ### Keyboard Shortcuts
 

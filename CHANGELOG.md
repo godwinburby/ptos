@@ -5,6 +5,17 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-17
+
+### Display size — per-device UI scaling (Android-friendly)
+
+- **A "Display size" setting scales the whole UI — 100% / 115% / 130% / 150% — and it's remembered per device.** Settings → Display gets a four-way segmented control with a live sample line; the sidebar footer gets an **`A−` / `A+`** pair (with a current-`%` label) so the size can be stepped from any page without opening Settings. The value applies as a CSS `zoom` on `<html>` — text, buttons, spacing and images scale together, like Android's own "Display size" — and a tiny script in `<head>` applies it **before the first stylesheet loads**, so a reload never flashes at the old size.
+- **Stored in `localStorage` (`ptos.uiScale`), deliberately not `config.toml`.** Config is synced by Syncthing across devices, so a shared scale would wrongly resize every device from whichever one changed it; `localStorage` also means changing size costs no config rewrite and no cache invalidation. The value is a fixed allowlist (`1`, `1.15`, `1.3`, `1.5`) and the default `1` sets nothing — today's layout is byte-for-byte untouched. Media queries keep matching the real device width, so the phone keeps its mobile layout at any size, and the viewport never gains `user-scalable`/`maximum-scale` (pinch zoom stays available; a guard test now enforces that permanently).
+- **The feature stands down where it isn't supported.** `ui_scale.js` feature-detects `CSS.supports('zoom', …)`; without it the stored value is ignored and both controls (Settings row, sidebar stepper) hide themselves. Storage writes are inside `try/catch`, so private-mode browsers just don't persist. `setUiScale` validates against the allowlist, applies immediately, re-highlights the active button, updates the sidebar label and dispatches a `ptos:uiscale` event for future consumers.
+- **Tests:** new `tests/test_ui_scale.py` (25) — head script present before the first stylesheet and under the 1000-char inline cap, allowlist parity between the head script and `ui_scale.js`, no template viewport ever carries `user-scalable`/`maximum-scale`, `ui_scale.js` external/av()-loaded/stand-down wiring, sidebar stepper placement, `/settings` renders the control and its block stays client-side only (no `/settings/save`); `tests/test_web_perf.py`'s pinned script order gains `ui_scale.js`. Phase 2 of the spec (`px` → `rem` conversion) is deliberately **not** started — it waits on this landing on a real device first.
+
+---
+
 ## 2026-10-16
 
 ### Note display names, .md-aware rename, and rename-safe favorites
