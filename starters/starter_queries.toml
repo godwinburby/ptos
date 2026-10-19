@@ -236,4 +236,28 @@ tag_filters  = ["project=demo_job"]
 board        = "demo_job"
 notes_path   = "Demo/Find a Job"
 
+# ══════════════════════════════════════════════════════════════════════════════
+# TODOS (saved todo views)
+# ══════════════════════════════════════════════════════════════════════════════
+# A saved todo view feeds ```ptos embeds (view = "todo") with the same keys the
+# /todo page filter bar accepts. Keys set inside an embed override these.
+# Every key below is optional: with none of them a view is the default open
+# todo list, grouped by timeline with a 20-item limit.
+# Validate with: ptos --lint  (also checked by ptos --doctor)
+
+# ["todo.NAME"]
+# project      = "+demo_job"      # a project name; "-name" excludes it
+# context      = "@phone"
+# priority     = "A"              # A-D (case-insensitive)
+# due          = "week"           # overdue|today|tomorrow|upcoming|someday|week|none
+# search       = "*call*"         # glob match over the description
+# linked_to    = "expense:abc123" # only todos linking to this type:id
+# include_done = false            # append a Done bucket (recent 50, filtered)
+# hide_routines = false           # drop +routine todos (defaults on when no project)
+# groupby      = "project"        # timeline (default) | priority | project | context | none
+# sort         = "most"           # default | reverse | most | fewest (group order)
+# limit        = 20               # truncate open groups in group order
+# title        = "Work week"      # embed card heading
+# add          = true             # show a quick-add box (widget chrome)
+
 

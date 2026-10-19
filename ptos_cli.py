@@ -3445,6 +3445,8 @@ def main():
         results, _ = scan_records(dt.date.min, dt.date.max, [], None,
                                  include_demo=True)
         error_files = lint_records(results, schema)
+        for w in ptos.lint_todo_views():
+            print(f"\n⚠ queries.toml: {w}")
         for fname, last_lineno in ptos.find_unterminated_tail_files():
             print(
                 f"\n═ {fname}:{last_lineno}\n"

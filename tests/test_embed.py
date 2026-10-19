@@ -509,7 +509,8 @@ class TestEmbedCandidates:
         c = svc.get_embed_candidates()
         assert c == {"queries": [], "metrics": [], "dashboards": [],
                      "thresholds": [], "boards": [], "habits": [],
-                     "calendars": [], "due": [], "projects": []}
+                     "calendars": [], "due": [], "projects": [],
+                     "todos": []}
 
 
 class TestEmbedCandidatesRoute:

@@ -10,6 +10,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ptos_service as svc
 import ptos
+import ptos_widgets
 from ptos import _glob_match
 from ptos_service import PTOSError
 from urllib.parse import quote, urlsplit
@@ -1098,7 +1099,10 @@ def todo_page():
     hide_routines = (project and project.startswith("-")) or (not has_prj_param and hide_routines_cfg)
 
     try:
-        buckets = svc.get_todos_bucketed()
+        buckets = svc.query_todos(
+            project=project, context=context, priority=pri, due=due_filter,
+            search=search, linked_to=linked_to,
+            hide_routines=(not has_prj_param and hide_routines_cfg))
         projects = svc.get_todo_projects()
         contexts = svc.get_todo_contexts()
         error = None
@@ -1108,46 +1112,9 @@ def todo_page():
         contexts = []
         error = str(e)
 
-    # apply project/context/priority filters within buckets
-    def _filter_list(todos):
-        result = todos
-        if project:
-            if project.startswith("-"):
-                exc = "+" + project[1:]
-                result = [t for t in result if exc not in t.projects]
-            else:
-                inc = project if project.startswith("+") else "+" + project
-                result = [t for t in result if inc in t.projects]
-        elif not has_prj_param and hide_routines_cfg:
-            result = [t for t in result if "+routine" not in t.projects]
-        if context:
-            result = [t for t in result if context in t.contexts]
-        if pri:
-            result = [t for t in result if t.priority == pri.upper()]
-        if search:
-            result = [t for t in result if _glob_match(search, t.description)]
-        if linked_to:
-            result = [t for t in result if linked_to in t.links]
-        return result
-
-    for key in ("overdue", "today", "tomorrow", "upcoming", "someday"):
-        buckets[key] = _filter_list(buckets[key])
-
-    # apply due range filter
-    if due_filter:
-        if due_filter in buckets:
-            for key in list(buckets.keys()):
-                if key != due_filter:
-                    buckets[key] = []
-        elif due_filter == "none":
-            buckets["overdue"] = []
-            buckets["today"] = []
-            buckets["tomorrow"] = []
-            buckets["upcoming"] = []
-
     # today progress: count completed today vs total added today
     try:
-        all_done, _ = svc.ptos_todo.load_todos(svc.DONE_PATH)
+        all_done, _ = svc.ptos_todo.load_todos(ptos.DONE_PATH)
         today_str = dt.date.today().isoformat()
         done_today = len([t for t in all_done if t.completed_date and t.completed_date.isoformat() == today_str])
         total_today = len(buckets["overdue"]) + len(buckets["today"]) + done_today
@@ -1164,60 +1131,9 @@ def todo_page():
 
     priority_labels = todo_cfg.get("priority_labels", {})
 
-    # Build grouped sections for the selected groupby mode
-    _pri_order = {"A": 0, "B": 1, "C": 2, "D": 3}
-    _pri_colors = {"A": "var(--error)", "B": "var(--warn)", "C": "var(--accent)", "D": "var(--sub)"}
-    _pri_labels = {"A": "Critical", "B": "Important", "C": "Moderate", "D": "Low"}
-    all_open = buckets["overdue"] + buckets["today"] + buckets["tomorrow"] + buckets["upcoming"] + buckets["someday"]
-
-    if groupby == "priority":
-        _groups = {}
-        for t in all_open:
-            p = t.priority or ""
-            _groups.setdefault(p, []).append(t)
-        grouped = []
-        for p in ("A", "B", "C", "D"):
-            if p in _groups:
-                lbl = f"({p}) {priority_labels.get(p, _pri_labels.get(p, p))}"
-                grouped.append((f"pri-{p}", lbl, _pri_colors.get(p, "var(--sub)"), sorted(_groups[p], key=lambda t: (t.due or dt.date.max, t.description))))
-        if "" in _groups:
-            grouped.append(("pri-none", "No Priority", "var(--border)", sorted(_groups[""], key=lambda t: (t.due or dt.date.max, t.description))))
-    elif groupby == "project":
-        _groups = {}
-        for t in all_open:
-            projs = t.projects or [""]
-            for p in projs:
-                _groups.setdefault(p, []).append(t)
-        no_proj = _groups.pop("", None)
-        grouped = []
-        for p in sorted(_groups.keys()):
-            lbl = p if p.startswith("+") else f"+{p}"
-            grouped.append(("proj-" + p.lower().lstrip("+"), lbl, "var(--accent)", sorted(_groups[p], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
-        if no_proj:
-            grouped.append(("proj-none", "No Project", "var(--sub)", sorted(no_proj, key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
-    elif groupby == "context":
-        _groups = {}
-        for t in all_open:
-            ctxs = t.contexts or [""]
-            for c in ctxs:
-                _groups.setdefault(c, []).append(t)
-        no_ctx = _groups.pop("", None)
-        grouped = []
-        for c in sorted(_groups.keys()):
-            lbl = c if c.startswith("@") else f"@{c}"
-            grouped.append(("ctx-" + c.lower().lstrip("@"), lbl, "var(--accent)", sorted(_groups[c], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
-        if no_ctx:
-            grouped.append(("ctx-none", "No Context", "var(--sub)", sorted(no_ctx, key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
-    else:
-        # timeline (default) — reuse existing bucket order
-        _timeline = [
-            ("overdue", "Overdue", "var(--error)", buckets["overdue"]),
-            ("today", "Today", "var(--accent)", buckets["today"]),
-            ("tomorrow", "Tomorrow", "var(--success)", buckets["tomorrow"]),
-            ("upcoming", "Upcoming", "#f0ad4e", buckets["upcoming"]),
-            ("someday", "Someday", "var(--sub)", buckets["someday"]),
-        ]
-        grouped = [(k, l, c, t) for k, l, c, t in _timeline if t]
+    # Build grouped sections for the selected groupby mode (shared with
+    # the todo widget via svc.group_todos so the two can never drift)
+    grouped = svc.group_todos(buckets, groupby, priority_labels)
 
     return render_template("todo.html", tab="todo", title="Todo",
         now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
@@ -1251,8 +1167,9 @@ def todo_complete():
     if not line_no:
         return jsonify(ok=False, error="No line_no provided")
     try:
-        svc.complete_todo_by_line(int(line_no))
-        return jsonify(ok=True)
+        resp = svc.complete_todo_by_line(int(line_no), expect=data.get("expect"))
+        return jsonify(ok=True, done_line_no=resp.get("done_line_no"),
+                       done_raw=resp.get("done_raw"))
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
 
@@ -1264,7 +1181,7 @@ def todo_undo():
     if not line_no:
         return jsonify(ok=False, error="No line_no provided")
     try:
-        svc.undo_todo_by_line(int(line_no))
+        svc.undo_todo_by_line(int(line_no), expect=data.get("expect"))
         return jsonify(ok=True)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -1277,7 +1194,7 @@ def todo_delete():
     if not line_no:
         return jsonify(ok=False, error="No line_no provided")
     try:
-        svc.delete_todo_by_line(int(line_no))
+        svc.delete_todo_by_line(int(line_no), expect=data.get("expect"))
         return jsonify(ok=True)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -1291,7 +1208,8 @@ def todo_edit():
     if not line_no:
         return jsonify(ok=False, error="No line_no provided")
     try:
-        result = svc.edit_todo_by_line(int(line_no), updates)
+        result = svc.edit_todo_by_line(int(line_no), updates,
+                                       expect=data.get("expect"))
         return jsonify(ok=True, todo=result["todo"])
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -1305,7 +1223,8 @@ def todo_bulk_edit():
     if not line_nos:
         return jsonify(ok=False, error="No tasks selected")
     try:
-        result = svc.bulk_edit_todos([int(ln) for ln in line_nos], updates)
+        result = svc.bulk_edit_todos([int(ln) for ln in line_nos], updates,
+                                     expects=data.get("expects"))
         return jsonify(ok=True, count=result["count"])
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -1318,7 +1237,7 @@ def todo_delete_done():
     if not line_no:
         return jsonify(ok=False, error="No line_no provided")
     try:
-        svc.delete_done_todo_by_line(int(line_no))
+        svc.delete_done_todo_by_line(int(line_no), expect=data.get("expect"))
         return jsonify(ok=True)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -1332,7 +1251,8 @@ def todo_edit_done():
     if not line_no:
         return jsonify(ok=False, error="No line_no provided")
     try:
-        result = svc.edit_done_todo_by_line(int(line_no), updates)
+        result = svc.edit_done_todo_by_line(int(line_no), updates,
+                                            expect=data.get("expect"))
         return jsonify(ok=True, todo=result["todo"])
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -1458,6 +1378,7 @@ def routines_page():
                 dur = 30
             block_data.append({
                 "line_no": t.line_no, "description": t.description,
+                "raw_line": t.raw_line,
                 "due_time": t.due_time, "priority": t.priority or "",
                 "context": (t.contexts[0].lstrip("@") if t.contexts else "other"),
                 "color": project_colors.get(_first_proj(t), "ctx-other"),
@@ -3951,6 +3872,70 @@ def api_embed_resolve():
         return jsonify(ok=False, error=str(e))
 
 
+WIDGET_BATCH_MAX_ITEMS = 200
+
+
+@app.route("/api/widgets/resolve", methods=["POST"])
+def api_widgets_resolve():
+    """Resolve many embeds in one round trip (home page, batch previews).
+
+    Body: {"items": [{"id": ..., "body": "<TOML>"}, ...]} ->
+    {"ok": true, "results": [{"id": ..., "ok": true, "data": ...} |
+                             {"id": ..., "ok": false, "error": ...}]}.
+    Row caps apply here only: list kinds get limit=100 when the spec
+    omits it (todo views are exempt — they keep their own 20 default),
+    and a limit above 500 is an error (ptos_widgets). Threshold results
+    come back with per-row `query_url` so the widget can link through
+    to /queries like the home and /thresholds rows do.
+    """
+    data = request.get_json(silent=True) or {}
+    items = data.get("items")
+    if not isinstance(items, list):
+        return jsonify(ok=False, error="JSON body required"), 400
+    if len(items) > WIDGET_BATCH_MAX_ITEMS:
+        return jsonify(ok=False,
+                       error=f"Too many items (max {WIDGET_BATCH_MAX_ITEMS})"), 400
+    results = []
+    for item in items:
+        wid = item.get("id") if isinstance(item, dict) else None
+        body = item.get("body") if isinstance(item, dict) else None
+        if not isinstance(body, str) or not body.strip():
+            results.append({"id": wid, "ok": False, "error": "Empty embed"})
+            continue
+        try:
+            spec = tomllib.loads(body)
+        except Exception as e:
+            results.append({"id": wid, "ok": False,
+                            "error": "Invalid embed TOML: " + str(e)})
+            continue
+        try:
+            limit = spec.get("limit")
+            if (isinstance(limit, int) and not isinstance(limit, bool)
+                    and limit > ptos_widgets.MAX_ROW_LIMIT):
+                raise PTOSError(
+                    f"'limit' above {ptos_widgets.MAX_ROW_LIMIT} is not "
+                    f"allowed (got {limit!r})")
+            # Todo views keep their own default limit (20) — the row cap
+            # is a records-kind concern and would override the saved view.
+            if spec.get("view") == "todo" or (
+                    not spec.get("view")
+                    and str(spec.get("name") or "")
+                    in svc.get_todo_view_names()):
+                pass
+            elif not limit:
+                spec = dict(spec)
+                spec["limit"] = ptos_widgets.DEFAULT_ROW_LIMIT
+            data = svc.resolve_embed(spec)
+            if data.get("kind") == "threshold":
+                _decorate_thresholds(data.get("thresholds") or [])
+            results.append({"id": wid, "ok": True, "data": data})
+        except PTOSError as e:
+            results.append({"id": wid, "ok": False, "error": str(e)})
+        except Exception as e:
+            results.append({"id": wid, "ok": False, "error": str(e)})
+    return jsonify(ok=True, results=results)
+
+
 @app.route("/api/embed/candidates", methods=["GET"])
 def api_embed_candidates():
     try:
@@ -3967,6 +3952,7 @@ def api_embed_candidates():
         {"kind": "c", "label": "Calendars", "items": cand["calendars"]},
         {"kind": "u", "label": "Due", "items": cand["due"]},
         {"kind": "p", "label": "Projects", "items": cand["projects"]},
+        {"kind": "v", "label": "Todo views", "items": cand["todos"]},
     ]
     _skip_time = {"year", "month", "date", "range"}
     time_options = [
@@ -3975,6 +3961,21 @@ def api_embed_candidates():
         if code not in _skip_time
     ]
     return jsonify(ok=True, groups=groups, time_options=time_options)
+
+
+@app.route("/dev/widgets")
+def dev_widgets():
+    from flask import abort
+    if not _ASSET_DEV:
+        abort(404)
+    specs = [
+        ("Records", 'view = "query"\nname = "expenses_by_category"'),
+        ("Threshold", 'view = "threshold"\nname = "food_spend"'),
+        ("Habit", 'view = "habit"\nname = "meditation"'),
+        ("Todo", 'view = "todo"\nadd = true'),
+        ("Due", 'view = "due"\nname = "default"'),
+    ]
+    return render_template("dev_widgets.html", dw_specs=specs)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -5033,7 +5034,7 @@ def _housekeeping_check(notified, notify_routines=False):
     import datetime as _dt
     import ptos_todo as _todo_mod
     try:
-        todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
+        todos, _ = _todo_mod.load_todos(ptos.TODO_PATH)
         due = _todo_mod.get_due_todos(todos, lookahead_days=1)
         today = _dt.date.today()
         due = [t for t in due if t.due == today and not _exclude_routine(t, notify_routines)]
@@ -5126,7 +5127,7 @@ def _reminder_loop(check_interval_minutes=2):
             remind_before = todo_cfg.get("remind_before_minutes", 0)
             notify_routines = todo_cfg.get("notify_routines", False)
             if remind_before > 0:
-                todos, _ = _todo_mod.load_todos(svc.TODO_PATH)
+                todos, _ = _todo_mod.load_todos(ptos.TODO_PATH)
                 now = _dt.datetime.now()
                 for t, mins_until in _due_soon_filtered(todos, now, remind_before, notify_routines):
                     key = _reminder_key(t)

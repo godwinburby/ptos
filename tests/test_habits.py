@@ -214,8 +214,12 @@ class TestHabitWindow:
         data = svc.get_habit_data("med", time="weeks")
         cols = [m["column"] for m in data["month_labels"]]
         assert len(cols) >= 2
+        # columns are absolute week-columns; a month starting inside the
+        # first week row (grid floored to a Monday near month end) shares
+        # that column with the previous month — so non-decreasing, not
+        # strictly increasing
         for a, b in zip(cols, cols[1:]):
-            assert b > a
+            assert b >= a
 
     def test_time_this_month(self):
         _clean_cache()

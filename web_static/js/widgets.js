@@ -30,6 +30,7 @@ function renderResult(d) {
     case "calendar":  return renderCalendar(d);
     case "due":       return renderDue(d);
     case "project":   return renderProject(d);
+    case "todo":      return renderTodo(d);
     default:          return errorCard("Unknown result type");
   }
 }
@@ -157,7 +158,7 @@ function renderThresholdResult(thresholds) {
   };
   var bars = thresholds.map(function(t) {
     var pct = Math.min(t.pct || 0, 100);
-    return '<div class="thr-card" style="margin-bottom:8px;">' +
+    var inner = '<div class="thr-card" style="margin-bottom:8px;">' +
       '<div class="thr-row">' +
         '<span class="thr-name">' + esc((t.name || '').replace(/_/g, ' ')) + '</span>' +
         '<div class="thr-bar-wrap">' +
@@ -173,6 +174,12 @@ function renderThresholdResult(thresholds) {
         '<span class="thr-status ' + esc(t.status || '') + '">' + statusLabel(t) + '</span>' +
       '</div>' +
     '</div>';
+    // Clickable like the home /thresholds rows: opens the referenced
+    // query on /queries in the same window the status was computed over.
+    return t.query_url
+      ? '<a class="thr-link" href="' + esc(t.query_url) + '" ' +
+        'style="text-decoration:none;color:inherit;display:block;">' + inner + '</a>'
+      : inner;
   }).join("");
   return '<div class="card"><div class="card-title">Thresholds</div>' + bars + '</div>';
 }
@@ -563,7 +570,12 @@ function renderHabit(d) {
       var dnum = parseInt(day.date.slice(8, 10), 10);
       var on = day.present ? " cnt" : "";
       var out = day.is_today ? " today" : "";
-      return '<td class="emb-cal-cell' + on + out + '">' + dnum + '</td>';
+      // data-* attrs let the interactive mount toggle a day without the
+      // page's global ids; static embeds ignore them.
+      return '<td class="emb-cal-cell' + on + out + '"' +
+        ' data-date="' + esc(day.date) + '"' +
+        ' data-present="' + (day.present ? 1 : 0) + '"' +
+        ' data-today="' + (day.is_today ? 1 : 0) + '">' + dnum + '</td>';
     });
     var rows = [];
     for (var i = 0; i < cells.length; i += 7) rows.push("<tr>" + cells.slice(i, i + 7).join("") + "</tr>");
@@ -572,11 +584,11 @@ function renderHabit(d) {
       '<table class="emb-cal"><thead><tr>' + wd.map(function (w) { return '<th class="emb-cal-wd">' + w + '</th>'; }).join("") +
       '</tr></thead><tbody>' + rows.join("") + '</tbody></table></div>';
   }
-  return '<div class="card">' +
+  return '<div class="card" data-toggleable="' + (d.toggleable ? 1 : 0) + '" data-habit="' + esc(d.habit_name || "") + '">' +
     '<div class="card-title">Habit · ' + esc(String(d.habit_name || "").replace(/_/g, " ")) + '</div>' +
     '<div class="emb-stat">' +
-      '<span><b>' + _fmt(d.streak || 0) + '</b>-day streak</span>' +
-      '<span>' + esc((d.days_done || 0) + " of " + (d.total_days || 0) + " days") + '</span>' +
+      '<span><b data-stat="streak">' + _fmt(d.streak || 0) + '</b>-day streak</span>' +
+      '<span data-stat="days">' + esc((d.days_done || 0) + " of " + (d.total_days || 0) + " days") + '</span>' +
       (d.range_label ? '<span>' + esc(d.range_label) + '</span>' : '') +
     '</div>' + monthHtml +
   '</div>';
@@ -644,14 +656,21 @@ function renderDue(d) {
       '<div class="msg" style="color:var(--sub);">Nothing outstanding.</div></div>';
   }
   var heatColor = { hot: "var(--error)", warm: "var(--warn)", cool: "var(--accent)" };
+  // Same link the /due page rows use (open the located record, return to
+  // the widget's own page) — always an anchor, static or interactive.
   var list = rows.map(function (r) {
     var hc = heatColor[r.heat] || "var(--sub)";
     var note = r.note ? '<span style="color:var(--sub);">— ' + esc(r.note) + '</span>' : "";
-    return '<div class="emb-due-row">' +
+    var href = "/edit?filepath=" + encodeURIComponent(r.filepath || "") +
+      "&lineno=" + encodeURIComponent(String(r.lineno == null ? "" : r.lineno)) +
+      "&line=" + encodeURIComponent(r.line || "") +
+      "&return_to=" + encodeURIComponent(d.link || "/due");
+    return '<a class="emb-due-row" href="' + href + '" ' +
+      'style="text-decoration:none;color:inherit;">' +
       '<span class="emb-heat" style="background:' + hc + ';"></span>' +
       '<span class="emb-name">' + esc(r.name) + '</span>' +
       '<span class="emb-due-gap">' + _fmt(r.days) + 'd</span>' + note +
-    '</div>';
+    '</a>';
   }).join("");
   var count = d.count == null ? rows.length : d.count;
   return '<div class="card"><div class="card-title">Due</div>' + list +
@@ -676,4 +695,99 @@ function renderProject(d) {
     '<div class="card-title">Project · ' + esc(label) + '</div>' +
     '<div class="emb-stat">' + lines.join("") + '</div>' +
   '</div>';
+}
+
+// ── Todo widget ──────────────────────────────────────────────────────────────
+// Shared by the /todo page's widget views, note embeds and the home page:
+// pure string builder over the svc.query_todos payload (groups of
+// {key,label,color,todos:[_todo_json]}), reusing the shared .todo-row CSS
+// from components.css. Interactive behavior (complete/undo/add) is wired by
+// widget_host.js's mount; static callers render the same markup untouched.
+
+function _todoDueBadge(t) {
+  if (!t.due) return "";
+  var iso = String(t.due).slice(0, 10);
+  var now = new Date();
+  var today = now.getFullYear() + "-" + _pad2(now.getMonth() + 1) + "-" + _pad2(now.getDate());
+  var cls = iso < today ? "overdue" : (iso === today ? "today" : "future");
+  var m = parseInt(iso.slice(5, 7), 10);
+  var dd = parseInt(iso.slice(8, 10), 10);
+  var time = t.due_time ? " " + t.due_time : "";
+  return '<span class="todo-due-badge ' + cls + '">' + dd + " " + _monthName(m) + time + '</span>';
+}
+
+function renderTodoRow(t) {
+  var pri = t.priority
+    ? '<div class="todo-pri ' + esc(t.priority) + '" title="Priority ' + esc(t.priority) + '">' + esc(t.priority) + '</div>'
+    : '<div class="todo-pri none" title="No priority">—</div>';
+  var dueBadge = _todoDueBadge(t);
+  var projs = (t.projects || []).map(function (p) {
+    return '<a class="todo-project" href="/todo?project=' + encodeURIComponent(p) + '">' + esc(p) + '</a>';
+  }).join("");
+  var ctxs = (t.contexts || []).map(function (c) {
+    return '<a class="todo-context" href="/todo?context=' + encodeURIComponent(c) + '">' + esc(c) + '</a>';
+  }).join("");
+  var links = (t.links || []).map(function (lk) {
+    return '<a class="todo-link-badge" href="/todo?linked_to=' + encodeURIComponent(lk) + '" title="Todos linked to ' + esc(lk) + '">' + esc(lk) + '</a>';
+  }).join("");
+  var idBadge = t.id
+    ? '<span class="todo-link-badge" title="id:' + esc(t.id) + '">id:' + esc(t.id) + '</span>'
+    : "";
+  return '<div class="todo-row' + (t.done ? " completed" : "") + '"' +
+    ' data-line="' + (t.line_no == null ? "" : t.line_no) + '"' +
+    ' data-raw="' + esc(t.raw_line || "") + '">' +
+    '<div class="todo-check' + (t.done ? " checked" : "") + '"' +
+      ' data-todo-act="' + (t.done ? "undo" : "complete") + '"' +
+      ' role="button" tabindex="0"' +
+      ' title="' + (t.done ? "Undo" : "Complete") + '"></div>' +
+    pri +
+    '<div class="todo-body">' +
+      '<div class="todo-desc">' + esc(t.description) + '</div>' +
+      '<div class="todo-meta">' + idBadge + links + dueBadge + projs + ctxs + '</div>' +
+    '</div>' +
+  '</div>';
+}
+
+function renderTodoGroup(g) {
+  var rows = (g.todos || []).map(renderTodoRow).join("");
+  return '<div class="todo-group" data-group="' + esc(g.key || "") + '">' +
+    '<div class="todo-group-head" style="color:' + esc(g.color || "var(--sub)") + '">' +
+      '<span>' + esc(g.label || "") + '</span>' +
+      '<span class="todo-group-count">' + (g.todos || []).length + '</span>' +
+    '</div>' + rows + '</div>';
+}
+
+function renderTodo(d) {
+  d = d || {};
+  var parts = [];
+  if (d.add) {
+    var f = d.filters || {};
+    var pre = [];
+    if (f.project && String(f.project).charAt(0) !== "-") {
+      var p = String(f.project);
+      pre.push(p.charAt(0) === "+" ? p : "+" + p);
+    }
+    if (f.context) {
+      var c = String(f.context);
+      pre.push(c.charAt(0) === "@" ? c : "@" + c);
+    }
+    if (f.priority) pre.push("(" + f.priority + ")");
+    parts.push(
+      '<div class="todo-add-bar">' +
+        '<input type="text" class="todo-add-input" placeholder="Add a task…"' +
+        ' value="' + esc(pre.join(" ")) + '">' +
+        '<button type="button" class="btn btn-ghost btn-sm todo-add-btn">Add</button>' +
+      '</div>');
+  }
+  var groups = d.groups || [];
+  if (groups.length) {
+    parts.push(groups.map(renderTodoGroup).join(""));
+    if (d.total_open) {
+      parts.push('<div class="emb-stat" style="padding:6px 12px 10px;">' +
+        '<span><b>' + _fmt(d.total_open) + '</b> open</span></div>');
+    }
+  } else {
+    parts.push('<div class="msg" style="color:var(--sub);margin:10px 12px;">No todos.</div>');
+  }
+  return '<div class="card">' + parts.join("") + '</div>';
 }

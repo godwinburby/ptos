@@ -26,7 +26,6 @@ class TestRoutinesPage:
     def test_empty_shows_empty_state(self, tmp_path, monkeypatch):
         monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo" / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo" / "todo.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo" / "todo.txt"))
         client = app.test_client()
         resp = client.get("/routines")
         assert resp.status_code == 200
@@ -37,7 +36,6 @@ class TestRoutinesPage:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Check mail +routine @morning due:{TODAY_S}",
             f"(B) {TODAY_S} Call clients +routine @morning due:{TODAY_S}",
@@ -53,7 +51,6 @@ class TestRoutinesPage:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Check mail +routine @morning rec:1d due:{TODAY_S}",
             f"(B) {TODAY_S} Water plants +routine @wednesday rec:1w due:{TODAY_S}",
@@ -71,7 +68,6 @@ class TestRoutinesPage:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"{TODAY_S} Unsorted routine +routine due:{TODAY_S}",
         ])
@@ -85,7 +81,6 @@ class TestRoutinesPage:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Custom ctx +routine @workout due:{TODAY_S}",
         ])
@@ -99,7 +94,6 @@ class TestRoutinesPage:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"{TODAY_S} Buy groceries +Home @errand due:{TODAY_S}",
             f"{TODAY_S} Check mail +routine @morning due:{TODAY_S}",
@@ -114,7 +108,6 @@ class TestRoutinesPage:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {YESTERDAY} Overdue task +routine @morning due:{YESTERDAY}",
         ])
@@ -128,11 +121,9 @@ class TestRoutinesPage:
         todo_path = tmp_path / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         done_path = tmp_path / "done.txt"
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Check mail +routine @morning due:{TODAY_S}",
             f"(B) {TODAY_S} Call clients +routine @morning due:{TODAY_S}",
@@ -145,7 +136,6 @@ class TestRoutinesPage:
     def test_nav_entry_present(self, tmp_path, monkeypatch):
         monkeypatch.setattr(ptos, "TODO_PATH", str(tmp_path / "todo" / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo" / "todo.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo" / "todo.txt"))
         client = app.test_client()
         resp = client.get("/routines")
         html = resp.get_data(as_text=True)
@@ -158,11 +148,9 @@ class TestRoutinesComplete:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Check mail +routine @morning due:{TODAY_S}",
         ])
@@ -182,10 +170,8 @@ class TestRoutinesComplete:
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Check mail +routine @morning due:{TODAY_S}",
         ])
@@ -205,10 +191,8 @@ class TestRoutinesRecurrence:
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Check mail +routine @morning rec:1d due:{TODAY_S}",
         ])
@@ -225,7 +209,6 @@ class TestRoutinesTimeView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -239,7 +222,6 @@ class TestRoutinesTimeView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Check mail +routine @morning due:{TODAY_S} due_time:09:00",
@@ -257,7 +239,6 @@ class TestRoutinesTimeView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Unsorted +routine @morning due:{TODAY_S}",
         ])
@@ -270,7 +251,6 @@ class TestRoutinesTimeView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Late task +routine @morning due:{TODAY_S} due_time:14:00",
             f"(B) {TODAY_S} Early task +routine @morning due:{TODAY_S} due_time:06:00",
@@ -288,7 +268,6 @@ class TestRoutinesTimeView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Timed task +routine @morning due:{TODAY_S} due_time:09:00",
             f"(B) {TODAY_S} Untimed task +routine @morning due:{TODAY_S}",
@@ -304,7 +283,6 @@ class TestRoutinesTimeView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -317,7 +295,6 @@ class TestRoutinesTimeView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -333,7 +310,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         client = app.test_client()
         resp = client.get("/routines")
         html = resp.get_data(as_text=True)
@@ -344,7 +320,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         client = app.test_client()
         resp = client.get("/routines")
         html = resp.get_data(as_text=True)
@@ -356,7 +331,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Check mail +routine @morning due:{TODAY_S} due_time:09:00",
@@ -372,7 +346,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Morning task +routine @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Afternoon task +routine @morning due:{TODAY_S} due_time:14:00",
@@ -390,7 +363,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Evening task +routine @morning due:{TODAY_S} due_time:20:15",
             f"(B) {TODAY_S} Noon task +routine @morning due:{TODAY_S} due_time:12:00",
@@ -407,7 +379,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Timed task +routine @morning due:{TODAY_S} due_time:09:00",
             f"(B) {TODAY_S} Untimed task +routine @morning due:{TODAY_S}",
@@ -422,7 +393,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Tidy up +routine +gym @evening due:{TODAY_S} due_time:20:00",
@@ -436,7 +406,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Evening gym +routine +gym @night due:{TODAY_S} due_time:20:00",
@@ -454,7 +423,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Morning gym +routine +gym @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Morning meal +routine +meal @morning due:{TODAY_S} due_time:08:00",
@@ -472,7 +440,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -485,7 +452,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Morning gym +routine +gym @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Morning meal +routine +meal @morning due:{TODAY_S} due_time:08:00",
@@ -502,7 +468,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Early +routine @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Late +routine @morning due:{TODAY_S} due_time:09:00",
@@ -518,7 +483,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} First +routine @morning due:{TODAY_S} due_time:09:00",
             f"(B) {TODAY_S} Second +routine @morning due:{TODAY_S} due_time:09:15",
@@ -539,7 +503,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} First +routine @morning due:{TODAY_S} due_time:09:00",
             f"(B) {TODAY_S} Second +routine @morning due:{TODAY_S} due_time:09:04",
@@ -557,7 +520,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_web, "_now_time_str", lambda: "06:30")
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S} due_time:06:00",
@@ -572,7 +534,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S} due_time:00:01",
         ])
@@ -585,7 +546,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S} due_time:09:00",
         ])
@@ -599,7 +559,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Untimed +routine @morning due:{TODAY_S}",
         ])
@@ -612,7 +571,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -628,7 +586,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Early +routine @morning due:{TODAY_S} due_time:06:45",
             f"(B) {TODAY_S} Late +routine @evening due:{TODAY_S} due_time:20:15",
@@ -645,7 +602,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_web, "_now_time_str", lambda: "14:00")
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Early +routine @morning due:{TODAY_S} due_time:06:00",
@@ -659,7 +615,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Early +routine @morning due:{TODAY_S} due_time:00:01",
         ])
@@ -674,7 +629,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Timed +routine @morning due:{TODAY_S} due_time:09:00",
             f"(B) {TODAY_S} Untimed +routine @morning due:{TODAY_S}",
@@ -689,7 +643,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S}",
         ])
@@ -702,7 +655,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Task +routine @morning due:{TODAY_S}",
         ])
@@ -715,7 +667,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Evening gym +routine +gym @night due:{TODAY_S} due_time:20:00",
@@ -732,7 +683,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Morning gym +routine +gym @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Morning meal +routine +meal @morning due:{TODAY_S} due_time:08:00",
@@ -749,7 +699,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Untimed gym +routine +gym @morning due:{TODAY_S}",
             f"(B) {TODAY_S} Plain untimed +routine @morning due:{TODAY_S}",
@@ -764,14 +713,12 @@ class TestRoutinesDayView:
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(done_path, [
             f"x {TODAY_S} Completed idle +routine @morning",
         ])
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -787,14 +734,12 @@ class TestRoutinesDayView:
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(done_path, [
             f"x {TODAY_S} Completed gym +routine +gym @morning",
         ])
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -807,14 +752,12 @@ class TestRoutinesDayView:
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(done_path, [
             f"x {YESTERDAY} Old gym +routine +gym @morning",
         ])
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -827,14 +770,12 @@ class TestRoutinesDayView:
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(done_path, [
             f"x {TODAY_S} Completed gym +routine +gym @morning",
         ])
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
             f"(B) {TODAY_S} Stretch +routine +gym @morning due:{TODAY_S} due_time:07:00",
@@ -848,14 +789,12 @@ class TestRoutinesDayView:
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(done_path, [
             f"x {TODAY_S} Completed gym +routine +gym @morning due:{TODAY_S} due_time:09:00",
         ])
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine +gym @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -869,14 +808,12 @@ class TestRoutinesDayView:
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(done_path, [
             f"x {TODAY_S} Completed idle +routine @morning",
         ])
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Wake up +routine @morning due:{TODAY_S} due_time:06:00",
         ])
@@ -890,7 +827,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(A) {TODAY_S} Untimed gym +routine +gym @morning due:{TODAY_S}",
         ])
@@ -904,7 +840,6 @@ class TestRoutinesDayView:
         todo_path = tmp_path / "todo" / "todo.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         _write_todo(todo_path, [
             f"(B) {TODAY_S} Non-routine todo @morning due:{TODAY_S}",
         ])
@@ -921,10 +856,8 @@ class TestTodoPageHideRoutines:
         done_path = tmp_path / "todo" / "done.txt"
         monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, lines)
         _write_todo(done_path, [])
 

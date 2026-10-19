@@ -1,0 +1,455 @@
+// widget_host.js — interactive widget layer (spec §3.3).
+//
+// PtosWidgets.register(kind, {render(el, data, ctx), mount(el, data, ctx)})
+//   render — static markup (the path note previews already use)
+//   mount  — static markup plus event wiring; returns {destroy()}
+// PtosWidgets.mount(el, body, {host, interactive, notifyChange, time})
+//   body is the ```ptos TOML string (falls back to el.dataset.body);
+//   returns {refresh(), destroy(), el, ctx}.
+// PtosWidgets.mountAll(root, opts) — mounts every [data-ptos-widget].
+//
+// Chrome per widget: title + "Open →" link + refresh control, with loading
+// and error states. Fetches go through POST /api/widgets/resolve (one item)
+// so widgets get widget-layer semantics (row caps, threshold query_url);
+// note previews keep embeds.js's /api/embed/resolve path.
+//
+// Instance-scoped DOM only: no global ids, everything queried from the host
+// element. The single <style> block is stamped data-ph-style and injected
+// once. ctx = {host, interactive, time, refresh(), notifyChange(), toast()}.
+(function () {
+  "use strict";
+
+  var REG = {};
+  var _cache = {};
+
+  function register(kind, impl) {
+    REG[kind] = impl || {};
+  }
+
+  function implFor(kind) {
+    return (kind && REG[kind]) || null;
+  }
+
+  function _esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;").replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function _post(url, payload) {
+    return fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload || {})
+    }).then(function (r) { return r.json(); });
+  }
+
+  function _fetch(body, force) {
+    if (!force && _cache.hasOwnProperty(body)) {
+      return Promise.resolve({ ok: true, data: _cache[body] });
+    }
+    return _post("/api/widgets/resolve", { items: [{ id: 1, body: body }] })
+      .then(function (d) {
+        if (!d || !d.ok || !d.results || !d.results[0]) {
+          return { ok: false, error: (d && d.error) || "Failed to load widget" };
+        }
+        var first = d.results[0];
+        if (!first.ok) {
+          return { ok: false, error: first.error || "Failed to load widget" };
+        }
+        _cache[body] = first.data;
+        return { ok: true, data: first.data };
+      })
+      .catch(function (e) {
+        return { ok: false, error: String(e) };
+      });
+  }
+
+  function _nameOf(body) {
+    var m = /name\s*=\s*"([^"]*)"/.exec(body || "");
+    return m ? m[1] : "";
+  }
+
+  var _STYLE_CSS = [
+    ".ph-widget{position:relative;}",
+    ".ph-head{display:flex;align-items:center;gap:10px;padding:10px 14px 0;}",
+    ".ph-title{font-size:14px;font-weight:700;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}",
+    ".ph-link{font-size:12px;color:var(--accent);text-decoration:none;white-space:nowrap;}",
+    ".ph-link:hover{text-decoration:underline;}",
+    ".ph-refresh{border:1px solid var(--border);background:transparent;color:var(--sub);border-radius:6px;width:28px;height:24px;cursor:pointer;font-size:13px;line-height:1;}",
+    ".ph-refresh:hover{color:var(--accent);border-color:var(--accent);}",
+    ".ph-body{padding:8px 6px 6px;}",
+    ".ph-state{color:var(--sub);font-size:13px;padding:8px 12px;}",
+    ".ph-toast-slot{position:absolute;left:0;right:0;bottom:8px;display:flex;justify-content:center;pointer-events:none;z-index:20;}",
+    ".ph-toast{pointer-events:auto;display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 6px 20px rgba(0,0,0,.18);padding:6px 12px;font-size:13px;}",
+    ".ph-toast.error{border-color:var(--error);color:var(--error);}",
+    ".ph-toast-btn{border:none;background:transparent;color:var(--accent);font-weight:700;cursor:pointer;font-size:13px;padding:0;}",
+    ".ph-widget .todo-group-head{display:flex;justify-content:space-between;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:8px 12px 2px;color:var(--sub);}",
+    ".ph-widget .todo-group-count{color:var(--sub);font-weight:600;}",
+    ".ph-widget .todo-add-bar{display:flex;gap:8px;padding:4px 12px 8px;}",
+    ".ph-widget .todo-add-input{flex:1;min-width:0;border:1px solid var(--border);background:var(--bg);color:var(--text);border-radius:6px;padding:6px 8px;font-size:13px;}",
+    ".ph-widget .todo-row{padding:5px 12px;}",
+    ".ph-widget .todo-group + .todo-group{border-top:1px solid var(--border);}"
+  ];
+
+  function _ensureStyles() {
+    if (document.querySelector("style[data-ph-style]")) return;
+    var s = document.createElement("style");
+    s.setAttribute("data-ph-style", "1");
+    s.textContent = _STYLE_CSS.join("\n");
+    document.head.appendChild(s);
+  }
+
+  function _toastIn(hostEl, msg, opts) {
+    opts = opts || {};
+    var slot = hostEl.querySelector(".ph-toast-slot");
+    if (!slot) return;
+    slot.innerHTML = "";
+    var box = document.createElement("div");
+    box.className = "ph-toast" + (opts.error ? " error" : "");
+    var span = document.createElement("span");
+    span.textContent = msg;
+    box.appendChild(span);
+    (opts.actions || []).forEach(function (a) {
+      var b = document.createElement("button");
+      b.type = "button";
+      b.className = "ph-toast-btn";
+      b.textContent = a.label;
+      b.addEventListener("click", function () {
+        slot.innerHTML = "";
+        if (a.onClick) a.onClick();
+      });
+      box.appendChild(b);
+    });
+    slot.appendChild(box);
+    var ttl = opts.timeout || ((opts.actions || []).length ? 8000 : 4000);
+    setTimeout(function () {
+      if (box.parentElement) box.parentElement.removeChild(box);
+    }, ttl);
+  }
+
+  function _paintBody(el, data, ctx, interactive) {
+    el.innerHTML = "";
+    var impl = implFor(data && data.kind);
+    if (impl && impl.render) {
+      impl.render(el, data, ctx);
+      return;
+    }
+    if (typeof window.embedRenderBody === "function") {
+      window.embedRenderBody(el, data);
+      return;
+    }
+    if (typeof renderResult === "function") {
+      el.innerHTML = renderResult(data);
+    } else {
+      el.innerHTML = "";
+    }
+  }
+
+  function mount(el, spec, opts) {
+    if (!el) return null;
+    opts = opts || {};
+    _ensureStyles();
+    var body = (typeof spec === "string" && spec) || el.getAttribute("data-body") || "";
+    var interactive = !!(opts.interactive || el.getAttribute("data-interactive") === "1");
+    var hostName = opts.host || el.getAttribute("data-widget-host") || "page";
+
+    if (el._phWidget) el._phWidget.destroy();
+
+    el.classList.add("ph-widget");
+    el.innerHTML =
+      '<div class="ph-head">' +
+        '<span class="ph-title"></span>' +
+        '<a class="ph-link" hidden>Open →</a>' +
+        '<button type="button" class="ph-refresh" title="Refresh" aria-label="Refresh">⟳</button>' +
+      '</div>' +
+      '<div class="ph-body"><div class="ph-state">Loading widget…</div></div>' +
+      '<div class="ph-toast-slot"></div>';
+
+    var titleEl = el.querySelector(".ph-title");
+    var linkEl = el.querySelector(".ph-link");
+    var refreshBtn = el.querySelector(".ph-refresh");
+    var bodyEl = el.querySelector(".ph-body");
+    var destroyed = false;
+    var sub = null;
+    var current = null;
+    var listeners = [];
+
+    function on(node, type, fn) {
+      node.addEventListener(type, fn);
+      listeners.push([node, type, fn]);
+    }
+
+    var ctx = {
+      host: hostName,
+      interactive: interactive,
+      time: opts.time != null ? opts.time : (el.getAttribute("data-time") || null),
+      refresh: function () { return handle.refresh(); },
+      notifyChange: opts.notifyChange || function () {},
+      toast: function (msg, toastOpts) { _toastIn(el, msg, toastOpts); }
+    };
+
+    function paint(data) {
+      current = data;
+      titleEl.textContent = data.title || data.name || _nameOf(body) || "Widget";
+      if (data.link) {
+        linkEl.setAttribute("href", data.link);
+        linkEl.hidden = false;
+      } else {
+        linkEl.removeAttribute("href");
+        linkEl.hidden = true;
+      }
+      if (sub && sub.destroy) { try { sub.destroy(); } catch (e) {} }
+      sub = null;
+      bodyEl.innerHTML = "";
+      var impl = implFor(data && data.kind);
+      if (interactive && impl && impl.mount) {
+        try {
+          sub = impl.mount(bodyEl, data, ctx) || null;
+        } catch (e) {
+          if (typeof errorCard === "function") bodyEl.innerHTML = errorCard(String(e));
+          return;
+        }
+      } else {
+        _paintBody(bodyEl, data, ctx, interactive);
+      }
+    }
+
+    function load(force) {
+      if (destroyed) return Promise.resolve();
+      bodyEl.innerHTML = '<div class="ph-state">Loading widget…</div>';
+      return _fetch(body, force).then(function (res) {
+        if (destroyed) return;
+        if (!res.ok) {
+          bodyEl.innerHTML = typeof errorCard === "function"
+            ? errorCard(res.error)
+            : '<div class="msg msg-error">' + _esc(res.error) + "</div>";
+          var nm = _nameOf(body);
+          if (nm && !titleEl.textContent) titleEl.textContent = nm;
+          return;
+        }
+        paint(res.data);
+      });
+    }
+
+    var handle = {
+      el: el,
+      ctx: ctx,
+      data: function () { return current; },
+      refresh: function () { return load(true); },
+      destroy: function () {
+        destroyed = true;
+        if (sub && sub.destroy) { try { sub.destroy(); } catch (e) {} }
+        sub = null;
+        listeners.forEach(function (l) {
+          try { l[0].removeEventListener(l[1], l[2]); } catch (e) {}
+        });
+        listeners = [];
+        el.classList.remove("ph-widget");
+        el.innerHTML = "";
+        delete el._phWidget;
+      }
+    };
+
+    on(refreshBtn, "click", function () { handle.refresh(); });
+
+    el._phWidget = handle;
+    load(false);
+    return handle;
+  }
+
+  function mountAll(root, opts) {
+    root = root || document;
+    if (!root.querySelectorAll) return [];
+    var out = [];
+    var nodes = root.querySelectorAll("[data-ptos-widget]");
+    for (var i = 0; i < nodes.length; i++) {
+      if (nodes[i]._phWidget) continue;
+      out.push(mount(nodes[i], null, opts));
+    }
+    return out;
+  }
+
+  // ── kind registrations (Phase 1 interactive kinds) ─────────────────────────
+  // threshold and due need no mount: their interactivity is navigation, and
+  // renderThresholdResult / renderDue build the links themselves.
+
+  register("todo", {
+    render: function (el, data) {
+      el.innerHTML = renderTodo(data);
+    },
+    mount: function (el, data, ctx) {
+      var evts = [];
+      function on(node, type, fn) {
+        node.addEventListener(type, fn);
+        evts.push([node, type, fn]);
+      }
+
+      function undo(lineNo, raw) {
+        _post("/todo/undo", { line_no: lineNo, expect: raw }).then(function (res) {
+          if (!res || !res.ok) {
+            ctx.toast((res && res.error) || "Could not undo", { error: true });
+            return;
+          }
+          ctx.refresh();
+        });
+      }
+
+      function complete(row) {
+        var lineNo = parseInt(row.getAttribute("data-line"), 10);
+        var raw = row.getAttribute("data-raw") || "";
+        if (isNaN(lineNo)) return;
+        _post("/todo/complete", { line_no: lineNo, expect: raw }).then(function (res) {
+          if (!res || !res.ok) {
+            ctx.toast((res && res.error) || "Could not complete", { error: true });
+            return;
+          }
+          row.style.opacity = "0.45";
+          if (res.done_line_no != null) {
+            ctx.toast("Done", {
+              actions: [{
+                label: "Undo",
+                onClick: function () { undo(res.done_line_no, res.done_raw || ""); }
+              }]
+            });
+          } else {
+            ctx.toast("Done");
+          }
+          ctx.refresh();
+        });
+      }
+
+      function addTask() {
+        var input = el.querySelector(".todo-add-input");
+        if (!input) return;
+        var text = (input.value || "").trim();
+        if (!text) { input.focus(); return; }
+        _post("/todo/add", { text: text }).then(function (res) {
+          if (!res || !res.ok) {
+            ctx.toast((res && res.error) || "Could not add", { error: true });
+            return;
+          }
+          ctx.refresh();
+        });
+      }
+
+      el.innerHTML = renderTodo(data);
+      on(el, "click", function (e) {
+        if (!e.target) return;
+        var chk = e.target.closest && e.target.closest("[data-todo-act]");
+        if (chk && el.contains(chk)) {
+          var row = chk.closest(".todo-row");
+          if (!row) return;
+          if (chk.getAttribute("data-todo-act") === "undo") {
+            var uln = parseInt(row.getAttribute("data-line"), 10);
+            if (!isNaN(uln)) undo(uln, row.getAttribute("data-raw") || "");
+            return;
+          }
+          complete(row);
+          return;
+        }
+        if (e.target.classList && e.target.classList.contains("todo-add-btn")) {
+          addTask();
+        }
+      });
+      on(el, "keydown", function (e) {
+        if (e.key !== "Enter") return;
+        if (e.target && e.target.classList &&
+            e.target.classList.contains("todo-add-input")) {
+          e.preventDefault();
+          addTask();
+        }
+      });
+
+      return {
+        destroy: function () {
+          evts.forEach(function (x) {
+            try { x[0].removeEventListener(x[1], x[2]); } catch (e) {}
+          });
+          evts = [];
+        }
+      };
+    }
+  });
+
+  register("records", {
+    render: function (el, data) {
+      el.innerHTML = renderRecordsStatic(data);
+    },
+    mount: function (el, data, ctx) {
+      el.innerHTML = "";
+      var wrap = document.createElement("div");
+      el.appendChild(wrap);
+      var rt = new RecordTable({
+        container: wrap,
+        returnTo: data.link || undefined,
+        onRefresh: function () { ctx.refresh(); }
+      });
+      rt.render(data);
+      return {
+        destroy: function () {
+          try { rt.destroy(); } catch (e) {}
+          if (wrap.parentElement) wrap.parentElement.removeChild(wrap);
+        }
+      };
+    }
+  });
+
+  register("habit", {
+    render: function (el, data) {
+      el.innerHTML = renderHabit(data);
+    },
+    mount: function (el, data, ctx) {
+      var evts = [];
+      function on(node, type, fn) {
+        node.addEventListener(type, fn);
+        evts.push([node, type, fn]);
+      }
+      el.innerHTML = renderHabit(data);
+      var card = el.querySelector(".card");
+      var toggleable = card && card.getAttribute("data-toggleable") === "1";
+      if (toggleable) {
+        on(el, "click", function (e) {
+          var td = e.target && e.target.closest && e.target.closest("td[data-date]");
+          if (!td || !el.contains(td)) return;
+          var date = td.getAttribute("data-date");
+          if (!date) return;
+          _post("/api/habit/toggle", {
+            habit_name: data.habit_name,
+            date: date
+          }).then(function (res) {
+            if (!res || !res.ok) {
+              ctx.toast((res && res.error) || "Could not toggle day", { error: true });
+              return;
+            }
+            td.setAttribute("data-present", res.present ? "1" : "0");
+            td.classList.toggle("cnt", !!res.present);
+            var st = el.querySelector('[data-stat="streak"]');
+            if (st && res.streak != null) st.textContent = String(res.streak);
+            var dy = el.querySelector('[data-stat="days"]');
+            if (dy && res.days_done != null) {
+              dy.textContent = res.days_done + " of " +
+                (data.total_days == null ? "" : data.total_days) + " days";
+            }
+          });
+        });
+      }
+      return {
+        destroy: function () {
+          evts.forEach(function (x) {
+            try { x[0].removeEventListener(x[1], x[2]); } catch (e) {}
+          });
+          evts = [];
+        }
+      };
+    }
+  });
+
+  window.PtosWidgets = {
+    register: register,
+    mount: mount,
+    mountAll: mountAll,
+    kinds: function () { return Object.keys(REG); }
+  };
+})();

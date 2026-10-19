@@ -1,10 +1,15 @@
 // ══════════════════════════════════════════════════════════════════════════════
-// RecordTable  v2.0
-// Drop-in modular records table.
+// RecordTable  v3.0
+// Drop-in modular records table. Instance-scoped: several tables can live on
+// one page (main results + widgets) without clobbering each other. Every
+// generated id derives from a per-instance uid, modals are per-instance, and
+// all interaction goes through delegated listeners on the instance's own
+// container/modal wrap — no globals, no page-side handler wiring.
 //
 // Usage:
 //   var rt = new RecordTable({
-//     containerId : "result-area",  // required
+//     containerId : "result-area",  // id of the container element...
+//     container   : el,             // ...or the element itself (widgets)
 //     returnTo    : "/browse",      // optional, defaults to window.location.pathname
 //     enableBulk  : true,           // optional, default true
 //     onRefresh   : function() {}   // optional, called after delete / bulk ops
@@ -31,6 +36,11 @@ function RecordTable(opts) {
   var _delRec   = null;
   var _page     = 1;
   var _pageSize = 100;
+  var _wired    = false;
+
+  // ── per-instance uid — every generated id derives from it ─────────────────
+  RecordTable._seq = (RecordTable._seq || 0) + 1;
+  var uid = "rt" + RecordTable._seq;
 
   // ── tiny helpers ───────────────────────────────────────────────────────────
   function ge(id)  { return document.getElementById(id); }
@@ -40,27 +50,88 @@ function RecordTable(opts) {
       .replace(/>/g,"&gt;").replace(/"/g,"&quot;").replace(/'/g,"&#39;");
   }
 
-  // ── modal IDs (page-scoped, one set per page) ──────────────────────────────
+  // ── modal ids (per-instance) ──────────────────────────────────────────────
   var M = {
-    del:       "rt-del-dialog",
-    delLine:   "rt-del-line",
-    delMsg:    "rt-del-msg",
-    bkBar:     "rt-bulk-bar",
-    bkCount:   "rt-bulk-count",
-    bkDel:     "rt-bulk-del-dialog",
-    bkDelTop:  "rt-bulk-del-top",
-    bkDelMsg:  "rt-bulk-del-msg",
-    bkSet:     "rt-bulk-set-dialog",
-    bkField:   "rt-bulk-set-field",
-    bkValContainer: "rt-bulk-set-val-ctnr",
-    bkValInput: "rt-bulk-set-val-input",
-    bkPrev:    "rt-bulk-set-preview",
-    bkSetMsg:  "rt-bulk-set-msg"
+    del:       uid + "-del-dialog",
+    delLine:   uid + "-del-line",
+    delMsg:    uid + "-del-msg",
+    bkBar:     uid + "-bulk-bar",
+    bkCount:   uid + "-bulk-count",
+    bkDel:     uid + "-bulk-del-dialog",
+    bkDelTop:  uid + "-bulk-del-top",
+    bkDelMsg:  uid + "-bulk-del-msg",
+    bkSet:     uid + "-bulk-set-dialog",
+    bkField:   uid + "-bulk-set-field",
+    bkValContainer: uid + "-bulk-set-val-ctnr",
+    bkValInput: uid + "-bulk-set-val-input",
+    bkPrev:    uid + "-bulk-set-preview",
+    bkSetMsg:  uid + "-bulk-set-msg",
+    wrap:      uid + "-modals",
+    selectAll: uid + "-select-all",
+    table:     uid + "-table",
+    tbody:     uid + "-tbody",
+    pagination: uid + "-pagination"
   };
 
-  // ── inject modals once ─────────────────────────────────────────────────────
+  // ── delegated action wiring (once per instance) ───────────────────────────
+  function _wire() {
+    if (_wired) return;
+    _wired = true;
+    var container = _container();
+    if (container) {
+      container.addEventListener("click", function(e) {
+        var t = e.target;
+        if (!t.closest) return;
+        var th = t.closest("th.sortable");
+        if (th) { self._sort(th, th.dataset.col || ""); return; }
+        var act = t.closest("[data-rt]");
+        if (!act) return;
+        var a = act.dataset.rt;
+        if (a === "export") self._export();
+        else if (a === "prev") self._prevPage();
+        else if (a === "next") self._nextPage();
+        else if (a === "opendel") {
+          try { self._openDel(JSON.parse(act.dataset.row)); } catch (err) {}
+        }
+      });
+      container.addEventListener("change", function(e) {
+        var t = e.target;
+        if (t.classList && t.classList.contains("rt-row-cb")) self._check(t);
+        else if (t.dataset && t.dataset.rt === "selall") self._selAll(t);
+      });
+    }
+    var wrap = ge(M.wrap);
+    if (!wrap) return;
+    wrap.addEventListener("click", function(e) {
+      if (e.target === ge(M.del)) { self._delClose(); return; }
+      if (e.target === ge(M.bkDel)) { self._bkDelClose(); return; }
+      if (e.target === ge(M.bkSet)) { self._bkSetClose(); return; }
+      var act = e.target.closest && e.target.closest("[data-rt]");
+      if (!act) return;
+      switch (act.dataset.rt) {
+        case "del": self._del(); break;
+        case "delclose": self._delClose(); break;
+        case "bksetopen": self._bkSetOpen(); break;
+        case "bksetclose": self._bkSetClose(); break;
+        case "bksetconfirm": self._bkSetConfirm(); break;
+        case "bkdelopen": self._bkDelOpen(); break;
+        case "bkdelclose": self._bkDelClose(); break;
+        case "bkdelconfirm": self._bkDelConfirm(); break;
+        case "bkclear": self._bkClear(); break;
+      }
+    });
+    wrap.addEventListener("change", function(e) {
+      if (e.target.id === M.bkField) { self._bkFieldChange(); self._bkPrev(); }
+      else if (e.target.dataset && e.target.dataset.rt === "bkval") self._bkPrev();
+    });
+    wrap.addEventListener("input", function(e) {
+      if (e.target.dataset && e.target.dataset.rt === "bkval") self._bkPrev();
+    });
+  }
+
+  // ── inject modals once (per instance) ─────────────────────────────────────
   function _injectModals() {
-    if (ge(M.del)) return;
+    if (ge(M.wrap)) return;
 
     var html =
       // single delete
@@ -71,8 +142,8 @@ function RecordTable(opts) {
           '<div id="'+M.delLine+'" style="font-family:monospace;font-size:12px;background:var(--bg);padding:8px;border-radius:6px;word-break:break-all;margin-bottom:14px;"></div>' +
           '<div id="'+M.delMsg+'" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>' +
           '<div style="display:flex;gap:10px;">' +
-            '<button class="btn btn-primary" style="flex:1;background:var(--error);" onclick="RecordTable._del()">Delete</button>' +
-            '<button class="btn btn-ghost" style="flex:1;" onclick="RecordTable._delClose()">Cancel</button>' +
+            '<button class="btn btn-primary" style="flex:1;background:var(--error);" data-rt="del">Delete</button>' +
+            '<button class="btn btn-ghost" style="flex:1;" data-rt="delclose">Cancel</button>' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -84,9 +155,9 @@ function RecordTable(opts) {
         'background:var(--card);border:1.5px solid var(--accent);border-radius:12px;padding:10px 16px;' +
         'box-shadow:0 4px 24px rgba(0,0,0,.18);align-items:center;gap:10px;z-index:700;white-space:nowrap;">' +
           '<span id="'+M.bkCount+'" style="font-size:13px;font-weight:700;color:var(--accent);min-width:80px;"></span>' +
-          '<button class="btn btn-ghost btn-sm" style="font-size:12px;" onclick="RecordTable._bkSetOpen()">✎ Set Field</button>' +
-          '<button class="btn btn-ghost btn-sm" style="font-size:12px;color:var(--error);" onclick="RecordTable._bkDelOpen()">✕ Delete</button>' +
-          '<button class="btn btn-ghost btn-sm" style="font-size:12px;" onclick="RecordTable._bkClear()">✕ Deselect</button>' +
+          '<button class="btn btn-ghost btn-sm" style="font-size:12px;" data-rt="bksetopen">✎ Set Field</button>' +
+          '<button class="btn btn-ghost btn-sm" style="font-size:12px;color:var(--error);" data-rt="bkdelopen">✕ Delete</button>' +
+          '<button class="btn btn-ghost btn-sm" style="font-size:12px;" data-rt="bkclear">✕ Deselect</button>' +
         '</div>';
       // bulk delete confirm
       html +=
@@ -96,8 +167,8 @@ function RecordTable(opts) {
             '<div id="'+M.bkDelTop+'" style="font-size:13px;color:var(--sub);margin-bottom:14px;"></div>' +
             '<div id="'+M.bkDelMsg+'" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>' +
             '<div style="display:flex;gap:10px;">' +
-              '<button class="btn btn-primary" style="flex:1;background:var(--error);" onclick="RecordTable._bkDelConfirm()">Delete All</button>' +
-              '<button class="btn btn-ghost" style="flex:1;" onclick="RecordTable._bkDelClose()">Cancel</button>' +
+              '<button class="btn btn-primary" style="flex:1;background:var(--error);" data-rt="bkdelconfirm">Delete All</button>' +
+              '<button class="btn btn-ghost" style="flex:1;" data-rt="bkdelclose">Cancel</button>' +
             '</div>' +
           '</div>' +
         '</div>';
@@ -108,7 +179,7 @@ function RecordTable(opts) {
             '<div style="font-size:16px;font-weight:700;margin-bottom:14px;">Set Field on Selected</div>' +
             '<div class="field-group" style="margin-bottom:10px;">' +
               '<label style="font-size:12px;">Field name</label>' +
-              '<select id="'+M.bkField+'" style="font-size:14px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100%;" onchange="RecordTable._bkFieldChange();RecordTable._bkPrev()">' +
+              '<select id="'+M.bkField+'" style="font-size:14px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100%;">' +
                 '<option value="">— select field —</option>' +
               '</select>' +
             '</div>' +
@@ -119,23 +190,19 @@ function RecordTable(opts) {
             '<div id="'+M.bkPrev+'" style="font-size:12px;color:var(--sub);font-family:monospace;background:var(--bg);padding:8px;border-radius:6px;margin-bottom:12px;display:none;"></div>' +
             '<div id="'+M.bkSetMsg+'" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>' +
             '<div style="display:flex;gap:10px;">' +
-              '<button class="btn btn-primary" style="flex:1;" onclick="RecordTable._bkSetConfirm()">Apply</button>' +
-              '<button class="btn btn-ghost" style="flex:1;" onclick="RecordTable._bkSetClose()">Cancel</button>' +
+              '<button class="btn btn-primary" style="flex:1;" data-rt="bksetconfirm">Apply</button>' +
+              '<button class="btn btn-ghost" style="flex:1;" data-rt="bksetclose">Cancel</button>' +
             '</div>' +
           '</div>' +
         '</div>';
     }
 
     var wrap = document.createElement("div");
+    wrap.id = M.wrap;
     wrap.innerHTML = html;
     document.body.appendChild(wrap);
 
-    // backdrop dismiss
-    ge(M.del).addEventListener("click", function(e){ if(e.target===this) RecordTable._delClose(); });
-    if (enableBulk) {
-      ge(M.bkDel).addEventListener("click", function(e){ if(e.target===this) RecordTable._bkDelClose(); });
-      ge(M.bkSet).addEventListener("click", function(e){ if(e.target===this) RecordTable._bkSetClose(); });
-    }
+    _wire();
   }
 
   // ── summary bar ────────────────────────────────────────────────────────────
@@ -161,8 +228,8 @@ function RecordTable(opts) {
     return Math.ceil(_records.length / _pageSize);
   }
 
-  function _updatePagination(container) {
-    var pag = ge("rt-pagination");
+  function _updatePagination() {
+    var pag = ge(M.pagination);
     if (!pag) return;
     var tp = _totalPages();
     if (tp <= 1) { pag.innerHTML = ""; return; }
@@ -170,9 +237,9 @@ function RecordTable(opts) {
     var end = Math.min(_page * _pageSize, _records.length);
     pag.innerHTML =
       '<div style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);">' +
-        '<button class="btn btn-ghost btn-sm" onclick="RecordTable._prevPage()" ' + (_page <= 1 ? 'disabled' : '') + '>← Prev</button>' +
+        '<button class="btn btn-ghost btn-sm" data-rt="prev" ' + (_page <= 1 ? 'disabled' : '') + '>← Prev</button>' +
         '<span>' + start + '–' + end + ' of ' + _records.length + '</span>' +
-        '<button class="btn btn-ghost btn-sm" onclick="RecordTable._nextPage()" ' + (_page >= tp ? 'disabled' : '') + '>Next →</button>' +
+        '<button class="btn btn-ghost btn-sm" data-rt="next" ' + (_page >= tp ? 'disabled' : '') + '>Next →</button>' +
       '</div>';
   }
 
@@ -189,7 +256,7 @@ function RecordTable(opts) {
       var cb = "";
       if (enableBulk) {
         cb = r._line
-          ? '<td style="text-align:center;width:32px;"><input type="checkbox" class="rt-row-cb" data-idx="'+globalIdx+'" onchange="RecordTable._check(this)"></td>'
+          ? '<td style="text-align:center;width:32px;"><input type="checkbox" class="rt-row-cb" data-idx="'+globalIdx+'"></td>'
           : '<td style="width:32px;"></td>';
       }
 
@@ -197,7 +264,7 @@ function RecordTable(opts) {
         ? '<td style="white-space:nowrap;">' +
           '<a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to='+encodeURIComponent(returnTo)+'" title="Edit">✎</a> ' +
           '<a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--warn);" href="/edit?convert=1&filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to='+encodeURIComponent(returnTo)+'" title="Convert to another type">⇄</a> ' +
-          '<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-row=\''+JSON.stringify(r).replace(/'/g,"&#39;")+'\' onclick="RecordTable._openDel(JSON.parse(this.dataset.row))">✕</button>' +
+          '<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-rt="opendel" data-row=\''+JSON.stringify(r).replace(/'/g,"&#39;")+'\'>✕</button>' +
           '</td>'
         : "<td></td>";
 
@@ -230,13 +297,16 @@ function RecordTable(opts) {
     }
   }
 
+  function _container() { return opts.container || ge(cid); }
+
   // ══ PUBLIC ═════════════════════════════════════════════════════════════════
 
   self.render = function(d) {
-    var container = ge(cid);
+    var container = _container();
     if (!container) return;
 
     _injectModals();
+    _wire();
 
     if (!d || !d.records || !d.records.length) {
       container.innerHTML = '<div class="card" style="color:var(--sub);text-align:center;padding:32px;">No records found.</div>';
@@ -255,12 +325,12 @@ function RecordTable(opts) {
     var pageRecs = _pageSlice(_records);
 
     var cbHead = enableBulk
-      ? '<th style="width:32px;text-align:center;"><input type="checkbox" id="rt-select-all" onchange="RecordTable._selAll(this)" title="Select all"></th>'
+      ? '<th style="width:32px;text-align:center;"><input type="checkbox" id="'+M.selectAll+'" data-rt="selall" title="Select all"></th>'
       : '';
 
     var heads = cbHead +
       _cols.map(function(c){
-        return '<th class="sortable" onclick="RecordTable._sort(this,\''+c.replace(/'/g,"\\'")+'\')" style="cursor:pointer;">'+esc(c)+'</th>';
+        return '<th class="sortable" data-col="'+esc(c)+'" style="cursor:pointer;">'+esc(c)+'</th>';
       }).join("") +
       '<th style="width:80px;"></th>';
 
@@ -268,13 +338,13 @@ function RecordTable(opts) {
       '<div class="card">' +
         '<div style="display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:10px;">' +
           _summaryBar(d) +
-          '<button class="btn btn-ghost btn-sm" onclick="RecordTable._export()">↓ CSV</button>' +
+          '<button class="btn btn-ghost btn-sm" data-rt="export">↓ CSV</button>' +
         '</div>' +
-        '<div id="rt-pagination"></div>' +
+        '<div id="'+M.pagination+'"></div>' +
         '<div style="overflow-x:auto;">' +
-          '<table class="data-table" id="rt-table">' +
+          '<table class="data-table" id="'+M.table+'">' +
             '<thead><tr>'+heads+'</tr></thead>' +
-            '<tbody id="rt-tbody">'+_buildRows(pageRecs, _cols, returnTo, (_page-1)*_pageSize)+'</tbody>' +
+            '<tbody id="'+M.tbody+'">'+_buildRows(pageRecs, _cols, returnTo, (_page-1)*_pageSize)+'</tbody>' +
           '</table>' +
         '</div>' +
       '</div>';
@@ -283,10 +353,16 @@ function RecordTable(opts) {
   };
 
   self.clear = function() {
-    var container = ge(cid);
+    var container = _container();
     if (container) container.innerHTML = "";
     _records = []; _cols = []; _selected = [];
     _updateBar();
+  };
+
+  self.destroy = function() {
+    self.clear();
+    var wrap = ge(M.wrap);
+    if (wrap && wrap.parentElement) wrap.parentElement.removeChild(wrap);
   };
 
   // ── sorting ────────────────────────────────────────────────────────────────
@@ -294,10 +370,13 @@ function RecordTable(opts) {
     if (_sortCol === col) { _sortAsc = !_sortAsc; }
     else { _sortCol = col; _sortAsc = true; }
 
-    document.querySelectorAll("#rt-table th.sortable").forEach(function(h){
-      h.classList.remove("sort-asc","sort-desc");
-    });
-    th.classList.add(_sortAsc ? "sort-asc" : "sort-desc");
+    var container = _container();
+    if (container) {
+      container.querySelectorAll("th.sortable").forEach(function(h){
+        h.classList.remove("sort-asc","sort-desc");
+      });
+    }
+    if (th) th.classList.add(_sortAsc ? "sort-asc" : "sort-desc");
 
     var cl = col.toLowerCase(), asc = _sortAsc;
     _records.sort(function(a, b){
@@ -308,11 +387,11 @@ function RecordTable(opts) {
 
     _page = 1;
     _selected = [];
-    var sa = ge("rt-select-all");
+    var sa = ge(M.selectAll);
     if (sa) sa.checked = false;
     _updateBar();
 
-    var tbody = ge("rt-tbody");
+    var tbody = ge(M.tbody);
     if (tbody) tbody.innerHTML = _buildRows(_pageSlice(_records), _cols, opts.returnTo || window.location.pathname, (_page-1)*_pageSize);
     _updatePagination();
   };
@@ -347,17 +426,23 @@ function RecordTable(opts) {
 
   self._selAll = function(cb) {
     _selected = [];
-    document.querySelectorAll(".rt-row-cb").forEach(function(box){
-      box.checked = cb.checked;
-      if (cb.checked) _selected.push(parseInt(box.dataset.idx));
-    });
+    var container = _container();
+    if (container) {
+      container.querySelectorAll(".rt-row-cb").forEach(function(box){
+        box.checked = cb.checked;
+        if (cb.checked) _selected.push(parseInt(box.dataset.idx));
+      });
+    }
     _updateBar();
   };
 
   self._bkClear = function() {
     _selected = [];
-    document.querySelectorAll(".rt-row-cb").forEach(function(b){ b.checked = false; });
-    var sa = ge("rt-select-all");
+    var container = _container();
+    if (container) {
+      container.querySelectorAll(".rt-row-cb").forEach(function(b){ b.checked = false; });
+    }
+    var sa = ge(M.selectAll);
     if (sa) sa.checked = false;
     _updateBar();
   };
@@ -427,14 +512,14 @@ function RecordTable(opts) {
   function _renderBkValueInput(val) {
     var t = _getBkFieldType();
     var id = M.bkValInput;
-    var attrs = 'id="'+id+'" style="font-size:14px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100%;box-sizing:border-box;"';
+    var attrs = 'id="'+id+'" data-rt="bkval" style="font-size:14px;padding:6px 8px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);width:100%;box-sizing:border-box;"';
     if (t === "date" || t === "month" || t === "datetime-local") {
-      return '<input type="'+t+'" '+attrs+' value="'+esc(val)+'" onchange="RecordTable._bkPrev()">';
+      return '<input type="'+t+'" '+attrs+' value="'+esc(val)+'">';
     }
     if (t === "number") {
-      return '<input type="number" '+attrs+' value="'+esc(val)+'" oninput="RecordTable._bkPrev()">';
+      return '<input type="number" '+attrs+' value="'+esc(val)+'">';
     }
-    return '<input type="text" '+attrs+' placeholder="new value" value="'+esc(val)+'" oninput="RecordTable._bkPrev()">';
+    return '<input type="text" '+attrs+' placeholder="new value" value="'+esc(val)+'">';
   }
 
   self._bkFieldChange = function() {
@@ -447,7 +532,7 @@ function RecordTable(opts) {
     var sel = ge(M.bkField);
     sel.innerHTML = '<option value="">— select field —</option>';
     _cols.forEach(function(c) {
-      sel.innerHTML += '<option value="'+c+'">'+c+'</option>';
+      sel.innerHTML += '<option value="'+esc(c)+'">'+esc(c)+'</option>';
     });
     ge(M.bkValContainer).innerHTML = _renderBkValueInput("");
     ge(M.bkPrev).style.display = "none";
@@ -464,7 +549,7 @@ function RecordTable(opts) {
     if (f && v) {
       p.textContent = "Will apply: "+f+"="+v+" to "+_selected.length+" record"+(_selected.length>1?"s":"");
       p.style.display = "block";
-    } else { p.style.display = "none"; }
+    } else { p.style.display = "none"; };
   };
 
   self._bkSetConfirm = function() {
@@ -496,19 +581,11 @@ function RecordTable(opts) {
 
   function _refreshPage() {
     _selected = [];
-    var sa = ge("rt-select-all");
+    var sa = ge(M.selectAll);
     if (sa) sa.checked = false;
     _updateBar();
-    var tbody = ge("rt-tbody");
+    var tbody = ge(M.tbody);
     if (tbody) tbody.innerHTML = _buildRows(_pageSlice(_records), _cols, opts.returnTo || window.location.pathname, (_page-1)*_pageSize);
     _updatePagination();
   }
-
-  // ── expose on global RecordTable for inline onclick handlers ───────────────
-  // (set by the page after instantiation — see usage note below)
 }
-
-// Default no-op stubs — pages override these after instantiation.
-// Defining them here prevents "is not a function" errors on pages
-// whose inline script hasn't (or doesn't) set up a given handler.
-RecordTable._bkFieldChange = function(){};

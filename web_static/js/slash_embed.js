@@ -148,6 +148,7 @@
     c: "calendar",
     u: "due",
     p: "project",
+    v: "todo",
   };
 
   // Embed kinds whose window is driven by the `time` key. `due` ignores it

@@ -88,8 +88,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
         result = svc.get_projects_overview()
@@ -103,8 +101,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.myproj"]
             label = "My Project"
@@ -147,8 +143,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.expenses"]
             label = "Home Reno"
@@ -176,8 +170,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [])
         _write_todo(done_path, [])
 
@@ -200,8 +192,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.stale"]
             label = "Stale Project"
@@ -229,8 +219,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos, "NOTES_DIR", str(notes_dir))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.proj1"]
@@ -255,8 +243,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.fresh"]
             label = "Fresh"
@@ -284,8 +270,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.proj"]
             label = "Project"
@@ -313,8 +297,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.proj"]
             label = "Project"
@@ -344,8 +326,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos, "NOTES_DIR", str(notes_dir))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.jobsearch"]
             label = "Find a Job"
@@ -369,8 +349,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [])
         _write_todo(done_path, [])
 
@@ -396,8 +374,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [])
         _write_todo(done_path, [])
         _write_queries(tmp_path / "queries.toml", '''
@@ -421,8 +397,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [])
         _write_todo(done_path, [])
         _write_queries(tmp_path / "queries.toml", '''
@@ -456,8 +430,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [])
         _write_todo(done_path, [])
         _write_queries(tmp_path / "queries.toml", '''
@@ -491,8 +463,6 @@ class TestProjectsOverview:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_todo(todo_path, [])
         _write_todo(done_path, [])
         _write_queries(tmp_path / "queries.toml", '''
@@ -524,8 +494,6 @@ class TestProjectsPage:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
         client = app.test_client()
@@ -542,8 +510,6 @@ class TestProjectsPage:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.jobsearch"]
             label = "Find a Job"
@@ -564,8 +530,6 @@ class TestProjectsPage:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
         client = app.test_client()
@@ -583,8 +547,6 @@ class TestProjectsInlineData:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.p1"]
             label = "Project One"
@@ -610,8 +572,6 @@ class TestProjectsInlineData:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.p1"]
             label = "Project One"
@@ -635,8 +595,6 @@ class TestProjectsInlineData:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.exp"]
             label = "Expenses"
@@ -663,8 +621,6 @@ class TestProjectsInlineData:
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos, "NOTES_DIR", str(notes_dir))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.p1"]
             label = "My Project"
@@ -691,8 +647,6 @@ class TestProjectsInlineData:
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos, "JOURNAL_DIR", str(journal_dir))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.p1"]
             label = "My Project"
@@ -716,8 +670,6 @@ class TestProjectsInlineData:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.p1"]
             label = "Project One"
@@ -739,8 +691,6 @@ class TestProjectsInlineData:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.p1"]
             label = "Project"
@@ -761,8 +711,6 @@ class TestProjectsInlineData:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.p1"]
             label = "Empty Project"
@@ -888,8 +836,6 @@ class TestProjectWebCRUD:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
         client = app.test_client()
@@ -905,8 +851,6 @@ class TestProjectWebCRUD:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_queries(tmp_path / "queries.toml", "")
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
@@ -930,8 +874,6 @@ class TestProjectWebCRUD:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_queries(tmp_path / "queries.toml", "")
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
@@ -948,8 +890,6 @@ class TestProjectWebCRUD:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_queries(tmp_path / "queries.toml", "")
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
@@ -972,8 +912,6 @@ class TestProjectWebCRUD:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_queries(tmp_path / "queries.toml", "")
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
@@ -990,8 +928,6 @@ class TestProjectWebCRUD:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_queries(tmp_path / "queries.toml", "")
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
@@ -1007,8 +943,6 @@ class TestProjectWebCRUD:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_queries(tmp_path / "queries.toml", "")
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
@@ -1023,8 +957,6 @@ class TestProjectWebCRUD:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_queries(tmp_path / "queries.toml", "")
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
@@ -1145,8 +1077,6 @@ class TestProjectNotesHub:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.proj1"]
             label = "Find a Job"
@@ -1170,8 +1100,6 @@ class TestProjectNotesHub:
         monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
-        monkeypatch.setattr(svc, "TODO_PATH", str(todo_path))
-        monkeypatch.setattr(svc, "DONE_PATH", str(done_path))
         _write_queries(tmp_path / "queries.toml", '''
             ["project.proj1"]
             label = "Find a Job"
@@ -1202,8 +1130,6 @@ class TestProjectNotesHub:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_queries(tmp_path / "queries.toml", "")
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
@@ -1228,8 +1154,6 @@ class TestProjectNotesHub:
         monkeypatch.setattr(ptos, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
-        monkeypatch.setattr(svc, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(svc, "DONE_PATH", str(tmp_path / "done.txt"))
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
         client = app.test_client()

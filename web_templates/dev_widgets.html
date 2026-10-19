@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+.dw-wrap { padding: 14px 18px; }
+.dw-note { color: var(--sub); font-size: 13px; margin: 4px 0 14px; }
+.dw-kind { margin-bottom: 22px; }
+.dw-kind-label { font-size: 12px; font-weight: 700; text-transform: uppercase;
+  letter-spacing: .5px; color: var(--sub); margin-bottom: 8px; }
+.dw-pair { display: flex; flex-wrap: wrap; gap: 14px; }
+.dw-cell { width: 360px; max-width: 100%; }
+.dw-cell-label { font-size: 11px; color: var(--sub); margin-bottom: 6px; }
+.dw-cell > [data-ptos-widget] { min-height: 72px; }
+</style>
+
+<div class="dw-wrap">
+  <h1>Widget dev harness</h1>
+  <p class="dw-note">Static vs interactive copies of each Phase&nbsp;1
+    widget kind. Serve with <code>PTOS_DEV=1</code> — this page 404s otherwise.</p>
+
+  {% for label, body in dw_specs %}
+  <div class="dw-kind">
+    <div class="dw-kind-label">{{ label }}</div>
+    <div class="dw-pair">
+      <div class="dw-cell">
+        <div class="dw-cell-label">Static</div>
+        <div data-ptos-widget data-widget-host="dev" data-body="{{ body }}"></div>
+      </div>
+      <div class="dw-cell">
+        <div class="dw-cell-label">Interactive</div>
+        <div data-ptos-widget data-interactive="1" data-widget-host="dev" data-body="{{ body }}"></div>
+      </div>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+
+<script src="{{ av('/static/js/widgets.js') }}"></script>
+<script src="{{ av('/static/js/record_table.js') }}"></script>
+<script src="{{ av('/static/js/embeds.js') }}"></script>
+<script src="{{ av('/static/js/widget_host.js') }}"></script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (window.PtosWidgets) window.PtosWidgets.mountAll(document, { host: "dev" });
+});
+</script>
+{% endblock %}

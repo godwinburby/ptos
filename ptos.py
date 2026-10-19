@@ -1852,6 +1852,74 @@ class AtomicWrite:
                 pass
 
 # --------------------------------------------------
+# Saved todo views — ["todo.NAME"] config lint
+# --------------------------------------------------
+
+TODO_VIEW_LINT_KEYS = ("project", "context", "priority", "due", "search",
+                       "linked_to", "include_done", "hide_routines",
+                       "groupby", "sort", "add", "title", "limit")
+TODO_VIEW_LINT_GROUPBYS = ("timeline", "priority", "project", "context", "none")
+TODO_VIEW_LINT_SORTS = ("default", "reverse", "most", "fewest")
+
+
+def lint_todo_views(queries=None):
+    """Validate saved ["todo.NAME"] view sections in queries.toml.
+
+    Returns a list of human-readable warnings (empty = clean): unknown
+    keys, a bad groupby/sort/limit/add value, or an empty section name.
+    Mirrors the strict checks _w_todo applies at resolve time so a
+    broken view is caught by `--lint` / `--doctor` before an embed hits
+    it. Kept in the engine (not the service) because both CLI entry
+    points reach it without importing the service layer.
+    """
+    if queries is None:
+        try:
+            queries = get_queries()
+        except Exception:
+            return []
+    if not isinstance(queries, dict):
+        return []
+    warnings = []
+    for key, val in sorted(queries.items()):
+        if not key.startswith("todo.") or not isinstance(val, dict):
+            continue
+        name = key[5:]
+        if not name:
+            warnings.append("todo view: empty name after the 'todo.' prefix")
+            continue
+        bad = [k for k in val if k not in TODO_VIEW_LINT_KEYS]
+        if bad:
+            warnings.append(
+                f"todo view '{name}': unsupported key(s) "
+                f"{', '.join(sorted(bad))} "
+                f"(allowed: {', '.join(sorted(TODO_VIEW_LINT_KEYS))})")
+        gb = val.get("groupby")
+        if gb and str(gb).strip().lower() not in TODO_VIEW_LINT_GROUPBYS:
+            warnings.append(
+                f"todo view '{name}': unknown groupby '{gb}' "
+                f"(allowed: {', '.join(TODO_VIEW_LINT_GROUPBYS)})")
+        srt = val.get("sort")
+        if srt and str(srt).strip().lower() not in TODO_VIEW_LINT_SORTS:
+            warnings.append(
+                f"todo view '{name}': unknown sort '{srt}' "
+                f"(allowed: {', '.join(TODO_VIEW_LINT_SORTS)})")
+        lim = val.get("limit")
+        if lim is not None and lim is not False:
+            try:
+                int(lim)
+            except (TypeError, ValueError):
+                warnings.append(
+                    f"todo view '{name}': 'limit' must be a whole number, "
+                    f"got {lim!r}")
+        if "add" in val and not isinstance(val.get("add"), bool):
+            warnings.append(f"todo view '{name}': 'add' must be true or false")
+        for dkey in ("include_done", "hide_routines"):
+            if dkey in val and not isinstance(val.get(dkey), bool):
+                warnings.append(
+                    f"todo view '{name}': '{dkey}' must be true or false")
+    return warnings
+
+# --------------------------------------------------
 # Doctor — check PTOS health
 # --------------------------------------------------
 
@@ -1959,7 +2027,8 @@ def doctor_check(verbose=False, fix=False, json_output=False):
             fixes_applied.append("Created config/queries.toml")
     else:
         messages.append(("config/queries.toml", "Exists"))
-    
+        warnings.extend(lint_todo_views())
+
     presets_file = os.path.join(CONFIG_DIR, "presets.toml")
     if not os.path.exists(presets_file):
         warnings.append("config/presets.toml missing (optional)")

@@ -271,13 +271,13 @@
         <span class="routine-badge">{{ total }}</span>
       </div>
       {% for t in todos %}
-      <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}{% if t.done %} completed{% endif %}" data-line="{{ t.line_no }}" data-time="{{ t.due_time or '' }}">
+      <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}{% if t.done %} completed{% endif %}" data-line="{{ t.line_no }}" data-raw="{{ t.raw_line }}" data-time="{{ t.due_time or '' }}">
         {% if t.done %}
         <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
         {% else %}
         <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
         {% endif %}
-        <span class="routine-desc" onclick="{% if t.done %}openEditDone{% else %}openEdit{% endif %}({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
+        <span class="routine-desc" onclick="{% if t.done %}openEditDone{% else %}openEdit{% endif %}({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}', this)">{{ t.description }}</span>
         {% if t.due_time %}<span class="routine-time">{{ fmt_ampm(t.due_time) }}</span>{% endif %}
         {% if t.rec %}<span class="routine-rec" title="Repeats {{ fmt_rec(t.rec) }}">{{ fmt_rec(t.rec) }}</span>{% endif %}
         {% if t.done %}
@@ -291,7 +291,7 @@
         {% endif %}
         {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
         {% if not t.done %}
-        <button class="routine-del" onclick="deleteTodo({{ t.line_no }})" title="Delete routine">✕</button>
+        <button class="routine-del" onclick="deleteTodo({{ t.line_no }}, this)" title="Delete routine">✕</button>
         {% endif %}
       </div>
       {% endfor %}
@@ -330,7 +330,7 @@
       {% for b in block_data %}
       <div class="rv-block {{ b.color }}{% if b.done %} done{% elif b.is_past %} past{% endif %}"
            style="top:{{ b.top }}px; height:{{ b.height }}px"
-           data-time="{{ b.due_time }}" data-line="{{ b.line_no }}">
+           data-time="{{ b.due_time }}" data-line="{{ b.line_no }}" data-raw="{{ b.raw_line }}">
         <div class="rv-block-head">
           {% if b.done %}
           <div class="rv-block-check checked" onclick="event.stopPropagation();undoTodo({{ b.line_no }}, this)"></div>
@@ -339,9 +339,9 @@
           {% endif %}
           <span class="rv-block-time">{{ fmt_ampm(b.due_time) }}</span>
           {% if b.rec %}<span class="routine-rec" title="Repeats {{ fmt_rec(b.rec) }}">{{ fmt_rec(b.rec) }}</span>{% endif %}
-          <span class="rv-block-desc" onclick="event.stopPropagation();{% if b.done %}openEditDone{% else %}openEdit{% endif %}({{ b.line_no }}, '{{ b.description|e }}', '{{ b.priority }}', '{{ b.due }}', '{{ b.due_time }}', '{{ b.threshold }}', '{{ b.threshold_time }}', '{{ b.projects|join(' ') }}', '{{ b.contexts|join(' ') }}', '{{ b.rec }}', '{{ b.id }}', '{{ b.links|join(',') }}')">{{ b.description }}</span>
+          <span class="rv-block-desc" onclick="event.stopPropagation();{% if b.done %}openEditDone{% else %}openEdit{% endif %}({{ b.line_no }}, '{{ b.description|e }}', '{{ b.priority }}', '{{ b.due }}', '{{ b.due_time }}', '{{ b.threshold }}', '{{ b.threshold_time }}', '{{ b.projects|join(' ') }}', '{{ b.contexts|join(' ') }}', '{{ b.rec }}', '{{ b.id }}', '{{ b.links|join(',') }}', this)">{{ b.description }}</span>
           {% if not b.done %}
-          <button class="routine-del" onclick="event.stopPropagation();deleteTodo({{ b.line_no }})" title="Delete routine">✕</button>
+          <button class="routine-del" onclick="event.stopPropagation();deleteTodo({{ b.line_no }}, this)" title="Delete routine">✕</button>
           {% endif %}
         </div>
       </div>
@@ -362,17 +362,17 @@
 <div class="rv-anytime">
   <div class="rv-anytime-title">Anytime</div>
   {% for t in untimed %}
-  <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}{% if t.done %} completed{% endif %}" data-line="{{ t.line_no }}">
+  <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}{% if t.done %} completed{% endif %}" data-line="{{ t.line_no }}" data-raw="{{ t.raw_line }}">
     {% if t.done %}
     <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
     {% else %}
     <div class="todo-check" onclick="completeTodo({{ t.line_no }}, this)"></div>
     {% endif %}
-    <span class="routine-desc" onclick="{% if t.done %}openEditDone{% else %}openEdit{% endif %}({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')">{{ t.description }}</span>
+    <span class="routine-desc" onclick="{% if t.done %}openEditDone{% else %}openEdit{% endif %}({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}', this)">{{ t.description }}</span>
     {% if t.rec %}<span class="routine-rec" title="Repeats {{ fmt_rec(t.rec) }}">{{ fmt_rec(t.rec) }}</span>{% endif %}
     {% if t.priority %}<span class="todo-pri {{ t.priority }}" style="font-size:10px;min-width:20px;height:18px;line-height:18px;">{{ t.priority }}</span>{% endif %}
     {% if not t.done %}
-    <button class="routine-del" onclick="deleteTodo({{ t.line_no }})" title="Delete routine">✕</button>
+    <button class="routine-del" onclick="deleteTodo({{ t.line_no }}, this)" title="Delete routine">✕</button>
     {% endif %}
   </div>
   {% endfor %}
@@ -461,24 +461,24 @@ function openAddRoutine(context) {
 
 function completeTodo(lineNo, el) {
   el.classList.add('checked');
-  const row = el.closest('.routine-item');
-  setTimeout(() => { row.classList.add('completed'); }, 300);
+  const row = el.closest('[data-raw]');
+  if (row) setTimeout(() => { row.classList.add('completed'); }, 300);
   fetch('/todo/complete', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: lineNo})
+    body: JSON.stringify({line_no: lineNo, expect: _rowRaw(el)})
   })
   .then(r => r.json())
   .then(d => { if (d.ok) { setTimeout(() => window.location.reload(), 500); } else { alert(d.error || 'Failed'); window.location.reload(); } })
   .catch(() => window.location.reload());
 }
 
-function deleteTodo(lineNo) {
+function deleteTodo(lineNo, el) {
   if (!confirm('Delete this routine?')) return;
   fetch('/todo/delete', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: lineNo})
+    body: JSON.stringify({line_no: lineNo, expect: _rowRaw(el)})
   })
   .then(r => r.json())
   .then(d => {
@@ -489,12 +489,12 @@ function deleteTodo(lineNo) {
 }
 
 function undoTodo(lineNo, el) {
-  const row = el.closest('.routine-item');
-  row.style.opacity = '0';
+  const row = el.closest('[data-raw]');
+  if (row) row.style.opacity = '0';
   fetch('/todo/undo', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: lineNo})
+    body: JSON.stringify({line_no: lineNo, expect: _rowRaw(el)})
   })
   .then(r => r.json())
   .then(d => { if (d.ok) { setTimeout(() => window.location.reload(), 300); } else { alert(d.error || 'Failed'); window.location.reload(); } })

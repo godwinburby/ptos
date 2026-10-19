@@ -2,7 +2,7 @@
 {% block content %}
 
 {% macro todo_row(t, badge_class) %}
-    <div class="todo-row" data-line="{{ t.line_no }}" data-id="{{ t.id or '' }}" data-links="{{ t.links|join(',') }}" data-pri="{{ t.priority or '' }}" data-due="{{ t.due.isoformat() if t.due else '' }}" data-due-time="{{ t.due_time or '' }}" data-threshold="{{ t.threshold.isoformat() if t.threshold else '' }}" data-threshold-time="{{ t.threshold_time or '' }}" data-rec="{{ t.rec or '' }}" data-projects="{{ t.projects|join(' ') }}" data-contexts="{{ t.contexts|join(' ') }}" onclick="toggleRowSel(this)">
+    <div class="todo-row" data-line="{{ t.line_no }}" data-raw="{{ t.raw_line }}" data-id="{{ t.id or '' }}" data-links="{{ t.links|join(',') }}" data-pri="{{ t.priority or '' }}" data-due="{{ t.due.isoformat() if t.due else '' }}" data-due-time="{{ t.due_time or '' }}" data-threshold="{{ t.threshold.isoformat() if t.threshold else '' }}" data-threshold-time="{{ t.threshold_time or '' }}" data-rec="{{ t.rec or '' }}" data-projects="{{ t.projects|join(' ') }}" data-contexts="{{ t.contexts|join(' ') }}" onclick="toggleRowSel(this)">
       <div class="todo-check" onclick="if(_selMode)return;completeTodo({{ t.line_no }}, this)"></div>
       <div class="todo-pri {{ t.priority or 'none' }}{% if selected_priority and t.priority and selected_priority==t.priority %} active{% endif %}" onclick="if(_selMode)return;popupEditPriority({{ t.line_no }}, '{{ t.priority or '' }}', this)" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %} — Change priority">{{ t.priority or '—' }}</div>
       <div class="todo-body">
@@ -21,8 +21,8 @@
         <button class="pomo-row-btn" data-line="{{ t.line_no }}" onclick="todoPomoAction(this, '{{ t.description|e }}')" title="Start pomodoro">▶</button>
         <button class="pomo-row-stop" onclick="todoPomoStop()" title="Stop pomodoro">⏹</button>
         <button onclick="linkTodoRow({{ t.line_no }})" title="Link to...">🔗</button>
-        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')" title="Edit">✎</button>
-        <button onclick="deleteTodo({{ t.line_no }})" title="Delete">✕</button>
+        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}', this)" title="Edit">✎</button>
+        <button onclick="deleteTodo({{ t.line_no }}, this)" title="Delete">✕</button>
       </div>
     </div>
 {% endmacro %}
@@ -590,7 +590,7 @@
   </div>
   <div id="sec-done" style="display:none;">
     {% for t in done_recent %}
-    <div class="todo-row" data-line="{{ t.line_no }}">
+    <div class="todo-row" data-line="{{ t.line_no }}" data-raw="{{ t.raw_line }}">
       <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
       <div class="todo-pri {{ t.priority or 'none' }}" style="opacity:0.5;" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %}"><a href="/todo?priority={{ (t.priority or '')|urlencode }}">{{ t.priority or '—' }}</a></div>
       <div class="todo-body">
@@ -603,8 +603,8 @@
         </div>
       </div>
       <div class="todo-actions">
-        <button onclick="openEditDone({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}')" title="Edit">✎</button>
-        <button onclick="deleteDoneTodo({{ t.line_no }})" title="Delete">✕</button>
+        <button onclick="openEditDone({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}', this)" title="Edit">✎</button>
+        <button onclick="deleteDoneTodo({{ t.line_no }}, this)" title="Delete">✕</button>
       </div>
     </div>
     {% endfor %}
@@ -719,7 +719,7 @@ function completeTodo(lineNo, el) {
   fetch('/todo/complete', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: lineNo})
+    body: JSON.stringify({line_no: lineNo, expect: _rowRaw(el)})
   })
   .then(r => r.json())
   .then(d => {
@@ -735,7 +735,7 @@ function undoTodo(lineNo, el) {
   fetch('/todo/undo', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: lineNo})
+    body: JSON.stringify({line_no: lineNo, expect: _rowRaw(el)})
   })
   .then(r => r.json())
   .then(d => {
@@ -745,12 +745,12 @@ function undoTodo(lineNo, el) {
   .catch(() => window.location.reload());
 }
 
-function deleteTodo(lineNo) {
+function deleteTodo(lineNo, el) {
   if (!confirm('Delete this task?')) return;
   fetch('/todo/delete', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: lineNo})
+    body: JSON.stringify({line_no: lineNo, expect: _rowRaw(el)})
   })
   .then(r => r.json())
   .then(d => {
@@ -759,12 +759,12 @@ function deleteTodo(lineNo) {
   });
 }
 
-function deleteDoneTodo(lineNo) {
+function deleteDoneTodo(lineNo, el) {
   if (!confirm('Permanently delete this done task?')) return;
   fetch('/todo/delete-done', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: lineNo})
+    body: JSON.stringify({line_no: lineNo, expect: _rowRaw(el)})
   })
   .then(r => r.json())
   .then(d => {
@@ -841,7 +841,7 @@ function toggleRowSel(el) {
   el.classList.toggle('selected');
   var lineNo = parseInt(el.dataset.line);
   if (el.classList.contains('selected')) {
-    _selLines[lineNo] = true;
+    _selLines[lineNo] = el.dataset.raw || '';
   } else {
     delete _selLines[lineNo];
   }
@@ -1372,11 +1372,12 @@ document.getElementById('todo-search-input').addEventListener('blur', function()
   setTimeout(function() { document.getElementById('search-ac-list').classList.remove('open'); }, 150);
 });
 
-var _fpLineNo = null, _fpField = '';
+var _fpLineNo = null, _fpField = '', _fpExpect = '';
 
 function popupEditDate(lineNo, field, currentValue, el) {
   _fpLineNo = lineNo;
   _fpField = field;
+  _fpExpect = _rowRaw(el);
   var popup = document.getElementById('field-popup');
   var opts = ['today','tomorrow','this_week','next_week','this_month','next_month'];
   var labels = ['Today','Tomorrow','This week','Next week','This month','Next month'];
@@ -1397,6 +1398,7 @@ function popupEditDate(lineNo, field, currentValue, el) {
 function popupEditPriority(lineNo, currentPri, el) {
   _fpLineNo = lineNo;
   _fpField = 'priority';
+  _fpExpect = _rowRaw(el);
   var popup = document.getElementById('field-popup');
   var opts = ['A','B','C','D',''];
   var defaultLabels = {'A':'Critical','B':'Important','C':'Moderate','D':'Low'};
@@ -1436,7 +1438,7 @@ function pickFieldDate(value) {
   fetch('/todo/edit', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: _fpLineNo, updates: updates})
+    body: JSON.stringify({line_no: _fpLineNo, updates: updates, expect: _fpExpect})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
@@ -1450,7 +1452,7 @@ function pickFieldThresholdNow() {
   fetch('/todo/edit', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: _fpLineNo, updates: {threshold: val}})
+    body: JSON.stringify({line_no: _fpLineNo, updates: {threshold: val}, expect: _fpExpect})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
@@ -1476,7 +1478,7 @@ function pickFieldPriority(value) {
   fetch('/todo/edit', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: _fpLineNo, updates: {priority: value}})
+    body: JSON.stringify({line_no: _fpLineNo, updates: {priority: value}, expect: _fpExpect})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })
@@ -1486,6 +1488,7 @@ function pickFieldPriority(value) {
 function popupEditRec(lineNo, currentRec, el) {
   _fpLineNo = lineNo;
   _fpField = 'rec';
+  _fpExpect = _rowRaw(el);
   var popup = document.getElementById('field-popup');
   var opts = ['1d','1w','2w','1m','2m','3m','1y','+1m','+1w','+1y'];
   var labels = ['Daily','Weekly','Biweekly','Monthly','Bimonthly','Quarterly','Yearly','Strict Monthly','Strict Weekly','Strict Yearly'];
@@ -1506,7 +1509,7 @@ function pickFieldRec(value) {
   fetch('/todo/edit', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
-    body: JSON.stringify({line_no: _fpLineNo, updates: {rec: value}})
+    body: JSON.stringify({line_no: _fpLineNo, updates: {rec: value}, expect: _fpExpect})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) { if (d.ok) window.location.reload(); else alert(d.error || 'Failed'); })

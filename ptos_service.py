@@ -50,6 +50,7 @@ def _safe_exit(msg=""):
 # ─────────────────────────────────────────────────────────────────────────────
 
 import ptos
+import ptos_widgets
 
 PTOSError = ptos.PTOSError
 
@@ -2433,27 +2434,32 @@ def run_adhoc_query(cfg, time=None, from_date=None, to_date=None):
 def resolve_embed(spec):
     """Resolve a markdown embed spec into widget data.
 
-    `spec` is the dict parsed from a fenced ```ptos TOML block. Recognized
-    keys: view, name, time, from_date, to_date, limit, title, chart.
+    `spec` is the dict parsed from a fenced ```ptos TOML block. Dispatch
+    is table-driven: each widget kind is registered in ptos_widgets with
+    its own allowed keys and resolver (see _register_builtin_widgets).
+    Common keys: view, name, time, from_date, to_date, limit, title;
+    the query kind additionally accepts chart. Unknown keys are an
+    error, not silently ignored.
 
     `view` is optional — when omitted the kind is inferred from which
     queries.toml section holds `name` (dashboard → metric → threshold →
-    board → habit → calendar → due → project → base query); inference
-    succeeds only when exactly one section owns `name` (an ambiguous name
-    raises PTOSError listing the candidates). Returns the
+    board → habit → calendar → due → project → todo → base query);
+    inference succeeds only when exactly one section owns `name` (an
+    ambiguous name raises PTOSError listing the candidates). `name` may
+    only be omitted when `view` is explicit and the kind does not need
+    one (view = "todo" — the untitled default todo view). Returns the
     underlying result dict with `title` and `link` attached; raises
     PTOSError on bad input or an unknown name.
     """
     if not isinstance(spec, dict):
         raise PTOSError("Embed must be a TOML table")
     name = str(spec.get("name") or "").strip()
-    if not name:
-        raise PTOSError("Embed is missing 'name'")
     view = str(spec.get("view") or "").strip().lower()
+    if not name and not view:
+        raise PTOSError("Embed is missing 'name'")
     time = spec.get("time") or None
     from_date = spec.get("from_date") or None
     to_date = spec.get("to_date") or None
-    title = spec.get("title") or name
 
     try:
         queries = ptos.get_queries()
@@ -2462,36 +2468,8 @@ def resolve_embed(spec):
     except Exception as e:
         raise PTOSError(str(e))
 
-    def _section_has(section, key):
-        sec = queries.get(section)
-        return isinstance(sec, dict) and key in sec
-
-    def _dotted_has(prefix):
-        return isinstance(queries.get(f"{prefix}.{name}"), dict)
-
     if not view:
-        owners = []
-        if _section_has("dashboards", name):
-            owners.append("dashboard")
-        if _section_has("metrics", name):
-            owners.append("metric")
-        if name in ptos.get_thresholds():
-            owners.append("threshold")
-        if _dotted_has("board"):
-            owners.append("board")
-        if _dotted_has("habit"):
-            owners.append("habit")
-        if _dotted_has("calendar") or name == "__all__":
-            if "calendar" not in owners:
-                owners.append("calendar")
-        if _dotted_has("due") or name in ("default", "__DEFAULT__"):
-            if "due" not in owners:
-                owners.append("due")
-        if _dotted_has("project"):
-            owners.append("project")
-        if isinstance(queries.get(name), dict) and name not in ("metrics",
-                                                                "dashboards"):
-            owners.append("query")
+        owners = ptos_widgets.infer_kinds(name, queries)
         if not owners:
             raise PTOSError(
                 f"Embed references unknown query/metric/dashboard/threshold/"
@@ -2503,50 +2481,18 @@ def resolve_embed(spec):
                 f'(e.g. view = "{owners[0]}")')
         view = owners[0]
 
-    if view == "dashboard":
-        result = get_dashboard(name, time or "tm", use_dashboard_time=True,
-                               from_date=from_date, to_date=to_date)
-        result["kind"] = "dashboard"
-        link = "/queries?run=" + urllib.parse.quote(name) + "&kind=d"
-    elif view == "metric":
-        result = get_metric(name, time or "tm", from_date=from_date, to_date=to_date)
-        result["kind"] = "metric"
-        link = "/queries?run=" + urllib.parse.quote(name) + "&kind=m"
-    elif view == "threshold":
-        status = get_threshold_status(name, time, from_date, to_date)
-        result = {"kind": "threshold", "name": name, "thresholds": [status]}
-        link = "/thresholds"
-    elif view in ("query", "records", "group", "pivot", "trend"):
-        result = run_query(name, time, from_date=from_date, to_date=to_date,
-                           chart=spec.get("chart"))
-        link = "/queries?run=" + urllib.parse.quote(name)
-    elif view == "board":
-        result = get_board_data(name, time, from_date=from_date, to_date=to_date)
-        result["kind"] = "board"
-        link = "/board?board=" + urllib.parse.quote(name)
-    elif view == "habit":
-        result = get_habit_data(name, time, from_date=from_date, to_date=to_date)
-        result["kind"] = "habit"
-        link = "/habits"
-    elif view == "calendar":
-        result = get_calendar_data(
-            name, *_calendar_embed_month(time, from_date))
-        result["kind"] = "calendar"
-        link = "/calendar" if name == "__all__" else \
-               "/calendar/" + urllib.parse.quote(name)
-    elif view == "due":
-        # The due window is config-driven (["due.*"] days); embed time specs
-        # are ignored so the widget always mirrors what /due shows.
-        result = get_due(config_name=name if name not in ("default",
-                                                          "__DEFAULT__") else None)
-        result["kind"] = "due"
-        link = "/due"
-    elif view == "project":
-        result = _project_embed_data(name)
-        result["kind"] = "project"
-        link = "/projects"
-    else:
+    entry = ptos_widgets.get_kind(view)
+    if entry is None:
         raise PTOSError(f"Unknown embed view '{view}'")
+    if entry["needs_name"] and not name:
+        raise PTOSError("Embed is missing 'name'")
+    unknown = ptos_widgets.unknown_keys(entry, spec)
+    if unknown:
+        allowed = ", ".join(sorted(ptos_widgets.allowed_keys(entry)))
+        raise PTOSError(
+            f"Embed view '{entry['kind']}' does not accept: "
+            f"{', '.join(unknown)} (allowed: {allowed})")
+    result, link = entry["resolve"](spec, name, time, from_date, to_date)
 
     limit = spec.get("limit")
     if limit and isinstance(result.get("records"), list):
@@ -2566,9 +2512,253 @@ def resolve_embed(spec):
             result["rows"] = result["rows"][:n]
             result["count"] = len(result["rows"])
 
-    result["title"] = title
+    result["title"] = (spec.get("title") or result.get("title") or name
+                       or entry["kind"].capitalize())
     result["link"] = link
     return result
+
+
+def _w_dashboard(spec, name, time, from_date, to_date):
+    result = get_dashboard(name, time or "tm", use_dashboard_time=True,
+                           from_date=from_date, to_date=to_date)
+    result["kind"] = "dashboard"
+    return result, "/queries?run=" + urllib.parse.quote(name) + "&kind=d"
+
+
+def _w_metric(spec, name, time, from_date, to_date):
+    result = get_metric(name, time or "tm", from_date=from_date, to_date=to_date)
+    result["kind"] = "metric"
+    return result, "/queries?run=" + urllib.parse.quote(name) + "&kind=m"
+
+
+def _w_threshold(spec, name, time, from_date, to_date):
+    status = get_threshold_status(name, time, from_date, to_date)
+    result = {"kind": "threshold", "name": name, "thresholds": [status]}
+    return result, "/thresholds"
+
+
+def _w_query(spec, name, time, from_date, to_date):
+    result = run_query(name, time, from_date=from_date, to_date=to_date,
+                       chart=spec.get("chart"))
+    return result, "/queries?run=" + urllib.parse.quote(name)
+
+
+def _w_board(spec, name, time, from_date, to_date):
+    result = get_board_data(name, time, from_date=from_date, to_date=to_date)
+    result["kind"] = "board"
+    return result, "/board?board=" + urllib.parse.quote(name)
+
+
+def _w_habit(spec, name, time, from_date, to_date):
+    result = get_habit_data(name, time, from_date=from_date, to_date=to_date)
+    result["kind"] = "habit"
+    return result, "/habits"
+
+
+def _w_calendar(spec, name, time, from_date, to_date):
+    result = get_calendar_data(
+        name, *_calendar_embed_month(time, from_date))
+    result["kind"] = "calendar"
+    return result, ("/calendar" if name == "__all__"
+                    else "/calendar/" + urllib.parse.quote(name))
+
+
+def _w_due(spec, name, time, from_date, to_date):
+    # The due window is config-driven (["due.*"] days); embed time specs
+    # are ignored so the widget always mirrors what /due shows.
+    result = get_due(config_name=name if name not in ("default",
+                                                      "__DEFAULT__") else None)
+    result["kind"] = "due"
+    return result, "/due"
+
+
+def _w_project(spec, name, time, from_date, to_date):
+    result = _project_embed_data(name)
+    result["kind"] = "project"
+    return result, "/projects"
+
+
+TODO_VIEW_FILTERS = ("project", "context", "priority", "due", "search",
+                     "linked_to", "include_done", "hide_routines", "groupby",
+                     "sort", "add")
+TODO_VIEW_KEYS = TODO_VIEW_FILTERS + ("title", "limit")
+_TODO_GROUPBYS = ("timeline", "priority", "project", "context", "none")
+_TODO_SORTS = (None, "", "default", "reverse", "most", "fewest")
+
+
+def _todo_json(t):
+    """Serialize a Todo for widget payloads (raw_line drives expect)."""
+    return {
+        "line_no": t.line_no,
+        "raw_line": t.raw_line,
+        "description": t.description,
+        "priority": t.priority or "",
+        "due": t.due.isoformat() if t.due else "",
+        "due_time": t.due_time or "",
+        "threshold": t.threshold.isoformat() if t.threshold else "",
+        "threshold_time": t.threshold_time or "",
+        "rec": t.rec or "",
+        "projects": list(t.projects),
+        "contexts": list(t.contexts),
+        "id": t.id or "",
+        "links": list(t.links),
+        "done": bool(t.done),
+        "completed_date": (t.completed_date.isoformat()
+                           if t.completed_date else ""),
+    }
+
+
+def _w_todo(spec, name, time, from_date, to_date):
+    """Todo view embed — saved ["todo.NAME"] section + inline overrides.
+
+    Deliberately config-driven only (no time window — a todo list is
+    always "now, bucketed"), matching what /todo shows via query_todos.
+    An omitted `name` renders the default open-todo view (grouped
+    timeline, widget limit). Inline spec keys win over the saved view.
+    """
+    if time or from_date or to_date:
+        raise PTOSError(
+            "Todo views do not support time/from_date/to_date — "
+            "they always show the live todo list")
+    queries = ptos.get_queries()
+    cfg_all = ptos.get_config()
+
+    saved = {}
+    if name:
+        if not isinstance(queries.get(f"todo.{name}"), dict):
+            raise PTOSError(f"Todo view '{name}' not found")
+        saved = dict(queries[f"todo.{name}"])
+    bad_saved = [k for k in saved if k not in TODO_VIEW_KEYS]
+    if bad_saved:
+        raise PTOSError(
+            f"Todo view '{name}' has unsupported keys: "
+            f"{', '.join(sorted(bad_saved))} "
+            f"(allowed: {', '.join(sorted(TODO_VIEW_KEYS))})")
+
+    filters = {k: saved[k] for k in TODO_VIEW_KEYS if k in saved}
+    for k in TODO_VIEW_KEYS:
+        if k in spec:
+            filters[k] = spec[k]
+
+    add = filters.get("add")
+    if add is not None and not isinstance(add, bool):
+        raise PTOSError("Embed 'add' must be true or false")
+
+    groupby = str(filters.get("groupby") or "timeline").strip().lower()
+    if groupby not in _TODO_GROUPBYS:
+        raise PTOSError(
+            f"Embed 'groupby' must be one of: "
+            f"{', '.join(_TODO_GROUPBYS)} — got {groupby!r}")
+    sort = filters.get("sort")
+    sort = str(sort).strip().lower() if sort else None
+    if sort not in _TODO_SORTS:
+        raise PTOSError(
+            f"Embed 'sort' must be one of: "
+            f"{', '.join(s for s in _TODO_SORTS if s)} — got {sort!r}")
+
+    limit = filters.get("limit")
+    if limit is None or limit is False:
+        limit = 20
+    else:
+        try:
+            limit = int(limit)
+        except (TypeError, ValueError):
+            raise PTOSError(f"Embed 'limit' must be a whole number, got {limit!r}")
+
+    todo_cfg = cfg_all.get("todo", {})
+    project = filters.get("project") or None
+    hide = filters.get("hide_routines")
+    if hide is None:
+        hide = (not project) and bool(todo_cfg.get("hide_routines", False))
+
+    buckets = query_todos(
+        project=project,
+        context=filters.get("context") or None,
+        priority=filters.get("priority") or None,
+        due=filters.get("due") or None,
+        search=filters.get("search") or None,
+        linked_to=filters.get("linked_to") or None,
+        hide_routines=bool(hide),
+        include_done=bool(filters.get("include_done")),
+        groupby=groupby,
+        sort=sort,
+        limit=limit,
+        priority_labels=todo_cfg.get("priority_labels", {}),
+    )
+
+    groups = [{"key": k, "label": l, "color": c,
+               "todos": [_todo_json(t) for t in todos]}
+              for k, l, c, todos in buckets.get("grouped", [])]
+    if buckets.get("done"):
+        groups.append({
+            "key": "done", "label": "Done", "color": "var(--success)",
+            "todos": [_todo_json(t) for t in buckets["done"]],
+        })
+
+    counts = {k: len(buckets.get(k) or [])
+              for k in ("overdue", "today", "tomorrow", "upcoming", "someday")}
+    result = {
+        "kind": "todo",
+        "groups": groups,
+        "counts": counts,
+        "total_open": buckets.get("total_open", sum(counts.values())),
+        "add": bool(add),
+        "filters": {k: filters[k] for k in ("project", "context", "priority")
+                    if filters.get(k)},
+        "title": saved.get("title") or None,
+    }
+
+    params = []
+    for key, val in (("project", project),
+                     ("context", filters.get("context") or None),
+                     ("priority", filters.get("priority") or None),
+                     ("due", filters.get("due") or None),
+                     ("search", filters.get("search") or None),
+                     ("linked_to", filters.get("linked_to") or None),
+                     ("groupby", groupby if groupby != "timeline" else None)):
+        if val:
+            params.append(f"{key}={urllib.parse.quote(str(val))}")
+    link = "/todo" + ("?" + "&".join(params) if params else "")
+    return result, link
+
+
+def _register_builtin_widgets():
+    """Register the built-in embed kinds into ptos_widgets.
+
+    owns_name predicates mirror the historical inference checks
+    exactly (see resolve_embed's docstring for the order).
+    """
+    reg = ptos_widgets.register
+    reg("dashboard", _w_dashboard, infer_order=10,
+        owns_name=lambda n, q: (isinstance(q.get("dashboards"), dict)
+                                and n in q["dashboards"]))
+    reg("metric", _w_metric, infer_order=20,
+        owns_name=lambda n, q: (isinstance(q.get("metrics"), dict)
+                                and n in q["metrics"]))
+    reg("threshold", _w_threshold, infer_order=30,
+        owns_name=lambda n, q: n in ptos.get_thresholds())
+    reg("board", _w_board, infer_order=40,
+        owns_name=lambda n, q: isinstance(q.get(f"board.{n}"), dict))
+    reg("habit", _w_habit, infer_order=50,
+        owns_name=lambda n, q: isinstance(q.get(f"habit.{n}"), dict))
+    reg("calendar", _w_calendar, infer_order=60,
+        owns_name=lambda n, q: (n == "__all__"
+                                or isinstance(q.get(f"calendar.{n}"), dict)))
+    reg("due", _w_due, infer_order=70,
+        owns_name=lambda n, q: (n in ("default", "__DEFAULT__")
+                                or isinstance(q.get(f"due.{n}"), dict)))
+    reg("project", _w_project, infer_order=80,
+        owns_name=lambda n, q: isinstance(q.get(f"project.{n}"), dict))
+    reg("todo", _w_todo, keys=TODO_VIEW_FILTERS, needs_name=False,
+        infer_order=85,
+        owns_name=lambda n, q: isinstance(q.get(f"todo.{n}"), dict))
+    reg("query", _w_query, views=("records", "group", "pivot", "trend"),
+        keys=("chart",), infer_order=90,
+        owns_name=lambda n, q: (isinstance(q.get(n), dict)
+                                and n not in ("metrics", "dashboards")))
+
+
+_register_builtin_widgets()
 
 
 def _calendar_embed_month(time, from_date):
@@ -2602,13 +2792,23 @@ def _project_embed_data(name):
     raise PTOSError(f"Project '{name}' not found in queries.toml")
 
 
+def get_todo_view_names():
+    """Saved ["todo.NAME"] view sections, for the embed picker menu."""
+    try:
+        all_q = get_queries()
+    except Exception:
+        all_q = {}
+    return sorted(k[5:] for k in all_q
+                  if k.startswith("todo.") and isinstance(all_q[k], dict))
+
+
 def get_embed_candidates():
     """Return the embeddable names grouped by kind, for the ``/`` menu.
 
     Lists base queries, metrics, dashboards, thresholds, boards, habits,
-    calendars, due sections and projects that a ```ptos embed can
-    reference. Mirrors the filtering each owning page applies so the page
-    and the editor menu can never drift apart.
+    calendars, due sections, projects and todo views that a ```ptos
+    embed can reference. Mirrors the filtering each owning page applies
+    so the page and the editor menu can never drift apart.
     """
     try:
         all_q = get_queries()
@@ -2617,7 +2817,8 @@ def get_embed_candidates():
     queries = [k for k in all_q
                if k not in ("metrics", "dashboards", "due")
                and not k.startswith(("board.", "habit.", "calendar.",
-                                     "due.", "project.", "threshold."))
+                                     "due.", "project.", "threshold.",
+                                     "todo."))
                and not (isinstance(all_q[k], dict) and "alias" in all_q[k])]
     thresholds = [k[10:] for k in all_q
                   if k.startswith("threshold.") and isinstance(all_q[k], dict)]
@@ -2641,6 +2842,7 @@ def get_embed_candidates():
         "calendars": sorted(calendars),
         "due": due,
         "projects": sorted(projects),
+        "todos": get_todo_view_names(),
     }
 
 
@@ -3501,11 +3703,11 @@ def get_projects_overview():
     todos_all = []
     done_all = []
     try:
-        todos_all, _ = ptos_todo.load_todos(TODO_PATH)
+        todos_all, _ = ptos_todo.load_todos(ptos.TODO_PATH)
     except Exception:
         pass
     try:
-        done_all, _ = ptos_todo.load_todos(DONE_PATH)
+        done_all, _ = ptos_todo.load_todos(ptos.DONE_PATH)
     except Exception:
         pass
 
@@ -5186,7 +5388,7 @@ def _mark_converted(filepath, old_line, lineno, target_type):
 # ══════════════════════════════════════════════════════════════════════════════
 
 _RESERVED_TOP_KEYS = ("metrics", "dashboards", "due")
-_DOTTED_PREFIXES = ("board.", "habit.", "calendar.", "due.", "threshold.", "project.")
+_DOTTED_PREFIXES = ("board.", "habit.", "calendar.", "due.", "threshold.", "project.", "todo.")
 _NAME_RE = re.compile(r'^[a-z][a-z0-9_]*$')
 
 
@@ -5866,7 +6068,7 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         return n
 
     def _is_config_key(n):
-        return any(n.startswith(p) for p in ("board.", "habit.", "calendar.", "due.", "threshold."))
+        return any(n.startswith(p) for p in ("board.", "habit.", "calendar.", "due.", "threshold.", "todo."))
 
     def _merge_entry(existing_entry, new_entry):
         """Merge new_entry on top of existing_entry, preserving unknown keys."""
@@ -6202,6 +6404,11 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
         for k, v in existing.items():
             if k.startswith("project.") and isinstance(v, dict):
                 data[k] = v
+
+    # preserve saved todo views (no SaveAll path owns them yet)
+    for k, v in existing.items():
+        if k.startswith("todo.") and isinstance(v, dict):
+            data[k] = v
 
     with ptos.AtomicWrite(ptos.QUERIES_PATH, "queries") as w:
         tomli_w.dump(data, w.stream)
@@ -6846,16 +7053,12 @@ import ptos_todo
 
 
 TODO_DIR  = ptos.TODO_DIR
-TODO_PATH = ptos.TODO_PATH
-DONE_PATH = ptos.DONE_PATH
-
-
 def get_todos(include_done=False):
     """Load all todos from todo.txt. Returns list of Todo dataclass instances."""
     try:
-        todos, errors = ptos_todo.load_todos(TODO_PATH)
+        todos, errors = ptos_todo.load_todos(ptos.TODO_PATH)
         if include_done:
-            done, _ = ptos_todo.load_todos(DONE_PATH)
+            done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
             todos = todos + done
         return todos
     except Exception as e:
@@ -6865,16 +7068,189 @@ def get_todos(include_done=False):
 def get_todos_bucketed():
     """Load todos and return bucketed dict (overdue/today/upcoming/someday)."""
     try:
-        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
         return ptos_todo.bucket_todos(todos)
     except Exception as e:
         raise PTOSError(str(e))
 
 
+def query_todos(project=None, context=None, priority=None, due=None,
+                search=None, linked_to=None, hide_routines=False,
+                include_done=False, groupby=None, sort=None, limit=None,
+                priority_labels=None):
+    """Open todos bucketed + filtered — the /todo page's query, shared
+    with the todo widget so the two can never drift.
+
+    Semantics match the page's query params exactly (pinned by
+    tests/test_todo_page_snapshot.py): project/context/priority/search/
+    linked_to are single values; a `-` project prefix excludes; context
+    matches the stored token verbatim (chips pass `@name`); priority is
+    case-insensitive; search is a glob over the description;
+    hide_routines drops `+routine` when no explicit project is given;
+    `due` cuts to one due-range bucket (`overdue`/`today`/`tomorrow`/
+    `upcoming`/`someday`), `none` for no-due buckets only, or `week`
+    (due on or within the next 7 days, overdue included).
+    Returns the bucketed dict with Todo objects (same shape as
+    get_todos_bucketed(), with total_open recomputed after filtering).
+
+    Widget-only extras (page callers pass none of these): `include_done`
+    adds a recent-first `done` bucket (same 50 cap as the page's done
+    strip, filtered like the open buckets, never counted in
+    total_open); `groupby` adds `grouped` via group_todos (timeline is
+    the default); `sort` reorders those groups (`default`/`reverse`/
+    `most`/`fewest`); `limit` truncates the grouped todos in group
+    order (the done bucket stays whole).
+    """
+    buckets = get_todos_bucketed()
+
+    def _filter_list(todos):
+        result = todos
+        if project:
+            if project.startswith("-"):
+                exc = "+" + project[1:]
+                result = [t for t in result if exc not in t.projects]
+            else:
+                inc = project if project.startswith("+") else "+" + project
+                result = [t for t in result if inc in t.projects]
+        elif hide_routines:
+            result = [t for t in result if "+routine" not in t.projects]
+        if context:
+            result = [t for t in result if context in t.contexts]
+        if priority:
+            result = [t for t in result if t.priority == priority.upper()]
+        if search:
+            result = [t for t in result
+                      if ptos._glob_match(search, t.description)]
+        if linked_to:
+            result = [t for t in result if linked_to in t.links]
+        return result
+
+    for key in ("overdue", "today", "tomorrow", "upcoming", "someday"):
+        buckets[key] = _filter_list(buckets[key])
+
+    if due == "week":
+        cutoff = ptos.today() + dt.timedelta(days=7)
+        for key in ("overdue", "today", "tomorrow", "upcoming", "someday"):
+            buckets[key] = [t for t in buckets[key]
+                            if t.due and t.due <= cutoff]
+    elif due:
+        if due in buckets:
+            for key in ("overdue", "today", "tomorrow", "upcoming", "someday"):
+                if key != due:
+                    buckets[key] = []
+        elif due == "none":
+            buckets["overdue"] = []
+            buckets["today"] = []
+            buckets["tomorrow"] = []
+            buckets["upcoming"] = []
+
+    if include_done:
+        try:
+            done_all, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+        except Exception:
+            done_all = []
+        done_f = _filter_list(done_all)
+        buckets["done"] = sorted(
+            done_f,
+            key=lambda t: (t.completed_date or dt.date.min),
+            reverse=True)[:50]
+
+    buckets["total_open"] = sum(
+        len(buckets[k]) for k in
+        ("overdue", "today", "tomorrow", "upcoming", "someday"))
+
+    if groupby:
+        grouped = group_todos(buckets, groupby, priority_labels or {})
+        if sort == "reverse":
+            grouped = list(reversed(grouped))
+        elif sort in ("most", "fewest"):
+            grouped = sorted(grouped, key=lambda g: len(g[3]),
+                             reverse=(sort == "most"))
+        if isinstance(limit, int) and limit > 0:
+            remaining = limit
+            trimmed = []
+            for gkey, glabel, gcolor, gtodos in grouped:
+                if remaining <= 0:
+                    break
+                take = gtodos[:remaining]
+                remaining -= len(take)
+                if take:
+                    trimmed.append((gkey, glabel, gcolor, take))
+            grouped = trimmed
+        buckets["grouped"] = grouped
+
+    return buckets
+
+
+def group_todos(buckets, groupby, priority_labels):
+    """Build the (key, label, color, todos) sections for a groupby mode.
+
+    Extracted from the /todo page route so the page and the todo widget
+    share one grouping implementation; the widget's "none" mode returns
+    a single untitled flat group (the page never uses it).
+    """
+    _pri_order = {"A": 0, "B": 1, "C": 2, "D": 3}
+    _pri_colors = {"A": "var(--error)", "B": "var(--warn)", "C": "var(--accent)", "D": "var(--sub)"}
+    _pri_labels = {"A": "Critical", "B": "Important", "C": "Moderate", "D": "Low"}
+    all_open = buckets["overdue"] + buckets["today"] + buckets["tomorrow"] + buckets["upcoming"] + buckets["someday"]
+
+    if groupby == "priority":
+        _groups = {}
+        for t in all_open:
+            p = t.priority or ""
+            _groups.setdefault(p, []).append(t)
+        grouped = []
+        for p in ("A", "B", "C", "D"):
+            if p in _groups:
+                lbl = f"({p}) {priority_labels.get(p, _pri_labels.get(p, p))}"
+                grouped.append((f"pri-{p}", lbl, _pri_colors.get(p, "var(--sub)"), sorted(_groups[p], key=lambda t: (t.due or dt.date.max, t.description))))
+        if "" in _groups:
+            grouped.append(("pri-none", "No Priority", "var(--border)", sorted(_groups[""], key=lambda t: (t.due or dt.date.max, t.description))))
+    elif groupby == "project":
+        _groups = {}
+        for t in all_open:
+            projs = t.projects or [""]
+            for p in projs:
+                _groups.setdefault(p, []).append(t)
+        no_proj = _groups.pop("", None)
+        grouped = []
+        for p in sorted(_groups.keys()):
+            lbl = p if p.startswith("+") else f"+{p}"
+            grouped.append(("proj-" + p.lower().lstrip("+"), lbl, "var(--accent)", sorted(_groups[p], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+        if no_proj:
+            grouped.append(("proj-none", "No Project", "var(--sub)", sorted(no_proj, key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+    elif groupby == "context":
+        _groups = {}
+        for t in all_open:
+            ctxs = t.contexts or [""]
+            for c in ctxs:
+                _groups.setdefault(c, []).append(t)
+        no_ctx = _groups.pop("", None)
+        grouped = []
+        for c in sorted(_groups.keys()):
+            lbl = c if c.startswith("@") else f"@{c}"
+            grouped.append(("ctx-" + c.lower().lstrip("@"), lbl, "var(--accent)", sorted(_groups[c], key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+        if no_ctx:
+            grouped.append(("ctx-none", "No Context", "var(--sub)", sorted(no_ctx, key=lambda t: (_pri_order.get(t.priority or "Z", 4), t.description))))
+    elif groupby == "none":
+        grouped = [("all", "", "var(--sub)", list(all_open))]
+    else:
+        # timeline (default) — reuse existing bucket order
+        _timeline = [
+            ("overdue", "Overdue", "var(--error)", buckets["overdue"]),
+            ("today", "Today", "var(--accent)", buckets["today"]),
+            ("tomorrow", "Tomorrow", "var(--success)", buckets["tomorrow"]),
+            ("upcoming", "Upcoming", "#f0ad4e", buckets["upcoming"]),
+            ("someday", "Someday", "var(--sub)", buckets["someday"]),
+        ]
+        grouped = [(k, l, c, t) for k, l, c, t in _timeline if t]
+    return grouped
+
+
 def get_todo_summary_counts():
     """Return (overdue_count, due_today_count) without loading full todo dicts."""
     try:
-        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
         today = ptos.today()
         overdue = 0
         due_today = 0
@@ -6921,30 +7297,63 @@ def add_todo_line(text):
         projects = get_todo_projects()
         contexts = get_todo_contexts()
         text = ptos_todo.preprocess_todo_text(text, projects=projects, contexts=contexts)
-        t = ptos_todo.add_todo(TODO_PATH, text)
+        t = ptos_todo.add_todo(ptos.TODO_PATH, text)
         return {"ok": True, "todo": dataclasses.asdict(t)}
     except Exception as e:
         raise PTOSError(str(e))
 
 
-def complete_todo_by_line(line_no):
+_TODO_STALE_MSG = "Task changed on disk — refresh and try again"
+
+
+def _verify_todo_expect(todos, line_no, expect):
+    """Stale-line guard for todo actions (spec 4.4).
+
+    `expect` is the raw line the client was looking at; when provided it
+    must still match the file's line at `line_no`, else the line number
+    has shifted (another view, the todo page or a Syncthing update moved
+    it) and acting would hit the wrong task. No expect = no check
+    (CLI/old callers keep working). A missing line is left for the
+    operation itself to report.
+    """
+    if not isinstance(expect, str) or not expect:
+        return
+    for t in todos:
+        if t.line_no == line_no:
+            if t.raw_line.rstrip("\n") != expect.rstrip("\n"):
+                raise PTOSError(_TODO_STALE_MSG)
+            return
+
+
+def complete_todo_by_line(line_no, expect=None):
     """Mark a todo as complete (move to done.txt)."""
     try:
-        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
         target = [t for t in todos if t.line_no == line_no]
         if not target:
             raise PTOSError(f"Todo at line {line_no} not found")
+        _verify_todo_expect(todos, line_no, expect)
         ptos_todo.complete_todo(target[0])
-        return {"ok": True}
+        resp = {"ok": True}
+        done_raw = ptos_todo.format_line(target[0])
+        done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+        for t in reversed(done):
+            if t.raw_line.rstrip("\n") == done_raw:
+                resp["done_line_no"] = t.line_no
+                resp["done_raw"] = done_raw
+                break
+        return resp
     except PTOSError:
         raise
     except Exception as e:
         raise PTOSError(str(e))
 
 
-def undo_todo_by_line(line_no):
+def undo_todo_by_line(line_no, expect=None):
     """Undo a completed todo (move from done.txt back to todo.txt)."""
     try:
+        done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+        _verify_todo_expect(done, line_no, expect)
         ptos_todo.undo_todo(line_no)
         return {"ok": True}
     except PTOSError:
@@ -6953,47 +7362,74 @@ def undo_todo_by_line(line_no):
         raise PTOSError(str(e))
 
 
-def delete_todo_by_line(line_no):
+def delete_todo_by_line(line_no, expect=None):
     """Delete a todo by line number."""
     try:
-        ptos_todo.delete_todo(TODO_PATH, line_no)
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+        _verify_todo_expect(todos, line_no, expect)
+        ptos_todo.delete_todo(ptos.TODO_PATH, line_no)
         return {"ok": True}
+    except PTOSError:
+        raise
     except Exception as e:
         raise PTOSError(str(e))
 
 
-def edit_todo_by_line(line_no, updates):
+def edit_todo_by_line(line_no, updates, expect=None):
     """Edit fields on a todo by line number."""
     try:
-        t = ptos_todo.edit_todo(TODO_PATH, line_no, updates)
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+        _verify_todo_expect(todos, line_no, expect)
+        t = ptos_todo.edit_todo(ptos.TODO_PATH, line_no, updates)
         return {"ok": True, "todo": dataclasses.asdict(t)}
+    except PTOSError:
+        raise
     except Exception as e:
         raise PTOSError(str(e))
 
 
-def bulk_edit_todos(line_nos, updates):
-    """Edit multiple open todos by line numbers."""
+def bulk_edit_todos(line_nos, updates, expects=None):
+    """Edit multiple open todos by line numbers.
+
+    `expects` maps line_no -> raw line as the client saw it; when given,
+    every requested line must still match or the batch is refused whole.
+    """
     try:
-        results = ptos_todo.batch_edit_todos(TODO_PATH, line_nos, updates)
+        if expects:
+            todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+            for ln in line_nos:
+                want = expects.get(ln, expects.get(str(ln)))
+                _verify_todo_expect(todos, ln, want)
+        results = ptos_todo.batch_edit_todos(ptos.TODO_PATH, line_nos, updates)
         return {"ok": True, "count": len(results)}
+    except PTOSError:
+        raise
     except Exception as e:
         raise PTOSError(str(e))
 
 
-def delete_done_todo_by_line(line_no):
+def delete_done_todo_by_line(line_no, expect=None):
     """Delete a done todo by line number."""
     try:
-        ptos_todo.delete_todo(DONE_PATH, line_no)
+        done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+        _verify_todo_expect(done, line_no, expect)
+        ptos_todo.delete_todo(ptos.DONE_PATH, line_no)
         return {"ok": True}
+    except PTOSError:
+        raise
     except Exception as e:
         raise PTOSError(str(e))
 
 
-def edit_done_todo_by_line(line_no, updates):
+def edit_done_todo_by_line(line_no, updates, expect=None):
     """Edit fields on a done todo by line number."""
     try:
-        t = ptos_todo.edit_todo(DONE_PATH, line_no, updates)
+        done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+        _verify_todo_expect(done, line_no, expect)
+        t = ptos_todo.edit_todo(ptos.DONE_PATH, line_no, updates)
         return {"ok": True, "todo": dataclasses.asdict(t)}
+    except PTOSError:
+        raise
     except Exception as e:
         raise PTOSError(str(e))
 
@@ -7001,8 +7437,8 @@ def edit_done_todo_by_line(line_no, updates):
 def get_todo_projects():
     """Get all unique +Project tokens from open todos."""
     try:
-        todos, _ = ptos_todo.load_todos(TODO_PATH)
-        done, _ = ptos_todo.load_todos(DONE_PATH)
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+        done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
         return ptos_todo.get_projects(todos + done)
     except Exception as e:
         raise PTOSError(str(e))
@@ -7011,8 +7447,8 @@ def get_todo_projects():
 def get_todo_contexts():
     """Get all unique @context tokens from open todos."""
     try:
-        todos, _ = ptos_todo.load_todos(TODO_PATH)
-        done, _ = ptos_todo.load_todos(DONE_PATH)
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+        done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
         return ptos_todo.get_contexts(todos + done)
     except Exception as e:
         raise PTOSError(str(e))
@@ -7021,7 +7457,7 @@ def get_todo_contexts():
 def archive_old_todos(threshold_months=6):
     """Archive old done tasks to year files. Returns count archived."""
     try:
-        return ptos_todo.archive_done_todos(DONE_PATH, threshold_months)
+        return ptos_todo.archive_done_todos(ptos.DONE_PATH, threshold_months)
     except Exception as e:
         raise PTOSError(str(e))
 
@@ -7231,7 +7667,7 @@ def retro_id_record(filepath, lineno):
 def retro_id_todo(line_no):
     """Generate + append id:<id> to a todo line in place."""
     try:
-        todos, _ = ptos_todo.load_todos(TODO_PATH)
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
         target = [t for t in todos if t.line_no == line_no]
         if not target:
             raise PTOSError(f"Todo at line {line_no} not found")
@@ -7239,7 +7675,7 @@ def retro_id_todo(line_no):
         if t.id:
             raise PTOSError(f"Todo already has id:{t.id}")
         new_line, new_id = ptos.append_todo_id(t.raw_line)
-        ptos_todo.rewrite_line_by_number(TODO_PATH, t.line_no, new_line)
+        ptos_todo.rewrite_line_by_number(ptos.TODO_PATH, t.line_no, new_line)
         return {"ok": True, "id": new_id, "target": f"todo:{new_id}"}
     except PTOSError:
         raise
