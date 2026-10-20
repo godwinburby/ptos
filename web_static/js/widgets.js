@@ -18,20 +18,22 @@ function errorCard(msg) {
 function renderResult(d) {
   if (!d) return errorCard("No data");
   switch (d.kind) {
-    case "dashboard": return renderDashboard(d);
-    case "metric":    return renderMetric(d);
-    case "group":     return renderGroup(d);
-    case "pivot":     return renderPivot(d);
-    case "trend":     return renderTrend(d);
-    case "threshold": return renderThresholdResult(d.thresholds || []);
-    case "records":   return renderRecordsStatic(d);
-    case "board":     return renderBoard(d);
-    case "habit":     return renderHabit(d);
-    case "calendar":  return renderCalendar(d);
-    case "due":       return renderDue(d);
-    case "project":   return renderProject(d);
-    case "todo":      return renderTodo(d);
-    default:          return errorCard("Unknown result type");
+    case "dashboard":    return renderDashboard(d);
+    case "metric":       return renderMetric(d);
+    case "group":        return renderGroup(d);
+    case "pivot":        return renderPivot(d);
+    case "trend":        return renderTrend(d);
+    case "threshold":    return renderThresholdResult(d.thresholds || []);
+    case "records":      return renderRecordsStatic(d);
+    case "board":        return renderBoard(d);
+    case "habit":        return renderHabit(d);
+    case "calendar":     return renderCalendar(d);
+    case "due":          return renderDue(d);
+    case "project":      return renderProject(d);
+    case "todo":         return renderTodo(d);
+    case "todo_summary": return renderTodoSummary(d);
+    case "journal":      return renderJournal(d);
+    default:             return errorCard("Unknown result type");
   }
 }
 
@@ -58,16 +60,35 @@ function exprBadge(d) {
   '</div>';
 }
 
-function renderDashboard(d) {
-  const items = (d.items || []).map(i =>
-    '<div class="stat-card">' +
-      '<div class="stat-label">' + esc(i.name.replace(/_/g, " ")) + '</div>' +
-      '<div class="stat-value" style="font-size:20px;">' + esc(i.value) + '</div>' +
-      '<div class="stat-sub">' + esc(d.time_label || "") + '</div>' +
-    '</div>').join("");
+function _dashboardStatCard(i, bare) {
+  var card = '<div class="stat-card' + (i.highlight ? ' c-' + esc(i.highlight) : '') + '">';
+  var inner =
+    '<div class="stat-label">' + esc((i.name || '').replace(/_/g, ' ')) + '</div>' +
+    '<div class="stat-value" style="font-size:20px;">' + esc(i.value) + '</div>' +
+    '<div class="stat-sub">' + esc(i.sub || '') + '</div>';
+  if (i.query_url) {
+    return '<a href="' + esc(i.query_url) + '" style="text-decoration:none;">' +
+      card + inner + '</div></a>';
+  }
+  return card + inner + '</div>';
+}
+
+function renderDashboard(d, opts) {
+  opts = opts || {};
+  var groups = d.groups && d.groups.length
+    ? d.groups
+    : [{ name: '', items: d.items || [] }];
+  var html = groups.map(function (g) {
+    var label = g.name
+      ? '<div class="stat-group-label">' + esc(g.name) + '</div>' : '';
+    var cards = (g.items || []).map(function (i) {
+      return _dashboardStatCard(i, opts.bare);
+    }).join('');
+    return label + '<div class="stat-grid">' + cards + '</div>';
+  }).join('');
+  if (opts.bare) return html;
   return '<div class="card"><div class="card-title">Dashboard · ' + esc(d.name) + '</div>' +
-    exprBadge(d) +
-    '<div class="stat-grid">' + items + '</div></div>';
+    exprBadge(d) + html + '</div>';
 }
 
 function renderMetric(d) {
@@ -147,8 +168,13 @@ function renderTrend(d) {
   '</div>';
 }
 
-function renderThresholdResult(thresholds) {
-  if (!thresholds || !thresholds.length) return '<div class="card" style="color:var(--sub);">No thresholds configured.</div>';
+function renderThresholdResult(thresholds, opts) {
+  opts = opts || {};
+  if (!thresholds || !thresholds.length) {
+    return opts.bare
+      ? '<div style="color:var(--sub);font-size:13px;">No thresholds configured.</div>'
+      : '<div class="card" style="color:var(--sub);">No thresholds configured.</div>';
+  }
   var statusLabel = function(t) {
     if (t.direction === "max") {
       return t.status === "over" ? "OVER" : t.status === "warning" ? "WARN" : "OK";
@@ -181,6 +207,7 @@ function renderThresholdResult(thresholds) {
         'style="text-decoration:none;color:inherit;display:block;">' + inner + '</a>'
       : inner;
   }).join("");
+  if (opts.bare) return bars;
   return '<div class="card"><div class="card-title">Thresholds</div>' + bars + '</div>';
 }
 
@@ -649,11 +676,13 @@ function renderCalendar(d) {
   '</div>';
 }
 
-function renderDue(d) {
+function renderDue(d, opts) {
+  opts = opts || {};
   var rows = d.rows || [];
   if (!rows.length) {
-    return '<div class="card"><div class="card-title">Due</div>' +
-      '<div class="msg" style="color:var(--sub);">Nothing outstanding.</div></div>';
+    var empty = '<div class="msg" style="color:var(--sub);">Nothing outstanding.</div>';
+    if (opts.bare) return empty;
+    return '<div class="card"><div class="card-title">' + esc(d.title || "Due") + '</div>' + empty + '</div>';
   }
   var heatColor = { hot: "var(--error)", warm: "var(--warn)", cool: "var(--accent)" };
   // Same link the /due page rows use (open the located record, return to
@@ -672,10 +701,34 @@ function renderDue(d) {
       '<span class="emb-due-gap">' + _fmt(r.days) + 'd</span>' + note +
     '</a>';
   }).join("");
-  var count = d.count == null ? rows.length : d.count;
-  return '<div class="card"><div class="card-title">Due</div>' + list +
+  var count = d.full_count != null ? d.full_count
+    : (d.count == null ? rows.length : d.count);
+  if (opts.bare) {
+    return list +
+      '<div class="emb-stat" style="margin-top:8px;"><span><b>' + _fmt(count) + '</b> overdue</span></div>';
+  }
+  return '<div class="card"><div class="card-title">' + esc(d.title || "Due") + '</div>' + list +
     '<div class="emb-stat" style="margin-top:8px;"><span><b>' + _fmt(count) + '</b> overdue</span></div>' +
   '</div>';
+}
+
+function renderTodoSummary(d) {
+  var parts = [];
+  if (d.overdue) parts.push('<span style="color:var(--error);">' + _fmt(d.overdue) + ' overdue</span>');
+  if (d.overdue && d.due_today) parts.push('<span style="color:var(--sub);"> · </span>');
+  if (d.due_today) parts.push('<span style="color:var(--accent);">' + _fmt(d.due_today) + ' due today</span>');
+  if (!parts.length) parts.push('<span style="color:var(--sub);">No todos due today</span>');
+  return '<a href="' + esc(d.link || "/todo") + '" style="display:flex;align-items:center;gap:12px;text-decoration:none;">' +
+    '<span style="font-size:14px;font-weight:600;color:var(--text);">' + parts.join("") + '</span>' +
+    '<span style="margin-left:auto;color:var(--sub);font-size:13px;">→</span>' +
+  '</a>';
+}
+
+function renderJournal(d) {
+  return '<a href="' + esc(d.link || "/journal") + '" style="display:block;text-decoration:none;">' +
+    '<span style="font-size:14px;font-weight:600;color:var(--text);">' +
+    esc(d.preview || "No entry yet") + '</span>' +
+  '</a>';
 }
 
 function renderProject(d) {

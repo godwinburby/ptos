@@ -100,7 +100,7 @@ def test_habit_days_done_stable_across_month_boundary(clock):
 
 
 @pytest.mark.parametrize("clock", MONTH_BOUNDARY_CLOCKS)
-def test_project_month_signals_stable_across_month_boundary(clock):
+def test_project_month_signals_stable_across_month_boundary(clock, monkeypatch):
     """todo_added / todo_done count from the 1st; derive the expectation the same way."""
     import ptos_todo
     import ptos_service as svc
@@ -126,9 +126,9 @@ def test_project_month_signals_stable_across_month_boundary(clock):
                 f"x {yest_s} {old_s} Old done +myproj\n")
 
     for mod in (ptos, ptos_todo, svc):
-        mod.QUERIES_PATH = queries_path
-        mod.TODO_PATH = todo_path
-        mod.DONE_PATH = done_path
+        monkeypatch.setattr(mod, "QUERIES_PATH", queries_path, raising=False)
+        monkeypatch.setattr(mod, "TODO_PATH", todo_path, raising=False)
+        monkeypatch.setattr(mod, "DONE_PATH", done_path, raising=False)
     ptos._invalidate_all()
 
     real_date = dt.date

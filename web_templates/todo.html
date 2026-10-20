@@ -618,6 +618,31 @@
 
 <script>
 
+// Live refresh: the server broadcasts data-changed after every todo/config
+// write (including another tab's or a Syncthing-delivered edit). The list is
+// server-rendered, so a matching scope reloads — but never while the user is
+// typing (quick-add, search, any focused field): the timer re-checks until
+// they finish, and one reload per burst covers a fan-out of events. The
+// page's own action handlers already reload; both paths converge on the same
+// fresh page, so a double schedule costs nothing.
+var _todoReloadTimer = null;
+function _todoReloadArmed() {
+  var a = document.activeElement;
+  return !a || !(a.tagName === "INPUT" || a.tagName === "TEXTAREA" || a.isContentEditable);
+}
+function _todoScheduleReload() {
+  if (_todoReloadTimer) return;
+  _todoReloadTimer = setTimeout(function () {
+    _todoReloadTimer = null;
+    if (_todoReloadArmed()) window.location.reload();
+    else _todoScheduleReload();
+  }, 500);
+}
+window.addEventListener('ptos:data-changed', function (e) {
+  var scope = e && e.detail ? e.detail.scope : null;
+  if (!scope || scope === 'todo' || scope === 'config') _todoScheduleReload();
+});
+
 
 function goSearch() {
   var raw = document.getElementById("todo-search-input").value.trim();

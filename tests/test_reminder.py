@@ -90,7 +90,6 @@ class TestHousekeepingCheck:
         return ptos.TODO_PATH
 
     def _check(self, monkeypatch, **kwargs):
-        monkeypatch.setattr(ptos_web.svc, "TODO_PATH", ptos.TODO_PATH)
         return ptos_web._housekeeping_check(set(), **kwargs)
 
     def test_excludes_routines_by_default(self, monkeypatch):
@@ -120,7 +119,6 @@ class TestHousekeepingCheck:
         today = dt.date.today().isoformat()
         self._write_todo("task A due:%s\n" % today)
         first = self._check(monkeypatch)
-        monkeypatch.setattr(ptos_web.svc, "TODO_PATH", ptos.TODO_PATH)
         current, tasks, body = ptos_web._housekeeping_check(first[0])
         assert tasks is None
 

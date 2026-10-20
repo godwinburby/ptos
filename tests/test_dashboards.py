@@ -130,13 +130,28 @@ class TestHomeGroupedRender:
     def _setup(self):
         _write_queries(QUERIES)
 
-    def test_home_renders_group_labels(self):
+    def _resolve(self, qs):
         from ptos_web import app
+        import tomli_w
         client = app.test_client()
-        resp = client.get("/?dashboard=mixed")
+        resp = client.get("/" + qs)
         assert resp.status_code == 200
-        body = resp.get_data(as_text=True)
-        assert '<div class="stat-group-label">Spend</div>' in body
+        import json, re
+        m = re.search(
+            r'<script type="application/json" id="home-widget-specs">'
+            r"(.*?)</script>", resp.get_data(as_text=True), re.S)
+        specs = json.loads(m.group(1))
+        bodies = [s["body"] for s in specs if s["kind"] == "dashboard"]
+        assert bodies, "no dashboard spec emitted"
+        out = client.post("/api/widgets/resolve", json={
+            "items": [{"id": i, "body": b} for i, b in enumerate(bodies)]
+        }).get_json()
+        return out["results"][0]["data"]
+
+    def test_home_renders_group_labels(self):
+        d = self._resolve("?dashboard=mixed")
+        names = [g["name"] for g in d.get("groups") or []]
+        assert "Spend" in names
 
     def test_home_renders_flat_when_no_groups(self):
         from ptos_web import app
@@ -150,20 +165,14 @@ class TestHomeGroupedRender:
         assert 'stat-group-label">Today' in body
 
     def test_home_renders_ungrouped_label(self):
-        from ptos_web import app
-        client = app.test_client()
-        resp = client.get("/?dashboard=labelled")
-        assert resp.status_code == 200
-        body = resp.get_data(as_text=True)
-        assert '<div class="stat-group-label">Everything else</div>' in body
+        d = self._resolve("?dashboard=labelled")
+        names = [g["name"] for g in d.get("groups") or []]
+        assert "Everything else" in names
 
     def test_home_renders_flat_dashboard_ungrouped_label(self):
-        from ptos_web import app
-        client = app.test_client()
-        resp = client.get("/?dashboard=flatlabelled")
-        assert resp.status_code == 200
-        body = resp.get_data(as_text=True)
-        assert '<div class="stat-group-label">Cash flow</div>' in body
+        d = self._resolve("?dashboard=flatlabelled")
+        groups = d.get("groups") or []
+        assert any(g["name"] == "Cash flow" for g in groups)
 
 
 class TestSaveQueriesFullGroups:
@@ -332,11 +341,32 @@ class TestDashboardCardLinks:
 
     def test_home_metric_card_links_with_kind(self):
         from ptos_web import app
-        html = app.test_client().get("/?dashboard=metric_db").data.decode()
-        assert "/queries?run=food_ratio&amp;kind=m" in html
+        import json, re
+        client = app.test_client()
+        html = client.get("/?dashboard=metric_db").data.decode()
+        m = re.search(
+            r'<script type="application/json" id="home-widget-specs">'
+            r"(.*?)</script>", html, re.S)
+        specs = json.loads(m.group(1))
+        body = [s["body"] for s in specs if s["kind"] == "dashboard"][0]
+        out = client.post("/api/widgets/resolve", json={
+            "items": [{"id": "d", "body": body}]}).get_json()
+        item = out["results"][0]["data"]["items"][0]
+        assert "/queries?run=food_ratio" in item["query_url"]
+        assert "kind=m" in item["query_url"]
 
     def test_home_query_card_links_without_kind(self):
         from ptos_web import app
-        html = app.test_client().get("/?dashboard=legacy").data.decode()
-        assert "/queries?run=income" in html
-        assert "run=income&amp;kind" not in html
+        import json, re
+        client = app.test_client()
+        html = client.get("/?dashboard=legacy").data.decode()
+        m = re.search(
+            r'<script type="application/json" id="home-widget-specs">'
+            r"(.*?)</script>", html, re.S)
+        specs = json.loads(m.group(1))
+        body = [s["body"] for s in specs if s["kind"] == "dashboard"][0]
+        out = client.post("/api/widgets/resolve", json={
+            "items": [{"id": "d", "body": body}]}).get_json()
+        item = out["results"][0]["data"]["items"][0]
+        assert "/queries?run=income" in item["query_url"]
+        assert "kind=" not in item["query_url"]

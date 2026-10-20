@@ -3,6 +3,8 @@ import datetime as dt
 import os
 import shutil
 import ptos
+import ptos_todo
+import ptos_cli
 
 
 _PATCHED_ATTRS = [
@@ -58,6 +60,16 @@ def _isolated_ptos_paths(tmp_path, monkeypatch):
     monkeypatch.setattr(ptos, "QUERIES_PATH", str(base / "config" / "queries.toml"))
     monkeypatch.setattr(ptos, "CONFIG_PATH", str(base / "config" / "config.toml"))
     monkeypatch.setattr(ptos, "PRESETS_PATH", str(base / "config" / "presets.toml"))
+    # ptos_todo and ptos_cli bind these by VALUE at import ("from ptos import
+    # TODO_PATH, ..."), so patching only ptos leaves their defaults pointing at
+    # the real data folder — a todo complete/undo (which reads ptos.TODO_PATH
+    # but used to default its writes to ptos_todo.DONE_PATH) then operated on
+    # the user's live todo.txt/done.txt during tests. Mirror every path patch.
+    monkeypatch.setattr(ptos_todo, "TODO_PATH", str(base / "todo" / "todo.txt"))
+    monkeypatch.setattr(ptos_todo, "DONE_PATH", str(base / "todo" / "done.txt"))
+    monkeypatch.setattr(ptos_cli, "TODO_PATH", str(base / "todo" / "todo.txt"))
+    monkeypatch.setattr(ptos_cli, "BACKUP_DIR", str(base / "backups"))
+    monkeypatch.setattr(ptos_cli, "EXPORTS_DIR", str(base / "exports"))
     ptos._invalidate_all()
     yield
 

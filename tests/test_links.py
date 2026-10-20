@@ -437,8 +437,6 @@ class TestServiceLinks:
         monkeypatch.setattr(ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
         monkeypatch.setattr(ptos_todo, "DONE_PATH", str(tmp_path / "done.txt"))
         monkeypatch.setattr(ptos_service.ptos_todo, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(ptos_service, "TODO_PATH", str(tmp_path / "todo.txt"))
-        monkeypatch.setattr(ptos_service, "DONE_PATH", str(tmp_path / "done.txt"))
         p = tmp_path / "todo.txt"
         _write(p, "(A) Call supplier\n")
         _write(tmp_path / "done.txt", "")

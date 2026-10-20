@@ -487,96 +487,9 @@ def _after_save_target(raw):
     return target
 
 def _build_period_label(time_code, custom_time, cycles, from_date=None, to_date=None):
-    """Build a human-readable label from time code.
-    
-    Examples:
-      "tm"     → "This month"
-      "tw"     → "This week"  
-      "tq"     → "This quarter"
-      "all"    → "All time"
-      "2026-04"→ "Apr 2026"
-      "2026"   → "2026"
-      "2026-04-15" → "15 Apr 2026"
-      "clinic" → "Clinic"
-      "custom" → "Custom"
-    """
-    # Standard time options labels
-    labels = {
-        "td": "Today", "yd": "Yesterday",
-        "tw": "This week", "lw": "Last week",
-        "tm": "This month", "lm": "Last month",
-        "tq": "This quarter", "lq": "Last quarter",
-        "ty": "This year", "ly": "Last year",
-        "all": "All time",
-    }
-    
-    # Check standard codes first
-    if time_code in labels:
-        return labels[time_code]
-    
-    # Handle range
-    if time_code == "range":
-        if from_date or to_date:
-            parts = []
-            if from_date:
-                d = dt.date.fromisoformat(from_date) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", from_date) else None
-                parts.append("From " + (f"{d.day} {d.strftime('%b %Y')}" if d else from_date))
-            if to_date:
-                d = dt.date.fromisoformat(to_date) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", to_date) else None
-                parts.append("to " + (f"{d.day} {d.strftime('%b %Y')}" if d else to_date))
-            return " ".join(parts)
-        return "Date range"
-    
-    # Handle YYYY (bare year)
-    if re.fullmatch(r"\d{4}", time_code):
-        return time_code
-    
-    # Handle YYYY-MM-DD (full date)
-    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", time_code):
-        year, month, day = int(time_code[:4]), int(time_code[5:7]), int(time_code[8:10])
-        return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
-    
-    # Handle YYYY-MM format (custom month)
-    if re.fullmatch(r"\d{4}-\d{2}", time_code):
-        year, month = int(time_code[:4]), int(time_code[5:7])
-        dt_obj = dt.datetime(year, month, 1)
-        return dt_obj.strftime("%b %Y")
-    
-    # Check for custom cycles (e.g., "clinic", "school")
-    for cycle_name in cycles.keys():
-        if time_code == cycle_name:
-            return cycle_name.capitalize()
-        # Check for offset variants like "clinic-1"
-        if time_code.startswith(cycle_name + "-"):
-            return cycle_name.capitalize()
-    
-    # Handle "custom", "year", "month", "date" with custom_time
-    if time_code in ("custom","year","month","date") and custom_time:
-        if re.fullmatch(r"\d{4}-\d{2}", custom_time):
-            year, month = int(custom_time[:4]), int(custom_time[5:7])
-            dt_obj = dt.datetime(year, month, 1)
-            return dt_obj.strftime("%b %Y")
-        if re.fullmatch(r"\d{4}", custom_time):
-            return custom_time
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", custom_time):
-            year, month, day = int(custom_time[:4]), int(custom_time[5:7]), int(custom_time[8:10])
-            return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
-        return "Custom"
-    
-    # Fallback - try to use custom_time if provided
-    if time_code in ("custom","year","month","date") and custom_time:
-        if re.fullmatch(r"\d{4}-\d{2}", custom_time):
-            year, month = int(custom_time[:4]), int(custom_time[5:7])
-            dt_obj = dt.datetime(year, month, 1)
-            return dt_obj.strftime("%b %Y")
-        if re.fullmatch(r"\d{4}", custom_time):
-            return custom_time
-        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", custom_time):
-            year, month, day = int(custom_time[:4]), int(custom_time[5:7]), int(custom_time[8:10])
-            return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
-        return "Custom"
-
-    return "Custom"
+    """Human-readable label from a time code (delegates to svc)."""
+    return svc.build_period_label(time_code, custom_time, cycles,
+                                  from_date=from_date, to_date=to_date)
 
 _TIME_LONG_TO_SHORT = {long: short for short, long in ptos._TIME_ALIASES.items()}
 
@@ -628,19 +541,8 @@ def _decorate_thresholds(data):
     return data
 
 def _build_field_types(schema):
-    ft = {}
-    def _set(fname, ftype):
-        ft[fname] = {"is_int": ftype == "int", "is_date": ftype == "date",
-                      "is_month": ftype == "month", "is_datetime": ftype == "datetime"}
-    for fname, fmeta in schema.get("fields", {}).items():
-        if isinstance(fmeta, dict):
-            _set(fname, fmeta.get("type", ""))
-    for tdef in schema.get("type", {}).values():
-        for fname, fdef in tdef.get("fields", {}).items():
-            if isinstance(fdef, dict) and fname not in ft:
-                _set(fname, fdef.get("type", ""))
-    _set("date", "date")
-    return ft
+    """Field-name → type flags for RecordTable (delegates to svc)."""
+    return svc.build_field_types(schema)
 
 def _global_dimensions(schema):
     """Union of dimension fields across all types (cross-type group/sort for Browse).
@@ -793,102 +695,28 @@ def _build_global_field_defs(schema, current_record=None):
 
 
 def _strip_and_validate_record(schema, record, label):
-    """Strip non-schema metadata keys (use_count, return_to, instant, alias,
-    note) from a preset record dict, then validate it. Returns (record, note,
-    err) where note is the preset's stored note (or None)."""
-    known = {"type", "tag"}
-    known.update(schema.get("fields", {}).keys())
-    known.update(schema.get("global_fields", {}).keys())
-    rtype = record.get("type")
-    if rtype:
-        ts = schema.get("type", {}).get(rtype, {})
-        known.update(ts.get("required", []))
-        known.update(ts.get("fields", {}).keys())
-    note = record.get("note") or None
-    record = {k: v for k, v in record.items() if k in known}
-    problems = svc.validate_record(schema, record)
-    if problems:
-        return None, None, f"preset '{label}': {problems[0]}"
-    return record, note, None
+    """Strip metadata keys + validate a preset record (delegates to svc)."""
+    return svc.strip_and_validate_record(schema, record, label)
 
 
 def _resolve_multi_preset(name):
-    presets = svc.get_presets()
-    pd = presets.get(name, {})
-    if isinstance(pd, dict) and "alias" in pd:
-        pd = presets.get(pd["alias"], {})
-    if not isinstance(pd, dict) or "records" not in pd:
-        return None, None, f"'{name}' is not a multi-record preset"
-    try:
-        schema = svc.get_schema()
-    except Exception as e:
-        return None, None, str(e)
-    resolved = []
-    notes = []
-    for item in pd["records"]:
-        if not isinstance(item, str):
-            return None, None, "records list must contain preset names"
-        if item not in presets:
-            return None, None, f"references unknown preset '{item}'"
-        ref = presets[item]
-        if isinstance(ref, dict) and "alias" in ref:
-            ref = presets.get(ref["alias"], {})
-        if isinstance(ref, dict) and "records" in ref:
-            return None, None, f"nested multi-record presets not supported"
-        record, note, err = _strip_and_validate_record(schema, dict(ref), item)
-        if err:
-            return None, None, err
-        resolved.append(record)
-        notes.append(note)
-    return resolved, notes, None
+    """Resolve a multi-record preset (delegates to svc)."""
+    return svc.resolve_multi_preset(name)
 
 
 def _resolve_preset_records(name):
-    """Resolve a preset into the list of records to append. Supports both
-    multi-record presets (`records = [...]`) and single presets flagged
-    `instant = true`. Returns (records, notes, err) with one note per record."""
-    presets = svc.get_presets()
-    pd = presets.get(name, {})
-    if isinstance(pd, dict) and "alias" in pd:
-        pd = presets.get(pd["alias"], {})
-    if not isinstance(pd, dict):
-        return None, None, f"'{name}' is not a multi-record or instant preset"
-    if "records" in pd:
-        return _resolve_multi_preset(name)
-    if pd.get("instant"):
-        try:
-            schema = svc.get_schema()
-        except Exception as e:
-            return None, None, str(e)
-        record, note, err = _strip_and_validate_record(schema, dict(pd), name)
-        if err:
-            return None, None, err
-        return [record], [note], None
-    return None, None, f"'{name}' is not a multi-record or instant preset"
+    """Resolve a multi/instant preset into records (delegates to svc)."""
+    return svc.resolve_preset_records(name)
 
 
 def _multi_presets():
-    result = {}
-    for name, p in svc.get_presets().items():
-        if not isinstance(p, dict) or "records" not in p:
-            continue
-        records, notes, err = _resolve_multi_preset(name)
-        if records is not None:
-            refs = p["records"]
-            result[name] = ", ".join(refs) if isinstance(refs, list) else ""
-    return result
+    """Multi-record preset map (delegates to svc)."""
+    return svc.get_multi_presets()
 
 
 def _instant_presets():
-    """Names of single presets flagged `instant = true` (excludes aliases
-    and multi-record presets). These render as one-click save buttons."""
-    result = set()
-    for name, p in svc.get_presets().items():
-        if not isinstance(p, dict) or "records" in p or "alias" in p:
-            continue
-        if p.get("instant"):
-            result.add(name)
-    return result
+    """Names of instant single presets (delegates to svc)."""
+    return svc.get_instant_presets()
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -897,147 +725,108 @@ def _instant_presets():
 
 @app.route("/")
 def home():
-    try:
-        schema = svc.get_schema()
-        field_types = _build_field_types(schema)
-    except Exception:
-        log.exception("Failed to load schema for home page")
-        schema = {}
-        field_types = {}
-    presets = {k: v for k, v in svc.get_presets().items()
-               if not (isinstance(v, dict) and ("alias" in v or "records" in v))}
-    multi_presets = _multi_presets()
-    instant_presets = _instant_presets()
-    
-    # Get selected due config from query param, default to first one
-    selected_due = request.args.get("due", None)
-    due_configs = {}  # {name: config}
-    
+    import tomli_w
+    cfg = svc.get_config()
+    username = cfg.get("user", {}).get("name", "User")
+    quick_n = cfg.get("home", {}).get("quick_presets", 10)
+    cycles = cfg.get("cycles", {})
+
+    queries = {}
+    dashboards = {}
+    due_configs = {}
     try:
         queries = svc.get_queries()
-        # Due configs are stored as ["due.NAME"] dotted keys
+        dashboards = queries.get("dashboards", {})
+        if not isinstance(dashboards, dict):
+            dashboards = {}
         for k, v in queries.items():
             if k.startswith("due.") and isinstance(v, dict):
                 due_configs[k[4:]] = v
     except Exception:
-        log.exception("Failed to load queries for due configs on home page")
-        queries = {}
-    
-    # Get due data for selected config
-    try:
-        due_data = svc.get_due(config_name=selected_due if selected_due and selected_due != "default" else None)
-        due_rows = due_data["rows"]
-        due_count = due_data["count"]
-    except Exception:
-        due_rows = []; due_count = 0
-    stats = []
-    stat_groups = None
-    dashboards = {}
-    try:
-        queries    = svc.get_queries()
-        dashboards = queries.get("dashboards", {})
-        cfg        = svc.get_config()
-        default_db = cfg.get("dashboard", {}).get("default")
-        # Use query param if provided, otherwise use config default, fallback to first
-        db_name = request.args.get("dashboard", default_db or next(iter(dashboards), None))
-        
-        # time_param absent = Per query mode: each metric uses its own query time.
-        # time_param present = user explicitly picked a window to override all metrics.
-        time_param  = request.args.get("time", None)
-        custom_time = request.args.get("custom_time", "")
-        from_date   = request.args.get("from_date") or None
-        to_date     = request.args.get("to_date") or None
+        log.exception("Failed to load queries for home page")
+
+    selected_due = request.args.get("due") or "default"
+    if selected_due != "default" and selected_due not in due_configs:
+        selected_due = "default"
+
+    default_db = cfg.get("dashboard", {}).get("default")
+    db_name = (request.args.get("dashboard")
+               or (default_db if default_db in dashboards else None)
+               or next(iter(dashboards), None))
+
+    time_param  = request.args.get("time", None)
+    custom_time = request.args.get("custom_time", "")
+    from_date   = request.args.get("from_date") or None
+    to_date     = request.args.get("to_date") or None
+    if from_date:
+        time_code = "range"
+        use_window = True
+    elif time_param in ("custom", "year", "month", "date") and custom_time and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
+        time_code = custom_time
+        use_window = True
+    else:
+        time_code = time_param or "tm"
+        use_window = time_param is not None
+
+    def _time_spec(spec):
         if from_date:
-            time_code = "range"
-            use_dashboard_time = True
-        elif time_param in ("custom","year","month","date") and custom_time and re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", custom_time):
-            time_code = custom_time
+            spec["from_date"] = from_date
+            if to_date:
+                spec["to_date"] = to_date
         else:
-            time_code = time_param or "tm"
-        use_dashboard_time = time_param is not None or from_date is not None
+            spec["time"] = time_code
+        return spec
 
-        cycles = cfg.get("cycles", {})
-        if db_name and db_name in dashboards:
-            db = svc.get_dashboard(db_name, time_code, use_dashboard_time,
-                                   from_date=from_date, to_date=to_date)
-            def _to_stat(item):
-                kind = item.get("kind", "unknown")
-                # Each card shows its own query's time window, not a global label
-                item_time = item.get("item_time", time_code)
-                sub = _build_period_label(item_time, custom_time, cycles, from_date=from_date, to_date=to_date)
-                stat = {
-                    "label": item["name"].replace("_"," "),
-                    "value": item["value"],
-                    "sub":   item.get("sub", sub),
-                    "kind":  kind,
-                    "highlight": item.get("highlight", ""),
-                }
-                raw_name = item.get("raw_name", item["name"])
-                if kind in ("query", "metric"):
-                    suffix = "&kind=m" if kind == "metric" else ""
-                    stat["query_url"] = f"/queries?run={quote(raw_name)}{suffix}"
-                return stat
-            stats = [_to_stat(it) for it in db["items"]]
-            if db.get("groups"):
-                stat_groups = [{"name": g["name"], "stats": [_to_stat(it) for it in g["items"]]}
-                               for g in db["groups"] if g["items"]]
-    except Exception:
-        log.exception("Failed to load dashboard stats for home page")
-    recent_rows = []
-    try:
-        data = svc.get_records([], "td")
-        recent_rows = data["records"][-8:]
-        recent_cols = data["columns"]
-    except Exception:
-        log.exception("Failed to load recent records for home page")
-        recent_cols = []
-    
-    cfg = svc.get_config()
-    username = cfg.get("user", {}).get("name", "User")
-    quick_n = cfg.get("home", {}).get("quick_presets", 10)
+    specs = []
+
+    def _add(section, spec):
+        specs.append({"section": section, "kind": str(spec.get("view", "")),
+                      "body": tomli_w.dumps(spec)})
+
+    if db_name and db_name in dashboards:
+        d = {"view": "dashboard", "name": db_name}
+        if use_window:
+            _time_spec(d)
+        else:
+            d["per_query"] = True
+        _add("overview", d)
+    if ptos.get_thresholds():
+        _add("overview", _time_spec({"view": "threshold", "title": "Thresholds"}))
+    if due_configs:
+        _add("attention", {"view": "due", "name": selected_due,
+                           "title": "Overdue Records", "limit": 5})
+    _add("attention", {"view": "todo_summary", "title": "Todos"})
+    _add("attention", {"view": "journal", "title": "Journal"})
+    _add("quickadd", {"view": "capture", "title": "Capture"})
     freq, rem = svc.get_frequent_presets(quick_n)
-
-    try:
-        threshold_data = _decorate_thresholds(svc.get_all_threshold_status(
-            time=time_code if 'time_code' in locals() else None,
-            from_date=from_date if 'from_date' in locals() else None,
-            to_date=to_date if 'to_date' in locals() else None))
-        selected_thr = cfg.get("home", {}).get("thresholds")
-        if selected_thr:
-            lookup = {t["name"]: t for t in threshold_data}
-            threshold_data = [lookup[name] for name in selected_thr if name in lookup]
-    except Exception:
-        threshold_data = []
-
-    overdue_count, due_today_count = svc.get_todo_summary_counts()
-    journal_preview = svc.get_journal_preview()
+    if freq:
+        _add("quickadd", {"view": "quick_add", "title": "Quick Add"})
+    if svc.get_multi_presets():
+        _add("quickadd", {"view": "quick_add_multi", "title": "Quick Add (multi)"})
+    r = {"view": "records", "limit": 8, "where": []}
+    if use_window:
+        _time_spec(r)
+        r["title"] = ("Records · "
+                      + svc.build_period_label(time_code, custom_time, cycles,
+                                               from_date=from_date,
+                                               to_date=to_date))
+    else:
+        r["time"] = "td"
+        r["title"] = "Today's Records"
+    _add("today", r)
 
     return render_template("home.html",
         tab="home", title="Home", now=_now_str(), greeting=_greeting(),
         username=username,
-        frequent_presets=freq,
-        remaining_presets=rem,
-        multi_presets=multi_presets,
-        instant_presets=instant_presets,
-        due_count=due_count, due_rows=due_rows[:5],
-        due_configs=list(due_configs.keys()), selected_due=selected_due or "default",
-        stats=stats,
-        stat_groups=stat_groups,
-        dashboards=list(dashboards.keys()),
-        current_db=db_name if 'db_name' in locals() else None,
+        widget_specs=specs,
+        has_dashboards=bool(dashboards) and bool(db_name),
+        due_configs=list(due_configs.keys()), selected_due=selected_due,
         time_options=_get_time_options(),
         year_range=_YEAR_RANGE,
-        current_time=request.args.get("time", ""),   # "" selects Per query option
+        current_time=request.args.get("time", ""),
         custom_time=request.args.get("custom_time", ""),
         from_date=request.args.get("from_date", ""),
-        to_date=request.args.get("to_date", ""),
-        recent_rows=recent_rows, recent_cols=recent_cols,
-        field_types=field_types,
-        threshold_data=threshold_data,
-        record_types=schema.get("types", {}).get("allowed", []),
-        overdue_count=overdue_count,
-        due_today_count=due_today_count,
-        journal_preview=journal_preview)
+        to_date=request.args.get("to_date", ""))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -2290,6 +2079,7 @@ def types_delete():
         try:
             ptos.remove_type(type_name)
             svc._invalidate_history_cache()
+            _emit_data_changed("config")
         except SystemExit:
             pass
     return redirect("/types")
@@ -2593,6 +2383,10 @@ def backup_restore():
         try:
             svc.restore_full(tmp_path)
             os.unlink(tmp_path)
+            _emit_data_changed("records")
+            _emit_data_changed("todo")
+            _emit_data_changed("notes")
+            _emit_data_changed("config")
             return jsonify(ok=True)
         except Exception as e:
             os.unlink(tmp_path)
@@ -2607,6 +2401,10 @@ def backup_restore():
             return jsonify(ok=False, error="Backup not found")
         try:
             svc.restore_full(backup_path)
+            _emit_data_changed("records")
+            _emit_data_changed("todo")
+            _emit_data_changed("notes")
+            _emit_data_changed("config")
             return jsonify(ok=True)
         except Exception as e:
             return jsonify(ok=False, error=str(e))
@@ -2645,6 +2443,7 @@ def backup_config_restore():
     try:
         result = svc.restore_config(tmp_path)
         os.unlink(tmp_path)
+        _emit_data_changed("config")
         return jsonify(ok=True, message=result.get("message", "Config restored"))
     except Exception as e:
         os.unlink(tmp_path)
@@ -2664,6 +2463,7 @@ def backup_config_restore_from_list(name):
     
     try:
         result = svc.restore_config(backup_path)
+        _emit_data_changed("config")
         return jsonify(ok=True, message=result.get("message", "Config restored"))
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -2750,6 +2550,14 @@ def api_conflict_resolve():
 
     if not os.path.exists(conf_full):
         return jsonify(ok=False, error="Conflict file not found"), 404
+
+    # Optimistic emit: most actions here rewrite the original file; a failed
+    # action only costs one harmless refetch. Journal paths map to None (no
+    # journal scope yet), so those resolve silently.
+    conflict_scope = (svc.scope_for_data_path(conflict_path)
+                      or svc.scope_for_data_path(original_path))
+    if conflict_scope:
+        _emit_data_changed(conflict_scope)
 
     try:
         if action == "import_records":
@@ -4102,6 +3910,7 @@ def editor_save():
     if not os.path.exists(path):
         return jsonify(ok=False, error=f"File not found: {file}")
     svc.write_file(path, content)
+    _emit_data_changed("records")
     # invalidate caches — editor can modify any config file
     svc.invalidate_all()
     return jsonify(ok=True)
@@ -4923,6 +4732,94 @@ def _sse_broadcast(event_type, data=""):
             except Exception:
                 pass
 
+
+def _emit_data_changed(scope):
+    """Tell connected clients a data scope changed (spec 3.4).
+
+    Installed as ptos_service's data-changed hook at import time, so every
+    service write path broadcasts; the external-change sweep calls it directly
+    for Syncthing-delivered edits. widget_host.js refreshes only the widgets
+    whose scope matches (config refreshes everything).
+    """
+    _sse_broadcast("data-changed", {"scope": scope})
+    if scope in ("todo", "notes"):
+        # Own todo/notes write: the emission sweep must re-baseline instead of
+        # announcing the same change a second time on its next pass.
+        _DATA_WATCH["dirty"] = True
+
+
+# Emission-only watch state for todo/ + notes/. The engine's own
+# check_external_changes() watches records/ + config/ (and re-baselines around
+# PTOS's own writes, so no double announce there) but deliberately skips
+# todo/journal/notes for cache purposes — yet a Syncthing-delivered todo or
+# note must still refresh widgets. journal/ stays unwatched: no journal widget
+# exists until a later phase, and scope_for_data_path maps it to None.
+_DATA_WATCH = {"sig": None, "dirty": False}
+
+
+def _todo_notes_signature():
+    """{relpath: (mtime_ns, size)} for todo/ and notes/ (no journal/)."""
+    sig = {}
+    for sub in ("todo", "notes"):
+        root = os.path.join(ptos.BASE_DIR, sub)
+        if not os.path.isdir(root):
+            continue
+        for dp, dns, fns in os.walk(root):
+            dns[:] = [d for d in dns if not d.startswith(".")]
+            for fn in fns:
+                if fn.endswith((".bak", ".tmp", ".lock")):
+                    continue
+                fp = os.path.join(dp, fn)
+                try:
+                    st = os.stat(fp)
+                except OSError:
+                    continue
+                rel = os.path.relpath(fp, ptos.BASE_DIR).replace(os.sep, "/")
+                sig[rel] = (st.st_mtime_ns, st.st_size)
+    return sig
+
+
+def _sweep_data_changed():
+    """Detect foreign data changes and broadcast one event per scope.
+
+    Returns the scopes emitted (the test seam). Engine-detected records/config
+    changes come from ptos.check_external_changes(); todo/notes changes come
+    from a local stat signature because the engine does not watch those
+    folders. The first pass only records a baseline, mirroring the engine rule
+    that changes predating PTOS's start cannot be detected. After an own write
+    (hook fired) the todo/notes signature re-baselines silently instead of
+    double-announcing.
+    """
+    emitted = []
+
+    def _emit(scope):
+        if scope and scope not in emitted:
+            emitted.append(scope)
+            _emit_data_changed(scope)
+
+    try:
+        result = ptos.check_external_changes()
+    except Exception:
+        log.exception("External change check failed")
+        result = {}
+    for rel in (result.get("files") or []):
+        _emit(svc.scope_for_data_path(rel))
+
+    if _DATA_WATCH["dirty"]:
+        _DATA_WATCH["sig"] = _todo_notes_signature()
+        _DATA_WATCH["dirty"] = False
+    else:
+        sig = _todo_notes_signature()
+        old, _DATA_WATCH["sig"] = _DATA_WATCH["sig"], sig
+        if old is not None and old != sig:
+            for rel in set(old) | set(sig):
+                if old.get(rel) != sig.get(rel):
+                    _emit(svc.scope_for_data_path(rel))
+    return emitted
+
+
+svc.set_data_changed_hook(_emit_data_changed)
+
 @app.route("/api/events")
 def api_events():
     def stream():
@@ -5514,7 +5411,8 @@ def _start_external_watch_thread():
     through Syncthing would otherwise stay invisible to a running server until
     something else happened to invalidate it. The sweep is a stat per cache-
     relevant file and is throttled + non-blocking in the engine, so this is
-    cheap. [server] external_check_seconds = 0 turns it off.
+    cheap. [server] external_check_seconds = 0 turns it off. Each detected
+    change also broadcasts data-changed so widgets refresh live.
     """
     try:
         seconds = float(_cfg_server("external_check_seconds", 5))
@@ -5527,13 +5425,12 @@ def _start_external_watch_thread():
         while True:
             time.sleep(seconds)
             try:
-                result = ptos.check_external_changes()
+                emitted = _sweep_data_changed()
             except Exception:
-                log.exception("External change check failed")
+                log.exception("Data change sweep failed")
                 continue
-            if result.get("changed"):
-                log.info("Data changed outside PTOS: %s (%d cache key(s) dropped)",
-                         ", ".join(result["files"]), len(result["invalidated"]))
+            if emitted:
+                log.info("Data changed outside PTOS: %s", ", ".join(emitted))
 
     _t = threading.Thread(target=loop, daemon=True, name="ptos-external-watch")
     _t.start()

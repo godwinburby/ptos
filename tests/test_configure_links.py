@@ -168,8 +168,21 @@ class TestThresholdRunLinks:
         assert '/queries?run=food_spend&amp;kind=m&amp;time=tm' in html
 
     def test_home_page_links_metric_ref(self):
-        html = _client().get("/").data.decode()
-        assert '/queries?run=food_spend&amp;kind=m&amp;time=tm' in html
+        import json, re
+        client = _client()
+        html = client.get("/").data.decode()
+        m = re.search(
+            r'<script type="application/json" id="home-widget-specs">'
+            r"(.*?)</script>", html, re.S)
+        specs = json.loads(m.group(1))
+        body = [s["body"] for s in specs if s["kind"] == "threshold"]
+        assert body, "no threshold spec on home"
+        out = client.post("/api/widgets/resolve", json={
+            "items": [{"id": "t", "body": body[0]}]}).get_json()
+        urls = [t.get("query_url", "") for t in
+                out["results"][0]["data"]["thresholds"]]
+        assert any("/queries?run=food_spend" in u and "kind=m" in u
+                   for u in urls)
 
     def test_query_ref_uses_kind_q(self):
         _write_queries(QUERIES + (

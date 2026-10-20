@@ -21,7 +21,7 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JS = os.path.join(_REPO_ROOT, "web_static", "js", "record_table.js")
 TEMPLATES = [
     os.path.join(_REPO_ROOT, "web_templates", name)
-    for name in ("browse.html", "home.html", "queries.html",
+    for name in ("browse.html", "queries.html",
                  "query_builder.html", "entity.html")
 ]
 
@@ -134,3 +134,9 @@ class TestTemplatesDroppedStaticWiring:
     @pytest.mark.parametrize("path", TEMPLATES)
     def test_template_still_instantiates_via_new(self, path):
         assert "new RecordTable(" in _read(path)
+
+    def test_home_loads_record_table_for_widget_mount(self):
+        home = os.path.join(_REPO_ROOT, "web_templates", "home.html")
+        assert "record_table.js" in _read(home)
+        host = os.path.join(_REPO_ROOT, "web_static", "js", "widget_host.js")
+        assert "new RecordTable(" in _read(host)

@@ -26,6 +26,7 @@ import re
 import glob
 import functools
 import logging
+import threading
 import time
 import json
 import datetime as dt
@@ -158,6 +159,50 @@ def _invalidate_history_cache(rtype=None, rtypes=None):
     ptos.rebaseline_external_watch()
 
 
+# ── data-changed notification (scoped widget refresh) ─────────────────────────
+# Write paths notify a hook so the web layer can broadcast an SSE
+# ``data-changed`` event with a scope ("records" | "todo" | "notes" | "config").
+# The service stays SSE-agnostic: ptos_web installs the hook at import, the CLI
+# leaves it unset and every emit is a no-op, and a broken listener can never
+# fail a write that already succeeded on disk.
+
+_DATA_CHANGED_HOOK = None
+
+
+def set_data_changed_hook(fn):
+    """Install the ``scope -> None`` callback (or ``None`` to clear)."""
+    global _DATA_CHANGED_HOOK
+    _DATA_CHANGED_HOOK = fn
+
+
+def _emit_changed(*scopes):
+    """Notify the installed hook once per scope. Never raises."""
+    hook = _DATA_CHANGED_HOOK
+    if hook is None:
+        return
+    for scope in scopes:
+        try:
+            hook(scope)
+        except Exception:
+            pass
+
+
+def scope_for_data_path(rel_path):
+    """Map a path inside the data folder to a data-changed scope.
+
+    Accepts absolute or relative paths and either separator. The *outermost*
+    known folder wins, so ``notes/config/x.md`` is ``notes``, not ``config``.
+    "journal/" maps to ``None``: no widget reads journals yet (a journal widget
+    ships in a later phase), so a journal write must not refresh anything.
+    """
+    parts = [seg for seg in str(rel_path).replace("\\", "/").split("/") if seg]
+    for seg in parts[:-1]:
+        low = seg.lower()
+        if low in ("records", "todo", "notes", "config"):
+            return low
+    return None
+
+
 # ── Browse-result cache (bounded) ─────────────────────────────────────────────
 # get_records stores its fully-built result under a ``recs:`` key so a repeated
 # browse doesn't re-scan and re-parse the whole record set. The cache lives in
@@ -286,6 +331,82 @@ def _resolve_time(code):
         raise PTOSError(f"Invalid time '{code}': {e}")
 
 
+def build_field_types(schema):
+    """Field-name → {is_int, is_date, is_month, is_datetime} for RecordTable."""
+    ft = {}
+    def _set(fname, ftype):
+        ft[fname] = {"is_int": ftype == "int", "is_date": ftype == "date",
+                      "is_month": ftype == "month", "is_datetime": ftype == "datetime"}
+    for fname, fmeta in schema.get("fields", {}).items():
+        if isinstance(fmeta, dict):
+            _set(fname, fmeta.get("type", ""))
+    for tdef in schema.get("type", {}).values():
+        for fname, fdef in tdef.get("fields", {}).items():
+            if isinstance(fdef, dict) and fname not in ft:
+                _set(fname, fdef.get("type", ""))
+    _set("date", "date")
+    return ft
+
+
+def build_period_label(time_code, custom_time, cycles, from_date=None, to_date=None):
+    """Build a human-readable label from a time code (moved from ptos_web).
+
+    Examples:
+      "tm"     → "This month"
+      "tw"     → "This week"
+      "tq"     → "This quarter"
+      "all"    → "All time"
+      "2026-04"→ "Apr 2026"
+      "2026"   → "2026"
+      "2026-04-15" → "15 Apr 2026"
+      "clinic" → "Clinic"
+      "custom" → "Custom"
+    """
+    labels = {
+        "td": "Today", "yd": "Yesterday",
+        "tw": "This week", "lw": "Last week",
+        "tm": "This month", "lm": "Last month",
+        "tq": "This quarter", "lq": "Last quarter",
+        "ty": "This year", "ly": "Last year",
+        "all": "All time",
+    }
+    if time_code in labels:
+        return labels[time_code]
+    if time_code == "range":
+        if from_date or to_date:
+            parts = []
+            if from_date:
+                d = dt.date.fromisoformat(from_date) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", from_date) else None
+                parts.append("From " + (f"{d.day} {d.strftime('%b %Y')}" if d else from_date))
+            if to_date:
+                d = dt.date.fromisoformat(to_date) if re.fullmatch(r"\d{4}-\d{2}-\d{2}", to_date) else None
+                parts.append("to " + (f"{d.day} {d.strftime('%b %Y')}" if d else to_date))
+            return " ".join(parts)
+        return "Date range"
+    if re.fullmatch(r"\d{4}", time_code):
+        return time_code
+    if re.fullmatch(r"\d{4}-\d{2}-\d{2}", time_code):
+        year, month, day = int(time_code[:4]), int(time_code[5:7]), int(time_code[8:10])
+        return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
+    if re.fullmatch(r"\d{4}-\d{2}", time_code):
+        year, month = int(time_code[:4]), int(time_code[5:7])
+        return dt.datetime(year, month, 1).strftime("%b %Y")
+    for cycle_name in (cycles or {}).keys():
+        if time_code == cycle_name or time_code.startswith(cycle_name + "-"):
+            return cycle_name.capitalize()
+    if time_code in ("custom", "year", "month", "date") and custom_time:
+        if re.fullmatch(r"\d{4}-\d{2}", custom_time):
+            year, month = int(custom_time[:4]), int(custom_time[5:7])
+            return dt.datetime(year, month, 1).strftime("%b %Y")
+        if re.fullmatch(r"\d{4}", custom_time):
+            return custom_time
+        if re.fullmatch(r"\d{4}-\d{2}-\d{2}", custom_time):
+            year, month, day = int(custom_time[:4]), int(custom_time[5:7]), int(custom_time[8:10])
+            return f"{day} {dt.date(year, month, 1).strftime('%b %Y')}"
+        return "Custom"
+    return "Custom"
+
+
 def _parse_record(line, format_date=True):
     """Parse a raw log line into a flat dict suitable for UI rendering.
     Derived fields from schema are computed and added as virtual columns.
@@ -352,6 +473,7 @@ def save_config(config_dict):
         os.makedirs(os.path.dirname(ptos.CONFIG_PATH), exist_ok=True)
         with ptos.AtomicWrite(ptos.CONFIG_PATH, "config") as w:
             tomli_w.dump(config_dict, w.stream)
+        _emit_changed("config")
         return {"ok": True, "message": "Settings saved"}
     except Exception as e:
         return {"ok": False, "message": str(e)}
@@ -605,6 +727,7 @@ def append_record(line):
     try:
         result = ptos.append_record(line)
         _invalidate_history_cache(rtype=_line_type(line))
+        _emit_changed("records")
         return result
     except Exception as e:
         raise PTOSError(str(e))
@@ -727,6 +850,7 @@ def remove_demo_data():
     except Exception as e:
         raise PTOSError(str(e))
     _invalidate_history_cache()
+    _emit_changed("records", "todo", "notes")
     counts = counts or {}
     return {
         "ok": True,
@@ -764,6 +888,8 @@ def reinstall_demo_data():
     except Exception as e:
         raise PTOSError(str(e))
     _invalidate_history_cache()
+    if not (result or {}).get("error"):
+        _emit_changed("records", "todo", "notes")
     removed = (result or {}).get("removed") or {}
     installed = (result or {}).get("installed")
     return {
@@ -2447,9 +2573,10 @@ def resolve_embed(spec):
     inference succeeds only when exactly one section owns `name` (an
     ambiguous name raises PTOSError listing the candidates). `name` may
     only be omitted when `view` is explicit and the kind does not need
-    one (view = "todo" — the untitled default todo view). Returns the
-    underlying result dict with `title` and `link` attached; raises
-    PTOSError on bad input or an unknown name.
+    one (todo, threshold, records, todo_summary, journal, capture,
+    quick_add, quick_add_multi). Returns the underlying result dict
+    with `title` and `link` attached; raises PTOSError on bad input or
+    an unknown name.
     """
     if not isinstance(spec, dict):
         raise PTOSError("Embed must be a TOML table")
@@ -2518,10 +2645,42 @@ def resolve_embed(spec):
     return result
 
 
+def _decorate_dashboard_items(db, from_date, to_date):
+    """Attach per-item query_url and period sub-label to a dashboard result.
+
+    Mirrors what the old inline home route did per stat card; the widget
+    renderer paints them directly."""
+    try:
+        cycles = _cycles()
+    except Exception:
+        cycles = {}
+    def _dec(item):
+        kind = item.get("kind", "unknown")
+        raw = item.get("raw_name") or item.get("name")
+        if kind in ("query", "metric") and raw:
+            suffix = "&kind=m" if kind == "metric" else ""
+            item["query_url"] = ("/queries?run=" + urllib.parse.quote(str(raw))
+                                 + suffix)
+        if not item.get("sub"):
+            item_time = item.get("item_time") or "tm"
+            item["sub"] = build_period_label(item_time, None, cycles,
+                                             from_date=from_date,
+                                             to_date=to_date)
+    for it in db.get("items") or []:
+        _dec(it)
+    for g in db.get("groups") or []:
+        for it in g.get("items") or []:
+            _dec(it)
+    return db
+
+
 def _w_dashboard(spec, name, time, from_date, to_date):
-    result = get_dashboard(name, time or "tm", use_dashboard_time=True,
+    per_query = bool(spec.get("per_query", False))
+    result = get_dashboard(name, time or "tm", use_dashboard_time=not per_query,
                            from_date=from_date, to_date=to_date)
     result["kind"] = "dashboard"
+    result["per_query"] = per_query
+    _decorate_dashboard_items(result, from_date, to_date)
     return result, "/queries?run=" + urllib.parse.quote(name) + "&kind=d"
 
 
@@ -2532,6 +2691,17 @@ def _w_metric(spec, name, time, from_date, to_date):
 
 
 def _w_threshold(spec, name, time, from_date, to_date):
+    if not name:
+        statuses = get_all_threshold_status(time=time, from_date=from_date,
+                                            to_date=to_date)
+        try:
+            selected = ptos.get_config().get("home", {}).get("thresholds")
+        except Exception:
+            selected = None
+        if selected:
+            lookup = {t["name"]: t for t in statuses}
+            statuses = [lookup[n] for n in selected if n in lookup]
+        return {"kind": "threshold", "thresholds": statuses, "name": ""}, "/thresholds"
     status = get_threshold_status(name, time, from_date, to_date)
     result = {"kind": "threshold", "name": name, "thresholds": [status]}
     return result, "/thresholds"
@@ -2541,6 +2711,42 @@ def _w_query(spec, name, time, from_date, to_date):
     result = run_query(name, time, from_date=from_date, to_date=to_date,
                        chart=spec.get("chart"))
     return result, "/queries?run=" + urllib.parse.quote(name)
+
+
+def _w_records(spec, name, time, from_date, to_date):
+    """Records embed — saved query via run_query, or a raw-where scan.
+
+    Named (a saved query name) delegates to run_query so chart/compat
+    behavior is identical to the query kind. Nameless scans with the
+    spec's `where` list (default: today's records) and attaches
+    field_types for interactive RecordTable mounts; a spec `limit` is
+    applied as a tail slice so the home page shows the LAST n rows."""
+    if name:
+        result = run_query(name, time, from_date=from_date, to_date=to_date,
+                           chart=spec.get("chart"))
+        return result, "/queries?run=" + urllib.parse.quote(name)
+    where = spec.get("where") or []
+    if isinstance(where, str):
+        where = [where] if where else []
+    if not all(isinstance(w, str) for w in where):
+        raise PTOSError("Embed 'where' must be a string or list of strings")
+    result = get_records(list(where), time or "td",
+                         from_date=from_date, to_date=to_date)
+    result["kind"] = "records"
+    try:
+        result["field_types"] = build_field_types(get_schema())
+    except Exception:
+        result["field_types"] = {}
+    limit = spec.get("limit")
+    if limit:
+        try:
+            n = int(limit)
+        except (TypeError, ValueError):
+            raise PTOSError(f"Embed 'limit' must be a whole number, got {limit!r}")
+        if n > 0:
+            result["records"] = result["records"][-n:]
+            result["count"] = len(result["records"])
+    return result, "/browse"
 
 
 def _w_board(spec, name, time, from_date, to_date):
@@ -2567,8 +2773,9 @@ def _w_due(spec, name, time, from_date, to_date):
     # The due window is config-driven (["due.*"] days); embed time specs
     # are ignored so the widget always mirrors what /due shows.
     result = get_due(config_name=name if name not in ("default",
-                                                      "__DEFAULT__") else None)
+                                                       "__DEFAULT__") else None)
     result["kind"] = "due"
+    result["full_count"] = result.get("count", 0)
     return result, "/due"
 
 
@@ -2722,6 +2929,37 @@ def _w_todo(spec, name, time, from_date, to_date):
     return result, link
 
 
+def _w_todo_summary(spec, name, time, from_date, to_date):
+    overdue, due_today = get_todo_summary_counts()
+    return {"kind": "todo_summary", "overdue": overdue,
+            "due_today": due_today}, "/todo"
+
+
+def _w_journal(spec, name, time, from_date, to_date):
+    preview = get_journal_preview()
+    return {"kind": "journal", "preview": preview,
+            "date": ptos.today().isoformat()}, "/journal"
+
+
+def _w_capture(spec, name, time, from_date, to_date):
+    return {"kind": "capture"}, ""
+
+
+def _w_quick_add(spec, name, time, from_date, to_date):
+    try:
+        n = int(ptos.get_config().get("home", {}).get("quick_presets", 10))
+    except Exception:
+        n = 10
+    freq, rem = get_frequent_presets(n)
+    instant = get_instant_presets()
+    return {"kind": "quick_add", "frequent": freq, "remaining": rem,
+            "instant": sorted(instant)}, ""
+
+
+def _w_quick_add_multi(spec, name, time, from_date, to_date):
+    return {"kind": "quick_add_multi", "presets": get_multi_presets()}, ""
+
+
 def _register_builtin_widgets():
     """Register the built-in embed kinds into ptos_widgets.
 
@@ -2729,13 +2967,13 @@ def _register_builtin_widgets():
     exactly (see resolve_embed's docstring for the order).
     """
     reg = ptos_widgets.register
-    reg("dashboard", _w_dashboard, infer_order=10,
+    reg("dashboard", _w_dashboard, keys=("per_query",), infer_order=10,
         owns_name=lambda n, q: (isinstance(q.get("dashboards"), dict)
                                 and n in q["dashboards"]))
     reg("metric", _w_metric, infer_order=20,
         owns_name=lambda n, q: (isinstance(q.get("metrics"), dict)
                                 and n in q["metrics"]))
-    reg("threshold", _w_threshold, infer_order=30,
+    reg("threshold", _w_threshold, needs_name=False, infer_order=30,
         owns_name=lambda n, q: n in ptos.get_thresholds())
     reg("board", _w_board, infer_order=40,
         owns_name=lambda n, q: isinstance(q.get(f"board.{n}"), dict))
@@ -2752,10 +2990,18 @@ def _register_builtin_widgets():
     reg("todo", _w_todo, keys=TODO_VIEW_FILTERS, needs_name=False,
         infer_order=85,
         owns_name=lambda n, q: isinstance(q.get(f"todo.{n}"), dict))
-    reg("query", _w_query, views=("records", "group", "pivot", "trend"),
+    reg("query", _w_query, views=("group", "pivot", "trend"),
         keys=("chart",), infer_order=90,
         owns_name=lambda n, q: (isinstance(q.get(n), dict)
                                 and n not in ("metrics", "dashboards")))
+    reg("records", _w_records, keys=("where", "chart"), needs_name=False,
+        infer_order=99)
+    reg("todo_summary", _w_todo_summary, needs_name=False, infer_order=99)
+    reg("journal", _w_journal, needs_name=False, infer_order=99)
+    reg("capture", _w_capture, needs_name=False, infer_order=99)
+    reg("quick_add", _w_quick_add, needs_name=False, infer_order=99)
+    reg("quick_add_multi", _w_quick_add_multi, needs_name=False,
+        infer_order=99)
 
 
 _register_builtin_widgets()
@@ -2985,6 +3231,7 @@ def edit_record(filepath, old_line, set_args=None, new_note=None, lineno=None):
     # on edit leaves the *new* type's history aggregate stale too, and the Add
     # form for that type would keep offering pre-edit values.
     _invalidate_history_cache(rtypes=_touched_types(old_line, new_line))
+    _emit_changed("records")
     return {"old_line": old_line, "new_line": new_line,
             "changed_date": changed_date}
 
@@ -3001,6 +3248,7 @@ def delete_record(filepath, old_line, lineno=None):
     except Exception as e:
         raise PTOSError(str(e))
     _invalidate_history_cache(rtype=_line_type(old_line))
+    _emit_changed("records")
     return {"deleted_line": old_line}
 
 
@@ -3036,6 +3284,7 @@ def bulk_delete(records):
                 errors.append(str(e))
     if deleted:
         _invalidate_history_cache(rtypes=touched or None)
+        _emit_changed("records")
     return {"deleted": deleted, "errors": errors}
 
 
@@ -3073,6 +3322,7 @@ def bulk_set(records, set_args):
                 errors.append(str(e))
     if updated:
         _invalidate_history_cache(rtypes=touched or None)
+        _emit_changed("records")
     return {"updated": updated, "errors": errors}
 
 
@@ -3119,6 +3369,107 @@ def get_frequent_presets(n=6):
         key=lambda k: (-singles[k].get("use_count", 0), k)
     )
     return ranked[:n], sorted(ranked[n:])
+
+
+def strip_and_validate_record(schema, record, label):
+    """Strip non-schema metadata keys (use_count, return_to, instant, alias,
+    note) from a preset record dict, then validate it. Returns (record, note,
+    err) where note is the preset's stored note (or None)."""
+    known = {"type", "tag"}
+    known.update(schema.get("fields", {}).keys())
+    known.update(schema.get("global_fields", {}).keys())
+    rtype = record.get("type")
+    if rtype:
+        ts = schema.get("type", {}).get(rtype, {})
+        known.update(ts.get("required", []))
+        known.update(ts.get("fields", {}).keys())
+    note = record.get("note") or None
+    record = {k: v for k, v in record.items() if k in known}
+    problems = validate_record(schema, record)
+    if problems:
+        return None, None, f"preset '{label}': {problems[0]}"
+    return record, note, None
+
+
+def resolve_multi_preset(name):
+    """Resolve a multi-record preset into its record/note lists."""
+    presets = ptos.get_presets()
+    pd = presets.get(name, {})
+    if isinstance(pd, dict) and "alias" in pd:
+        pd = presets.get(pd["alias"], {})
+    if not isinstance(pd, dict) or "records" not in pd:
+        return None, None, f"'{name}' is not a multi-record preset"
+    try:
+        schema = get_schema()
+    except Exception as e:
+        return None, None, str(e)
+    resolved = []
+    notes = []
+    for item in pd["records"]:
+        if not isinstance(item, str):
+            return None, None, "records list must contain preset names"
+        if item not in presets:
+            return None, None, f"references unknown preset '{item}'"
+        ref = presets[item]
+        if isinstance(ref, dict) and "alias" in ref:
+            ref = presets.get(ref["alias"], {})
+        if isinstance(ref, dict) and "records" in ref:
+            return None, None, "nested multi-record presets not supported"
+        record, note, err = strip_and_validate_record(schema, dict(ref), item)
+        if err:
+            return None, None, err
+        resolved.append(record)
+        notes.append(note)
+    return resolved, notes, None
+
+
+def resolve_preset_records(name):
+    """Resolve a preset into the list of records to append. Supports both
+    multi-record presets (`records = [...]`) and single presets flagged
+    `instant = true`. Returns (records, notes, err) with one note per record."""
+    presets = ptos.get_presets()
+    pd = presets.get(name, {})
+    if isinstance(pd, dict) and "alias" in pd:
+        pd = presets.get(pd["alias"], {})
+    if not isinstance(pd, dict):
+        return None, None, f"'{name}' is not a multi-record or instant preset"
+    if "records" in pd:
+        return resolve_multi_preset(name)
+    if pd.get("instant"):
+        try:
+            schema = get_schema()
+        except Exception as e:
+            return None, None, str(e)
+        record, note, err = strip_and_validate_record(schema, dict(pd), name)
+        if err:
+            return None, None, err
+        return [record], [note], None
+    return None, None, f"'{name}' is not a multi-record or instant preset"
+
+
+def get_multi_presets():
+    """Multi-record preset name → comma-joined ref list (home chips)."""
+    result = {}
+    for name, p in ptos.get_presets().items():
+        if not isinstance(p, dict) or "records" not in p:
+            continue
+        records, notes, err = resolve_multi_preset(name)
+        if records is not None:
+            refs = p["records"]
+            result[name] = ", ".join(refs) if isinstance(refs, list) else ""
+    return result
+
+
+def get_instant_presets():
+    """Names of single presets flagged `instant = true` (excludes aliases
+    and multi-record presets). These render as one-click save buttons."""
+    result = set()
+    for name, p in ptos.get_presets().items():
+        if not isinstance(p, dict) or "records" in p or "alias" in p:
+            continue
+        if p.get("instant"):
+            result.add(name)
+    return result
 
 
 def restore_config(zip_path):
@@ -3945,6 +4296,7 @@ def capture(text, date=None, tag=None, links=None):
     line = ptos.build_record_line(date_str, record, note=text)
     filepath, lineno = ptos.append_record(line, return_position=True)
     _invalidate_history_cache(rtype="capture")
+    _emit_changed("records")
     return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
 
 
@@ -3962,6 +4314,8 @@ def paste_to_record(raw, date_override=None, dry_run=False):
         result = ptos.validate_and_append_line(
             date_override=date_override, dry_run=dry_run, _parsed=detail)
         result["kind"] = "line"
+        if result.get("ok") and not dry_run:
+            _emit_changed("records")
         return result
     text = detail
     if dry_run:
@@ -4021,6 +4375,7 @@ def pomodoro_log(task, minutes, date=None):
     line = ptos.build_record_line(date_str, record)
     filepath, lineno = ptos.append_record(line, return_position=True)
     _invalidate_history_cache(rtype="pomodoro")
+    _emit_changed("records")
     return {"ok": True, "line": line, "filepath": filepath, "lineno": lineno}
 
 
@@ -4560,6 +4915,7 @@ def advance_record(old_line, lineno, target_type, target_ctx_fields=None):
 
         new_filepath, new_lineno = ptos.append_record(new_line, return_position=True)
         _invalidate_history_cache(rtype=target_type)
+        _emit_changed("records")
         return {
             "ok": True,
             "new_line": new_line,
@@ -4604,6 +4960,7 @@ def move_record(filepath, old_line, field, value, lineno=None,
     except Exception as e:
         raise PTOSError(str(e))
     _invalidate_history_cache(rtypes=_touched_types(old_line, new_line))
+    _emit_changed("records")
     return {"old_line": old_line, "new_line": new_line}
 
 
@@ -4791,6 +5148,7 @@ def convert_record(filepath, old_line, lineno, target_type, kv_overrides=None, k
     # Always invalidate: new record (target_type) was appended, and
     # possibly an old record was deleted — full invalidation is cheapest.
     _invalidate_history_cache()
+    _emit_changed("records")
     return {
         "ok": True,
         "draft": draft,
@@ -5363,6 +5721,7 @@ def create_type_from_form(type_name, fields, original_name=None):
             if fname not in (required or []):
                 ptos.add_type_field(type_name, fname, fdef.get("type", "string"),
                                     fdef.get("options"))
+    _emit_changed("config")
 
 
 def _mark_converted(filepath, old_line, lineno, target_type):
@@ -5470,15 +5829,29 @@ def _write_queries(data):
         tomli_w.dump(data, w.stream)
 
 
+_QUERIES_WRITE_DEPTH = threading.local()
+
+
 def _locked_queries(fn):
     """Run *fn* under queries.toml's sidecar lock, so its whole
     load → mutate → write span cannot interleave with another writer.
     Reentrant (a nested lock on the same path is a no-op); the path is
-    resolved at call time so tests that repoint ptos.QUERIES_PATH work."""
+    resolved at call time so tests that repoint ptos.QUERIES_PATH work.
+    Emits the ``config`` data-changed scope once per OUTERMOST write: a
+    writer that calls another locked writer (save_query_entry →
+    _write_queries_toml_key) must not announce the same save twice."""
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
-        with ptos.file_lock(ptos.QUERIES_PATH):
-            return fn(*args, **kwargs)
+        depth = getattr(_QUERIES_WRITE_DEPTH, "depth", 0)
+        _QUERIES_WRITE_DEPTH.depth = depth + 1
+        try:
+            with ptos.file_lock(ptos.QUERIES_PATH):
+                result = fn(*args, **kwargs)
+        finally:
+            _QUERIES_WRITE_DEPTH.depth = depth
+        if depth == 0:
+            _emit_changed("config")
+        return result
     return wrapper
 
 
@@ -6632,13 +7005,19 @@ def get_tag_context(rtype, record):
 def add_field_option(type_name, field_name, new_option, option_source,
                     parent_field="", parent_value="", shared_key=""):
     """Add a new option to schema.toml."""
-    return ptos.add_field_option(type_name, field_name, new_option, option_source,
-                                 parent_field, parent_value, shared_key)
+    result = ptos.add_field_option(type_name, field_name, new_option, option_source,
+                                   parent_field, parent_value, shared_key)
+    if isinstance(result, dict) and result.get("success"):
+        _emit_changed("config")
+    return result
 
 
 def add_global_field_option(field_name, new_option):
     """Add a new option to a global field in schema.toml."""
-    return ptos.add_global_field_option(field_name, new_option)
+    result = ptos.add_global_field_option(field_name, new_option)
+    if isinstance(result, dict) and result.get("success"):
+        _emit_changed("config")
+    return result
 
 
 def add_tag_option(rtype, tag_field, parent_value, new_tag):
@@ -6680,6 +7059,7 @@ def add_tag_option(rtype, tag_field, parent_value, new_tag):
 
         # Save schema (handles backup + atomic write + cache invalidation)
         ptos._save_schema(schema)
+        _emit_changed("config")
 
         return {"success": True, "message": f"Added '{new_tag}' to {tag_field}.{parent_value}"}
     except Exception as e:
@@ -6800,10 +7180,12 @@ def svc_list_dir(rel_path=""):
 
 def svc_create_folder(rel_path, name):
     ptos.create_folder(rel_path, name)
+    _emit_changed("notes")
 
 
 def svc_create_file(rel_path, name, content):
     ptos.create_file(rel_path, name, content)
+    _emit_changed("notes")
 
 
 def svc_rename(rel_path, new_name):
@@ -6814,6 +7196,7 @@ def svc_rename(rel_path, new_name):
     full = ptos._safe_path(rel_path)
     was_folder = os.path.isdir(full)
     new_rel = ptos.rename_note(rel_path, new_name)
+    _emit_changed("notes")
     favorites_updated = 0
     warning = None
     try:
@@ -6830,6 +7213,7 @@ def svc_rename(rel_path, new_name):
 
 def svc_delete(rel_path):
     ptos.delete_note_entry(rel_path)
+    _emit_changed("notes")
 
 
 def svc_ensure_note_id(rel_path):
@@ -6945,8 +7329,12 @@ def svc_save_file(rel_path, content, base_rev=None, force=False):
             return prefix + "\n" + content
         return content
 
-    return _save_text_locked(full, content, base_rev, force,
-                             prepare=_keep_id_prefix)
+    result = _save_text_locked(full, content, base_rev, force,
+                               prepare=_keep_id_prefix)
+    scope = scope_for_data_path(rel_path)
+    if scope:
+        _emit_changed(scope)
+    return result
 
 
 def svc_resolve_template(rel_path):
@@ -7041,6 +7429,7 @@ def save_schema(schema_dict):
     try:
         ptos._save_schema(schema_dict)
         _invalidate_history_cache()
+        _emit_changed("config")
     except Exception as e:
         raise PTOSError(str(e))
 
@@ -7298,6 +7687,7 @@ def add_todo_line(text):
         contexts = get_todo_contexts()
         text = ptos_todo.preprocess_todo_text(text, projects=projects, contexts=contexts)
         t = ptos_todo.add_todo(ptos.TODO_PATH, text)
+        _emit_changed("todo")
         return {"ok": True, "todo": dataclasses.asdict(t)}
     except Exception as e:
         raise PTOSError(str(e))
@@ -7333,7 +7723,8 @@ def complete_todo_by_line(line_no, expect=None):
         if not target:
             raise PTOSError(f"Todo at line {line_no} not found")
         _verify_todo_expect(todos, line_no, expect)
-        ptos_todo.complete_todo(target[0])
+        ptos_todo.complete_todo(target[0], todo_path=ptos.TODO_PATH,
+                                done_path=ptos.DONE_PATH)
         resp = {"ok": True}
         done_raw = ptos_todo.format_line(target[0])
         done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
@@ -7342,6 +7733,7 @@ def complete_todo_by_line(line_no, expect=None):
                 resp["done_line_no"] = t.line_no
                 resp["done_raw"] = done_raw
                 break
+        _emit_changed("todo")
         return resp
     except PTOSError:
         raise
@@ -7354,7 +7746,9 @@ def undo_todo_by_line(line_no, expect=None):
     try:
         done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
         _verify_todo_expect(done, line_no, expect)
-        ptos_todo.undo_todo(line_no)
+        ptos_todo.undo_todo(line_no, todo_path=ptos.TODO_PATH,
+                            done_path=ptos.DONE_PATH)
+        _emit_changed("todo")
         return {"ok": True}
     except PTOSError:
         raise
@@ -7368,6 +7762,7 @@ def delete_todo_by_line(line_no, expect=None):
         todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
         _verify_todo_expect(todos, line_no, expect)
         ptos_todo.delete_todo(ptos.TODO_PATH, line_no)
+        _emit_changed("todo")
         return {"ok": True}
     except PTOSError:
         raise
@@ -7381,6 +7776,7 @@ def edit_todo_by_line(line_no, updates, expect=None):
         todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
         _verify_todo_expect(todos, line_no, expect)
         t = ptos_todo.edit_todo(ptos.TODO_PATH, line_no, updates)
+        _emit_changed("todo")
         return {"ok": True, "todo": dataclasses.asdict(t)}
     except PTOSError:
         raise
@@ -7401,6 +7797,7 @@ def bulk_edit_todos(line_nos, updates, expects=None):
                 want = expects.get(ln, expects.get(str(ln)))
                 _verify_todo_expect(todos, ln, want)
         results = ptos_todo.batch_edit_todos(ptos.TODO_PATH, line_nos, updates)
+        _emit_changed("todo")
         return {"ok": True, "count": len(results)}
     except PTOSError:
         raise
@@ -7414,6 +7811,7 @@ def delete_done_todo_by_line(line_no, expect=None):
         done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
         _verify_todo_expect(done, line_no, expect)
         ptos_todo.delete_todo(ptos.DONE_PATH, line_no)
+        _emit_changed("todo")
         return {"ok": True}
     except PTOSError:
         raise
@@ -7427,6 +7825,7 @@ def edit_done_todo_by_line(line_no, updates, expect=None):
         done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
         _verify_todo_expect(done, line_no, expect)
         t = ptos_todo.edit_todo(ptos.DONE_PATH, line_no, updates)
+        _emit_changed("todo")
         return {"ok": True, "todo": dataclasses.asdict(t)}
     except PTOSError:
         raise
@@ -7657,6 +8056,7 @@ def retro_id_record(filepath, lineno):
             raise PTOSError(f"Line already has id={kv['id']}")
         new_id = ptos.append_record_id(filepath, lineno, raw)
         _invalidate_history_cache()
+        _emit_changed("records")
         return {"ok": True, "id": new_id, "target": f"{rtype}:{new_id}"}
     except PTOSError:
         raise
@@ -7676,6 +8076,7 @@ def retro_id_todo(line_no):
             raise PTOSError(f"Todo already has id:{t.id}")
         new_line, new_id = ptos.append_todo_id(t.raw_line)
         ptos_todo.rewrite_line_by_number(ptos.TODO_PATH, t.line_no, new_line)
+        _emit_changed("todo")
         return {"ok": True, "id": new_id, "target": f"todo:{new_id}"}
     except PTOSError:
         raise
@@ -8022,6 +8423,7 @@ def link_entries(src_target, dst_target):
         links = []
         for tok in re.findall(r'links[=:](\S+)', new_line):
             links.extend(x.strip() for x in tok.split(",") if x.strip())
+        _emit_changed({"todo": "todo", "note": "notes"}.get(src["kind"], "records"))
         return {"ok": True, "source": src_target, "target": dst_target,
                 "resolves": dst_resolves, "updated": updated, "links": links}
     except PTOSError:

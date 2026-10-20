@@ -1,4 +1,6 @@
+import json
 import os
+import re
 from pathlib import Path
 import ptos
 from ptos_service import get_frequent_presets, increment_preset_use
@@ -255,8 +257,12 @@ class TestInstantPresets:
         html = client.get("/add").get_data(as_text=True)
         assert 'class="preset-edit" title="Edit preset"' in html
         assert 'href="/add?preset=exercise"' in html
-        home_html = client.get("/").get_data(as_text=True)
-        assert 'class="preset-edit" title="Edit preset"' in home_html
+        # Home no longer renders preset chips server-side; the quick_add
+        # widget carries the edit pencil client-side.
+        resp = client.post("/api/widgets/resolve", json={
+            "items": [{"id": "qa", "body": 'view = "quick_add"'}]})
+        data = resp.get_json()["results"][0]["data"]
+        assert "exercise" in data["instant"]
         edit_html = client.get("/add?preset=exercise").get_data(as_text=True)
         assert "_existingPresets" in edit_html
         assert '_loadedPresetName = "exercise"' in edit_html
@@ -338,25 +344,38 @@ class TestQuickPresetCount:
         presets_path.write_text("\n".join(lines), encoding="utf-8")
         ptos._invalidate("presets")
 
-    def _frequent_chips(self, html):
+    def _add_chips(self, html):
         start = html.find('id="frequent-presets"')
         end = html.find("id=\"remaining-presets\"", start)
         section = html[start:end] if start != -1 else ""
         return section.count('<span class="preset-chip-wrap">')
 
-    def test_home_shows_10_by_default(self, tmp_path, monkeypatch):
-        self._many_presets(tmp_path, monkeypatch)
+    def _home_quick_add(self):
         from ptos_web import app
         client = app.test_client()
         body = client.get("/").get_data(as_text=True)
-        assert self._frequent_chips(body) == 10
+        m = re.search(
+            r'<script type="application/json" id="home-widget-specs">'
+            r"(.*?)</script>", body, re.S)
+        specs = json.loads(m.group(1))
+        qa = [s for s in specs if s["kind"] == "quick_add"]
+        assert qa, "home did not emit a quick_add spec"
+        return client.post("/api/widgets/resolve",
+                           json={"items": [{"id": "qa", "body": qa[0]["body"]}]
+                                 }).get_json()["results"][0]["data"]
+
+    def test_home_shows_10_by_default(self, tmp_path, monkeypatch):
+        self._many_presets(tmp_path, monkeypatch)
+        data = self._home_quick_add()
+        assert len(data["frequent"]) == 10
+        assert len(data["remaining"]) == 2
 
     def test_add_shows_10_by_default(self, tmp_path, monkeypatch):
         self._many_presets(tmp_path, monkeypatch)
         from ptos_web import app
         client = app.test_client()
         body = client.get("/add").get_data(as_text=True)
-        assert self._frequent_chips(body) == 10
+        assert self._add_chips(body) == 10
 
     def test_home_respects_config_override(self, tmp_path, monkeypatch):
         self._many_presets(tmp_path, monkeypatch)
@@ -364,7 +383,6 @@ class TestQuickPresetCount:
         cfg = ptos_service.get_config()
         cfg.setdefault("home", {})["quick_presets"] = 3
         ptos_service.save_config(cfg)
-        from ptos_web import app
-        client = app.test_client()
-        body = client.get("/").get_data(as_text=True)
-        assert self._frequent_chips(body) == 3
+        data = self._home_quick_add()
+        assert len(data["frequent"]) == 3
+        assert len(data["remaining"]) == 9

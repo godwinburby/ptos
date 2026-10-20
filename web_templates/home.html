@@ -3,45 +3,15 @@
 
 <div class="page-title">Good {{ greeting }}, {{ username }}</div>
 
-{% macro stat_card(s) %}
-{% if s.query_url %}
-<a href="{{ s.query_url }}" style="text-decoration:none;">
-  <div class="stat-card{% if s.highlight %} c-{{ s.highlight }}{% endif %}" style="cursor:pointer;transition:box-shadow .15s;"
-       onmouseover="this.style.boxShadow='0 4px 16px rgba(79,107,237,.18)'"
-       onmouseout="this.style.boxShadow=''">
-    <div class="stat-label" style="display:flex;align-items:center;justify-content:space-between;">
-      <span>{{ s.label }}</span>
-      <span style="font-size:11px;color:var(--accent);font-weight:700;opacity:.7;">→</span>
-    </div>
-    <div class="stat-value">{{ s.value }}</div>
-    <div class="stat-sub">{{ s.sub }}</div>
-  </div>
-</a>
-{% else %}
-<div class="stat-card{% if s.highlight %} c-{{ s.highlight }}{% endif %}">
-  <div class="stat-label">{{ s.label }}</div>
-  <div class="stat-value">{{ s.value }}</div>
-  <div class="stat-sub">{{ s.sub }}</div>
-</div>
-{% endif %}
-{% endmacro %}
-
-<!-- dashboard + time selector -->
-{% if dashboards %}
+{% if has_dashboards %}
 <div style="margin-bottom:16px; display:flex; gap:12px; align-items:center; flex-wrap:wrap;">
-  <select id="db-select" onchange="updateUrl()" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;min-width:120px;">
-    {% for db in dashboards %}
-    <option value="{{ db }}" {% if db == current_db %}selected{% endif %}>{{ db }}</option>
-    {% endfor %}
-  </select>
-  
   <select id="time-select" onchange="onTimeChange(this.value)" style="padding:6px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;cursor:pointer;min-width:120px;">
-    <option value="" {% if current_time == "" %}selected{% endif %}>Per query</option>
+    <option value="" {% if current_time == "" %}selected{% endif %}>Default</option>
     {% for label, code in time_options %}
     <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
-  
+
   {% with prefix="" %}
   {% include "_time_picker.html" %}
   {% endwith %}
@@ -59,12 +29,10 @@ var tp;
   });
 
   function updateUrl() {
-    var db = document.getElementById('db-select').value;
     var time = document.getElementById('time-select').value;
     var params = new URLSearchParams();
-    params.set('dashboard', db);
     if (time === '') {
-      // Per query — no time param sent; each metric uses its own query time
+      /* Default — no time param; dashboard per-query, records today */
     } else if (time === 'year' || time === 'month' || time === 'date') {
       var ct = tp.getTime();
       if (ct) { params.set('time', time); params.set('custom_time', ct); }
@@ -80,16 +48,8 @@ var tp;
   }
   window.updateUrl = updateUrl;
 
-  function changeDue(due) {
-    var params = new URLSearchParams(window.location.search);
-    params.set("due", due);
-    window.location = "/?" + params.toString();
-  }
-  window.changeDue = changeDue;
-
   window.onTimeChange = function(val) { tp.onSelectChange(val); };
 
-  // Restore state from URL params
   (function() {
     var params = new URLSearchParams(window.location.search);
     var time = params.get("time");
@@ -105,387 +65,47 @@ var tp;
 </script>
 {% endif %}
 
-<div class="stat-group-label">Overview</div>
-
-<!-- stat cards - dashboard metrics (2 rows) -->
-{% if stat_groups %}
-{% for g in stat_groups %}
-  {% if g.name %}
-  <div class="stat-group-label">{{ g.name }}</div>
-  {% endif %}
-  <div class="stat-grid">
-    {% for s in g.stats %}
-    {{ stat_card(s) }}
-    {% endfor %}
-  </div>
-{% endfor %}
-{% else %}
-<div class="stat-grid">
-  {% if not stats %}
-  <div class="stat-card">
-    <div class="stat-label">Dashboard</div>
-    <div class="stat-value" style="font-size:14px;color:var(--sub);">No data</div>
-    <div class="stat-sub">Select a dashboard above</div>
-  </div>
-  {% else %}
-  {% for s in stats %}
-  {{ stat_card(s) }}
-  {% endfor %}
-  {% endif %}
-</div>
-{% endif %}
-
-{% if threshold_data %}
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <div class="card-title" style="margin:0;">Thresholds</div>
-    <a href="/thresholds" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
-  </div>
-  {% set compact = true %}
-  {% for t in threshold_data %}
-    {% include '_threshold_bar.html' with context %}
-  {% endfor %}
-</div>
-{% endif %}
-
-<div class="stat-group-label">Needs your attention</div>
-
-{% if due_configs %}
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <div class="card-title" style="margin:0;">Overdue Records</div>
-    {% if due_configs|length > 1 %}
-    <select onchange="changeDue(this.value)" style="font-size:12px;padding:4px;">
-      {% for dc in due_configs %}
-      <option value="{{ dc }}" {% if dc == selected_due %}selected{% endif %}>{{ dc }}</option>
-      {% endfor %}
-    </select>
-    {% endif %}
-    <a href="/due" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
-  </div>
-  {% if due_rows %}
-  {% for row in due_rows %}
-  {% set edit_url = "/edit?filepath=" ~ row.filepath|urlencode ~ "&lineno=" ~ row.lineno ~ "&line=" ~ (row.line|urlencode) ~ "&return_to=%2F" %}
-  <div class="due-row">
-    <div class="due-badge {{ row.heat }}">{{ row.days }}d</div>
-    <div style="flex:1;min-width:0;">
-      <a href="{{ edit_url }}" class="due-name" style="text-decoration:none;color:inherit;" title="Open this record">{{ row.name }}</a>
-      <div class="due-meta">{{ row.status }}{% if row.note %} · {{ row.note[:50] }}{% if row.note|length > 50 %}…{% endif %}{% endif %}</div>
-    </div>
-    <a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="{{ edit_url }}" title="Open / edit this record">✎</a>
-  </div>
-  {% endfor %}
-  {% else %}
-  <div style="font-size:13px;color:var(--sub);">No overdue records</div>
-  {% endif %}
-</div>
-{% endif %}
-
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <div class="card-title" style="margin:0;">Todos</div>
-    <a href="/todo" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
-  </div>
-  <a href="/todo" style="display:flex;align-items:center;gap:12px;text-decoration:none;">
-    <span style="font-size:14px;font-weight:600;color:var(--text);">
-      {% if overdue_count %}<span style="color:var(--error);">{{ overdue_count }} overdue</span>{% endif %}
-      {% if overdue_count and due_today_count %} · {% endif %}
-      {% if due_today_count %}<span style="color:var(--accent);">{{ due_today_count }} due today</span>{% endif %}
-      {% if not overdue_count and not due_today_count %}No todos due today{% endif %}
-    </span>
-    <span style="margin-left:auto;color:var(--sub);font-size:13px;">→</span>
-  </a>
-</div>
-
-<div class="card">
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-    <div class="card-title" style="margin:0;">Journal</div>
-    <a href="/journal" style="font-size:13px;color:var(--accent);text-decoration:none;font-weight:600;">See all →</a>
-  </div>
-  <a href="/journal" style="display:block;text-decoration:none;">
-    <span style="font-size:14px;font-weight:600;color:var(--text);">
-      {% if journal_preview %}{{ journal_preview }}{% else %}No entry yet{% endif %}
-    </span>
-  </a>
-</div>
-
-<div class="stat-group-label">Quick add</div>
-
-<!-- capture — quick inbox -->
-<div class="card">
-  <div class="card-title" style="margin-bottom:10px;">Capture</div>
-  <div style="display:flex;gap:8px;flex-wrap:wrap;">
-    <input id="cap-input" type="text" placeholder="Quick record… (Enter to capture)"
-           onkeydown="if(event.key==='Enter')doCapture()"
-           style="flex:1;min-width:220px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">
-    <button onclick="doCapture()" class="btn btn-primary">Capture</button>
-    <button onclick="doCaptureConvert()" class="btn btn-ghost" title="Capture and convert to another record type">Convert</button>
-  </div>
-  <div id="cap-msg" style="font-size:13px;margin-top:8px;display:none;"></div>
-</div>
-
-<!-- quick add — frequent presets + toggle for rest -->
-{% if frequent_presets %}
-<div class="card">
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-    <div class="card-title" style="margin:0;">Quick Add</div>
-    {% if remaining_presets %}
-    <button onclick="toggleAllPresets(this)"
-            style="background:none;border:none;font-size:12px;color:var(--accent);
-                   cursor:pointer;font-weight:600;padding:0;">Show all ▾</button>
-    {% endif %}
-  </div>
-  <div class="chip-group" id="frequent-presets">
-    {% for name in frequent_presets %}
-    <span class="preset-chip-wrap">
-      {% if name in instant_presets %}
-      <button class="preset-chip preset-instant" onclick="addMultiPreset('{{ name }}', this)">
-        + {{ name }} <span style="opacity:.7;font-size:11px;">instant</span>
-      </button>
-      <a href="/add?preset={{ name }}" class="preset-edit" title="Edit preset">✎</a>
-      {% else %}
-      <a href="/add?preset={{ name }}" class="preset-chip"
-         onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
-      {% endif %}
-      <button class="preset-instant-toggle" {% if name in instant_presets %}data-active="1"{% endif %}
-              onclick="toggleInstantPreset('{{ name }}', this)" title="Toggle instant save">⚡</button>
-      <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
-    </span>
-    {% endfor %}
-  </div>
-  {% if remaining_presets %}
-  <div class="chip-group" id="remaining-presets" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
-    {% for name in remaining_presets %}
-    <span class="preset-chip-wrap">
-      {% if name in instant_presets %}
-      <button class="preset-chip preset-instant" onclick="addMultiPreset('{{ name }}', this)">
-        + {{ name }} <span style="opacity:.7;font-size:11px;">instant</span>
-      </button>
-      <a href="/add?preset={{ name }}" class="preset-edit" title="Edit preset">✎</a>
-      {% else %}
-      <a href="/add?preset={{ name }}" class="preset-chip"
-         onclick="trackPreset('{{ name }}')">+ {{ name }}</a>
-      {% endif %}
-      <button class="preset-instant-toggle" {% if name in instant_presets %}data-active="1"{% endif %}
-              onclick="toggleInstantPreset('{{ name }}', this)" title="Toggle instant save">⚡</button>
-      <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
-    </span>
-    {% endfor %}
-  </div>
-  {% endif %}
-</div>
-{% endif %}
-
-<!-- multi-record presets -->
-{% if multi_presets %}
-<div class="card">
-  <div class="card-title">Quick Add (multi)</div>
-  <div class="chip-group">
-    {% for name, refs in multi_presets.items() %}
-    <span class="preset-chip-wrap">
-      <button class="preset-chip" onclick="addMultiPreset('{{ name }}', this)">
-        + {{ name }} <span style="opacity:.6;font-size:11px;">({{ refs }})</span>
-      </button>
-      <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
-    </span>
-    {% endfor %}
-  </div>
-  <div id="multi-msg-home" style="font-size:13px;margin-top:8px;display:none;"></div>
-</div>
-{% else %}
-<div id="multi-msg-home" style="font-size:13px;display:none;"></div>
-{% endif %}
-
-<div class="stat-group-label">Today</div>
-
-<!-- recent records as table -->
-{% if recent_rows %}
-<div class="card">
-  <div class="card-title">Today's Records</div>
-  <div id="home-records-area"></div>
-</div>
-{% endif %}
-
-<!-- Delete modal injected by RecordTable -->
-
-<script src="{{ av('/static/js/record_table.js') }}"></script>
 <script>
-window._recentRecords = {{ recent_rows|tojson }};
-window._recentCols    = {{ recent_cols|tojson }};
-
-var _fieldTypes = {{ field_types | tojson }};
-document.addEventListener("DOMContentLoaded", function() {
-  var area = document.getElementById("home-records-area");
-  if (!area) return;
-  var _rt = new RecordTable({
-    containerId: "home-records-area",
-    returnTo: "/",
-    enableBulk: true,
-    fieldTypes: _fieldTypes,
-    exportName: "recent_records",
-    onRefresh: function() { window.location.reload(); }
-  });
-  _rt.render({
-    records: window._recentRecords || [],
-    columns: window._recentCols   || [],
-    count:   (window._recentRecords||[]).length
-  });
-  // Reload when returning from bfcache (e.g. after edit redirect)
-  window.addEventListener('pageshow', function(e) {
-    if (e.persisted) window.location.reload();
-  });
-});
-
-
-function trackPreset(name) {
-  fetch("/api/preset_use", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({name: name})
-  }).catch(function(){});
-}
-
-function toggleAllPresets(btn) {
-  var el = document.getElementById("remaining-presets");
-  if (!el) return;
-  var open = el.style.display !== "none";
-  el.style.display = open ? "none" : "flex";
-  btn.textContent  = open ? "Show all ▾" : "Show less ▲";
-}
-
-function toggleInstantPreset(name, btn) {
-  const active = btn.getAttribute("data-active") === "1";
-  fetch("/api/preset_instant", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({name, instant: !active})
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) {
-      location.reload();
-    } else {
-      alert("Toggle failed: " + (d.error || "Unknown error"));
-    }
-  })
-  .catch(e => alert("Toggle failed: " + String(e)));
-}
-
-function deletePreset(name, btn) {
-  if (!confirm("Delete preset '" + name + "'?\n\nThis cannot be undone.")) return;
-  fetch("/api/preset_delete", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({name})
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) {
-      location.reload();
-    } else {
-      alert("Delete failed: " + (d.error || "Unknown error"));
-    }
-  })
-  .catch(e => {
-    alert("Delete failed: " + String(e));
-  });
-}
-
-function doCapture() {
-  const input = document.getElementById("cap-input");
-  const msg  = document.getElementById("cap-msg");
-  const text = input.value.trim();
-  if (!text) return;
-  fetch("/api/capture", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({text: text})
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) {
-      input.value = "";
-      msg.textContent = "✔ Captured";
-      msg.style.color = "var(--success)";
-      msg.style.display = "block";
-      setTimeout(() => { location.reload(); }, 700);
-    } else {
-      msg.textContent = d.error || "Capture failed";
-      msg.style.color = "var(--error)";
-      msg.style.display = "block";
-    }
-  })
-  .catch(e => {
-    msg.textContent = String(e);
-    msg.style.color = "var(--error)";
-    msg.style.display = "block";
-  });
-}
-
-function doCaptureConvert() {
-  const input = document.getElementById("cap-input");
-  const msg  = document.getElementById("cap-msg");
-  const text = input.value.trim();
-  if (!text) { msg.textContent = "Type something first"; msg.style.color = "var(--warn)"; msg.style.display = "block"; return; }
-  fetch("/api/capture", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({text: text})
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) {
-      window.location.href = "/edit?convert=1&filepath=" + encodeURIComponent(d.filepath)
-        + "&lineno=" + d.lineno + "&line=" + encodeURIComponent(d.line) + "&return_to=" + encodeURIComponent("/");
-    } else {
-      msg.textContent = d.error || "Capture failed";
-      msg.style.color = "var(--error)";
-      msg.style.display = "block";
-    }
-  })
-  .catch(e => {
-    msg.textContent = String(e);
-    msg.style.color = "var(--error)";
-    msg.style.display = "block";
-  });
-}
-
-function addMultiPreset(name, btn) {
-  const today = new Date().toISOString().split("T")[0];
-  const msg   = document.getElementById("multi-msg-home");
-  btn.disabled = true;
-  const orig = btn.innerHTML;
-  btn.textContent = "Adding…";
-  fetch("/api/preset_add", {
-    method: "POST",
-    headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({name, date: today})
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (d.ok) {
-      btn.textContent = `✔ ${d.count} added`;
-      btn.style.background = "var(--success)";
-      msg.style.display = "none";
-      setTimeout(() => {
-        location.reload();
-      }, 1200);
-    } else {
-      btn.innerHTML = orig;
-      btn.disabled = false;
-      msg.textContent = d.error;
-      msg.style.color = "var(--error)";
-      msg.style.display = "block";
-    }
-  })
-  .catch(e => {
-    btn.innerHTML = orig;
-    btn.disabled = false;
-    msg.textContent = String(e);
-    msg.style.color = "var(--error)";
-    msg.style.display = "block";
-  });
+function changeDue(due) {
+  var params = new URLSearchParams(window.location.search);
+  params.set("due", due);
+  window.location = "/?" + params.toString();
 }
 </script>
+
+<div class="stat-group-label">Overview</div>
+<div data-home-section="overview">
+  {% if not has_dashboards %}
+  <div class="card">
+    <div class="card-title">Dashboard</div>
+    <div style="font-size:14px;color:var(--sub);">No data</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="stat-group-label">Needs your attention</div>
+{% if due_configs|length > 1 %}
+<div style="margin-bottom:8px;">
+  <select onchange="changeDue(this.value)" style="font-size:12px;padding:4px;">
+    {% for dc in due_configs %}
+    <option value="{{ dc }}" {% if dc == selected_due %}selected{% endif %}>{{ dc }}</option>
+    {% endfor %}
+  </select>
+</div>
+{% endif %}
+<div data-home-section="attention"></div>
+
+<div class="stat-group-label">Quick add</div>
+<div data-home-section="quickadd"></div>
+
+<div class="stat-group-label">Today</div>
+<div data-home-section="today"></div>
+
+<script type="application/json" id="home-widget-specs">{{ widget_specs|tojson }}</script>
+
+<script src="{{ av('/static/js/record_table.js') }}"></script>
+<script src="{{ av('/static/js/widgets.js') }}"></script>
+<script src="{{ av('/static/js/widget_host.js') }}"></script>
+<script src="{{ av('/static/js/home_widgets.js') }}"></script>
 
 {% endblock %}

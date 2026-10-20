@@ -36,6 +36,14 @@ function _showTodoToast(tasks) {
           d.innerHTML = "<h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p>";
           document.body.appendChild(d);
         }
+        if (msg.type === "data-changed") {
+          // Relay as a DOM event so widget_host.js (and the todo page) can
+          // refresh by scope without opening a second EventSource.
+          try {
+            window.dispatchEvent(new CustomEvent("ptos:data-changed",
+              {detail: msg.data || {}}));
+          } catch (ex) {}
+        }
         if (msg.type === "todo-due") {
           var tasks = msg.data;
           if ("Notification" in window && Notification.permission === "default") {

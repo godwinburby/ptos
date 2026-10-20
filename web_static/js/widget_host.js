@@ -71,6 +71,82 @@
     return m ? m[1] : "";
   }
 
+  // ── scoped live refresh (spec 3.4) ─────────────────────────────────────────
+  // sse.js relays the server's data-changed event as "ptos:data-changed".
+  // Mounted widgets subscribe by scope: todo widgets only re-fetch on "todo",
+  // every other kind reads records; "config" (settings/schema/queries) and a
+  // scope-less payload refresh everything. Debounced 500 ms so one write that
+  // fans out to several emits still triggers a single pass, and refreshed on
+  // tab-visible / back-forward-cache restore. No polling.
+  var _REFRESH_DEBOUNCE_MS = 500;
+  var _live = [];
+  var _pendingScopes = null;
+  var _pendingAll = false;
+  var _debounceTimer = null;
+
+  function _scopesForKind(kind) {
+    if (kind === "todo" || kind === "todo_summary") return ["todo"];
+    if (kind === "quick_add" || kind === "quick_add_multi") return ["config"];
+    if (kind === "capture" || kind === "journal") return [];
+    return ["records"];
+  }
+
+  function _clearCache() {
+    for (var k in _cache) {
+      if (Object.prototype.hasOwnProperty.call(_cache, k)) delete _cache[k];
+    }
+  }
+
+  function _runPendingRefresh() {
+    var scopes = _pendingScopes || [];
+    var all = _pendingAll || scopes.indexOf("config") !== -1;
+    _pendingScopes = null;
+    _pendingAll = false;
+    _live.slice().forEach(function (h) {
+      if (destroyedSafe(h)) return;
+      var mine = h._phScopes || [];
+      if (all || mine.some(function (s) { return scopes.indexOf(s) !== -1; })) {
+        h.refresh();
+      }
+    });
+  }
+
+  function destroyedSafe(h) {
+    try { return !h || !h.el || !h.el._phWidget; } catch (e) { return true; }
+  }
+
+  function _scheduleRefresh(scope) {
+    if (scope == null) {
+      _pendingAll = true;
+    } else {
+      _pendingScopes = _pendingScopes || [];
+      if (_pendingScopes.indexOf(scope) === -1) _pendingScopes.push(scope);
+    }
+    if (_debounceTimer) clearTimeout(_debounceTimer);
+    _debounceTimer = setTimeout(function () {
+      _debounceTimer = null;
+      _runPendingRefresh();
+    }, _REFRESH_DEBOUNCE_MS);
+  }
+
+  window.addEventListener("ptos:data-changed", function (e) {
+    _clearCache();
+    var scope = e && e.detail ? e.detail.scope : null;
+    _scheduleRefresh(scope || null);
+  });
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") {
+      _clearCache();
+      _scheduleRefresh(null);
+    }
+  });
+  window.addEventListener("pageshow", function (e) {
+    if (e.persisted) {
+      _clearCache();
+      _scheduleRefresh(null);
+    }
+  });
+
   var _STYLE_CSS = [
     ".ph-widget{position:relative;}",
     ".ph-head{display:flex;align-items:center;gap:10px;padding:10px 14px 0;}",
@@ -192,6 +268,7 @@
 
     function paint(data) {
       current = data;
+      handle._phScopes = _scopesForKind(data && data.kind);
       titleEl.textContent = data.title || data.name || _nameOf(body) || "Widget";
       if (data.link) {
         linkEl.setAttribute("href", data.link);
@@ -240,6 +317,8 @@
       refresh: function () { return load(true); },
       destroy: function () {
         destroyed = true;
+        var i = _live.indexOf(handle);
+        if (i !== -1) _live.splice(i, 1);
         if (sub && sub.destroy) { try { sub.destroy(); } catch (e) {} }
         sub = null;
         listeners.forEach(function (l) {
@@ -255,8 +334,69 @@
     on(refreshBtn, "click", function () { handle.refresh(); });
 
     el._phWidget = handle;
-    load(false);
+    _live.push(handle);
+    if (opts.error) {
+      bodyEl.innerHTML = typeof errorCard === "function"
+        ? errorCard(opts.error)
+        : '<div class="msg msg-error">' + _esc(opts.error) + "</div>";
+      var enm = _nameOf(body);
+      if (enm && !titleEl.textContent) titleEl.textContent = enm;
+    } else if (opts.data) {
+      paint(opts.data);
+    } else {
+      load(false);
+    }
     return handle;
+  }
+
+  function mountBatch(items, opts) {
+    opts = opts || {};
+    if (!items || !items.length) return Promise.resolve([]);
+    var bodies = items.map(function (it) { return it.body; });
+    var seen = {};
+    var unique = [];
+    bodies.forEach(function (b) {
+      if (!seen[b]) { seen[b] = true; unique.push(b); }
+    });
+    return _post("/api/widgets/resolve", {
+      items: unique.map(function (b, i) { return { id: i, body: b }; })
+    }).then(function (d) {
+      var byBody = {};
+      if (d && d.ok && d.results) {
+        unique.forEach(function (b, i) {
+          var res = d.results[i];
+          if (res && res.ok) {
+            _cache[b] = res.data;
+            byBody[b] = { ok: true, data: res.data };
+          } else {
+            byBody[b] = { ok: false, error: (res && res.error) || "Failed to load widget" };
+          }
+        });
+      } else {
+        unique.forEach(function (b) {
+          byBody[b] = { ok: false, error: (d && d.error) || "Failed to load widget" };
+        });
+      }
+      return items.map(function (it) {
+        var r = byBody[it.body] || { ok: false, error: "Failed to load widget" };
+        var mopts = {};
+        for (var k in opts) {
+          if (Object.prototype.hasOwnProperty.call(opts, k)) mopts[k] = opts[k];
+        }
+        for (var k2 in (it.opts || {})) {
+          if (Object.prototype.hasOwnProperty.call(it.opts, k2)) mopts[k2] = it.opts[k2];
+        }
+        if (r.ok) mopts.data = r.data;
+        else mopts.error = r.error;
+        return mount(it.el, it.body, mopts);
+      });
+    }).catch(function (e) {
+      return items.map(function (it) {
+        return mount(it.el, it.body, {
+          host: opts.host, interactive: !!it.interactive, error: String(e)
+        });
+      });
+    });
   }
 
   function mountAll(root, opts) {
@@ -384,6 +524,9 @@
       var rt = new RecordTable({
         container: wrap,
         returnTo: data.link || undefined,
+        enableBulk: true,
+        fieldTypes: data.field_types || undefined,
+        exportName: data.export_name || "widget_records",
         onRefresh: function () { ctx.refresh(); }
       });
       rt.render(data);
@@ -450,6 +593,7 @@
     register: register,
     mount: mount,
     mountAll: mountAll,
+    mountBatch: mountBatch,
     kinds: function () { return Object.keys(REG); }
   };
 })();

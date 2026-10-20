@@ -2005,7 +2005,8 @@ def _handle_todo_done(n):
                   f"todo:{target[0].id} — they will become dangling.")
 
     try:
-        ptos_todo.complete_todo(target[0])
+        ptos_todo.complete_todo(target[0], todo_path=ptos.TODO_PATH,
+                                done_path=ptos.DONE_PATH)
         print(f"Completed: {ptos_todo.format_line(target[0])}")
     except Exception as e:
         print(f"Error: {e}")
@@ -2193,7 +2194,8 @@ def _handle_todo_undo(n):
         return
 
     try:
-        ptos_todo.undo_todo(line_no)
+        ptos_todo.undo_todo(line_no, todo_path=ptos.TODO_PATH,
+                            done_path=ptos.DONE_PATH)
         print(f"Undone: todo at line {line_no} moved back to todo.txt")
     except Exception as e:
         print(f"Error: {e}")

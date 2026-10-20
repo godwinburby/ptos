@@ -138,18 +138,25 @@ class TestBuiltinKindsRegistered:
     def test_all_builtin_views_resolve(self):
         for view in ("dashboard", "metric", "threshold", "query",
                      "records", "group", "pivot", "trend", "board",
-                     "habit", "calendar", "due", "project", "todo"):
+                     "habit", "calendar", "due", "project", "todo",
+                     "todo_summary", "journal", "capture", "quick_add",
+                     "quick_add_multi"):
             assert pw.get_kind(view) is not None, view
 
     def test_builtin_needs_name(self):
+        nameless = {"todo", "threshold", "records", "todo_summary",
+                    "journal", "capture", "quick_add", "quick_add_multi"}
         for e in pw.kinds():
-            if e["kind"] == "todo":
+            if e["kind"] in nameless:
                 assert e["needs_name"] is False, e["kind"]
             else:
                 assert e["needs_name"] is True, e["kind"]
 
     def test_query_carries_chart_key(self):
         assert pw.get_kind("query")["keys"] == frozenset({"chart"})
+
+    def test_records_carries_where_and_chart_keys(self):
+        assert pw.get_kind("records")["keys"] == frozenset({"where", "chart"})
 
 
 class TestResolveEmbedEnforcement:
