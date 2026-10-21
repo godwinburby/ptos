@@ -3769,6 +3769,59 @@ def api_embed_candidates():
     return jsonify(ok=True, groups=groups, time_options=time_options)
 
 
+@app.route("/api/widgets/catalog", methods=["GET"])
+def api_widgets_catalog():
+    """Gallery catalog: categories, kind metadata, visible starters."""
+    try:
+        return jsonify(ok=True, **svc.get_widget_catalog())
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e))
+    except Exception as e:
+        return jsonify(ok=False, error=str(e))
+
+
+@app.route("/api/widgets/options", methods=["GET"])
+def api_widgets_options():
+    """Option values for one gallery field source (?source=...)."""
+    source = request.args.get("source", "")
+    try:
+        return jsonify(ok=True, source=source,
+                       values=svc.get_widget_options(source))
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except Exception as e:
+        return jsonify(ok=False, error=str(e)), 400
+
+
+@app.route("/api/widgets/validate", methods=["POST"])
+def api_widgets_validate():
+    """Static spec validation for the gallery form.
+
+    Body: {"body": "<TOML>"} or {"spec": {...}} ->
+    {"ok": true, "errors": [{field, message}, ...]}. Always HTTP 200
+    with `errors` (an invalid TOML body is one error on the body
+    field); only a missing JSON body is 400.
+    """
+    data = request.get_json(silent=True) or {}
+    spec = data.get("spec")
+    if spec is None:
+        body = data.get("body")
+        if not isinstance(body, str) or not body.strip():
+            return jsonify(ok=False, error="JSON body required"), 400
+        try:
+            spec = tomllib.loads(body)
+        except Exception as e:
+            return jsonify(ok=True, errors=[
+                {"field": "body", "message": "Invalid TOML: " + str(e)}])
+    try:
+        res = svc.validate_widget_spec(spec)
+        return jsonify(ok=True, errors=res["errors"])
+    except PTOSError as e:
+        return jsonify(ok=True, errors=[{"field": "spec", "message": str(e)}])
+    except Exception as e:
+        return jsonify(ok=True, errors=[{"field": "spec", "message": str(e)}])
+
+
 @app.route("/dev/widgets")
 def dev_widgets():
     from flask import abort

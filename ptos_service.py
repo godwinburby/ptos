@@ -2795,6 +2795,8 @@ TODO_VIEW_FILTERS = ("project", "context", "priority", "due", "search",
                      "linked_to", "include_done", "hide_routines", "groupby",
                      "sort", "add")
 TODO_VIEW_KEYS = TODO_VIEW_FILTERS + ("title", "limit")
+TODO_DUE_VALUES = ("overdue", "today", "tomorrow", "upcoming",
+                   "someday", "none", "week")
 _TODO_GROUPBYS = ("timeline", "priority", "project", "context", "none")
 _TODO_SORTS = (None, "", "default", "reverse", "most", "fewest")
 
@@ -2966,48 +2968,322 @@ def _w_quick_add_multi(spec, name, time, from_date, to_date):
     return {"kind": "quick_add_multi", "presets": get_multi_presets()}, ""
 
 
+def _wf(key, label, type_, **kw):
+    d = {"key": key, "label": label, "type": type_}
+    d.update(kw)
+    return d
+
+
+def _widget_fields(kind, *, view_options, name=None, time=True, extra=()):
+    """Common gallery field list (view/name/time/from/to/title/limit).
+
+    `name` is a (label, options_from, required, help) tuple when the
+    kind takes a saved-item name, else None (name stays in the
+    whitelist but is hidden from the form). `time` False hides the
+    time window (and the from/to dates) for kinds that are always
+    "live, now". `extra` appends the kind's own fields.
+    """
+    fields = [
+        _wf("view", "Show as", "select", options=list(view_options),
+            help="This widget always renders the same way; kept for the "
+                 "TOML spec.",
+            **({} if len(view_options) > 1 else {"show_if": False})),
+    ]
+    if name:
+        label, src, req, help_ = name
+        fields.append(_wf("name", label, "saved_item", required=req,
+                          help=help_,
+                          **({"options_from": src} if src else {})))
+    else:
+        fields.append(_wf("name", "Name", "saved_item", show_if=False,
+                          help="Unused for this widget."))
+    if time:
+        fields.append(_wf("time", "Time window", "time_window",
+                          options_from="time",
+                          help="Window for time-based data."))
+        fields.append(_wf("from_date", "From date", "text", advanced=True,
+                          help="ISO date, for custom range windows."))
+        fields.append(_wf("to_date", "To date", "text", advanced=True,
+                          help="ISO date, for custom range windows."))
+    else:
+        fields.append(_wf("time", "Time window", "time_window", show_if=False,
+                          help="Not used — this widget always shows the "
+                               "live list."))
+        fields.append(_wf("from_date", "From date", "text", advanced=True,
+                          show_if=False, help="Not used by this widget."))
+        fields.append(_wf("to_date", "To date", "text", advanced=True,
+                          show_if=False, help="Not used by this widget."))
+    fields.append(_wf("title", "Title", "text", advanced=True,
+                      help="Heading shown above the widget."))
+    fields.append(_wf("limit", "Max rows", "number", advanced=True,
+                      help="Cap the number of rows shown."))
+    fields.extend(extra)
+    return fields
+
+
+_TODO_STARTERS = (
+    {"id": "tasks_today", "label": "Today's tasks",
+     "description": "Tasks due today, grouped by timeline.",
+     "body": 'view = "todo"\ndue = "today"\n'},
+    {"id": "tasks_overdue", "label": "Overdue tasks",
+     "description": "Tasks past their due date.",
+     "body": 'view = "todo"\ndue = "overdue"\n'},
+    {"id": "tasks_week", "label": "Due this week",
+     "description": "Tasks due within the next seven days.",
+     "body": 'view = "todo"\ndue = "week"\ngroupby = "timeline"\n'},
+    {"id": "tasks_top", "label": "Top priority",
+     "description": "Your priority-A tasks.",
+     "body": 'view = "todo"\npriority = "A"\n'},
+    {"id": "tasks_by_project", "label": "Tasks by project",
+     "description": "All open tasks grouped by project.",
+     "body": 'view = "todo"\ngroupby = "project"\n'},
+)
+
+_RECORDS_STARTERS = (
+    {"id": "records_today", "label": "Today's records",
+     "description": "Everything you logged today.",
+     "body": 'view = "records"\ntime = "td"\nlimit = 8\n'},
+    {"id": "records_month", "label": "This month's records",
+     "description": "This month's records, newest first.",
+     "body": 'view = "records"\ntime = "tm"\nlimit = 10\n'},
+)
+
+
 def _register_builtin_widgets():
     """Register the built-in embed kinds into ptos_widgets.
 
     owns_name predicates mirror the historical inference checks
-    exactly (see resolve_embed's docstring for the order).
+    exactly (see resolve_embed's docstring for the order). Gallery
+    metadata (label/description/icon/category/named/fields/starters)
+    is declared alongside each kind; _widget_fields builds the common
+    field list and its keys are validated against each kind's
+    whitelist at registration.
     """
     reg = ptos_widgets.register
     reg("dashboard", _w_dashboard, keys=("per_query",), infer_order=10,
         owns_name=lambda n, q: (isinstance(q.get("dashboards"), dict)
-                                and n in q["dashboards"]))
+                                and n in q["dashboards"]),
+        label="Dashboard",
+        description="A group of saved metric and query numbers.",
+        icon="layout", category="numbers", named=True,
+        interactive_default=False,
+        fields=_widget_fields(
+            "dashboard", view_options=("dashboard",),
+            name=("Dashboard", "saved.dashboard", True,
+                  "Saved dashboard name from the Query Builder."),
+            extra=(_wf("per_query", "Use each item's own time", "bool",
+                       advanced=True,
+                       help="Ignore the dashboard's time and use each "
+                            "item's own window."),)))
     reg("metric", _w_metric, infer_order=20,
         owns_name=lambda n, q: (isinstance(q.get("metrics"), dict)
-                                and n in q["metrics"]))
+                                and n in q["metrics"]),
+        label="Metric",
+        description="One saved number — a sum, count or average.",
+        icon="hash", category="numbers", named=True,
+        interactive_default=False,
+        fields=_widget_fields(
+            "metric", view_options=("metric",),
+            name=("Metric", "saved.metric", True,
+                  "Saved metric name from the Query Builder.")))
     reg("threshold", _w_threshold, needs_name=False, infer_order=30,
-        owns_name=lambda n, q: n in ptos.get_thresholds())
+        owns_name=lambda n, q: n in ptos.get_thresholds(),
+        label="Threshold",
+        description="Budget or target warnings with status bars.",
+        icon="gauge", category="goals", named=True,
+        interactive_default=False,
+        starters=({"id": "thresholds_month", "label": "Thresholds",
+                   "description": "All thresholds for this month.",
+                   "body": 'view = "threshold"\ntime = "tm"\n'},),
+        fields=_widget_fields(
+            "threshold", view_options=("threshold",),
+            name=("Threshold", "saved.threshold", False,
+                  "Saved threshold name — leave empty to show all "
+                  "(filtered by the home thresholds setting).")))
     reg("board", _w_board, infer_order=40,
-        owns_name=lambda n, q: isinstance(q.get(f"board.{n}"), dict))
+        owns_name=lambda n, q: isinstance(q.get(f"board.{n}"), dict),
+        label="Board",
+        description="Kanban columns from a saved board.",
+        icon="columns", category="projects", named=True,
+        interactive_default=False,
+        fields=_widget_fields(
+            "board", view_options=("board",),
+            name=("Board", "saved.board", True,
+                  "Saved board name from the Query Builder.")))
     reg("habit", _w_habit, infer_order=50,
-        owns_name=lambda n, q: isinstance(q.get(f"habit.{n}"), dict))
+        owns_name=lambda n, q: isinstance(q.get(f"habit.{n}"), dict),
+        label="Habit",
+        description="Calendar heatmap and streak for a habit.",
+        icon="calendar-check", category="goals", named=True,
+        interactive_default=True,
+        fields=_widget_fields(
+            "habit", view_options=("habit",),
+            name=("Habit", "saved.habit", True,
+                  "Saved habit name from the Query Builder.")))
     reg("calendar", _w_calendar, infer_order=60,
         owns_name=lambda n, q: (n == "__all__"
-                                or isinstance(q.get(f"calendar.{n}"), dict)))
+                                or isinstance(q.get(f"calendar.{n}"), dict)),
+        label="Calendar",
+        description="Month grid of records for a calendar view.",
+        icon="calendar", category="goals", named=True,
+        interactive_default=False,
+        fields=_widget_fields(
+            "calendar", view_options=("calendar",),
+            name=("Calendar", "saved.calendar", True,
+                  "Saved calendar name — __all__ is the global "
+                  "'All records' view.")))
     reg("due", _w_due, infer_order=70,
         owns_name=lambda n, q: (n in ("default", "__DEFAULT__")
-                                or isinstance(q.get(f"due.{n}"), dict)))
+                                or isinstance(q.get(f"due.{n}"), dict)),
+        label="Due",
+        description="Due and overdue tasks from a saved due view.",
+        icon="clock", category="tasks", named=True,
+        interactive_default=False,
+        starters=({"id": "due_default", "label": "Overdue tasks",
+                   "description": "Default due view — overdue and "
+                                  "upcoming tasks.",
+                   "body": 'view = "due"\nname = "default"\nlimit = 5\n'},),
+        fields=_widget_fields(
+            "due", view_options=("due",), time=False,
+            name=("Due view", "saved.due", True,
+                  "Saved due view name, e.g. default.")))
     reg("project", _w_project, infer_order=80,
-        owns_name=lambda n, q: isinstance(q.get(f"project.{n}"), dict))
+        owns_name=lambda n, q: isinstance(q.get(f"project.{n}"), dict),
+        label="Project",
+        description="Project overview with drift, records and notes.",
+        icon="folder", category="projects", named=True,
+        interactive_default=False,
+        fields=_widget_fields(
+            "project", view_options=("project",), time=False,
+            name=("Project", "saved.project", True,
+                  "Saved project name from the Query Builder.")))
     reg("todo", _w_todo, keys=TODO_VIEW_FILTERS, needs_name=False,
         infer_order=85,
-        owns_name=lambda n, q: isinstance(q.get(f"todo.{n}"), dict))
+        owns_name=lambda n, q: isinstance(q.get(f"todo.{n}"), dict),
+        label="Task list",
+        description="Live todo list with filters.",
+        icon="check-square", category="tasks", named=True,
+        interactive_default=True,
+        starters=_TODO_STARTERS,
+        fields=_widget_fields(
+            "todo", view_options=("todo",), time=False,
+            name=("Saved todo view", "saved.todo", False,
+                  "Optional saved view to start from — inline filters "
+                  "below override it."),
+            extra=(
+                _wf("project", "Projects", "chips",
+                    options_from="todo.projects",
+                    help="Only these +Projects (empty = all)."),
+                _wf("context", "Contexts", "chips",
+                    options_from="todo.contexts",
+                    help="Only these @contexts (empty = all)."),
+                _wf("priority", "Priorities", "chips",
+                    options_from="todo.priorities",
+                    help="Only these priorities, e.g. A."),
+                _wf("due", "Due", "select", options=list(TODO_DUE_VALUES),
+                    help="Cut to one due bucket, or none/week."),
+                _wf("search", "Search", "text",
+                    help="Glob search over the description, e.g. call*."),
+                _wf("linked_to", "Linked to", "text", advanced=True,
+                    help="Only todos linking to a type:id target."),
+                _wf("include_done", "Include done", "bool", advanced=True,
+                    help="Append a recent-done bucket."),
+                _wf("hide_routines", "Hide routines", "bool", advanced=True,
+                    help="Drop +routine todos when no project filter is set."),
+                _wf("groupby", "Group by", "select",
+                    options=list(_TODO_GROUPBYS)),
+                _wf("sort", "Sort", "select",
+                    options=[s for s in _TODO_SORTS if s]),
+                _wf("add", "Show add box", "bool", advanced=True,
+                    help="Show the quick-add box in the widget."),
+            )))
     reg("query", _w_query, views=("group", "pivot", "trend"),
         keys=("chart",), infer_order=90,
         owns_name=lambda n, q: (isinstance(q.get(n), dict)
-                                and n not in ("metrics", "dashboards")))
+                                and n not in ("metrics", "dashboards")),
+        label="Query",
+        description="Saved query as a table or chart.",
+        icon="search", category="tables", named=True,
+        interactive_default=False,
+        fields=_widget_fields(
+            "query", view_options=("query", "group", "pivot", "trend"),
+            name=("Query", "saved.query", True,
+                  "Saved query name from the Query Builder."),
+            extra=(_wf("chart", "Chart", "select",
+                       options=["bar", "hbar", "line", "stacked"],
+                       advanced=True,
+                       help="Chart style for group (bar/hbar), trend "
+                            "(bar/line) and pivot (stacked/bar) views."),)))
     reg("records", _w_records, keys=("where", "chart"), needs_name=False,
-        infer_order=99)
-    reg("todo_summary", _w_todo_summary, needs_name=False, infer_order=99)
-    reg("journal", _w_journal, needs_name=False, infer_order=99)
-    reg("capture", _w_capture, needs_name=False, infer_order=99)
-    reg("quick_add", _w_quick_add, needs_name=False, infer_order=99)
+        infer_order=99,
+        label="Records",
+        description="Live records table from a filter expression.",
+        icon="table", category="tables", named=False,
+        interactive_default=True,
+        starters=_RECORDS_STARTERS,
+        fields=_widget_fields(
+            "records", view_options=("records",),
+            name=("Name", "", False,
+                  "Unused — records views take a filter instead."),
+            extra=(
+                _wf("where", "Filter", "field_filter",
+                    help="Filter expression, e.g. type=expense AND "
+                         "amount>100."),
+                _wf("chart", "Chart", "select",
+                    options=["bar", "hbar", "line", "stacked"],
+                    advanced=True,
+                    help="Reserved — records views render as a table."),
+            )))
+    reg("todo_summary", _w_todo_summary, needs_name=False, infer_order=99,
+        label="Task summary",
+        description="Counts of open, due and overdue tasks.",
+        icon="list", category="tasks", named=False,
+        interactive_default=False,
+        fields=_widget_fields(
+            "todo_summary", view_options=("todo_summary",), time=False,
+            extra=()))
+    reg("journal", _w_journal, needs_name=False, infer_order=99,
+        label="Journal",
+        description="Recent journal entries.",
+        icon="book", category="capture", named=False,
+        interactive_default=False,
+        fields=_widget_fields(
+            "journal", view_options=("journal",), time=False,
+            extra=()))
+    reg("capture", _w_capture, needs_name=False, infer_order=99,
+        label="Quick capture",
+        description="Type a line and save it as a capture record.",
+        icon="inbox", category="capture", named=False,
+        interactive_default=False,
+        starters=({"id": "capture_box", "label": "Quick capture",
+                   "description": "Type a line and save it.",
+                   "body": 'view = "capture"\n'},),
+        fields=_widget_fields(
+            "capture", view_options=("capture",), time=False,
+            extra=()))
+    reg("quick_add", _w_quick_add, needs_name=False, infer_order=99,
+        label="Quick add",
+        description="One-tap buttons for your common presets.",
+        icon="zap", category="capture", named=False,
+        interactive_default=False,
+        starters=({"id": "quick_add_bar", "label": "Quick add",
+                   "description": "One-tap buttons for your common presets.",
+                   "body": 'view = "quick_add"\n'},),
+        fields=_widget_fields(
+            "quick_add", view_options=("quick_add",), time=False,
+            extra=()))
     reg("quick_add_multi", _w_quick_add_multi, needs_name=False,
-        infer_order=99)
+        infer_order=99,
+        label="Quick add multi",
+        description="Pick from multi-field presets.",
+        icon="layers", category="capture", named=False,
+        interactive_default=False,
+        starters=({"id": "quick_add_multi_bar", "label": "Quick add multi",
+                   "description": "Pick from multi-field presets.",
+                   "body": 'view = "quick_add_multi"\n'},),
+        fields=_widget_fields(
+            "quick_add_multi", view_options=("quick_add_multi",),
+            time=False, extra=()))
 
 
 _register_builtin_widgets()
@@ -3096,6 +3372,172 @@ def get_embed_candidates():
         "projects": sorted(projects),
         "todos": get_todo_view_names(),
     }
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Widget catalog — gallery metadata, option sources, form validation
+# ══════════════════════════════════════════════════════════════════════════════
+
+_SAVED_KIND_KEY = {
+    "dashboard": "dashboards", "metric": "metrics", "threshold": "thresholds",
+    "board": "boards", "habit": "habits", "calendar": "calendars",
+    "due": "due", "project": "projects", "query": "queries", "todo": "todos",
+}
+
+
+def get_widget_options(source):
+    """Values for a gallery field's options_from source string.
+
+    Sources: todo.projects, todo.contexts, todo.priorities, time,
+    schema.types, schema.fields:<type>, saved.<kind> (dashboard,
+    metric, threshold, board, habit, calendar, due, project, query,
+    todo). Unknown sources raise PTOSError so a typo surfaces instead
+    of silently rendering an empty dropdown.
+    """
+    source = str(source or "").strip()
+    if source == "todo.projects":
+        return list(get_todo_projects())
+    if source == "todo.contexts":
+        return list(get_todo_contexts())
+    if source == "todo.priorities":
+        try:
+            labels = (get_config().get("todo") or {}).get("priority_labels")
+        except Exception:
+            labels = None
+        if isinstance(labels, dict) and labels:
+            return sorted(labels)
+        return ["A", "B", "C", "D"]
+    if source == "time":
+        codes = list(ptos._TIME_ALIASES) + ["all"]
+        try:
+            for name in get_config().get("cycles", {}):
+                codes.extend([name, f"{name}-1"])
+        except Exception:
+            pass
+        return codes
+    if source == "schema.types":
+        try:
+            schema = ptos.get_schema()
+        except Exception:
+            schema = {}
+        return list((schema.get("types") or {}).get("allowed") or [])
+    if source.startswith("schema.fields:"):
+        rtype = source.split(":", 1)[1].strip()
+        return [str(f) for f in ptos.filter_fields_for_type(rtype)]
+    if source.startswith("saved."):
+        kind = source.split(".", 1)[1].strip()
+        ckey = _SAVED_KIND_KEY.get(kind)
+        if ckey is None:
+            raise PTOSError(f"Unknown option source '{source}'")
+        cand = get_embed_candidates()
+        vals = list(cand.get(ckey) or [])
+        if kind == "calendar" and "__all__" not in vals:
+            vals = ["__all__"] + vals
+        return vals
+    raise PTOSError(f"Unknown option source '{source}'")
+
+
+def get_widget_catalog():
+    """Gallery catalog: categories, per-kind metadata, visible starters.
+
+    Starters whose body names a saved item the workspace does not have
+    are hidden (threshold is the deliberate exception — a nameless
+    threshold starter shows every configured threshold). The catalog
+    only reports what is usable; nothing here writes config.
+    """
+    import tomllib
+    try:
+        cand = get_embed_candidates()
+    except Exception:
+        cand = {}
+    kinds_out = [ptos_widgets.catalog_entry(e) for e in ptos_widgets.kinds()]
+    starters = []
+    for entry in ptos_widgets.kinds():
+        ckey = _SAVED_KIND_KEY.get(entry["kind"])
+        for st in ptos_widgets.starters_for(entry):
+            body = st.get("body", "")
+            try:
+                spec = tomllib.loads(body) if body.strip() else {}
+            except Exception:
+                continue
+            nm = str(spec.get("name") or "").strip()
+            if ckey and entry.get("named") and nm:
+                if nm not in (cand.get(ckey) or []):
+                    continue  # hidden until the user has that item
+            starters.append({
+                "id": st.get("id"),
+                "label": st.get("label"),
+                "description": st.get("description", ""),
+                "body": body,
+                "kind": entry["kind"],
+                "category": entry.get("category"),
+            })
+    return {
+        "categories": [dict(c) for c in ptos_widgets.CATEGORIES],
+        "kinds": kinds_out,
+        "starters": starters,
+    }
+
+
+def validate_widget_spec(spec):
+    """Static form validation for a widget spec: {"ok", "errors"}.
+
+    Mirrors the resolver's input rules (kind detection, unknown keys,
+    name-required) plus the registry's field metadata (required,
+    types, select options), so the gallery form can show inline errors
+    without running any data query. `errors` is a list of
+    {field, message} dicts; an empty list means the spec is structurally
+    valid (a bad saved name still fails at render time).
+    """
+    if not isinstance(spec, dict):
+        raise PTOSError("Widget spec must be a TOML table")
+    view = str(spec.get("view") or "").strip().lower()
+    name = str(spec.get("name") or "").strip()
+    if not name and not view:
+        return {"ok": False, "errors": [
+            {"field": "name",
+             "message": "Choose a saved item or set a view"}]}
+    entry = None
+    if view:
+        entry = ptos_widgets.get_kind(view)
+        if entry is None:
+            return {"ok": False, "errors": [
+                {"field": "view", "message": f"Unknown view '{view}'"}]}
+    else:
+        try:
+            queries = ptos.get_queries()
+        except Exception:
+            queries = {}
+        owners = ptos_widgets.infer_kinds(name, queries)
+        if not owners:
+            return {"ok": False, "errors": [
+                {"field": "name",
+                 "message": f"No widget kind owns '{name}' — add "
+                            f'view = "..." to pick one'}]}
+        if len(owners) > 1:
+            return {"ok": False, "errors": [
+                {"field": "view",
+                 "message": f"'{name}' exists in multiple sections "
+                            f"({', '.join(owners)}) — pick a view"}]}
+        entry = ptos_widgets.get_kind(owners[0])
+    errors = []
+    for k in ptos_widgets.unknown_keys(entry, spec):
+        errors.append({"field": k,
+                       "message": f"'{k}' is not a valid key for "
+                                  f"{entry['kind']} views"})
+    limit = spec.get("limit")
+    if (isinstance(limit, int) and not isinstance(limit, bool)
+            and limit > ptos_widgets.MAX_ROW_LIMIT):
+        errors.append({"field": "limit",
+                       "message": f"Max rows above "
+                                  f"{ptos_widgets.MAX_ROW_LIMIT} is not "
+                                  f"allowed"})
+    field_errs = ptos_widgets.field_errors(entry, spec)
+    if (entry["needs_name"] and not name
+            and not any(e["field"] == "name" for e in field_errs)):
+        errors.append({"field": "name", "message": "Choose a saved item"})
+    errors.extend(field_errs)
+    return {"ok": not errors, "errors": errors}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -7502,13 +7944,11 @@ def query_todos(project=None, context=None, priority=None, due=None,
     """
     buckets = get_todos_bucketed()
 
-    _DUE_OK = ("overdue", "today", "tomorrow", "upcoming",
-               "someday", "none", "week")
     if due is not None and str(due).strip() != "":
         d = str(due).strip().lower()
-        if d not in _DUE_OK:
+        if d not in TODO_DUE_VALUES:
             raise PTOSError(
-                "`due` must be one of: " + ", ".join(_DUE_OK))
+                "`due` must be one of: " + ", ".join(TODO_DUE_VALUES))
         due = d
     else:
         due = None
