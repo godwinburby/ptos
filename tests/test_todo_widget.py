@@ -588,3 +588,98 @@ class TestWidgetHostClient:
         host = self._js("widget_host.js")
         assert "container: wrap" in host
         assert "rt.destroy()" in host
+
+
+class TestQueryTodoFilterValidation:
+    @staticmethod
+    def _descs(b):
+        return [t.description for k in ("overdue", "today", "tomorrow",
+                                        "upcoming", "someday") for t in b[k]]
+
+    @staticmethod
+    def _client():
+        from ptos_web import app
+        return app.test_client()
+
+    def test_bare_project_matches_prefixed(self):
+        _clean()
+        _seed_todos(["Alpha +work", "Beta +play"])
+        assert self._descs(svc.query_todos(project="work")) == ["Alpha"]
+        assert self._descs(svc.query_todos(project="+work")) == ["Alpha"]
+
+    def test_project_prefix_exclusion_still_works(self):
+        _clean()
+        _seed_todos(["Alpha +work", "Beta +play"])
+        assert self._descs(svc.query_todos(project="-work")) == ["Beta"]
+
+    def test_project_and_context_case_insensitive(self):
+        _clean()
+        _seed_todos(["Alpha +Work", "Gamma @Office"])
+        assert self._descs(svc.query_todos(project="work")) == ["Alpha"]
+        assert self._descs(svc.query_todos(project="WORK")) == ["Alpha"]
+        assert self._descs(svc.query_todos(context="office")) == ["Gamma"]
+        assert self._descs(svc.query_todos(context="@Office")) == ["Gamma"]
+
+    def test_hyphenated_names_match_exactly(self):
+        _clean()
+        _seed_todos(["Alpha +big-project", "Beta +big"])
+        assert self._descs(svc.query_todos(project="big-project")) == ["Alpha"]
+        assert self._descs(svc.query_todos(project="big")) == ["Beta"]
+
+    def test_bare_context_matches_at_prefixed(self):
+        _clean()
+        _seed_todos(["Call boss @office", "Buy milk @shop"])
+        assert self._descs(svc.query_todos(context="office")) == ["Call boss"]
+        assert self._descs(svc.query_todos(context="@office")) == ["Call boss"]
+
+    def test_invalid_due_raises_field_error(self):
+        _clean()
+        _seed_todos(["Alpha +p"])
+        with pytest.raises(PTOSError, match="due"):
+            svc.query_todos(due="nextcentury")
+
+    def test_invalid_priority_raises_field_error(self):
+        _clean()
+        _seed_todos(["Alpha +p"])
+        with pytest.raises(PTOSError, match="priority"):
+            svc.query_todos(priority="zz")
+        with pytest.raises(PTOSError, match="priority"):
+            svc.query_todos(priority="AB")
+        with pytest.raises(PTOSError, match="priority"):
+            svc.query_todos(priority="1")
+
+    def test_due_is_case_insensitive_and_empty_means_unfiltered(self):
+        _clean()
+        _seed_todos([f"Today +p due:{_today()}", "Later +q"])
+        assert self._descs(svc.query_todos(due="TODAY")) == ["Today"]
+        assert self._descs(svc.query_todos(due="today")) == ["Today"]
+        got = self._descs(svc.query_todos(due="", priority=""))
+        assert sorted(got) == ["Later", "Today"]
+
+    def test_priority_list_matches_any_letter(self):
+        _clean()
+        _seed_todos(["(A) High +p", "(B) Med +p", "(C) Low +p"])
+        got = self._descs(svc.query_todos(project="+p",
+                                          priority=["A", "b"]))
+        assert sorted(got) == ["High", "Med"]
+
+    def test_page_invalid_due_shows_error_banner(self):
+        _clean()
+        _seed_todos(["Alpha +p"])
+        resp = self._client().get("/todo?due=bogus")
+        assert resp.status_code == 200
+        assert b"must be one of" in resp.data
+
+    def test_batch_todo_widget_invalid_due_returns_item_error(self):
+        _clean()
+        resp = self._client().post(
+            "/api/widgets/resolve",
+            json={"items": [
+                {"id": 1, "body": 'view = "todo"\ndue = "bogus"'},
+                {"id": 2, "body": 'view = "todo"'}]})
+        data = resp.get_json()
+        assert data["ok"]
+        res1, res2 = data["results"]
+        assert res1["ok"] is False
+        assert "due" in res1.get("error", "")
+        assert res2["ok"], res2.get("error")

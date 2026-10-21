@@ -2443,7 +2443,6 @@ def backup_config_restore():
     try:
         result = svc.restore_config(tmp_path)
         os.unlink(tmp_path)
-        _emit_data_changed("config")
         return jsonify(ok=True, message=result.get("message", "Config restored"))
     except Exception as e:
         os.unlink(tmp_path)
@@ -2463,7 +2462,6 @@ def backup_config_restore_from_list(name):
     
     try:
         result = svc.restore_config(backup_path)
-        _emit_data_changed("config")
         return jsonify(ok=True, message=result.get("message", "Config restored"))
     except Exception as e:
         return jsonify(ok=False, error=str(e))

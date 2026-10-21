@@ -190,8 +190,14 @@ def _emit_changed(*scopes):
 def scope_for_data_path(rel_path):
     """Map a path inside the data folder to a data-changed scope.
 
-    Accepts absolute or relative paths and either separator. The *outermost*
-    known folder wins, so ``notes/config/x.md`` is ``notes``, not ``config``.
+    Contract: **data-folder paths only** (``records/``, ``todo/``,
+    ``notes/``, ``config/`` as a folder inside the data folder, absolute
+    or relative). Note-save paths are notes-*folder*-relative and must
+    NOT come through here — ``config/x.md`` means a notes subfolder named
+    ``config``, which would mis-scope to ``config``; those writers emit
+    ``"notes"`` directly (see ``svc_save_file``). Accepts absolute or
+    relative paths and either separator. The *outermost* known folder
+    wins, so ``notes/config/x.md`` is ``notes``, not ``config``.
     "journal/" maps to ``None``: no widget reads journals yet (a journal widget
     ships in a later phase), so a journal write must not refresh anything.
     """
@@ -3563,6 +3569,7 @@ def restore_config(zip_path):
     
     # Invalidate caches
     invalidate_all()
+    _emit_changed("config")
 
     return {"ok": True, "message": "Config restored successfully"}
 
@@ -7219,7 +7226,9 @@ def svc_delete(rel_path):
 def svc_ensure_note_id(rel_path):
     """Generate and persist an id for a note if it doesn't have one.
     Returns the id string."""
-    return ptos.ensure_note_id(rel_path)
+    nid = ptos.ensure_note_id(rel_path)
+    _emit_changed("notes")
+    return nid
 
 
 def check_note_delete_links(rel_path):
@@ -7331,9 +7340,7 @@ def svc_save_file(rel_path, content, base_rev=None, force=False):
 
     result = _save_text_locked(full, content, base_rev, force,
                                prepare=_keep_id_prefix)
-    scope = scope_for_data_path(rel_path)
-    if scope:
-        _emit_changed(scope)
+    _emit_changed("notes")
     return result
 
 
@@ -7472,13 +7479,16 @@ def query_todos(project=None, context=None, priority=None, due=None,
 
     Semantics match the page's query params exactly (pinned by
     tests/test_todo_page_snapshot.py): project/context/priority/search/
-    linked_to are single values; a `-` project prefix excludes; context
-    matches the stored token verbatim (chips pass `@name`); priority is
-    case-insensitive; search is a glob over the description;
-    hide_routines drops `+routine` when no explicit project is given;
-    `due` cuts to one due-range bucket (`overdue`/`today`/`tomorrow`/
-    `upcoming`/`someday`), `none` for no-due buckets only, or `week`
-    (due on or within the next 7 days, overdue included).
+    linked_to are single values (priority also accepts a list); a `-`
+    project prefix excludes; project and context are normalized on input
+    (`+`/`@` optional, matched case-insensitively); search is a glob
+    over the description; hide_routines drops `+routine` when no
+    explicit project is given; `due` must be one of `overdue`/`today`/
+    `tomorrow`/`upcoming`/`someday`/`none`/`week` and `priority` a
+    single A–Z letter — any other value raises `PTOSError` naming the
+    field instead of being silently ignored. `due` cuts to one due-range
+    bucket, `none` for no-due buckets only, or `week` (due on or within
+    the next 7 days, overdue included).
     Returns the bucketed dict with Todo objects (same shape as
     get_todos_bucketed(), with total_open recomputed after filtering).
 
@@ -7492,21 +7502,50 @@ def query_todos(project=None, context=None, priority=None, due=None,
     """
     buckets = get_todos_bucketed()
 
+    _DUE_OK = ("overdue", "today", "tomorrow", "upcoming",
+               "someday", "none", "week")
+    if due is not None and str(due).strip() != "":
+        d = str(due).strip().lower()
+        if d not in _DUE_OK:
+            raise PTOSError(
+                "`due` must be one of: " + ", ".join(_DUE_OK))
+        due = d
+    else:
+        due = None
+    pri_list = None
+    if priority:
+        raw_pri = priority if isinstance(priority, (list, tuple)) \
+            else [priority]
+        pri_list = []
+        for p in raw_pri:
+            s = str(p).strip()
+            if len(s) != 1 or not s.isalpha():
+                raise PTOSError(
+                    "`priority` must be a single letter A-Z "
+                    "(or a list of them)")
+            pri_list.append(s.upper())
+
     def _filter_list(todos):
         result = todos
         if project:
-            if project.startswith("-"):
-                exc = "+" + project[1:]
-                result = [t for t in result if exc not in t.projects]
+            neg = project.startswith("-")
+            body = project[1:] if neg else project
+            want = (body if body.startswith("+") else "+" + body).lower()
+            if neg:
+                result = [t for t in result
+                          if want not in [p.lower() for p in t.projects]]
             else:
-                inc = project if project.startswith("+") else "+" + project
-                result = [t for t in result if inc in t.projects]
+                result = [t for t in result
+                          if want in [p.lower() for p in t.projects]]
         elif hide_routines:
             result = [t for t in result if "+routine" not in t.projects]
         if context:
-            result = [t for t in result if context in t.contexts]
-        if priority:
-            result = [t for t in result if t.priority == priority.upper()]
+            want_ctx = context if context.startswith("@") else "@" + context
+            want_ctx = want_ctx.lower()
+            result = [t for t in result
+                      if want_ctx in [c.lower() for c in t.contexts]]
+        if pri_list:
+            result = [t for t in result if t.priority in pri_list]
         if search:
             result = [t for t in result
                       if ptos._glob_match(search, t.description)]

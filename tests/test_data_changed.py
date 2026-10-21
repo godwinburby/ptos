@@ -12,7 +12,9 @@ visibilitychange/pageshow, no polling), and todo.html reloads guarded against
 typing focus.
 """
 
+import io
 import os
+import zipfile
 
 import pytest
 
@@ -142,6 +144,82 @@ class TestScopeForDataPath:
         assert svc.scope_for_data_path(
             os.path.join("C:\\", "data", "ptos-data", "todo",
                          "todo.txt").replace("\\", "/")) == "todo"
+
+
+class TestNoteSaveEmission:
+    def test_top_level_note_save_emits_notes(self, scopes):
+        os.makedirs(ptos.NOTES_DIR, exist_ok=True)
+        svc.svc_save_file("a1_probe.md", "hello\n")
+        assert scopes == ["notes"]
+
+    def test_nested_note_save_emits_notes(self, scopes):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, "deep"), exist_ok=True)
+        svc.svc_save_file(os.path.join("deep", "a1_probe.md"), "hello\n")
+        assert scopes == ["notes"]
+
+    @pytest.mark.parametrize("folder", ["config", "todo"])
+    def test_note_folder_named_like_data_folder(self, scopes, folder):
+        os.makedirs(os.path.join(ptos.NOTES_DIR, folder), exist_ok=True)
+        svc.svc_save_file(folder + "/a1_probe.md", "hello\n")
+        assert scopes == ["notes"]
+
+    def test_stale_revision_emits_nothing(self, scopes):
+        os.makedirs(ptos.NOTES_DIR, exist_ok=True)
+        svc.svc_save_file("a1_stale.md", "v1\n")
+        scopes.clear()
+        with pytest.raises(svc.NoteConflictError):
+            svc.svc_save_file("a1_stale.md", "v2\n", base_rev="stale-rev")
+        assert scopes == []
+
+    def test_ensure_note_id_emits_notes(self, scopes):
+        os.makedirs(ptos.NOTES_DIR, exist_ok=True)
+        svc.svc_save_file("a1_id.md", "# probe\n")
+        scopes.clear()
+        assert svc.svc_ensure_note_id("a1_id.md")
+        assert scopes == ["notes"]
+
+    def test_web_stale_rev_returns_409_and_no_broadcast(self, client,
+                                                        broadcasts):
+        os.makedirs(ptos.NOTES_DIR, exist_ok=True)
+        resp = client.post("/notes/save",
+                           json={"path": "a1_web.md", "content": "v1"})
+        assert resp.status_code == 200 and resp.get_json().get("ok")
+        broadcasts.clear()
+        resp = client.post("/notes/save", json={"path": "a1_web.md",
+                                                "content": "v2",
+                                                "base_rev": "stale-rev"})
+        assert resp.status_code == 409
+        assert _scopes(broadcasts) == []
+
+    def test_restore_config_emits_config(self, scopes, tmp_path):
+        result = svc.restore_config(self._config_zip(tmp_path))
+        assert result["ok"]
+        assert "config" in scopes
+
+    def test_restore_route_broadcasts_config_exactly_once(self, client,
+                                                          broadcasts,
+                                                          tmp_path):
+        zip_path = self._config_zip(tmp_path, "a1_route.zip")
+        with open(zip_path, "rb") as fh:
+            buf = io.BytesIO(fh.read())
+        resp = client.post("/backup/config/restore",
+                           data={"file": (buf, "cfg.zip")},
+                           content_type="multipart/form-data")
+        assert resp.status_code == 200 and resp.get_json().get("ok")
+        assert _scopes(broadcasts) == ["config"]
+
+    @staticmethod
+    def _config_zip(tmp_path, name="a1_restore.zip"):
+        cfg_dir = os.path.dirname(ptos.CONFIG_PATH)
+        zip_path = str(tmp_path / name)
+        with zipfile.ZipFile(zip_path, "w") as zf:
+            for fname in sorted(os.listdir(cfg_dir)):
+                if fname.endswith((".bak", ".tmp", ".lock")):
+                    continue
+                full = os.path.join(cfg_dir, fname)
+                if os.path.isfile(full):
+                    zf.write(full, "config/" + fname)
+        return zip_path
 
 
 class TestWebBroadcasts:

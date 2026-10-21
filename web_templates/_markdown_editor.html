@@ -71,7 +71,9 @@
   </div>
 </div>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/marked/9.1.6/marked.min.js"></script>
+<script src="{{ av('/static/vendor/marked.min.js') }}"></script>
+<script src="{{ av('/static/vendor/purify.min.js') }}"></script>
+<script src="{{ av('/static/js/md_render.js') }}"></script>
 <script src="{{ av('/static/js/widgets.js') }}"></script>
 <script src="{{ av('/static/js/embeds.js') }}"></script>
 <script src="{{ av('/static/js/slash_embed.js') }}"></script>
@@ -302,19 +304,6 @@
 
 <script>
 (function() {
-  if (typeof marked !== "undefined") {
-    marked.setOptions({ gfm:true, breaks:true });
-    var _r = new marked.Renderer();
-    var _origLI = _r.listitem.bind(_r);
-    _r.listitem = function(text, task, checked) {
-      if (task)
-        return '<li style="list-style:none;margin-left:-22px;"><input type="checkbox" ' +
-               (checked?"checked":"") + ' disabled> ' + text + '</li>';
-      return _origLI(text, task, checked);
-    };
-    marked.use({ renderer: _r });
-  }
-
   var _eid = "{{ _eid }}";
   var _mode = window.innerWidth < 768 ? "stacked" : "edit";
   var _saveTimer = null, _dirty = false;
@@ -327,8 +316,9 @@
   window.renderPreview = function() {
     var src = document.getElementById(_eid).value;
     var pane = document.getElementById("preview-pane");
-    pane.innerHTML = typeof marked !== "undefined"
-      ? marked.parse(typeof preprocessLinks === "function" ? preprocessLinks(src) : src)
+    var text = typeof preprocessLinks === "function" ? preprocessLinks(src) : src;
+    pane.innerHTML = typeof renderMarkdown === "function"
+      ? renderMarkdown(text)
       : "<pre style='white-space:pre-wrap'>" +
           src.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>";
     if (typeof window.mountEmbeds === "function") window.mountEmbeds(pane);
