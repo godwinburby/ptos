@@ -202,7 +202,7 @@
         '<a href="/add?preset=' + encodeURIComponent(name) + '" class="preset-edit" title="Edit preset">✎</a>';
     } else {
       chip = '<a href="/add?preset=' + encodeURIComponent(name) + '" class="preset-chip" data-preset="' +
-        esc(name) + '" onclick="return false;">+ ' + esc(name) + '</a>';
+        esc(name) + '">+ ' + esc(name) + '</a>';
     }
     return '<span class="preset-chip-wrap">' + chip +
       '<button type="button" class="preset-instant-toggle" data-preset="' + esc(name) + '"' +

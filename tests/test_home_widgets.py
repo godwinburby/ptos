@@ -355,6 +355,25 @@ class TestHomeWidgetsJsPins:
             assert 'register("%s"' % kind in src, kind
         assert "{ bare: true }" in src
 
+    def test_quick_add_chip_still_navigates_to_add_screen(self):
+        src = self._js()
+        m = re.search(r"chip = '<a href=\"/add\?preset=' \+ encodeURIComponent\(name\) \+ '"
+                      r'[^;]*;', src)
+        assert m, "non-instant quick-add chip markup missing"
+        chip = m.group(0)
+        assert 'href="/add?preset=' in chip
+        assert "onclick" not in chip, (
+            "non-instant chip must not carry an inline onclick — it blocked "
+            "the anchor's navigation to /add?preset= (home quick-add regression)")
+
+    def test_quick_add_chip_click_does_not_prevent_default(self):
+        src = self._js()
+        m = re.search(r'if \(chip\.classList\.contains\("preset-chip"\)\) \{[^}]*\}', src)
+        assert m, "preset-chip click branch missing"
+        branch = m.group(0)
+        assert "preventDefault" not in branch
+        assert "return false" not in branch
+
     def test_mount_batch_exported_from_widget_host(self):
         assert "mountBatch: mountBatch" in self._host_js()
 

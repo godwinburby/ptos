@@ -5,7 +5,25 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-21
+
+### Add/Edit forms: Id & links collapsed by default
+
+- **Id + Links now live behind an "Id & links" collapsible** on the Add Record and Edit Record forms, using the same toggle pattern as the "Additional info" section (clickable header, `▼/▲` arrow, `· filled` badge). They're rarely used, so the section is collapsed by default and auto-opens only when the record already has an `id` or `links` value (pre-filled forms — edit, presets, convert — show their values immediately). The toggle renders even on forms with no global fields (where Additional info doesn't exist). The edit form's "Linked from" backlinks panel stays outside the collapsible, so incoming links still auto-appear without expanding anything. Inputs are only `display:none` (never disabled), so hidden values still submit.
+
+### Inline calculator on numeric record fields
+
+- **ƒx button on int fields** — the Add Record and Edit Record forms now render a small `ƒx` button next to every `type = "int"` schema field (e.g. `amount`, `duration`, `minutes`). Clicking it opens a fixed-position calculator panel (expression input + keypad with digits, `+ − × ÷`, parentheses, `%`, `C`, `⌫`) seeded with the field's current value, so you can type or tap out arithmetic like `120+45*2` or a discount like `500-10%` and see the live result.
+- **Percentage/discount semantics** — `%` after a number in a `+`/`−` chain means "percent of the running total" (`500-10%` → 450, `500+10%` → 550, `100-10%-10%` → 81, the standard phone-calculator behavior); after `×`/`÷` or standalone it is just `/100` (`500×10%` → 50, `50/25%` → 200). The keypad's former `±` key made room for `%` — negative values are still typeable with `-`.
+- **Apply writes back safely** — the result is rounded to an integer (all PTOS numeric fields are `int`) and written into the field, then `input`/`change` events are dispatched so the forms' threshold live-preview fires. The expression evaluator is a small recursive-descent parser in `web_static/js/calculator.js` — **no `eval()`** (test-pinned); invalid input or division by zero shows `—` and disables Apply. Esc / outside-click closes.
+- **Client-only** — no engine/service/schema/config changes; loaded via `av()` on the two form templates only. Pins in `tests/test_calc.py` (no-eval, exports, event dispatch, template branch markup, CSS classes).
+
 ## 2026-10-20
+
+### Bug fix: home quick-add chips no longer opened the Add Record screen
+
+- **Non-instant quick-add preset chips on the home page navigate to `/add?preset=NAME` again.** Stage 5's widget rewrite rendered each chip as an anchor carrying `onclick="return false;"`, which suppressed the href navigation, while the widget's click handler only bumped the preset's use count (`/api/preset_use`) and never navigated — so clicking a chip reloaded nothing and never reached the prefilled Add Record form (the pre-widget home page navigated after a fire-and-forget `trackPreset` post). The inline `onclick` is gone; the click handler still fires the use-count post and the anchor's default navigation proceeds, matching the old behavior. Instant chips (direct add), multi-record presets, and the ✎ edit pencil were unaffected.
+- **Regression pins** — `tests/test_home_widgets.py` now asserts the chip markup keeps the `/add?preset=` href with no inline `onclick`, and that the `preset-chip` click branch neither calls `preventDefault` nor returns false.
 
 ### Live widgets — Stage 5: home rebuilt as a live-widget page
 

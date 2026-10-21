@@ -816,3 +816,73 @@ class TestRemoveTypeAwareness:
         ptos = _link_env(tmp_path, monkeypatch)
         ptos.remove_type("expense")
         assert "existing records use type 'expense'" not in capsys.readouterr().out
+
+
+class TestIdLinksCollapse:
+    """The Id + Links inputs are wrapped in an "Id & links" collapsible
+    (same pattern as the Additional info toggle) on both form templates."""
+
+    _REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+    @staticmethod
+    def _read(*parts):
+        with open(os.path.join(TestIdLinksCollapse._REPO, *parts),
+                  encoding="utf-8") as f:
+            return f.read()
+
+    @pytest.mark.parametrize("tpl", ["add.html", "edit.html"])
+    def test_wrapper_encloses_id_and_links_inputs(self, tpl):
+        body = self._read("web_templates", tpl)
+        m = re.search(r'<div id="link-fields"[^>]*>(.*?)\n    </div>\n'
+                      r"    <script>", body, re.S)
+        assert m, f"{tpl}: link-fields wrapper missing"
+        inner = m.group(1)
+        assert re.search(r'name="id"', inner)
+        assert re.search(r'name="links"', inner)
+
+    @pytest.mark.parametrize("tpl", ["add.html", "edit.html"])
+    def test_toggle_header_present(self, tpl):
+        body = self._read("web_templates", tpl)
+        assert 'onclick="toggleLinks()"' in body
+        assert 'id="link-arrow"' in body
+        assert "Id &amp; links" in body
+        assert "function toggleLinks()" in body
+        assert re.search(
+            r'getElementById\("link-fields"\)', body)
+        assert re.search(
+            r'getElementById\("link-arrow"\)', body)
+
+    @pytest.mark.parametrize("tpl", ["add.html", "edit.html"])
+    def test_collapsed_unless_filled(self, tpl):
+        body = self._read("web_templates", tpl)
+        m = re.search(r'<div id="link-fields" style="display:\{(.*?)\};"',
+                      body)
+        assert m, f"{tpl}: display conditional missing"
+        cond = m.group(1)
+        assert "has_links" in cond
+        assert re.search(r"field_values\.get\('id'\)", body)
+        assert re.search(r"field_values\.get\('links'\)", body)
+        assert "\u00b7 filled" in body
+
+    def test_edit_linked_from_stays_outside_wrapper(self):
+        body = self._read("web_templates", "edit.html")
+        m = re.search(r'<div id="link-fields"[^>]*>(.*?)\n    </div>\n'
+                      r"    <script>", body, re.S)
+        assert m
+        assert "linked-from" not in m.group(1)
+        assert 'id="linked-from-wrap"' in body
+
+    def test_add_page_renders_collapsed_without_values(self):
+        from ptos_web import app
+        body = app.test_client().get("/add?type=expense").get_data(as_text=True)
+        assert 'id="link-fields"' in body
+        assert "Id &amp; links" in body
+        assert "toggleLinks" in body
+        assert '<div id="link-fields" style="display:none;">' in body
+
+    def test_add_page_opens_when_links_prefilled(self):
+        from ptos_web import app
+        body = app.test_client().get(
+            "/add?type=expense&links=todo:abc123").get_data(as_text=True)
+        assert '<div id="link-fields" style="display:block;">' in body
+        assert "· filled" in body

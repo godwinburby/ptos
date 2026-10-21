@@ -263,9 +263,12 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
         <option value="">— select {{ f.parent }} first —</option>
       </select>
       {% elif f.is_int %}
-      <input type="number" name="{{ f.name }}" min="0" inputmode="numeric"
-             value="{{ field_values.get(f.name, '') if field_values else '' }}"
-             placeholder="0">
+      <div style="display:flex;gap:4px;align-items:center;">
+        <input type="number" name="{{ f.name }}" id="field-{{ f.name }}" min="0" inputmode="numeric"
+               value="{{ field_values.get(f.name, '') if field_values else '' }}"
+               placeholder="0" style="flex:1;min-width:0;">
+        <button type="button" class="calc-btn" data-for="field-{{ f.name }}" title="Calculator">ƒx</button>
+      </div>
       {% elif f.is_month %}
       <input type="month" name="{{ f.name }}"
              value="{{ field_values.get(f.name, '') if field_values else '' }}">
@@ -403,24 +406,49 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
 
     <!-- links -->
     <div class="divider"></div>
-    <div class="field-group">
-      <label>Id <span style="color:var(--sub);font-weight:400;">optional · link target</span></label>
-      <div style="display:flex;gap:4px;align-items:center;">
-        <input type="text" name="id" id="add-id" list="add-link-id-list"
-               value="{{ field_values.get('id','') if field_values else '' }}"
-               placeholder="auto link target (e.g. k3f9a1)" style="flex:1;">
-        <button type="button" onclick="generateRecordId()" style="padding:4px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;" title="Generate a random id">Generate</button>
+    {% set has_links = field_values and (field_values.get('id') or field_values.get('links')) %}
+    <div onclick="toggleLinks()"
+         style="display:flex;align-items:center;justify-content:space-between;
+                padding:10px 0;cursor:pointer;user-select:none;">
+      <span style="font-size:13px;font-weight:600;color:var(--sub);">
+        Id &amp; links
+        {% if has_links %}
+        <span style="color:var(--accent);margin-left:6px;">· filled</span>
+        {% endif %}
+      </span>
+      <span id="link-arrow" style="font-size:11px;color:var(--sub);">
+        {% if has_links %}▲{% else %}▼{% endif %}
+      </span>
+    </div>
+    <div id="link-fields" style="display:{% if has_links %}block{% else %}none{% endif %};">
+      <div class="field-group">
+        <label>Id <span style="color:var(--sub);font-weight:400;">optional · link target</span></label>
+        <div style="display:flex;gap:4px;align-items:center;">
+          <input type="text" name="id" id="add-id" list="add-link-id-list"
+                 value="{{ field_values.get('id','') if field_values else '' }}"
+                 placeholder="auto link target (e.g. k3f9a1)" style="flex:1;">
+          <button type="button" onclick="generateRecordId()" style="padding:4px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;" title="Generate a random id">Generate</button>
+        </div>
+        <datalist id="add-link-id-list"></datalist>
       </div>
-      <datalist id="add-link-id-list"></datalist>
+      <div class="field-group">
+        <label>Links <span style="color:var(--sub);font-weight:400;">optional · comma-separated type:id</span></label>
+        <input type="text" name="links" id="add-links" list="add-link-ids-list"
+               value="{{ field_values.get('links','') if field_values else '' }}"
+               placeholder="expense:k3f9a1, todo:t7c2b8">
+        <datalist id="add-link-ids-list"></datalist>
+        <div style="font-size:11px;color:var(--sub);margin-top:4px;">links reference existing entries by their id — e.g. project:p91a, expense:k3f9a1</div>
+      </div>
     </div>
-    <div class="field-group">
-      <label>Links <span style="color:var(--sub);font-weight:400;">optional · comma-separated type:id</span></label>
-      <input type="text" name="links" id="add-links" list="add-link-ids-list"
-             value="{{ field_values.get('links','') if field_values else '' }}"
-             placeholder="expense:k3f9a1, todo:t7c2b8">
-      <datalist id="add-link-ids-list"></datalist>
-      <div style="font-size:11px;color:var(--sub);margin-top:4px;">links reference existing entries by their id — e.g. project:p91a, expense:k3f9a1</div>
-    </div>
+    <script>
+    function toggleLinks() {
+      var el  = document.getElementById("link-fields");
+      var arr = document.getElementById("link-arrow");
+      var open = el.style.display !== "none";
+      el.style.display = open ? "none" : "block";
+      arr.textContent  = open ? "▼" : "▲";
+    }
+    </script>
 
     <!-- note -->
     <div class="divider"></div>
@@ -990,5 +1018,6 @@ document.addEventListener("DOMContentLoaded", function() {
   }).catch(function() {});
 });
 </script>
+<script src="{{ av('/static/js/calculator.js') }}"></script>
 
 {% endblock %}
