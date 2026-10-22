@@ -5,6 +5,21 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-22
+
+### Phase 2b (home-note spec): gallery Text category, text-block toolbar
+
+- The gallery and slash menu now share `text_blocks.js` as the source for headings, paragraphs, lists, quotes, callouts, code blocks, tables, dividers and token blocks. Text picks open in Blocks edit mode at their declared caret position and stay out of widget Recent.
+- The note and Blocks editors share the `md_toolbar.js` controls. It supports bold, italic, links, H1/H2/H3, bulleted and numbered lists, checklists, quotes, inline code, token insertion, list continuation and indentation, plus a safe rendered preview. On phones, the toolbar follows the visual viewport above the keyboard. Pure helpers are exposed as `PtosToolbar` and covered by `tests/js/md_toolbar.test.js`.
+
+### Phase 2 (home-note spec): widget gallery form, picker, client TOML core
+
+- **Hand-edited widget bodies keep their keys and order** — new `web_static/js/widget_toml.js` exposes `window.PtosToml` (parse + serialize): a small purpose-built parser for the flat TOML subset ```ptos fences use (strings with escapes, literal 'strings', ints/floats, bools, arrays incl. line-wrapped ones; comments dropped; nested tables rejected with a clear error). The gallery form parses the current body, edits only the keys it knows, and serializes back — unknown keys and the user's key order survive. This is the **single** client TOML implementation (no npm, no second parser); `tests/js/widget_toml.test.js` runs it under `node --test` (15 cases: round-trips, escapes, wrapped arrays, CRLF, error shapes).
+- **The widget form** (`widget_form.js`, `PtosWidgetForm.mount`) — Blocks-mode ✎ on a widget block now opens a metadata-driven form instead of the raw textarea: one control per key straight from the catalog's field metadata (selects, chips with lazily-fetched options, saved-item dropdowns, labelled time windows from `/api/embed/candidates`, the `where` expression box with a schema-field datalist, bools, numbers). A debounced 400 ms tick both **validates** the spec (`POST /api/widgets/validate` — inline per-field errors; Save stays disabled while any error shows) and refreshes a **live preview** through the same `embedFetch`/`embedRenderBody` path the note preview uses, so expression and resolve errors are visible while editing. "Edit as text" swaps in the generated TOML; switching back re-parses. A body with no usable `view` gets a kind selector first (with client-side inference from `/api/embed/candidates` when a unique owner exists), so a hand-written `name`-only embed is still editable. The raw-textarea path remains as the fallback when the module is absent.
+- **The widget gallery** (`widget_picker.js`, `PtosWidgetPicker.open`) — a bottom sheet on phones (~85 vh, 44 px targets) and a popover on desktop, opened from the slash menu's new leading **"All widgets…"** entry (Format group and the named-item quick lists are unchanged, so the fast path stays fast). The gallery leads with **Starters**, then the six **Categories**, then **Recent** picks (localStorage, try/catch, capped at 8); search filters labels/descriptions/aliases live. Named kinds open a second step listing their saved items (`options?source=saved.<kind>`); threshold/todo also offer their nameless default. `mode:"change"` merges the pick into the current spec — keys the target kind doesn't allow are dropped, everything else carries over, and the picked body wins on conflicts — and Blocks-mode ⇄ on a widget block opens the gallery in that mode (with a "Markdown & text…" escape back to the Format picker, so widget→text conversion is never a dead end). Slash-menu widget picks that replace an existing widget block also run through `merge`, so title/limit-style fields survive.
+- **Server**: `get_widget_options` gains `schema.fields` (union of field names across all allowed types) for the `where` datalist.
+- **Tests** — `tests/test_widget_form.py` (19: script order pins, single-TOML-parser pins, form/picker wiring, gallery entry in both slash paths, CSS hooks, `schema.fields` source) + the node suite above. Full suite 3673 green.
+
 ## 2026-10-21
 
 ### Add/Edit forms: Id & links collapsed by default

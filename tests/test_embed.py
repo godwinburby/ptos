@@ -570,16 +570,22 @@ class TestEmbedMarkup:
         assert "attachSlashEmbed" in html
 
     def test_slash_menu_ships_format_helpers(self):
-        path = os.path.join(_REPO_ROOT, "web_static", "js", "slash_embed.js")
-        with open(path, encoding="utf-8") as f:
-            js = f.read()
+        slash_path = os.path.join(_REPO_ROOT, "web_static", "js",
+                                  "slash_embed.js")
+        catalog_path = os.path.join(_REPO_ROOT, "web_static", "js",
+                                    "text_blocks.js")
+        with open(slash_path, encoding="utf-8") as f:
+            slash_js = f.read()
+        with open(catalog_path, encoding="utf-8") as f:
+            catalog_js = f.read()
         for label in ("Heading 1", "Heading 2", "Heading 3", "Bulleted list",
-                      "Numbered list", "Task list", "Quote", "Code block",
+                      "Numbered list", "Checklist", "Quote", "Code block",
                       "Divider", "Table", "Bold", "Italic", "Strikethrough",
                       "Inline code", "Link"):
-            assert label in js, label
-        assert '"f"' in js
-        assert 'label: "Format"' in js
+            assert label in catalog_js, label
+        assert "window.PtosTextBlocks" in slash_js
+        assert 'kind: "f"' in slash_js
+        assert 'label: "Format"' in slash_js
 
     def test_slash_menu_inserts_explicit_view(self):
         path = os.path.join(_REPO_ROOT, "web_static", "js", "slash_embed.js")

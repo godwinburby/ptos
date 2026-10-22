@@ -1,0 +1,27 @@
+(function (root) {
+  "use strict";
+  root.PtosTextBlocks = [
+    { id: "heading-1", label: "Heading 1", aliases: ["h1", "heading", "title"], description: "Large section title.", icon: "heading", seed: "# ", caret: 2, gallery: true, run: "prefix", prefix: "# ", xform: { t: "prefix", pre: "# ", first: true } },
+    { id: "heading-2", label: "Heading 2", aliases: ["h2"], description: "Medium section title.", icon: "heading", seed: "## ", caret: 3, gallery: true, run: "prefix", prefix: "## ", xform: { t: "prefix", pre: "## ", first: true } },
+    { id: "heading-3", label: "Heading 3", aliases: ["h3"], description: "Small section title.", icon: "heading", seed: "### ", caret: 4, gallery: true, run: "prefix", prefix: "### ", xform: { t: "prefix", pre: "### ", first: true } },
+    { id: "paragraph", label: "Text", aliases: ["p", "plain", "paragraph"], description: "Plain body text.", icon: "pilcrow", seed: "", caret: 0, gallery: true, run: "prefix", prefix: "", xform: { t: "prefix", pre: "", all: true } },
+    { id: "bulleted-list", label: "Bulleted list", aliases: ["ul", "bullet", "todo list"], description: "Unordered list of items.", icon: "list", seed: "- ", caret: 2, gallery: true, run: "prefix", prefix: "- ", xform: { t: "prefix", pre: "- ", all: true } },
+    { id: "numbered-list", label: "Numbered list", aliases: ["ol", "numbered"], description: "Ordered list, auto-numbered.", icon: "list-ordered", seed: "1. ", caret: 3, gallery: true, run: "prefix", prefix: "1. ", xform: { t: "prefix", pre: "1. ", all: true } },
+    { id: "checklist", label: "Checklist", aliases: ["todo", "task", "checkbox", "checklist"], description: "Checkable list items.", icon: "check-square", seed: "- [ ] ", caret: 6, gallery: true, run: "prefix", prefix: "- [ ] ", xform: { t: "prefix", pre: "- [ ] ", all: true } },
+    { id: "quote", label: "Quote", aliases: ["blockquote", "quote"], description: "Block quote.", icon: "quote", seed: "> ", caret: 2, gallery: true, run: "prefix", prefix: "> ", xform: { t: "prefix", pre: "> ", all: true } },
+    { id: "callout", label: "Callout", aliases: ["note", "admonition", "callout"], description: "Highlighted note box.", icon: "message-square", seed: "> **Note**\n> ", caret: 13, gallery: true, run: "block", xform: { t: "prefix", pre: "> ", all: true } },
+    { id: "divider", label: "Divider", aliases: ["hr", "line"], description: "Horizontal rule.", icon: "minus", seed: "---", caret: 3, gallery: true, run: "block", xform: { t: "replace" } },
+    { id: "table", label: "Table", aliases: ["grid"], description: "Simple two-column table.", icon: "table", seed: "| Column | Column |\n| ------ | ------ |\n|        |        |", caret: 10, gallery: true, run: "block", xform: { t: "replace" } },
+    { id: "code-block", label: "Code block", aliases: ["code", "fence"], description: "Fenced code block.", icon: "code", seed: "```text\n\n```", caret: 8, gallery: true, run: "block", xform: { t: "fence", lang: "text" } },
+    { id: "greeting-line", label: "Greeting line", aliases: ["greeting", "welcome"], description: "A greeting that follows your local time.", icon: "sun", seed: "# {{greeting}}, {{name}}", caret: 2, token: "{{greeting}}", tokenLabel: "Greeting", gallery: true, run: "block", xform: { t: "prefix", pre: "# ", first: true } },
+    { id: "today-date", label: "Today's date", aliases: ["date", "today"], description: "The current date in your local locale.", icon: "calendar", seed: "{{date}}", caret: 0, token: "{{date}}", tokenLabel: "Date", gallery: true, run: "block" },
+    { id: "weekday", label: "Weekday", aliases: ["day", "monday"], description: "The local day of the week.", icon: "calendar", seed: "{{weekday}}", caret: 0, token: "{{weekday}}", tokenLabel: "Weekday", gallery: true, run: "block" },
+    { id: "time", label: "Time", aliases: ["clock", "hour"], description: "The current local time.", icon: "clock", seed: "{{time}}", caret: 0, token: "{{time}}", tokenLabel: "Time", gallery: true, run: "block" },
+    { id: "your-name", label: "Your name", aliases: ["name", "user"], description: "Your saved display name.", icon: "user", seed: "{{name}}", caret: 0, token: "{{name}}", tokenLabel: "Name", gallery: true, run: "block" },
+    { id: "bold", label: "Bold", aliases: ["b", "strong"], description: "Bold text.", icon: "bold", seed: "**bold text**", caret: 2, gallery: false, run: "wrap", open: "**", close: "**", xform: { t: "wrap", open: "**", close: "**" } },
+    { id: "italic", label: "Italic", aliases: ["i", "em"], description: "Italic text.", icon: "italic", seed: "*italic*", caret: 1, gallery: false, run: "wrap", open: "*", close: "*", xform: { t: "wrap", open: "*", close: "*" } },
+    { id: "strike", label: "Strikethrough", aliases: ["s", "strike", "del"], description: "Struck through text.", icon: "strikethrough", seed: "~~strikethrough~~", caret: 2, gallery: false, run: "wrap", open: "~~", close: "~~", xform: { t: "wrap", open: "~~", close: "~~" } },
+    { id: "inline-code", label: "Inline code", aliases: ["code-inline"], description: "Code within a sentence.", icon: "code", seed: "`code`", caret: 1, gallery: false, run: "wrap", open: "`", close: "`", xform: { t: "wrap", open: "`", close: "`" } },
+    { id: "link", label: "Link", aliases: ["url", "hyperlink"], description: "A link to a page or website.", icon: "link", seed: "[text](url)", caret: 1, gallery: false, run: "link", xform: { t: "link" } },
+  ];
+})(window);

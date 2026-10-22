@@ -3389,10 +3389,11 @@ def get_widget_options(source):
     """Values for a gallery field's options_from source string.
 
     Sources: todo.projects, todo.contexts, todo.priorities, time,
-    schema.types, schema.fields:<type>, saved.<kind> (dashboard,
-    metric, threshold, board, habit, calendar, due, project, query,
-    todo). Unknown sources raise PTOSError so a typo surfaces instead
-    of silently rendering an empty dropdown.
+    schema.types, schema.fields (union across all allowed types, for
+    expression autocomplete), schema.fields:<type>, saved.<kind>
+    (dashboard, metric, threshold, board, habit, calendar, due, project,
+    query, todo). Unknown sources raise PTOSError so a typo surfaces
+    instead of silently rendering an empty dropdown.
     """
     source = str(source or "").strip()
     if source == "todo.projects":
@@ -3421,6 +3422,17 @@ def get_widget_options(source):
         except Exception:
             schema = {}
         return list((schema.get("types") or {}).get("allowed") or [])
+    if source == "schema.fields":
+        try:
+            schema = ptos.get_schema()
+        except Exception:
+            schema = {}
+        out = []
+        for t in (schema.get("types") or {}).get("allowed") or ():
+            for f in ptos.filter_fields_for_type(t):
+                if f not in out:
+                    out.append(f)
+        return out
     if source.startswith("schema.fields:"):
         rtype = source.split(":", 1)[1].strip()
         return [str(f) for f in ptos.filter_fields_for_type(rtype)]

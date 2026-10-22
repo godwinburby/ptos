@@ -13,6 +13,7 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 EDITOR = os.path.join(_REPO_ROOT, "web_templates", "_markdown_editor.html")
 MD_BLOCKS = os.path.join(_REPO_ROOT, "web_static", "js", "md_blocks.js")
 SLASH = os.path.join(_REPO_ROOT, "web_static", "js", "slash_embed.js")
+TEXT_BLOCKS = os.path.join(_REPO_ROOT, "web_static", "js", "text_blocks.js")
 EMBEDS = os.path.join(_REPO_ROOT, "web_static", "js", "embeds.js")
 
 
@@ -34,6 +35,11 @@ def blocks_js():
 @pytest.fixture(scope="module")
 def slash_js():
     return _read(SLASH)
+
+
+@pytest.fixture(scope="module")
+def text_blocks_js():
+    return _read(TEXT_BLOCKS)
 
 
 @pytest.fixture(scope="module")
@@ -104,7 +110,7 @@ class TestBlocksJs:
 
     def test_reuses_shared_helpers(self, blocks_js):
         for ref in ("embedRegions", "embedFetch", "embedRenderBody",
-                    "openSlashPicker", "preprocessLinks", "marked.parse",
+                    "openSlashPicker", "preprocessLinks", "window.renderMarkdown",
                     "marked.lexer"):
             assert ref in blocks_js, ref
 
@@ -188,30 +194,33 @@ class TestBlockPicker:
         assert slash_js.count("function _embedSource(") == 1
 
     def test_picker_reports_md_seeds_and_widget_sources(self, slash_js):
-        assert 'kind: "md",\n        seed: it.seed != null ? it.seed : "",' in slash_js
+        assert 'kind: "md",\n        seed: it.seed != null ? it.seed : "",\n        caret:' in slash_js
         assert 'onPick({ kind: "widget", source: _embedSource' in slash_js
 
     def test_picker_runs_the_time_step(self, slash_js):
         assert "function _openTimeStepPick(" in slash_js
         assert "_TIME_CAPABLE[it.view]" in slash_js
 
-    def test_format_items_carry_a_seed(self, slash_js):
-        assert slash_js.count("seed:") >= 15, slash_js.count("seed:")
+    def test_format_items_carry_a_seed(self, slash_js, text_blocks_js):
+        assert "window.PtosTextBlocks" in slash_js
+        assert text_blocks_js.count("seed:") >= 20
         for seed in ('seed: "# "', 'seed: "- "', 'seed: "- [ ] "',
                      'seed: "> "', 'seed: "---"', 'seed: "**bold text**"',
                      'seed: "*italic*"', 'seed: "~~strikethrough~~"',
                      'seed: "`code`"', 'seed: "[text](url)"',
                      'seed: "| Column | Column |'):
-            assert seed in slash_js, seed
+            assert seed in text_blocks_js, seed
 
     def test_format_items_keep_their_textarea_run(self, slash_js):
-        for run in ("run: _prefix(", "run: _block(", "run: _wrap("):
+        assert "function _formatRun(item)" in slash_js
+        for run in ('_prefix(item.prefix)', '_wrap(item.open, item.close)',
+                    '_block(item.seed + "\\n",'):
             assert run in slash_js, run
 
-    def test_format_items_declare_a_transform(self, slash_js):
+    def test_format_items_declare_a_transform(self, text_blocks_js):
         # Each Format item says how to re-style a block that already has
         # text, so ⇄ keeps the paragraph instead of swapping in a skeleton.
-        assert slash_js.count("xform:") >= 15, slash_js.count("xform:")
+        assert text_blocks_js.count("xform:") >= 15
         for shape in ('{ t: "prefix", pre: "# ", first: true }',
                       '{ t: "prefix", pre: "- ", all: true }',
                       '{ t: "prefix", pre: "1. ", all: true }',
@@ -220,7 +229,7 @@ class TestBlockPicker:
                       '{ t: "wrap", open: "`", close: "`" }',
                       '{ t: "link" }', '{ t: "fence", lang: "text" }',
                       '{ t: "replace" }'):
-            assert shape in slash_js, shape
+            assert shape in text_blocks_js, shape
 
     def test_picker_passes_the_transform_through(self, slash_js):
         assert "xform: it.xform || null" in slash_js

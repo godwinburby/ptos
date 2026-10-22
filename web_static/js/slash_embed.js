@@ -95,46 +95,31 @@
   //   { t:"link" }                          -> "[text](url)"
   //   { t:"fence", lang:"text" }            -> wrap the text in a code fence
   //   { t:"replace" }                       -> discard text, use the skeleton
-  var _FORMAT_GROUP = {
+  function _formatRun(item) {
+    if (item.run === "prefix") return _prefix(item.prefix);
+    if (item.run === "wrap") return _wrap(item.open, item.close);
+    if (item.run === "link") return _wrap("[", "](url)");
+    var caret = Math.max(0, Math.min(item.seed.length, item.caret || 0));
+    return _block(item.seed + "\n", item.seed.slice(0, caret));
+  }
+
+  var _formatGroup = {
     kind: "f",
     label: "Format",
+    items: (window.PtosTextBlocks || []).map(function (item) {
+      return Object.assign({}, item, { run: _formatRun(item) });
+    }),
+  };
+
+  // The gallery (widget_picker.js). Format stays first; this entry leads
+  // the widget choices so the full catalog is one pick away without
+  // losing the named-item quick lists below it.
+  var _GALLERY_GROUP = {
+    kind: "g",
+    label: "Widgets",
     items: [
-      { label: "Heading 1", aliases: ["h1", "heading"], seed: "# ",
-        run: _prefix("# "), xform: { t: "prefix", pre: "# ", first: true } },
-      { label: "Heading 2", aliases: ["h2"], seed: "## ", run: _prefix("## "),
-        xform: { t: "prefix", pre: "## ", first: true } },
-      { label: "Heading 3", aliases: ["h3"], seed: "### ",
-        run: _prefix("### "), xform: { t: "prefix", pre: "### ", first: true } },
-      { label: "Bulleted list", aliases: ["ul", "bullet"], seed: "- ",
-        run: _prefix("- "), xform: { t: "prefix", pre: "- ", all: true } },
-      { label: "Numbered list", aliases: ["ol", "numbered"], seed: "1. ",
-        run: _prefix("1. "), xform: { t: "prefix", pre: "1. ", all: true } },
-      { label: "Task list", aliases: ["todo", "checkbox", "checklist"],
-        seed: "- [ ] ", run: _prefix("- [ ] "),
-        xform: { t: "prefix", pre: "- [ ] ", all: true } },
-      { label: "Quote", aliases: ["blockquote", "quote"], seed: "> ",
-        run: _prefix("> "), xform: { t: "prefix", pre: "> ", all: true } },
-      { label: "Code block", aliases: ["code", "fence"],
-        seed: "```text\n\n```",
-        run: _block("```text\n\n```\n", "```text\n"),
-        xform: { t: "fence", lang: "text" } },
-      { label: "Divider", aliases: ["hr", "divider", "line"], seed: "---",
-        run: _block("---\n", "---\n"), xform: { t: "replace" } },
-      { label: "Table", aliases: ["table", "grid"],
-        seed: "| Column | Column |\n| ------ | ------ |\n|        |        |",
-        run: _block("| Column | Column |\n| ------ | ------ |\n|        |        |\n", "| "),
-        xform: { t: "replace" } },
-      { label: "Bold", aliases: ["b", "strong"], seed: "**bold text**",
-        run: _wrap("**", "**"), xform: { t: "wrap", open: "**", close: "**" } },
-      { label: "Italic", aliases: ["i", "em"], seed: "*italic*",
-        run: _wrap("*", "*"), xform: { t: "wrap", open: "*", close: "*" } },
-      { label: "Strikethrough", aliases: ["s", "strike", "del"],
-        seed: "~~strikethrough~~", run: _wrap("~~", "~~"),
-        xform: { t: "wrap", open: "~~", close: "~~" } },
-      { label: "Inline code", aliases: ["code-inline"], seed: "`code`",
-        run: _wrap("`", "`"), xform: { t: "wrap", open: "`", close: "`" } },
-      { label: "Link", aliases: ["link", "url", "hyperlink"],
-        seed: "[text](url)", run: _wrap("[", "](url)"), xform: { t: "link" } },
+      { label: "All widgets…", _gallery: true,
+        aliases: ["gallery", "widgets", "all widgets"] },
     ],
   };
 
@@ -207,8 +192,9 @@
     groups.forEach(function (g) {
       var items = [];
       g.items.forEach(function (it) {
-        var hay = it.run ? (it.label + " " + (it.aliases || []).join(" "))
-                         : it;
+        var hay = (it && (it.run || it._gallery))
+          ? (it.label + " " + (it.aliases || []).join(" "))
+          : it;
         if (!q || hay.toLowerCase().indexOf(q) !== -1) items.push(it);
       });
       if (items.length) out.push({ kind: g.kind, label: g.label, items: items });
@@ -217,7 +203,7 @@
   }
 
   function _label(it) {
-    return it.run ? it.label : it;
+    return (it.run || it._gallery) ? it.label : it;
   }
 
   // The ```ptos body for an embed pick (name + explicit view + optional
@@ -232,7 +218,7 @@
   // Menu markup for the embed groups filtered by `q` ("" = everything).
   // Returns {html, flat} or null when nothing matches.
   function _buildMenu(q) {
-    var groups = [_FORMAT_GROUP];
+    var groups = [_formatGroup, _GALLERY_GROUP];
     if (_groups !== null) groups = groups.concat(_groups);
     var matched = _filter(groups, q);
     if (!matched.length) return null;
@@ -243,7 +229,8 @@
       g.items.forEach(function (it) {
         html += '<div class="bracket-ac-item slash-ac-item" data-idx="' +
           flat.length + '">' + _label(it) + "</div>";
-        flat.push(it.run ? it : { name: it, view: _VIEWS[g.kind] });
+        flat.push(it.run || it._gallery
+          ? it : { name: it, view: _VIEWS[g.kind] });
       });
     });
     if (_groups === null && _fetching) {
@@ -299,6 +286,7 @@
   function _commit(el, list, idx) {
     var it = list._flat[idx];
     if (!it) return;
+    if (it._gallery) { _openGallerySlash(el, list); return; }
     if (it.run) { it.run(el, list._tok, list); return; }
     if (list._mode === "time") {
       var item = list._pendingItem;
@@ -307,6 +295,42 @@
     }
     if (_TIME_CAPABLE[it.view]) { _openTimeStep(el, it, list); return; }
     _insert(el, list._tok, it, list);
+  }
+
+  // Gallery from the "/" path: the typed token stays put until a pick
+  // lands, then the fence replaces it exactly like a named-item insert.
+  // A Text-category pick replaces the token with the markdown seed
+  // instead (empty seed = just drop the token).
+  function _openGallerySlash(el, list) {
+    if (!window.PtosWidgetPicker) return;
+    window.PtosWidgetPicker.open({
+      mode: "add",
+      onPick: function (p) {
+        var tok = list._tok;
+        if (!tok) { _close(list); return; }
+        var before = el.value.slice(0, tok.start);
+        var after = el.value.slice(tok.end);
+        if (p && typeof p !== "string" && p.kind === "md") {
+          var seed = p.seed != null ? p.seed : "";
+          if (!seed) {
+            el.value = before + after;
+            _finish(list, el, before.length);
+            return;
+          }
+          var slead = (before && !/\n$/.test(before)) ? "\n" : "";
+          el.value = before + slead + seed + after;
+          var caret = Number.isFinite(Number(p.caret))
+            ? Number(p.caret) : seed.length;
+          _finish(list, el, (before + slead).length + caret);
+          return;
+        }
+        var source = typeof p === "string" ? p : (p && p.source) || "";
+        var lead = (before && !/\n$/.test(before)) ? "\n" : "";
+        var fence = "```ptos\n" + source + "\n```\n";
+        el.value = before + lead + fence + after;
+        _finish(list, el, (before + lead + fence).length);
+      }
+    });
   }
 
   function _openTimeStep(el, item, list) {
@@ -409,11 +433,24 @@
     var onPick = _picker.onPick;
     var it = list._flat[idx];
     if (!it) return;
+    if (it._gallery) {
+      window.PtosWidgetPicker.open({
+        mode: "add",
+        onPick: function (p) {
+          _closePicker();
+          if (!onPick) return;
+          onPick(typeof p === "string" ? { kind: "widget", source: p }
+            : p && p.kind === "md" ? p : { kind: "widget", source: p.source });
+        }
+      });
+      return;
+    }
     if (it.run) {
       _closePicker();
       if (onPick) onPick({
         kind: "md",
         seed: it.seed != null ? it.seed : "",
+        caret: Number(it.caret) || 0,
         xform: it.xform || null
       });
       return;

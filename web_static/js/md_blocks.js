@@ -155,9 +155,9 @@
   }
 
   function _mdHtml(src) {
-    if (typeof marked !== "undefined") {
+    if (typeof window.renderMarkdown === "function") {
       var body = (typeof preprocessLinks === "function") ? preprocessLinks(src) : src;
-      try { return marked.parse(body); } catch (e) {}
+      try { return window.renderMarkdown(body); } catch (e) {}
     }
     return "<pre style='white-space:pre-wrap'>" + _esc(src) + "</pre>";
   }
@@ -240,6 +240,7 @@
 
   function render() {
     if (!_pane) return;
+    _destroyToolbars(_pane);
     _pane.innerHTML = "";
     _cards = [];
     _blocks.forEach(function (blk, i) {
@@ -260,9 +261,20 @@
   function _renderCard(i) {
     var old = _cards[i];
     if (!old || !old.parentNode) { render(); return; }
+    _destroyToolbars(old);
     var fresh = _card(_blocks[i], i);
     old.parentNode.replaceChild(fresh, old);
     _cards[i] = fresh;
+  }
+
+  function _destroyToolbars(root) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll("textarea").forEach(function (ta) {
+      if (ta.__ptosToolbar && ta.__ptosToolbar.destroy) {
+        ta.__ptosToolbar.destroy();
+        ta.__ptosToolbar = null;
+      }
+    });
   }
 
   // ── actions ──────────────────────────────────────────────────────────
@@ -306,7 +318,9 @@
     _blocks.splice(at, 0, blk);
     _sync();
     render();
-    if (blk.kind === "md" && blk.source) _edit(at, true);
+    if (blk.kind === "md" && picked && picked.kind === "md") {
+      _edit(at, true, picked.caret);
+    }
   }
 
   function _pickerAt(anchor, at) {
@@ -396,14 +410,45 @@
   }
 
   function _change(blk, anchor) {
-    if (!blk || typeof openSlashPicker !== "function") return;
+    if (blk && blk.kind === "widget" &&
+        window.PtosWidgetPicker && typeof PtosToml !== "undefined") {
+      var spec = {};
+      try { spec = PtosToml.parse(blk.source) || {}; } catch (e) { spec = {}; }
+      window.PtosWidgetPicker.open({
+        mode: "change",
+        spec: spec,
+        anchor: anchor,
+        onPick: function (source) {
+          var i = _blocks.indexOf(blk);
+          if (i === -1) return;
+          _blocks[i] = { kind: "widget", source: _norm(source) };
+          _sync();
+          _renderCard(i);
+        },
+        onFormat: function () { _formatChange(blk, anchor); }
+      });
+      return;
+    }
+    _formatChange(blk, anchor);
+  }
+
+  function _formatChange(blk, anchor) {
+    if (typeof openSlashPicker !== "function") return;
     openSlashPicker(anchor, function (picked) {
       // Re-resolve by identity: the block may have moved while the picker
       // was open, and a shifted index would restyle the wrong block.
       var i = _blocks.indexOf(blk);
       if (i === -1 || !picked) return;
       if (picked.kind === "widget") {
-        _blocks[i] = { kind: "widget", source: _norm(picked.source) };
+        var source = picked.source;
+        if (blk.kind === "widget" && window.PtosWidgetPicker &&
+            window.PtosWidgetPicker.merge) {
+          var cur = {};
+          try { cur = PtosToml.parse(_blocks[i].source) || {}; }
+          catch (e) { cur = {}; }
+          source = window.PtosWidgetPicker.merge(cur, source);
+        }
+        _blocks[i] = { kind: "widget", source: _norm(source) };
         _sync();
         _renderCard(i);
         return;
@@ -417,7 +462,7 @@
     });
   }
 
-  function _edit(i, focus) {
+  function _edit(i, focus, caretOverride) {
     var card = _cards[i];
     var blk = _blocks[i];
     if (!card || !blk) return;
@@ -426,11 +471,25 @@
     if (!body) return;
     body.innerHTML = "";
 
+    if (blk.kind === "widget" && window.PtosWidgetForm) {
+      window.PtosWidgetForm.mount(body, {
+        body: blk.source,
+        onSave: function (text) { _applyEdit(i, text); },
+        onCancel: function () { _renderCard(i); },
+      });
+      return;
+    }
+
     var box = document.createElement("textarea");
     box.className = "md-block-edit-box";
     box.setAttribute("spellcheck", "false");
     box.value = blk.source;
     body.appendChild(box);
+
+    if (blk.kind !== "widget" && window.PtosToolbar &&
+        window.PtosToolbar.attach) {
+      box.__ptosToolbar = window.PtosToolbar.attach(box);
+    }
 
     if (blk.kind === "widget") {
       var hint = document.createElement("div");
@@ -464,7 +523,9 @@
     });
 
     box.focus();
-    var caret = focus ? _caretFor(blk.source) : blk.source.length;
+    var caret = focus && Number.isFinite(Number(caretOverride))
+      ? Number(caretOverride)
+      : focus ? _caretFor(blk.source) : blk.source.length;
     if (typeof caret === "object") box.setSelectionRange(caret.start, caret.end);
     else box.setSelectionRange(caret, caret);
   }
@@ -483,7 +544,8 @@
   function _wireDrag(el) {
     el.addEventListener("dragstart", function (e) {
       if (e.target.closest && e.target.closest(
-          ".md-block-btn,.md-block-edit-box,.md-block-edit-actions,.md-embed-link")) {
+          ".md-block-btn,.md-block-edit-box,.md-block-edit-actions," +
+          ".md-embed-link,.wf-form,.md-tool")) {
         e.preventDefault();
         return;
       }

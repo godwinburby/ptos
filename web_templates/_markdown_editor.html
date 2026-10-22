@@ -76,6 +76,11 @@
 <script src="{{ av('/static/js/md_render.js') }}"></script>
 <script src="{{ av('/static/js/widgets.js') }}"></script>
 <script src="{{ av('/static/js/embeds.js') }}"></script>
+<script src="{{ av('/static/js/widget_toml.js') }}"></script>
+<script src="{{ av('/static/js/widget_form.js') }}"></script>
+<script src="{{ av('/static/js/text_blocks.js') }}"></script>
+<script src="{{ av('/static/js/widget_picker.js') }}"></script>
+<script src="{{ av('/static/js/md_toolbar.js') }}"></script>
 <script src="{{ av('/static/js/slash_embed.js') }}"></script>
 <script src="{{ av('/static/js/md_blocks.js') }}"></script>
 <script src="{{ av('/static/js/md_highlight.js') }}"></script>
@@ -310,6 +315,9 @@
   var _editGen = 0;          // bumped per keystroke; a save clears _dirty only if unchanged
   var _conflictRev = null;   // set while the conflict banner is open (autosave frozen)
   var _retried423 = false;
+
+  var _mainTextarea = document.getElementById(_eid);
+  if (_mainTextarea && window.PtosToolbar) window.PtosToolbar.attach(_mainTextarea);
 
   if (typeof mdBlocks !== "undefined" && mdBlocks.init) mdBlocks.init(_eid);
 

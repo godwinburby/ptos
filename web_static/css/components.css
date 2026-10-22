@@ -222,3 +222,67 @@
 .qt-leg { display:inline-flex;align-items:center;gap:5px; }
 .qt-swatch { width:10px;height:10px;border-radius:2px;display:inline-block;flex-shrink:0; }
 .qt-empty { color:var(--sub);padding:20px 0;font-size:13px; }
+
+/* -- Widget gallery picker ------------------------------------------------ */
+.wp-overlay { position:fixed;inset:0;background:rgba(20,24,34,.5);z-index:1200;display:flex;align-items:flex-end;justify-content:center; }
+.wp-sheet { background:var(--card);width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;border-radius:14px 14px 0 0;box-shadow:0 12px 40px rgba(10,14,24,.25);overflow:hidden; }
+@media (min-width:768px) { .wp-overlay { align-items:center; } .wp-sheet { border-radius:14px;width:540px;max-height:78vh; } }
+.wp-head { display:flex;align-items:center;gap:8px;padding:10px 12px 6px;flex-shrink:0; }
+.wp-title { flex:1;font-weight:700; }
+.wp-back,.wp-close { min-width:44px;min-height:44px;border:none;background:transparent;cursor:pointer;font-size:16px;color:var(--sub);border-radius:8px; }
+.wp-back:hover,.wp-close:hover { background:var(--bg);color:var(--text); }
+.wp-search { margin:0 14px 8px;padding:9px 12px;border:1px solid var(--border);border-radius:10px;font:inherit;background:var(--bg);color:var(--text);flex-shrink:0; }
+.wp-search:focus { outline:none;border-color:var(--accent); }
+.wp-body { overflow-y:auto;padding:2px 14px 20px; }
+.wp-sec-label { font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--sub);margin:14px 0 8px; }
+.wp-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px; }
+@media (max-width:520px) { .wp-grid { grid-template-columns:1fr; } }
+.wp-card { display:flex;gap:10px;align-items:flex-start;text-align:left;min-height:44px;padding:10px;border:1px solid var(--border);border-radius:10px;background:var(--bg);cursor:pointer;color:inherit;font:inherit; }
+.wp-card:hover { border-color:var(--accent); }
+.wp-card-ico { color:var(--accent);flex-shrink:0; }
+.wp-card-ico svg { width:18px;height:18px;display:block;margin-top:2px; }
+.wp-card-txt { min-width:0; }
+.wp-card-label { font-weight:600;display:block; }
+.wp-card-desc { font-size:12px;color:var(--sub);display:block;margin-top:2px;line-height:1.35; }
+.wp-item { display:flex;width:100%;min-height:44px;align-items:center;padding:10px 12px;border:none;border-radius:8px;background:transparent;cursor:pointer;color:inherit;font:inherit;text-align:left; }
+.wp-item:hover { background:var(--bg); }
+.wp-empty { padding:20px 10px;text-align:center;color:var(--sub);font-size:13px; }
+
+/* -- Widget form ---------------------------------------------------------- */
+.wf-form { display:flex;flex-direction:column;gap:10px;min-width:0; }
+.wf-head-label { font-weight:700; }
+.wf-err { color:var(--error);font-size:12px; }
+.wf-top-err:empty { display:none !important; }
+.wf-fields { display:flex;flex-direction:column;gap:10px; }
+.wf-field { display:flex;flex-direction:column;gap:4px; }
+.wf-label { font-size:12px;font-weight:600;color:var(--sub); }
+.wf-req { color:var(--error); }
+.wf-help { font-size:11.5px;color:var(--sub); }
+.wf-input,.wf-textbox { width:100%;box-sizing:border-box;padding:7px 10px;border:1px solid var(--border);border-radius:8px;font:inherit;background:var(--bg);color:var(--text); }
+.wf-input:focus,.wf-textbox:focus { outline:none;border-color:var(--accent); }
+.wf-bool { display:inline-flex;align-items:center;gap:6px;font-size:13px;min-height:32px;cursor:pointer; }
+.wf-chips { display:flex;flex-wrap:wrap;gap:6px; }
+.wf-chip { min-height:32px;padding:4px 12px;border-radius:999px;border:1px solid var(--border);background:transparent;color:var(--text);cursor:pointer;font-size:12.5px; }
+.wf-chip.on { background:var(--accent);color:#fff;border-color:transparent; }
+.wf-more { border-top:1px solid var(--border);padding-top:6px; }
+.wf-more > summary { cursor:pointer;font-size:12.5px;color:var(--sub);padding:4px 0;min-height:32px;display:flex;align-items:center; }
+.wf-more-body { display:flex;flex-direction:column;gap:10px;padding-top:6px; }
+.wf-unknown { font-size:11.5px;color:var(--sub); }
+.wf-preview-frame { border:1px dashed var(--border);border-radius:10px;padding:10px;min-height:64px; }
+.wf-preview-frame.md-embed { margin:0; }
+.wf-actions { display:flex;gap:8px;align-items:center;flex-wrap:wrap; }
+.wf-spacer { flex:1; }
+.wf-textlink { background:none;border:none;color:var(--accent);cursor:pointer;font-size:12.5px;padding:8px;min-height:36px; }
+.wf-save[disabled] { opacity:.5;cursor:not-allowed; }
+
+/* -- Markdown editor toolbar -------------------------------------------- */
+.md-tool { display:flex;gap:4px;align-items:center;overflow-x:auto;margin:0 0 6px;padding:3px 0;white-space:nowrap; }
+.md-tool-btn,.md-tool-menu button { min-width:44px;min-height:44px;border:1px solid var(--border);border-radius:7px;background:var(--card);color:var(--text);font-weight:700;cursor:pointer; }
+.md-tool-btn { position:relative; }
+.md-tool-heading { position:relative;display:inline-flex; }
+.md-tool-menu { position:absolute;z-index:70;top:100%;left:0;display:flex;gap:4px;padding:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 5px 18px #0002; }
+.md-tool-menu[hidden] { display:none; }
+.md-tool-spacer { height:0; }
+.md-tool-preview { margin:0 0 8px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px;max-height:220px;overflow:auto; }
+.md-tool-help { min-height:44px;display:inline-flex;align-items:center;padding:0 10px;color:var(--accent);font-size:12px; }
+.md-tool.md-tool-pinned { position:fixed;z-index:1000;box-sizing:border-box;margin:0;padding:4px 8px;background:var(--card);box-shadow:0 -3px 16px #0002; }
