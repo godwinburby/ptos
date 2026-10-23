@@ -41,12 +41,41 @@ def test_shared_text_block_catalog_has_required_entries_and_metadata():
         'id: "checklist"', 'id: "quote"', 'id: "callout"',
         'id: "divider"', 'id: "table"', 'id: "code-block"',
         'id: "greeting-line"', 'id: "today-date"', 'id: "your-name"',
+        'id: "period-token"', 'id: "long-date"', 'id: "iso-date"',
     ):
         assert entry in source
     assert "description:" in source
     assert "aliases:" in source
     assert "caret:" in source
     assert "gallery: true" in source
+
+
+def test_token_entries_cover_every_spec_token_and_feed_the_toolbar_menu():
+    """The {} / "Token" menu offers all eight Part F tokens, driven from
+    the single text_blocks.js catalog (no second token list anywhere)."""
+    source = _read(TEXT_BLOCKS)
+    spec_tokens = ("{{greeting}}", "{{period}}", "{{name}}", "{{date}}",
+                   "{{date:long}}", "{{date:iso}}", "{{weekday}}",
+                   "{{time}}")
+    for token in spec_tokens:
+        assert 'token: "%s"' % token in source, token
+    # The three menu-only variants stay out of the gallery Text category
+    # (spec C5) but remain in the slash Format group and the {} menu.
+    for entry in ('id: "period-token"', 'id: "long-date"', 'id: "iso-date"'):
+        line = next(l for l in source.splitlines() if entry in l)
+        assert "gallery: false" in line, entry
+    toolbar = _read(TOOLBAR)
+    assert 'action("Token","Insert token"' in toolbar
+    assert "window.PtosTextBlocks || []" in toolbar
+    assert ".filter(function(item){return item.token;})" in toolbar
+
+
+def test_full_editor_disables_the_under_textarea_preview_blocks_keeps_it():
+    html = _read(EDITOR)
+    assert "attach(_mainTextarea, { preview: false })" in html
+    blocks = _read(BLOCKS)
+    assert "window.PtosToolbar.attach(box)" in blocks  # default: preview on
+    assert "attach(box, {" not in blocks
 
 
 def test_blocks_editor_uses_catalog_caret_and_shared_safe_renderer():

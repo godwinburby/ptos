@@ -317,7 +317,7 @@
   var _retried423 = false;
 
   var _mainTextarea = document.getElementById(_eid);
-  if (_mainTextarea && window.PtosToolbar) window.PtosToolbar.attach(_mainTextarea);
+  if (_mainTextarea && window.PtosToolbar) window.PtosToolbar.attach(_mainTextarea, { preview: false });
 
   if (typeof mdBlocks !== "undefined" && mdBlocks.init) mdBlocks.init(_eid);
 

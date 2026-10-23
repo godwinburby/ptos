@@ -175,7 +175,7 @@
     action(">","Quote",function(){apply(togglePrefix(ta.value,ta.selectionStart,ta.selectionEnd,"> "));});
     action("`","Code",function(){wrap("`","`");});
     var tokenHolder=document.createElement("span"); tokenHolder.className="md-tool-heading";
-    var tokenButton=action("{}","Insert token",function(){toggleMenu(tokenMenu,tokenButton);});
+    var tokenButton=action("Token","Insert token",function(){toggleMenu(tokenMenu,tokenButton);});
     bar.replaceChild(tokenHolder,tokenButton); tokenHolder.appendChild(tokenButton);
     var tokenMenu=document.createElement("div"); tokenMenu.className="md-tool-menu"; tokenMenu.hidden=true; tokenHolder.appendChild(tokenMenu);
     (window.PtosTextBlocks || []).filter(function(item){return item.token;}).forEach(function(item){

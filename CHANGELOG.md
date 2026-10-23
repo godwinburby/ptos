@@ -5,6 +5,21 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-23
+
+### Phase 2b (home-note spec): inline `{{tokens}}` in markdown
+
+- **Notes and previews substitute `{{tokens}}` at render time** — `renderMarkdown` now runs a post-sanitize `TreeWalker` pass that replaces `{{greeting}}`, `{{period}}`, `{{name}}`, `{{date}}`, `{{date:long}}`, `{{date:iso}}`, `{{weekday}}` and `{{time}}` in text nodes only (inline/fenced code, `pre` and link URLs/attributes stay untouched). Values are inserted as text nodes inside an `md-token` span built with DOM methods, so a name containing markup or markdown can never become HTML. Unknown tokens render exactly as typed, `\{{name}}` shows the literal token text, spaces inside the braces are allowed, and an empty name renders as nothing.
+- **The clock is the device's, not the server's** — greeting, period, date and time come from the browser's `Date`/`Intl` (period boundaries unchanged: before 12:00 morning, before 17:00 afternoon, otherwise evening), fixing the old server-clock greeting mismatch; the name comes from the new `window.PTOS.userName` shim key (`[user] name`, JSON-escaped in `base.html`, supplied by the `_inject_globals` context processor).
+- **Live refresh without re-render** — one timer fires at the next period boundary (12:00, 17:00, midnight) and `visibilitychange` re-substitutes every rendered token span in place (textContent only), so focus, selection and open embeds survive a greeting change.
+- **Tests:** `tests/js/md_tokens.test.js` (12 cases under `node --test`: every token with an injected clock/locale, period boundaries at 11:59/12:00/16:59/17:00, escapes, spaces in braces, unknown/adjacent/empty-name, CRLF, local-vs-UTC ISO date, `nextBoundary` math) plus new static pins in `tests/test_md_render.py` (render is the sole token-pass caller; spans built with DOM methods only; code/pre skip-guard; shim key JSON-escaped; context processor supplies `user_name`; the toolbar preview inherits tokens for free) and `tests/test_web_perf.py`'s shim-key list gains `userName`.
+
+### Editor polish: complete token menu, preview out of the full editor
+
+- **The toolbar's token helper now covers every spec token** — the **Token** button (formerly a cryptic `{}`) inserts `{{greeting}}`, `{{period}}`, `{{name}}`, `{{date}}`, `{{date:long}}`, `{{date:iso}}`, `{{weekday}}` and `{{time}}` at the caret. The three menu-only variants (period, long date, ISO date) are new `text_blocks.js` entries with `gallery: false`, so the gallery's Text category keeps its spec'd set while the `/` slash Format group gains them as searchable rows (`/period`, `/iso`) for free — one catalog feeds all three surfaces, no second token list.
+- **The under-textarea live preview no longer appears in the full notes/journal editor** — the boot call now attaches the toolbar with `preview: false`, so the editor's own **Edit / Preview / Colour** modes remain its only preview (and a per-keystroke `renderMarkdown` of the whole note is gone from typing). Blocks-mode ✎ text cards keep the live preview, where there is no Preview pane to fall back on.
+- **Tests:** `tests/test_text_blocks_toolbar.py` (all eight tokens present, menu-only entries stay `gallery: false`, menu driven from `window.PtosTextBlocks`, `Token` label pin, boot passes `{ preview: false }` while Blocks keeps the default) and a `tests/js/md_toolbar.test.js` case asserting the token filter yields exactly the eight spec tokens.
+
 ## 2026-10-22
 
 ### Phase 2b (home-note spec): gallery Text category, text-block toolbar

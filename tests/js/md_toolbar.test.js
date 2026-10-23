@@ -27,6 +27,19 @@ test("shared text block catalog defines picker and slash entries once", () => {
   }
 });
 
+test("the Insert token menu source covers all eight spec tokens", () => {
+  const menuItems = globalThis.PtosTextBlocks.filter((item) => item.token);
+  const tokens = menuItems.map((item) => item.token).sort();
+  assert.deepEqual(tokens, [
+    "{{date:iso}}", "{{date:long}}", "{{date}}", "{{greeting}}",
+    "{{name}}", "{{period}}", "{{time}}", "{{weekday}}",
+  ]);
+  for (const item of menuItems) {
+    assert.ok(item.tokenLabel, item.id);
+    assert.ok(item.seed.includes(item.token), item.id);
+  }
+});
+
 test("wrap selection adds and removes markdown delimiters", () => {
   const wrapped = T.wrapSelection("hello", 1, 4, "**", "**");
   assert.deepEqual(wrapped, { text: "h**ell**o", start: 3, end: 6 });

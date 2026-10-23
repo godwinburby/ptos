@@ -220,6 +220,7 @@ def _inject_globals():
         "sync_conflict_count": sync_conflict_count,
         "last_change": last_change,
         "favorites": favorites,
+        "user_name": str(cfg.get("user", {}).get("name", "User") or ""),
         # Rendered through Jinja's |tojson (which escapes <, >, &, ...) so a
         # synced-in URL containing "</script>" can never break out of the shim.
         "fav_urls": [f["url"] for f in favorites],
