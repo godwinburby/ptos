@@ -64,6 +64,8 @@
     return { time: time || "tm", apply_time: !!time };
   }
 
+  window.embedTimeContext = _timeContext;
+
   function _cacheKey(body, context) {
     return String(body) + "\u0000" + JSON.stringify(context || {});
   }

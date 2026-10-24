@@ -170,7 +170,7 @@ class TestFieldErrors:
     def test_chips_membership_when_static_options(self):
         e = pw.get_kind("todo")
         errs = pw.field_errors(e, {"view": "todo", "priority": "Zzz"})
-        assert errs == []  # priority has options_from — membership not static
+        assert errs[0]["field"] == "priority"
 
 
 class TestWidgetOptions:
@@ -232,6 +232,32 @@ class TestWidgetOptions:
             svc.get_widget_options("saved.nope")
 
 
+class TestSavedItemDescriptions:
+    @pytest.mark.parametrize("kind,definition,expected,tag", [
+        ("query", {"where":"type=expense", "group":"category", "time":"tm"},
+         "type=expense · by category · this month", "chart"),
+        ("metric", {"avg":"amount"}, "Average of amount", ""),
+        ("dashboard", {"metrics":["a","b"]}, "2 items", ""),
+        ("threshold", {"metric":"food_ratio", "time":"tm"},
+         "Metric food_ratio · this month", "limit"),
+        ("board", {"columns":["todo","doing","done"]},
+         "Columns: todo, doing, done", ""),
+        ("habit", {"frequency":"Daily"}, "Daily", ""),
+        ("calendar", {"filters":["a","b"], "time_window":"tm"},
+         "2 filters · this month", ""),
+        ("due", {"title":"Overdue", "days":7}, "Overdue · 7 day window", ""),
+        ("project", {"description":"Work"}, "Work", ""),
+        ("todo", {"due":"today"}, "due: today", ""),
+    ])
+    def test_description_by_saved_kind(self, kind, definition, expected, tag):
+        assert svc.describe_saved(kind, "example", definition) == {
+            "description": expected, "tag": tag}
+
+    def test_missing_definition_falls_back_to_kind(self):
+        assert svc.describe_saved("metric", "gone", None) == {
+            "description": "Metric", "tag": ""}
+
+
 class TestWidgetCatalog:
     def test_shape(self):
         cat = svc.get_widget_catalog()
@@ -253,7 +279,20 @@ class TestWidgetCatalog:
                 "tasks_by_project"} <= ids
         assert {"thresholds_month", "due_default", "records_today",
                 "records_month", "capture_box", "quick_add_bar",
-                "quick_add_multi_bar"} <= ids
+                "quick_add_multi_bar", "journal_preview", "task_summary"} <= ids
+
+    def test_quick_add_kinds_hide_limit_and_starters_are_unique(self):
+        cat = svc.get_widget_catalog()
+        kinds = {k["kind"]: k for k in cat["kinds"]}
+        for name in ("capture", "quick_add", "quick_add_multi", "journal",
+                     "todo_summary"):
+            assert kinds[name]["quick_add"] is True
+            limit = next(f for f in kinds[name]["fields"]
+                         if f["key"] == "limit")
+            assert limit["show_if"] is False
+        assert all(c["count"] > 0 for c in cat["categories"])
+        labels = [s["label"] for s in cat["starters"]]
+        assert len(labels) == len(set(labels))
 
     def test_starters_parse_and_carry_kind(self):
         for s in svc.get_widget_catalog()["starters"]:
@@ -330,6 +369,18 @@ class TestValidateWidgetSpec:
         assert res["ok"] is False
         assert res["errors"][0]["field"] == "limit"
 
+    def test_invalid_priority_matches_resolver(self):
+        spec = {"view": "todo", "priority": "zz"}
+        assert svc.validate_widget_spec(spec)["errors"][0]["field"] == "priority"
+        with pytest.raises(PTOSError, match="Priorities"):
+            svc.resolve_embed(spec)
+
+    def test_limit_must_be_at_least_one_in_form_and_resolver(self):
+        spec = {"view": "records", "limit": -3}
+        assert svc.validate_widget_spec(spec)["errors"][0]["field"] == "limit"
+        with pytest.raises(PTOSError, match="Max rows"):
+            svc.resolve_embed(spec)
+
     def test_non_dict_raises(self):
         with pytest.raises(PTOSError):
             svc.validate_widget_spec("nope")
@@ -352,6 +403,16 @@ class TestCatalogEndpoints:
         j = r.get_json()
         assert j["ok"] is True
         assert "food_ratio" in j["values"]
+
+    def test_options_detail_includes_descriptions_and_legacy_values(self):
+        r = _client().get("/api/widgets/options?source=saved.query&detail=1")
+        data = r.get_json()
+        assert r.status_code == 200
+        assert "expenses_this_month" in data["values"]
+        item = next(x for x in data["items"]
+                    if x["name"] == "expenses_this_month")
+        assert item["description"]
+        assert item["tag"] in ("chart", "table")
 
     def test_options_unknown_400(self):
         r = _client().get("/api/widgets/options?source=nope")

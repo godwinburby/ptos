@@ -146,6 +146,12 @@
 
   function exit() { _active = false; }
 
+  window.addEventListener("ptos:time-window-change", function () {
+    if (!_active || !_ta) return;
+    _blocks = parse(_ta.value);
+    render();
+  });
+
   // ── rendering ────────────────────────────────────────────────────────
 
   function _esc(s) {
@@ -173,17 +179,34 @@
   }
 
   function _paintWidget(body, source) {
+    if (body._ptosWidgetHandle && body._ptosWidgetHandle.destroy) {
+      body._ptosWidgetHandle.destroy();
+      body._ptosWidgetHandle = null;
+    }
     body.innerHTML = '<div class="md-embed-loading">Loading widget…</div>';
     if (typeof embedFetch !== "function") {
       body.innerHTML = '<div class="msg msg-error">embeds.js is not loaded</div>';
       return;
     }
     embedFetch(source, false).then(function (res) {
+      if (!body.isConnected) return;
       if (!res.ok) {
         body.innerHTML = '<div class="msg msg-error">' + _esc(res.error) + "</div>";
         return;
       }
       var data = res.data || {};
+      var live = true;
+      try {
+        if (window.PtosToml && window.PtosToml.parse(source).live === false) live = false;
+      } catch (e) { live = false; }
+      if (live && window.PtosWidgets && typeof window.PtosWidgets.mount === "function") {
+        body._ptosWidgetHandle = window.PtosWidgets.mount(body, source, {
+          host: "note", interactive: true, data: data,
+          context: typeof window.embedTimeContext === "function"
+            ? window.embedTimeContext() : null
+        });
+        return;
+      }
       var link = data.link
         ? '<a class="md-embed-link" href="' + _esc(data.link) + '">Open →</a>'
         : "";
@@ -269,6 +292,12 @@
 
   function _destroyToolbars(root) {
     if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll(".md-block-body").forEach(function (body) {
+      if (body._ptosWidgetHandle && body._ptosWidgetHandle.destroy) {
+        body._ptosWidgetHandle.destroy();
+        body._ptosWidgetHandle = null;
+      }
+    });
     root.querySelectorAll("textarea").forEach(function (ta) {
       if (ta.__ptosToolbar && ta.__ptosToolbar.destroy) {
         ta.__ptosToolbar.destroy();
@@ -318,14 +347,45 @@
     _blocks.splice(at, 0, blk);
     _sync();
     render();
+    var card = _cards[at];
+    if (card) {
+      card.classList.add("md-block-just-added");
+      if (card.scrollIntoView) card.scrollIntoView({ behavior: "smooth", block: "center" });
+      setTimeout(function () { card.classList.remove("md-block-just-added"); }, 1100);
+    }
+    _showUndo(blk);
     if (blk.kind === "md" && picked && picked.kind === "md") {
       _edit(at, true, picked.caret);
     }
   }
 
+  function _showUndo(blk) {
+    var old = document.querySelector(".md-block-undo");
+    if (old && old.parentNode) old.parentNode.removeChild(old);
+    var toast = document.createElement("div");
+    toast.className = "md-block-undo";
+    toast.setAttribute("role", "status");
+    toast.innerHTML = '<span>Block added</span><button type="button">Undo</button>';
+    toast.querySelector("button").addEventListener("click", function () {
+      var i = _blocks.indexOf(blk);
+      if (i !== -1) _remove(i);
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    });
+    document.body.appendChild(toast);
+    setTimeout(function () {
+      if (toast.parentNode) toast.parentNode.removeChild(toast);
+    }, 5000);
+  }
+
   function _pickerAt(anchor, at) {
-    if (typeof openSlashPicker === "function") {
-      openSlashPicker(anchor, function (picked) { _insertBlock(picked, at); });
+    if (window.PtosWidgetPicker && typeof window.PtosWidgetPicker.open === "function") {
+      window.PtosWidgetPicker.open({
+        mode: "add", anchor: anchor,
+        onPick: function (picked) {
+          if (picked && picked.kind === "md") _insertBlock(picked, at);
+          else _insertBlock({ kind: "widget", source: picked || "" }, at);
+        }
+      });
       return;
     }
     // Picker unavailable — fall back to a blank text block so the button

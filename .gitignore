@@ -40,3 +40,5 @@ dist/
 # Misc
 test.txt
 *.csv
+# JavaScript test dependencies
+node_modules/

@@ -114,6 +114,13 @@ class TestBlocksJs:
                     "marked.lexer"):
             assert ref in blocks_js, ref
 
+    def test_live_widgets_mount_with_the_page_time_context(self, blocks_js):
+        assert "window.PtosWidgets.mount(body, source" in blocks_js
+        assert 'host: "note", interactive: true, data: data' in blocks_js
+        assert "window.embedTimeContext()" in blocks_js
+        assert '"ptos:time-window-change"' in blocks_js
+        assert "_ptosWidgetHandle.destroy()" in blocks_js
+
     def test_control_surface(self, blocks_js):
         for cls in ('"md-block-actions"', '"md-block-add-row"',
                     '"md-block-edit-box"', '"md-block-add-row"',

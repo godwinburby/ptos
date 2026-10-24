@@ -69,7 +69,8 @@ test("render wires marked options and the task-list hack", () => {
   try {
     const html = render("- [x] done");
     assert.ok(html.includes('type="checkbox"'));
-    assert.ok(html.includes("list-style:none"));
+    assert.equal((html.match(/type="checkbox"/g) || []).length, 1);
+    assert.ok(html.includes('class="md-task-list-item"'));
     assert.ok(html.includes("checked"));
     const breaks = render("line1\nline2");
     assert.ok(breaks.includes("<br>"));
@@ -97,6 +98,7 @@ test("DOMPurify sanitization end to end (needs jsdom)",
   assert.equal(typeof purify.sanitize, "function",
                "unexpected purify export shape");
   globalThis.DOMPurify = purify;
+  globalThis.document = win.document;
   try {
     const html = render("# hi\n\n| a | b |\n|---|---|\n| 1 | 2 |");
     assert.ok(html.includes("<h1"));
@@ -114,7 +116,11 @@ test("DOMPurify sanitization end to end (needs jsdom)",
     assert.ok(!render("<iframe src=//evil></iframe>")
                 .includes("<iframe"));
     assert.ok(!render("<style>body{}</style>").includes("<style"));
+    assert.ok(!render('<p style="position:fixed">x</p>').includes("style="));
+    assert.ok(!render('<input type="password" value="secret">').includes('type="password"'));
+    assert.ok(render('<input type="checkbox" disabled>').includes('type="checkbox"'));
   } finally {
     delete globalThis.DOMPurify;
+    delete globalThis.document;
   }
 });

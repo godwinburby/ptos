@@ -127,8 +127,8 @@ class TestWidgetPickerWiring:
         src = _read(PICKER_JS)
         assert "/api/widgets/catalog" in src
         assert 'encodeURIComponent("saved." + kind)' in src
-        assert "window.PtosWidgetPicker = { open: open, close: close," \
-               " merge: merge }" in src
+        assert "window.PtosWidgetPicker = {" in src
+        assert "catalog: function (cb)" in src
         assert "_RECENT_KEY" in src
         assert "localStorage" in src
 
@@ -143,11 +143,42 @@ class TestWidgetPickerWiring:
         assert "All widgets…" in src
         assert "it._gallery" in src
 
+    def test_slash_empty_menu_uses_gallery_categories(self):
+        src = _read(SLASH_JS)
+        render = src[src.index("function _render(el, tok, list)"):src.index("function _escape")]
+        assert "PtosWidgetPicker.catalog" in render
+        assert "_navCategory" in render
+        assert "if (tok.query)" in render
+        assert "_buildMenu(tok.query)" not in render
+
     def test_slash_handles_gallery_in_both_paths(self):
         src = _read(SLASH_JS)
         assert "_openGallerySlash" in src
         assert src.count("it._gallery") >= 3  # filter hay, label, buildMenu, commits
         assert "mode: \"add\"" in src
+
+    def test_blocks_plus_opens_gallery_directly(self):
+        src = _read(BLOCKS_JS)
+        picker = src[src.index("function _pickerAt"):src.index("function _change")]
+        assert "PtosWidgetPicker.open" in picker
+        assert "openSlashPicker" not in picker
+
+    def test_picker_node_suite(self):
+        if shutil.which("node") is None:
+            pytest.skip("node not installed")
+        path = os.path.join(REPO, "tests", "js", "widget_picker.test.js")
+        proc = subprocess.run([shutil.which("node"), "--test", path],
+                              cwd=REPO, capture_output=True, text=True,
+                              timeout=180)
+        assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
+
+    def test_slash_navigation_node_suite(self):
+        if shutil.which("node") is None:
+            pytest.skip("node not installed")
+        path = os.path.join(REPO, "tests", "js", "slash_nav.test.js")
+        proc = subprocess.run([shutil.which("node"), path], cwd=REPO,
+                              capture_output=True, text=True, timeout=180)
+        assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
 
 
 class TestWidgetCss:

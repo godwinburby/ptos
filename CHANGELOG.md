@@ -7,6 +7,19 @@ Format: `[version or date] — description`
 
 ## 2026-10-24
 
+### Markdown widget add flow
+
+- The Blocks `+` controls now open the widget gallery directly. The gallery starts with a compact strip of six quick starts, category tiles with counts, and recent widgets. Saved items include a short description and type tag, with searchable lists.
+- Widget picks open the existing live preview form before insertion. Capture, quick-add, journal, and todo summary widgets skip the form; Back or closing the gallery leaves the page untouched. The widget form exposes Add widget and Back labels for this flow.
+- The catalog now marks quick-add kinds, limits are hidden for widgets that do not use row counts, new Journal and Task summary starters are available, and duplicate starter labels are prevented by tests. Saved-item options retain `values` and can return described items with `detail=1`.
+- Widget validation now applies shared field metadata in both the form validator and embed resolver, including minimum row limits and single-letter todo priorities.
+- The `/` menu filters matching categories, widget kinds, and text blocks as you type; arrow-key navigation scrolls the active choice into view. Gallery search remains available from the menu.
+- Markdown sanitization removes inline styles and drops inputs other than disabled checkboxes. Task-list rendering keeps one checkbox per item in Blocks view; remote images remain allowed.
+- The editor's separate Colour view now applies heading colors to the token classes it actually renders; normal text entry stays in the textarea.
+- Blocks view mounts live widgets through the shared widget host, including the interactive time picker, and refreshes them when its page time window changes. `live = false` retains static rendering.
+- Moved the two committed home/widget design specs under `docs/specs/`.
+- **Tests:** Added catalog, descriptions, and resolver parity coverage; extended markdown renderer sanitization tests.
+
 ### Interactive widgets in markdown previews
 
 - Widgets in note and journal previews now mount through the interactive widget host by default. Records tables get their interactive table controls, thresholds retain their Browse links, and capture/quick-add widgets use their interactive actions. Set `live = false` for a read-only block; preview actions do not edit or autosave the markdown note.

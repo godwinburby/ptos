@@ -2653,6 +2653,10 @@ def resolve_embed(spec, context=None):
         raise PTOSError(
             f"Embed view '{entry['kind']}' does not accept: "
             f"{', '.join(unknown)} (allowed: {allowed})")
+    value_errors = ptos_widgets.runtime_field_errors(entry, spec)
+    if value_errors:
+        first = value_errors[0]
+        raise PTOSError(first["message"])
     result, link = entry["resolve"](spec, name, time, from_date, to_date)
 
     limit = spec.get("limit")
@@ -3005,7 +3009,8 @@ def _wf(key, label, type_, **kw):
     return d
 
 
-def _widget_fields(kind, *, view_options, name=None, time=True, extra=()):
+def _widget_fields(kind, *, view_options, name=None, time=True, limit=True,
+                   extra=()):
     """Common gallery field list (view/name/time/from/to/title/limit/
     span/hide_on/live).
 
@@ -3047,7 +3052,8 @@ def _widget_fields(kind, *, view_options, name=None, time=True, extra=()):
                           show_if=False, help="Not used by this widget."))
     fields.append(_wf("title", "Title", "text", advanced=True,
                       help="Heading shown above the widget."))
-    fields.append(_wf("limit", "Max rows", "number", advanced=True,
+    fields.append(_wf("limit", "Max rows", "number", min=1, advanced=True,
+                      show_if=limit,
                       help="Cap the number of rows shown."))
     fields.append(_wf("span", "Wide on home", "number", advanced=True,
                       help="2 = double width in the home grid (1 or 2)."))
@@ -3177,7 +3183,7 @@ def _register_builtin_widgets():
         description="Due and overdue tasks from a saved due view.",
         icon="clock", category="tasks", named=True,
         interactive_default=False,
-        starters=({"id": "due_default", "label": "Overdue tasks",
+        starters=({"id": "due_default", "label": "Overdue records",
                    "description": "Default due view — overdue and "
                                   "upcoming tasks.",
                    "body": 'view = "due"\nname = "default"\nlimit = 5\n'},),
@@ -3279,15 +3285,21 @@ def _register_builtin_widgets():
         interactive_default=False,
         fields=_widget_fields(
             "todo_summary", view_options=("todo_summary",), time=False,
-            extra=()))
+            limit=False, extra=()), quick_add=True,
+        starters=({"id": "task_summary", "label": "Task summary",
+                   "description": "Counts of open, due and overdue tasks.",
+                   "body": 'view = "todo_summary"\n'},))
     reg("journal", _w_journal, needs_name=False, infer_order=99,
         label="Journal",
         description="Recent journal entries.",
         icon="book", category="capture", named=False,
         interactive_default=False,
         fields=_widget_fields(
-            "journal", view_options=("journal",), time=False,
-            extra=()))
+            "journal", view_options=("journal",), time=False, limit=False,
+            extra=()), quick_add=True,
+        starters=({"id": "journal_preview", "label": "Journal",
+                   "description": "Recent journal entries.",
+                   "body": 'view = "journal"\n'},))
     reg("capture", _w_capture, needs_name=False, infer_order=99,
         label="Quick capture",
         description="Type a line and save it as a capture record.",
@@ -3297,8 +3309,8 @@ def _register_builtin_widgets():
                    "description": "Type a line and save it.",
                    "body": 'view = "capture"\n'},),
         fields=_widget_fields(
-            "capture", view_options=("capture",), time=False,
-            extra=()))
+            "capture", view_options=("capture",), time=False, limit=False,
+            extra=()), quick_add=True)
     reg("quick_add", _w_quick_add, needs_name=False, infer_order=99,
         label="Quick add",
         description="One-tap buttons for your common presets.",
@@ -3308,8 +3320,8 @@ def _register_builtin_widgets():
                    "description": "One-tap buttons for your common presets.",
                    "body": 'view = "quick_add"\n'},),
         fields=_widget_fields(
-            "quick_add", view_options=("quick_add",), time=False,
-            extra=()))
+            "quick_add", view_options=("quick_add",), time=False, limit=False,
+            extra=()), quick_add=True)
     reg("quick_add_multi", _w_quick_add_multi, needs_name=False,
         infer_order=99,
         label="Quick add multi",
@@ -3321,7 +3333,7 @@ def _register_builtin_widgets():
                    "body": 'view = "quick_add_multi"\n'},),
         fields=_widget_fields(
             "quick_add_multi", view_options=("quick_add_multi",),
-            time=False, extra=()))
+            time=False, limit=False, extra=()), quick_add=True)
     reg("time_picker", _w_time_picker, needs_name=False, infer_order=99,
         label="Time window picker",
         description="Choose the time window for time-aware widgets on Home.",
@@ -3331,7 +3343,8 @@ def _register_builtin_widgets():
                    "description": "A Home-wide time window selector.",
                    "body": 'view = "time_picker"\nlive = true\n'},),
         fields=_widget_fields("time_picker", view_options=("time_picker",),
-                              time=False, extra=()))
+                              time=False, limit=False, extra=()),
+        quick_add=True)
 
 
 _register_builtin_widgets()
@@ -3426,6 +3439,114 @@ def get_embed_candidates():
 # Widget catalog — gallery metadata, option sources, form validation
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _saved_description_time(value):
+    labels = {
+        "td": "today", "yd": "yesterday", "tw": "this week",
+        "lw": "last week", "tm": "this month", "lm": "last month",
+        "tq": "this quarter", "lq": "last quarter", "ty": "this year",
+        "ly": "last year", "all": "all time",
+        "this-month": "this month", "last-month": "last month",
+        "this-week": "this week", "last-week": "last week",
+        "this-year": "this year", "last-year": "last year",
+    }
+    raw = str(value or "").strip()
+    return labels.get(raw.lower(), raw.replace("-", " "))
+
+
+def _saved_definition(kind, name, queries):
+    if kind == "query":
+        return queries.get(name)
+    if kind in ("metric", "dashboard"):
+        section = queries.get({"metric": "metrics",
+                               "dashboard": "dashboards"}[kind]) or {}
+        return section.get(name) if isinstance(section, dict) else None
+    value = queries.get(f"{kind}.{name}")
+    if kind == "habit" and not isinstance(value, dict):
+        habits = (get_config().get("habits") or {})
+        return habits.get(name) if isinstance(habits, dict) else None
+    return value
+
+
+def describe_saved(kind, name, cfg=None):
+    """Describe a saved widget item without resolving or querying its data."""
+    kind = str(kind or "").strip().lower()
+    name = str(name or "").strip()
+    if cfg is None:
+        try:
+            cfg = _saved_definition(kind, name, get_queries())
+        except Exception:
+            cfg = None
+    if not isinstance(cfg, dict):
+        return {"description": kind.replace("_", " ").title() or "Saved item",
+                "tag": ""}
+
+    parts = []
+    tag = ""
+    if kind == "query":
+        where = str(cfg.get("where") or "").strip()
+        if where:
+            parts.append(where)
+        group = cfg.get("group") or cfg.get("pivot")
+        if group:
+            parts.append("by " + str(group))
+        if cfg.get("time"):
+            parts.append(_saved_description_time(cfg["time"]))
+        tag = "chart" if (cfg.get("chart") or group or cfg.get("trend")) else "table"
+    elif kind == "metric":
+        if cfg.get("ratio"):
+            pair = cfg["ratio"]
+            parts.append("Ratio of " + " to ".join(map(str, pair))
+                         if isinstance(pair, (list, tuple)) else
+                         "Ratio of " + str(pair))
+        else:
+            for op in ("avg", "sum", "count", "min", "max"):
+                if op in cfg:
+                    label = {"avg": "Average", "sum": "Sum", "count": "Count",
+                             "min": "Minimum", "max": "Maximum"}[op]
+                    parts.append(label + " of " + str(cfg[op]))
+                    break
+    elif kind == "dashboard":
+        count = sum(len(cfg.get(k) or []) for k in ("metrics", "queries"))
+        parts.append(f"{count} item" + ("s" if count != 1 else "")
+                     if count else "Saved dashboard")
+    elif kind == "threshold":
+        if cfg.get("metric"):
+            parts.append("Metric " + str(cfg["metric"]))
+        if cfg.get("value") is not None:
+            parts.append("target " + str(cfg["value"]))
+        if cfg.get("time"):
+            parts.append(_saved_description_time(cfg["time"]))
+        tag = "limit"
+    elif kind == "board":
+        columns = cfg.get("columns") or []
+        parts.append("Columns: " + ", ".join(map(str, columns[:4]))
+                     if columns else "Saved board")
+    elif kind == "habit":
+        parts.append(str(cfg.get("frequency") or cfg.get("cadence")
+                         or cfg.get("where") or "Configured habit"))
+    elif kind == "calendar":
+        filters = cfg.get("filters") or []
+        parts.append((f"{len(filters)} filter" +
+                      ("s" if len(filters) != 1 else "")) if filters
+                     else "All records")
+        if cfg.get("time_window"):
+            parts.append(_saved_description_time(cfg["time_window"]))
+    elif kind == "due":
+        parts.append(str(cfg.get("title") or "Due and overdue tasks"))
+        if cfg.get("days") is not None:
+            parts.append(f"{cfg['days']} day window")
+    elif kind == "project":
+        parts.append(str(cfg.get("description") or cfg.get("where")
+                         or "Project overview"))
+    elif kind == "todo":
+        filters = [f"{key}: {cfg[key]}" for key in
+                   ("due", "priority", "project", "context") if cfg.get(key)]
+        parts.extend(filters or ["Saved task list"])
+    description = " · ".join(p for p in parts if p)
+    return {"description": description[:160] or
+            kind.replace("_", " ").title() or "Saved item", "tag": tag}
+
+
 _SAVED_KIND_KEY = {
     "dashboard": "dashboards", "metric": "metrics", "threshold": "thresholds",
     "board": "boards", "habit": "habits", "calendar": "calendars",
@@ -3511,6 +3632,11 @@ def get_widget_catalog():
     except Exception:
         cand = {}
     kinds_out = [ptos_widgets.catalog_entry(e) for e in ptos_widgets.kinds()]
+    kind_counts = {}
+    for kind in kinds_out:
+        category = kind.get("category")
+        if category:
+            kind_counts[category] = kind_counts.get(category, 0) + 1
     starters = []
     for entry in ptos_widgets.kinds():
         ckey = _SAVED_KIND_KEY.get(entry["kind"])
@@ -3533,7 +3659,8 @@ def get_widget_catalog():
                 "category": entry.get("category"),
             })
     return {
-        "categories": [dict(c) for c in ptos_widgets.CATEGORIES],
+        "categories": [dict(c, count=kind_counts.get(c["id"], 0))
+                       for c in ptos_widgets.CATEGORIES],
         "kinds": kinds_out,
         "starters": starters,
     }

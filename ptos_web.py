@@ -3869,8 +3869,15 @@ def api_widgets_options():
     """Option values for one gallery field source (?source=...)."""
     source = request.args.get("source", "")
     try:
-        return jsonify(ok=True, source=source,
-                       values=svc.get_widget_options(source))
+        values = svc.get_widget_options(source)
+        result = {"ok": True, "source": source, "values": values}
+        if request.args.get("detail") == "1" and source.startswith("saved."):
+            kind = source.split(".", 1)[1].strip()
+            result["items"] = [
+                {"name": name, **svc.describe_saved(kind, name)}
+                for name in values
+            ]
+        return jsonify(**result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e)), 400
     except Exception as e:

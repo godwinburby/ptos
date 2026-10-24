@@ -1,8 +1,8 @@
 // md_render.js — the single markdown renderer for notes, blocks and home.
 // marked parses, DOMPurify sanitizes (fail closed: with either library
 // missing the text renders escaped, never raw). Spec: allow standard
-// markdown output plus details/summary/br; block script/style/iframe,
-// event handlers and javascript:/data: URLs (the URI regex is DOMPurify's).
+// markdown output plus details/summary/br; styles are removed and only
+// disabled task-list checkboxes survive. Remote images remain allowed.
 //
 // Part F — inline {{tokens}}: substituted AFTER sanitizing, as text nodes,
 // so a name containing markdown or markup characters can never become
@@ -39,10 +39,15 @@
     var r = new marked.Renderer();
     var orig = r.listitem.bind(r);
     r.listitem = function (text, task, checked) {
-      if (task)
-        return '<li style="list-style:none;margin-left:-22px;">' +
-          '<input type="checkbox" ' + (checked ? "checked" : "") +
-          " disabled> " + text + "</li>";
+      if (task) {
+        var body = String(text == null ? "" : text);
+        var hasCheckbox = /<input\b(?=[^>]*\btype=["']checkbox["'])[^>]*>/i.test(body);
+        if (!hasCheckbox) {
+          body = '<input type="checkbox" ' + (checked ? "checked" : "") +
+            " disabled> " + body;
+        }
+        return '<li class="md-task-list-item">' + body + "</li>";
+      }
       return orig(text, task, checked);
     };
     marked.use({ renderer: r });
@@ -244,7 +249,19 @@
     }
     configureMarked();
     var html = marked.parse(src);
-    var clean = DOMPurify.sanitize(html, { ALLOWED_TAGS: ALLOWED_TAGS });
+    var clean = DOMPurify.sanitize(html, {
+      ALLOWED_TAGS: ALLOWED_TAGS,
+      FORBID_ATTR: ["style"]
+    });
+    if (typeof document === "undefined" || !document.implementation) return clean;
+    var doc = document.implementation.createHTMLDocument("");
+    var box = doc.createElement("div");
+    box.innerHTML = clean;
+    box.querySelectorAll("input").forEach(function (input) {
+      if (String(input.getAttribute("type") || "").toLowerCase() !== "checkbox" ||
+          !input.hasAttribute("disabled")) input.remove();
+    });
+    clean = box.innerHTML;
     if (clean.indexOf("{{") === -1) return clean;
     var container = document.createElement("div");
     container.innerHTML = clean;

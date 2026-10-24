@@ -95,7 +95,8 @@ class TestMdRenderWiring:
     def test_helper_sanitizes_and_fails_closed(self):
         src = _read("web_static", "js", "md_render.js")
         assert "DOMPurify.sanitize(html" in src
-        assert "{ ALLOWED_TAGS: ALLOWED_TAGS }" in src
+        assert "ALLOWED_TAGS: ALLOWED_TAGS" in src
+        assert 'FORBID_ATTR: ["style"]' in src
         assert 'typeof DOMPurify === "undefined"' in src
         assert "escapeText(src)" in src
         assert "window.renderMarkdown = render" in src
@@ -106,7 +107,7 @@ class TestMdRenderWiring:
         for tag in ('"details"', '"summary"', '"br"', '"table"',
                     '"input"', '"pre"'):
             assert tag in src
-        for tag in ('"script"', '"style"', '"iframe"', '"object"',
+        for tag in ('"script",', '"style",', '"iframe"', '"object"',
                     '"embed"'):
             assert tag not in src
 

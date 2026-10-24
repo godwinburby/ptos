@@ -254,9 +254,18 @@
   }
 
   function _activateIn(list, i) {
-    list.querySelectorAll(".slash-ac-item").forEach(function (itemEl, j) {
+    var items = list.querySelectorAll(".slash-ac-item");
+    items.forEach(function (itemEl, j) {
       itemEl.classList.toggle("active", j === i);
     });
+    var active = i >= 0 ? items[i] : null;
+    if (!active) return;
+    var top = active.offsetTop;
+    var bottom = top + active.offsetHeight;
+    if (top < list.scrollTop) list.scrollTop = top;
+    else if (bottom > list.scrollTop + list.clientHeight) {
+      list.scrollTop = bottom - list.clientHeight;
+    }
   }
 
   function _wireItems(list, commitFn) {
@@ -270,22 +279,226 @@
 
   function _render(el, tok, list) {
     if (list._blurTimer) { clearTimeout(list._blurTimer); list._blurTimer = null; }
-    list._mode = "embed";
-    var built = _buildMenu(tok.query);
-    if (!built) { _close(list); return; }
-    list.innerHTML = built.html;
-    list._flat = built.flat;
+    list._mode = "nav";
     list._tok = tok;
+    list._flat = [];
     list.style.display = "block";
     list.classList.add("open");
     _position(list, el);
     list._activate = _activateIn.bind(null, list);
     _wireItems(list, function (idx) { _commit(el, list, idx); });
+    if (tok.query && !list._catalog) {
+      window.PtosWidgetPicker.catalog(function (catalog) {
+        if (!list.classList.contains("open") || list._tok.start !== tok.start ||
+            list._tok.query !== tok.query) return;
+        list._catalog = catalog;
+        _render(el, list._tok, list);
+      });
+      list._navPath = [];
+      list._flat = [{_gallerySearch: tok.query}];
+      list.innerHTML = '<div class="slash-ac-group">Search</div>' +
+        '<div class="bracket-ac-item slash-ac-item" data-idx="0">Search all for “' +
+        _escape(tok.query) + '” in gallery…</div>';
+      _wireItems(list, function (idx) { _commit(el, list, idx); });
+      return;
+    }
+    if (!window.PtosWidgetPicker || !window.PtosWidgetPicker.catalog) {
+      _close(list);
+      return;
+    }
+    window.PtosWidgetPicker.catalog(function (catalog) {
+      if (!list.classList.contains("open") || list._tok.start !== tok.start ||
+          list._tok.query !== tok.query) return;
+      list._catalog = catalog;
+      var path = list._navPath || [];
+      var flat = [];
+      var html = "";
+      if (tok.query) {
+        var q = tok.query.toLowerCase();
+        function matches(label, description) {
+          return (String(label || "") + " " + String(description || ""))
+            .toLowerCase().indexOf(q) !== -1;
+        }
+        html = '<div class="slash-ac-group">Matches for "' + _escape(tok.query) + '"</div>';
+        if (!path.length) {
+          (catalog.categories || []).forEach(function (c) {
+            if (!matches(c.label, c.description)) return;
+            html += _navRow(flat.length, c.label, c.count + " items", c.description || "Category");
+            flat.push({_navCategory:c.id});
+          });
+          (catalog.kinds || []).forEach(function (kind) {
+            if (!matches(kind.label, kind.description)) return;
+            if (window.PtosWidgetPicker.allowsKind &&
+                !window.PtosWidgetPicker.allowsKind(kind.kind)) return;
+            html += _navRow(flat.length, kind.label, kind.named ? "Saved items" : "", kind.description);
+            flat.push({_navKind:kind});
+          });
+          (window.PtosTextBlocks || []).filter(function (it) {
+            return it && it.gallery && matches(it.label, it.description);
+          }).forEach(function (item) {
+            html += _navRow(flat.length, item.label, "Text", item.description);
+            flat.push({_navText:item});
+          });
+        } else if (path[0] === "text") {
+          (window.PtosTextBlocks || []).filter(function (it) {
+            return it && it.gallery && matches(it.label, it.description);
+          }).forEach(function (item) {
+            html += _navRow(flat.length, item.label, "Text", item.description);
+            flat.push({_navText:item});
+          });
+        } else if (path.length === 1) {
+          (catalog.kinds || []).filter(function (kind) {
+            return kind.category === path[0] && matches(kind.label, kind.description) &&
+              (!window.PtosWidgetPicker.allowsKind ||
+               window.PtosWidgetPicker.allowsKind(kind.kind));
+          }).forEach(function (kind) {
+            html += _navRow(flat.length, kind.label, kind.named ? "Saved items" : "", kind.description);
+            flat.push({_navKind:kind});
+          });
+        } else if (list._navItems) {
+          list._navItems.filter(function (item) {
+            return matches(item.name, item.tag + " " + item.description);
+          }).forEach(function (item) {
+            html += _navRow(flat.length, item.name, item.tag || "", item.description);
+            flat.push({_navItem:item, kind:path[1]});
+          });
+        }
+        if (!flat.length) html += '<div class="slash-ac-empty">No matches here.</div>';
+        flat.push({_gallerySearch:tok.query});
+        html += '<div class="bracket-ac-item slash-ac-item slash-nav-row" data-idx="' +
+          (flat.length - 1) + '">Search all for “' + _escape(tok.query) + '” in gallery…</div>';
+      } else if (!path.length) {
+        var categories = [{id:"text",label:"Text",count:(window.PtosTextBlocks || []).length}]
+          .concat(catalog.categories || []);
+        html = '<div class="slash-ac-group">Add to page</div>';
+        categories.forEach(function (c) {
+          html += _navRow(flat.length, c.label, c.count + " items", "");
+          flat.push({_navCategory:c.id});
+        });
+        var recent = window.PtosWidgetPicker.recent
+          ? window.PtosWidgetPicker.recent().slice(0, 3) : [];
+        if (recent.length) html += '<div class="slash-ac-group">Recent</div>';
+        recent.forEach(function (r) {
+          html += _navRow(flat.length, r.label || "Recent widget", "", "");
+          flat.push({_galleryRecent:r});
+        });
+      } else if (path[0] === "text") {
+        html = '<div class="slash-ac-group">Add to page › Text</div>';
+        (window.PtosTextBlocks || []).filter(function (it) { return it && it.gallery; })
+          .forEach(function (item) {
+            html += _navRow(flat.length, item.label, "", item.description);
+            flat.push({_navText:item});
+          });
+      } else if (path.length === 1) {
+        var category = null;
+        (catalog.categories || []).forEach(function (c) {
+          if (c.id === path[0]) category = c;
+        });
+        html = '<div class="slash-ac-group">Add to page › ' +
+          _escape(category ? category.label : path[0]) + '</div>';
+        (catalog.kinds || []).filter(function (k) {
+          return k.category === path[0];
+        }).forEach(function (kind) {
+          if (window.PtosWidgetPicker.allowsKind &&
+              !window.PtosWidgetPicker.allowsKind(kind.kind)) return;
+          html += _navRow(flat.length, kind.label, kind.named ? "Saved items" : "",
+                          kind.description);
+          flat.push({_navKind:kind});
+        });
+      } else {
+        var kindEntry = null;
+        (catalog.kinds || []).forEach(function (k) {
+          if (k.kind === path[1]) kindEntry = k;
+        });
+        html = '<div class="slash-ac-group">Add to page › ' +
+          _escape(kindEntry ? kindEntry.label : path[1]) + '</div>';
+        if (list._navLoading) {
+          html += '<div class="slash-ac-empty">Loading saved items…</div>';
+        } else if (list._navItems) {
+          list._navItems.forEach(function (item) {
+            html += _navRow(flat.length, item.name, item.tag || "", item.description);
+            flat.push({_navItem:item, kind:path[1]});
+          });
+          if (!list._navItems.length) html += '<div class="slash-ac-empty">No saved items. Browse in gallery…</div>';
+        }
+      }
+      if (path.length === 2 && !list._navItems && !list._navLoading) {
+        list._navLoading = true;
+        fetch("/api/widgets/options?detail=1&source=" +
+          encodeURIComponent("saved." + path[1]))
+          .then(function (r) { return r.json(); })
+          .then(function (d) {
+            if (list._navPath !== path) return;
+            list._navLoading = false;
+            list._navItems = d && d.ok && Array.isArray(d.items) ? d.items : [];
+            _render(el, list._tok, list);
+          }).catch(function () {
+            if (list._navPath !== path) return;
+            list._navLoading = false;
+            list._navItems = [];
+            _render(el, list._tok, list);
+          });
+      }
+      list.innerHTML = html;
+      list._flat = flat;
+      list._activate(-1);
+      _wireItems(list, function (idx) { _commit(el, list, idx); });
+    });
+  }
+
+  function _navRow(index, label, meta, description) {
+    return '<div class="bracket-ac-item slash-ac-item slash-nav-row" data-idx="' +
+      index + '"><span class="slash-nav-main"><span>' + _escape(label) +
+      '</span>' + (description ? '<small>' + _escape(description) + '</small>' : '') +
+      '</span>' + (meta ? '<span class="slash-ac-count">' + _escape(meta) + '</span>' : '') +
+      '</div>';
+  }
+
+  function _escape(text) {
+    return String(text == null ? "" : text).replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   }
 
   function _commit(el, list, idx) {
     var it = list._flat[idx];
     if (!it) return;
+    if (it._navCategory) {
+      list._navPath = [it._navCategory];
+      list._navItems = null;
+      list._navLoading = false;
+      _render(el, list._tok, list);
+      return;
+    }
+    if (it._navKind) {
+      var kind = it._navKind;
+      if (kind.named) {
+        list._navPath = [kind.category, kind.kind];
+        list._navItems = null;
+        list._navLoading = false;
+        _render(el, list._tok, list);
+      } else {
+        _openGallerySlash(el, list, null, "", _widgetBody(kind.kind), kind.label);
+      }
+      return;
+    }
+    if (it._navText) {
+      _insertSlashText(el, list, it._navText);
+      return;
+    }
+    if (it._navItem) {
+      _openGallerySlash(el, list, null, "",
+        _widgetBody(it.kind, it._navItem.name), it._navItem.name);
+      return;
+    }
+    if (it._gallerySearch) {
+      _openGallerySlash(el, list, null, it._gallerySearch);
+      return;
+    }
+    if (it._galleryRecent) {
+      _openGallerySlash(el, list, null, "", it._galleryRecent.body,
+                        it._galleryRecent.label);
+      return;
+    }
     if (it._gallery) { _openGallerySlash(el, list); return; }
     if (it.run) { it.run(el, list._tok, list); return; }
     if (list._mode === "time") {
@@ -297,14 +510,36 @@
     _insert(el, list._tok, it, list);
   }
 
+  function _widgetBody(kind, name) {
+    var spec = {view:kind};
+    if (name) spec.name = name;
+    if (window.PtosToml && window.PtosToml.serialize) return window.PtosToml.serialize(spec);
+    var escaped = String(name || "").replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+    return 'view = "' + kind + '"' + (name ? '\nname = "' + escaped + '"' : "");
+  }
+
+  function _insertSlashText(el, list, item) {
+    var tok = list._tok;
+    var before = el.value.slice(0, tok.start);
+    var after = el.value.slice(tok.end);
+    var seed = item.seed == null ? "" : String(item.seed);
+    var lead = (seed && before && !/\n$/.test(before)) ? "\n" : "";
+    el.value = before + lead + seed + after;
+    _finish(list, el, (before + lead).length + (Number(item.caret) || 0));
+  }
+
   // Gallery from the "/" path: the typed token stays put until a pick
   // lands, then the fence replaces it exactly like a named-item insert.
   // A Text-category pick replaces the token with the markdown seed
   // instead (empty seed = just drop the token).
-  function _openGallerySlash(el, list) {
+  function _openGallerySlash(el, list, category, query, startBody, startLabel) {
     if (!window.PtosWidgetPicker) return;
     window.PtosWidgetPicker.open({
       mode: "add",
+      category: category || undefined,
+      query: query || "",
+      startBody: startBody,
+      startLabel: startLabel,
       onPick: function (p) {
         var tok = list._tok;
         if (!tok) { _close(list); return; }
@@ -522,7 +757,13 @@
     el.addEventListener("input", function () {
       var tok = _getSlashToken(el);
       if (!tok) { _close(list); return; }
-      _load(function () { _render(el, tok, list); });
+      if (!list.classList.contains("open") || !list._tok ||
+          list._tok.start !== tok.start || list._tok.query !== tok.query) {
+        list._navPath = [];
+        list._navItems = null;
+        list._navLoading = false;
+      }
+      _render(el, tok, list);
     });
 
     el.addEventListener("keydown", function (e) {
@@ -544,7 +785,21 @@
           _commit(el, list, cur);
         }
       } else if (e.key === "Escape") {
-        _close(list);
+        if (list._mode === "nav" && list._navPath && list._navPath.length) {
+          e.preventDefault();
+          list._navPath.pop();
+          list._navItems = null;
+          list._navLoading = false;
+          _render(el, list._tok, list);
+        } else _close(list);
+      } else if ((e.key === "ArrowLeft" || e.key === "Backspace") &&
+                 list._mode === "nav" && !list._tok.query &&
+                 list._navPath && list._navPath.length) {
+        e.preventDefault();
+        list._navPath.pop();
+        list._navItems = null;
+        list._navLoading = false;
+        _render(el, list._tok, list);
       }
     });
 

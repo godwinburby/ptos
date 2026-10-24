@@ -270,8 +270,8 @@
 
     var actions = document.createElement("div");
     actions.className = "wf-actions";
-    S.saveBtn = _btn("Save", "wf-save md-embed-edit-save");
-    var cancel = _btn("Cancel", "wf-cancel md-embed-edit-cancel");
+    S.saveBtn = _btn(S.opts.saveLabel || "Save", "wf-save md-embed-edit-save");
+    var cancel = _btn(S.opts.cancelLabel || "Cancel", "wf-cancel md-embed-edit-cancel");
     S.toggleBtn = _btn("Edit as text", "wf-textlink");
     actions.appendChild(S.saveBtn);
     actions.appendChild(cancel);

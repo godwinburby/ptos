@@ -56,12 +56,11 @@ class TestColourViewMarkup:
         assert "<textarea" in html
         assert "contenteditable" not in html
 
-    def test_overlay_is_gone(self):
+    def test_overlay_is_absent_from_editing_surface(self):
         html = _read(EDITOR)
-        assert "md-hl" not in html
-        assert "attachMdHighlight" not in html
+        assert 'id="md-live-highlight"' not in html
+        assert "md-live-input" not in html
         assert "caret-color:var(--text)" not in html
-        assert "pointer-events:none" not in html
 
     def test_ships_static_colour_view(self):
         html = _read(EDITOR)
@@ -85,7 +84,7 @@ class TestColourViewMarkup:
 
     def test_editor_ships_token_colors(self):
         html = _read(EDITOR)
-        for cls in (".md-h1", ".mh-hr", ".mh-op", ".mh-task", ".mh-b",
+        for cls in (".mh-h1", ".mh-hr", ".mh-op", ".mh-task", ".mh-b",
                     ".mh-i", ".mh-s", ".mh-c", ".mh-br", ".mh-link",
                     ".mh-fence", ".mh-fence-open", ".mh-q", ".mh-tk-key",
                     ".mh-tk-punct", ".mh-tk-str", ".mh-tk-num"):

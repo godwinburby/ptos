@@ -203,19 +203,30 @@
       onFormat: opts.onFormat || null,
       anchor: opts.anchor || null,
       step: "home",
-      cat: null,
+      cat: opts.category || null,
       kind: null,
-      query: "",
+      query: opts.query || "",
+      showMore: false,
       items: null,
+      itemDetails: null,
+      pendingBody: null,
+      pendingLabel: "Widget",
+      returnStep: "home",
       loading: true,
       itemsLoading: false,
       blockTimePicker: !editingTimePicker && _pageHasTimePicker(pageSource),
     };
+    _S.step = opts.category ? "cat" : "home";
     _buildOverlay();
+    _overlay.querySelector(".wp-search").value = _S.query;
     _load(function () {
       if (!_S) return;
       _S.loading = false;
-      _render();
+      if (opts.startBody != null) {
+        var kind = "";
+        try { kind = String(PtosToml.parse(opts.startBody).view || ""); } catch (e) {}
+        _choose(opts.startBody, opts.startLabel || "Recent", kind);
+      } else _render();
     });
   }
 
@@ -241,6 +252,7 @@
           '<span class="wp-title">Add a widget</span>' +
           '<button type="button" class="wp-close" aria-label="Close">✕</button>' +
         "</div>" +
+        '<div class="wp-breadcrumb" aria-live="polite"></div>' +
         '<input class="wp-search" type="search" ' +
           'placeholder="Search…" autocomplete="off">' +
         '<div class="wp-body"></div>' +
@@ -252,6 +264,12 @@
     var back = ov.querySelector(".wp-back");
     back.addEventListener("click", function () {
       if (!_S) return;
+      if (_S.step === "configure") {
+        _S.step = _S.returnStep || "home";
+        _S.pendingBody = null;
+        _render();
+        return;
+      }
       if (_S.step === "kind" || _S.step === "items") {
         _S.step = _S.kind ? "cat" : "home";
         _S.kind = null;
@@ -266,10 +284,29 @@
     search.addEventListener("input", function () {
       if (!_S) return;
       _S.query = search.value;
+      _S.showMore = false;
       _render();
     });
     ov.addEventListener("keydown", function (e) {
-      if (e.key === "Escape") { e.preventDefault(); close(); }
+      if (e.key === "Escape") {
+        e.preventDefault();
+        if (_S && _S.step !== "home") back.click();
+        else close();
+      } else if (e.key === "Backspace" && _S && !_S.query &&
+                 _S.step !== "home" && e.target !== search) {
+        e.preventDefault();
+        back.click();
+      } else if (e.key === "Tab") {
+        var focusable = Array.prototype.slice.call(ov.querySelectorAll(
+          'button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])'));
+        if (!focusable.length) return;
+        var first = focusable[0], last = focusable[focusable.length - 1];
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault(); last.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault(); first.focus();
+        }
+      }
     });
     ov.addEventListener("mousedown", function (e) {
       if (e.target === ov) close();
@@ -287,21 +324,38 @@
     var back = _overlay.querySelector(".wp-back");
     var title = _overlay.querySelector(".wp-title");
     var search = _overlay.querySelector(".wp-search");
+    var crumb = _overlay.querySelector(".wp-breadcrumb");
     if (!body) return;
 
     back.style.display = _S.step === "home" ? "none" : "";
-    search.style.display = _S.step === "items" ? "none" : "";
+    search.style.display = _S.step === "configure" ? "none" : "";
     title.textContent = _S.mode === "change" ? "Change widget"
-      : _S.step === "home" ? "Add a widget"
+      : _S.step === "home" ? "Add to page"
       : _S.step === "cat" ? _catLabel(_S.cat)
+      : _S.step === "configure" ? "Configure widget"
+      : _S.step === "starters" ? "Quick starts"
+      : _S.step === "items" && _S.items
+        ? _kindLabel(_S.kind) + " (" + _S.items.length + ")"
       : _S.kind ? _kindLabel(_S.kind) : "Add a widget";
+    var crumbParts = ["Add to page"];
+    if (_S.step === "cat" || _S.step === "items") crumbParts.push(_catLabel(_S.cat));
+    if (_S.step === "items") crumbParts.push(_kindLabel(_S.kind));
+    if (_S.step === "starters") crumbParts.push("Quick starts");
+    if (_S.step === "configure") {
+      if (_S.cat) crumbParts.push(_catLabel(_S.cat));
+      crumbParts.push(_S.pendingLabel || "Configure");
+    }
+    crumb.textContent = _S.step === "home" ? "" : crumbParts.join(" › ");
+    crumb.style.display = _S.step === "home" ? "none" : "";
 
     if (_S.loading) {
       body.innerHTML = '<div class="wp-empty">Loading…</div>';
       return;
     }
+    if (_S.step === "configure") { _renderConfigure(body); return; }
     if (_S.step === "items") { _renderItems(body); return; }
     if (_S.step === "cat") { _renderCat(body); return; }
+    if (_S.step === "starters") { _renderStarters(body); return; }
     _renderHome(body);
   }
 
@@ -362,38 +416,57 @@
         })
       : [];
     if (q) {
-      html += '<div class="wp-sec-label">Matching</div>';
-      html += '<div class="wp-grid">';
+      var grouped = {};
+      texts.forEach(function (t) { (grouped.text = grouped.text || []).push(_textCard(t)); });
       starters.forEach(function (s) {
-        html += _card("starter", s.id, _kindIcon(s.kind), s.label, s.description);
+        var id = s.category || "other";
+        (grouped[id] = grouped[id] || []).push(_card("starter", s.id,
+          _kindIcon(s.kind), s.label, s.description));
       });
       kinds.forEach(function (k) {
-        html += _card("kind", k.kind, k.icon, k.label, k.description);
+        var id = k.category || "other";
+        (grouped[id] = grouped[id] || []).push(_card("kind", k.kind,
+          k.icon, k.label, k.description));
       });
-      texts.forEach(function (t) { html += _textCard(t); });
-      html += "</div>";
+      var groupOrder = ["text"].concat((_cat && _cat.categories || []).map(function (c) { return c.id; }));
+      var matchCount = 0;
+      groupOrder.forEach(function (id) {
+        var rows = grouped[id] || [];
+        if (!rows.length) return;
+        var label = id === "text" ? "Text" : _catLabel(id);
+        var take = _S.showMore ? rows.length : Math.max(0, 30 - matchCount);
+        html += '<div class="wp-sec-label">' + _esc(label) +
+          '</div><div class="wp-grid">' + rows.slice(0, take).join("") + "</div>";
+        matchCount += rows.length;
+      });
+      if (matchCount > 30) html += '<button type="button" class="wp-see-more" data-more="1">Show more results</button>';
       if (!starters.length && !kinds.length && !texts.length) {
         html += '<div class="wp-empty">Nothing matches “' +
           _esc(_S.query) + "”.</div>";
       }
     } else {
       if (starters.length) {
-        html += '<div class="wp-sec-label">Starters</div><div class="wp-grid">';
-        starters.forEach(function (s) {
-          html += _card("starter", s.id, _kindIcon(s.kind), s.label,
-                        s.description);
+        html += '<div class="wp-sec-row"><span class="wp-sec-label">Quick starts</span>' +
+          '<button type="button" class="wp-see-all" data-starters-all="1">See all (' +
+          starters.length + ')</button></div><div class="wp-starter-strip">';
+        starters.slice(0, 6).forEach(function (s) {
+          html += '<button type="button" class="wp-starter-chip" data-starter="' +
+            _esc(s.id) + '"><span class="wp-card-ico">' +
+            _iconHtml(_kindIcon(s.kind)) + '</span><span>' + _esc(s.label) +
+            '</span></button>';
         });
         html += "</div>";
       }
       var showText = _S.mode === "add" && _textItems().length > 0;
       if (showText || (_cat && _cat.categories || []).length) {
-        html += '<div class="wp-sec-label">Categories</div><div class="wp-grid">';
+        html += '<div class="wp-sec-label">Categories</div><div class="wp-grid wp-category-grid">';
         if (showText) {
-          html += _card("cat", "text", "pilcrow", "Text",
+          html += _categoryCard("text", "Text", _textItems().length,
                         "Headings, lists, quotes, tables");
         }
         (_cat.categories).forEach(function (c) {
-          html += _card("cat", c.id, _catIcon(c.id), c.label, "");
+          html += _categoryCard(c.id, c.label, c.count || 0,
+            c.description || _categoryHint(c.id));
         });
         html += "</div>";
       }
@@ -402,7 +475,7 @@
         rec = rec.filter(function (r) { return !_isTimePicker(r.body); });
       }
       if (rec.length) {
-        html += '<div class="wp-sec-label">Recent</div><div class="wp-grid">';
+        html += '<div class="wp-sec-label">Recent</div><div class="wp-recent-strip">';
         rec.forEach(function (r, i) {
           html += _card("recent", i, "layers", r.label, "");
         });
@@ -410,6 +483,35 @@
       }
     }
     body.innerHTML = html;
+    _wire(body);
+  }
+
+  function _categoryHint(id) {
+    return ({tasks:"Task lists and summaries",tables:"Records and saved queries",
+      numbers:"Metrics, charts and dashboards",goals:"Targets and habits",
+      capture:"Quick capture tools",projects:"Projects and calendars"})[id] || "Browse items";
+  }
+
+  function _categoryCard(id, label, count, hint) {
+    return '<button type="button" class="wp-card wp-category" data-cat="' +
+      _esc(id) + '" aria-label="' + _esc(label + ", " + count + " items") + '">' +
+      '<span class="wp-card-ico">' + _iconHtml(_catIcon(id)) + '</span>' +
+      '<span class="wp-card-txt"><span class="wp-card-label">' + _esc(label) +
+      '</span><span class="wp-card-desc">' + _esc(count + " items · " + hint) +
+      '</span></span><span class="wp-chevron" aria-hidden="true">›</span></button>';
+  }
+
+  function _renderStarters(body) {
+    var q = (_S.query || "").toLowerCase().trim();
+    var starters = (_cat && _cat.starters || []).filter(function (s) {
+      return !q || _hay(s).indexOf(q) !== -1;
+    });
+    var html = '<div class="wp-grid">';
+    starters.forEach(function (s) {
+      html += _card("starter", s.id, _kindIcon(s.kind), s.label, s.description);
+    });
+    body.innerHTML = (starters.length ? html + "</div>" :
+      '<div class="wp-empty">No starters match.</div>');
     _wire(body);
   }
 
@@ -489,8 +591,11 @@
       return;
     }
     var q = (_S.query || "").toLowerCase().trim();
-    var items = _S.items.filter(function (n) {
-      return !q || String(n).toLowerCase().indexOf(q) !== -1;
+    var items = (_S.itemDetails || _S.items.map(function (n) {
+      return { name: n, description: "", tag: "" };
+    })).filter(function (it) {
+      return !q || (String(it.name) + " " + String(it.description || "") +
+        " " + String(it.tag || "")).toLowerCase().indexOf(q) !== -1;
     });
     var html = "";
     var entry = null;
@@ -503,10 +608,17 @@
          : _S.kind === "todo" ? "Default task list"
          : "Default") + "</button>";
     }
-    items.slice(0, _MAX_ITEMS).forEach(function (n) {
+    items.slice(0, _MAX_ITEMS).forEach(function (it) {
+      var n = it.name;
       html += '<button type="button" class="wp-item" data-name="' +
-        _esc(n) + '">' + _esc(n) + "</button>";
+        _esc(n) + '"><span class="wp-item-main"><span class="wp-item-name">' +
+        _esc(n) + '</span>' + (it.description ? '<span class="wp-item-desc">' +
+        _esc(it.description) + '</span>' : '') + '</span>' +
+        (it.tag ? '<span class="wp-item-tag">' + _esc(it.tag) + '</span>' : '') +
+        "</button>";
     });
+    if (_S.items.length > _MAX_ITEMS) html += '<div class="wp-empty">Showing the first ' +
+      _MAX_ITEMS + ' items. Search to narrow the list.</div>';
     if (!items.length && !(entry && entry.needs_name === false)) {
       html = '<div class="wp-empty">No saved ' + _esc(_kindLabel(_S.kind)) +
         " items yet — create one in the Query Builder.</div>" + html;
@@ -540,10 +652,29 @@
         if (el.dataset.recent != null) { _pickRecent(parseInt(el.dataset.recent, 10)); }
       });
     });
+    body.querySelectorAll("[data-starters-all]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        if (!_S) return;
+        _S.step = "starters";
+        _S.query = "";
+        _overlay.querySelector(".wp-search").value = "";
+        _render();
+      });
+    });
+    body.querySelectorAll("[data-more]").forEach(function (el) {
+      el.addEventListener("click", function () {
+        if (!_S) return;
+        _S.showMore = true;
+        _render();
+      });
+    });
+    body.querySelectorAll(".wp-starter-chip").forEach(function (el) {
+      el.addEventListener("click", function () { _pickStarter(el.dataset.starter); });
+    });
     body.querySelectorAll(".wp-item").forEach(function (el) {
       el.addEventListener("click", function () {
         if (!_S || _S.step !== "items") return;
-        _finish(_kindSource(_S.kind, el.dataset.name), _kindLabel(_S.kind));
+        _choose(_kindSource(_S.kind, el.dataset.name), _kindLabel(_S.kind), _S.kind);
       });
     });
   }
@@ -557,25 +688,27 @@
       if (k.kind === kind) entry = k;
     });
     if (!entry) return;
-    if (!entry.named) { _finish(_kindSource(kind, ""), entry.label || kind); return; }
+    if (!entry.named) { _choose(_kindSource(kind, ""), entry.label || kind, kind); return; }
     _S.kind = kind;
     _S.step = "items";
     _S.items = null;
     _S.itemsLoading = true;
     _render();
-    fetch("/api/widgets/options?source=" +
+    fetch("/api/widgets/options?detail=1&source=" +
          encodeURIComponent("saved." + kind))
       .then(function (r) { return r.json(); })
       .then(function (d) {
         if (!_S || _S.kind !== kind || _S.step !== "items") return;
         _S.itemsLoading = false;
         _S.items = (d && d.ok && Array.isArray(d.values)) ? d.values : [];
+        _S.itemDetails = (d && Array.isArray(d.items)) ? d.items : null;
         _render();
       })
       .catch(function () {
         if (!_S || _S.kind !== kind || _S.step !== "items") return;
         _S.itemsLoading = false;
         _S.items = [];
+        _S.itemDetails = [];
         _render();
       });
   }
@@ -605,14 +738,61 @@
       if (s.id === id) st = s;
     });
     if (!st) return;
-    _finish(st.body, st.label || st.id);
+    _choose(st.body, st.label || st.id, st.kind);
   }
 
   function _pickRecent(i) {
     if (!_S) return;
     var r = _recent()[i];
     if (!r) return;
-    _finish(r.body, r.label || "Recent");
+    var kind = "";
+    try { kind = String(PtosToml.parse(r.body).view || ""); } catch (e) {}
+    _choose(r.body, r.label || "Recent", kind);
+  }
+
+  function _entryFor(kind) {
+    var found = null;
+    ((_cat && _cat.kinds) || []).forEach(function (k) {
+      if (k.kind === kind) found = k;
+    });
+    return found;
+  }
+
+  function _choose(body, label, kind) {
+    if (!_S) return;
+    if (_S.blockTimePicker && kind === "time_picker") {
+      _S.step = "home";
+      _render();
+      return;
+    }
+    var entry = _entryFor(kind);
+    if (_S.mode === "change") body = merge(_S.spec, body);
+    if (!entry || entry.quick_add || !window.PtosWidgetForm ||
+        typeof window.PtosWidgetForm.mount !== "function") {
+      _finish(body, label);
+      return;
+    }
+    _S.pendingBody = body;
+    _S.pendingLabel = label || "Widget";
+    _S.returnStep = _S.step;
+    _S.step = "configure";
+    _render();
+  }
+
+  function _renderConfigure(body) {
+    if (!_S || !_overlay) return;
+    body.innerHTML = '<div class="wp-configure"></div>';
+    window.PtosWidgetForm.mount(body.firstChild, {
+      body: _S.pendingBody || "",
+      saveLabel: "Add widget",
+      cancelLabel: "Back",
+      onSave: function (saved) { _finish(saved, _S && _S.pendingLabel); },
+      onCancel: function () {
+        if (!_S) return;
+        _S.step = _S.returnStep || "home";
+        _render();
+      },
+    });
   }
 
   function _kindSource(kind, name) {
@@ -631,5 +811,19 @@
     if (cb) cb(body);
   }
 
-  window.PtosWidgetPicker = { open: open, close: close, merge: merge };
+  window.PtosWidgetPicker = {
+    open: open, close: close, merge: merge,
+    catalog: function (cb) { _load(function () { if (cb) cb(_cat); }); },
+    recent: function () {
+      var editor = document.getElementById("md-editor");
+      var list = _recent();
+      return editor && _pageHasTimePicker(editor.value)
+        ? list.filter(function (item) { return !_isTimePicker(item.body); })
+        : list;
+    },
+    allowsKind: function (kind) {
+      var editor = document.getElementById("md-editor");
+      return !(kind === "time_picker" && editor && _pageHasTimePicker(editor.value));
+    }
+  };
 })();

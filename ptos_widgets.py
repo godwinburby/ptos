@@ -17,6 +17,8 @@ cover that allowed-key set exactly — enforced at registration so the form
 and the whitelist can never drift apart.
 """
 
+import re
+
 COMMON_KEYS = frozenset({
     "view", "name", "time", "from_date", "to_date", "title", "limit",
     "span", "hide_on", "live",
@@ -48,7 +50,7 @@ _VIEW_ALIASES = {}  # view name -> canonical kind
 def register(kind, resolve, views=(), keys=(), needs_name=True,
              infer_order=99, owns_name=None, label=None, description=None,
              icon=None, category=None, named=False, fields=(),
-             starters=(), interactive_default=False):
+             starters=(), interactive_default=False, quick_add=False):
     """Register one widget kind (re-registration replaces the entry,
     so an importlib.reload of the registering module stays safe).
 
@@ -74,6 +76,7 @@ def register(kind, resolve, views=(), keys=(), needs_name=True,
     starters     ready-made configs: id, label, description, body (TOML)
     interactive_default
                  mount with interactive actions on home by default
+    quick_add    skip the configure step when adding this widget
     """
     if not callable(resolve):
         raise ValueError(f"widget {kind!r}: resolve must be callable")
@@ -126,6 +129,7 @@ def register(kind, resolve, views=(), keys=(), needs_name=True,
         "fields": fields,
         "starters": starters,
         "interactive_default": bool(interactive_default),
+        "quick_add": bool(quick_add),
     }
     _WIDGETS[entry["kind"]] = entry
     for v in (entry["kind"],) + tuple(views):
@@ -187,12 +191,39 @@ def field_errors(entry, spec, include_required=True):
     return errs
 
 
+def runtime_field_errors(entry, spec):
+    """Checks whose generic metadata rule must also guard widget rendering.
+
+    Most enums and compound fields have kind-specific runtime checks with
+    established error messages. Numeric bounds and todo priority shape have
+    no such downstream guard, so they share the exact form validator here.
+    """
+    errs = []
+    if not isinstance(spec, dict):
+        return errs
+    for key, value in spec.items():
+        field = field_map(entry).get(key)
+        if not field:
+            continue
+        if field.get("min") is not None or field.get("max") is not None or \
+                field.get("options_from") == "todo.priorities":
+            errs.extend(_value_errors(field, value))
+    return errs
+
+
 def _value_errors(f, value):
     label = f.get("label", f["key"])
     t = f.get("type")
     if t == "number":
+        label = f"{label} ({f['key']})"
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             return [{"field": f["key"], "message": f"{label} must be a number"}]
+        if f.get("min") is not None and value < f["min"]:
+            return [{"field": f["key"],
+                     "message": f"{label} must be at least {f['min']}"}]
+        if f.get("max") is not None and value > f["max"]:
+            return [{"field": f["key"],
+                     "message": f"{label} must be at most {f['max']}"}]
     elif t == "bool":
         if not isinstance(value, bool):
             return [{"field": f["key"],
@@ -205,6 +236,12 @@ def _value_errors(f, value):
                                 + ", ".join(str(o) for o in opts)}]
     elif t in ("chips", "multiselect"):
         if f.get("options_from"):
+            if f.get("options_from") == "todo.priorities":
+                vals = list(value) if isinstance(value, (list, tuple)) else [value]
+                if any(not isinstance(v, str) or
+                       re.fullmatch(r"[A-Z]", v) is None for v in vals):
+                    return [{"field": f["key"],
+                             "message": f"{label} ({f['key']}) must be letters A-Z"}]
             return []
         opts = f.get("options") or ()
         if not opts:
@@ -232,6 +269,7 @@ def catalog_entry(entry):
         "named": bool(entry.get("named")),
         "needs_name": entry["needs_name"],
         "interactive_default": bool(entry.get("interactive_default")),
+        "quick_add": bool(entry.get("quick_add")),
         "fields": [dict(f) for f in entry.get("fields") or ()],
     }
 
