@@ -10,11 +10,11 @@ require(path.join(__dirname, "..", "..", "web_static", "js", "widget_toml.js"));
 const { parse, serialize } = globalThis.PtosToml;
 
 test("parse: basic keys and value types", () => {
-  const d = parse('view = "records"\nlimit = 8\nper_query = false\ntitle = "Today"');
+  const d = parse('view = "records"\nlimit = 8\nlive = true\ntitle = "Today"');
   assert.deepStrictEqual(d, {
     view: "records",
     limit: 8,
-    per_query: false,
+    live: true,
     title: "Today",
   });
 });

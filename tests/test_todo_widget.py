@@ -445,7 +445,7 @@ class TestBatchEndpoint:
         assert rows and rows[0]["query_url"].startswith("/queries?run=")
         assert "kind=" in rows[0]["query_url"]
 
-    def test_legacy_embed_resolve_threshold_undecorated(self):
+    def test_legacy_embed_resolve_threshold_is_decorated_for_live_preview(self):
         _clean()
         _set_queries({
             "exp": {"where": "type=expense", "time": "all"},
@@ -457,7 +457,8 @@ class TestBatchEndpoint:
                                                  'view = "threshold"'})
         data = resp.get_json()
         assert data["ok"]
-        assert "query_url" not in data["data"]["thresholds"][0]
+        assert data["data"]["thresholds"][0]["query_url"].startswith(
+            "/queries?run=")
 
     def test_bad_todo_view_fails_item_not_batch(self):
         _clean()

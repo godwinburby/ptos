@@ -456,10 +456,6 @@ _TIME_DICT   = dict(TIME_OPTIONS)
 def _now_str():
     return dt.datetime.now().strftime("%a %d %b")
 
-def _greeting():
-    h = dt.datetime.now().hour
-    return "morning" if h < 12 else "afternoon" if h < 17 else "evening"
-
 def _safe_return_to(raw, default="/"):
     r"""Validate a return_to value, falling back to `default` when unusable.
 
@@ -539,6 +535,15 @@ def _decorate_thresholds(data):
     /thresholds so both render the same clickable rows)."""
     for t in data:
         t["query_url"] = _threshold_query_url(t)
+    return data
+
+
+def _decorate_time_picker(data):
+    data["time_options"] = [
+        {"label": label, "value": code}
+        for label, code in _get_time_options()
+    ]
+    data["year_range"] = [_YEAR_RANGE[0], _YEAR_RANGE[-1]]
     return data
 
 def _build_field_types(schema):
@@ -728,7 +733,6 @@ def _instant_presets():
 def home():
     import tomli_w
     cfg = svc.get_config()
-    username = cfg.get("user", {}).get("name", "User")
     quick_n = cfg.get("home", {}).get("quick_presets", 10)
     cycles = cfg.get("cycles", {})
 
@@ -778,6 +782,33 @@ def home():
             spec["time"] = time_code
         return spec
 
+    note = svc.svc_get_home_note()
+    if note["mode"] == "note":
+        params = {}
+        if due_configs:
+            params["due"] = {"from": "default", "to": selected_due}
+        if db_name and db_name in dashboards:
+            base = default_db if default_db in dashboards else db_name
+            params["dashboard"] = {"from": base, "to": db_name}
+        source = {"path": note["path"], "rev": note["rev"],
+                  "source": "note", "content": note["content"],
+                  "params": params,
+                  "created": note.get("created", False)}
+        banner = ("Your home page is now a note you can edit."
+                  if note.get("created") else None)
+        return render_template("home.html",
+            tab="home", title="Home", now=_now_str(),
+            home_note=True, home_source=source, banner=banner,
+            has_dashboards=bool(dashboards) and bool(db_name),
+            due_configs=list(due_configs.keys()),
+            selected_due=selected_due,
+            time_options=_get_time_options(),
+            year_range=_YEAR_RANGE,
+            current_time=request.args.get("time", ""),
+            custom_time=request.args.get("custom_time", ""),
+            from_date=request.args.get("from_date", ""),
+            to_date=request.args.get("to_date", ""))
+
     specs = []
 
     def _add(section, spec):
@@ -788,8 +819,6 @@ def home():
         d = {"view": "dashboard", "name": db_name}
         if use_window:
             _time_spec(d)
-        else:
-            d["per_query"] = True
         _add("overview", d)
     if ptos.get_thresholds():
         _add("overview", _time_spec({"view": "threshold", "title": "Thresholds"}))
@@ -816,9 +845,17 @@ def home():
         r["title"] = "Today's Records"
     _add("today", r)
 
+    banner = None
+    if note.get("reason") == "create_failed":
+        banner = ("Couldn't create your home note — "
+                  "showing the default view.")
+    elif note.get("reason") == "missing":
+        banner = ("The home page note is gone — "
+                  "showing the default view.")
+
     return render_template("home.html",
-        tab="home", title="Home", now=_now_str(), greeting=_greeting(),
-        username=username,
+        tab="home", title="Home", now=_now_str(),
+        home_note=False, home_source=None, banner=banner,
         widget_specs=specs,
         has_dashboards=bool(dashboards) and bool(db_name),
         due_configs=list(due_configs.keys()), selected_due=selected_due,
@@ -828,6 +865,35 @@ def home():
         custom_time=request.args.get("custom_time", ""),
         from_date=request.args.get("from_date", ""),
         to_date=request.args.get("to_date", ""))
+
+
+@app.route("/api/home/set", methods=["POST"])
+def api_home_set():
+    body = request.get_json(silent=True)
+    if body is None:
+        return jsonify(ok=False, error="JSON body required"), 400
+    try:
+        path = svc.svc_set_home_page_for(body.get("path") or "")
+        return jsonify(ok=True, path=path)
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except Exception as e:
+        log.exception("home set failed")
+        return jsonify(ok=False, error=str(e)), 500
+
+
+@app.route("/api/home/reset", methods=["POST"])
+def api_home_reset():
+    body = request.get_json(silent=True)
+    if body is None:
+        return jsonify(ok=False, error="JSON body required"), 400
+    try:
+        return jsonify(svc.svc_reset_home_note())
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    except Exception as e:
+        log.exception("home reset failed")
+        return jsonify(ok=False, error=str(e)), 500
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1578,11 +1644,16 @@ def notes_edit(rel_path):
     if note is None:
         return "Note not found", 404
     parent_dir = str(os.path.dirname(rel_path)).replace("\\", "/")
+    home_page = svc.get_home_page()
+    is_home = (home_page is not None
+               and rel_path.replace("\\", "/")
+               == home_page.replace("\\", "/"))
     return render_template("notes_edit.html", rel_path=rel_path,
                            content=note["content"],
                            rev=note["rev"],
                            breadcrumbs=_notes_breadcrumbs(rel_path),
-                           parent_dir=parent_dir)
+                           parent_dir=parent_dir,
+                           is_home=is_home)
 
 
 @app.route("/notes/new-folder", methods=["POST"])
@@ -2134,6 +2205,7 @@ def settings_page():
     return render_template("settings.html",
         tab="settings", title="Settings", now=_now_str(),
         user_name=user.get("name", ""),
+        home_page=svc.get_home_page(),
         currency=display.get("currency", "₹"),
         date_format=display.get("date_format", "indian"),
         date_formats=date_formats,
@@ -3665,6 +3737,7 @@ def queries_run():
 def api_embed_resolve():
     data = request.get_json(silent=True) or {}
     body = data.get("body", "")
+    context = data.get("context") if isinstance(data.get("context"), dict) else None
     if not isinstance(body, str) or not body.strip():
         return jsonify(ok=False, error="Empty embed")
     try:
@@ -3672,7 +3745,13 @@ def api_embed_resolve():
     except Exception as e:
         return jsonify(ok=False, error="Invalid embed TOML: " + str(e))
     try:
-        return jsonify(ok=True, data=svc.resolve_embed(spec))
+        resolved = svc.resolve_embed(spec, context=context)
+        if (spec.get("live") is not False or
+                (context and context.get("apply_time"))) and resolved.get("kind") == "threshold":
+            _decorate_thresholds(resolved.get("thresholds") or [])
+        if resolved.get("kind") == "time_picker":
+            _decorate_time_picker(resolved)
+        return jsonify(ok=True, data=resolved)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
     except Exception as e:
@@ -3702,6 +3781,8 @@ def api_widgets_resolve():
     if len(items) > WIDGET_BATCH_MAX_ITEMS:
         return jsonify(ok=False,
                        error=f"Too many items (max {WIDGET_BATCH_MAX_ITEMS})"), 400
+    context = data.get("context") if isinstance(
+        data.get("context"), dict) else None
     results = []
     for item in items:
         wid = item.get("id") if isinstance(item, dict) else None
@@ -3732,9 +3813,11 @@ def api_widgets_resolve():
             elif not limit:
                 spec = dict(spec)
                 spec["limit"] = ptos_widgets.DEFAULT_ROW_LIMIT
-            data = svc.resolve_embed(spec)
+            data = svc.resolve_embed(spec, context=context)
             if data.get("kind") == "threshold":
                 _decorate_thresholds(data.get("thresholds") or [])
+            if data.get("kind") == "time_picker":
+                _decorate_time_picker(data)
             results.append({"id": wid, "ok": True, "data": data})
         except PTOSError as e:
             results.append({"id": wid, "ok": False, "error": str(e)})

@@ -25,7 +25,7 @@ Audit basis: `main` after commit `ba38815` (home quick-add fix, inline calculato
 
 ## 1. Current state (verified)
 
-- **Widget kinds:** 16 registered (`dashboard`, `metric`, `threshold`, `board`, `habit`, `calendar`, `due`, `project`, `todo`, `query`, `capture`, `journal`, `quick_add`, `quick_add_multi`, `records`, `todo_summary`). Nine point at a saved named item (`needs_name`). The rest take parameters or none: `todo` (11 keys), `records` (`where`, `chart`), `query` (`chart`), `dashboard` (`per_query`).
+- **Widget kinds:** 16 registered (`dashboard`, `metric`, `threshold`, `board`, `habit`, `calendar`, `due`, `project`, `todo`, `query`, `capture`, `journal`, `quick_add`, `quick_add_multi`, `records`, `todo_summary`). Nine point at a saved named item (`needs_name`). The rest take parameters or none: `todo` (11 keys), `records` (`where`, `chart`), and `query` (`chart`). Dashboard widgets take a saved dashboard name; the page time picker supplies the shared time window.
 - **Picker today:** `GET /api/embed/candidates` returns named items only, in nine groups (with the starter data: 17 queries, 6 metrics, 2 dashboards, 1 threshold, 1 board, 3 habits, 1 calendar, 1 due, 1 project, plus an empty "Todo views"). `todo`, `records`, `capture`, `journal`, `quick_add`, `quick_add_multi` and `todo_summary` cannot be picked at all.
 - **Blocks mode** (`md_blocks.js`, 536 lines): the note as a vertical list of top-level blocks (markdown element or one ```` ```ptos ```` widget). Controls: `+` add (slash picker), `?` change, ✎ edit, delete, drag reorder. The textarea stays the source of truth; serialization joins blocks with a blank line. **The ✎ edit for a widget opens a raw textarea of its TOML**, with a one-line hint (`view · name · time · from_date · to_date · limit · title`).
 - **Slash picker core** (`slash_embed.js`, 546 lines) is shared by the `/` menu, the "Insert view" button and Blocks mode; it adds a time-window step after picking an item.
@@ -33,7 +33,7 @@ Audit basis: `main` after commit `ba38815` (home quick-add fix, inline calculato
 
   | Section | Kind | Body |
   |---|---|---|
-  | overview | dashboard | `name = "default"`, `per_query = true` |
+  | overview | dashboard | `name = "default"` |
   | overview | threshold | `title = "Thresholds"`, `time = "tm"` |
   | attention | due | `name = "default"`, `title = "Overdue Records"`, `limit = 5` |
   | attention | todo_summary | `title = "Todos"` |

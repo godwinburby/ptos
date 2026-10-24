@@ -30,6 +30,38 @@
     return (kind && REG[kind]) || null;
   }
 
+  var TIME_AWARE = {
+    query: 1, metric: 1, dashboard: 1, threshold: 1, board: 1,
+    habit: 1, calendar: 1, records: 1
+  };
+
+  function timeWindowLabel(context) {
+    context = context || {};
+    var from = context.from_date || "";
+    var to = context.to_date || "";
+    if (context.time === "range" || from) {
+      return (from || "Start") + " to " + (to || "Today");
+    }
+    var time = String(context.time || "");
+    if (/^\d{4}$/.test(time)) return "Year " + time;
+    if (/^\d{4}-\d{2}$/.test(time)) {
+      var monthDate = new Date(time + "-01T00:00:00");
+      return isNaN(monthDate.getTime()) ? time :
+        monthDate.toLocaleString(undefined, { month: "long", year: "numeric" });
+    }
+    if (/^\d{4}-\d{2}-\d{2}$/.test(time)) return time;
+    var labels = {
+      td: "Today", yd: "Yesterday", tw: "This week", lw: "Last week",
+      tm: "This month", lm: "Last month", tq: "This quarter",
+      lq: "Last quarter", ty: "This year", ly: "Last year", all: "All time"
+    };
+    if (labels[time]) return labels[time];
+    return time.replace(/-1$/, " · previous").replace(/[-_]/g, " ")
+      .replace(/\b\w/g, function (c) { return c.toUpperCase(); });
+  }
+
+  window.PtosWidgetTimeLabel = timeWindowLabel;
+
   function _esc(s) {
     return String(s == null ? "" : s)
       .replace(/&/g, "&amp;").replace(/</g, "&lt;")
@@ -45,11 +77,18 @@
     }).then(function (r) { return r.json(); });
   }
 
-  function _fetch(body, force) {
-    if (!force && _cache.hasOwnProperty(body)) {
-      return Promise.resolve({ ok: true, data: _cache[body] });
+  function _cacheKey(body, context) {
+    return String(body) + "\u0000" + JSON.stringify(context || {});
+  }
+
+  function _fetch(body, force, context) {
+    var key = _cacheKey(body, context);
+    if (!force && _cache.hasOwnProperty(key)) {
+      return Promise.resolve({ ok: true, data: _cache[key] });
     }
-    return _post("/api/widgets/resolve", { items: [{ id: 1, body: body }] })
+    var payload = { items: [{ id: 1, body: body }] };
+    if (context) payload.context = context;
+    return _post("/api/widgets/resolve", payload)
       .then(function (d) {
         if (!d || !d.ok || !d.results || !d.results[0]) {
           return { ok: false, error: (d && d.error) || "Failed to load widget" };
@@ -58,7 +97,7 @@
         if (!first.ok) {
           return { ok: false, error: first.error || "Failed to load widget" };
         }
-        _cache[body] = first.data;
+        _cache[key] = first.data;
         return { ok: true, data: first.data };
       })
       .catch(function (e) {
@@ -229,6 +268,11 @@
     _ensureStyles();
     var body = (typeof spec === "string" && spec) || el.getAttribute("data-body") || "";
     var interactive = !!(opts.interactive || el.getAttribute("data-interactive") === "1");
+    if (interactive && window.PtosToml && typeof window.PtosToml.parse === "function") {
+      try {
+        if (window.PtosToml.parse(body).live === false) interactive = false;
+      } catch (e) {}
+    }
     var hostName = opts.host || el.getAttribute("data-widget-host") || "page";
 
     if (el._phWidget) el._phWidget.destroy();
@@ -260,6 +304,7 @@
     var ctx = {
       host: hostName,
       interactive: interactive,
+      context: opts.context || null,
       time: opts.time != null ? opts.time : (el.getAttribute("data-time") || null),
       refresh: function () { return handle.refresh(); },
       notifyChange: opts.notifyChange || function () {},
@@ -270,6 +315,14 @@
       current = data;
       handle._phScopes = _scopesForKind(data && data.kind);
       titleEl.textContent = data.title || data.name || _nameOf(body) || "Widget";
+      if (ctx.context && ctx.context.apply_time && TIME_AWARE[data.kind]) {
+        var badge = document.createElement("span");
+        badge.className = "ph-time-badge";
+        badge.title = "Inherited from this page's time window";
+        badge.textContent = "Time: " + timeWindowLabel(ctx.context);
+        badge.style.cssText = "display:inline-block;margin-left:8px;padding:2px 7px;border:1px solid var(--border);border-radius:999px;color:var(--sub);font-size:11px;font-weight:500;vertical-align:middle";
+        titleEl.appendChild(badge);
+      }
       if (data.link) {
         linkEl.setAttribute("href", data.link);
         linkEl.hidden = false;
@@ -296,7 +349,7 @@
     function load(force) {
       if (destroyed) return Promise.resolve();
       bodyEl.innerHTML = '<div class="ph-state">Loading widget…</div>';
-      return _fetch(body, force).then(function (res) {
+      return _fetch(body, force, ctx.context).then(function (res) {
         if (destroyed) return;
         if (!res.ok) {
           bodyEl.innerHTML = typeof errorCard === "function"
@@ -358,15 +411,17 @@
     bodies.forEach(function (b) {
       if (!seen[b]) { seen[b] = true; unique.push(b); }
     });
-    return _post("/api/widgets/resolve", {
+    var payload = {
       items: unique.map(function (b, i) { return { id: i, body: b }; })
-    }).then(function (d) {
+    };
+    if (opts.context) payload.context = opts.context;
+    return _post("/api/widgets/resolve", payload).then(function (d) {
       var byBody = {};
       if (d && d.ok && d.results) {
         unique.forEach(function (b, i) {
           var res = d.results[i];
           if (res && res.ok) {
-            _cache[b] = res.data;
+            _cache[_cacheKey(b, opts.context)] = res.data;
             byBody[b] = { ok: true, data: res.data };
           } else {
             byBody[b] = { ok: false, error: (res && res.error) || "Failed to load widget" };
@@ -377,19 +432,46 @@
           byBody[b] = { ok: false, error: (d && d.error) || "Failed to load widget" };
         });
       }
-      return items.map(function (it) {
+      // opts.lazy defers below-the-fold mounts on a long page (the home
+      // note): only > 8 widgets AND a real IntersectionObserver; each
+      // deferred item mounts the first time it approaches the viewport.
+      var lazy = !!opts.lazy && items.length > 8 &&
+        typeof IntersectionObserver === "function";
+      var io = lazy ? new IntersectionObserver(function (entries) {
+        entries.forEach(function (en) {
+          if (!en.isIntersecting) return;
+          var t = en.target;
+          io.unobserve(t);
+          var rec = t && t._phPending;
+          if (!rec) return;
+          delete t._phPending;
+          mount(t, rec.body, rec.mopts);
+        });
+      }, { rootMargin: "200px" }) : null;
+      var out = [];
+      items.forEach(function (it) {
         var r = byBody[it.body] || { ok: false, error: "Failed to load widget" };
         var mopts = {};
         for (var k in opts) {
           if (Object.prototype.hasOwnProperty.call(opts, k)) mopts[k] = opts[k];
         }
+        delete mopts.lazy;
         for (var k2 in (it.opts || {})) {
           if (Object.prototype.hasOwnProperty.call(it.opts, k2)) mopts[k2] = it.opts[k2];
         }
         if (r.ok) mopts.data = r.data;
         else mopts.error = r.error;
-        return mount(it.el, it.body, mopts);
+        var below = io && it.el && it.el.getBoundingClientRect &&
+          it.el.getBoundingClientRect().top >= (window.innerHeight || 0);
+        if (below) {
+          it.el._phPending = { body: it.body, mopts: mopts };
+          io.observe(it.el);
+          out.push(null);
+          return;
+        }
+        out.push(mount(it.el, it.body, mopts));
       });
+      return out;
     }).catch(function (e) {
       return items.map(function (it) {
         return mount(it.el, it.body, {

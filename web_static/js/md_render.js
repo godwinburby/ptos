@@ -165,7 +165,7 @@
     var doc = root.ownerDocument || document;
     if (typeof doc.createTreeWalker !== "function") return;
     ctx = ctx || _ctx();
-    var walker = doc.createTreeWalker(root, 1 /* NodeFilter.SHOW_TEXT */, null);
+    var walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */, null);
     var nodes = [];
     var n;
     while ((n = walker.nextNode())) {

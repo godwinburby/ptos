@@ -94,6 +94,10 @@ duration_minutes = 25
 log_sessions = true
 
 [home]
+# The home page is a note in notes/ (created from the default template on
+# first visit). Uncomment to point it at a different note; an empty string
+# falls back to the built-in widget page.
+# page = "Home.md"
 # Number of most-used quick-add presets shown on Home and Add Record
 # (default: 10); the rest appear under "Show all".
 quick_presets = 10

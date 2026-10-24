@@ -490,7 +490,8 @@
     var inp = document.createElement("input");
     inp.type = "checkbox";
     inp.className = "wf-check";
-    inp.checked = S.spec[f.key] === true;
+    inp.checked = S.spec[f.key] === true ||
+      (S.spec[f.key] == null && f.default === true);
     inp.addEventListener("change", function () {
       S.spec[f.key] = inp.checked;
       _schedule(S);

@@ -2563,15 +2563,23 @@ def run_adhoc_query(cfg, time=None, from_date=None, to_date=None):
 # Embed widgets (markdown ```ptos blocks)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def resolve_embed(spec):
+def resolve_embed(spec, context=None):
     """Resolve a markdown embed spec into widget data.
 
     `spec` is the dict parsed from a fenced ```ptos TOML block. Dispatch
     is table-driven: each widget kind is registered in ptos_widgets with
     its own allowed keys and resolver (see _register_builtin_widgets).
-    Common keys: view, name, time, from_date, to_date, limit, title;
-    the query kind additionally accepts chart. Unknown keys are an
-    error, not silently ignored.
+    Common keys: view, name, time, from_date, to_date, limit, title,
+    span, hide_on, live; the query kind additionally accepts chart. Unknown
+    keys are an error, not silently ignored.
+
+    `time = "@home"` ("follow the home time") is substituted here:
+    `context` (the home page's {time, from_date, to_date}) decides the
+    window, defaulting to "tm". When `apply_time` is true, that selected
+    window overrides every time-aware widget. Otherwise `time = "@home"`
+    follows the context and resolves to "tm" outside home. `span`/`hide_on`
+    are home layout hints; `live` is read by the markdown preview and
+    ignored by the resolver.
 
     `view` is optional — when omitted the kind is inferred from which
     queries.toml section holds `name` (dashboard → metric → threshold →
@@ -2586,6 +2594,8 @@ def resolve_embed(spec):
     """
     if not isinstance(spec, dict):
         raise PTOSError("Embed must be a TOML table")
+    if "live" in spec and not isinstance(spec["live"], bool):
+        raise PTOSError("Embed 'live' must be true or false")
     name = str(spec.get("name") or "").strip()
     view = str(spec.get("view") or "").strip().lower()
     if not name and not view:
@@ -2593,6 +2603,14 @@ def resolve_embed(spec):
     time = spec.get("time") or None
     from_date = spec.get("from_date") or None
     to_date = spec.get("to_date") or None
+    if time == "@home":
+        ctx = context if isinstance(context, dict) else {}
+        time = str(ctx.get("time") or "tm")
+        if time == "range":
+            from_date = from_date or ctx.get("from_date") or None
+            to_date = to_date or ctx.get("to_date") or None
+            if not from_date:
+                time = "tm"
 
     try:
         queries = ptos.get_queries()
@@ -2619,6 +2637,16 @@ def resolve_embed(spec):
         raise PTOSError(f"Unknown embed view '{view}'")
     if entry["needs_name"] and not name:
         raise PTOSError("Embed is missing 'name'")
+    ctx = context if isinstance(context, dict) else {}
+    if ctx.get("apply_time") and entry["kind"] in {
+            "query", "metric", "dashboard", "threshold", "board",
+            "habit", "calendar", "records"}:
+        time = str(ctx.get("time") or "tm")
+        from_date = ctx.get("from_date") or None
+        to_date = ctx.get("to_date") or None
+        if time == "range" and not from_date:
+            time = "tm"
+            to_date = None
     unknown = ptos_widgets.unknown_keys(entry, spec)
     if unknown:
         allowed = ", ".join(sorted(ptos_widgets.allowed_keys(entry)))
@@ -2681,11 +2709,9 @@ def _decorate_dashboard_items(db, from_date, to_date):
 
 
 def _w_dashboard(spec, name, time, from_date, to_date):
-    per_query = bool(spec.get("per_query", False))
-    result = get_dashboard(name, time or "tm", use_dashboard_time=not per_query,
+    result = get_dashboard(name, time or "tm", use_dashboard_time=True,
                            from_date=from_date, to_date=to_date)
     result["kind"] = "dashboard"
-    result["per_query"] = per_query
     _decorate_dashboard_items(result, from_date, to_date)
     return result, "/queries?run=" + urllib.parse.quote(name) + "&kind=d"
 
@@ -2968,6 +2994,11 @@ def _w_quick_add_multi(spec, name, time, from_date, to_date):
     return {"kind": "quick_add_multi", "presets": get_multi_presets()}, ""
 
 
+def _w_time_picker(spec, name, time, from_date, to_date):
+    return {"kind": "time_picker",
+            "title": spec.get("title") or "Time window"}, ""
+
+
 def _wf(key, label, type_, **kw):
     d = {"key": key, "label": label, "type": type_}
     d.update(kw)
@@ -2975,7 +3006,8 @@ def _wf(key, label, type_, **kw):
 
 
 def _widget_fields(kind, *, view_options, name=None, time=True, extra=()):
-    """Common gallery field list (view/name/time/from/to/title/limit).
+    """Common gallery field list (view/name/time/from/to/title/limit/
+    span/hide_on/live).
 
     `name` is a (label, options_from, required, help) tuple when the
     kind takes a saved-item name, else None (name stays in the
@@ -3017,6 +3049,16 @@ def _widget_fields(kind, *, view_options, name=None, time=True, extra=()):
                       help="Heading shown above the widget."))
     fields.append(_wf("limit", "Max rows", "number", advanced=True,
                       help="Cap the number of rows shown."))
+    fields.append(_wf("span", "Wide on home", "number", advanced=True,
+                      help="2 = double width in the home grid (1 or 2)."))
+    fields.append(_wf("hide_on", "Hide on", "multiselect",
+                      options=["phone", "desktop"], advanced=True,
+                      help="Hide this widget on phones or desktops (home "
+                           "layout only)."))
+    fields.append(_wf("live", "Interactive in note preview", "bool",
+                      default=True, advanced=True,
+                      help="Interactive by default; set false to make this "
+                           "widget read-only in markdown previews."))
     fields.extend(extra)
     return fields
 
@@ -3060,7 +3102,7 @@ def _register_builtin_widgets():
     whitelist at registration.
     """
     reg = ptos_widgets.register
-    reg("dashboard", _w_dashboard, keys=("per_query",), infer_order=10,
+    reg("dashboard", _w_dashboard, infer_order=10,
         owns_name=lambda n, q: (isinstance(q.get("dashboards"), dict)
                                 and n in q["dashboards"]),
         label="Dashboard",
@@ -3070,11 +3112,7 @@ def _register_builtin_widgets():
         fields=_widget_fields(
             "dashboard", view_options=("dashboard",),
             name=("Dashboard", "saved.dashboard", True,
-                  "Saved dashboard name from the Query Builder."),
-            extra=(_wf("per_query", "Use each item's own time", "bool",
-                       advanced=True,
-                       help="Ignore the dashboard's time and use each "
-                            "item's own window."),)))
+                  "Saved dashboard name from the Query Builder.")))
     reg("metric", _w_metric, infer_order=20,
         owns_name=lambda n, q: (isinstance(q.get("metrics"), dict)
                                 and n in q["metrics"]),
@@ -3284,6 +3322,16 @@ def _register_builtin_widgets():
         fields=_widget_fields(
             "quick_add_multi", view_options=("quick_add_multi",),
             time=False, extra=()))
+    reg("time_picker", _w_time_picker, needs_name=False, infer_order=99,
+        label="Time window picker",
+        description="Choose the time window for time-aware widgets on Home.",
+        icon="calendar", category="numbers", named=False,
+        interactive_default=True,
+        starters=({"id": "time_window_picker", "label": "Time window",
+                   "description": "A Home-wide time window selector.",
+                   "body": 'view = "time_picker"\nlive = true\n'},),
+        fields=_widget_fields("time_picker", view_options=("time_picker",),
+                              time=False, extra=()))
 
 
 _register_builtin_widgets()
@@ -3409,7 +3457,7 @@ def get_widget_options(source):
             return sorted(labels)
         return ["A", "B", "C", "D"]
     if source == "time":
-        codes = list(ptos._TIME_ALIASES) + ["all"]
+        codes = ["@home"] + list(ptos._TIME_ALIASES) + ["all"]
         try:
             for name in get_config().get("cycles", {}):
                 codes.extend([name, f"{name}-1"])
@@ -3544,6 +3592,12 @@ def validate_widget_spec(spec):
                        "message": f"Max rows above "
                                   f"{ptos_widgets.MAX_ROW_LIMIT} is not "
                                   f"allowed"})
+    if "span" in spec:
+        s = spec["span"]
+        if (isinstance(s, bool) or not isinstance(s, int)
+                or s not in (1, 2)):
+            errors.append({"field": "span",
+                           "message": "Wide on home must be 1 or 2"})
     field_errs = ptos_widgets.field_errors(entry, spec)
     if (entry["needs_name"] and not name
             and not any(e["field"] == "name" for e in field_errs)):
@@ -7668,12 +7722,24 @@ def svc_rename(rel_path, new_name):
     except Exception as e:
         log.exception("Rename succeeded but favorites update failed: %s", e)
         warning = "Renamed, but favorites could not be updated"
+    try:
+        _update_home_page_after_rename(rel_path, new_rel, was_folder)
+    except Exception as e:
+        log.exception("Rename succeeded but home page update failed: %s", e)
+        warning = (warning
+                   or "Renamed, but the home page setting could not be "
+                      "updated")
     return {"rel_path": new_rel, "favorites_updated": favorites_updated,
             "warning": warning}
 
 
 def svc_delete(rel_path):
     ptos.delete_note_entry(rel_path)
+    try:
+        _clear_home_if_deleted(rel_path)
+    except Exception:
+        log.exception("Note deleted but home page setting could not be "
+                      "cleared")
     _emit_changed("notes")
 
 
@@ -7804,6 +7870,250 @@ def svc_resolve_template(rel_path):
 
 def svc_parent_template(rel_path):
     return ptos.find_parent_template(rel_path)
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# Home page (the home note)
+# ══════════════════════════════════════════════════════════════════════════════
+
+HOME_DEFAULT_PAGE = "Home.md"
+
+
+def _home_page_raw():
+    return (get_config().get("home") or {}).get("page")
+
+
+def get_home_page():
+    """Configured home note path.
+
+    Returns the note path (default `Home.md` on a workspace that has
+    never chosen one) or None when the setting has been cleared and
+    the home page must fall back to the built-in default."""
+    raw = _home_page_raw()
+    if raw is None:
+        return HOME_DEFAULT_PAGE
+    raw = str(raw).strip()
+    return raw or None
+
+
+def set_home_page(path):
+    """Point [home] page at a note (str), or clear it (None/"").
+
+    A cleared page never auto-recreates: / falls back to the built-in
+    widgets until a note is picked again."""
+    cfg = get_config()
+    home = dict(cfg.get("home") or {})
+    if path:
+        home["page"] = str(path)
+    else:
+        home["page"] = ""
+    cfg["home"] = home
+    res = save_config(cfg)
+    if not res.get("ok"):
+        raise PTOSError(res.get("message") or "Could not update config.toml")
+    return get_home_page()
+
+
+def clear_home_page():
+    return set_home_page("")
+
+
+def build_home_note():
+    """Default Home.md content (D2): a greeting heading, a time-window
+    picker and fenced data widgets, sectioned like the built-in page.
+
+    Gating mirrors the built-in default at generation time: the
+    dashboard only when one exists, thresholds only when configured,
+    quick-add only when frequent presets exist, quick-add-multi only
+    when multi presets exist, due only when a due view exists. After
+    the note is generated it is the user's — later config changes never
+    rewrite it."""
+    import tomli_w
+    cfg = get_config()
+    quick_n = cfg.get("home", {}).get("quick_presets", 10)
+    queries = {}
+    try:
+        queries = get_queries()
+    except Exception:
+        queries = {}
+    if not isinstance(queries, dict):
+        queries = {}
+    dashboards = queries.get("dashboards") or {}
+    if not isinstance(dashboards, dict):
+        dashboards = {}
+    due_configs = {
+        k[4:]: v for k, v in queries.items()
+        if k.startswith("due.") and isinstance(v, dict)
+    }
+    default_db = cfg.get("dashboard", {}).get("default")
+    db_name = ((default_db if default_db in dashboards else None)
+               or next(iter(dashboards), None))
+
+    def fence(spec):
+        return "```ptos\n" + tomli_w.dumps(spec).rstrip() + "\n```"
+
+    overview = []
+    if db_name:
+        overview.append(fence({"view": "dashboard", "name": db_name}))
+    if ptos.get_thresholds():
+        overview.append(fence({
+            "view": "threshold", "title": "Thresholds", "time": "tm"}))
+    attention = []
+    if due_configs:
+        attention.append(fence({
+            "view": "due", "name": "default", "title": "Overdue Records",
+            "limit": 5}))
+    attention.append(fence({"view": "todo_summary", "title": "Todos"}))
+    attention.append(fence({"view": "journal", "title": "Journal"}))
+    quickadd = [fence({"view": "capture", "title": "Capture"})]
+    freq, _rem = get_frequent_presets(quick_n)
+    if freq:
+        quickadd.append(fence({"view": "quick_add", "title": "Quick Add"}))
+    if get_multi_presets():
+        quickadd.append(fence({
+            "view": "quick_add_multi", "title": "Quick Add (multi)"}))
+    today = [fence({
+        "view": "records", "limit": 8, "where": [], "time": "td",
+        "title": "Today's Records"})]
+
+    parts = ["# {{greeting}}, {{name}}", "",
+             fence({"view": "time_picker", "title": "Time window"}), ""]
+    sections = (("Overview", overview),
+                ("Needs your attention", attention),
+                ("Quick add", quickadd),
+                ("Today", today))
+    for heading, blocks in sections:
+        if not blocks:
+            continue
+        parts.append(f"## {heading}")
+        parts.append("")
+        for b in blocks:
+            parts.append(b)
+            parts.append("")
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def svc_get_home_note():
+    """Resolve the home note for the / page.
+
+    Returns {"mode": "note", path, content, rev, created} or
+    {"mode": "fallback", reason}. The default path with no config entry
+    yet is created from the template on first visit (the setting is then
+    recorded); a cleared setting never recreates; a configured path
+    whose file has vanished falls back so a bad path can't blank the
+    home page."""
+    raw = _home_page_raw()
+    page = (HOME_DEFAULT_PAGE if raw is None
+            else (str(raw).strip() if raw else ""))
+    if not page:
+        return {"mode": "fallback", "reason": "cleared"}
+    note = None
+    try:
+        note = svc_read_file(page)
+    except Exception:
+        log.exception("Home note unreadable: %s", page)
+        note = None
+    if note is None:
+        if raw is None:
+            try:
+                os.makedirs(ptos.NOTES_DIR, exist_ok=True)
+                content = build_home_note()
+                res = svc_save_file(page, content)
+                try:
+                    set_home_page(page)
+                except Exception:
+                    log.exception("Home note created but [home] page "
+                                  "could not be recorded")
+                return {"mode": "note", "path": page, "content": content,
+                        "rev": res["rev"], "created": True}
+            except Exception:
+                log.exception("Could not create the home note")
+                return {"mode": "fallback", "reason": "create_failed"}
+        return {"mode": "fallback", "reason": "missing"}
+    return {"mode": "note", "path": page, "content": note["content"],
+            "rev": note["rev"], "created": False}
+
+
+def svc_set_home_page_for(path):
+    """Make an existing note the home page ("Make this my home")."""
+    path = str(path or "").strip()
+    if not path:
+        raise PTOSError("Home page path cannot be empty")
+    try:
+        note = svc_read_file(path)
+    except Exception as e:
+        raise PTOSError(str(e))
+    if note is None:
+        raise PTOSError(f"Note not found: {path}")
+    return set_home_page(path)
+
+
+def svc_reset_home_note():
+    """Rewrite the home note from the default template (D3).
+
+    Whatever note is there now is copied to a timestamped sibling
+    first — `Home (backup YYYY-MM-DD HHMM).md` in the note's own folder
+    — and [home] page is re-pointed at the note. Returns
+    {ok, path, backup}."""
+    import shutil
+    page = get_home_page() or HOME_DEFAULT_PAGE
+    try:
+        full = ptos._safe_path(page)
+    except Exception as e:
+        raise PTOSError(str(e))
+    content = build_home_note()
+    backup_rel = None
+    with ptos.file_lock(full):
+        if os.path.isfile(full):
+            stem = page[:-3] if page.endswith(".md") else page
+            stamp = dt.datetime.now().strftime("%Y-%m-%d %H%M")
+            cand = f"{stem} (backup {stamp}).md"
+            n = 2
+            while os.path.isfile(ptos._safe_path(cand)):
+                cand = f"{stem} (backup {stamp}) ({n}).md"
+                n += 1
+            shutil.copy2(full, ptos._safe_path(cand))
+            backup_rel = cand
+        svc_save_file(page, content, force=True)
+    set_home_page(page)
+    return {"ok": True, "path": page, "backup": backup_rel}
+
+
+def _update_home_page_after_rename(old_rel, new_rel, is_folder):
+    """Retarget [home] page when the home note (or a folder holding it)
+    is renamed. Called by svc_rename; a failure must never undo the
+    rename. Returns 1 when the setting changed, else 0."""
+    cur = _home_page_raw()
+    page = (HOME_DEFAULT_PAGE if cur is None
+            else (str(cur).strip() if cur else ""))
+    if not page:
+        return 0
+    p = page.replace("\\", "/")
+    old_n = str(old_rel).replace("\\", "/").strip("/")
+    new_n = str(new_rel).replace("\\", "/").strip("/")
+    if p == old_n:
+        set_home_page(new_n)
+        return 1
+    if is_folder and p.startswith(old_n + "/"):
+        set_home_page(new_n + p[len(old_n):])
+        return 1
+    return 0
+
+
+def _clear_home_if_deleted(rel_path):
+    """Clear [home] page when the home note (or a folder holding it)
+    is deleted, so / falls back cleanly. Returns 1 when cleared."""
+    cur = _home_page_raw()
+    page = (HOME_DEFAULT_PAGE if cur is None
+            else (str(cur).strip() if cur else ""))
+    if not page:
+        return 0
+    p = page.replace("\\", "/")
+    rel_n = str(rel_path).replace("\\", "/").strip("/")
+    if p == rel_n or p.startswith(rel_n + "/"):
+        clear_home_page()
+        return 1
+    return 0
 
 
 def save_as_preset(name, record, note=None, instant=False):

@@ -181,6 +181,77 @@
         return { destroy: function () {} };
       }
     });
+
+    PtosWidgets.register("time_picker", {
+      render: function (el) {
+        el.innerHTML = '<div style="color:var(--sub);font-size:13px;">' +
+          'Time window controls are available on Home.</div>';
+      },
+      mount: function (el, data, ctx) {
+        el.innerHTML = _timePickerHtml(data);
+        var select = el.querySelector(".home-time-select");
+        var custom = el.querySelector(".home-time-custom");
+        var apply = el.querySelector(".home-time-apply");
+        var listeners = [];
+        function on(node, type, fn) {
+          if (!node) return;
+          node.addEventListener(type, fn);
+          listeners.push([node, type, fn]);
+        }
+        function updateCustom() {
+          var mode = select.value;
+          var active = ["year", "month", "date", "range"].indexOf(mode) !== -1;
+          if (custom) custom.style.display = active ? "flex" : "none";
+          Array.prototype.forEach.call(
+            el.querySelectorAll(".home-time-field"), function (field) {
+              field.style.display = field.classList.contains(
+                "home-time-" + mode + "-field") ? "block" : "none";
+            });
+        }
+        function applySelection() {
+          var mode = select.value;
+          var url = new URL(window.location.href);
+          ["time", "custom_time", "from_date", "to_date"].forEach(
+            function (key) { url.searchParams.delete(key); });
+          if (mode === "year" || mode === "month" || mode === "date") {
+            var input = el.querySelector(".home-time-" + mode);
+            if (!input || !input.value) return;
+            url.searchParams.set("time", mode);
+            url.searchParams.set("custom_time", input.value);
+          } else if (mode === "range") {
+            var from = el.querySelector(".home-time-from").value;
+            var to = el.querySelector(".home-time-to").value;
+            if (!from && !to) return;
+            url.searchParams.set("time", "range");
+            if (from) url.searchParams.set("from_date", from);
+            if (to) url.searchParams.set("to_date", to);
+          } else if (mode) {
+            url.searchParams.set("time", mode);
+          }
+          var nextUrl = url.pathname + url.search + url.hash;
+          if (ctx.host === "note") {
+            window.history.pushState({}, "", nextUrl);
+            window.dispatchEvent(new CustomEvent("ptos:time-window-change"));
+          } else {
+            window.location.href = nextUrl;
+          }
+        }
+        on(select, "change", function () {
+          updateCustom();
+          if (["year", "month", "date", "range"].indexOf(select.value) === -1) {
+            applySelection();
+          }
+        });
+        on(apply, "click", applySelection);
+        updateCustom();
+        return { destroy: function () {
+          listeners.forEach(function (entry) {
+            entry[0].removeEventListener(entry[1], entry[2]);
+          });
+          listeners = [];
+        }};
+      }
+    });
   }
 
   function _captureHtml() {
@@ -246,6 +317,36 @@
         '<button type="button" class="preset-del" data-preset="' + esc(n) +
         '" title="Delete preset">×</button></span>';
     }).join("") + '</div>';
+  }
+
+  function _timePickerHtml(data) {
+    var params = new URLSearchParams(window.location.search || "");
+    var time = params.get("time") || "";
+    var customTime = params.get("custom_time") || "";
+    var fromDate = params.get("from_date") || "";
+    var toDate = params.get("to_date") || "";
+    var selected = time;
+    if (fromDate || time === "range") selected = "range";
+    else if (/^\d{4}$/.test(time)) { selected = "year"; customTime = time; }
+    else if (/^\d{4}-\d{2}$/.test(time)) { selected = "month"; customTime = time; }
+    else if (/^\d{4}-\d{2}-\d{2}$/.test(time)) { selected = "date"; customTime = time; }
+    var options = data.time_options || [];
+    var html = '<div class="home-time-picker">' +
+      '<select class="home-time-select" style="padding:7px 10px;border-radius:6px;border:1px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;min-width:170px;">' +
+      '<option value=""' + (selected ? "" : " selected") + '>Default</option>';
+    options.forEach(function (item) {
+      var value = String(item.value || "");
+      html += '<option value="' + esc(value) + '"' +
+        (value === selected ? " selected" : "") + '>' + esc(item.label || value) + '</option>';
+    });
+    html += '</select><div class="home-time-custom" style="display:none;gap:8px;align-items:end;flex-wrap:wrap;margin-top:8px;">' +
+      '<label class="home-time-field home-time-year-field" style="display:none;">Year<input class="home-time-year" type="number" min="' + esc((data.year_range || [1900, 2100])[0]) + '" max="' + esc((data.year_range || [1900, 2100])[1]) + '" value="' + (selected === "year" ? esc(customTime) : "") + '"></label>' +
+      '<label class="home-time-field home-time-month-field" style="display:none;">Month<input class="home-time-month" type="month" value="' + (selected === "month" ? esc(customTime.slice(0, 7)) : "") + '"></label>' +
+      '<label class="home-time-field home-time-date-field" style="display:none;">Date<input class="home-time-date" type="date" value="' + (selected === "date" ? esc(customTime) : "") + '"></label>' +
+      '<label class="home-time-field home-time-range-field" style="display:none;">From<input class="home-time-from" type="date" value="' + esc(fromDate) + '"></label>' +
+      '<label class="home-time-field home-time-range-field" style="display:none;">To<input class="home-time-to" type="date" value="' + esc(toDate) + '"></label>' +
+      '<button type="button" class="btn btn-primary btn-sm home-time-apply">Apply</button></div></div>';
+    return html;
   }
 
   // ── boot ───────────────────────────────────────────────────────────────────

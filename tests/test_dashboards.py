@@ -133,6 +133,7 @@ class TestHomeGroupedRender:
     def _resolve(self, qs):
         from ptos_web import app
         import tomli_w
+        ptos_service.set_home_page("")
         client = app.test_client()
         resp = client.get("/" + qs)
         assert resp.status_code == 200
@@ -155,6 +156,7 @@ class TestHomeGroupedRender:
 
     def test_home_renders_flat_when_no_groups(self):
         from ptos_web import app
+        ptos_service.set_home_page("")
         client = app.test_client()
         resp = client.get("/?dashboard=legacy")
         assert resp.status_code == 200
@@ -342,6 +344,7 @@ class TestDashboardCardLinks:
     def test_home_metric_card_links_with_kind(self):
         from ptos_web import app
         import json, re
+        ptos_service.set_home_page("")
         client = app.test_client()
         html = client.get("/?dashboard=metric_db").data.decode()
         m = re.search(
@@ -358,6 +361,7 @@ class TestDashboardCardLinks:
     def test_home_query_card_links_without_kind(self):
         from ptos_web import app
         import json, re
+        ptos_service.set_home_page("")
         client = app.test_client()
         html = client.get("/?dashboard=legacy").data.decode()
         m = re.search(

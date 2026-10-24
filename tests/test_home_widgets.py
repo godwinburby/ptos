@@ -1,9 +1,13 @@
 """Tests for the live home page (Phase 3 of the live-widgets spec).
 
-The home route bakes its widget specs into #home-widget-specs as
-[{section, kind, body}] and home_widgets.js resolves them in one batch.
-There is no JS test runner, so the client pins are static scans; the
-server side is tested through the rendered blob and the batch endpoint.
+The home page is normally a note (Home.md) rendered by home_note.js;
+the built-in fallback page still bakes its widget specs into
+#home-widget-specs as [{section, kind, body}] and home_widgets.js
+resolves them in one batch. `fallback=True` clears [home] page so the
+request exercises that built-in path — used by the time-window tests,
+whose per-request baking no longer applies once the note exists. Note
+mode is covered by the spec blob (the generated note) plus
+tests/test_home_note.py.
 """
 import json
 import os
@@ -35,13 +39,57 @@ def _client():
     return app.test_client()
 
 
-def _home_specs(query_string=""):
+def _force_fallback():
+    svc.set_home_page("")
+
+
+def _note_specs(body):
+    m = re.search(
+        r'<script type="application/json" id="home-note-source">'
+        r"(.*?)</script>", body, re.S)
+    assert m, "home-note-source blob missing"
+    src = json.loads(m.group(1))
+    sections = {"Overview": "overview",
+                "Needs your attention": "attention",
+                "Quick add": "quickadd",
+                "Today": "today"}
+    specs = []
+    section = None
+    lines = str(src.get("content") or "").split("\n")
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if line.startswith("## "):
+            section = sections.get(line[3:].strip())
+            i += 1
+            continue
+        if line.strip() == "```ptos":
+            j = i + 1
+            buf = []
+            while j < len(lines) and lines[j].strip() != "```":
+                buf.append(lines[j])
+                j += 1
+            raw = "\n".join(buf)
+            spec = tomllib.loads(raw)
+            specs.append({"section": section or "",
+                          "kind": str(spec.get("view", "")),
+                          "body": raw})
+            i = j + 1
+            continue
+        i += 1
+    return specs, body
+
+
+def _home_specs(query_string="", fallback=False):
+    if fallback:
+        _force_fallback()
     body = _client().get("/" + query_string).get_data(as_text=True)
     m = re.search(
         r'<script type="application/json" id="home-widget-specs">'
         r"(.*?)</script>", body, re.S)
-    assert m, "home-widget-specs blob missing"
-    return json.loads(m.group(1)), body
+    if m:
+        return json.loads(m.group(1)), body
+    return _note_specs(body)
 
 
 def _by_kind(specs, kind, section=None):
@@ -81,7 +129,7 @@ class TestHomeSpecBlob:
         assert not _by_kind(specs, "quick_add_multi")
 
     def test_sections_are_the_four_known_ones(self):
-        specs, _ = _home_specs()
+        specs, _ = _home_specs(fallback=True)
         assert set(s["section"] for s in specs) <= {
             "overview", "attention", "quickadd", "today"}
 
@@ -94,14 +142,15 @@ class TestHomeSpecBlob:
         assert r["where"] == []
 
     def test_records_with_time_window_carries_title(self):
-        specs, _ = _home_specs("?time=lm")
+        specs, _ = _home_specs("?time=lm", fallback=True)
         r = _parse_body(_by_kind(specs, "records")[0])
         assert r["time"] == "lm"
         assert r["title"].startswith("Records · ")
         assert "limit" in r and r["limit"] == 8
 
     def test_records_with_from_date_uses_range(self):
-        specs, _ = _home_specs("?from_date=2026-01-01&to_date=2026-01-31")
+        specs, _ = _home_specs("?from_date=2026-01-01&to_date=2026-01-31",
+                               fallback=True)
         r = _parse_body(_by_kind(specs, "records")[0])
         assert r["from_date"] == "2026-01-01"
         assert r["to_date"] == "2026-01-31"
@@ -171,24 +220,25 @@ class TestHomeDashboardGating:
 
     def test_dashboard_spec_only_when_configured(self):
         self._seed_dashboard()
-        specs, _ = _home_specs()
+        specs, _ = _home_specs(fallback=True)
         db = _by_kind(specs, "dashboard", "overview")
         assert len(db) == 1
         d = _parse_body(db[0])
         assert d["name"] == "money"
-        assert d["per_query"] is True
+        assert "per_query" not in d
         assert "time" not in d
 
-    def test_dashboard_time_window_replaces_per_query(self):
+    def test_dashboard_time_window_is_applied_to_widget(self):
         self._seed_dashboard()
-        specs, _ = _home_specs("?time=lm")
+        specs, _ = _home_specs("?time=lm", fallback=True)
         d = _parse_body(_by_kind(specs, "dashboard")[0])
         assert d["time"] == "lm"
         assert "per_query" not in d
 
     def test_dashboard_from_date_replaces_per_query(self):
         self._seed_dashboard()
-        specs, _ = _home_specs("?from_date=2026-02-01&to_date=2026-02-28")
+        specs, _ = _home_specs("?from_date=2026-02-01&to_date=2026-02-28",
+                               fallback=True)
         d = _parse_body(_by_kind(specs, "dashboard")[0])
         assert d["from_date"] == "2026-02-01"
         assert "per_query" not in d
@@ -196,13 +246,14 @@ class TestHomeDashboardGating:
     def test_threshold_follows_time_pick(self):
         _set_queries({"threshold.budget": {
             "metric": "m1", "direction": "max", "target": 10}})
-        specs, _ = _home_specs("?time=ty")
+        specs, _ = _home_specs("?time=ty", fallback=True)
         d = _parse_body(_by_kind(specs, "threshold")[0])
         assert d["time"] == "ty"
 
     def test_custom_time_is_passed_through(self):
         self._seed_dashboard()
-        specs, _ = _home_specs("?time=month&custom_time=2026-03")
+        specs, _ = _home_specs("?time=month&custom_time=2026-03",
+                               fallback=True)
         d = _parse_body(_by_kind(specs, "dashboard")[0])
         assert d["time"] == "2026-03"
 
@@ -213,27 +264,44 @@ class TestHomeTemplate:
 
     def test_no_data_placeholder_without_dashboards(self):
         _wipe_queries()
-        _, body = _home_specs()
+        _, body = _home_specs(fallback=True)
         assert "No data" in body
         assert 'data-home-section="overview"' in body
 
     def test_four_section_containers(self):
-        _, body = _home_specs()
+        _, body = _home_specs(fallback=True)
         for section in ("overview", "attention", "quickadd", "today"):
             assert 'data-home-section="%s"' % section in body, section
 
     def test_widget_scripts_loaded_versioned(self):
+        _force_fallback()
         from ptos_web import app
         body = app.test_client().get("/").get_data(as_text=True)
         for name in ("record_table.js", "widgets.js", "widget_host.js",
                      "home_widgets.js"):
             assert "/static/js/%s?v=" % name in body, name
 
-    def test_time_select_has_default_option(self):
-        self._seed_dashboard()
+    def test_note_mode_scripts_loaded_versioned(self):
         from ptos_web import app
         body = app.test_client().get("/").get_data(as_text=True)
-        assert ">Default</option>" in body
+        for name in ("marked.min.js", "purify.min.js", "md_render.js",
+                     "embeds.js", "widget_toml.js", "record_table.js",
+                     "widgets.js", "widget_host.js", "home_widgets.js",
+                     "home_note.js"):
+            marker = ("/static/vendor/%s?v=" % name if name.endswith(".min.js")
+                      else "/static/js/%s?v=" % name)
+            assert marker in body, name
+        assert 'id="time-select"' not in body
+
+    def test_picker_is_in_markdown_instead_of_template_chrome(self):
+        self._seed_dashboard()
+        svc.svc_save_file("NoPicker.md", "# No picker\n")
+        svc.set_home_page("NoPicker.md")
+        from ptos_web import app
+        body = app.test_client().get("/").get_data(as_text=True)
+        specs, _ = _note_specs(body)
+        assert not _by_kind(specs, "time_picker")
+        assert 'id="time-select"' not in body
 
     def test_due_selector_when_multiple_configs(self):
         _set_queries({"due.default": {"days": 7},

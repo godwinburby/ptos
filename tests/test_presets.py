@@ -352,6 +352,8 @@ class TestQuickPresetCount:
 
     def _home_quick_add(self):
         from ptos_web import app
+        import ptos_service
+        ptos_service.set_home_page("")
         client = app.test_client()
         body = client.get("/").get_data(as_text=True)
         m = re.search(

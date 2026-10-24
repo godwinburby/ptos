@@ -26,6 +26,7 @@
   <div id="save-msg" style="display:none;font-size:13px;"></div>
   <a href="#sec-data">Data</a>
   <a href="#sec-profile">Profile</a>
+  <a href="#sec-home">Home</a>
   <a href="#sec-display">Display</a>
   <a href="#sec-dashboard">Dashboard</a>
   {% if dashboards %}<a href="#sec-highlights">Highlights</a>{% endif %}
@@ -76,6 +77,28 @@
   <div class="field-group">
     <label>User Name</label>
     <input type="text" id="user-name" value="{{ user_name }}" placeholder="Your name">
+  </div>
+</div>
+
+<div class="card" id="sec-home" style="margin-bottom:14px;">
+  <div class="card-title">Home page</div>
+  <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">
+    The home page is a note you can edit like any other
+    {% if home_page %}(currently <code>{{ home_page }}</code>){% else %}(currently the built-in default){% endif %}.
+  </div>
+  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+    {% if home_page %}
+    <a href="/notes/edit/{{ home_page|urlencode }}" class="btn btn-ghost"
+       style="font-size:12px;">Open in editor</a>
+    {% endif %}
+    <button type="button" class="btn btn-ghost"
+            onclick="resetHomePage()"
+            style="font-size:12px;color:var(--danger,#e55);border:1px solid var(--danger,#e55);">
+      Reset home to default
+    </button>
+    <span style="font-size:12px;color:var(--sub);">
+      Rewrites the note from the template; the old one is kept as a backup.
+    </span>
   </div>
 </div>
 
@@ -669,6 +692,24 @@
   renderCycles();
   renderBackupFolders();
 })();
+
+function resetHomePage() {
+  if (!confirm(
+      "Reset the home page to the default template?\n\n" +
+      "The current note is kept as a timestamped backup, then the note is\n" +
+      "rewritten from the default template.")) return;
+  fetch("/api/home/reset", {
+    method: "POST",
+    headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({})
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(data) {
+    if (data.ok) { location.reload(); return; }
+    alert("Error: " + (data.error || "could not reset the home page"));
+  })
+  .catch(function(err) { alert("Error: " + err.message); });
+}
 
 function removeDemoData() {
   if (!confirm(

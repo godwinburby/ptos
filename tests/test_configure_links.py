@@ -169,6 +169,7 @@ class TestThresholdRunLinks:
 
     def test_home_page_links_metric_ref(self):
         import json, re
+        svc.set_home_page("")
         client = _client()
         html = client.get("/").data.decode()
         m = re.search(

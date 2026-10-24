@@ -13,6 +13,17 @@
   {% endfor %}
 </div>
 
+{% if is_home %}
+<div class="card home-banner" style="margin-bottom:12px;">
+  <span style="font-size:13px;">This note is your home page.</span>
+  <a href="/" class="btn btn-ghost" style="margin-left:8px;font-size:12px;">Open home</a>
+</div>
+{% else %}
+<div style="margin-bottom:12px;">
+  <button onclick="makeThisHome()" class="btn btn-ghost" style="font-size:12px;">Make this my home</button>
+</div>
+{% endif %}
+
 {% include "_markdown_editor.html" with context %}
 
 <div id="backlinks-panel" style="margin-top:16px;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;background:var(--bg-card,var(--bg));">
@@ -103,6 +114,19 @@ window._mdCopyFn = function() {
     });
   });
 };
+
+function makeThisHome() {
+  fetch("/api/home/set", {
+    method: "POST", headers: {"Content-Type": "application/json"},
+    body: JSON.stringify({path: {{ rel_path|tojson }} })
+  })
+  .then(function(r) { return r.json(); })
+  .then(function(d) {
+    if (d && d.ok) window.location.reload();
+    else alert((d && d.error) || "Could not set the home page");
+  })
+  .catch(function() { alert("Could not set the home page"); });
+}
 
 function deleteNote() {
   var name = "{{ rel_path }}".split("/").pop();

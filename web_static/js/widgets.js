@@ -33,8 +33,40 @@ function renderResult(d) {
     case "todo":         return renderTodo(d);
     case "todo_summary": return renderTodoSummary(d);
     case "journal":      return renderJournal(d);
+    case "capture":      return renderCapture(d);
+    case "quick_add":    return renderQuickAdd(d);
+    case "quick_add_multi": return renderQuickAddMulti(d);
+    case "time_picker": return '<div class="card" style="color:var(--sub);font-size:13px;">' +
+      'Time window picker — available on Home or in a live preview.</div>';
     default:             return errorCard("Unknown result type");
   }
+}
+
+function renderCapture(d) {
+  return '<div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+    '<input type="text" class="cap-input" placeholder="Quick record… (Enter to capture)" disabled ' +
+    'style="flex:1;min-width:180px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">' +
+    '<button type="button" class="btn btn-primary" disabled>Capture</button>' +
+    '<button type="button" class="btn btn-ghost" disabled>Convert</button></div></div>';
+}
+
+function renderQuickAdd(d) {
+  var names = (d.frequent || []).concat(d.remaining || []);
+  if (!names.length) return '<div class="card" style="color:var(--sub);font-size:13px;">No quick-add presets.</div>';
+  return '<div class="chip-group">' + names.map(function (name) {
+    return '<a class="preset-chip" href="/add?preset=' +
+      encodeURIComponent(name) + '">+ ' + esc(name) + '</a>';
+  }).join("") + '</div>';
+}
+
+function renderQuickAddMulti(d) {
+  var presets = d.presets || {};
+  var names = Object.keys(presets);
+  if (!names.length) return '<div class="card" style="color:var(--sub);font-size:13px;">No multi-record presets.</div>';
+  return '<div class="chip-group">' + names.map(function (name) {
+    var detail = presets[name] ? ' <span style="opacity:.6;font-size:11px;">(' + esc(presets[name]) + ')</span>' : '';
+    return '<span class="preset-chip">+ ' + esc(name) + detail + '</span>';
+  }).join("") + '</div>';
 }
 
 function exprBadge(d) {

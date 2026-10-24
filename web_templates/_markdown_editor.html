@@ -76,6 +76,9 @@
 <script src="{{ av('/static/js/md_render.js') }}"></script>
 <script src="{{ av('/static/js/widgets.js') }}"></script>
 <script src="{{ av('/static/js/embeds.js') }}"></script>
+<script src="{{ av('/static/js/record_table.js') }}"></script>
+<script src="{{ av('/static/js/widget_host.js') }}"></script>
+<script src="{{ av('/static/js/home_widgets.js') }}"></script>
 <script src="{{ av('/static/js/widget_toml.js') }}"></script>
 <script src="{{ av('/static/js/widget_form.js') }}"></script>
 <script src="{{ av('/static/js/text_blocks.js') }}"></script>
@@ -324,6 +327,7 @@
   window.renderPreview = function() {
     var src = document.getElementById(_eid).value;
     var pane = document.getElementById("preview-pane");
+    if (typeof window.unmountEmbeds === "function") window.unmountEmbeds(pane);
     var text = typeof preprocessLinks === "function" ? preprocessLinks(src) : src;
     pane.innerHTML = typeof renderMarkdown === "function"
       ? renderMarkdown(text)
@@ -331,6 +335,19 @@
           src.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>";
     if (typeof window.mountEmbeds === "function") window.mountEmbeds(pane);
   };
+
+  window.addEventListener("ptos:time-window-change", function() {
+    var pane = document.getElementById("preview-pane");
+    if (pane && pane.innerHTML && typeof window.renderPreview === "function") {
+      window.renderPreview();
+    }
+  });
+  window.addEventListener("popstate", function() {
+    var pane = document.getElementById("preview-pane");
+    if (pane && pane.innerHTML && typeof window.renderPreview === "function") {
+      window.renderPreview();
+    }
+  });
 
   window.setMode = function(m) {
     _mode = m;

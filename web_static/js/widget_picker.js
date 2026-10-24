@@ -135,6 +135,28 @@
     } catch (e) {}
   }
 
+  function _isTimePicker(body) {
+    if (!window.PtosToml || typeof window.PtosToml.parse !== "function") return false;
+    try {
+      return String(window.PtosToml.parse(body || "").view || "")
+        .toLowerCase() === "time_picker";
+    } catch (e) { return false; }
+  }
+
+  function _pageHasTimePicker(source) {
+    var text = String(source || "");
+    var regions = typeof window.embedRegions === "function"
+      ? window.embedRegions(text) : [];
+    var lines = text.split(/\r\n|\n/);
+    return regions.some(function (r) {
+      return _isTimePicker(lines.slice(r.start + 1, r.end).join("\n"));
+    });
+  }
+
+  function _kindAvailable(kind) {
+    return !(_S && _S.blockTimePicker && kind === "time_picker");
+  }
+
   // ── change-mode merge ────────────────────────────────────────────────
   // Keep current keys the target kind allows, drop the rest, then overlay
   // the picked body (its view/name/time win). Needs the catalog for the
@@ -167,6 +189,13 @@
   function open(opts) {
     close();
     opts = opts || {};
+    var pageSource = opts.pageSource;
+    if (pageSource == null) {
+      var editor = document.getElementById("md-editor");
+      pageSource = editor ? editor.value : "";
+    }
+    var editingTimePicker = String((opts.spec || {}).view || "")
+      .toLowerCase() === "time_picker";
     _S = {
       mode: opts.mode === "change" ? "change" : "add",
       spec: opts.spec || null,
@@ -180,6 +209,7 @@
       items: null,
       loading: true,
       itemsLoading: false,
+      blockTimePicker: !editingTimePicker && _pageHasTimePicker(pageSource),
     };
     _buildOverlay();
     _load(function () {
@@ -320,10 +350,11 @@
             "</span></span></button></div>";
     }
     var starters = (_cat && _cat.starters || []).filter(function (s) {
-      return !q || _hay(s).indexOf(q) !== -1;
+      return (!(_S.blockTimePicker && s.kind === "time_picker")) &&
+        (!q || _hay(s).indexOf(q) !== -1);
     });
     var kinds = (_cat && _cat.kinds || []).filter(function (k) {
-      return !q || _hay(k).indexOf(q) !== -1;
+      return _kindAvailable(k.kind) && (!q || _hay(k).indexOf(q) !== -1);
     });
     var texts = _S.mode === "add"
       ? _textItems().filter(function (t) {
@@ -367,6 +398,9 @@
         html += "</div>";
       }
       var rec = _recent();
+      if (_S.blockTimePicker) {
+        rec = rec.filter(function (r) { return !_isTimePicker(r.body); });
+      }
       if (rec.length) {
         html += '<div class="wp-sec-label">Recent</div><div class="wp-grid">';
         rec.forEach(function (r, i) {
@@ -415,7 +449,7 @@
 
   function _kindsIn(catId) {
     return ((_cat && _cat.kinds) || []).filter(function (k) {
-      return k.category === catId;
+      return k.category === catId && _kindAvailable(k.kind);
     });
   }
 

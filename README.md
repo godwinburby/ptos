@@ -343,20 +343,31 @@ ptos --set-config history.window_months 12
 
 ### Home
 
+The home page is a **markdown note** (`notes/Home.md` by default) you can edit
+like any other note: prose renders with the usual markdown pipeline (including
+live `{{tokens}}` such as `{{greeting}}`), and each fenced ```` ```ptos ````
+block is a live widget (dashboard, thresholds, due list, todos, capture,
+quick-add presets, today's records). The first visit creates the note for you;
+any note's editor has a **Make this my home** action, and **Settings → Home**
+has **Reset home to default** (the old note is kept as a timestamped backup).
+Set `page = "Home.md"` (or another note path) under `[home]` in `config.toml`;
+clearing it falls back to the built-in widget view.
+
 Dashboard stats (first 4 metrics from the configured dashboard), overdue due-list
 summary (up to 5 rows), quick-add preset buttons, and today's records. A dropdown
 lets you switch between dashboards. The default dashboard is set in `config.toml`
 under `[dashboard] default`.
 
 Features:
-- Personalized greeting with user name
+- Personalized greeting with user name (live `{{tokens}}` in the note body)
 - **Quick Capture** — text input to instantly log a `type=capture` record (Enter or button). A **Convert** button next to it captures the text and immediately opens the convert form to pick a target type
 - Dashboard selector dropdown
-- Time window selector (presets + specific year/month/date/range)
+- A **Time window** widget (add it from Numbers and charts in the widget gallery) applies presets or a custom year/month/date/range to every time-aware widget in the Markdown preview, including dashboard items and thresholds. Affected widgets show the inherited window, and a page can have one picker. `time = "@home"` is also available for widgets that should follow the Home context.
 - Quick-add preset chips and multi-record preset buttons
 - Overdue items with heat indicators (hot / warm / cool)
 - Today's records table with inline edit/delete
 - **Table column sorting** — click headers to sort
+- Editable note source — reorder, retitle, add prose or widgets from the note editor or Blocks mode
 
 <img src="images/ptos_home.png" width="260" alt="PTOS Home dashboard with metrics, Quick Add presets, and multi-presets">
 
@@ -500,18 +511,30 @@ title = "Spend by category"
 ```
 ````
 
-The markdown preview replaces the block with a read-only card showing the
-query result and an **Open →** link to the full page. Recognized keys:
+The markdown preview mounts widgets interactively by default, including
+sortable records tables, threshold links, and quick capture. Set `live = false`
+when a block should stay read-only:
+
+````markdown
+```ptos
+view = "records"
+time = "td"
+live = false
+```
+````
+
+Omitting `live` has the same behavior as `live = true`. Recognized keys:
 
 | Key | Meaning |
 |-----|---------|
 | `name` | The query / metric / dashboard / threshold / board / habit / calendar / due / project to show (required) |
-| `view` | `records`, `group`, `pivot`, `trend`, `metric`, `dashboard`, `threshold`, `board`, `habit`, `calendar`, `due`, or `project`. Omit to infer from `queries.toml` — the name must exist in exactly one section (dashboard → metric → threshold → board → habit → calendar → due → project → query), otherwise the embed errors and asks for an explicit `view` |
+| `view` | `records`, `group`, `pivot`, `trend`, `metric`, `dashboard`, `threshold`, `board`, `habit`, `calendar`, `due`, `project`, `capture`, `quick_add`, `quick_add_multi`, or `time_picker`. Omit to infer a saved item from `queries.toml` — its name must exist in exactly one section |
 | `time` | Time window (`td`, `tm`, `ty`, `all`, a cycle name, …); for a calendar embed this also picks the month (unless `from_date` is set) |
 | `from_date` / `to_date` | Explicit inclusive date range (overrides `time`) |
 | `limit` | Truncate a records/group result to N rows, or a due list to N items |
 | `title` | Card heading (defaults to `name`) |
 | `chart` | Override the saved query's chart for this embed (`bar`, `hbar`, `line`, `stacked`); only valid when the underlying result is a group/trend/pivot |
+| `live` | Interactive by default; set `false` to make this embed read-only |
 
 Embeddable kinds and their links back to the full pages:
 
@@ -522,6 +545,7 @@ Embeddable kinds and their links back to the full pages:
 | `calendar` | `[calendar.NAME]` (or `__all__` for every record) | Mini month grid with `type · value1 · value2` labels inside each day cell (`display_fields` picks the values), plus a per-day detail list under the grid (date + each record's full label/note + a **Browse →** link for that day) | `/calendar` |
 | `due` | `[due.NAME]` (`default` = the default due view) | Overdue strip with heat dots | `/due` |
 | `project` | `[project.NAME]` | Drift / stall / todo / record stat card | `/projects` |
+| `time_picker` | Markdown block | Page-wide time-window selector in Markdown preview | Home or the current note/journal preview |
 
 A habit embed fills the month from `time`/`from_date` like the page; a calendar
 embed renders the one month that `from_date`, then `time`, then today picks. A
@@ -547,10 +571,11 @@ top with markdown helpers — type `/h1` or `/heading` for a heading, `/todo` fo
 a checkbox task, `/table`, `/bold`, `/code`, `/link`, and so on (aliases like
 `h2`, `ul`, `ol`, `quote`, `hr`, `b`, `i`, `s` work too).
 
-The preview is a **pure render** of the finished page — the same card you'd get
-if you published the note. It has no controls: to reorder, edit or retarget an
-embed, switch to **Blocks mode** (below), which owns every edit / move control
-and writes the change back into the same source the Edit view uses.
+The preview is a render of the finished page. Embeds are interactive by
+default; `live = false` makes one read-only without changing the note source.
+To reorder, edit or retarget an embed, switch to **Blocks mode**
+(below), which owns every edit / move control and writes the change back into
+the same source the Edit view uses.
 
 The markdown **source editor has a colour view**: the 🎨 **Colour** toolbar
 button (next to Edit/Preview) swaps the plain text area for a read-only

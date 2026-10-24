@@ -5,6 +5,26 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-24
+
+### Interactive widgets in markdown previews
+
+- Widgets in note and journal previews now mount through the interactive widget host by default. Records tables get their interactive table controls, thresholds retain their Browse links, and capture/quick-add widgets use their interactive actions. Set `live = false` for a read-only block; preview actions do not edit or autosave the markdown note.
+- The widget form exposes this as the advanced **Interactive in note preview** option, defaulting to on.
+- A Markdown `time_picker` applies its selected range to every time-aware widget in that page's preview, including dashboard items and thresholds. With no selection, dashboards use their configured window. This works in Home and in note/journal editor previews; changing the picker refreshes the preview in place.
+- The picker is a `view = "time_picker"` widget with a gallery starter. New Home notes include it; existing Markdown Home pages show a picker only when their source contains a time-picker block. The legacy picker remains on the built-in non-Markdown Home view. The shared Markdown embed resolver passes the selected page window to each time-aware widget. The dashboard widget no longer exposes or accepts `per_query`.
+- The widget gallery hides the time-picker option once a page already has one; if duplicate fences are pasted into the source, only the first mounts and later ones show an error. Time-aware widgets label the inherited window while a page selection is active.
+
+### Phase 3 (home-note spec): the home page is now a note
+
+- **Home is a real markdown note** — the first `/` visit creates `notes/Home.md` from a default template (a `{{greeting}}, {{name}}` heading plus one fenced ```` ```ptos ```` widget per section: dashboard/threshold when configured, due/todo/journal, capture/quick-add when presets exist, and Today's records) and records `page = "Home.md"` under `[home]`. The note *is* the page: body text renders through the shared `renderMarkdown` pipeline (Part F `{{tokens}}` greet you live), and every fence mounts as a widget through one batched `POST /api/widgets/resolve`. A first-visit banner announces the note was created; a missing note shows a restore banner; a *cleared* setting silently shows the built-in fallback and never auto-recreates.
+- **`time = "@home"`** — a widget fence can say "follow the home time picker": the batch resolver substitutes the home page's `{time, from_date, to_date}` context (default `tm`; a `range` window with no dates falls back to `tm`), while the same fence in an ordinary note preview resolves the plain default. `GET /api/widgets/options?source=time` lists `@home` first, so the widget form offers it.
+- **`span` / `hide_on` spec keys** — `span = 1|2` (double-width on desktop) and `hide_on = ["phone","desktop"]` are new validated widget keys (`COMMON_KEYS` + `validate_widget_spec` range/membership checks); `home_note.js` applies them as `home-span-2` / `ph-hide-on-*` classes.
+- **`?dashboard=` / `?due=` still switch** — the server sends validated `{from, to}` name swaps in the source blob and the client rewrites only the *generated* widget's name (a hand-written fence is never touched).
+- **Reset, pick, follow renames** — "Reset home to default" (Settings → Home card, or `POST /api/home/reset`) keeps a timestamped `Home (backup YYYY-MM-DD HHMM).md` sibling (collision suffixes) inside the file lock, then rewrites from the template; any note's editor gains "Make this my home" (`POST /api/home/set`, path-escape checked); renaming the note or its containing folder retargets `[home] page`, and deleting either clears the setting so `/` falls back cleanly (hook failures are warnings on the rename response, never a rollback).
+- **Long notes stay fast** — once a page carries more than eight widgets, `home_note.js` defers below-the-fold mounts behind an `IntersectionObserver` (`widget_host.js` `mountBatch` lazy mode), and the blob's `context` rides along so deferred mounts resolve with the same time window.
+- **Tests:** `tests/test_home_note.py` (template gating, fallback banners, first-visit create, reset backup/re-point, set/reset routes, rename/delete hooks, `@home` substitution incl. range fallback, span/hide_on validation, notes/settings wiring, static pins, node-suite runner) + `tests/js/home_note.test.js` (14 cases: `split`, `homeContext`, `applyParamNames`, `widgetAttrs`). Existing home/dashboards/configure-links/presets tests that exercise the old per-request spec baking now force the fallback page (`set_home_page("")`).
+
 ## 2026-10-23
 
 ### Phase 2b (home-note spec): inline `{{tokens}}` in markdown

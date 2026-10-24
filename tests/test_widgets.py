@@ -145,7 +145,8 @@ class TestBuiltinKindsRegistered:
 
     def test_builtin_needs_name(self):
         nameless = {"todo", "threshold", "records", "todo_summary",
-                    "journal", "capture", "quick_add", "quick_add_multi"}
+                    "journal", "capture", "quick_add", "quick_add_multi",
+                    "time_picker"}
         for e in pw.kinds():
             if e["kind"] in nameless:
                 assert e["needs_name"] is False, e["kind"]

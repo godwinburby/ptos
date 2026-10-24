@@ -9,14 +9,17 @@ functions), so the import direction stays ptos_service -> ptos_widgets
 and this module imports nothing from the product.
 
 Every entry's allowed keys are COMMON_KEYS plus its own:
-view, name, time, from_date, to_date, title, limit. When a kind
-provides `fields`, their keys must cover that allowed-key set exactly —
-enforced at registration so the form and the whitelist can never
-drift apart.
+view, name, time, from_date, to_date, title, limit, span, hide_on, live.
+`span` (1 or 2) and `hide_on` (["phone"]/["desktop"]) are home-layout
+keys; markdown preview embeds mount interactively by default, and
+`live = false` opts out. When a kind provides `fields`, their keys must
+cover that allowed-key set exactly — enforced at registration so the form
+and the whitelist can never drift apart.
 """
 
 COMMON_KEYS = frozenset({
     "view", "name", "time", "from_date", "to_date", "title", "limit",
+    "span", "hide_on", "live",
 })
 
 # Gallery categories, in display order (the client merges its own

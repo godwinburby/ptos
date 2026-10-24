@@ -286,3 +286,12 @@
 .md-tool-preview { margin:0 0 8px;padding:8px 10px;border:1px dashed var(--border);border-radius:8px;max-height:220px;overflow:auto; }
 .md-tool-help { min-height:44px;display:inline-flex;align-items:center;padding:0 10px;color:var(--accent);font-size:12px; }
 .md-tool.md-tool-pinned { position:fixed;z-index:1000;box-sizing:border-box;margin:0;padding:4px 8px;background:var(--card);box-shadow:0 -3px 16px #0002; }
+
+/* -- Home page (the home note) ---------------------------------------- */
+.home-banner { margin:0 0 16px;padding:10px 14px;border-left:4px solid var(--accent);background:var(--card);border-radius:8px; }
+.home-note .home-text { margin:0 0 12px; }
+.home-note .home-text h1:first-child { margin-top:0; }
+.home-widget-run { display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 12px; }
+@media (min-width:768px) { .home-widget-run.home-span-2 { grid-column:span 2; } }
+@media (max-width:767px) { .ph-hide-on-phone { display:none !important; } }
+@media (min-width:768px) { .ph-hide-on-desktop { display:none !important; } }
