@@ -21,7 +21,7 @@
     for (var i = 0; i < btns.length; i++) {
       btns[i].innerHTML = on ? "&#9733;" : "&#9734;"; // ★ / ☆
       btns[i].classList.toggle("on", on);
-      btns[i].title = on ? "Remove this page from favorites" : "Star this page";
+      btns[i].title = on ? "Unpin from menu" : "Pin to menu";
     }
   }
 
@@ -62,7 +62,7 @@
       if (!items.length && !group.querySelector(".fav-empty")) {
         var e = document.createElement("div");
         e.className = "fav-empty";
-        e.textContent = "Star any page with \u2605";
+        e.textContent = "Pin pages here with \u2605";
         group.insertBefore(e, manage);
       }
     }
@@ -131,7 +131,7 @@
         patchList(res.favorites);
       }).catch(fail);
     } else {
-      var name = prompt("Name for this favorite:", defaultName());
+      var name = prompt("Name for this pinned page:", defaultName());
       if (name === null) return; // cancelled
       name = name.trim();
       if (!name) return;
@@ -144,6 +144,7 @@
   }
 
   window.toggleFav = toggleFav;
+  window.PtosFavoritesPatch = patchList;
 
   setStars();
   markActive();

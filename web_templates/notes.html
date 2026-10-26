@@ -16,13 +16,13 @@
     {% endif %}
   {% endfor %}
   {% if not breadcrumbs %}
-    <span style="font-size:17px;font-weight:800;color:var(--text);">Notes</span>
+    <span style="font-size:17px;font-weight:800;color:var(--text);">Pages</span>
   {% endif %}
 </div>
 
 <div style="display:flex;gap:8px;margin-bottom:14px;">
   <button onclick="promptNewFolder()" class="btn btn-sm btn-ghost" style="border:1px solid var(--border,#ccc);">New Folder</button>
-  <button onclick="promptNewFile()" class="btn btn-sm btn-ghost" style="border:1px solid var(--border,#ccc);">New File</button>
+  <button onclick="promptNewFile()" class="btn btn-sm btn-ghost" style="border:1px solid var(--border,#ccc);">New Page</button>
 </div>
 
 {% if listing.folders %}
@@ -41,13 +41,20 @@
     <a href="/notes/edit/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128196; {{ f.display_name }}</a>
     <button data-path="{{ f.rel_path }}" data-name="{{ f.display_name }}" data-folder="false" onclick="promptRename(this)" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
     <button data-path="{{ f.rel_path }}" data-name="{{ f.display_name }}" data-folder="false" onclick="confirmDelete(this)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+    <details class="page-actions" style="position:relative;">
+      <summary title="Page actions" style="list-style:none;padding:4px 8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:13px;cursor:pointer;">⋮</summary>
+      <div style="position:absolute;right:0;top:100%;z-index:10;min-width:150px;padding:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px #0002;">
+        <button type="button" data-page-action="pin" data-path="{{ f.rel_path }}" data-name="{{ f.display_name }}" style="display:block;width:100%;text-align:left;padding:7px;border:0;background:transparent;color:var(--text);cursor:pointer;">Pin to menu</button>
+        <button type="button" data-page-action="home" data-path="{{ f.rel_path }}" style="display:block;width:100%;text-align:left;padding:7px;border:0;background:transparent;color:var(--text);cursor:pointer;">Make this my home</button>
+      </div>
+    </details>
   </div>
   {% endfor %}
 {% endif %}
 
 {% if not listing.folders and not listing.files %}
 <div style="padding:24px;text-align:center;color:var(--sub);">
-  No files yet. Click <b>New File</b> above to get started.
+  No pages yet. Click <b>New Page</b> above to get started.
 </div>
 {% endif %}
 
@@ -64,8 +71,20 @@
 
 <div id="new-file-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center;">
   <div style="background:var(--bg-card,var(--bg));border:1px solid var(--border,#ccc);border-radius:10px;padding:20px;min-width:320px;">
-    <div style="font-size:15px;font-weight:700;margin-bottom:10px;">New File</div>
+    <div style="font-size:15px;font-weight:700;margin-bottom:10px;">New Page</div>
     <input id="nfl-name" type="text" placeholder="File name" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
+    <label for="nfl-folder" style="display:block;font-size:13px;font-weight:600;margin-top:12px;">Folder</label>
+    <select id="nfl-folder" onchange="onPageTemplateChange()" style="width:100%;margin-top:5px;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;background:var(--bg);color:var(--text);">
+      <option value="{{ rel_path }}">{{ rel_path or "Pages" }}</option>
+      {% for folder in listing.folders %}<option value="{{ folder.rel_path }}">{{ folder.name }}</option>{% endfor %}
+    </select>
+    <label for="nfl-template" style="display:block;font-size:13px;font-weight:600;margin-top:12px;">Template</label>
+    <select id="nfl-template" onchange="onPageTemplateChange()" style="width:100%;margin-top:5px;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;background:var(--bg);color:var(--text);">
+      <option value="blank">Blank</option>
+      <option value="dashboard">Dashboard</option>
+      <option value="project">Project</option>
+      <option value="folder">Folder template</option>
+    </select>
     <div id="template-choice" style="display:none;margin-top:12px;padding:10px;background:var(--bg-subtle,#f9f9f9);border-radius:6px;">
       <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Use template?</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
@@ -107,22 +126,53 @@ function promptNewFolder() {
 
 function promptNewFile() {
   document.getElementById("nfl-name").value = "";
+  document.getElementById("nfl-folder").value = _curPath;
+  document.getElementById("nfl-template").value = "blank";
   _templateContent = null;
   document.getElementById("template-choice").style.display = "none";
   openDialog("new-file-dialog");
   setTimeout(function() {
     document.getElementById("nfl-name").focus();
-    checkTemplate();
   }, 100);
+}
+
+function onPageTemplateChange() {
+  var kind = document.getElementById("nfl-template").value;
+  var choice = document.getElementById("template-choice");
+  if (kind === "dashboard") {
+    var dashboard = {{ page_templates.dashboard|tojson }};
+    _templateContent = dashboard
+      ? '# Dashboard\n\n```ptos\nview = "dashboard"\nname = "' + dashboard + '"\n```\n'
+      : '# Dashboard\n\nCreate a dashboard in Queries, then add it here with `/` → Dashboard.\n';
+    choice.style.display = "none";
+  } else if (kind === "project") {
+    var project = {{ page_templates.project|tojson }};
+    _templateContent = project
+      ? '# ' + project.replace(/_/g, ' ') + '\n\n```ptos\nview = "project"\nname = "' + project + '"\n```\n\n## Next steps\n\n- [ ] Define the next action\n'
+      : '# Project\n\n## Goal\n\n## Next steps\n\n- [ ] Define the next action\n\n## Notes\n';
+    choice.style.display = "none";
+  } else if (kind === "folder") {
+    _templateContent = null;
+    choice.style.display = "none";
+    checkTemplate();
+  } else {
+    _templateContent = "";
+    choice.style.display = "none";
+  }
+}
+
+function _selectedFolder() {
+  return document.getElementById("nfl-folder").value || "";
 }
 
 function checkTemplate() {
   fetch("/notes/template-check", {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({path: _curPath})
+    body: JSON.stringify({path: _selectedFolder()})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
+    if (document.getElementById("nfl-template").value !== "folder") return;
     if (!d.ok) return;
     if (d.source === "local") {
       _templateContent = d.content;
@@ -148,12 +198,13 @@ function createTemplateHere() {
   document.getElementById("template-choice").style.display = "none";
   fetch("/notes/new-file", {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({path: _curPath, name: "template", content: ""})
+    body: JSON.stringify({path: _selectedFolder(), name: "template", content: ""})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) {
-      var editPath = _curPath ? _curPath + "/template.md" : "template.md";
+      var folder = _selectedFolder();
+      var editPath = folder ? folder + "/template.md" : "template.md";
       window.location.href = "/notes/edit/" + encodeURIComponent(editPath);
     } else {
       alert(d.error || "Failed");
@@ -180,13 +231,14 @@ function submitNewFile() {
   if (!name) return;
   fetch("/notes/new-file", {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({path: _curPath, name: name, content: _templateContent || ""})
+    body: JSON.stringify({path: _selectedFolder(), name: name, content: _templateContent || ""})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) {
       var fileName = name.endsWith(".md") ? name : name + ".md";
-      var editPath = _curPath ? _curPath + "/" + fileName : fileName;
+      var folder = _selectedFolder();
+      var editPath = folder ? folder + "/" + fileName : fileName;
       window.location.href = "/notes/edit/" + encodeURIComponent(editPath);
     } else {
       alert(d.error || "Failed");
@@ -278,6 +330,34 @@ document.addEventListener("keydown", function(e) {
       document.getElementById(id).style.display = "none";
     });
   }
+});
+
+function _pagePathUrl(path) {
+  return "/notes/edit/" + String(path || "").split("/").map(encodeURIComponent).join("/");
+}
+
+document.addEventListener("click", function(e) {
+  var btn = e.target.closest && e.target.closest("[data-page-action]");
+  if (!btn) return;
+  var path = btn.getAttribute("data-path");
+  var url = _pagePathUrl(path);
+  var action = btn.getAttribute("data-page-action");
+  var endpoint = action === "home" ? "/api/home/set" : "/api/favorites/add";
+  var body = action === "home" ? {path:path} : {
+    name: btn.getAttribute("data-name").replace(/\.md$/i, ""), url:url
+  };
+  fetch(endpoint, {method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify(body)})
+    .then(function(r) { return r.json().then(function(d) { return {status:r.status, data:d}; }); })
+    .then(function(res) {
+      if (!res.data || !res.data.ok) throw new Error((res.data && res.data.error) || "Action failed");
+      if (action === "pin" && typeof window.PtosFavoritesPatch === "function") {
+        window.PtosFavoritesPatch(res.data.favorites);
+      }
+      btn.closest("details").open = false;
+      btn.textContent = action === "home" ? "Home page updated" : "Pinned to menu";
+      setTimeout(function() { btn.textContent = action === "home" ? "Make this my home" : "Pin to menu"; }, 1600);
+    }).catch(function(err) { alert(err.message || "Action failed"); });
 });
 </script>
 {% endblock %}

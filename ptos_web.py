@@ -228,9 +228,9 @@ def _inject_globals():
             ("log", "Log", [
                 ("",            "home",    "home",      "Home",        "H"),
                 ("add",         "add",     "add",       "Add Record",  "A"),
-                ("todo",        "todo",    "todo",      "Todo",        "T"),
+                ("todo",        "todo",    "todo",      "Todos",       "T"),
                 ("journal",     "journal", "journal",   "Journal",     "J"),
-                ("notes",       "notes",   "notes",     "Notes",       "N"),
+                ("notes",       "notes",   "notes",     "Pages",       "N"),
                 ("types",       "types",   "types",     "Types",       "Y"),
                 ("routines",    "routines","routines",  "Routines",    "R"),
             ]),
@@ -991,7 +991,7 @@ def todo_page():
     # the todo widget via svc.group_todos so the two can never drift)
     grouped = svc.group_todos(buckets, groupby, priority_labels)
 
-    return render_template("todo.html", tab="todo", title="Todo",
+    return render_template("todo.html", tab="todo", title="Todos",
         now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
         error=error, selected_project=project, selected_context=context,
         selected_priority=pri, selected_due=due_filter, selected_search=search,
@@ -1622,7 +1622,8 @@ def journal_delete():
 @app.route("/notes/browse")
 def notes_browse():
     listing = svc.svc_list_dir("")
-    return render_template("notes.html", listing=listing, rel_path="", breadcrumbs=[])
+    return render_template("notes.html", tab="notes", listing=listing, rel_path="", breadcrumbs=[],
+                           title="Pages", page_templates=_notes_page_templates())
 
 
 @app.route("/notes/browse/<path:rel_path>")
@@ -1630,12 +1631,25 @@ def notes_browse_path(rel_path):
     try:
         listing = svc.svc_list_dir(rel_path)
     except Exception as e:
-        return render_template("notes.html", error=str(e),
+        return render_template("notes.html", tab="notes", error=str(e),
                                listing={"folders": [], "files": []},
-                               rel_path=rel_path, breadcrumbs=_notes_breadcrumbs(rel_path))
-    return render_template("notes.html", listing=listing,
+                               rel_path=rel_path, breadcrumbs=_notes_breadcrumbs(rel_path),
+                               title="Pages", page_templates=_notes_page_templates())
+    return render_template("notes.html", tab="notes", listing=listing,
                            rel_path=rel_path,
-                           breadcrumbs=_notes_breadcrumbs(rel_path))
+                           breadcrumbs=_notes_breadcrumbs(rel_path),
+                           title="Pages", page_templates=_notes_page_templates())
+
+
+def _notes_page_templates():
+    try:
+        candidates = svc.get_embed_candidates()
+    except Exception:
+        candidates = {}
+    return {
+        "dashboard": next(iter(candidates.get("dashboards") or []), ""),
+        "project": next(iter(candidates.get("projects") or []), ""),
+    }
 
 
 @app.route("/notes/edit/<path:rel_path>")
@@ -1648,12 +1662,12 @@ def notes_edit(rel_path):
     is_home = (home_page is not None
                and rel_path.replace("\\", "/")
                == home_page.replace("\\", "/"))
-    return render_template("notes_edit.html", rel_path=rel_path,
+    return render_template("notes_edit.html", tab="notes", rel_path=rel_path,
                            content=note["content"],
                            rev=note["rev"],
                            breadcrumbs=_notes_breadcrumbs(rel_path),
                            parent_dir=parent_dir,
-                           is_home=is_home)
+                           is_home=is_home, title="Pages")
 
 
 @app.route("/notes/new-folder", methods=["POST"])
@@ -1763,7 +1777,7 @@ def notes_save():
 
 def _notes_breadcrumbs(rel_path):
     parts = rel_path.replace("\\", "/").split("/") if rel_path else []
-    crumbs = [{"label": "Notes", "path": ""}]
+    crumbs = [{"label": "Pages", "path": ""}]
     running = []
     for i, part in enumerate(parts):
         running.append(part)
@@ -3065,7 +3079,7 @@ def habit_toggle():
 @app.route("/favorites")
 def favorites_page():
     return render_template("favorites.html", tab="favorites",
-                           title="Favorites", now=_now_str(),
+                           title="Pinned pages", now=_now_str(),
                            favorites=svc.get_favorites())
 
 

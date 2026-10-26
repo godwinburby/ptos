@@ -15,14 +15,17 @@
 
 {% if is_home %}
 <div class="card home-banner" style="margin-bottom:12px;">
-  <span style="font-size:13px;">This note is your home page.</span>
+  <span style="font-size:13px;">This page is your home page.</span>
   <a href="/" class="btn btn-ghost" style="margin-left:8px;font-size:12px;">Open home</a>
 </div>
-{% else %}
-<div style="margin-bottom:12px;">
-  <button onclick="makeThisHome()" class="btn btn-ghost" style="font-size:12px;">Make this my home</button>
-</div>
 {% endif %}
+<details style="margin-bottom:12px;position:relative;width:max-content;">
+  <summary class="btn btn-ghost" style="font-size:12px;cursor:pointer;">Page actions</summary>
+  <div style="position:absolute;left:0;top:100%;z-index:20;min-width:180px;padding:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px #0002;">
+    <button type="button" onclick="pinThisPage()" style="display:block;width:100%;text-align:left;padding:7px;border:0;background:transparent;color:var(--text);cursor:pointer;">Pin to menu</button>
+    {% if not is_home %}<button type="button" onclick="makeThisHome()" style="display:block;width:100%;text-align:left;padding:7px;border:0;background:transparent;color:var(--text);cursor:pointer;">Make this my home</button>{% endif %}
+  </div>
+</details>
 
 {% include "_markdown_editor.html" with context %}
 
@@ -32,9 +35,9 @@
 </div>
 
 <div style="margin-top:10px;display:flex;gap:8px;">
-  <button onclick="linkToNote()" class="btn btn-ghost" style="border:1px solid var(--accent,#4a9);color:var(--accent,#4a9);">Link to this note</button>
+  <button onclick="linkToNote()" class="btn btn-ghost" style="border:1px solid var(--accent,#4a9);color:var(--accent,#4a9);">Link to this page</button>
   <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success" style="flex:1;">
-    Save Note
+    Save Page
   </button>
   <button onclick="deleteNote()" class="btn btn-ghost" style="color:var(--danger,#e55);border:1px solid var(--danger,#e55);">
     Delete
@@ -66,7 +69,7 @@ window._mdSaveFn = function(silent, opts) {
       _baseRev = d.rev;
       if (!silent && btn) {
         btn.textContent = "\u2714 Saved";
-        setTimeout(function() { btn.textContent = "Save Note"; }, 2000);
+        setTimeout(function() { btn.textContent = "Save Page"; }, 2000);
       }
       return {ok: true, rev: d.rev};
     }, function() {
@@ -77,13 +80,13 @@ window._mdSaveFn = function(silent, opts) {
     if (e && e.status !== undefined) {
       if (e.status !== 409 && e.status !== 423 && !silent && btn) {
         btn.textContent = "Error \u2014 retry";
-        setTimeout(function() { btn.textContent = "Save Note"; }, 3000);
+        setTimeout(function() { btn.textContent = "Save Page"; }, 3000);
       }
       throw e;
     }
     if (!silent && btn) {
       btn.textContent = "Error \u2014 retry";
-      setTimeout(function() { btn.textContent = "Save Note"; }, 3000);
+      setTimeout(function() { btn.textContent = "Save Page"; }, 3000);
     }
     throw {status: 0, error: String(e && e.message || e)};
   });
@@ -128,6 +131,20 @@ function makeThisHome() {
   .catch(function() { alert("Could not set the home page"); });
 }
 
+function pinThisPage() {
+  var path = {{ rel_path|tojson }};
+  var url = "/notes/edit/" + path.split("/").map(encodeURIComponent).join("/");
+  var name = path.split("/").pop().replace(/\.md$/i, "");
+  fetch("/api/favorites/add", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name:name, url:url})
+  }).then(function(r) { return r.json(); }).then(function(d) {
+    if (!d || !d.ok) throw new Error((d && d.error) || "Could not pin this page");
+    if (window.PtosFavoritesPatch) window.PtosFavoritesPatch(d.favorites);
+    alert("Page pinned to the menu");
+  }).catch(function(e) { alert(e.message || "Could not pin this page"); });
+}
+
 function deleteNote() {
   var name = "{{ rel_path }}".split("/").pop();
   if (!confirm("Delete '" + name + "' permanently?")) return;
@@ -162,7 +179,7 @@ function linkToNote() {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     if (d.ok) {
-      var msg = "Note id: " + d.id + "\nLink target: " + d.target + "\n\nCopied to clipboard. Paste it into a record's links= field or a todo's links: field.";
+      var msg = "Page id: " + d.id + "\nLink target: " + d.target + "\n\nCopied to clipboard. Paste it into a record's links= field or a todo's links: field.";
       if (navigator.clipboard) navigator.clipboard.writeText(d.target);
       alert(msg);
     } else alert(d.error || "Failed");

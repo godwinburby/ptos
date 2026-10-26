@@ -14,7 +14,7 @@
   <link rel="stylesheet" href="{{ av('/static/css/base.css') }}">
   <link rel="stylesheet" href="{{ av('/static/css/base-widgets.css') }}">
 </head>
-<body>
+<body{% if request.args.get('quick_edit') == '1' or request.form.get('quick_edit') == '1' %} class="quick-edit-mode"{% endif %}>
 
 <!-- Values the extracted JS files read (see web_static/js/) -->
 <script>window.PTOS={frozen:{{ 1 if frozen else 0 }},desktop:{{ 1 if desktop_mode else 0 }},pomoMinutes:{{ pomo_minutes|default(25) }},pomoLog:{{ 1 if pomo_log else 0 }},favUrls:{{ fav_urls|default([], true)|tojson }},userName:{{ user_name|default("", true)|tojson }}};</script>
@@ -23,7 +23,7 @@
   <div><a href="/" style="text-decoration:none"><span class="brand">PTOS</span></a><span class="brand-tag">Plain Text OS</span></div>
   <div class="topbar-date">{{ now }}
     {% if last_change.label %}<span class="last-change" data-epoch="{{ last_change.epoch }}" data-prefix="· changed " title="Data last changed: {{ last_change.exact }}">· changed {{ last_change.label }}</span>{% endif %}
-    <button id="fav-star-top" class="fav-star" onclick="toggleFav()" title="Star this page">&#9734;</button>
+    <button id="fav-star-top" class="fav-star" onclick="toggleFav()" title="Pin to menu">&#9734;</button>
   </div>
 </div>
 
@@ -34,18 +34,18 @@
     {% if last_change.label %}<div class="last-change" data-epoch="{{ last_change.epoch }}" data-prefix="Last change: " title="Data last changed: {{ last_change.exact }}">Last change: {{ last_change.label }}</div>{% endif %}
   </div>
   <form action="/search" method="GET" class="sidebar-search">
-    <input type="text" name="q" id="sidebar-search" placeholder="Search records, journal, todos, notes… (/)" autocomplete="off">
+    <input type="text" name="q" id="sidebar-search" placeholder="Search records, journal, todos, pages… (/)" autocomplete="off">
   </form>
   <script src="{{ av('/static/js/sidebar_search.js') }}"></script>
   <div class="sidebar-section" data-section="favorites">
-    Favorites <button id="fav-star-side" class="fav-star" onclick="event.stopPropagation();toggleFav()" title="Star this page">&#9734;</button>
+    Pinned pages <button id="fav-star-side" class="fav-star" onclick="event.stopPropagation();toggleFav()" title="Pin to menu">&#9734;</button>
   </div>
   <div class="sidebar-nav-group" data-group="favorites" id="fav-group">
     {% for fav in favorites %}
     <a href="{{ fav.url }}" class="fav-item" data-url="{{ fav.url }}">{{ fav.name }}</a>
     {% endfor %}
-    <a href="/favorites" class="fav-item fav-manage">Manage favorites…</a>
-    {% if not favorites %}<div class="fav-empty">Star any page with ★</div>{% endif %}
+    <a href="/favorites" class="fav-item fav-manage">Manage pinned pages…</a>
+    {% if not favorites %}<div class="fav-empty">Pin pages here with ★</div>{% endif %}
   </div>
   <nav class="sidebar-nav">
     {% for sec_id, sec_name, items in nav_sections %}
@@ -174,11 +174,11 @@
     </a>
     {% endfor %}
     {% endfor %}
-    <div class="more-menu-section">Favorites</div>
+    <div class="more-menu-section">Pinned pages</div>
     {% for fav in favorites %}
     <a href="{{ fav.url }}" class="more-menu-item fav-more-item">{{ fav.name }}</a>
     {% endfor %}
-    <a href="/favorites" class="more-menu-item fav-more-manage">Manage favorites…</a>
+    <a href="/favorites" class="more-menu-item fav-more-manage">Manage pinned pages…</a>
     <div style="border-top:1px solid var(--border);margin:8px 0;"></div>
     <a href="#" class="more-menu-item" onclick="stopServer();return false;" style="color:var(--error);">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>

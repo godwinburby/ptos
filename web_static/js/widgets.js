@@ -731,6 +731,7 @@ function renderDue(d, opts) {
       '<span class="emb-heat" style="background:' + hc + ';"></span>' +
       '<span class="emb-name">' + esc(r.name) + '</span>' +
       '<span class="emb-due-gap">' + _fmt(r.days) + 'd</span>' + note +
+      '<span class="emb-due-open" style="margin-left:auto;font-size:11px;color:var(--accent);">Open â†’</span>' +
     '</a>';
   }).join("");
   var count = d.full_count != null ? d.full_count

@@ -40,6 +40,11 @@
     <option value="{{ code }}" {% if code == time %}selected{% endif %}>{{ label }}</option>
     {% endfor %}
   </select>
+  <div class="habit-month-nav" aria-label="Habit month navigation" style="display:flex;align-items:center;gap:5px;">
+    <button type="button" class="btn btn-sm btn-ghost" onclick="shiftHabitMonth(-1)" aria-label="Previous month" title="Previous month">‹</button>
+    <span id="habit-month-nav-label" style="min-width:88px;text-align:center;font-size:12px;color:var(--sub);"></span>
+    <button type="button" class="btn btn-sm btn-ghost" onclick="shiftHabitMonth(1)" aria-label="Next month" title="Next month">›</button>
+  </div>
   {% with prefix="hab-" %}
   {% include "_time_picker.html" %}
   {% endwith %}
@@ -78,6 +83,28 @@ var tp;
   window.updateUrl = updateUrl;
   window.onTimeChange = function(val) { tp.onSelectChange(val); };
 
+  window.shiftHabitMonth = function(delta) {
+    var current = tp.getTime();
+    var match = /^(\d{4})-(\d{2})$/.exec(current || "");
+    var base = match
+      ? new Date(Number(match[1]), Number(match[2]) - 1, 1)
+      : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    base.setMonth(base.getMonth() + Number(delta || 0));
+    var value = base.getFullYear() + "-" + String(base.getMonth() + 1).padStart(2, "0");
+    document.getElementById("hab-time-select").value = "month";
+    tp.setTime("month", value);
+    updateUrl();
+  };
+
+  function updateHabitMonthLabel() {
+    var value = tp.getTime();
+    var m = /^(\d{4})-(\d{2})$/.exec(value || "");
+    var date = m ? new Date(Number(m[1]), Number(m[2]) - 1, 1)
+      : new Date(new Date().getFullYear(), new Date().getMonth(), 1);
+    document.getElementById("habit-month-nav-label").textContent =
+      date.toLocaleDateString(undefined, {month:"short", year:"numeric"});
+  }
+
   (function() {
     var params = new URLSearchParams(window.location.search);
     var time = params.get('time');
@@ -88,6 +115,7 @@ var tp;
     } else if (time) {
       tp.setTime(time);
     }
+    updateHabitMonthLabel();
   })();
 })();
 </script>

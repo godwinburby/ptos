@@ -67,7 +67,7 @@ setTimeout(function() {
 
   {% if notes %}
   <div class="card" style="margin-bottom:12px;">
-    <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Notes <span style="font-weight:400;color:var(--sub);font-size:13px;">({{ notes|length }} match{{ 'es' if notes|length != 1 }})</span></div>
+    <div style="font-weight:700;font-size:15px;margin-bottom:10px;">Pages <span style="font-weight:400;color:var(--sub);font-size:13px;">({{ notes|length }} match{{ 'es' if notes|length != 1 }})</span></div>
     {% for n in notes %}
     <div style="margin-bottom:8px;">
       <a href="/notes/edit/{{ n.rel_path }}" style="font-size:13px;color:var(--accent);font-weight:600;">{{ n.title }}</a>

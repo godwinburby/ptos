@@ -68,6 +68,12 @@
     .topbar-date { font-size: 12px; color: var(--sub); }
     .last-change { font-size: 11px; color: var(--sub); opacity: .85; }
     .sidebar { display: none; }
+    body.quick-edit-mode .topbar,
+    body.quick-edit-mode .sidebar,
+    body.quick-edit-mode .bottom-nav,
+    body.quick-edit-mode .field-popup,
+    body.quick-edit-mode #dt-picker-overlay { display: none !important; }
+    body.quick-edit-mode .main { padding: 14px !important; margin: 0 !important; width: 100% !important; }
 
     /* ── Main scroll area ── */
     .main {

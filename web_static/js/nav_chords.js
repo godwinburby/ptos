@@ -269,9 +269,9 @@ function toggleMoreMenu(e) {
         <tbody>
           <tr><td><kbd>H</kbd></td><td>Home</td></tr>
           <tr><td><kbd>A</kbd></td><td>Add Record</td></tr>
-          <tr><td><kbd>T</kbd></td><td>Todo</td></tr>
+          <tr><td><kbd>T</kbd></td><td>Todos</td></tr>
           <tr><td><kbd>J</kbd></td><td>Journal</td></tr>
-          <tr><td><kbd>N</kbd></td><td>Notes</td></tr>
+          <tr><td><kbd>N</kbd></td><td>Pages</td></tr>
           <tr><td><kbd>F</kbd></td><td>Search</td></tr>
           <tr><td><kbd>R</kbd></td><td>Routines</td></tr>
           <tr><td><kbd>Y</kbd></td><td>Record Types</td></tr>
@@ -297,7 +297,7 @@ function toggleMoreMenu(e) {
           <tr><td><kbd>Y</kbd></td><td>Calendar</td></tr>
           <tr><td><kbd>R</kbd></td><td>Thresholds</td></tr>
           <tr><td><kbd>V</kbd></td><td>Entity</td></tr>
-          <tr><td><kbd>F</kbd></td><td>Favorites</td></tr>
+          <tr><td><kbd>F</kbd></td><td>Pinned pages</td></tr>
           <tr><td><kbd>U</kbd></td><td>Query Builder</td></tr>
           <tr><td><kbd>C</kbd></td><td>Schema Builder</td></tr>
           <tr><td><kbd>E</kbd></td><td>Log Editor</td></tr>
@@ -413,7 +413,7 @@ function toggleMoreMenu(e) {
       return;
     }
 
-    // N — go to Notes
+    // N — go to Pages
     if (key === "n" && !_g) {
       e.preventDefault();
       window.location = "/notes";
@@ -441,7 +441,7 @@ function toggleMoreMenu(e) {
       return;
     }
 
-    // T — go to Todo page
+    // T — go to Todos page
     if (key === "t" && !_g) {
       e.preventDefault();
       window.location = "/todo";

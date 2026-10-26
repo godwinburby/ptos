@@ -7,6 +7,14 @@ Format: `[version or date] — description`
 
 ## 2026-10-26
 
+### Pages and Home actions
+
+- The Notes interface is labeled Pages. Page creation now selects a destination folder and Blank, Dashboard, Project, or folder templates. Page menus offer Pin to menu and Make this my home; Favorites now appears as Pinned pages.
+- Home has an edit mode for configuring, duplicating, reordering, and removing widget cards, with phone and desktop previews and an undo action. Changes save through the existing revision-checked page save route.
+- The Habits controls now include previous and next month navigation. Due rows continue to open their records, with an explicit Open action; threshold rows remain links in the shared preview renderer.
+- Browse tables now offer an optional edit-in-dialog action that reuses the existing record edit form.
+- The Browse edit dialog hides the embedded page navigation, and history tags in Add/Edit forms are collapsed until opened.
+
 ### Page migration Part A fixes
 
 - Board widget results now serialize set-like values as JSON arrays, and widget resolution isolates serialization failures to one item with a generic client error. HTTP coverage checks every registered widget kind and failure isolation.

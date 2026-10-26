@@ -9,6 +9,9 @@
 Record and analyse life, work, and finance events using structured plain-text logs.
 No database. No cloud. You own the data completely.
 
+In the web interface, **Pages** are your Markdown notes; built-in screens keep
+their names, such as Todos and Habits.
+
 ---
 
 ## Table of Contents

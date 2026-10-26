@@ -23,6 +23,7 @@ function RecordTable(opts) {
   opts           = opts || {};
   var cid        = opts.containerId;
   var enableBulk = opts.enableBulk !== false;
+  var quickEdit = opts.quickEdit === true;
   var onRefresh  = opts.onRefresh || function(){};
   var _fieldTypes = opts.fieldTypes || {};
   var exportName = opts.exportName || "export";
@@ -70,7 +71,9 @@ function RecordTable(opts) {
     selectAll: uid + "-select-all",
     table:     uid + "-table",
     tbody:     uid + "-tbody",
-    pagination: uid + "-pagination"
+    pagination: uid + "-pagination",
+    quickEdit: uid + "-quick-edit",
+    quickFrame: uid + "-quick-frame"
   };
 
   // ── delegated action wiring (once per instance) ───────────────────────────
@@ -90,6 +93,9 @@ function RecordTable(opts) {
         if (a === "export") self._export();
         else if (a === "prev") self._prevPage();
         else if (a === "next") self._nextPage();
+        else if (a === "quickedit") {
+          try { _openQuickEdit(JSON.parse(decodeURIComponent(act.dataset.row))); } catch (err) {}
+        }
         else if (a === "opendel") {
           try { self._openDel(JSON.parse(act.dataset.row)); } catch (err) {}
         }
@@ -108,6 +114,7 @@ function RecordTable(opts) {
       if (e.target === ge(M.bkSet)) { self._bkSetClose(); return; }
       var act = e.target.closest && e.target.closest("[data-rt]");
       if (!act) return;
+      if (act.dataset.rt === "quickclose") { _closeQuickEdit(); return; }
       switch (act.dataset.rt) {
         case "del": self._del(); break;
         case "delclose": self._delClose(); break;
@@ -197,12 +204,63 @@ function RecordTable(opts) {
         '</div>';
     }
 
+    if (quickEdit) {
+      html +=
+        '<div id="'+M.quickEdit+'" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:950;align-items:center;justify-content:center;padding:12px;">' +
+          '<div style="position:relative;width:min(980px,100%);height:min(92vh,900px);background:var(--card);border-radius:12px;overflow:hidden;box-shadow:0 8px 36px rgba(0,0,0,.3);">' +
+            '<button type="button" class="btn btn-ghost btn-sm" data-rt="quickclose" style="position:absolute;right:8px;top:8px;z-index:2;">Close</button>' +
+            '<iframe id="'+M.quickFrame+'" title="Edit record" style="width:100%;height:100%;border:0;background:var(--bg);"></iframe>' +
+          '</div>' +
+        '</div>';
+    }
+
     var wrap = document.createElement("div");
     wrap.id = M.wrap;
     wrap.innerHTML = html;
     document.body.appendChild(wrap);
 
+    if (quickEdit) {
+      var quickModal = ge(M.quickEdit);
+      var quickFrame = ge(M.quickFrame);
+      quickFrame.addEventListener("load", function () {
+        try {
+          if (quickModal.style.display !== "flex") return;
+          if (quickFrame.contentWindow.location.pathname !== "/edit") {
+            quickModal.style.display = "none";
+            quickFrame.src = "about:blank";
+            onRefresh();
+          }
+        } catch (e) {}
+      });
+      quickModal.addEventListener("click", function (e) {
+        if (e.target === quickModal) _closeQuickEdit();
+      });
+    }
+
     _wire();
+  }
+
+  function _openQuickEdit(row) {
+    if (!quickEdit || !row || !row._filepath || !row._line) return;
+    var modal = ge(M.quickEdit);
+    var frame = ge(M.quickFrame);
+    if (!modal || !frame) return;
+    var qs = new URLSearchParams({
+      filepath: row._filepath,
+      lineno: row._lineno == null ? "" : String(row._lineno),
+      line: row._line,
+      return_to: opts.returnTo || window.location.pathname,
+      quick_edit: "1"
+    });
+    modal.style.display = "flex";
+    frame.src = "/edit?" + qs.toString();
+  }
+
+  function _closeQuickEdit() {
+    var modal = ge(M.quickEdit);
+    var frame = ge(M.quickFrame);
+    if (modal) modal.style.display = "none";
+    if (frame) frame.src = "about:blank";
   }
 
   // ── summary bar ────────────────────────────────────────────────────────────
@@ -260,8 +318,12 @@ function RecordTable(opts) {
           : '<td style="width:32px;"></td>';
       }
 
+      var quickAction = quickEdit
+        ? '<button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" data-rt="quickedit" data-row="'+encodeURIComponent(JSON.stringify(r))+'" title="Quick edit">Edit in dialog</button> '
+        : "";
       var acts = r._line
         ? '<td style="white-space:nowrap;">' +
+          quickAction +
           '<a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;" href="/edit?filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to='+encodeURIComponent(returnTo)+'" title="Edit">✎</a> ' +
           '<a class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--warn);" href="/edit?convert=1&filepath='+encodeURIComponent(r._filepath)+'&lineno='+r._lineno+'&line='+encodeURIComponent(r._line)+'&return_to='+encodeURIComponent(returnTo)+'" title="Convert to another type">⇄</a> ' +
           '<button class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:12px;color:var(--error);" data-rt="opendel" data-row=\''+JSON.stringify(r).replace(/'/g,"&#39;")+'\'>✕</button>' +

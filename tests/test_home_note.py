@@ -400,7 +400,7 @@ class TestNotesEditorAndSettings:
     def test_notes_edit_marks_home(self):
         _client().get("/")
         body = _client().get("/notes/edit/Home.md").get_data(as_text=True)
-        assert "This note is your home page." in body
+        assert "This page is your home page." in body
         assert "Make this my home" not in body
 
     def test_notes_edit_offers_make_home(self):

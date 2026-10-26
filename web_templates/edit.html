@@ -68,6 +68,9 @@
   <input type="hidden" name="convert"   value="1">
   {% endif %}
   <input type="hidden" name="return_to" value="{{ return_to }}">
+  {% if request.args.get('quick_edit') == '1' or request.form.get('quick_edit') == '1' %}
+  <input type="hidden" name="quick_edit" value="1">
+  {% endif %}
 
   <div class="card">
     <!-- date -->
@@ -577,10 +580,15 @@ document.getElementById("edit-form").addEventListener("submit", function() {
     );
     const extra = histTags.filter(t => !existing.has(t));
     if (!extra.length) return;
-    const divLabel = document.createElement("span");
-    divLabel.style.cssText = "font-size:11px;color:var(--sub);width:100%;margin-top:6px;display:block;";
-    divLabel.textContent = "from history:";
-    chipGroup.appendChild(divLabel);
+    const historySection = document.createElement("details");
+    historySection.style.cssText = "width:100%;margin-top:6px;";
+    const summary = document.createElement("summary");
+    summary.textContent = `History tags (${extra.length})`;
+    summary.style.cssText = "font-size:12px;color:var(--sub);cursor:pointer;user-select:none;margin-bottom:6px;";
+    const historyChips = document.createElement("div");
+    historyChips.className = "chip-group";
+    historySection.append(summary, historyChips);
+    chipGroup.appendChild(historySection);
     extra.forEach(tag => {
       const label = document.createElement("label");
       label.className = "chip";
@@ -588,7 +596,7 @@ document.getElementById("edit-form").addEventListener("submit", function() {
       label.innerHTML = `<input type="checkbox" name="tag" value="${tag}"
         onchange="this.closest('.chip').classList.toggle('selected', this.checked)">
         ${tag}`;
-      chipGroup.appendChild(label);
+      historyChips.appendChild(label);
     });
   }
 })();

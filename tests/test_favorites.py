@@ -407,7 +407,7 @@ class TestFavoritesShell:
     def test_sidebar_group_renders(self, client):
         html = self._home(client)
         assert 'data-group="favorites"' in html
-        assert "Manage favorites" in html
+        assert "Manage pinned pages" in html
 
     def test_sidebar_lists_favourite(self, client):
         svc.add_favorite("Buried note", "/notes/edit/deep/x.md")
@@ -417,7 +417,7 @@ class TestFavoritesShell:
 
     def test_sidebar_empty_hint(self, client):
         html = self._home(client)
-        assert "Star any page" in html
+        assert "Pin pages here" in html
 
     def test_star_buttons_present(self, client):
         html = self._home(client)
@@ -506,7 +506,7 @@ class TestFavoritesChord:
         with open(path, encoding="utf-8") as f:
             text = f.read()
         assert '"g f": "/favorites"' in text
-        assert "Favorites" in text
+        assert "Pinned pages" in text
 
 
 # ── starter parity ────────────────────────────────────────────────────────────

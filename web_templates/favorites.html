@@ -1,14 +1,14 @@
 {% extends "base.html" %}
 {% block content %}
 
-<div class="page-title">Favorites</div>
+<div class="page-title">Pinned pages</div>
 <div style="font-size:13px;color:var(--sub);margin-bottom:14px;">
-  Bookmark any PTOS page. Star a page with the ★ button, or add one below.
+  Pin any PTOS page to the menu, or add one below.
   Shortcuts: <kbd style="font-size:10px;">G</kbd> <kbd style="font-size:10px;">F</kbd> opens this page.
 </div>
 
 <div class="card" style="margin-bottom:14px;">
-  <div style="font-size:14px;font-weight:700;margin-bottom:10px;">Add a favorite</div>
+  <div style="font-size:14px;font-weight:700;margin-bottom:10px;">Add a pinned page</div>
   <div style="display:flex;gap:8px;flex-wrap:wrap;">
     <input type="text" id="fav-name" placeholder="Name (e.g. Northside clinic note)"
            style="flex:1;min-width:160px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);">
@@ -44,7 +44,7 @@
 {% else %}
 <div class="card">
   <div style="text-align:center;padding:30px;color:var(--sub);">
-    No favorites yet. Star a page with the ★ button, or add one above.
+    No pinned pages yet. Pin a page from its menu, or add one above.
   </div>
 </div>
 {% endif %}
@@ -85,7 +85,7 @@ function favRow(el) { return el.closest(".fav-row"); }
 function favUrl(el) { return favRow(el).getAttribute("data-url"); }
 
 function favRemove(el) {
-  if (!confirm("Remove this favorite?")) return;
+  if (!confirm("Unpin this page from the menu?")) return;
   favPost("/api/favorites/remove", { url: favUrl(el) }).then(function (res) {
     if (res.ok) location.reload();
     else favMsg(res.error || "Failed to remove", true);
