@@ -103,11 +103,29 @@ if [ ! -d "$DATA_DIR/config" ]; then
 fi
 
 # ── Install runtime dependencies if missing ──────────────────────────────────
-if ! $PYTHON -c "import flask" 2>/dev/null; then
+if [ "${PTOS_FORCE_PIP:-0}" = "1" ] || ! $PYTHON -c "import flask, tomli_w" 2>/dev/null; then
     echo ""
     echo "--- Installing runtime dependencies (flask, tomli-w) ---"
-    $PYTHON -m pip install -r requirements.txt --break-system-packages --quiet
-    echo "Dependencies installed."
+    if ! $PYTHON -m pip install -r "$PTOS_DIR/requirements.txt" --break-system-packages --quiet; then
+        echo "Retrying with full pip output..."
+        if ! $PYTHON -m pip install -r "$PTOS_DIR/requirements.txt" --break-system-packages; then
+            echo ""
+            echo "ERROR: Could not install Python packages required by PTOS."
+            echo "Run this exact command, then re-run the launcher:"
+            echo ""
+            echo "  \"$PYTHON\" -m pip install -r \"$PTOS_DIR/requirements.txt\" --break-system-packages"
+            exit 1
+        fi
+    fi
+    if ! $PYTHON -c "import flask, tomli_w" 2>/dev/null; then
+        echo ""
+        echo "ERROR: PTOS dependencies are missing (flask / tomli-w)."
+        echo "Run this exact command, then re-run the launcher:"
+        echo ""
+        echo "  \"$PYTHON\" -m pip install -r \"$PTOS_DIR/requirements.txt\" --break-system-packages"
+        exit 1
+    fi
+    echo "Dependencies ready."
 fi
 
 # ── First-time init (only if config/ doesn't exist) ─────────────────────────
@@ -180,6 +198,16 @@ elif command -v fuser &>/dev/null; then
     fuser -k "$PTOS_PORT"/tcp 2>/dev/null || true
 fi
 echo "Port $PTOS_PORT ready."
+
+# ── Never start the server with missing runtime deps ────────────────────────
+if ! $PYTHON -c "import flask, tomli_w" 2>/dev/null; then
+    echo ""
+    echo "ERROR: PTOS dependencies are missing (flask / tomli-w)."
+    echo "Run this exact command, then re-run the launcher:"
+    echo ""
+    echo "  \"$PYTHON\" -m pip install -r \"$PTOS_DIR/requirements.txt\" --break-system-packages"
+    exit 1
+fi
 
 # ── Start Flask, then open browser ──────────────────────────────────────────
 echo ""

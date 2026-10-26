@@ -54,6 +54,18 @@ class TestAndroidLauncher:
     def test_fetch_failure_is_reported(self):
         assert "Update check failed (offline?)" in self.text
 
+    def test_dependency_gate_covers_flask_and_tomli_w(self):
+        assert 'import flask, tomli_w' in self.text
+        assert 'import flask" 2>/dev/null' not in self.text
+
+    def test_dependency_failure_is_fatal(self):
+        assert "Could not install Python packages required by PTOS." in self.text
+        assert "PTOS dependencies are missing (flask / tomli-w)." in self.text
+        assert self.text.count("exit 1") >= 2
+
+    def test_force_pip_env_is_honored(self):
+        assert "PTOS_FORCE_PIP" in self.text
+
     def test_widget_shortcut_wrapper(self):
         assert ".shortcuts/run_ptos.sh" in self.text
         assert 'exec bash \\"$PTOS_DIR/run_ptos_android.sh\\"' in self.text
@@ -113,6 +125,18 @@ class TestLinuxLauncher:
     def test_fetch_failure_is_reported(self):
         assert "Update check failed (offline?)" in self.text
 
+    def test_dependency_gate_covers_flask_and_tomli_w(self):
+        assert 'import flask, tomli_w' in self.text
+        assert 'import flask" 2>/dev/null' not in self.text
+
+    def test_dependency_failure_is_fatal(self):
+        assert "Could not install Python packages required by PTOS." in self.text
+        assert "PTOS dependencies are missing (flask / tomli-w)." in self.text
+        assert self.text.count("exit 1") >= 2
+
+    def test_force_pip_env_is_honored(self):
+        assert "PTOS_FORCE_PIP" in self.text
+
     def test_no_hardcoded_port(self):
         assert "localhost:5000" not in self.text
 
@@ -167,6 +191,44 @@ class TestWindowsLauncher:
         assert "Updated to latest version." in self.text
         assert "Update check failed (offline?)" in self.text
         assert "Not a git repo - skipping update check." in self.text
+
+    def test_python_probes_prefer_specific_versions(self):
+        for probe in ('"py", "-3.13"', '"py", "-3.12"', '"py", "-3"',
+                      '"py"', '"python"'):
+            assert probe in self.text, probe
+
+    def test_python_is_normalized_via_sys_executable(self):
+        assert "sys.executable" in self.text
+        assert "Start-Process -FilePath $pythonExe" in self.text
+        assert "& $pythonExe ptos.py --init" in self.text
+        assert "& $pythonExe ptos.py --sync-check" in self.text
+
+    def test_post_winget_falls_back_to_known_locations(self):
+        assert "LocalAppData" in self.text
+        for folder in ("Python313", "Python312", "Python311"):
+            assert folder in self.text, folder
+
+    def test_re_run_message_after_failed_python_install(self):
+        assert "Python 3.11+ was not found after installation." in self.text
+        assert "Run run_ptos.bat again." in self.text
+        assert "winget install -e --id Python.Python.3.13" in self.text
+
+    def test_dependency_gate_covers_flask_and_tomli_w(self):
+        assert "import flask, tomli_w" in self.text
+        assert 'import flask" 2>$null' not in self.text
+
+    def test_dependency_failure_is_fatal(self):
+        assert "Could not install Python packages required by PTOS." in self.text
+        assert "PTOS dependencies are missing (flask / tomli-w)." in self.text
+        assert "WARNING: dependency install may have failed." not in self.text
+
+    def test_force_pip_env_is_honored(self):
+        assert "PTOS_FORCE_PIP" in self.text
+
+    def test_server_start_is_gated_on_deps(self):
+        launch = self.text.index("Start-Process -FilePath $pythonExe")
+        gate = self.text.index("PTOS dependencies are missing (flask / tomli-w).")
+        assert gate < launch
 
     def test_ps1_parses(self):
         ps = shutil.which("powershell") or shutil.which("pwsh")

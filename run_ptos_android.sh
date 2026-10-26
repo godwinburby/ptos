@@ -101,9 +101,28 @@ if [ ! -d "$DATA_DIR/config" ]; then
 fi
 
 # ── Install runtime dependencies if missing ──────────────────────────────────
-if ! python -c "import flask" 2>/dev/null; then
+if [ "${PTOS_FORCE_PIP:-0}" = "1" ] || ! python -c "import flask, tomli_w" 2>/dev/null; then
     echo "Installing runtime dependencies (flask, tomli-w)..."
-    python -m pip install -r "$PTOS_DIR/requirements.txt" --quiet
+    if ! python -m pip install -r "$PTOS_DIR/requirements.txt" --quiet; then
+        echo "Retrying with full pip output..."
+        if ! python -m pip install -r "$PTOS_DIR/requirements.txt"; then
+            echo ""
+            echo "ERROR: Could not install Python packages required by PTOS."
+            echo "Run this exact command, then re-run the launcher:"
+            echo ""
+            echo "  python -m pip install -r \"$PTOS_DIR/requirements.txt\""
+            exit 1
+        fi
+    fi
+    if ! python -c "import flask, tomli_w" 2>/dev/null; then
+        echo ""
+        echo "ERROR: PTOS dependencies are missing (flask / tomli-w)."
+        echo "Run this exact command, then re-run the launcher:"
+        echo ""
+        echo "  python -m pip install -r \"$PTOS_DIR/requirements.txt\""
+        exit 1
+    fi
+    echo "Dependencies ready."
 fi
 
 # ── Warn if termux-api missing ─────────────────────────────────────────────
@@ -187,6 +206,16 @@ PTOS_URL="http://localhost:$PTOS_PORT"
 
 # ── Kill anything already on the port ──────────────────────────────────────
 pkill -f "python.*ptos_web.py" 2>/dev/null || true
+
+# ── Never start the server with missing runtime deps ────────────────────────
+if ! python -c "import flask, tomli_w" 2>/dev/null; then
+    echo ""
+    echo "ERROR: PTOS dependencies are missing (flask / tomli-w)."
+    echo "Run this exact command, then re-run the launcher:"
+    echo ""
+    echo "  python -m pip install -r \"$PTOS_DIR/requirements.txt\""
+    exit 1
+fi
 
 # ── Start Flask, then open browser ──────────────────────────────────────────
 echo ""

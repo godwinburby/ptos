@@ -21,18 +21,59 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $scriptDir
 
 # -- 1. Python detection + auto-install --
-function Get-PythonCmd {
-    foreach ($cmd in @("py", "python")) {
-        if (Get-Command $cmd -ErrorAction SilentlyContinue) {
-            $ver = & $cmd -c "import sys; print(sys.version_info>=(3,11))" 2>$null
-            if ($ver -eq "True") { return $cmd }
+# Ordered probes: py -3.13, py -3.12, py -3, py, python. The first that
+# reports >= 3.11 wins, and its own sys.executable is used for every later
+# step so one interpreter does the version check, pip, ptos.py and ptos_web.py.
+function Test-PythonLauncher([string[]]$Launcher) {
+    if (-not (Get-Command $Launcher[0] -ErrorAction SilentlyContinue)) { return $null }
+    $extra = @()
+    if ($Launcher.Count -gt 1) { $extra = $Launcher[1..($Launcher.Count - 1)] }
+
+    $probe = $extra + @("-c", "import sys; print(sys.version_info>=(3,11))")
+    $ver = & $Launcher[0] @probe 2>$null
+    if ($LASTEXITCODE -ne 0 -or "$ver".Trim() -ne "True") { return $null }
+
+    $exeProbe = $extra + @("-c", "import sys; print(sys.executable)")
+    $exe = & $Launcher[0] @exeProbe 2>$null
+    if ($LASTEXITCODE -ne 0 -or -not $exe) { return $null }
+    return "$exe".Trim()
+}
+
+function Get-PythonExe {
+    $launchers = @(
+        @("py", "-3.13"),
+        @("py", "-3.12"),
+        @("py", "-3"),
+        @("py"),
+        @("python")
+    )
+    foreach ($launcher in $launchers) {
+        $exe = Test-PythonLauncher $launcher
+        if ($exe) { return $exe }
+    }
+    return $null
+}
+
+function Get-PythonFromKnownLocations {
+    $roots = @(
+        (Join-Path $env:LocalAppData "Programs\Python"),
+        $env:ProgramFiles
+    )
+    foreach ($root in $roots) {
+        if (-not $root) { continue }
+        foreach ($ver in @("Python313", "Python312", "Python311")) {
+            $candidate = Join-Path $root "$ver\python.exe"
+            if (-not (Test-Path $candidate)) { continue }
+            $exe = Test-PythonLauncher @($candidate)
+            if ($exe) { return $exe }
         }
     }
     return $null
 }
 
-$python = Get-PythonCmd
-if (-not $python) {
+$pythonExe = Get-PythonExe
+if (-not $pythonExe) { $pythonExe = Get-PythonFromKnownLocations }
+if (-not $pythonExe) {
     if (Get-Command winget -ErrorAction SilentlyContinue) {
         Write-Host "Python not found. Installing via winget..."
         winget install -e --id Python.Python.3.13 --silent `
@@ -40,18 +81,20 @@ if (-not $python) {
 
         $env:Path = [System.Environment]::GetEnvironmentVariable("Path","Machine") + ";" +
                     [System.Environment]::GetEnvironmentVariable("Path","User")
-        $python = Get-PythonCmd
+        $pythonExe = Get-PythonExe
+        if (-not $pythonExe) { $pythonExe = Get-PythonFromKnownLocations }
     }
-    if (-not $python) {
+    if (-not $pythonExe) {
         Write-Host ""
-        Write-Host "ERROR: Python 3.11+ is required."
-        Write-Host "Install it from https://python.org/downloads (tick 'Add to PATH'),"
-        Write-Host "or close this window and re-run if you just installed it."
+        Write-Host "ERROR: Python 3.11+ was not found after installation."
+        Write-Host "1. Close this window completely."
+        Write-Host "2. Run run_ptos.bat again."
+        Write-Host "Or install manually: winget install -e --id Python.Python.3.13"
         Read-Host "Press Enter to exit"
         exit 1
     }
 }
-Write-Host "Using $python"
+Write-Host "Using Python: $pythonExe"
 
 # -- 2. Git detection + auto-install --
 if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
@@ -124,28 +167,45 @@ if (Test-Path $homeFile) {
 $env:PTOS_HOME = $dataDir
 
 # -- 7. Install runtime dependencies (requirements.txt) --
-& $python -c "import flask" 2>$null
-if ($LASTEXITCODE -ne 0) {
+function Test-PtosDeps([string]$Exe) {
+    & $Exe -c "import flask, tomli_w" 2>$null
+    return ($LASTEXITCODE -eq 0)
+}
+
+$forcePip = $env:PTOS_FORCE_PIP -eq "1"
+if ($forcePip -or -not (Test-PtosDeps $pythonExe)) {
     Write-Step "Installing runtime dependencies (flask, tomli-w)"
-    & $python -m pip install -r "$ptosDir\requirements.txt" --quiet
+    & $pythonExe -m pip install -r "$ptosDir\requirements.txt" --quiet
     if ($LASTEXITCODE -ne 0) {
-        & $python -m pip install -r "$ptosDir\requirements.txt"
+        Write-Host "Retrying with full pip output..."
+        & $pythonExe -m pip install -r "$ptosDir\requirements.txt"
         if ($LASTEXITCODE -ne 0) {
-            Write-Host "WARNING: dependency install may have failed."
-            Write-Host "You can try manually:  $python -m pip install -r `"$ptosDir\requirements.txt`""
-        } else {
-            Write-Host "Dependencies installed."
+            Write-Host ""
+            Write-Host "ERROR: Could not install Python packages required by PTOS."
+            Write-Host "Run this exact command, then re-run run_ptos.bat:"
+            Write-Host ""
+            Write-Host "  `"$pythonExe`" -m pip install -r `"$ptosDir\requirements.txt`""
+            Read-Host "Press Enter to exit"
+            exit 1
         }
-    } else {
-        Write-Host "Dependencies ready."
     }
+    if (-not (Test-PtosDeps $pythonExe)) {
+        Write-Host ""
+        Write-Host "ERROR: PTOS dependencies are missing (flask / tomli-w)."
+        Write-Host "Run this exact command, then re-run run_ptos.bat:"
+        Write-Host ""
+        Write-Host "  `"$pythonExe`" -m pip install -r `"$ptosDir\requirements.txt`""
+        Read-Host "Press Enter to exit"
+        exit 1
+    }
+    Write-Host "Dependencies ready."
 }
 
 # -- 8. First-time init (only if config/ doesn't exist) --
 $configDir = Join-Path $dataDir "config"
 if (-not (Test-Path $configDir)) {
     Write-Step "Initialising PTOS"
-    & $python ptos.py --init
+    & $pythonExe ptos.py --init
     if ($LASTEXITCODE -ne 0) {
         Write-Host "ERROR: ptos --init failed."
         Read-Host "Press Enter to exit"
@@ -155,7 +215,7 @@ if (-not (Test-Path $configDir)) {
     Write-Step "Your Name"
     $userName = Read-Host "Enter your name (leave blank for 'User')"
     if ($userName) {
-        & $python ptos.py --set-name $userName
+        & $pythonExe ptos.py --set-name $userName
         if ($LASTEXITCODE -eq 0) {
             Write-Host "Name set to: $userName"
         } else {
@@ -168,7 +228,7 @@ if (-not (Test-Path $configDir)) {
 }
 
 # -- 8b. Syncthing detection (Windows runs its own daemon; never started here) --
-& $python ptos.py --sync-check 2>$null | Out-Null
+& $pythonExe ptos.py --sync-check 2>$null | Out-Null
 if ($LASTEXITCODE -ne 0) {
     Write-Host ""
     Write-Host "Syncthing not detected. Install it from https://syncthing.net/downloads/"
@@ -216,13 +276,24 @@ if ($conn) {
 }
 Write-Host "Port 5000 ready."
 
+# -- 9b. Never start the server with missing runtime deps --
+if (-not (Test-PtosDeps $pythonExe)) {
+    Write-Host ""
+    Write-Host "ERROR: PTOS dependencies are missing (flask / tomli-w)."
+    Write-Host "Run this exact command, then re-run run_ptos.bat:"
+    Write-Host ""
+    Write-Host "  `"$pythonExe`" -m pip install -r `"$ptosDir\requirements.txt`""
+    Read-Host "Press Enter to exit"
+    exit 1
+}
+
 # -- 10. Start Flask and open browser --
 Write-Banner "Starting PTOS Web Server"
 Write-Host "Open in browser: http://localhost:5000"
 Write-Host "Press Ctrl+C in this window to stop the server."
 Write-Host ""
 
-$proc = Start-Process -FilePath $python -ArgumentList "ptos_web.py" `
+$proc = Start-Process -FilePath $pythonExe -ArgumentList "ptos_web.py" `
     -PassThru -NoNewWindow
 
 # Kill Flask when PowerShell exits

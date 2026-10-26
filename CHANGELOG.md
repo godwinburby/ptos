@@ -5,6 +5,18 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-26
+
+### Windows launcher reliability
+
+- **One resolved interpreter** — `run_ptos.ps1` now probes `py -3.13`, `py -3.12`, `py -3`, `py`, then `python` (first ≥3.11 wins), normalizes the choice via `sys.executable`, and uses that exact path for pip, `--init`, `--set-name`, `--sync-check` and `ptos_web.py`.
+- **Post-winget re-detect** — after installing Python, the launcher re-runs the full probe and falls back to `%LocalAppData%\Programs\Python\Python313|312|311\python.exe` (and `%ProgramFiles%`); if it still cannot find one it exits 1 with the close/re-run and manual `winget` instructions.
+- **Full dependency gate** — the Flask-only check is gone: launch requires `import flask, tomli_w`, runs `"$pythonExe" -m pip install -r requirements.txt` when needed (or with `PTOS_FORCE_PIP=1`), retries verbose, re-checks imports, and **exits 1 without starting the server** on install/import failure. The import check is repeated just before launch.
+- **Linux/Android parity** — both shell launchers use the same flask+tomli_w gate, honor `PTOS_FORCE_PIP=1`, retry pip verbosely, and hard-fail (exit 1) instead of launching with missing deps.
+- **Tests:** extended `tests/test_launch_scripts.py` (probe order, `sys.executable` normalization, known-location fallback, fatal dependency paths, force-pip, pre-launch gate ordering, shell parity).
+
+---
+
 ## 2026-10-24
 
 ### Markdown widget add flow
