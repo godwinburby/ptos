@@ -285,7 +285,7 @@ class TestWidgetCatalog:
         cat = svc.get_widget_catalog()
         kinds = {k["kind"]: k for k in cat["kinds"]}
         for name in ("capture", "quick_add", "quick_add_multi", "journal",
-                     "todo_summary"):
+                     "todo_summary", "time_picker"):
             assert kinds[name]["quick_add"] is True
             limit = next(f for f in kinds[name]["fields"]
                          if f["key"] == "limit")

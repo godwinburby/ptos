@@ -169,6 +169,17 @@ class TestTemplateGating:
 
 
 class TestFallback:
+    def test_invalid_home_path_falls_back_and_warns_once(self, monkeypatch, caplog):
+        monkeypatch.setattr(svc, "_home_page_raw", lambda: "../outside.md")
+        monkeypatch.setattr(svc, "_HOME_PAGE_INVALID_LOGGED", False)
+        assert svc.get_home_page() is None
+        assert svc.get_home_page() is None
+        assert sum("Ignoring invalid [home] page value" in r.message
+                   for r in caplog.records) == 1
+        result = svc.svc_get_home_note()
+        assert result == {"mode": "fallback", "reason": "invalid"}
+        assert not os.path.exists(ptos._safe_path("Home.md"))
+
     def test_cleared_setting_falls_back_without_creating(self):
         _client().get("/")
         svc.clear_home_page()

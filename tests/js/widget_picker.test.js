@@ -6,7 +6,7 @@ const { JSDOM } = require("jsdom");
 
 const ROOT = path.join(__dirname, "..", "..");
 
-function setup() {
+function setup(savedTodos = ["default"]) {
   const dom = new JSDOM("<!doctype html><body></body>", { url: "http://ptos.test" });
   globalThis.window = dom.window;
   globalThis.document = dom.window.document;
@@ -29,7 +29,7 @@ function setup() {
       {id:"capture",label:"Capture",count:3},{id:"projects",label:"Projects",count:2}
     ],
     kinds: [
-      {kind:"todo",label:"Task list",category:"tasks",named:false,quick_add:false,needs_name:false,icon:"list",fields:[]},
+      {kind:"todo",label:"Task list",category:"tasks",named:true,quick_add:false,needs_name:false,icon:"list",fields:[]},
       {kind:"capture",label:"Capture",category:"capture",named:false,quick_add:true,needs_name:false,icon:"inbox",fields:[]},
       {kind:"dashboard",label:"Dashboard",category:"numbers",named:true,quick_add:false,needs_name:true,icon:"layout",fields:[]}
     ],
@@ -88,6 +88,41 @@ test("quick-add picks bypass configuration and saved rows show descriptions", as
   document.querySelector(".wp-item").click();
   formOptions.onSave('view = "dashboard"\nname = "default"');
   assert.ok(configured.includes('name = "default"'));
+  window.PtosWidgetPicker.close();
+  dom.window.close();
+});
+
+test("named kind with no saved views skips the default-only chooser", async () => {
+  const {dom, catalog} = setup();
+  globalThis.fetch = async url => ({json: async () => String(url).includes("catalog")
+    ? catalog
+    : {ok:true,values:[],items:[]}});
+  let picked = "";
+  let formOptions = null;
+  window.PtosWidgetForm = {mount:(el, opts) => { formOptions = opts; }};
+  window.PtosWidgetPicker.open({onPick: body => { picked = body; }});
+  await new Promise(resolve => setTimeout(resolve, 0));
+  document.querySelector('[data-cat="tasks"]').click();
+  document.querySelector('[data-kind="todo"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(document.querySelector(".wp-title").textContent, "Configure widget");
+  formOptions.onSave('view = "todo"');
+  assert.ok(picked.includes('view = "todo"'));
+  assert.equal(document.querySelector(".wp-overlay"), null);
+  dom.window.close();
+});
+
+test("named kind with saved views keeps the selection step", async () => {
+  const {dom, catalog} = setup();
+  globalThis.fetch = async url => ({json: async () => String(url).includes("catalog")
+    ? catalog
+    : {ok:true,values:["today", "week"],items:[{name:"today"},{name:"week"}]}});
+  window.PtosWidgetPicker.open({});
+  await new Promise(resolve => setTimeout(resolve, 0));
+  document.querySelector('[data-cat="tasks"]').click();
+  document.querySelector('[data-kind="todo"]').click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(document.querySelectorAll(".wp-item[data-name]").length, 3);
   window.PtosWidgetPicker.close();
   dom.window.close();
 });

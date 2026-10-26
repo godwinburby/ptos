@@ -210,7 +210,74 @@ def _batch(items):
     return _client().post("/api/widgets/resolve", json={"items": items})
 
 
+def _registered_widget_bodies():
+    candidates = svc.get_embed_candidates()
+    candidate_key = {
+        "dashboard": "dashboards", "metric": "metrics",
+        "board": "boards", "habit": "habits", "calendar": "calendars",
+        "due": "due", "project": "projects", "query": "queries",
+    }
+    bodies = []
+    for entry in pw.kinds():
+        spec = {"view": entry["kind"]}
+        key = candidate_key.get(entry["kind"])
+        if entry["needs_name"]:
+            names = candidates.get(key) or []
+            assert names, "starter workspace has no saved " + entry["kind"]
+            spec["name"] = names[0]
+        bodies.append(tomli_w.dumps(spec))
+    return bodies
+
+
 class TestWidgetsBatchResolve:
+    def test_every_registered_kind_resolves_over_both_http_endpoints(self):
+        bodies = _registered_widget_bodies()
+        for body in bodies:
+            resp = _client().post("/api/embed/resolve", json={"body": body})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["ok"] is True, (body, data)
+            assert data["data"]["kind"]
+
+        resp = _batch([{"id": str(i), "body": body}
+                       for i, body in enumerate(bodies)])
+        assert resp.status_code == 200
+        data = resp.get_json()
+        assert data["ok"] is True
+        assert len(data["results"]) == len(bodies)
+        assert all(item["ok"] for item in data["results"]), data["results"]
+
+    def test_serialization_failure_isolated_and_generic(self, monkeypatch):
+        import ptos_web
+
+        class BadString:
+            def __str__(self):
+                raise TypeError("PrivateSerializationFailure")
+
+        def resolve(spec, context=None):
+            if spec.get("view") == "bad":
+                return {"kind": "bad", "value": BadString()}
+            return {"kind": "good", "value": [1, 2]}
+
+        monkeypatch.setattr(svc, "resolve_embed", resolve)
+        resp = _batch([
+            {"id": "bad", "body": 'view = "bad"'},
+            {"id": "good", "body": 'view = "good"'},
+        ])
+        assert resp.status_code == 200
+        results = {item["id"]: item for item in resp.get_json()["results"]}
+        assert results["bad"]["ok"] is False
+        assert results["bad"]["error"] == "This widget could not be rendered"
+        assert "TypeError" not in results["bad"]["error"]
+        assert results["good"]["ok"] is True
+
+        resp = _client().post("/api/embed/resolve",
+                              json={"body": 'view = "bad"'})
+        assert resp.status_code == 200
+        error = resp.get_json()["error"]
+        assert error == "This widget could not be rendered"
+        assert "TypeError" not in error
+
     def test_ok_batch(self):
         ptos._CACHE.clear()
         _set_queries({"exp": {"where": "type=expense", "time": "all"}})

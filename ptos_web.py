@@ -3751,11 +3751,42 @@ def api_embed_resolve():
             _decorate_thresholds(resolved.get("thresholds") or [])
         if resolved.get("kind") == "time_picker":
             _decorate_time_picker(resolved)
-        return jsonify(ok=True, data=resolved)
+        return jsonify(ok=True, data=json_safe(resolved))
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
-    except Exception as e:
-        return jsonify(ok=False, error=str(e))
+    except Exception:
+        log.exception("Markdown widget result could not be rendered")
+        return jsonify(ok=False, error="This widget could not be rendered")
+
+
+def json_safe(value, _stack=None):
+    """Convert resolver output to JSON-compatible values deterministically."""
+    if value is None or isinstance(value, (str, int, float, bool)):
+        return value
+    if _stack is None:
+        _stack = set()
+    if isinstance(value, dict):
+        identity = id(value)
+        if identity in _stack:
+            raise ValueError("Circular resolver result")
+        _stack.add(identity)
+        try:
+            return {str(key): json_safe(item, _stack)
+                    for key, item in value.items()}
+        finally:
+            _stack.remove(identity)
+    if isinstance(value, (list, tuple, set, frozenset)):
+        identity = id(value)
+        if identity in _stack:
+            raise ValueError("Circular resolver result")
+        _stack.add(identity)
+        try:
+            items = sorted(value, key=lambda item: str(item)) \
+                if isinstance(value, (set, frozenset)) else value
+            return [json_safe(item, _stack) for item in items]
+        finally:
+            _stack.remove(identity)
+    return str(value)
 
 
 WIDGET_BATCH_MAX_ITEMS = 200
@@ -3818,11 +3849,13 @@ def api_widgets_resolve():
                 _decorate_thresholds(data.get("thresholds") or [])
             if data.get("kind") == "time_picker":
                 _decorate_time_picker(data)
-            results.append({"id": wid, "ok": True, "data": data})
+            results.append({"id": wid, "ok": True, "data": json_safe(data)})
         except PTOSError as e:
             results.append({"id": wid, "ok": False, "error": str(e)})
-        except Exception as e:
-            results.append({"id": wid, "ok": False, "error": str(e)})
+        except Exception:
+            log.exception("Widget batch item could not be rendered")
+            results.append({"id": wid, "ok": False,
+                            "error": "This widget could not be rendered"})
     return jsonify(ok=True, results=results)
 
 

@@ -7,6 +7,15 @@ Format: `[version or date] — description`
 
 ## 2026-10-26
 
+### Page migration Part A fixes
+
+- Board widget results now serialize set-like values as JSON arrays, and widget resolution isolates serialization failures to one item with a generic client error. HTTP coverage checks every registered widget kind and failure isolation.
+- Markdown rendering preserves escaped `{{tokens}}` outside code spans and fences.
+- The widget picker skips the redundant default-only saved-item step; tests cover zero and multiple saved choices.
+- Moved the add-flow/gallery spec into `docs/specs/`. JavaScript test wrappers skip locally with `npm ci` guidance when Node or jsdom is missing, and fail in CI. README setup now documents `npm ci`.
+- Invalid `[home] page` paths now use the built-in fallback and emit one warning per process.
+- **Tests:** added HTTP resolver, Markdown escape, picker flow, and home-path fallback coverage.
+
 ### Windows launcher reliability
 
 - **One resolved interpreter** — `run_ptos.ps1` now probes `py -3.13`, `py -3.12`, `py -3`, `py`, then `python` (first ≥3.11 wins), normalizes the choice via `sys.executable`, and uses that exact path for pip, `--init`, `--set-name`, `--sync-check` and `ptos_web.py`.

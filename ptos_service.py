@@ -5147,12 +5147,13 @@ def get_board_data(board_name, time=None, from_date=None, to_date=None):
     field_info = {}
     for l in lanes:
         if l["kind"] == "type":
-            field_info[l["key"]] = set(ptos.filter_fields_for_type(l["types"][0], schema))
+            field_info[l["key"]] = sorted(
+                set(ptos.filter_fields_for_type(l["types"][0], schema)))
         else:
             merged = {"date", "type"}
             for t in l["types"]:
                 merged |= set(ptos.filter_fields_for_type(t, schema))
-            field_info[l["key"]] = merged
+            field_info[l["key"]] = sorted(merged)
 
     # Time window: URL params override the board's config default
     cfg_time_window = cfg.get("time_window", "this-month")
@@ -8004,6 +8005,7 @@ def svc_parent_template(rel_path):
 # ══════════════════════════════════════════════════════════════════════════════
 
 HOME_DEFAULT_PAGE = "Home.md"
+_HOME_PAGE_INVALID_LOGGED = False
 
 
 def _home_page_raw():
@@ -8016,11 +8018,30 @@ def get_home_page():
     Returns the note path (default `Home.md` on a workspace that has
     never chosen one) or None when the setting has been cleared and
     the home page must fall back to the built-in default."""
+    global _HOME_PAGE_INVALID_LOGGED
     raw = _home_page_raw()
     if raw is None:
         return HOME_DEFAULT_PAGE
     raw = str(raw).strip()
-    return raw or None
+    if not raw:
+        return None
+    normalized = raw.replace("\\", "/")
+    parts = normalized.split("/")
+    valid = (not normalized.startswith("/")
+             and not any(part in ("", ".", "..") for part in parts)
+             and normalized.lower().endswith(".md")
+             and not any(ord(ch) < 32 or ord(ch) == 127 for ch in normalized))
+    if valid:
+        try:
+            ptos._safe_path(normalized)
+        except Exception:
+            valid = False
+    if not valid:
+        if not _HOME_PAGE_INVALID_LOGGED:
+            log.warning("Ignoring invalid [home] page value; using built-in Home fallback")
+            _HOME_PAGE_INVALID_LOGGED = True
+        return None
+    return normalized
 
 
 def set_home_page(path):
@@ -8130,10 +8151,9 @@ def svc_get_home_note():
     whose file has vanished falls back so a bad path can't blank the
     home page."""
     raw = _home_page_raw()
-    page = (HOME_DEFAULT_PAGE if raw is None
-            else (str(raw).strip() if raw else ""))
+    page = get_home_page()
     if not page:
-        return {"mode": "fallback", "reason": "cleared"}
+        return {"mode": "fallback", "reason": "cleared" if not raw else "invalid"}
     note = None
     try:
         note = svc_read_file(page)

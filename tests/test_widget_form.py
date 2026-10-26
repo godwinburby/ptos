@@ -123,6 +123,22 @@ class TestWidgetFormWiring:
 
 
 class TestWidgetPickerWiring:
+    def _require_node_jsdom(self):
+        node = shutil.which("node")
+        if node is None:
+            message = "Node.js is required for JavaScript widget tests; run npm ci"
+            if os.environ.get("CI"):
+                pytest.fail(message)
+            pytest.skip(message)
+        proc = subprocess.run([node, "-e", "require.resolve('jsdom')"],
+                              cwd=REPO, capture_output=True, text=True)
+        if proc.returncode != 0:
+            message = "jsdom is required for JavaScript widget tests; run npm ci"
+            if os.environ.get("CI"):
+                pytest.fail(message)
+            pytest.skip(message)
+        return node
+
     def test_picker_surface(self):
         src = _read(PICKER_JS)
         assert "/api/widgets/catalog" in src
@@ -164,19 +180,17 @@ class TestWidgetPickerWiring:
         assert "openSlashPicker" not in picker
 
     def test_picker_node_suite(self):
-        if shutil.which("node") is None:
-            pytest.skip("node not installed")
+        node = self._require_node_jsdom()
         path = os.path.join(REPO, "tests", "js", "widget_picker.test.js")
-        proc = subprocess.run([shutil.which("node"), "--test", path],
+        proc = subprocess.run([node, "--test", path],
                               cwd=REPO, capture_output=True, text=True,
                               timeout=180)
         assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
 
     def test_slash_navigation_node_suite(self):
-        if shutil.which("node") is None:
-            pytest.skip("node not installed")
+        node = self._require_node_jsdom()
         path = os.path.join(REPO, "tests", "js", "slash_nav.test.js")
-        proc = subprocess.run([shutil.which("node"), path], cwd=REPO,
+        proc = subprocess.run([node, path], cwd=REPO,
                               capture_output=True, text=True, timeout=180)
         assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
 

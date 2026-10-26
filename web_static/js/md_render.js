@@ -236,6 +236,103 @@
     }, nextBoundary(new Date()));
   }
 
+  var ESCAPED_TOKEN_OPEN = "\uE000PTOS_ESCAPED_TOKEN_OPEN\uE001";
+
+  function _tickRun(src, at) {
+    var end = at;
+    while (end < src.length && src.charAt(end) === "`") end++;
+    return end - at;
+  }
+
+  function _hasClosingTicks(src, at, length) {
+    while (at < src.length) {
+      var next = src.indexOf("`", at);
+      if (next === -1) return false;
+      var run = _tickRun(src, next);
+      if (run === length) return true;
+      at = next + run;
+    }
+    return false;
+  }
+
+  function _protectEscapedTokenOpen(src) {
+    var out = "";
+    var i = 0;
+    var fenceChar = "";
+    var fenceLength = 0;
+    var inlineLength = 0;
+    while (i < src.length) {
+      var lineEnd = src.indexOf("\n", i);
+      if (lineEnd === -1) lineEnd = src.length;
+      var line = src.slice(i, lineEnd);
+      var newline = lineEnd < src.length ? "\n" : "";
+      var probe = line.replace(/\r$/, "");
+
+      if (!inlineLength && fenceChar) {
+        out += line + newline;
+        var close = new RegExp("^ {0,3}" + fenceChar + "{" +
+          fenceLength + ",}[ \\t]*$").test(probe);
+        if (close) { fenceChar = ""; fenceLength = 0; }
+        i = lineEnd + newline.length;
+        continue;
+      }
+      if (!inlineLength) {
+        var opening = /^ {0,3}(`{3,}|~{3,})/.exec(probe);
+        if (opening) {
+          fenceChar = opening[1].charAt(0);
+          fenceLength = opening[1].length;
+          out += line + newline;
+          i = lineEnd + newline.length;
+          continue;
+        }
+      }
+
+      while (i < lineEnd) {
+        var ch = src.charAt(i);
+        if (ch === "`") {
+          var ticks = _tickRun(src, i);
+          out += src.slice(i, i + ticks);
+          if (inlineLength) {
+            if (ticks === inlineLength) inlineLength = 0;
+          } else if (_hasClosingTicks(src, i + ticks, ticks)) {
+            inlineLength = ticks;
+          }
+          i += ticks;
+          continue;
+        }
+        if (!inlineLength && ch === "\\") {
+          var slashEnd = i;
+          while (slashEnd < lineEnd && src.charAt(slashEnd) === "\\") slashEnd++;
+          var slashCount = slashEnd - i;
+          if (slashCount % 2 === 1 && src.slice(slashEnd, slashEnd + 2) === "{{") {
+            out += "\\".repeat(slashCount - 1) + ESCAPED_TOKEN_OPEN;
+            i = slashEnd + 2;
+          } else {
+            out += src.slice(i, slashEnd);
+            i = slashEnd;
+          }
+          continue;
+        }
+        out += ch;
+        i++;
+      }
+      out += newline;
+      i = lineEnd + newline.length;
+    }
+    return out;
+  }
+
+  function _restoreEscapedTokenOpen(root) {
+    var doc = root.ownerDocument || document;
+    var walker = doc.createTreeWalker(root, 4 /* NodeFilter.SHOW_TEXT */, null);
+    var node;
+    while ((node = walker.nextNode())) {
+      if (node.nodeValue.indexOf(ESCAPED_TOKEN_OPEN) !== -1) {
+        node.nodeValue = node.nodeValue.split(ESCAPED_TOKEN_OPEN).join("{{");
+      }
+    }
+  }
+
   if (typeof document !== "undefined" && document.addEventListener) {
     document.addEventListener("visibilitychange", function () {
       if (document.visibilityState === "visible") refreshTokens(document);
@@ -248,12 +345,14 @@
       return "<pre style='white-space:pre-wrap'>" + escapeText(src) + "</pre>";
     }
     configureMarked();
-    var html = marked.parse(src);
+    var html = marked.parse(_protectEscapedTokenOpen(src));
     var clean = DOMPurify.sanitize(html, {
       ALLOWED_TAGS: ALLOWED_TAGS,
       FORBID_ATTR: ["style"]
     });
-    if (typeof document === "undefined" || !document.implementation) return clean;
+    if (typeof document === "undefined" || !document.implementation) {
+      return clean.split(ESCAPED_TOKEN_OPEN).join("{{");
+    }
     var doc = document.implementation.createHTMLDocument("");
     var box = doc.createElement("div");
     box.innerHTML = clean;
@@ -262,10 +361,10 @@
           !input.hasAttribute("disabled")) input.remove();
     });
     clean = box.innerHTML;
-    if (clean.indexOf("{{") === -1) return clean;
     var container = document.createElement("div");
     container.innerHTML = clean;
-    substituteTokens(container, ctx || _ctx());
+    if (clean.indexOf("{{") !== -1) substituteTokens(container, ctx || _ctx());
+    _restoreEscapedTokenOpen(container);
     _scheduleRefresh();
     return container.innerHTML;
   }

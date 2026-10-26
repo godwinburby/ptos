@@ -702,6 +702,10 @@
         _S.itemsLoading = false;
         _S.items = (d && d.ok && Array.isArray(d.values)) ? d.values : [];
         _S.itemDetails = (d && Array.isArray(d.items)) ? d.items : null;
+        if (!_S.items.length && entry.needs_name === false) {
+          _choose(_kindSource(kind, ""), entry.label || kind, kind);
+          return;
+        }
         _render();
       })
       .catch(function () {
@@ -709,6 +713,10 @@
         _S.itemsLoading = false;
         _S.items = [];
         _S.itemDetails = [];
+        if (entry.needs_name === false) {
+          _choose(_kindSource(kind, ""), entry.label || kind, kind);
+          return;
+        }
         _render();
       });
   }

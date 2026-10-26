@@ -2615,13 +2615,15 @@ Journal files are stored at `journal/YYYY/YYYY-MM-DD.md`.
 python -m pytest tests/ -v
 ```
 
+Install the JavaScript test dependency with `npm ci` before running the suite.
+
 The full suite takes ~2 minutes. All tests should pass.
 
 CI runs the same command (`.github/workflows/tests.yml`) on Linux and Windows
 across Python 3.11 and 3.13, so a green run here means a green run before any
 commit lands.
 
-Test dependencies: `flask`, `tomli-w`, `pytest`, and `pyyaml`.
+Test dependencies: `flask`, `tomli-w`, `pytest`, `pyyaml`, Node.js, and `jsdom` (`npm ci`).
 
 ### Test isolation
 

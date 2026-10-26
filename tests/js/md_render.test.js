@@ -99,6 +99,9 @@ test("DOMPurify sanitization end to end (needs jsdom)",
                "unexpected purify export shape");
   globalThis.DOMPurify = purify;
   globalThis.document = win.document;
+  globalThis.PTOS = {userName: "Ada"};
+  const savedSetTimeout = globalThis.setTimeout;
+  globalThis.setTimeout = () => 1;
   try {
     const html = render("# hi\n\n| a | b |\n|---|---|\n| 1 | 2 |");
     assert.ok(html.includes("<h1"));
@@ -119,8 +122,16 @@ test("DOMPurify sanitization end to end (needs jsdom)",
     assert.ok(!render('<p style="position:fixed">x</p>').includes("style="));
     assert.ok(!render('<input type="password" value="secret">').includes('type="password"'));
     assert.ok(render('<input type="checkbox" disabled>').includes('type="checkbox"'));
+    assert.ok(render("\\{{name}}").includes("{{name}}"));
+    const doubledEscape = render("\\\\{{name}}");
+    assert.ok(doubledEscape.includes("{{name}}"));
+    assert.ok(!doubledEscape.includes("Ada"));
+    assert.ok(render("`\\{{name}}`").includes("\\{{name}}"));
+    assert.ok(render("{{name}}").includes("Ada"));
   } finally {
     delete globalThis.DOMPurify;
     delete globalThis.document;
+    delete globalThis.PTOS;
+    globalThis.setTimeout = savedSetTimeout;
   }
 });
