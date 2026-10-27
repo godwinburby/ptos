@@ -41,6 +41,48 @@
     PtosWidgets.register("due", {
       render: function (el, data) { el.innerHTML = renderDue(data, { bare: true }); }
     });
+    PtosWidgets.register("calendar", {
+      render: function (el, data, ctx) {
+        el.innerHTML = renderCalendar(data, { interactive: ctx && ctx.size === "full" });
+      },
+      mount: function (el, data, ctx) {
+        el.innerHTML = renderCalendar(data, { interactive: true });
+        var onKey = function (e) {
+          if ((e.key === "Enter" || e.key === " ") && e.target.matches("[data-calendar-day]")) {
+            e.preventDefault();
+            e.target.click();
+          }
+        };
+        var onClick = function (e) {
+          var cell = e.target.closest && e.target.closest("[data-calendar-day]");
+          if (!cell || !el.contains(cell)) return;
+          var day = cell.getAttribute("data-calendar-day");
+          var active = cell.classList.contains("expanded");
+          el.querySelectorAll("[data-calendar-day].expanded").forEach(function (node) {
+            node.classList.remove("expanded");
+          });
+          el.querySelectorAll("[data-calendar-detail]").forEach(function (node) {
+            node.style.display = "none";
+          });
+          if (!active) {
+            cell.classList.add("expanded");
+            var detail = el.querySelector('[data-calendar-detail="' + day + '"]');
+            if (detail) detail.style.display = "block";
+          }
+        };
+        el.addEventListener("click", onClick);
+        el.addEventListener("keydown", onKey);
+        return { destroy: function () {
+          el.removeEventListener("click", onClick);
+          el.removeEventListener("keydown", onKey);
+        }};
+      }
+    });
+    PtosWidgets.register("project", {
+      render: function (el, data, ctx) {
+        el.innerHTML = renderProject(data, { full: ctx && ctx.size === "full" });
+      }
+    });
 
     // ── capture ─────────────────────────────────────────────────────────────
     PtosWidgets.register("capture", {

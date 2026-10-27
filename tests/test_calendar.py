@@ -397,7 +397,7 @@ class TestCalendarWeb:
         _clear_calendars()
         from ptos_web import app
         client = app.test_client()
-        resp = client.get("/calendar")
+        resp = client.get("/calendar?legacy=1")
         assert resp.status_code == 200
         html = resp.get_data(as_text=True)
         assert "All records" in html
@@ -410,7 +410,7 @@ class TestCalendarWeb:
         _write_records(today.year, [f"{today} type=expense amount=100"])
         from ptos_web import app
         client = app.test_client()
-        resp = client.get("/calendar")
+        resp = client.get("/calendar?legacy=1")
         assert resp.status_code == 200
         html = resp.get_data(as_text=True)
         assert "exp" in html
@@ -423,7 +423,7 @@ class TestCalendarWeb:
         _write_records(today.year, [f"{today} type=expense amount=100"])
         from ptos_web import app
         client = app.test_client()
-        resp = client.get(f"/calendar/exp?year={today.year}&month={today.month}")
+        resp = client.get(f"/calendar/exp?year={today.year}&month={today.month}&legacy=1")
         assert resp.status_code == 200
         html = resp.get_data(as_text=True)
         assert "Open day in Browse" in html
@@ -438,11 +438,32 @@ class TestCalendarWeb:
         ])
         from ptos_web import app
         client = app.test_client()
-        html_all = client.get("/calendar").get_data(as_text=True)
+        html_all = client.get("/calendar?legacy=1").get_data(as_text=True)
         assert "prescription · binaural" in html_all
         html_exp = client.get(
-            f"/calendar/exp?year={today.year}&month={today.month}").get_data(as_text=True)
+            f"/calendar/exp?year={today.year}&month={today.month}&legacy=1").get_data(as_text=True)
         assert "prescription · binaural" not in html_exp
+
+    def test_calendar_page_shell_inlines_selected_month_and_records(self):
+        _clean_cache()
+        _add_calendar("exp", ["type=expense"])
+        today = dt.date.today()
+        _write_records(today.year, [f"{today} type=expense amount=100"])
+        from ptos_web import app
+        response = app.test_client().get(
+            f"/calendar/exp?year={today.year}&month={today.month}")
+        body = response.get_data(as_text=True)
+        assert response.status_code == 200
+        assert 'data-page-shell' in body
+        assert 'data-page-month-shift="-1"' in body
+        payload = body.split('<script type="application/json" id="page-data">', 1)[1].split('</script>', 1)[0]
+        import json
+        data = json.loads(payload)
+        assert data["kind"] == "calendar"
+        assert data["calendar_name"] == "exp"
+        assert data["total_records"] == 1
+        assert data["year"] == today.year
+        assert data["month"] == today.month
 
     def test_query_builder_includes_calendars(self):
         _clean_cache()

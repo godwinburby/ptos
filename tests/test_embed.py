@@ -287,6 +287,16 @@ class TestResolveEmbedNewKindsDispatch:
         assert with_time["count"] == base["count"]
         assert with_time["link"] == "/due"
 
+    def test_due_days_override_matches_page_selector(self):
+        _clean()
+        _set_queries(_rich_queries())
+        _seed_due_expenses()
+        result = svc.resolve_embed({"name": "default", "days": "1"})
+        expected = svc.get_due(config_name=None, days_override=1)
+        assert result["days"] == 1
+        assert result["rows"] == expected["rows"]
+        assert result["link"] == "/due?days=1"
+
     def test_due_limit_truncates_rows(self):
         _clean()
         _set_queries(_rich_queries())

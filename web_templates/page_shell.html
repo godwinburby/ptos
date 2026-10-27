@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<link rel="stylesheet" href="{{ av('/static/css/page_shell.css') }}">
+<section class="page-shell" data-page-shell>
+  <header class="page-shell-header">
+    <h1>{{ page_title }}</h1>
+    {% if configure_url %}<a class="edit-btn" href="{{ configure_url }}">{{ configure_label or "Configure" }}</a>{% endif %}
+  </header>
+  <div class="page-controls" data-page-controls>
+    {% if time_options %}
+    <label class="page-control-field">Time window
+      <select data-page-time>
+        <option value="">{{ default_time_label or "Default" }}</option>
+        {% for label, code in time_options %}
+        <option value="{{ code }}" {% if time_value == code %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    <div class="page-custom-time" data-page-custom-time>
+      <label data-page-custom="year">Year<input type="number" min="{{ year_range[0] }}" max="{{ year_range[-1] }}" data-page-year value="{{ custom_time if time_value == 'year' else '' }}"></label>
+      <label data-page-custom="month">Month<input type="month" data-page-month-value value="{{ custom_time if time_value == 'month' else '' }}"></label>
+      <label data-page-custom="date">Date<input type="date" data-page-date value="{{ custom_time if time_value == 'date' else '' }}"></label>
+      <label data-page-custom="range">From<input type="date" data-page-from value="{{ from_date }}"></label>
+      <label data-page-custom="range">To<input type="date" data-page-to value="{{ to_date }}"></label>
+      <button type="button" class="btn btn-primary btn-sm" data-page-apply>Apply</button>
+    </div>
+    {% endif %}
+    {% if month_navigation %}
+    <div class="page-month-nav" aria-label="Month navigation">
+      <button type="button" class="btn btn-ghost btn-sm" data-page-month-shift="-1" aria-label="Previous month">‹</button>
+      <span>{{ month_label }}</span>
+      <button type="button" class="btn btn-ghost btn-sm" data-page-month-shift="1" aria-label="Next month">›</button>
+    </div>
+    {% endif %}
+    {% for control in select_controls or [] %}
+    <label class="page-control-field">{{ control.label }}
+      <select data-page-selector="{{ control.param }}" data-page-body-key="{{ control.body_key or control.param }}" {% if control.path_prefix %}data-page-path-prefix="{{ control.path_prefix }}"{% endif %}>
+        {% for label, value in control.options %}
+        <option value="{{ value }}" {% if control.value == value %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </label>
+    {% endfor %}
+  </div>
+  <div class="page-shell-widget" id="page-widget"></div>
+</section>
+<script type="application/json" id="page-spec">{{ page_spec|tojson }}</script>
+<script type="application/json" id="page-data">{{ page_data|tojson }}</script>
+<script>
+window.PTOS_PAGE = {{ page_state|tojson }};
+</script>
+{% endblock %}
+{% block scripts %}
+<script src="{{ av('/static/js/widgets.js') }}"></script>
+<script src="{{ av('/static/js/widget_host.js') }}"></script>
+<script src="{{ av('/static/js/home_widgets.js') }}"></script>
+<script src="{{ av('/static/js/page_shell.js') }}"></script>
+{% endblock %}

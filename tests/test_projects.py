@@ -497,7 +497,7 @@ class TestProjectsPage:
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         assert resp.status_code == 200
         html = resp.get_data(as_text=True)
         assert "No projects configured" in html
@@ -518,11 +518,35 @@ class TestProjectsPage:
         _write_todo(todo_path, [f"(A) {TODAY_S} Apply +jobsearch due:{TODAY_S}"])
         _write_todo(done_path, [f"x {TODAY_S} {TODAY_S} Resume updated +jobsearch"])
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         assert resp.status_code == 200
         html = resp.get_data(as_text=True)
         assert "Find a Job" in html
         assert "1 project(s)" in html
+
+    def test_page_shell_inlines_full_project_widget_data(self, tmp_path, monkeypatch):
+        todo_path = tmp_path / "todo.txt"
+        done_path = tmp_path / "done.txt"
+        monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos, "DONE_PATH", str(done_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "DONE_PATH", str(done_path))
+        _write_queries(tmp_path / "queries.toml", '''
+            ["project.jobsearch"]
+            label = "Find a Job"
+            todo_project = "jobsearch"
+        ''')
+        _write_todo(todo_path, [f"(A) {TODAY_S} Apply +jobsearch due:{TODAY_S}"])
+        _write_todo(done_path, [])
+        body = app.test_client().get("/projects").get_data(as_text=True)
+        import json
+        payload = body.split('<script type="application/json" id="page-data">', 1)[1].split('</script>', 1)[0]
+        data = json.loads(payload)
+        assert 'data-page-shell' in body
+        assert data[0]["kind"] == "project"
+        assert data[0]["label"] == "Find a Job"
+        assert data[0]["open_items"][0]["description"] == "Apply"
 
     def test_nav_entry(self, tmp_path, monkeypatch):
         monkeypatch.setattr(ptos, "QUERIES_PATH", str(tmp_path / "queries.toml"))
@@ -558,7 +582,7 @@ class TestProjectsInlineData:
         ])
         _write_todo(done_path, [])
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "Apply online" in html
         assert "Update resume" in html
@@ -582,7 +606,7 @@ class TestProjectsInlineData:
             f"x {TODAY_S} {YESTERDAY} Sent application +p1",
         ])
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "Sent application" in html
         assert "Done" in html
@@ -606,7 +630,7 @@ class TestProjectsInlineData:
         _write_record(os.path.join(str(tmp_path), "records", "2026.log"), record)
         monkeypatch.setattr(ptos, "RECORDS_DIR", str(tmp_path / "records"))
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "Records" in html
         assert "paint supplies" in html
@@ -632,7 +656,7 @@ class TestProjectsInlineData:
         (notes_dir / "notes.md").write_text("some content", encoding="utf-8")
         (notes_dir / "meeting.md").write_text("Meeting about [[My Project]] next week", encoding="utf-8")
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "Notes" in html
         assert "meeting.md" in html
@@ -657,7 +681,7 @@ class TestProjectsInlineData:
         journal_dir.mkdir(parents=True, exist_ok=True)
         (journal_dir / "2026-09-15.md").write_text("Working on [[My Project]] today\n", encoding="utf-8")
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "Journal" in html
         assert "2026-09-15.md" in html
@@ -678,7 +702,7 @@ class TestProjectsInlineData:
         _write_todo(todo_path, [f"(A) {TODAY_S} Task +p1 due:{TODAY_S}"])
         _write_todo(done_path, [f"x {TODAY_S} {TODAY_S} Done task +p1"])
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "<details" in html
         assert "proj-section" in html
@@ -699,7 +723,7 @@ class TestProjectsInlineData:
         _write_todo(todo_path, [f"(A) {OLD} Overdue task +p1 due:{YESTERDAY}"])
         _write_todo(done_path, [])
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "overdue" in html.lower()
 
@@ -719,7 +743,7 @@ class TestProjectsInlineData:
         _write_todo(todo_path, [])
         _write_todo(done_path, [])
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "<details" not in html
 
@@ -947,7 +971,7 @@ class TestProjectWebCRUD:
         _write_todo(tmp_path / "todo.txt", [])
         _write_todo(tmp_path / "done.txt", [])
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "New Project" in html
 
@@ -962,7 +986,7 @@ class TestProjectWebCRUD:
         _write_todo(tmp_path / "done.txt", [])
         svc.save_project("myproj", {"label": "Test"})
         client = app.test_client()
-        resp = client.get("/projects")
+        resp = client.get("/projects?legacy=1")
         html = resp.get_data(as_text=True)
         assert "/projects/myproj/edit" in html
         assert "/projects/myproj/delete" in html

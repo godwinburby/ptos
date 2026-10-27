@@ -513,3 +513,34 @@ class TestHabitToggle:
         data = resp.get_json()
         assert data["ok"] is False
         assert "not toggleable" in data["error"]
+
+
+class TestHabitsPageShell:
+    def test_page_shell_inlines_toggleable_habit_and_month_controls(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        today = dt.date.today()
+        _write_records([f"{today} type=habit name=meditation"])
+        from ptos_web import app
+        response = app.test_client().get("/habits")
+        body = response.get_data(as_text=True)
+        import json
+        payload = body.split('<script type="application/json" id="page-data">', 1)[1].split('</script>', 1)[0]
+        data = json.loads(payload)
+        specs = json.loads(body.split('<script type="application/json" id="page-spec">', 1)[1].split('</script>', 1)[0])
+        habit = next(row for row in data if row["habit_name"] == "med")
+        habit_spec = next(item for item in specs["items"] if 'name = "med"' in item["body"])
+        assert response.status_code == 200
+        assert 'data-page-shell' in body
+        assert 'data-page-month-shift="-1"' in body
+        assert habit["kind"] == "habit"
+        assert habit["toggleable"] is True
+        assert habit_spec["body"].startswith('view = "habit"')
+
+    def test_legacy_habits_page_remains_available(self):
+        _clean_cache()
+        _add_habit("med", ["type=habit", "name=meditation"], weeks=4)
+        from ptos_web import app
+        body = app.test_client().get("/habits?legacy=1").get_data(as_text=True)
+        assert "habits-header" in body
+        assert "shiftHabitMonth" in body

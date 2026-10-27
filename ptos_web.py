@@ -930,10 +930,41 @@ def due_page():
         except PTOSError as e:
             rows = []; days_used = 7; error = str(e); used_due = due_name or "default"
     return_to = "/due" + (f"?{request.query_string.decode()}" if request.query_string else "")
-    return render_template("due.html", tab="due", title="Due List",
-        now=_now_str(), rows=rows, days=days_used, error=error,
-        due_configs=list(due_configs.keys()), selected_due=used_due,
-        no_config=no_config, return_to=return_to)
+    if request.args.get("legacy") == "1":
+        return render_template("due.html", tab="due", title="Due List",
+            now=_now_str(), rows=rows, days=days_used, error=error,
+            due_configs=list(due_configs.keys()), selected_due=used_due,
+            no_config=no_config, return_to=return_to)
+
+    page_error = None
+    page_data = None
+    embed_spec = {"view": "due", "name": used_due}
+    if days is not None:
+        embed_spec["days"] = days
+    if not no_config:
+        try:
+            page_data = svc.resolve_embed(embed_spec)
+        except PTOSError as e:
+            page_error = str(e)
+    else:
+        page_error = "No due list is configured. Use Configure to create one."
+    embed_body = 'view = "due"\nname = ' + json.dumps(used_due)
+    if days is not None:
+        embed_body += "\ndays = " + json.dumps(str(days))
+    select_controls = [
+        {"label": "Due view", "param": "due", "body_key": "name", "value": used_due,
+         "options": [("Default", "default")] +
+                    [(n.replace("_", " "), n) for n in due_configs]},
+        {"label": "Days", "param": "days", "value": str(days) if days is not None else str(days_used),
+         "options": [("All", "0"), ("1+ days", "1"), ("7+ days", "7"), ("14+ days", "14")]},
+    ]
+    return render_template("page_shell.html",
+        tab="due", title="Due List", page_title="Due List", now=_now_str(),
+        configure_url="/query-builder?section=due&edit=" + quote(str(used_due)),
+        time_options=[], time_value="", custom_time="", from_date="", to_date="",
+        year_range=_YEAR_RANGE, page_data=page_data or {},
+        page_spec={"body": embed_body, "kind": "due"},
+        page_state={"error": page_error}, select_controls=select_controls)
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3047,14 +3078,54 @@ def habits():
                                          from_date=from_date, to_date=to_date)
         except Exception:
             continue
-    return render_template("habits.html",
-        tab="habits", title="Habits",
-        now=_now_str(), habits=data,
-        today_date=dt.date.today().isoformat(),
-        time_options=_habit_time_options(),
-        time=time_param, custom_time=custom_time,
-        from_date=from_date or "", to_date=to_date or "",
-        year_range=_YEAR_RANGE)
+    if request.args.get("legacy") == "1":
+        return render_template("habits.html",
+            tab="habits", title="Habits",
+            now=_now_str(), habits=data,
+            today_date=dt.date.today().isoformat(),
+            time_options=_habit_time_options(),
+            time=time_param, custom_time=custom_time,
+            from_date=from_date or "", to_date=to_date or "",
+            year_range=_YEAR_RANGE)
+
+    items = []
+    page_data = []
+    for name, habit in data.items():
+        body = 'view = "habit"\nname = ' + json.dumps(name)
+        if resolved_time:
+            body += "\ntime = " + json.dumps(str(resolved_time))
+        if from_date:
+            body += "\nfrom_date = " + json.dumps(from_date)
+        if to_date:
+            body += "\nto_date = " + json.dumps(to_date)
+        items.append({"body": body, "interactive": True})
+        page_data.append(dict(habit, kind="habit", title=name.replace("_", " "),
+                              link="/habits"))
+    if from_date:
+        picker_time, picker_custom = "range", ""
+    elif time_param in ("year", "month", "date"):
+        picker_time, picker_custom = time_param, custom_time or ""
+    elif re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", str(resolved_time or "")):
+        picker_time = {4: "year", 7: "month", 10: "date"}[len(str(resolved_time))]
+        picker_custom = str(resolved_time)
+    else:
+        picker_time, picker_custom = time_param or "", ""
+    month_source = picker_custom or from_date or dt.date.today().isoformat()
+    month_match = re.match(r"^(\d{4})-(\d{2})", month_source)
+    month_year = int(month_match.group(1)) if month_match else dt.date.today().year
+    month_num = int(month_match.group(2)) if month_match else dt.date.today().month
+    month_label = dt.date(month_year, month_num, 1).strftime("%B %Y")
+    return render_template("page_shell.html",
+        tab="habits", title="Habits", page_title="Habits", now=_now_str(),
+        configure_url="/query-builder?section=habits", time_options=_habit_time_options(),
+        time_value=picker_time, custom_time=picker_custom,
+        from_date=from_date or "", to_date=to_date or "", year_range=_YEAR_RANGE,
+        default_time_label="This month (default)", page_data=page_data,
+        page_spec={"items": items, "kind": "habit"},
+        page_state={"month": {"year": month_year, "month": month_num},
+                    "monthParam": "custom_time",
+                    "empty": "No habits configured." if not names else ""},
+        month_navigation=True, month_label=month_label, select_controls=[])
 
 
 @app.route("/api/habit/toggle", methods=["POST"])
@@ -3150,12 +3221,54 @@ def thresholds_page(time=None):
             time=resolved_time, from_date=from_date, to_date=to_date))
     except Exception:
         data = []
-    return render_template("thresholds.html",
-        tab="thresholds", title="Thresholds",
-        now=_now_str(), thresholds=data, time=time_param or "",
-        custom_time=custom_time, from_date=from_date or "",
-        to_date=to_date or "",
-        time_options=_get_time_options(), year_range=_YEAR_RANGE)
+    if request.args.get("legacy") == "1":
+        return render_template("thresholds.html",
+            tab="thresholds", title="Thresholds",
+            now=_now_str(), thresholds=data, time=time_param or "",
+            custom_time=custom_time, from_date=from_date or "",
+            to_date=to_date or "",
+            time_options=_get_time_options(), year_range=_YEAR_RANGE)
+
+    embed_spec = {"view": "threshold", "all": True}
+    if resolved_time:
+        embed_spec["time"] = resolved_time
+    if from_date:
+        embed_spec["from_date"] = from_date
+    if to_date:
+        embed_spec["to_date"] = to_date
+    try:
+        page_data = svc.resolve_embed(embed_spec)
+        _decorate_thresholds(page_data.get("thresholds", []))
+        page_error = None
+    except PTOSError as e:
+        page_data = None
+        page_error = str(e)
+    embed_body = 'view = "threshold"\nall = true'
+    if resolved_time:
+        embed_body += "\ntime = " + json.dumps(str(resolved_time))
+    if from_date:
+        embed_body += "\nfrom_date = " + json.dumps(from_date)
+    if to_date:
+        embed_body += "\nto_date = " + json.dumps(to_date)
+    if from_date:
+        picker_time, picker_custom = "range", ""
+    elif time_param in ("year", "month", "date"):
+        picker_time, picker_custom = time_param, custom_time or ""
+    elif re.fullmatch(r"\d{4}(?:-\d{2}(?:-\d{2})?)?", str(resolved_time or "")):
+        picker_time = {4: "year", 7: "month", 10: "date"}[len(str(resolved_time))]
+        picker_custom = str(resolved_time)
+    else:
+        picker_time, picker_custom = time_param or "", ""
+    return render_template("page_shell.html",
+        tab="thresholds", title="Thresholds", page_title="Thresholds",
+        now=_now_str(), configure_url="/query-builder?section=thresholds",
+        time_options=_get_time_options(), time_value=picker_time,
+        custom_time=picker_custom, from_date=from_date or "",
+        to_date=to_date or "", default_time_label="Per-threshold time",
+        year_range=_YEAR_RANGE, page_data=page_data or {},
+        page_error=page_error,
+        page_spec={"body": embed_body, "kind": "threshold"},
+        page_state={"time": time_param or "", "error": page_error})
 
 
 @app.route("/calendar")
@@ -3178,10 +3291,39 @@ def calendar_view(name=None):
             data = None
     else:
         data = svc.get_calendar_data("__all__", year, month)
-    return render_template("calendar.html",
-        tab="calendar", title="Calendar",
-        now=_now_str(), today=dt.date.today(),
-        calendars=names, active=name or "__all__", data=data)
+    if request.args.get("legacy") == "1":
+        return render_template("calendar.html",
+            tab="calendar", title="Calendar",
+            now=_now_str(), today=dt.date.today(),
+            calendars=names, active=name or "__all__", data=data)
+
+    active = name or "__all__"
+    year = year or dt.date.today().year
+    month = month or dt.date.today().month
+    embed_spec = {"view": "calendar", "name": active,
+                  "time": f"{year:04d}-{month:02d}"}
+    try:
+        page_data = svc.resolve_embed(embed_spec)
+        page_error = None
+    except PTOSError as e:
+        page_data = None
+        page_error = str(e)
+    embed_body = ('view = "calendar"\nname = ' + json.dumps(active) +
+                  "\ntime = " + json.dumps(f"{year:04d}-{month:02d}"))
+    month_label = dt.date(year, month, 1).strftime("%B %Y")
+    return render_template("page_shell.html",
+        tab="calendar", title="Calendar", page_title="Calendar", now=_now_str(),
+        configure_url=("/query-builder?section=calendars" if active == "__all__"
+                       else "/query-builder?section=calendars&edit=" + quote(active)),
+        time_options=[], time_value="", custom_time="", from_date="", to_date="",
+        year_range=_YEAR_RANGE, page_data=page_data or {},
+        page_spec={"body": embed_body, "kind": "calendar"},
+        page_state={"error": page_error, "month": {"year": year, "month": month}},
+        month_navigation=True, month_label=month_label,
+        select_controls=[{"label": "Calendar", "param": "calendar", "body_key": "name",
+                          "path_prefix": "/calendar", "value": active,
+                          "options": [("All records", "__all__")] +
+                                     [(n.replace("_", " "), n) for n in names]}])
 
 
 @app.route("/projects")
@@ -3191,10 +3333,30 @@ def projects_page():
     except Exception as e:
         log.exception("Projects load failed")
         projects = []
-    return render_template("projects.html",
-        tab="projects", title="Projects",
-        now=_now_str(), today=dt.date.today(),
-        projects=projects)
+    if request.args.get("legacy") == "1":
+        return render_template("projects.html",
+            tab="projects", title="Projects",
+            now=_now_str(), today=dt.date.today(),
+            projects=projects)
+
+    items = []
+    page_data = []
+    for project in projects:
+        name = str(project.get("name") or "")
+        body = 'view = "project"\nname = ' + json.dumps(name)
+        items.append({"body": body, "interactive": True})
+        data = svc._project_json(project)
+        data.update({"title": project.get("label") or name,
+                     "link": project.get("link_target") or "/projects"})
+        page_data.append(json_safe(data))
+    return render_template("page_shell.html",
+        tab="projects", title="Projects", page_title="Projects", now=_now_str(),
+        configure_url="/projects/new", configure_label="New Project",
+        time_options=[], time_value="",
+        custom_time="", from_date="", to_date="", year_range=_YEAR_RANGE,
+        page_data=page_data, page_spec={"items": items, "kind": "project"},
+        page_state={"empty": "No projects configured." if not projects else ""},
+        select_controls=[])
 
 
 @app.route("/projects/new", methods=["GET", "POST"])

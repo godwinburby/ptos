@@ -474,7 +474,7 @@ class TestNoteDisplayNames:
         _write("job-hunt.md", "# Job Hunt\nMeeting [[PT Name]] next week\n")
         svc._write_queries_toml_key(
             "project.ptname", {"label": "PT Name", "todo_project": "ptname"})
-        html = client.get("/projects").get_data(as_text=True)
+        html = client.get("/projects?legacy=1").get_data(as_text=True)
         assert ">📝 job-hunt</a>" in html
         assert ">📝 job-hunt.md</a>" not in html
         assert 'href="/notes/edit/job-hunt.md"' in html

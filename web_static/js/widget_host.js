@@ -125,6 +125,7 @@
 
   function _scopesForKind(kind) {
     if (kind === "todo" || kind === "todo_summary") return ["todo"];
+    if (kind === "project") return ["records", "todo", "notes"];
     if (kind === "quick_add" || kind === "quick_add_multi") return ["config"];
     if (kind === "capture" || kind === "journal") return [];
     return ["records"];
@@ -278,6 +279,8 @@
     if (el._phWidget) el._phWidget.destroy();
 
     el.classList.add("ph-widget");
+    var fullSize = opts.size === "full";
+    if (fullSize) el.classList.add("ph-widget-full");
     el.innerHTML =
       '<div class="ph-head">' +
         '<span class="ph-title"></span>' +
@@ -291,6 +294,10 @@
     var linkEl = el.querySelector(".ph-link");
     var refreshBtn = el.querySelector(".ph-refresh");
     var bodyEl = el.querySelector(".ph-body");
+    if (fullSize) {
+      var chrome = el.querySelector(".ph-head");
+      if (chrome) chrome.remove();
+    }
     var destroyed = false;
     var sub = null;
     var current = null;
@@ -303,6 +310,7 @@
 
     var ctx = {
       host: hostName,
+      size: fullSize ? "full" : "card",
       interactive: interactive,
       context: opts.context || null,
       time: opts.time != null ? opts.time : (el.getAttribute("data-time") || null),
@@ -368,6 +376,14 @@
       ctx: ctx,
       data: function () { return current; },
       refresh: function () { return load(true); },
+      setSpec: function (nextBody, nextContext) {
+        if (typeof nextBody === "string") body = nextBody;
+        if (arguments.length > 1) {
+          ctx.context = nextContext || null;
+          ctx.time = nextContext && nextContext.time || null;
+        }
+        return load(true);
+      },
       destroy: function () {
         destroyed = true;
         var i = _live.indexOf(handle);
@@ -379,6 +395,7 @@
         });
         listeners = [];
         el.classList.remove("ph-widget");
+        el.classList.remove("ph-widget-full");
         el.innerHTML = "";
         delete el._phWidget;
       }
@@ -635,6 +652,13 @@
       var card = el.querySelector(".card");
       var toggleable = card && card.getAttribute("data-toggleable") === "1";
       if (toggleable) {
+        on(el, "keydown", function (e) {
+          var td = e.target && e.target.closest && e.target.closest("td[data-date]");
+          if (td && (e.key === "Enter" || e.key === " ")) {
+            e.preventDefault();
+            td.click();
+          }
+        });
         on(el, "click", function (e) {
           var td = e.target && e.target.closest && e.target.closest("td[data-date]");
           if (!td || !el.contains(td)) return;

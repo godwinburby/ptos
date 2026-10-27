@@ -779,8 +779,21 @@ class TestDueRead:
         body = resp.get_data(as_text=True)
         assert "No [due] section" not in body
         assert "No [\"due.default\"] section" not in body
-        assert "groceries" in body
-        assert "href=\"/edit?filepath=" in body
+        assert 'data-page-shell' in body
+        payload = body.split('<script type="application/json" id="page-data">', 1)[1].split('</script>', 1)[0]
+        import json
+        data = json.loads(payload)
+        assert data["kind"] == "due"
+        expected = svc.get_due()
+        assert data["rows"] == expected["rows"]
+        assert data["rows"][0]["lineno"] == 0
+        assert data["rows"][0]["filepath"].endswith(".log")
+
+    def test_due_legacy_page_keeps_record_open_links(self):
+        _write_queries('["due.default"]\ntype = "expense"\nkey = "name"\ndays = 7\n')
+        from ptos_web import app
+        body = app.test_client().get("/due?legacy=1").get_data(as_text=True)
+        assert 'href="/edit?filepath=' in body
         assert "lineno=0" in body
 
     def test_falls_back_to_only_config_when_default_missing(self):
@@ -826,13 +839,20 @@ class TestDueRead:
         _write_queries('[expenses]\nwhere = "type=expense"\n')
         from ptos_web import app
         client = app.test_client()
-        resp = client.get("/due")
+        resp = client.get("/due?legacy=1")
         assert resp.status_code == 200
         body = resp.get_data(as_text=True)
         assert "No Due section configured" in body
         assert "Query Builder \u2192 Due" in body
         assert "No [\"due.default\"] section" not in body
         assert "All clear" not in body
+
+    def test_due_page_without_config_uses_shell_error_state(self):
+        _write_queries('[expenses]\nwhere = "type=expense"\n')
+        from ptos_web import app
+        body = app.test_client().get("/due").get_data(as_text=True)
+        assert 'data-page-shell' in body
+        assert "No due list is configured" in body
 
     def test_query_builder_no_config_seed_is_generic(self):
         _write_queries('[expenses]\nwhere = "type=expense"\n')

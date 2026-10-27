@@ -1,6 +1,7 @@
 import pytest
 import os
 import datetime as dt
+import json
 import ptos
 import ptos_service as svc
 
@@ -53,6 +54,12 @@ def _write_records(lines):
     with open(records_path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n" if lines else "")
     ptos._invalidate("records")
+
+
+def _client():
+    import ptos_web
+    ptos_web.app.config["TESTING"] = True
+    return ptos_web.app.test_client()
 
 
 EXPENSE_THRESHOLD = (
@@ -198,6 +205,52 @@ class TestGetThresholdStatus:
         status = svc.get_threshold_status("income_target")
         assert status["status"] == "ok"
         assert status["pct"] == pytest.approx(70.0)
+
+
+class TestThresholdsPageCharacterization:
+    def _seed_threshold_page(self):
+        _write_schema()
+        _write_queries(EXPENSE_THRESHOLD)
+        _write_records([
+            f"{_d(1)} type=expense domain=self category=food amount=2000",
+        ])
+
+    def test_legacy_page_retains_threshold_view_and_time_controls(self):
+        self._seed_threshold_page()
+
+        response = _client().get("/thresholds?legacy=1")
+        body = response.get_data(as_text=True)
+
+        assert response.status_code == 200
+        assert 'class="thr-list"' in body
+        assert 'id="thr-time-select"' in body
+        assert "food spend" in body
+        assert "40%" in body
+
+    def test_page_shell_inlines_resolved_threshold_widget(self):
+        self._seed_threshold_page()
+
+        response = _client().get("/thresholds")
+        body = response.get_data(as_text=True)
+
+        assert response.status_code == 200
+        assert 'data-page-shell' in body
+        assert 'id="page-widget"' in body
+        assert 'id="page-spec"' in body
+        assert '"view = \\"threshold\\"\\nall = true' in body
+        payload = body.split('<script type="application/json" id="page-data">', 1)[1].split('</script>', 1)[0]
+        data = json.loads(payload)
+        assert data["kind"] == "threshold"
+        assert data["thresholds"][0]["name"] == "food_spend"
+        assert data["thresholds"][0]["query_url"].startswith("/queries?run=food_q")
+
+    def test_page_shell_preserves_custom_time_url(self):
+        self._seed_threshold_page()
+
+        body = _client().get("/thresholds?time=month&custom_time=2026-04").get_data(as_text=True)
+
+        assert '"time": "2026-04"' in body
+        assert 'value="2026-04"' in body
 
     def test_missing_threshold_raises(self):
         _write_queries("")

@@ -2731,7 +2731,8 @@ def _w_threshold(spec, name, time, from_date, to_date):
         statuses = get_all_threshold_status(time=time, from_date=from_date,
                                             to_date=to_date)
         try:
-            selected = ptos.get_config().get("home", {}).get("thresholds")
+            selected = (None if spec.get("all") else
+                        ptos.get_config().get("home", {}).get("thresholds"))
         except Exception:
             selected = None
         if selected:
@@ -2808,16 +2809,29 @@ def _w_calendar(spec, name, time, from_date, to_date):
 def _w_due(spec, name, time, from_date, to_date):
     # The due window is config-driven (["due.*"] days); embed time specs
     # are ignored so the widget always mirrors what /due shows.
+    days_override = spec.get("days")
+    if days_override is not None:
+        try:
+            days_override = int(days_override)
+        except (TypeError, ValueError):
+            raise PTOSError("Embed 'days' must be one of 0, 1, 7 or 14")
+        if days_override not in (0, 1, 7, 14):
+            raise PTOSError("Embed 'days' must be one of 0, 1, 7 or 14")
     result = get_due(config_name=name if name not in ("default",
-                                                       "__DEFAULT__") else None)
+                                                       "__DEFAULT__") else None,
+                     days_override=days_override)
     result["kind"] = "due"
     result["full_count"] = result.get("count", 0)
-    return result, "/due"
+    link = "/due"
+    if name and name not in ("default", "__DEFAULT__"):
+        link += "?due=" + urllib.parse.quote(name)
+    if days_override is not None:
+        link += ("&" if "?" in link else "?") + "days=" + str(days_override)
+    return result, link
 
 
 def _w_project(spec, name, time, from_date, to_date):
-    result = _project_embed_data(name)
-    result["kind"] = "project"
+    result = _project_json(_project_embed_data(name))
     return result, "/projects"
 
 
@@ -3130,7 +3144,8 @@ def _register_builtin_widgets():
             "metric", view_options=("metric",),
             name=("Metric", "saved.metric", True,
                   "Saved metric name from the Query Builder.")))
-    reg("threshold", _w_threshold, needs_name=False, infer_order=30,
+    reg("threshold", _w_threshold, keys=("all",), needs_name=False,
+        infer_order=30,
         owns_name=lambda n, q: n in ptos.get_thresholds(),
         label="Threshold",
         description="Budget or target warnings with status bars.",
@@ -3143,7 +3158,9 @@ def _register_builtin_widgets():
             "threshold", view_options=("threshold",),
             name=("Threshold", "saved.threshold", False,
                   "Saved threshold name — leave empty to show all "
-                  "(filtered by the home thresholds setting).")))
+                  "(filtered by the home thresholds setting)."),
+            extra=(_wf("all", "All thresholds", "bool", advanced=True,
+                       help="Include every configured threshold."),)))
     reg("board", _w_board, infer_order=40,
         owns_name=lambda n, q: isinstance(q.get(f"board.{n}"), dict),
         label="Board",
@@ -3176,7 +3193,7 @@ def _register_builtin_widgets():
             name=("Calendar", "saved.calendar", True,
                   "Saved calendar name — __all__ is the global "
                   "'All records' view.")))
-    reg("due", _w_due, infer_order=70,
+    reg("due", _w_due, keys=("days",), infer_order=70,
         owns_name=lambda n, q: (n in ("default", "__DEFAULT__")
                                 or isinstance(q.get(f"due.{n}"), dict)),
         label="Due",
@@ -3190,7 +3207,10 @@ def _register_builtin_widgets():
         fields=_widget_fields(
             "due", view_options=("due",), time=False,
             name=("Due view", "saved.due", True,
-                  "Saved due view name, e.g. default.")))
+                  "Saved due view name, e.g. default."),
+            extra=(_wf("days", "Days", "select",
+                       options=["0", "1", "7", "14"], advanced=True,
+                       help="Override the saved due window."),)))
     reg("project", _w_project, infer_order=80,
         owns_name=lambda n, q: isinstance(q.get(f"project.{n}"), dict),
         label="Project",
@@ -3379,6 +3399,30 @@ def _project_embed_data(name):
         if p.get("name") == name:
             return p
     raise PTOSError(f"Project '{name}' not found in queries.toml")
+
+
+def _project_json(data):
+    result = dict(data)
+    result["notes"] = [
+        {**note, "display_name": ptos.note_title(str(note.get("path") or ""))}
+        for note in result.get("notes", [])
+    ]
+    for key in ("open_items", "done_items"):
+        rows = []
+        for task in result.get(key, []):
+            due = getattr(task, "due", None)
+            completed = getattr(task, "completed_date", None)
+            rows.append({
+                "description": getattr(task, "description", ""),
+                "priority": getattr(task, "priority", "") or "",
+                "due": due.isoformat() if due else "",
+                "completed_date": completed.isoformat() if completed else "",
+                "projects": list(getattr(task, "projects", []) or []),
+                "contexts": list(getattr(task, "contexts", []) or []),
+            })
+        result[key] = rows
+    result["kind"] = "project"
+    return result
 
 
 def get_todo_view_names():

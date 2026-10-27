@@ -622,6 +622,8 @@ function renderBoard(d) {
 function renderHabit(d) {
   var blk = (d.months && d.months.length) ? d.months[d.months.length - 1] : null;
   var wd = ["M", "T", "W", "T", "F", "S", "S"];
+  var now = new Date();
+  var today = now.getFullYear() + "-" + _pad2(now.getMonth() + 1) + "-" + _pad2(now.getDate());
   var monthHtml = "";
   if (blk) {
     var cells = (blk.days || []).map(function (day) {
@@ -631,10 +633,11 @@ function renderHabit(d) {
       var out = day.is_today ? " today" : "";
       // data-* attrs let the interactive mount toggle a day without the
       // page's global ids; static embeds ignore them.
-      return '<td class="emb-cal-cell' + on + out + '"' +
-        ' data-date="' + esc(day.date) + '"' +
-        ' data-present="' + (day.present ? 1 : 0) + '"' +
-        ' data-today="' + (day.is_today ? 1 : 0) + '">' + dnum + '</td>';
+      var canToggle = !!d.toggleable && day.date <= today;
+      return '<td class="emb-cal-cell' + on + out + (canToggle ? ' clickable' : '') + '"' +
+        (canToggle ? ' data-date="' + esc(day.date) + '" data-present="' + (day.present ? 1 : 0) +
+          '" data-today="' + (day.is_today ? 1 : 0) + '" tabindex="0" role="button"' : '') +
+        ' title="' + esc(day.date) + '">' + dnum + '</td>';
     });
     var rows = [];
     for (var i = 0; i < cells.length; i += 7) rows.push("<tr>" + cells.slice(i, i + 7).join("") + "</tr>");
@@ -653,7 +656,9 @@ function renderHabit(d) {
   '</div>';
 }
 
-function renderCalendar(d) {
+function renderCalendar(d, opts) {
+  opts = opts || {};
+  var interactive = !!opts.interactive;
   var weeks = d.weeks || [];
   var wd = ["M", "T", "W", "T", "F", "S", "S"];
   var today = new Date();
@@ -671,7 +676,7 @@ function renderCalendar(d) {
         inner += '<div class="emb-calc-chip" title="' + esc(label) + '">' + esc(label) + '</div>';
       });
       if (recs.length > 3) inner += '<div class="emb-calc-more">+' + (recs.length - 3) + ' more</div>';
-      return '<td class="' + cls + '">' + inner + '</td>';
+      return '<td class="' + cls + '"' + (interactive && cell.count > 0 ? ' data-calendar-day="' + cell.day + '" tabindex="0" role="button"' : '') + '>' + inner + '</td>';
     }).join("");
     return "<tr>" + cells + "</tr>";
   }).join("");
@@ -688,7 +693,7 @@ function renderCalendar(d) {
       var note = r.note ? '<div class="emb-cal-rec-note">' + esc(r.note) + '</div>' : "";
       return '<div class="emb-cal-rec"><span class="emb-cal-rec-label">' + esc(label) + '</span>' + note + '</div>';
     }).join("");
-    return '<div class="emb-cal-day">' +
+    return '<div class="emb-cal-day"' + (interactive ? ' data-calendar-detail="' + cell.day + '" style="display:none;"' : '') + '>' +
       '<div class="emb-cal-day-head">' +
         '<span>' + esc(iso) + '</span>' +
         '<a class="emb-cal-browse" href="/browse?time=range&from_date=' + encodeURIComponent(iso) + '&to_date=' + encodeURIComponent(iso) + '">Browse →</a>' +
@@ -764,9 +769,64 @@ function renderJournal(d) {
   '</a>';
 }
 
-function renderProject(d) {
+function renderProject(d, opts) {
+  opts = opts || {};
   var heatColor = { hot: "var(--error)", warm: "var(--warn)", cool: "var(--accent)" };
   var hc = heatColor[d.heat] || "var(--sub)";
+  if (opts.full) {
+    var label = esc(d.label || d.name || "");
+    var stats = [];
+    if (d.todo_project) {
+      stats.push("<span>Open: <b>" + _fmt(d.open_todos || 0) + "</b></span>");
+      stats.push("<span>Done: <b>" + _fmt(d.done_todos || 0) + "</b></span>");
+      if (d.overdue_todos) stats.push('<span style="color:var(--error)">Overdue: <b>' + _fmt(d.overdue_todos) + "</b></span>");
+      stats.push("<span>Added/Done (month): <b>" + _fmt(d.todo_added || 0) + "/" + _fmt(d.todo_done || 0) + "</b></span>");
+      if (d.todo_delta > 0) stats.push('<span style="color:var(--warn)">+' + _fmt(d.todo_delta) + " backlog</span>");
+    }
+    if (d.record_count) stats.push("<span>Records: <b>" + _fmt(d.record_count) + "</b></span>");
+    if ((d.notes || []).length) stats.push("<span>Notes: <b>" + _fmt(d.notes.length) + "</b></span>");
+    if ((d.journals || []).length) stats.push("<span>Journal: <b>" + _fmt(d.journals.length) + "</b></span>");
+    function details(title, count, html) {
+      return html ? '<details class="page-project-section"><summary>' + title + ' <span>(' + count + ')</span></summary><div>' + html + '</div></details>' : "";
+    }
+    var open = (d.open_items || []).map(function (t) {
+      return '<div class="page-project-row"><b>' + esc(t.priority || "—") + '</b><span>' + esc(t.description || "") + '</span>' +
+        (t.due ? '<small>Due ' + esc(t.due) + '</small>' : '') + '</div>';
+    }).join("");
+    var done = (d.done_items || []).map(function (t) {
+      return '<div class="page-project-row"><b>✓</b><span>' + esc(t.description || "") + '</span>' +
+        (t.completed_date ? '<small>' + esc(t.completed_date) + '</small>' : '') + '</div>';
+    }).join("");
+    var records = (d.record_items || []).slice(0, 20).map(function (r) {
+      var fields = Object.keys(r || {}).filter(function (k) { return ["date", "type", "note", "_filepath", "_lineno"].indexOf(k) < 0; })
+        .map(function (k) { return '<span><small>' + esc(k) + ':</small> ' + esc(r[k]) + '</span>'; }).join(" ");
+      return '<div class="page-project-row"><b>' + esc(r.date || "") + '</b><span>' + esc(r.type || "") + ' ' + fields + (r.note ? ' <small>| ' + esc(r.note) + '</small>' : '') + '</span></div>';
+    }).join("");
+    var notes = (d.notes || []).map(function (n) {
+      return '<div class="page-project-ref"><a href="/notes/edit/' + encodeURIComponent(n.path || "") + '">📝 ' + esc(n.display_name || String(n.path || "").replace(/\.md$/, "")) + '</a>' + (n.snippet ? '<small>' + esc(n.snippet) + '</small>' : '') + '</div>';
+    }).join("");
+    var journals = (d.journals || []).map(function (j) {
+      var datePath = String(j.path || "").replace(/\.md$/, "");
+      return '<div class="page-project-ref"><a href="/journal?date=' + encodeURIComponent(datePath) + '">' + esc(j.path || "") + '</a>' + (j.snippet ? '<small>' + esc(j.snippet) + '</small>' : '') + '</div>';
+    }).join("");
+    var stalls = (d.board_stalls || []).map(function (b) {
+      return '<span class="page-project-stall">' + esc(b.column || b.label || "") + ': ' + _fmt(b.oldest_days || 0) + 'd</span>';
+    }).join("");
+    var links = [];
+    if (d.todo_project) links.push('<a href="/todo?project=' + encodeURIComponent(d.todo_project) + '">Todos</a>');
+    if (d.has_board) links.push('<a href="/board?board=' + encodeURIComponent(d.board_name || "") + '">Board</a>');
+    if (d.record_count) links.push('<a href="/browse?where=' + encodeURIComponent("project=" + d.name) + '">Records</a>');
+    return '<article class="page-project-card ' + esc(d.drift || "ok") + '">' +
+      '<header><strong>' + label + '</strong><span class="page-project-badge">' + _fmt(d.stale_days || 0) + 'd ago · ' + esc(d.drift || "ok") + '</span>' +
+      '<nav><a href="/projects/' + encodeURIComponent(d.name || "") + '/edit">Edit</a><a href="/projects/' + encodeURIComponent(d.name || "") + '/delete">Delete</a></nav></header>' +
+      '<div class="page-project-stats">' + stats.join("") + '</div>' +
+      (stalls ? '<div class="page-project-stalls">Board stalls: ' + stalls + '</div>' : '') +
+      '<div class="page-project-sections">' +
+      details("Todos", d.open_todos || 0, open) + details("Done", d.done_todos || 0, done) +
+      details("Records", d.record_count || 0, records) + details("Notes", (d.notes || []).length, notes) +
+      details("Journal", (d.journals || []).length, journals) + '</div>' +
+      '<footer>' + links.join("") + '</footer></article>';
+  }
   var lines = [
     '<span>drift: <b style="color:' + hc + ';">' + esc(d.drift || "ok") + '</b></span>',
     '<span>stale <b>' + esc(d.stale_days || 0) + '</b>d</span>',

@@ -5,6 +5,15 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-27
+
+### Wave 1 page shells
+
+- Thresholds, Due, Calendar, Projects, and Habits now render through the shared full-size widget shell with server-inlined first paint. Time and selector changes update widget data in place and keep the URL in sync; calendar and habit month arrows are included. Legacy pages remain available with `?legacy=1` during the phone review window.
+- Restored Calendar cell borders and the green GitHub-style completed-day grid on Habits. Toggleable habit days now have click and keyboard affordances, and successful toggles update their cell and counts in place. Project note links keep their `.md` target while showing the extension-free title.
+- Added page characterization/data parity coverage and client tests for custom time, month navigation, habit toggling, and project note titles. The focused Python checks passed (196 tests); the page-shell Node tests passed (4 tests).
+- **G6 preliminary source count:** 661 lines added and 43 removed outside tests. The old templates remain for G7 rollback, so the code gate has not passed; do not start Wave 2 until the phone review and cleanup measurement are complete. Phone behavior and first-paint performance also still need manual checks.
+
 ## 2026-10-26
 
 ### Pages and Home actions

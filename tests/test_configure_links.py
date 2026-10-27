@@ -163,9 +163,19 @@ class TestThresholdRunLinks:
     def _setup(self):
         _write_queries(QUERIES)
 
+    def _threshold_urls(self, html):
+        import json, re
+        match = re.search(
+            r'<script type="application/json" id="page-data">(.*?)</script>',
+            html, re.S)
+        assert match, "threshold page data was not inlined"
+        data = json.loads(match.group(1))
+        return [t.get("query_url", "") for t in data.get("thresholds", [])]
+
     def test_thresholds_page_links_metric_ref(self):
         html = _client().get("/thresholds").data.decode()
-        assert '/queries?run=food_spend&amp;kind=m&amp;time=tm' in html
+        assert any("/queries?run=food_spend&kind=m&time=tm" in url
+                   for url in self._threshold_urls(html))
 
     def test_home_page_links_metric_ref(self):
         import json, re
@@ -196,7 +206,8 @@ class TestThresholdRunLinks:
             'time = "tm"\n'
         ))
         html = _client().get("/thresholds").data.decode()
-        assert '/queries?run=all_expenses&amp;kind=q&amp;time=tm' in html
+        assert any("/queries?run=all_expenses&kind=q&time=tm" in url
+                   for url in self._threshold_urls(html))
 
     def test_literal_month_time_becomes_custom(self):
         _write_queries(
@@ -212,7 +223,9 @@ class TestThresholdRunLinks:
             'time = "2026-10"\n'
         )
         html = _client().get("/thresholds").data.decode()
-        assert '/queries?run=all_expenses&amp;kind=q&amp;time=month&amp;custom_time=2026-10' in html
+        assert any(
+            "/queries?run=all_expenses&kind=q&time=month&custom_time=2026-10" in url
+            for url in self._threshold_urls(html))
 
     def test_error_row_is_not_a_link(self):
         _write_queries(
