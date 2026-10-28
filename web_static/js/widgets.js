@@ -850,6 +850,15 @@ function renderProject(d, opts) {
 // from components.css. Interactive behavior (complete/undo/add) is wired by
 // widget_host.js's mount; static callers render the same markup untouched.
 
+function _todoThresholdBadge(t) {
+  if (!t.threshold) return "";
+  var iso = String(t.threshold).slice(0, 10);
+  var m = parseInt(iso.slice(5, 7), 10);
+  var dd = parseInt(iso.slice(8, 10), 10);
+  var time = t.threshold_time ? " " + t.threshold_time : "";
+  return '<span class="todo-context" data-field="threshold" data-value="' + esc(t.threshold) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="Change threshold date">threshold ' + dd + " " + _monthName(m) + time + '</span>';
+}
+
 function _todoDueBadge(t) {
   if (!t.due) return "";
   var iso = String(t.due).slice(0, 10);
@@ -864,10 +873,22 @@ function _todoDueBadge(t) {
 
 function renderTodoRow(t, filters) {
   filters = filters || {};
+  var _priLabels = {A:'Critical',B:'Important',C:'Moderate',D:'Low'};
+  var priLabel = t.priority ? (_priLabels[t.priority] || '') : '';
+  var priTitle = t.priority ? 'Priority ' + t.priority + (priLabel ? ' — ' + priLabel : '') : 'No priority';
   var pri = t.priority
-    ? '<div class="todo-pri ' + esc(t.priority) + '" data-field="priority" data-value="' + esc(t.priority) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="Priority ' + esc(t.priority) + '">' + esc(t.priority) + '</div>'
+    ? '<div class="todo-pri ' + esc(t.priority) + '" data-field="priority" data-value="' + esc(t.priority) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="' + esc(priTitle) + '">' + esc(t.priority) + '</div>'
     : '<div class="todo-pri none" data-field="priority" data-value="" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="No priority">—</div>';
   var dueBadge = _todoDueBadge(t);
+  // Threshold badge
+  var threshBadge = "";
+  if (t.threshold) {
+    var tiso = String(t.threshold).slice(0, 10);
+    var tdd = parseInt(tiso.slice(8, 10), 10);
+    var tm = parseInt(tiso.slice(5, 7), 10);
+    var ttime = t.threshold_time ? " " + t.threshold_time : "";
+    threshBadge = '<span class="todo-context" data-field="threshold" data-value="' + esc(t.threshold) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="Change threshold date">threshold ' + tdd + " " + _monthName(tm) + ttime + '</span>';
+  }
   // Make due badge clickable for popup editing (full mode only)
   var activeProj = String(filters.project || "").replace(/^\+/, "");
   var projs = (t.projects || []).map(function (p) {
@@ -907,14 +928,17 @@ function renderTodoRow(t, filters) {
     pri +
     '<div class="todo-body">' +
       '<div class="todo-desc">' + esc(t.description) + '</div>' +
-      '<div class="todo-meta">' + idBadge + links + dueBadge +
+      '<div class="todo-meta">' + idBadge + links + dueBadge + _todoThresholdBadge(t) +
         (t.rec ? '<span class="todo-rec-badge" data-field="rec" data-value="' + esc(t.rec) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="Change recurrence">rec:' + esc(t.rec) + '</span>' : '') +
         projs + " " + ctxs +
       '</div>' +
     '</div>' +
-    '<div class="todo-actions">' +
+'<div class="todo-actions">' +
+      '<button class="pomo-row-btn" data-line="' + (t.line_no == null ? "" : t.line_no) + '" data-desc="' + esc(t.description || "") + '" onclick="todoPomoAction(this, this.getAttribute(\'data-desc\'))" title="Start pomodoro" style="background:none;border:none;cursor:pointer;font-size:14px;">▶</button>' +
+      '<button class="pomo-row-stop" onclick="todoPomoStop()" title="Stop pomodoro" style="background:none;border:none;cursor:pointer;font-size:14px;">⏹</button>' +
       '<button data-todo-act="link" title="Link to..." style="background:none;border:none;cursor:pointer;font-size:14px;">🔗</button>' +
       '<button data-todo-act="edit" title="Edit" style="background:none;border:none;cursor:pointer;font-size:14px;">✎</button>' +
+      '<button data-todo-act="delete" title="Delete" style="background:none;border:none;cursor:pointer;font-size:14px;">✕</button>' +
     '</div>' +
   '</div>';
 }

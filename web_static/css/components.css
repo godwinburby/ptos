@@ -369,3 +369,4 @@ li.md-task-list-item { list-style:none;margin-left:-22px; }
 .sel-mode .todo-check.checked::after { background: var(--accent); border-color: var(--accent); }
 .sel-mode .todo-actions { display: none; }
 .todo-row.selected { background: var(--accent-lt); border-radius: 6px; box-shadow: inset 3px 0 0 var(--accent); }
+.sr-only { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); white-space:nowrap; border:0; }

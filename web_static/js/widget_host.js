@@ -575,35 +575,31 @@
 
       function _linkTodoRow(lineNo, row) {
         var tid = row ? (row.getAttribute("data-id") || "") : "";
+        var target = window.prompt("Link to (type:id):", "");
+        if (!target || !target.trim()) return;
         if (!tid) {
           _post("/api/retro-id", { kind: "todo", line_no: lineNo }).then(function (res) {
             if (!res || !res.ok) {
               window.alert((res && res.error) || "Failed to assign an id");
               return;
             }
-            var target = window.prompt("Link to (type:id):", "");
-            if (target && target.trim()) {
-              _post("/api/link", { source: res.target, target: target.trim() }).then(function (r) {
-                if (r && r.ok) {
-                  if (r.updated) ctx.refresh(); else window.alert("Already linked");
-                } else {
-                  window.alert((r && r.error) || "Failed to link");
-                }
-              });
-            }
+            _post("/api/link", { source: res.target, target: target.trim() }).then(function (r) {
+              if (r && r.ok) {
+                if (r.updated) ctx.refresh(); else window.alert("Already linked");
+              } else {
+                window.alert((r && r.error) || "Failed to link");
+              }
+            });
           });
           return;
         }
-        var target2 = window.prompt("Link to (type:id):", "");
-        if (target2 && target2.trim()) {
-          _post("/api/link", { source: "todo:" + tid, target: target2.trim() }).then(function (r) {
-            if (r && r.ok) {
-              if (r.updated) ctx.refresh(); else window.alert("Already linked");
-            } else {
-              window.alert((r && r.error) || "Failed to link");
-            }
-          });
-        }
+        _post("/api/link", { source: "todo:" + tid, target: target.trim() }).then(function (r) {
+          if (r && r.ok) {
+            if (r.updated) ctx.refresh(); else window.alert("Already linked");
+          } else {
+            window.alert((r && r.error) || "Failed to link");
+          }
+        });
       }
 
       el.innerHTML = renderTodo(data, { full: ctx.size === "full" });
@@ -629,9 +625,50 @@
         if (chk && el.contains(chk)) {
           var row = chk.closest(".todo-row");
           if (!row) return;
-          if (chk.getAttribute("data-todo-act") === "undo") {
+          var act = chk.getAttribute("data-todo-act");
+          if (act === "undo") {
             var uln = parseInt(row.getAttribute("data-line"), 10);
             if (!isNaN(uln)) undo(uln, row.getAttribute("data-raw") || "");
+            return;
+          }
+          if (act === "link") {
+            var linkLineNo = parseInt(row.getAttribute("data-line"), 10);
+            if (!isNaN(linkLineNo)) _linkTodoRow(linkLineNo, row);
+            return;
+          }
+if (act === "edit") {
+            var editLineNo = parseInt(row.getAttribute("data-line"), 10);
+            if (!isNaN(editLineNo)) {
+              var editDone = row.classList.contains("completed");
+              var descEl = row.querySelector(".todo-desc");
+              var desc = descEl ? descEl.textContent : "";
+              var pri = row.getAttribute("data-pri") || "";
+              var due = row.getAttribute("data-due") || "";
+              var dueTime = row.getAttribute("data-due-time") || "";
+              var threshold = row.getAttribute("data-threshold") || "";
+              var thresholdTime = row.getAttribute("data-threshold-time") || "";
+              var projects = row.getAttribute("data-projects") || "";
+              var contexts = row.getAttribute("data-contexts") || "";
+              var rec = row.getAttribute("data-rec") || "";
+              var id = row.getAttribute("data-id") || "";
+              var links = row.getAttribute("data-links") || "";
+              if (editDone) {
+                openEditDone(editLineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec, id, links, row);
+              } else {
+                openEdit(editLineNo, desc, pri, due, dueTime, threshold, thresholdTime, projects, contexts, rec, id, links, row);
+              }
+            }
+            return;
+          }
+          if (act === "delete") {
+            var delLineNo = parseInt(row.getAttribute("data-line"), 10);
+            var raw = row.getAttribute("data-raw") || "";
+            if (!isNaN(delLineNo) && window.confirm("Delete this task?")) {
+              _post("/api/todo/delete", { line_no: delLineNo, target: row.classList.contains("completed") ? "done" : "todo", expect: raw }).then(function (r) {
+                if (r && r.ok) ctx.refresh();
+                else window.alert((r && r.error) || "Failed to delete");
+              });
+            }
             return;
           }
           complete(row);

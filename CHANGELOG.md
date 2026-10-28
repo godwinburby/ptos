@@ -5,7 +5,17 @@ Format: `[version or date] — description`
 
 ---
 
-## 2026-10-27
+## 2026-10-28
+
+### Wave 3 Todo page parity
+
+- **Edit button wired** — `data-todo-act="edit"` handler added to `widget_host.js`; reads fields from row data attributes and calls `openEdit`/`openEditDone`
+- **Link button fixed** — prompt now appears first; retro-id only generated when user enters a target (prevents stray id generation on cancel)
+- **Pomodoro button fixed** — inline onclick quoting corrected (double→single quotes) so the handler fires
+- **Missing row elements restored** — delete button (✕), pomo stop button (⏹), threshold badge, priority label in title
+
+---
+
 
 ### Wave 3 Todo page T1
 
