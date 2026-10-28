@@ -6,6 +6,8 @@ ptos_service.query_todos cannot silently change the page.
 """
 import datetime as dt
 import os
+import shutil
+import subprocess
 
 import pytest
 import tomli_w
@@ -14,6 +16,7 @@ import ptos
 import ptos_todo
 
 TODAY = dt.date.today()
+REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
 def _iso(offset):
@@ -61,7 +64,9 @@ def _todo_context(args=None):
     template_rendered.connect(_capture)
     try:
         client = app.test_client()
-        resp = client.get("/todo", query_string=args or {})
+        query = dict(args or {})
+        query["legacy"] = "1"
+        resp = client.get("/todo", query_string=query)
         assert resp.status_code == 200
     finally:
         template_rendered.disconnect(_capture)
@@ -133,6 +138,87 @@ class TestTodoPageGolden:
             with ptos.AtomicWrite(cfg_path, "config") as w:
                 tomli_w.dump({}, w.stream)
             ptos._invalidate_all()
+
+
+class TestTodoPageShell:
+    def _shell_data(self, args=None):
+        import json
+        from ptos_web import app
+        response = app.test_client().get("/todo", query_string=args or {})
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        match = __import__("re").search(
+            r'<script type="application/json" id="page-data">(.*?)</script>',
+            html, __import__("re").S)
+        assert match, "todo shell did not inline widget data"
+        spec_match = __import__("re").search(
+            r'<script type="application/json" id="page-spec">(.*?)</script>',
+            html, __import__("re").S)
+        assert spec_match, "todo shell did not inline its widget spec"
+        return html, json.loads(match.group(1)), json.loads(spec_match.group(1))
+
+    def test_todo_shell_inlines_grouped_rows_and_recent_done(self):
+        html, data, _spec = self._shell_data()
+        assert 'id="page-widget-toolbar"' in html
+        assert 'class="page-shell page-shell-todo"' in html
+        assert 'todo_toolbar.js' in html
+        assert 'id="todo-modal"' in html
+        assert data["kind"] == "todo"
+        grouped = {g["key"]: [t["description"] for t in g["todos"]]
+                   for g in data["groups"]}
+        assert grouped["overdue"] == ["Call supplier", "Urgent fix"]
+        assert grouped["today"] == ["Gym", "Pay rent"]
+        assert grouped["done"] == ["Done thing"]
+
+    def test_todo_shell_preserves_filter_and_groupby_url(self):
+        html, data, spec = self._shell_data({
+            "project": "home", "context": "shop", "groupby": "priority",
+            "search": "milk", "sort": "reverse"
+        })
+        assert "project=home" in html
+        assert data["filters"] == {"project": "home", "context": "shop"}
+        assert 'project = "home"' in spec["body"]
+        assert 'search = "milk"' in spec["body"]
+        assert 'groupby = "priority"' in spec["body"]
+        assert 'sort = "reverse"' in spec["body"]
+        assert len(data["groups"]) == 1
+        assert data["groups"][0]["todos"][0]["description"] == "Buy milk"
+
+    def test_todo_shell_filtered_rows_match_legacy_page(self):
+        args = {"project": "home", "context": "shop", "search": "milk",
+                "groupby": "priority"}
+        _html, data, _spec = self._shell_data(args)
+        legacy = _todo_context(args)
+        expected = [todo.description for _key, _label, _color, todos in legacy["grouped"]
+                    for todo in todos]
+        actual = [todo["description"] for group in data["groups"]
+                  for todo in group["todos"]]
+        assert actual == expected
+
+    def test_todo_legacy_page_remains_available(self):
+        from ptos_web import app
+        response = app.test_client().get("/todo?legacy=1")
+        assert b"id=\"page-widget-toolbar\"" not in response.data
+        assert b"groupby-bar" in response.data
+
+    def test_todo_shell_node_suite(self):
+        node = shutil.which("node")
+        if node is None:
+            message = "Node.js is required for Todo shell tests; run npm ci"
+            if os.environ.get("CI"):
+                pytest.fail(message)
+            pytest.skip(message)
+        probe = subprocess.run([node, "-e", "require.resolve('jsdom')"],
+                               cwd=REPO, capture_output=True, text=True)
+        if probe.returncode != 0:
+            message = "jsdom is required for Todo shell tests; run npm ci"
+            if os.environ.get("CI"):
+                pytest.fail(message)
+            pytest.skip(message)
+        result = subprocess.run(
+            [node, "--test", "tests/js/todo_shell.test.js"], cwd=REPO,
+            capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout + result.stderr
 
     def test_context_filter(self):
         ctx = _todo_context({"context": "@phone"})

@@ -9,6 +9,8 @@
 }
 .todo-row:last-child { border-bottom:none; }
 .todo-row.completed { opacity:0.4; text-decoration:line-through; }
+.todo-del { border:none; background:transparent; color:var(--sub); cursor:pointer; font-size:14px; padding:0 4px; margin-left:auto; }
+.todo-del:hover { color:var(--error); }
 .todo-check {
   width:22px; height:22px; border-radius:50%; border:2px solid var(--border);
   cursor:pointer; flex-shrink:0; margin-top:2px;
@@ -45,6 +47,8 @@
 .todo-due-badge.overdue { background:var(--error-lt); color:var(--error); }
 .todo-due-badge.today { background:#FEF3E7; color:var(--warn); }
 .todo-due-badge.future { background:var(--accent-lt); color:var(--accent); }
+.todo-rec-badge, .todo-thr-badge { display:inline-block; padding:1px 6px; border-radius:4px; font-size:11px; font-weight:600; background:var(--bg); color:var(--sub); border:1px solid var(--border); margin-right:4px; }
+.todo-rec-badge:hover, .todo-thr-badge:hover { background:var(--accent-lt); color:var(--accent); border-color:var(--accent); }
 .todo-link-badge {
   font-size:11px; padding:2px 6px; border-radius:4px;
   background:#E9E7FF; color:#5B52C7;
@@ -67,6 +71,9 @@
 }
 .todo-context:hover { background:var(--accent-lt); color:var(--accent); }
 .todo-context.active { background:var(--accent-lt); color:var(--accent); font-weight:600; }
+.todo-sel-btn { padding:4px 8px; border:none; background:transparent; color:var(--sub); font-size:13px; cursor:pointer; border-radius:4px; flex-shrink:0; width:auto; min-width:0; line-height:1; }
+.todo-sel-btn:hover { color:var(--text); background:var(--bg); }
+.todo-sel-btn.active { color:var(--accent); font-weight:700; }
 .todo-actions {
   display:flex; gap:6px;
 }
@@ -328,3 +335,37 @@ li.md-task-list-item { list-style:none;margin-left:-22px; }
 @media (min-width:768px) { .home-widget-run.home-span-2 { grid-column:span 2; } }
 @media (max-width:767px) { .ph-hide-on-phone { display:none !important; } }
 @media (min-width:768px) { .ph-hide-on-desktop { display:none !important; } }
+
+.add-chip {
+  display:inline-flex; align-items:center; gap:4px;
+  padding:6px 14px; border-radius:14px; font-size:14px; font-weight:600;
+  background:var(--bg); border:1.5px solid var(--border);
+  color:var(--sub); cursor:pointer; user-select:none;
+  transition: all 0.15s; -webkit-tap-highlight-color:transparent;
+}
+.add-chip:hover { border-color:var(--accent); color:var(--accent); }
+.add-chip.selected { background:var(--accent-lt); border-color:var(--accent); color:var(--accent); }
+.add-chip.pri-chip.selected { color:#fff; }
+.add-chip.pri-chip.pri-A.selected { background:var(--error); border-color:var(--error); }
+.add-chip.pri-chip.pri-B.selected { background:var(--warn); border-color:var(--warn); }
+.add-chip.pri-chip.pri-C.selected { background:var(--accent); border-color:var(--accent); }
+.add-chip.pri-chip.pri-D.selected { background:var(--sub); border-color:var(--sub); }
+
+.chip-toggle-bar { display:flex; align-items:center; gap:6px; padding:6px 0; margin-bottom:4px; cursor:pointer; user-select:none; font-size:13px; color:var(--sub); }
+.chip-toggle-bar:hover { color:var(--text); }
+.chip-toggle-bar.open .chip-toggle-arrow { transform:rotate(90deg); }
+.chip-toggle-arrow { display:inline-block; transition:transform .15s; }
+.add-chips { margin-top:6px; display:none; gap:6px; }
+.add-chips.open { display:grid; grid-template-columns:1fr 1fr; }
+.chip-group-card { background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:8px 10px; }
+.chip-group-card.full-width { grid-column:1 / -1; }
+.chip-group-label { font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.5px; color:var(--sub); margin-bottom:6px; }
+.chip-row { display:flex; gap:5px; flex-wrap:wrap; }
+
+/* Select mode */
+.sel-mode { cursor: pointer; }
+.sel-mode .todo-check { border-color: var(--accent); border-radius: 4px; }
+.sel-mode .todo-check::after { content: ""; display: block; width: 12px; height: 12px; border: 2px solid var(--accent); border-radius: 2px; }
+.sel-mode .todo-check.checked::after { background: var(--accent); border-color: var(--accent); }
+.sel-mode .todo-actions { display: none; }
+.todo-row.selected { background: var(--accent-lt); border-radius: 6px; box-shadow: inset 3px 0 0 var(--accent); }

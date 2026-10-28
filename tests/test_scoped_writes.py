@@ -488,6 +488,52 @@ class TestDispatchRoute:
         stored = _read()
         assert "board.kanban" not in stored
 
+    def test_save_todo_view_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/todo", json={
+            "name": "work_week", "cfg": {
+                "project": "+work", "due": "week", "groupby": "project",
+                "sort": "most", "hide_routines": True,
+            },
+        })
+        assert resp.get_json()["ok"] is True
+        stored = _read()
+        assert stored["todo.work_week"] == {
+            "project": "+work", "due": "week", "groupby": "project",
+            "sort": "most", "hide_routines": True,
+        }
+
+    def test_delete_todo_view_via_route(self):
+        from ptos_web import app
+        client = app.test_client()
+        _write_queries(_FULL_TOML + '\n[todo.work_week]\nproject = "+work"\n')
+        resp = client.post("/api/query-builder/todo",
+                           json={"name": "work_week", "action": "delete"})
+        assert resp.get_json()["ok"] is True
+        assert "todo.work_week" not in _read()
+
+    def test_todo_view_rejects_invalid_filter(self):
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.post("/api/query-builder/todo", json={
+            "name": "work_week", "cfg": {"due": "someday-ish"},
+        })
+        assert resp.get_json()["ok"] is False
+        assert "due must be one of" in resp.get_json()["error"]
+
+    def test_update_todo_view_removes_cleared_filters(self):
+        from ptos_web import app
+        client = app.test_client()
+        client.post("/api/query-builder/todo", json={
+            "name": "work_week", "cfg": {"project": "+work", "due": "week"},
+        })
+        resp = client.post("/api/query-builder/todo", json={
+            "name": "work_week", "cfg": {"context": "@office"},
+        })
+        assert resp.get_json()["ok"] is True, resp.get_json()
+        assert _read()["todo.work_week"] == {"context": "@office"}
+
     def test_unknown_kind_rejected(self):
         from ptos_web import app
         client = app.test_client()

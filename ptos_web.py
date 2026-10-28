@@ -973,65 +973,130 @@ def due_page():
 
 @app.route("/todo")
 def todo_page():
-    has_prj_param = "project" in request.args
-    project = request.args.get("project") or None
-    context = request.args.get("context", None)
-    pri = request.args.get("priority", None)
-    due_filter = request.args.get("due", None)
-    search = request.args.get("search", None)
-    linked_to = request.args.get("linked_to", None)
-    groupby = request.args.get("groupby", "timeline")
+    saved_views = svc.get_todo_views()
+    requested_view = request.args.get("view", "").strip()
+    selected_view = requested_view if requested_view in saved_views else ""
+    saved_view = saved_views.get(selected_view, {})
+    has_prj_param = "project" in request.args or "project" in saved_view
+    project = request.args.get("project", saved_view.get("project")) or None
+    context = request.args.get("context", saved_view.get("context"))
+    pri = request.args.get("priority", saved_view.get("priority"))
+    due_filter = request.args.get("due", saved_view.get("due"))
+    search = request.args.get("search", saved_view.get("search"))
+    linked_to = request.args.get("linked_to", saved_view.get("linked_to"))
+    groupby = request.args.get("groupby", saved_view.get("groupby", "timeline"))
+    sort = request.args.get("sort", saved_view.get("sort"))
     todo_cfg = svc.get_config().get("todo", {})
     hide_routines_cfg = bool(todo_cfg.get("hide_routines", False))
-    hide_routines = (project and project.startswith("-")) or (not has_prj_param and hide_routines_cfg)
-
-    try:
-        buckets = svc.query_todos(
-            project=project, context=context, priority=pri, due=due_filter,
-            search=search, linked_to=linked_to,
-            hide_routines=(not has_prj_param and hide_routines_cfg))
-        projects = svc.get_todo_projects()
-        contexts = svc.get_todo_contexts()
-        error = None
-    except PTOSError as e:
-        buckets = {"overdue": [], "today": [], "tomorrow": [], "upcoming": [], "someday": [], "total_open": 0}
-        projects = []
-        contexts = []
-        error = str(e)
-
-    # today progress: count completed today vs total added today
-    try:
-        all_done, _ = svc.ptos_todo.load_todos(ptos.DONE_PATH)
-        today_str = dt.date.today().isoformat()
-        done_today = len([t for t in all_done if t.completed_date and t.completed_date.isoformat() == today_str])
-        total_today = len(buckets["overdue"]) + len(buckets["today"]) + done_today
-        # most recent 50 done tasks, newest first
-        done_recent = sorted(all_done, key=lambda t: t.completed_date or dt.date.min, reverse=True)[:50]
-    except Exception:
-        done_today = 0
-        total_today = 0
-        done_recent = []
-
-    # collect all unique priorities across all todos
-    all_todos_flat = buckets["overdue"] + buckets["today"] + buckets["upcoming"] + buckets["someday"]
-    all_priorities = sorted(set(t.priority for t in all_todos_flat if t.priority))
+    hide_routines = bool(project and project.startswith("-")) or (
+        not has_prj_param and bool(saved_view.get("hide_routines", hide_routines_cfg)))
 
     priority_labels = todo_cfg.get("priority_labels", {})
 
-    # Build grouped sections for the selected groupby mode (shared with
-    # the todo widget via svc.group_todos so the two can never drift)
-    grouped = svc.group_todos(buckets, groupby, priority_labels)
+    if request.args.get("legacy") == "1":
+        try:
+            buckets = svc.query_todos(
+                project=project, context=context, priority=pri, due=due_filter,
+                search=search, linked_to=linked_to,
+                hide_routines=(not has_prj_param and hide_routines_cfg))
+            projects = svc.get_todo_projects()
+            contexts = svc.get_todo_contexts()
+            error = None
+        except PTOSError as e:
+            buckets = {"overdue": [], "today": [], "tomorrow": [], "upcoming": [], "someday": [], "total_open": 0}
+            projects = []
+            contexts = []
+            error = str(e)
 
-    return render_template("todo.html", tab="todo", title="Todos",
-        now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
-        error=error, selected_project=project, selected_context=context,
-        selected_priority=pri, selected_due=due_filter, selected_search=search,
-        selected_linked_to=linked_to,
-        hide_routines=hide_routines, hide_routines_param=has_prj_param,
-        hide_routines_cfg=hide_routines_cfg,
-        done_today=done_today, total_today=total_today, done_recent=done_recent,
-        all_priorities=all_priorities, priority_labels=priority_labels,
-        grouped=grouped, groupby=groupby)
+        try:
+            all_done, _ = svc.ptos_todo.load_todos(ptos.DONE_PATH)
+            today_str = dt.date.today().isoformat()
+            done_today = len([t for t in all_done if t.completed_date and t.completed_date.isoformat() == today_str])
+            total_today = len(buckets["overdue"]) + len(buckets["today"]) + done_today
+            done_recent = sorted(all_done, key=lambda t: t.completed_date or dt.date.min, reverse=True)[:50]
+        except Exception:
+            done_today = 0
+            total_today = 0
+            done_recent = []
+
+        all_todos_flat = buckets["overdue"] + buckets["today"] + buckets["upcoming"] + buckets["someday"]
+        all_priorities = sorted(set(t.priority for t in all_todos_flat if t.priority))
+        grouped = svc.group_todos(buckets, groupby, priority_labels)
+        return render_template("todo.html", tab="todo", title="Todos",
+            now=_now_str(), buckets=buckets, projects=projects, contexts=contexts,
+            error=error, selected_project=project, selected_context=context,
+            selected_priority=pri, selected_due=due_filter, selected_search=search,
+            selected_linked_to=linked_to,
+            hide_routines=hide_routines, hide_routines_param=has_prj_param,
+            hide_routines_cfg=hide_routines_cfg,
+            done_today=done_today, total_today=total_today, done_recent=done_recent,
+            all_priorities=all_priorities, priority_labels=priority_labels,
+            grouped=grouped, groupby=groupby)
+
+    widget_spec = {
+        "view": "todo", "groupby": groupby,
+        "include_done": bool(saved_view.get("include_done", True)),
+        "hide_routines": bool(hide_routines), "limit": 500,
+    }
+    if selected_view:
+        widget_spec["name"] = selected_view
+    for key, value in (("project", project), ("context", context),
+                       ("priority", pri), ("due", due_filter),
+                       ("search", search), ("linked_to", linked_to),
+                       ("sort", sort)):
+        if key in request.args:
+            widget_spec[key] = request.args.get(key, "")
+        elif value and not selected_view:
+            widget_spec[key] = value
+    embed_body = "\n".join(
+        key + " = " + ("true" if value is True else
+                       "false" if value is False else json.dumps(value))
+        for key, value in widget_spec.items())
+    try:
+        page_data = svc.resolve_embed(widget_spec)
+        page_error = None
+    except PTOSError as e:
+        page_data = None
+        page_error = str(e)
+
+    projects = []
+    contexts = []
+    all_priorities = sorted({
+        todo.get("priority", "")
+        for group in (page_data or {}).get("groups", [])
+        for todo in group.get("todos", [])
+        if todo.get("priority")
+    })
+    try:
+        projects = svc.get_todo_projects()
+        contexts = svc.get_todo_contexts()
+    except PTOSError as e:
+        if page_error is None:
+            page_error = str(e)
+
+    return render_template("page_shell.html", tab="todo", title="Todos",
+        page_title="Todos", now=_now_str(), configure_url="",
+        time_options=[], time_value="", custom_time="", from_date="", to_date="",
+        year_range=_YEAR_RANGE, page_data=page_data or {},
+        projects=projects, contexts=contexts, priority_labels=priority_labels,
+        show_delete=True,
+        page_spec={"body": embed_body, "kind": "todo"},
+        page_toolbar="todo", page_state={
+            "error": page_error,
+            "todo": {
+                "projects": projects, "contexts": contexts,
+                "views": saved_views, "selected_view": selected_view,
+                "priorities": all_priorities,
+                "priority_labels": priority_labels,
+                "filters": {"project": project or "", "context": context or "",
+                            "priority": pri or "", "due": due_filter or "",
+                            "search": search or "", "linked_to": linked_to or ""},
+                "groupby": groupby, "sort": sort or "default",
+                "include_done": bool(saved_view.get("include_done", True)),
+                "hide_routines": bool(hide_routines),
+                "hide_routines_config": hide_routines_cfg,
+            },
+        }, select_controls=[])
 
 
 @app.route("/todo/add", methods=["POST"])
@@ -3794,6 +3859,7 @@ def query_builder_item(kind):
         "threshold": svc.save_threshold,
         "due": svc.save_due,
         "project": svc.save_project,
+        "todo": svc.save_todo_view,
     }
     _DELETE = {
         "query": svc.delete_query_entry,
@@ -3806,6 +3872,7 @@ def query_builder_item(kind):
         "threshold": svc.delete_threshold,
         "due": svc.delete_due,
         "project": svc.delete_project,
+        "todo": svc.delete_todo_view,
     }
     if kind not in _SAVE:
         return jsonify(ok=False, error=f"Unknown kind '{kind}'")

@@ -64,6 +64,65 @@
       syncUrl(p, path);
     }
 
+    // Wire autocomplete after toolbar mount
+    if (window.PtosTodoAutocomplete && typeof window.PtosTodoAutocomplete.wire === "function") {
+      setTimeout(window.PtosTodoAutocomplete.wire, 50);
+      if (state.todo) window.PtosTodoAutocomplete.rebuild(state.todo);
+    }
+    var todoToolbarEl = document.getElementById("page-widget-toolbar");
+    if (todoToolbarEl && state.todo && window.PtosTodoToolbar) {
+      window.PtosTodoToolbar.mount(todoToolbarEl, state.todo, function (changes) {
+        var p = params();
+        var savedViewActive = !!p.get("view") || !!changes.selected_view;
+        Object.keys(changes).forEach(function (key) {
+          var value = changes[key];
+          if (key === "selected_view") {
+            state.todo.selected_view = value || "";
+            if (value) p.set("view", value); else p.delete("view");
+            return;
+          }
+          if (key === "hide_routines") {
+            state.todo.hide_routines = !!value;
+            return;
+          }
+          if (key === "include_done") {
+            state.todo.include_done = !!value;
+            return;
+          }
+          if (key === "groupby") {
+            if (!value || value === "timeline") {
+              if (savedViewActive) p.set(key, "timeline"); else p.delete(key);
+            } else p.set(key, value);
+            state.todo.groupby = value || "timeline";
+          } else if (key === "sort") {
+            if (!value || value === "default") {
+              if (savedViewActive) p.set(key, "default"); else p.delete(key);
+            } else p.set(key, value);
+            state.todo.sort = value || "default";
+          } else if (key === "project" && !value) {
+            if (savedViewActive || (changes.hide_routines === false && state.todo.hide_routines_config)) p.set(key, "");
+            else p.delete(key);
+            state.todo.filters.project = "";
+          } else {
+            if (value) p.set(key, value);
+            else if (savedViewActive) p.set(key, "");
+            else p.delete(key);
+            if (state.todo.filters && Object.prototype.hasOwnProperty.call(state.todo.filters, key)) {
+              state.todo.filters[key] = value || "";
+            }
+          }
+        });
+        var bodyChanges = Object.assign({}, changes);
+        if (Object.prototype.hasOwnProperty.call(bodyChanges, "selected_view")) {
+          bodyChanges.name = bodyChanges.selected_view || null;
+          delete bodyChanges.selected_view;
+        }
+        refreshBodies(function (body) {
+          return window.PtosTodoController.updateBody(body, bodyChanges);
+        }, p);
+      });
+    }
+
     var controls = document.querySelector("[data-page-controls]");
     if (!controls) return;
     var timeSelect = controls.querySelector("[data-page-time]");

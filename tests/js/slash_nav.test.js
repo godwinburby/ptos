@@ -27,6 +27,7 @@ test("slash starts with categories and searches through the gallery", async () =
     {id:"capture",label:"Capture",count:3},{id:"projects",label:"Projects",count:2}
   ],kinds:[
     {kind:"query",label:"Saved query",category:"tables",named:true,needs_name:true,description:"Tables and charts"},
+    {kind:"todo",label:"Task list",category:"tasks",named:true,needs_name:false,description:"Live todo list with filters"},
     {kind:"capture",label:"Quick capture",category:"capture",named:false,needs_name:false,quick_add:true,description:"Capture a line"}
   ],starters:[]};
   globalThis.fetch = async url => ({json:async()=>String(url).includes("/options")
@@ -89,5 +90,16 @@ test("slash starts with categories and searches through the gallery", async () =
   await new Promise(resolve=>setTimeout(resolve,0));
   assert.ok(list.textContent.includes("Quick capture"), list.innerHTML);
   assert.ok(!list.textContent.includes("Tasks"));
+
+  el.value = "/todo";
+  el.setSelectionRange(el.value.length,el.value.length);
+  el.dispatchEvent(new window.Event("input",{bubbles:true}));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  const taskList = Array.from(list.querySelectorAll(".slash-nav-row"))
+    .find(item => item.textContent.includes("Task list"));
+  assert.ok(taskList, list.innerHTML);
+  taskList.dispatchEvent(new window.MouseEvent("mousedown",{bubbles:true}));
+  await new Promise(resolve=>setTimeout(resolve,0));
+  assert.ok(formOptions && formOptions.body.includes('view = "todo"'));
   dom.window.close();
 });

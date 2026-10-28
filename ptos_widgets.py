@@ -237,7 +237,12 @@ def _value_errors(f, value):
     elif t in ("chips", "multiselect"):
         if f.get("options_from"):
             if f.get("options_from") == "todo.priorities":
+                if value is None or value == "" or value == []:
+                    return []
                 vals = list(value) if isinstance(value, (list, tuple)) else [value]
+                vals = [v for v in vals if v != "" and v is not None]
+                if not vals:
+                    return []
                 if any(not isinstance(v, str) or
                        re.fullmatch(r"[A-Z]", v) is None for v in vals):
                     return [{"field": f["key"],

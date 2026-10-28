@@ -859,19 +859,27 @@ function _todoDueBadge(t) {
   var m = parseInt(iso.slice(5, 7), 10);
   var dd = parseInt(iso.slice(8, 10), 10);
   var time = t.due_time ? " " + t.due_time : "";
-  return '<span class="todo-due-badge ' + cls + '">' + dd + " " + _monthName(m) + time + '</span>';
+  return '<span class="todo-due-badge ' + cls + '" data-field="due" data-value="' + esc(t.due) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer">' + dd + " " + _monthName(m) + time + '</span>';
 }
 
-function renderTodoRow(t) {
+function renderTodoRow(t, filters) {
+  filters = filters || {};
   var pri = t.priority
-    ? '<div class="todo-pri ' + esc(t.priority) + '" title="Priority ' + esc(t.priority) + '">' + esc(t.priority) + '</div>'
-    : '<div class="todo-pri none" title="No priority">—</div>';
+    ? '<div class="todo-pri ' + esc(t.priority) + '" data-field="priority" data-value="' + esc(t.priority) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="Priority ' + esc(t.priority) + '">' + esc(t.priority) + '</div>'
+    : '<div class="todo-pri none" data-field="priority" data-value="" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="No priority">—</div>';
   var dueBadge = _todoDueBadge(t);
+  // Make due badge clickable for popup editing (full mode only)
+  var activeProj = String(filters.project || "").replace(/^\+/, "");
   var projs = (t.projects || []).map(function (p) {
-    return '<a class="todo-project" href="/todo?project=' + encodeURIComponent(p) + '">' + esc(p) + '</a>';
+    var pNorm = String(p).replace(/^\+/, "");
+    var cls = (activeProj && pNorm === activeProj) ? " active" : "";
+    return '<a class="todo-project' + cls + '" data-todo-filter-badge="project" data-value="' + esc(p) + '" style="cursor:pointer">' + esc(p) + '</a>';
   }).join("");
+  var activeCtx = String(filters.context || "").replace(/^@/, "");
   var ctxs = (t.contexts || []).map(function (c) {
-    return '<a class="todo-context" href="/todo?context=' + encodeURIComponent(c) + '">' + esc(c) + '</a>';
+    var cNorm = String(c).replace(/^@/, "");
+    var cls = (activeCtx && cNorm === activeCtx) ? " active" : "";
+    return '<a class="todo-context' + cls + '" data-todo-filter-badge="context" data-value="' + esc(c) + '" style="cursor:pointer">' + esc(c) + '</a>';
   }).join("");
   var links = (t.links || []).map(function (lk) {
     return '<a class="todo-link-badge" href="/todo?linked_to=' + encodeURIComponent(lk) + '" title="Todos linked to ' + esc(lk) + '">' + esc(lk) + '</a>';
@@ -881,7 +889,17 @@ function renderTodoRow(t) {
     : "";
   return '<div class="todo-row' + (t.done ? " completed" : "") + '"' +
     ' data-line="' + (t.line_no == null ? "" : t.line_no) + '"' +
-    ' data-raw="' + esc(t.raw_line || "") + '">' +
+    ' data-raw="' + esc(t.raw_line || "") + '"' +
+    ' data-id="' + esc(t.id || "") + '"' +
+    ' data-links="' + esc((t.links || []).join(",")) + '"' +
+    ' data-pri="' + esc(t.priority || "") + '"' +
+    ' data-due="' + esc(t.due || "") + '"' +
+    ' data-due-time="' + esc(t.due_time || "") + '"' +
+    ' data-threshold="' + esc(t.threshold || "") + '"' +
+    ' data-threshold-time="' + esc(t.threshold_time || "") + '"' +
+    ' data-rec="' + esc(t.rec || "") + '"' +
+    ' data-projects="' + esc((t.projects || []).join(" ")) + '"' +
+    ' data-contexts="' + esc((t.contexts || []).join(" ")) + '">' +
     '<div class="todo-check' + (t.done ? " checked" : "") + '"' +
       ' data-todo-act="' + (t.done ? "undo" : "complete") + '"' +
       ' role="button" tabindex="0"' +
@@ -889,13 +907,30 @@ function renderTodoRow(t) {
     pri +
     '<div class="todo-body">' +
       '<div class="todo-desc">' + esc(t.description) + '</div>' +
-      '<div class="todo-meta">' + idBadge + links + dueBadge + projs + ctxs + '</div>' +
+      '<div class="todo-meta">' + idBadge + links + dueBadge +
+        (t.rec ? '<span class="todo-rec-badge" data-field="rec" data-value="' + esc(t.rec) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="Change recurrence">rec:' + esc(t.rec) + '</span>' : '') +
+        projs + " " + ctxs +
+      '</div>' +
+    '</div>' +
+    '<div class="todo-actions">' +
+      '<button data-todo-act="link" title="Link to..." style="background:none;border:none;cursor:pointer;font-size:14px;">🔗</button>' +
+      '<button data-todo-act="edit" title="Edit" style="background:none;border:none;cursor:pointer;font-size:14px;">✎</button>' +
     '</div>' +
   '</div>';
 }
 
-function renderTodoGroup(g) {
-  var rows = (g.todos || []).map(renderTodoRow).join("");
+function renderTodoGroup(g, opts) {
+  var rows = (g.todos || []).map(function (t) { return renderTodoRow(t, (opts && opts.filters) || {}); }).join("");
+  if (opts && opts.full) {
+    var open = g.key !== "overdue" && g.key !== "done";
+    if (opts && opts.hasSearch && (g.todos || []).length > 0) open = true;
+    return '<details class="todo-group todo-section" data-group="' + esc(g.key || "") +
+      '" data-todo-section="' + esc(g.key || "") + '"' + (open ? " open" : "") + '>' +
+      '<summary class="todo-group-head" style="color:' + esc(g.color || "var(--sub)") + '">' +
+      '<span>' + esc(g.label || "") + '</span><span class="todo-group-count">' +
+      (g.todos || []).length + '</span></summary><div class="todo-group-rows">' + rows +
+      '</div></details>';
+  }
   return '<div class="todo-group" data-group="' + esc(g.key || "") + '">' +
     '<div class="todo-group-head" style="color:' + esc(g.color || "var(--sub)") + '">' +
       '<span>' + esc(g.label || "") + '</span>' +
@@ -903,8 +938,9 @@ function renderTodoGroup(g) {
     '</div>' + rows + '</div>';
 }
 
-function renderTodo(d) {
+function renderTodo(d, opts) {
   d = d || {};
+  opts = opts || {};
   var parts = [];
   if (d.add) {
     var f = d.filters || {};
@@ -925,9 +961,28 @@ function renderTodo(d) {
         '<button type="button" class="btn btn-ghost btn-sm todo-add-btn">Add</button>' +
       '</div>');
   }
+  // Select mode bar
+  parts.push(
+    '<div id="sel-bar" class="sel-bar" style="display:none;padding:6px 12px;background:var(--accent-lt);border-bottom:1px solid var(--border);align-items:center;gap:8px;">' +
+    '<span id="sel-count" style="font-size:13px;font-weight:600;">0 selected</span>' +
+    '<button type="button" class="btn btn-sm btn-primary" onclick="openBulkEdit()">Bulk edit</button>' +
+    '<button type="button" class="btn btn-sm" onclick="toggleSelectMode()">Cancel</button>' +
+    '</div>');
+
+  var _hasSearch = !!(d.filters && (
+    (d.filters.search && String(d.filters.search).trim() !== "") ||
+    (d.filters.project && String(d.filters.project).trim() !== "") ||
+    (d.filters.context && String(d.filters.context).trim() !== "") ||
+    (d.filters.priority && String(d.filters.priority).trim() !== "") ||
+    (d.filters.due && String(d.filters.due).trim() !== "") ||
+    (d.filters.linked_to && String(d.filters.linked_to).trim() !== "")
+  ));
   var groups = d.groups || [];
   if (groups.length) {
-    parts.push(groups.map(renderTodoGroup).join(""));
+    parts.push(groups.map(function (group) {
+      var gOpts = Object.assign({}, opts, { hasSearch: _hasSearch, filters: d.filters || {} });
+      return renderTodoGroup(group, gOpts);
+    }).join(""));
     if (d.total_open) {
       parts.push('<div class="emb-stat" style="padding:6px 12px 10px;">' +
         '<span><b>' + _fmt(d.total_open) + '</b> open</span></div>');
@@ -935,5 +990,7 @@ function renderTodo(d) {
   } else {
     parts.push('<div class="msg" style="color:var(--sub);margin:10px 12px;">No todos.</div>');
   }
-  return '<div class="card">' + parts.join("") + '</div>';
+  return opts.full
+    ? '<div class="todo-full-list">' + parts.join("") + '</div>'
+    : '<div class="card">' + parts.join("") + '</div>';
 }

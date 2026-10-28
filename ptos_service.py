@@ -3435,6 +3435,16 @@ def get_todo_view_names():
                   if k.startswith("todo.") and isinstance(all_q[k], dict))
 
 
+def get_todo_views():
+    """Return saved Todo view definitions keyed by their short names."""
+    try:
+        all_q = get_queries()
+    except Exception:
+        all_q = {}
+    return {k[5:]: dict(v) for k, v in all_q.items()
+            if k.startswith("todo.") and isinstance(v, dict) and k[5:]}
+
+
 def get_embed_candidates():
     """Return the embeddable names grouped by kind, for the ``/`` menu.
 
@@ -6970,6 +6980,66 @@ def delete_threshold(name):
 
 
 # ── Due ─────────────────────────────────────────────────────────────────────
+
+@_locked_queries
+def save_todo_view(name, cfg):
+    """Write or update a saved Todo view in queries.toml."""
+    name = _validate_name(name)
+    if not isinstance(cfg, dict):
+        raise PTOSError("Todo view settings must be an object")
+    allowed = set(TODO_VIEW_KEYS)
+    unknown = sorted(set(cfg) - allowed)
+    if unknown:
+        raise PTOSError("Unsupported Todo view setting(s): " + ", ".join(unknown))
+    entry = {}
+    for key in ("project", "context", "priority", "due", "search", "linked_to",
+                "groupby", "sort", "title"):
+        value = cfg.get(key)
+        if isinstance(value, str) and value.strip():
+            entry[key] = value.strip()
+    if entry.get("due") and entry["due"].lower() not in TODO_DUE_VALUES:
+        raise PTOSError("Todo view due must be one of: " + ", ".join(TODO_DUE_VALUES))
+    if entry.get("groupby") and entry["groupby"].lower() not in _TODO_GROUPBYS:
+        raise PTOSError("Todo view groupby must be one of: " + ", ".join(_TODO_GROUPBYS))
+    if entry.get("sort") and entry["sort"].lower() not in {"default", "reverse", "most", "fewest"}:
+        raise PTOSError("Todo view sort must be one of: default, reverse, most, fewest")
+    if entry.get("priority"):
+        if not re.fullmatch(r"[A-Z]", entry["priority"].upper()):
+            raise PTOSError("Todo view priority must be a single letter")
+        entry["priority"] = entry["priority"].upper()
+    for key in ("include_done", "hide_routines", "add"):
+        if key in cfg:
+            if not isinstance(cfg[key], bool):
+                raise PTOSError(f"Todo view {key} must be true or false")
+            entry[key] = cfg[key]
+    if "limit" in cfg:
+        try:
+            limit = int(cfg["limit"])
+        except (TypeError, ValueError):
+            raise PTOSError("Todo view limit must be a whole number")
+        if limit < 1:
+            raise PTOSError("Todo view limit must be at least 1")
+        entry["limit"] = limit
+    existing = _load_queries_toml()
+    old_entry = _lookup_entry(existing, "todo", name)
+    if isinstance(old_entry, dict):
+        entry = {key: value for key, value in old_entry.items()
+                 if key not in allowed} | entry
+    _write_queries_toml_key(f"todo.{name}", entry)
+    return {"ok": True, "name": name}
+
+
+@_locked_queries
+def delete_todo_view(name):
+    """Remove a saved Todo view from queries.toml."""
+    name = _validate_name(name)
+    existing = _load_queries_toml()
+    if not _has_entry(existing, "todo", name):
+        raise PTOSError(f"Todo view '{name}' not found")
+    _remove_entry(existing, "todo", name)
+    _write_queries(existing)
+    return {"ok": True, "name": name}
+
 
 @_locked_queries
 def save_due(name, cfg):

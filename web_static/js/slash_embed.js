@@ -471,7 +471,7 @@
     }
     if (it._navKind) {
       var kind = it._navKind;
-      if (kind.named) {
+      if (kind.named && kind.needs_name !== false) {
         list._navPath = [kind.category, kind.kind];
         list._navItems = null;
         list._navLoading = false;

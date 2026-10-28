@@ -82,6 +82,33 @@ class TestTodoViewResolution:
         assert "project=%2Bwork" in r["link"]
         assert "groupby=project" in r["link"]
 
+    def test_todo_page_loads_saved_view_for_editing(self):
+        import json
+        import re
+        _clean()
+        _set_queries({"todo.work_week": {
+            "project": "+work", "groupby": "project", "sort": "most",
+            "title": "Work week", "hide_routines": True,
+        }})
+        _seed_todos([f"Call supplier +work due:{_today()}", "Fix sink +home"])
+        from ptos_web import app
+        response = app.test_client().get("/todo?view=work_week")
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert '"selected_view": "work_week"' in html
+        spec_match = re.search(
+            r'<script type="application/json" id="page-spec">(.*?)</script>',
+            html, re.S)
+        data_match = re.search(
+            r'<script type="application/json" id="page-data">(.*?)</script>',
+            html, re.S)
+        spec = json.loads(spec_match.group(1))
+        data = json.loads(data_match.group(1))
+        assert 'name = "work_week"' in spec["body"]
+        descriptions = [todo["description"] for group in data["groups"]
+                        for todo in group["todos"]]
+        assert descriptions == ["Call supplier"]
+
     def test_saved_view_title_overrides_kind_capitalization(self):
         _clean()
         _set_queries({"todo.q1": {"title": "Deep Work"}})

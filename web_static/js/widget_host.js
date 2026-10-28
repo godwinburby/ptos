@@ -516,7 +516,7 @@
 
   register("todo", {
     render: function (el, data) {
-      el.innerHTML = renderTodo(data);
+      el.innerHTML = renderTodo(data, { full: false });
     },
     mount: function (el, data, ctx) {
       var evts = [];
@@ -573,10 +573,59 @@
         });
       }
 
-      el.innerHTML = renderTodo(data);
+      function _linkTodoRow(lineNo, row) {
+        var tid = row ? (row.getAttribute("data-id") || "") : "";
+        if (!tid) {
+          _post("/api/retro-id", { kind: "todo", line_no: lineNo }).then(function (res) {
+            if (!res || !res.ok) {
+              window.alert((res && res.error) || "Failed to assign an id");
+              return;
+            }
+            var target = window.prompt("Link to (type:id):", "");
+            if (target && target.trim()) {
+              _post("/api/link", { source: res.target, target: target.trim() }).then(function (r) {
+                if (r && r.ok) {
+                  if (r.updated) ctx.refresh(); else window.alert("Already linked");
+                } else {
+                  window.alert((r && r.error) || "Failed to link");
+                }
+              });
+            }
+          });
+          return;
+        }
+        var target2 = window.prompt("Link to (type:id):", "");
+        if (target2 && target2.trim()) {
+          _post("/api/link", { source: "todo:" + tid, target: target2.trim() }).then(function (r) {
+            if (r && r.ok) {
+              if (r.updated) ctx.refresh(); else window.alert("Already linked");
+            } else {
+              window.alert((r && r.error) || "Failed to link");
+            }
+          });
+        }
+      }
+
+      el.innerHTML = renderTodo(data, { full: ctx.size === "full" });
       on(el, "click", function (e) {
         if (!e.target) return;
         var chk = e.target.closest && e.target.closest("[data-todo-act]");
+        if (window._selMode) {
+          var selRow = e.target && e.target.closest && e.target.closest(".todo-row");
+          if (selRow && el.contains(selRow) && !(e.target.closest && e.target.closest("[data-todo-act]"))) {
+            selRow.classList.toggle("selected");
+            var ln = parseInt(selRow.getAttribute("data-line"), 10);
+            if (selRow.classList.contains("selected")) {
+              window._selLines[ln] = selRow.getAttribute("data-raw") || "";
+            } else {
+              delete window._selLines[ln];
+            }
+            var cnt = Object.keys(window._selLines).length;
+            var cntEl = el.querySelector("#sel-count");
+            if (cntEl) cntEl.textContent = cnt + " selected";
+          }
+          return;
+        }
         if (chk && el.contains(chk)) {
           var row = chk.closest(".todo-row");
           if (!row) return;
@@ -590,6 +639,59 @@
         }
         if (e.target.classList && e.target.classList.contains("todo-add-btn")) {
           addTask();
+        }
+        // Metadata popups (priority, due, recurrence badges in todo rows)
+        var meta = e.target && e.target.closest && e.target.closest("[data-field]");
+        if (meta && el.contains(meta)) {
+          var mfield = meta.getAttribute("data-field");
+          var mrow = meta.closest && meta.closest(".todo-row");
+          var mline = mrow ? parseInt(mrow.getAttribute("data-line"), 10) : NaN;
+          var mval = meta.getAttribute("data-value") || "";
+          if (!isNaN(mline) && window.PtosTodoPopups) {
+            if (mfield === "priority") {
+              window.PtosTodoPopups.popupEditPriority(mline, mval, meta, ctx.refresh);
+              return;
+            }
+            if (mfield === "due") {
+              window.PtosTodoPopups.popupEditDate(mline, "due", mval, meta, ctx.refresh);
+              return;
+            }
+            if (mfield === "threshold") {
+              window.PtosTodoPopups.popupEditDate(mline, "threshold", mval, meta, ctx.refresh);
+              return;
+            }
+            if (mfield === "rec") {
+              window.PtosTodoPopups.popupEditRec(mline, mval, meta, ctx.refresh);
+              return;
+            }
+          }
+        }
+        // Badge chip filters (project/context badges in todo rows)
+        var badge = e.target && e.target.closest && e.target.closest("[data-todo-filter-badge]");
+        if (badge && el.contains(badge)) {
+          var filterKey = badge.getAttribute("data-todo-filter-badge");
+          var filterVal = badge.getAttribute("data-value") || "";
+          var sel = document.querySelector('select[data-todo-filter="' + filterKey + '"]');
+          if (sel) {
+            // Toggle: if already filtered by this value, clear it
+            if (String(sel.value) === String(filterVal) && filterVal !== "") {
+              sel.value = "";
+            } else {
+              sel.value = filterVal;
+            }
+            sel.dispatchEvent(new Event("change", { bubbles: true }));
+          }
+          return;
+        }
+        // Link button
+        var linkBtn = e.target && e.target.closest && e.target.closest('[data-todo-act="link"]');
+        if (linkBtn && el.contains(linkBtn)) {
+          var linkRow = linkBtn.closest(".todo-row");
+          if (linkRow) {
+            var lineNo = parseInt(linkRow.getAttribute("data-line"), 10);
+            if (!isNaN(lineNo)) _linkTodoRow(lineNo, linkRow);
+          }
+          return;
         }
       });
       on(el, "keydown", function (e) {

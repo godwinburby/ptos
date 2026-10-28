@@ -42,3 +42,6 @@ test.txt
 *.csv
 # JavaScript test dependencies
 node_modules/
+
+# Kilo CLI temp/scratch files
+.kilo/

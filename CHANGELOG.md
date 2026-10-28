@@ -7,6 +7,55 @@ Format: `[version or date] — description`
 
 ## 2026-10-27
 
+### Wave 3 Todo page T1
+
+- Todo now renders in the shared page shell at full content width with server-inlined task data, quick add and form add controls, filter/search/group/sort controls, active filter chips, routine visibility, and collapsible task sections. The previous page remains available with `?legacy=1` during migration.
+- The Markdown slash menu can add the default Todo task list directly; saved Todo views remain available through the widget gallery.
+- Todo filters can be saved, selected, updated, and deleted as `todo.NAME` entries from the Todo page. Saved views can be inserted into custom pages from the widget gallery.
+- Added shell and filtered-row parity coverage against the legacy page, plus client tests for toolbar state, widget updates, and section persistence.
+
+### Wave 3 Todo page T2 (in progress)
+
+- Done tasks now render a delete button in the widget body; clicking it calls /todo/delete-done with the row's expect guard and shows a toast on success or failure.
+- Complete, undo, and delete-done failures caused by a stale expect (task changed on disk) now surface as "Task changed on disk" and trigger a refresh instead of a generic error message.
+- CSS for the done-task delete button added to components.css.
+
+### Wave 3 Todo page T2 (continued)
+
+- Add-input text is now preserved across widget refreshes (snapshotted before re-render and restored after), so a data-changed or action-triggered refresh no longer wipes typed text.
+- Widget validation no longer rejects an empty priority (All priorities) in the gallery form.
+
+### Wave 3 Todo page T3 (in progress)
+
+- Date/threshold popup extracted into shared 	odo_popups.js module; clicking a due badge opens the date picker with quick options (Today, Tomorrow, This week, etc.) and custom date/time picker.
+- Priority popup extracted into same module; clicking a priority badge opens the priority picker with all A-D options plus None.
+- Popups use ctx.refresh() instead of page reload, preserving scroll position and state.
+- Popups wired into widget mount via event delegation on .todo-due-badge and .todo-pri elements (full mode only).
+
+- Recurrence popup extracted into 	odo_popups.js (popupEditRec, pickFieldRec); recurrence badge rendered in widget row and wired to popup on click.
+
+- Threshold badge rendered in widget row (	odo-thr-badge) and wired to date popup with field="threshold".
+
+- CSS for recurrence and threshold badges added to components.css.
+- T3 popups (date, priority, recurrence, threshold) are complete; custom date/time picker uses the global openDTPicker from date_picker.js.
+
+- Quick-pick chips (Due, Priority, Projects, Contexts, Threshold, Repeat) added to page shell for todo pages, with toggle/select/pick-date logic in 	odo_popups.js.
+
+- Quick-pick chips now auto-open on add-input focus and auto-close on blur, matching legacy behavior.
+
+- Quick-pick chip styles (.add-chip, .chip-group-card, .chip-toggle-bar, etc.) added to components.css so they render consistently with the rest of the project.
+
+- Quick-pick chips moved into the toolbar (below the add input) with event delegation for toggle/select/pick-date; no longer a separate section below the toolbar.
+
+- Quick-pick chip selection is now mutually exclusive within each group (Due, Priority, Threshold, Repeat): clicking a chip clears siblings and only the clicked chip is highlighted; clicking again deselects.
+
+- Field popup now closes when clicking outside (matching legacy behavior).
+
+- Add-input autocomplete module (	odo_autocomplete.js) with prefix-aware suggestions for +, @, due:, 	:, 
+ec:, pri:, (, and links:; keyboard navigation (arrows, Enter, Escape); positioned dropdown; click-to-select.
+
+- Bracket autocomplete wired to add and search inputs via shared ttachBracketAutocomplete.
+
 ### Wave 1 page shells
 
 - Thresholds, Due, Calendar, Projects, and Habits now render through the shared full-size widget shell with server-inlined first paint. Time and selector changes update widget data in place and keep the URL in sync; calendar and habit month arrows are included. Legacy pages remain available with `?legacy=1` during the phone review window.
