@@ -87,8 +87,6 @@ function changeDue(due) {
 
 {% if home_note %}
 <style>
-  #home.home-preview-phone { max-width:390px;margin-left:auto;margin-right:auto; }
-  #home.home-preview-desktop { max-width:none; }
   .home-editing .home-widget-run { position:relative;border:1px dashed var(--accent);border-radius:10px;padding:34px 8px 8px;margin:10px 0; }
   .home-editing .home-widget-actions { position:absolute;top:5px;right:6px;z-index:3; }
   .home-widget-actions > summary { list-style:none;padding:2px 10px;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:18px;line-height:20px;cursor:pointer; }
@@ -99,11 +97,9 @@ function changeDue(due) {
 <div id="home-edit-toolbar" data-path="{{ home_source.path }}">
   <a class="btn btn-ghost btn-sm" href="{{ url_for('notes_edit', rel_path=home_source.path) }}">Edit Markdown</a>
   <button id="home-edit-toggle" class="btn btn-ghost btn-sm" type="button" onclick="toggleHomeEdit()">Edit widgets</button>
-  <button class="btn btn-ghost btn-sm" type="button" onclick="setHomePreview('phone')">Phone preview</button>
-  <button class="btn btn-ghost btn-sm" type="button" onclick="setHomePreview('desktop')">Desktop preview</button>
   <span id="home-edit-status" role="status" style="font-size:12px;color:var(--sub);"></span>
 </div>
-<div id="home" class="home-note home-preview-desktop"></div>
+<div id="home" class="home-note"></div>
 <div id="home-edit-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:900;align-items:center;justify-content:center;padding:16px;">
   <div style="background:var(--card);border:1px solid var(--border);border-radius:12px;width:min(640px,100%);max-height:90vh;overflow:auto;padding:16px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">

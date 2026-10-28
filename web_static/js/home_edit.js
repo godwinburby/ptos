@@ -160,10 +160,6 @@
   }
 
   window.toggleHomeEdit = function () { editing = !editing; addActions(); };
-  window.setHomePreview = function (size) {
-    host.classList.toggle("home-preview-phone", size === "phone");
-    host.classList.toggle("home-preview-desktop", size !== "phone");
-  };
   window.closeHomeWidgetModal = function () {
     var modal = document.getElementById("home-edit-modal");
     var form = document.getElementById("home-edit-form");

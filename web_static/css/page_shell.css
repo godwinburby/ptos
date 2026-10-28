@@ -1,4 +1,4 @@
-.page-shell { max-width: 1200px; margin: 0 auto; }
+.page-shell { max-width: 1200px; margin: 0 auto; overflow-x: hidden; }
 .page-shell-todo { width:100%; max-width:none; }
 .page-shell-header { display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:14px; }
 .page-shell-header h1 { font-size:22px; margin:0; flex:1; }
@@ -63,7 +63,8 @@
 .page-shell-widget .emb-calc-chip { margin-top:4px; padding:2px 6px; overflow:hidden; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font-size:11px; font-weight:600; text-overflow:ellipsis; white-space:nowrap; }
 .page-shell-widget .emb-calc-more { margin-top:2px; color:var(--sub); font-size:10px; }
 .page-shell-toolbar { margin-bottom:14px; padding:12px; background:var(--card); border:1px solid var(--border); border-radius:10px; }
-.todo-shell-toolbar { display:grid; gap:10px; }
+.todo-shell-toolbar { display:grid; gap:10px; overflow:hidden; min-width:0; }
+.todo-shell-add,.todo-shell-search { min-width:0; overflow:hidden; }
 .todo-shell-add,.todo-shell-search { display:flex; align-items:center; gap:8px; width:100%; min-height:58px; box-sizing:border-box; padding:9px 12px; background:var(--bg); border:1px solid var(--border); border-radius:12px; }
 .todo-shell-add input,.todo-shell-search input { flex:1; min-width:0; height:38px; box-sizing:border-box; color:var(--text); font:inherit; font-size:15px; line-height:20px; }
 .todo-shell-add input { padding:0 2px; border:0; outline:0; background:transparent; }
@@ -100,7 +101,8 @@
   .page-control-field select,.page-custom-time input { min-width:0; width:100%; }
   .page-custom-time { width:100%; }
   .todo-shell-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
-  .todo-shell-add,.todo-shell-search { padding:8px; }
+  .todo-shell-add,.todo-shell-search { padding:8px; min-width:0; }
+  .todo-shell-toolbar { overflow:hidden; }
   .todo-shell-add input,.todo-shell-search input { font-size:14px; }
   .todo-shell-add button[type="submit"],.todo-shell-search button { padding:0 11px; }
 }
