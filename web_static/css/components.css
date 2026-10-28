@@ -334,6 +334,7 @@ li.md-task-list-item { list-style:none;margin-left:-22px; }
 .home-widget-run { display:grid;grid-template-columns:1fr;gap:12px;margin:0 0 12px; }
 @media (min-width:768px) { .home-widget-run.home-span-2 { grid-column:span 2; } }
 @media (max-width:767px) { .ph-hide-on-phone { display:none !important; } }
+@media (max-width:767px) { .todo-row { flex-wrap:wrap; gap:6px; } .todo-actions { flex-basis:100%; justify-content:flex-end; gap:4px; padding-top:2px; } .todo-actions button { min-width:30px; min-height:30px; font-size:15px; padding:4px 6px; } }
 @media (min-width:768px) { .ph-hide-on-desktop { display:none !important; } }
 
 .add-chip {
