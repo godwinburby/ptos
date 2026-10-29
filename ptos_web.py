@@ -3919,6 +3919,19 @@ def queries_get():
         log.exception("Failed to load schema/queries for queries page")
         cand = {"queries": [], "metrics": [], "dashboards": [], "thresholds": []}
         field_types = {}
+    if request.args.get("legacy") == "1":
+        return render_template("queries_legacy.html",
+            tab="queries", title="Queries", now=_now_str(),
+            queries=cand["queries"],
+            metrics=cand["metrics"],
+            dashboards=cand["dashboards"],
+            thresholds=cand["thresholds"],
+            time_options=_get_time_options(), year_range=_YEAR_RANGE,
+            current_time=request.args.get("time", ""),
+            custom_time=request.args.get("custom_time", ""),
+            from_date=request.args.get("from_date", ""),
+            to_date=request.args.get("to_date", ""),
+            field_types=field_types)
     return render_template("queries.html",
         tab="queries", title="Queries", now=_now_str(),
         queries=cand["queries"],
@@ -4220,6 +4233,16 @@ def browse_get():
         field_types = {}
         group_dimensions = ["date"]
     log_files = svc.get_log_files()
+    if request.args.get("legacy") == "1":
+        return render_template("browse_legacy.html",
+            tab="browse", title="Browse", now=_now_str(),
+            types=types, field_types=field_types, log_files=log_files,
+            group_dimensions=group_dimensions,
+            time_options=_get_time_options(), year_range=_YEAR_RANGE,
+            current_time=request.args.get("time", "tm"),
+            custom_time=request.args.get("custom_time", ""),
+            from_date=request.args.get("from_date", ""),
+            to_date=request.args.get("to_date", ""))
     return render_template("browse.html",
         tab="browse", title="Browse", now=_now_str(),
         types=types, field_types=field_types, log_files=log_files,

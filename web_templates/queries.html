@@ -56,221 +56,27 @@
   </div>
 </div>
 
-
-<!-- Delete modal injected by RecordTable -->
-
 <div id="result-area"></div>
 
 <script src="{{ av('/static/js/widgets.js') }}"></script>
 <script src="{{ av('/static/js/record_table.js') }}"></script>
-<script src="{{ av('/static/js/time_picker.js') }}"></script>
 <script src="{{ av('/static/js/chips.js') }}"></script>
+<script src="{{ av('/static/js/queries_controller.js') }}"></script>
 <script>
-// ── State ──────────────────────────────────────────────────────────────────
-var _qKind = null;
-var _qName = null;
-var _qNames = {{ queries | tojson }};
-var _mNames = {{ metrics | tojson }};
-var _dNames = {{ dashboards | tojson }};
-var _tNames = {{ thresholds | tojson }};
-
-function _selectChip(kind, name) {
-  _qKind = kind;
-  _qName = name;
-  _renderAllChips();
-  runQuery();
-  _scrollToResults();
-}
-
-function _scrollToResults() {
-  if (!window.matchMedia || !window.matchMedia("(max-width: 767px)").matches) return;
-  var area = document.getElementById("result-area");
-  if (area) area.scrollIntoView({ behavior: "smooth", block: "start" });
-}
-
-function _selectThreshold(name) {
-  _qKind = "t";
-  _qName = name;
-  _renderAllChips();
-  var area = document.getElementById("result-area");
-  area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
-  fetch("/api/thresholds/status")
-    .then(function(r) { return r.json(); })
-    .then(function(d) {
-      if (!d.ok) { area.innerHTML = errorCard(d.error || "Failed to load thresholds"); return; }
-      var match = (d.thresholds || []).filter(function(t) { return t.name === name; });
-      area.innerHTML = renderThresholdResult(match);
-    })
-    .catch(function(e) { area.innerHTML = errorCard(String(e)); });
-  var builderLink = document.getElementById("builder-link");
-  if (builderLink) builderLink.href = "/query-builder?section=thresholds";
-  _scrollToResults();
-}
-
-function toggleSection(el) {
-  var section = el.parentElement;
-  section.classList.toggle("collapsed");
-  el.querySelector(".chip-toggle").textContent =
-    section.classList.contains("collapsed") ? "+" : "−";
-}
-
-function _renderAllChips() {
-  var selected = (_qKind === "q") ? _qName : null;
-  var el = document.getElementById("q-chip-group");
-  if (el) renderChipGroup(el, _qNames, selected, function(n) { _selectChip("q", n); });
-  selected = (_qKind === "m") ? _qName : null;
-  el = document.getElementById("m-chip-group");
-  if (el) renderChipGroup(el, _mNames, selected, function(n) { _selectChip("m", n); });
-  selected = (_qKind === "d") ? _qName : null;
-  el = document.getElementById("d-chip-group");
-  if (el) renderChipGroup(el, _dNames, selected, function(n) { _selectChip("d", n); });
-  el = document.getElementById("t-chip-group");
-  if (el) renderChipGroup(el, _tNames, (_qKind==="t")?_qName:null, function(n) { _selectThreshold(n); });
-}
-
-// ── Queries TimePicker ─────────────────────────────────────────────────────
-var tp;
-(function() {
-  tp = new TimePicker({
-    prefix: "q-",
-    yearMin: {{ year_range[0] }},
-    yearMax: {{ year_range[-1] }},
-    onChange: function(code) { if (_qName) runQuery(); }
+  window.QUERIES_DATA = {
+    queries: {{ queries | tojson }},
+    metrics: {{ metrics | tojson }},
+    dashboards: {{ dashboards | tojson }},
+    thresholds: {{ thresholds | tojson }},
+    fieldTypes: {{ field_types | tojson }},
+    yearRange: {{ year_range | tojson }}
+  };
+  document.addEventListener("DOMContentLoaded", function() {
+    window.QueriesController.init(window.QUERIES_DATA);
   });
-
-  // Restore state from URL params
-  (function() {
-    var params = new URLSearchParams(window.location.search);
-    var time = params.get("time");
-    if (time === "range") {
-      tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
-    } else if (time) {
-      tp.setTime(time, params.get("custom_time"));
-    }
-  })();
-})();
-
-function onQTimeChange(val) { tp.onSelectChange(val); }
-
-window._qGetTime = function() { return tp.getTime(); };
-
-function runQuery() {
-  var time = window._qGetTime();
-  // if custom chosen but no value picked yet, wait
-  const timeVal = document.getElementById("q-time-select").value;
-  if (timeVal === "custom" && !time) return;
-  var from_date = null, to_date = null;
-  if (time === "range" && tp) {
-    var r = tp.getRange();
-    if (r) { from_date = r.from; to_date = r.to; }
-  }
-  const area = document.getElementById("result-area");
-  var kind = _qKind, name = _qName;
-  if (!kind || !name) return;
-  // update builder link with selected item
-  const builderLink = document.getElementById("builder-link");
-  if (builderLink) {
-    if (kind === "q") {
-      builderLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=queries";
-    } else if (kind === "m") {
-      builderLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=metrics";
-    } else if (kind === "d") {
-      builderLink.href = "/query-builder?edit=" + encodeURIComponent(name) + "&section=dashboards";
-    } else {
-      builderLink.href = "/query-builder";
-    }
-  }
-  area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
-  fetch("/queries/run", {
-    method:"POST", headers:{"Content-Type":"application/json"},
-    body: JSON.stringify({kind, name, time, from_date, to_date})
-  })
-  .then(r => r.json())
-  .then(d => {
-    if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
-    const data = d.data;
-    if (!data) { area.innerHTML = errorCard("No data"); return; }
-    if (data.kind === "records") {
-      renderRecords(data);
-    } else {
-      area.innerHTML = renderResult(data);
-    }
-  })
-  .catch(e => { area.innerHTML = errorCard(String(e)); });
-}
-
-function clearOut() {
-  _qKind = null;
-  _qName = null;
-  document.getElementById("q-time-select").value = "";
-  if (tp) tp.reset();
-  document.getElementById("result-area").innerHTML = "";
-  _renderAllChips();
-}
-
-// errorCard, renderResult, exprBadge, renderDashboard, renderMetric,
-// renderGroup, renderPivot, renderTrend, renderThresholdResult and
-// summaryBar live in web_static/js/widgets.js (loaded above) so the Queries
-// page and the markdown embed mounter (embeds.js) share one implementation.
-// renderResult dispatches 'records' to renderRecordsStatic there; this page
-// keeps its own renderRecords so the interactive RecordTable still drives it.
-
-function renderRecords(d) {
-  var area = document.getElementById("result-area");
-  if (area) area.innerHTML = "";
-  if (_rt) _rt.render(d);
-  // inject query badge above the table (RecordTable clears innerHTML)
-  var badge = exprBadge(d);
-  if (badge.trim() && area && area.firstChild) {
-    var wrap = document.createElement("div");
-    wrap.innerHTML = badge;
-    area.insertBefore(wrap, area.firstChild);
-  }
-  return "";
-}
-
-// ── RecordTable instance ─────────────────────────────────────────────────────
-var _fieldTypes = {{ field_types | tojson }};
-var _rt = new RecordTable({
-  containerId: "result-area",
-  enableBulk: true,
-  fieldTypes: _fieldTypes,
-  exportName: "query_results",
-  onRefresh: function() { runQuery(); }
-});
-
-// ── Initial render ───────────────────────────────────────────────────────────
-_renderAllChips();
-
-// ── Auto-run from URL params (?run=name&time=code&kind=q|m|d) ────────────────
-(function() {
-  var params = new URLSearchParams(window.location.search);
-  var run    = params.get("run");
-  var kind   = params.get("kind") || "q";
-  var time   = params.get("time") || "";
-  if (!run) return;
-
-  // find in the matching list
-  var names;
-  if (kind === "m") names = _mNames;
-  else if (kind === "d") names = _dNames;
-  else names = _qNames;
-  if (names.indexOf(run) === -1) return;
-
-  _qKind = kind;
-  _qName = run;
-
-  // set time override if provided
-  if (time) {
-    if (tp) tp.setTime(time, params.get("custom_time"));
-  }
-
-  _renderAllChips();
-  runQuery();
-  setTimeout(function() {
-    var area = document.getElementById("result-area");
-    if (area) area.scrollIntoView({behavior:"smooth", block:"start"});
-  }, 600);
-})();
 </script>
+
+{% block scripts %}
+<script src="{{ av('/static/js/time_picker.js') }}"></script>
+{% endblock %}
 {% endblock %}

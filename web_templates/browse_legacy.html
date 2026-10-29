@@ -1,0 +1,431 @@
+{% extends "base.html" %}
+{% block content %}
+
+<style>
+  .qb-chip {
+    display:inline-flex;align-items:center;gap:4px;padding:6px 12px;
+    border-radius:20px;font-size:13px;font-weight:600;cursor:pointer;
+    border:1.5px solid var(--border);background:var(--bg);color:var(--text);
+    transition:all .15s;margin:3px;
+  }
+  .qb-chip:hover    { border-color:var(--accent);color:var(--accent); }
+  .qb-chip.active   { background:var(--accent);border-color:var(--accent);color:#fff; }
+  .qb-chip.selected { background:var(--accent-lt);border-color:var(--accent);color:var(--accent); }
+  .qb-active-chip {
+    display:inline-flex;align-items:center;gap:5px;padding:5px 10px;
+    border-radius:20px;font-size:13px;font-weight:600;margin:3px;
+    background:var(--accent-lt);border:1.5px solid var(--accent);color:var(--accent);
+  }
+  .qb-active-chip button { background:none;border:none;color:var(--accent);
+    cursor:pointer;font-size:14px;padding:0;line-height:1;font-weight:700; }
+</style>
+
+<div class="page-title">Browse</div>
+
+<div class="card">
+  <!-- ── FilterBuilder ── -->
+  <div id="browse-filter" style="margin-bottom:12px;"></div>
+
+  <!-- ── Time and Group ── -->
+  <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+    <div class="field-group" style="flex:1;min-width:140px;">
+      <label>Time</label>
+      <select id="b-time-select" onchange="onBTimeChange(this.value)">
+        {% for label, code in time_options %}
+        <option value="{{ code }}" {% if code == current_time %}selected{% endif %}>{{ label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    {% with prefix="b-" %}
+    {% include "_time_picker.html" %}
+    {% endwith %}
+    <div class="field-group" style="flex:1;min-width:140px;">
+      <label>Group by</label>
+      <select id="b-group" onchange="runBrowse()"><option value="">— select —</option></select>
+    </div>
+    <div class="field-group" style="flex:1;min-width:140px;">
+      <label>Sort by</label>
+      <select id="b-sort" onchange="runBrowse()">
+        <option value="">— select —</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- ── Search ── -->
+  <div class="field-group" style="margin-bottom:12px;">
+    <label>Search</label>
+    <input type="text" id="b-search" placeholder="full-text search…"
+           oninput="debouncedBrowse()">
+  </div>
+
+  <div style="display:flex;gap:8px;flex-wrap:wrap;">
+    <button class="btn btn-primary btn-sm" onclick="showSaveQuery()">💾 Save as Query</button>
+    <button class="btn btn-ghost btn-sm" onclick="clearBrowse()">✕ Clear</button>
+  </div>
+</div>
+
+<!-- Save as Query dialog -->
+<div id="query-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
+     z-index:500;align-items:center;justify-content:center;">
+  <div style="background:var(--card);border-radius:14px;padding:24px;width:320px;
+              box-shadow:0 8px 32px rgba(0,0,0,.18);">
+    <div style="font-size:16px;font-weight:700;margin-bottom:14px;">Save as Query</div>
+    <div class="field-group">
+      <label>Query name</label>
+      <input type="text" id="query-name-input" placeholder="e.g. my_expenses"
+             style="text-transform:lowercase;"
+             oninput="this.value=this.value.replace(/[^a-z0-9_]/g,'')">
+      <div class="hint">lowercase letters, numbers, underscores</div>
+    </div>
+    <div id="query-preview" style="font-size:12px;color:var(--sub);
+         background:var(--bg);padding:8px;border-radius:6px;
+         margin-bottom:10px;font-family:monospace;word-break:break-all;"></div>
+    <div id="query-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
+    <div style="display:flex;gap:10px;">
+      <button class="btn btn-primary" style="flex:1" onclick="doSaveQuery()">Save</button>
+      <button class="btn btn-ghost"   style="flex:1" onclick="hideQueryDialog()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div id="result-area"></div>
+
+<!-- Modals injected by RecordTable -->
+
+<script src="{{ av('/static/js/record_table.js') }}"></script>
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+var _types = {{ types | tojson }};
+var _fieldTypes = {{ field_types | tojson }};
+var _globalDims = {{ group_dimensions | tojson }};
+
+// ── FilterBuilder + RecordTable instances ────────────────────────────────────
+var _fb = null;
+var _rt = null;
+document.addEventListener("DOMContentLoaded", function() {
+  _fb = new FilterBuilder({
+    containerId: "browse-filter",
+    types: _types,
+    onRun: function(expr) { runBrowse(); },
+    onTypeFields: function(t, e) { _refreshGroupSortForType(t, e ? e.dimensions : null); }
+  });
+  _fb.init();
+
+  _rt = new RecordTable({
+    containerId: "result-area",
+    returnTo: "/browse",
+    enableBulk: true,
+    quickEdit: true,
+    fieldTypes: _fieldTypes,
+    exportName: "browse_results",
+    onRefresh: function() { runBrowse(); }
+  });
+
+  _populateGroupSort(true);
+
+  // Reload when returning from bfcache (e.g. after edit redirect)
+  window.addEventListener('pageshow', function(e) {
+    if (e.persisted) window.location.reload();
+  });
+});
+</script>
+
+<script src="{{ av('/static/js/time_picker.js') }}"></script>
+<script>
+var tp;
+(function() {
+  tp = new TimePicker({
+    prefix: "b-",
+    yearMin: {{ year_range[0] }},
+    yearMax: {{ year_range[-1] }},
+    onChange: function(code) { runBrowse(); }
+  });
+
+  // Restore state from URL params
+  (function() {
+    var params = new URLSearchParams(window.location.search);
+    var run = params.get("run");
+    var time = params.get("time");
+    var file = params.get("file");
+    var search = params.get("search");
+    if (time === "range") {
+      tp.setTime("range", null, params.get("from_date"), params.get("to_date"));
+    } else if (time) {
+      tp.setTime(time, params.get("custom_time"));
+    } else if (file) {
+      var base = file.split("/").pop();
+      var year = base.replace(".log", "");
+      if (/^\d{4}$/.test(year)) {
+        tp.setTime("year", year);
+      }
+    }
+    if (search) {
+      document.getElementById("b-search").value = search;
+    }
+    if (run && run.startsWith("q:")) {
+      // Load from query - for now just show chip builder
+    }
+    setTimeout(function() { runBrowse(); }, 100);
+  })();
+})();
+
+function onBTimeChange(val) { tp.onSelectChange(val); }
+
+// ── Legacy stubs (called by remaining browse code) ───────────────────────────
+function renderTypeChips()  {}
+function renderActiveChips(){}
+function renderFieldChips() {}
+function renderTagsSection(){}
+function fetchFields()      {}
+function toggleChip(f,v)    { if (_fb) _fb._toggleChip(f,"=",v); }
+function closeValueRow()    { if (_fb) _fb.closeValueRow(); }
+function addTextFilter()    { if (_fb) _fb.addTextValue(); }
+function syncExprFromChips(){ if (_fb) _fb._syncExprFromChips(); }
+function chipsToExpr(chips) { return _fb ? _fb._chipsToExpr() : ""; }
+function updateWherePreview(){ if (_fb) _fb._syncExprFromChips(); }
+function parseExprToChips(e){ return _fb ? _fb._parseExpr(e) : []; }
+function onExprInput()      { if (_fb) _fb._onExprInput(); }
+window.toggleAdvancedMode   = function() {};
+window.applyAdvancedExpr    = function() {};
+window.cancelAdvancedExpr   = function() {};
+window.toggleExprMode       = function() {};
+
+// Legacy _browse shim — keeps _params() and clearBrowse() working
+var _browse = {
+  get type() { return _fb ? _fb._type : null; },
+  get chips(){ return _fb ? _fb._chips : []; },
+  exprManual: "",
+  search: "",
+  _activeField: null
+};
+var _fieldCache = {};
+var _exprVisible = false;
+
+// debounce for search input — wait 500ms after user stops typing
+let _searchTimer = null;
+function debouncedBrowse() {
+  updateWherePreview();
+  clearTimeout(_searchTimer);
+  _searchTimer = setTimeout(runBrowse, 500);
+}
+
+function _groupSortOptions(dims) {
+  var placeholder = '<option value="">— select —</option>';
+  return placeholder + dims.map(function(f) {
+    return '<option value="'+f+'">'+f+'</option>';
+  }).join("");
+}
+
+function _populateGroupSort(fromUrl, dims) {
+  var grp  = document.getElementById("b-group");
+  var sort = document.getElementById("b-sort");
+  if (!grp || !sort) return;
+  var prevG = grp.value, prevS = sort.value;
+  if (!dims) {
+    if (_fb && _fb._type) {
+      dims = [];
+    } else {
+      dims = _globalDims || ["date"];
+    }
+  }
+  var opts = _groupSortOptions(dims);
+  grp.innerHTML  = opts;
+  sort.innerHTML = opts;
+  var g = prevG, s = prevS;
+  if (fromUrl) {
+    var params = new URLSearchParams(window.location.search);
+    g = params.get("group") || "";
+    s = params.get("sort") || "";
+  }
+  if (g && grp.querySelector('option[value="'+g+'"]'))  grp.value  = g;
+  if (s && sort.querySelector('option[value="'+s+'"]')) sort.value = s;
+}
+
+var _typeDimsCache = {};
+var _curGroupType = null;
+
+function _refreshGroupSortForType(t, dims) {
+  if (!t) t = _fb && _fb._type;
+  if (!t) {
+    _curGroupType = null;
+    _populateGroupSort(false);
+    return;
+  }
+  if (t !== _curGroupType) {
+    _curGroupType = t;
+    _populateGroupSort(false, []);
+  }
+  if (dims) { _typeDimsCache[t] = dims; _populateGroupSort(false, dims); return; }
+  if (_typeDimsCache[t]) { _populateGroupSort(false, _typeDimsCache[t]); return; }
+  if (_typeDimsCache[t] === null) return;
+  _typeDimsCache[t] = null;
+  var url = "/api/type_fields/" + encodeURIComponent(t);
+  fetch(url)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+      _typeDimsCache[t] = data.dimensions || [];
+      if (_fb && _fb._type === t) _populateGroupSort(false, _typeDimsCache[t]);
+    })
+    .catch(function() { _typeDimsCache[t] = ["date"]; if (_fb && _fb._type === t) _populateGroupSort(false, _typeDimsCache[t]); });
+}
+
+function _params() {
+  let time = tp ? (tp.getTime() || "tm") : "tm";
+  const search = document.getElementById("b-search") ? document.getElementById("b-search").value.trim() : "";
+  const group  = document.getElementById("b-group")  ? document.getElementById("b-group").value  : "";
+  const sort   = document.getElementById("b-sort")   ? document.getElementById("b-sort").value   : "";
+  // FilterBuilder is the single source of truth for the expression
+  const expr = _fb ? _fb.getExpr() : "";
+  var from_date = null, to_date = null;
+  if (time === "range" && tp) {
+    var r = tp.getRange();
+    if (r) { from_date = r.from; to_date = r.to; }
+  }
+  return {where: [], expr, time, search, group, sort, from_date, to_date};
+}
+
+function runBrowse() {
+  _refreshGroupSortForType();
+  const area = document.getElementById("result-area");
+  area.innerHTML = '<div class="card" style="color:var(--sub);font-size:13px;">Loading…</div>';
+  fetch("/browse/run", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify(_params())
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (!d.ok) { area.innerHTML = errorCard(d.error); return; }
+    const data = d.data;
+    if (!data) { area.innerHTML = errorCard("No data"); return; }
+    if (data.kind === "group") {
+      area.innerHTML = renderGroup(data);
+    } else {
+      area.innerHTML = "";
+      if (_rt) _rt.render(data);
+    }
+  })
+  .catch(e => {
+    area.innerHTML = errorCard(String(e));
+  });
+}
+
+function clearBrowse() {
+  if (_fb) _fb.clear();
+  if (_rt) _rt.clear();
+  _fieldCache = {};
+  document.getElementById("b-search").value = "";
+  document.getElementById("b-time-select").value = "tm";
+  if (tp) tp.reset();
+  document.getElementById("b-group").value = "";
+  document.getElementById("b-sort").value = "";
+}
+
+function errorCard(msg) {
+  return `<div class="card"><div class="msg msg-error">${msg}</div></div>`;
+}
+
+function summaryBar(d) {
+  const parts = [];
+  if (d.count !== undefined) parts.push(`<span>${d.count} records</span>`);
+  if (d.total_fmt) parts.push(`<span>Total: <strong>${d.total_fmt}</strong></span>`);
+  if (d.avg_fmt)   parts.push(`<span>Avg: <strong>${d.avg_fmt}</strong></span>`);
+  if (d.time_label) parts.push(`<span style="color:var(--sub)">${d.time_label}</span>`);
+  return parts.length
+    ? `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:13px;color:var(--sub);margin-bottom:10px;">${parts.join("")}</div>`
+    : "";
+}
+
+function renderResult(d) {
+  if (!d) return errorCard("No data");
+  if (d.kind === "group") return renderGroup(d);
+  // records: hand off to RecordTable
+  var container = document.getElementById("result-area");
+  if (container) container.innerHTML = "";
+  if (_rt) _rt.render(d);
+  return "";
+}
+
+function renderGroup(d) {
+  const hasTot = d.has_amount;
+  const heads  = hasTot
+    ? `<th>Group</th><th class="numeric">Count</th><th class="numeric">Total</th>`
+    : `<th>Group</th><th class="numeric">Count</th>`;
+  const rows = (d.rows||[]).map(r => hasTot
+    ? `<tr><td>${r.key}</td><td class="numeric">${r.count}</td><td class="numeric">${r.total_fmt}</td></tr>`
+    : `<tr><td>${r.key}</td><td class="numeric">${r.count}</td></tr>`).join("");
+  const foot = hasTot
+    ? `<tr class="total-row"><td>Total</td><td class="numeric">${d.grand_count}</td><td class="numeric">${d.grand_total_fmt}</td></tr>`
+    : `<tr class="total-row"><td>Total</td><td class="numeric">${d.grand_count}</td></tr>`;
+  return `<div class="card">
+    <div class="card-title">Grouped by ${(d.fields||[]).join(", ")} · ${d.time_label}</div>
+    ${summaryBar(d)}
+    <div style="overflow-x:auto;"><table class="data-table"><thead><tr>${heads}</tr></thead><tbody>${rows}${foot}</tbody></table></div>
+  </div>`;
+}
+
+
+// ── Save as Query ─────────────────────────────────────────────────────────────
+function showSaveQuery() {
+  const p = _params();
+  const msg = document.getElementById("query-msg");
+  msg.style.display = "none";
+  document.getElementById("query-name-input").value = "";
+
+  // build unified expression preview — expr is now always the single source of truth
+  const exprPreview = p.expr || "";
+
+  const previewLines = [];
+  if (exprPreview) previewLines.push(`where = "${exprPreview}"`);
+  previewLines.push(`time  = "${p.time}"`);
+  if (p.group)  previewLines.push(`group = ["${p.group}"]`);
+  if (p.sort)  previewLines.push(`sort = "${p.sort}"`);
+  if (p.search) previewLines.push(`search = "${p.search}"`);
+  document.getElementById("query-preview").textContent = previewLines.join("\n");
+
+  const dlg = document.getElementById("query-dialog");
+  dlg.style.display = "flex";
+  document.getElementById("query-name-input").focus();
+}
+
+function hideQueryDialog() {
+  document.getElementById("query-dialog").style.display = "none";
+}
+
+function doSaveQuery() {
+  const name = document.getElementById("query-name-input").value.trim();
+  const msg  = document.getElementById("query-msg");
+  if (!name) { msg.textContent = "Enter a name."; msg.style.display="block"; return; }
+  const p = _params();
+  fetch("/api/save_query", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({name, where: p.where, expr: p.expr, time: p.time,
+                          group: p.group, search: p.search, sort: p.sort})
+  })
+  .then(r => r.json())
+  .then(d => {
+    if (d.ok) {
+      hideQueryDialog();
+      const btn = document.querySelector('[onclick="showSaveQuery()"]');
+      btn.textContent = `✔ Saved as '${d.name}'`;
+      btn.style.background = "var(--success)";
+      setTimeout(() => { btn.textContent = "💾 Save as Query"; btn.style.background = ""; }, 3000);
+    } else {
+      msg.textContent = d.error;
+      msg.style.display = "block";
+    }
+  })
+  .catch(e => { msg.textContent = String(e); msg.style.display="block"; });
+}
+
+document.getElementById("query-dialog").addEventListener("click", function(e) {
+  if (e.target === this) hideQueryDialog();
+});
+document.getElementById("query-name-input").addEventListener("keydown", function(e) {
+  if (e.key === "Enter") doSaveQuery();
+  if (e.key === "Escape") hideQueryDialog();
+});
+</script>
+{% block scripts %}
+<script src="{{ av('/static/js/filter_builder.js') }}"></script>
+{% endblock %}
+{% endblock %}

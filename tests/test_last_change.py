@@ -149,11 +149,11 @@ class TestLastChangeMarkup:
 
 class TestQueriesScrollsToResults:
     def test_mobile_scroll_helper_wired_into_chip_and_threshold(self):
-        html = open(os.path.join(REPO, "web_templates", "queries.html"),
-                    encoding="utf-8").read()
-        assert "function _scrollToResults()" in html
-        assert "max-width: 767px" in html
-        chip = re.search(r"function _selectChip\b.*?\n}", html, re.S).group(0)
+        src = open(os.path.join(REPO, "web_static", "js", "queries_controller.js"),
+                   encoding="utf-8").read()
+        assert "function _scrollToResults()" in src
+        assert "max-width: 767px" in src
+        chip = re.search(r"function _selectChip\b.*?\n}", src, re.S).group(0)
         assert "_scrollToResults()" in chip
-        thr = re.search(r"function _selectThreshold\b.*?\n}", html, re.S).group(0)
+        thr = re.search(r"function _selectThreshold\b.*?\n}", src, re.S).group(0)
         assert "_scrollToResults()" in thr

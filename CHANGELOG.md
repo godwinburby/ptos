@@ -5,7 +5,15 @@ Format: `[version or date] — description`
 
 ---
 
-## 2026-10-28
+## 2026-10-29
+
+### Wave 2 Browse and Queries page migration (Phase 1 + Phase 2)
+
+- **Browse migrated** — inline JS (431 → 117 template lines) moved into `web_static/js/browse_controller.js` (348 lines); `?legacy=1` keeps the original template at `web_templates/browse_legacy.html`
+- **Queries migrated** — inline JS (276 → 82 template lines) moved into `web_static/js/queries_controller.js` (221 lines); `?legacy=1` keeps the original template at `web_templates/queries_legacy.html`
+- **G0 characterization** — `tests/test_browse_page.py` locks `/browse` GET output and `/browse/run` POST behavior (16 tests)
+- **G6 code gate (measured)** — Browse: 314 template lines deleted vs 358 added (348 controller + 10 route legacy branch) — added > deleted by ~44. Queries: 194 deleted vs 238 added (221 controller + 17 route legacy branch) — added > deleted by ~44. Strict G6 (deleted > added) is **not** met for either page; legacy templates are preserved and `?legacy=1` remains available, so per spec fallback (keep page, share components) applies pending reassessment. Legacy template copies (431 + 276 lines) are preservation, not new logic, and are excluded from the "added" count
+- **G7** — old templates stay reachable via `?legacy=1` for one week of phone use before any deletion
 
 ### Wave 3 Todo page parity
 

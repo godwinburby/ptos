@@ -21,14 +21,24 @@ _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 JS = os.path.join(_REPO_ROOT, "web_static", "js", "record_table.js")
 TEMPLATES = [
     os.path.join(_REPO_ROOT, "web_templates", name)
-    for name in ("browse.html", "queries.html",
-                 "query_builder.html", "entity.html")
+    for name in ("query_builder.html", "entity.html")
 ]
 
 
 def _read(path):
     with open(path, encoding="utf-8") as f:
         return f.read()
+
+
+CONTROLLER_JS = [
+    os.path.join(_REPO_ROOT, "web_static", "js", name)
+    for name in ("browse_controller.js", "queries_controller.js")
+]
+
+class TestControllerInstantiatesRecordTable:
+    @pytest.mark.parametrize("path", CONTROLLER_JS)
+    def test_controller_instantiates_via_new(self, path):
+        assert "new RecordTable(" in _read(path)
 
 
 @pytest.fixture(scope="module")
