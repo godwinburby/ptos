@@ -6804,9 +6804,9 @@ def save_board(name, cfg):
 
     columns items are either bare type strings (type board) or
     {label, where, set?} dicts (status board, requires set_field)."""
+    if not name or not str(name).strip():
+        raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
-    if not _has_entry(existing, "board", name):
-        name = _validate_name(name)
     cols = cfg.get("columns", [])
     if not cols or not isinstance(cols, list):
         raise PTOSError(f"Board '{name}' must have a non-empty columns list")
@@ -6872,9 +6872,9 @@ def delete_board(name):
 @_locked_queries
 def save_habit(name, cfg):
     """Write/update a single ["habit.NAME"] entry in queries.toml."""
+    if not name or not str(name).strip():
+        raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
-    if not _has_entry(existing, "habit", name):
-        name = _validate_name(name)
     hfilters = cfg.get("filters", [])
     if not hfilters or not isinstance(hfilters, list):
         raise PTOSError(f"Habit '{name}' must have a non-empty filters list")
@@ -6908,9 +6908,9 @@ def delete_habit(name):
 @_locked_queries
 def save_calendar(name, cfg):
     """Write/update a single ["calendar.NAME"] entry in queries.toml."""
+    if not name or not str(name).strip():
+        raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
-    if not _has_entry(existing, "calendar", name):
-        name = _validate_name(name)
     cfilters = cfg.get("filters", [])
     if not cfilters or not isinstance(cfilters, list):
         raise PTOSError(f"Calendar '{name}' must have a non-empty filters list")
@@ -6947,9 +6947,9 @@ def delete_calendar(name):
 @_locked_queries
 def save_threshold(name, cfg):
     """Write/update a single ["threshold.NAME"] entry in queries.toml."""
+    if not name or not str(name).strip():
+        raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
-    if not _has_entry(existing, "threshold", name):
-        name = _validate_name(name)
     if not cfg.get("metric", "").strip():
         raise PTOSError(f"Threshold '{name}' must have a metric")
     entry = {"metric": cfg["metric"].strip()}
@@ -6992,9 +6992,9 @@ def delete_threshold(name):
 @_locked_queries
 def save_todo_view(name, cfg):
     """Write or update a saved Todo view in queries.toml."""
+    if not name or not str(name).strip():
+        raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
-    if not _has_entry(existing, "todo", name):
-        name = _validate_name(name)
     if not isinstance(cfg, dict):
         raise PTOSError("Todo view settings must be an object")
     allowed = set(TODO_VIEW_KEYS)
@@ -7054,9 +7054,9 @@ def delete_todo_view(name):
 @_locked_queries
 def save_due(name, cfg):
     """Write/update a single ["due.NAME"] entry in queries.toml."""
+    if not name or not str(name).strip():
+        raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
-    if not _has_entry(existing, "due", name):
-        name = _validate_name(name)
     entry = {}
     if cfg.get("type"):
         entry["type"] = cfg["type"]

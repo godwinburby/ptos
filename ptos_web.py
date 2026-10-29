@@ -3192,7 +3192,7 @@ def habits():
                     "monthParam": "custom_time",
                     "empty": "No habits configured." if not names else ""},
         month_navigation=True, month_label=month_label, select_controls=[],
-        habit_configs={k: v for k, v in ptos.get_queries().items() if k.startswith("habit.")})
+        habit_configs={k.split('.', 1)[1]: v for k, v in ptos.get_queries().items() if k.startswith("habit.")})
 
 
 @app.route("/api/habit/toggle", methods=["POST"])
@@ -3403,7 +3403,7 @@ def calendar_view(name=None):
                           "path_prefix": "/calendar", "value": active,
                           "options": [("All records", "__all__")] +
                                      [(n.replace("_", " "), n) for n in names]}],
-        calendar_configs={k: v for k, v in ptos.get_queries().items() if k.startswith("calendar.")})
+        calendar_configs={k.split('.', 1)[1]: v for k, v in ptos.get_queries().items() if k.startswith("calendar.")})
 
 
 @app.route("/projects")
