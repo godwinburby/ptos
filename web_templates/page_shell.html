@@ -65,6 +65,7 @@
   {% if tab == "due" %}{% include "_due_manage.html" %}{% endif %}
   <div class="page-shell-widget" id="page-widget"></div>
 </section>
+{% if tab == "todo" %}<script src="{{ av('/static/js/todo_shortcuts.js') }}"></script>{% endif %}
 {% if page_toolbar == 'todo' %}{% include '_todo_modal.html' %}{% endif %}
 <script type="application/json" id="page-spec">{{ page_spec|tojson }}</script>
 <script type="application/json" id="page-data">{{ page_data|tojson }}</script>
