@@ -1,0 +1,98 @@
+{# Manage habits on /habits — reuses /api/query-builder/habit #}
+<style>
+  .thr-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:600; align-items:center; justify-content:center; }
+  .thr-modal.open { display:flex; }
+  .thr-modal-box { background:var(--card); border-radius:14px; padding:20px; width:min(560px,92vw); max-height:85vh; overflow:auto; box-shadow:0 8px 32px rgba(0,0,0,.18); }
+  .thr-modal-box label { font-size:12px; font-weight:700; display:block; margin:8px 0 4px; }
+  .thr-modal-box input { width:100%; padding:6px 8px; border-radius:6px; border:1.5px solid var(--border); background:var(--bg); color:var(--text); font-size:13px; box-sizing:border-box; }
+  .thr-modal-actions { display:flex; gap:8px; margin-top:14px; }
+</style>
+<details style="margin-bottom:16px;">
+  <summary style="cursor:pointer; font-size:14px; font-weight:700; padding:8px 0;">Manage habits ({{ habit_configs|length if habit_configs else 0 }})</summary>
+  <div class="card" style="margin-top:8px; padding:12px 16px;">
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+    <div style="font-size:14px; font-weight:700;">Manage habits</div>
+    <button class="btn btn-primary btn-sm" onclick="habitOpenEditor('')">+ New habit</button>
+  </div>
+  <div id="habit-manage-list">
+    {% for name, cfg in (habit_configs or {}).items() %}
+    <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border);">
+      <span style="flex:1; font-weight:600; font-size:13px;">{{ name }}</span>
+      <span style="font-size:12px; color:var(--sub);">{{ (cfg.filters or [])|join(' ') }} · {{ cfg.weeks or 12 }}w</span>
+      <button class="btn btn-ghost btn-sm" onclick="habitOpenEditor('{{ name }}')">Edit</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--error);border-color:var(--error);" onclick="habitDelete('{{ name }}')">Delete</button>
+    </div>
+    {% endfor %}
+    {% if not habit_configs %}
+    <div style="font-size:12px; color:var(--sub);">No habits yet.</div>
+    {% endif %}
+  </div>
+</div>
+</details>
+
+<div class="thr-modal" id="habit-modal">
+  <div class="thr-modal-box">
+    <div style="font-size:16px; font-weight:700; margin-bottom:10px;">Habit</div>
+    <label>Name</label>
+    <input type="text" id="habit-name">
+    <label>Filters (space-separated field=value)</label>
+    <input type="text" id="habit-filters">
+    <label>Weeks</label>
+    <input type="number" id="habit-weeks" value="12">
+    <label><input type="checkbox" id="habit-tog" checked> Toggleable</label>
+    <div id="habit-msg" style="font-size:13px; color:var(--error); margin-top:8px; display:none;"></div>
+    <div class="thr-modal-actions">
+      <button class="btn btn-primary" onclick="habitSave()">Save</button>
+      <button class="btn btn-ghost" onclick="habitClose()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var configs = {{ (habit_configs or {}) | tojson }};
+  window.habitOpenEditor = function(name) {
+    var cfg = (name && configs[name]) ? configs[name] : {};
+    document.getElementById("habit-name").value = name || "";
+    document.getElementById("habit-name").disabled = !!name;
+    document.getElementById("habit-filters").value = (cfg.filters || []).join(" ");
+    document.getElementById("habit-weeks").value = cfg.weeks || 12;
+    document.getElementById("habit-tog").checked = (cfg.toggleable !== false);
+    var msg = document.getElementById("habit-msg");
+    if (msg) { msg.style.display = "none"; msg.textContent = ""; }
+    document.getElementById("habit-modal").classList.add("open");
+  };
+  window.habitClose = function() {
+    document.getElementById("habit-modal").classList.remove("open");
+  };
+  window.habitSave = function() {
+    var name = document.getElementById("habit-name").value.trim();
+    var msg = document.getElementById("habit-msg");
+    if (!name) { if (msg) { msg.textContent = "Enter a name."; msg.style.display = "block"; } return; }
+    var cfg = {
+      filters: document.getElementById("habit-filters").value.trim().split(/\s+/).filter(Boolean),
+      weeks: parseInt(document.getElementById("habit-weeks").value) || 12,
+      toggleable: document.getElementById("habit-tog").checked
+    };
+    fetch("/api/query-builder/habit", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ name: name, cfg: cfg, action: "save" })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) { habitClose(); window.location.reload(); }
+      else { if (msg) { msg.textContent = d.error || "Save failed"; msg.style.display = "block"; } }
+    }).catch(function(e){ if (msg) { msg.textContent = String(e); msg.style.display = "block"; } });
+  };
+  window.habitDelete = function(name) {
+    if (!confirm("Delete habit '" + name + "'?")) return;
+    fetch("/api/query-builder/habit", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ name: name, action: "delete" })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) { window.location.reload(); }
+      else { alert(d.error || "Delete failed"); }
+    });
+  };
+  var modal = document.getElementById("habit-modal");
+  if (modal) modal.addEventListener("click", function(e){ if (e.target === modal) habitClose(); });
+})();
+</script>

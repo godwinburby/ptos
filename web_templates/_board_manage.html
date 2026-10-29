@@ -1,0 +1,38 @@
+{# Manage boards on /board — full editing happens in Query Builder to avoid data loss #}
+<details style="margin-bottom:16px;">
+  <summary style="cursor:pointer; font-size:14px; font-weight:700; padding:8px 0;">Manage boards ({{ board_configs|length if board_configs else 0 }})</summary>
+  <div class="card" style="margin-top:8px; padding:12px 16px;">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+      <div style="font-size:14px; font-weight:700;">Manage boards</div>
+      <a class="btn btn-primary btn-sm" href="/query-builder?section=boards">+ New board (Query Builder)</a>
+    </div>
+    <div id="board-manage-list">
+      {% for name, cfg in (board_configs or {}).items() %}
+      <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border);">
+        <span style="flex:1; font-weight:600; font-size:13px;">{{ name }}</span>
+        <span style="font-size:12px; color:var(--sub);">{{ (cfg.columns or [])|length }} columns</span>
+        <a class="btn btn-ghost btn-sm" href="/query-builder?section=boards&edit={{ name|urlencode }}">Edit (QB)</a>
+        <button class="btn btn-ghost btn-sm" style="color:var(--error);border-color:var(--error);" onclick="boardDelete('{{ name }}')">Delete</button>
+      </div>
+      {% endfor %}
+      {% if not board_configs %}
+      <div style="font-size:12px; color:var(--sub);">No boards yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</details>
+
+<script>
+(function() {
+  window.boardDelete = function(name) {
+    if (!confirm("Delete board '" + name + "'?")) return;
+    fetch("/api/query-builder/board", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ name: name, action: "delete" })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) { window.location.reload(); }
+      else { alert(d.error || "Delete failed"); }
+    });
+  };
+})();
+</script>

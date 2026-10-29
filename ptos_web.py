@@ -3190,7 +3190,8 @@ def habits():
         page_state={"month": {"year": month_year, "month": month_num},
                     "monthParam": "custom_time",
                     "empty": "No habits configured." if not names else ""},
-        month_navigation=True, month_label=month_label, select_controls=[])
+        month_navigation=True, month_label=month_label, select_controls=[],
+        habit_configs={k: v for k, v in ptos.get_queries().items() if k.startswith("habit.")})
 
 
 @app.route("/api/habit/toggle", methods=["POST"])
@@ -3286,13 +3287,24 @@ def thresholds_page(time=None):
             time=resolved_time, from_date=from_date, to_date=to_date))
     except Exception:
         data = []
+    # Manage UI data: raw threshold configs + metric/query candidate names
+    try:
+        thr_configs = ptos.get_thresholds()
+    except Exception:
+        thr_configs = {}
+    try:
+        cand = svc.get_embed_candidates()
+        thr_metric_opts = list(cand.get("queries", [])) + list(cand.get("metrics", []))
+    except Exception:
+        thr_metric_opts = []
     if request.args.get("legacy") == "1":
         return render_template("thresholds.html",
             tab="thresholds", title="Thresholds",
             now=_now_str(), thresholds=data, time=time_param or "",
             custom_time=custom_time, from_date=from_date or "",
             to_date=to_date or "",
-            time_options=_get_time_options(), year_range=_YEAR_RANGE)
+            time_options=_get_time_options(), year_range=_YEAR_RANGE,
+            threshold_configs=thr_configs, threshold_metric_opts=thr_metric_opts)
 
     embed_spec = {"view": "threshold", "all": True}
     if resolved_time:
@@ -3333,7 +3345,8 @@ def thresholds_page(time=None):
         year_range=_YEAR_RANGE, page_data=page_data or {},
         page_error=page_error,
         page_spec={"body": embed_body, "kind": "threshold"},
-        page_state={"time": time_param or "", "error": page_error})
+        page_state={"time": time_param or "", "error": page_error},
+        threshold_configs=thr_configs, threshold_metric_opts=thr_metric_opts)
 
 
 @app.route("/calendar")
@@ -3586,6 +3599,7 @@ def board():
         now=_now_str(), boards=boards,
         active_board=active_board,
         board_data=board_data,
+        board_configs=boards,
         view=view,
         time=time_param, custom_time=custom_time,
         from_date=from_date or "", to_date=to_date or "",

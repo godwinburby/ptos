@@ -1,0 +1,150 @@
+{# Manage thresholds on /thresholds — reuses /api/query-builder/threshold (same write path as QB) #}
+<style>
+  .thr-manage { margin-bottom: 16px; }
+  .thr-manage-list { display:flex; flex-direction:column; gap:8px; margin-bottom:12px; }
+  .thr-manage-row { display:flex; align-items:center; gap:8px; padding:8px 12px; border:1px solid var(--border); border-radius:8px; background:var(--card); }
+  .thr-manage-name { flex:1; font-weight:600; font-size:13px; }
+  .thr-manage-meta { font-size:12px; color:var(--sub); }
+  .thr-modal { display:none; position:fixed; inset:0; background:rgba(0,0,0,.4); z-index:600; align-items:center; justify-content:center; }
+  .thr-modal.open { display:flex; }
+  .thr-modal-box { background:var(--card); border-radius:14px; padding:20px; width:min(560px,92vw); max-height:85vh; overflow:auto; box-shadow:0 8px 32px rgba(0,0,0,.18); }
+  .thr-modal-box label { font-size:12px; font-weight:700; display:block; margin:8px 0 4px; }
+  .thr-modal-box input, .thr-modal-box select { width:100%; padding:6px 8px; border-radius:6px; border:1.5px solid var(--border); background:var(--bg); color:var(--text); font-size:13px; box-sizing:border-box; }
+  .thr-modal-actions { display:flex; gap:8px; margin-top:14px; }
+</style>
+
+<details class="page-manage-details" style="margin-bottom:16px;">
+  <summary style="cursor:pointer; font-size:14px; font-weight:700; padding:8px 0;">Manage thresholds ({{ threshold_configs|length if threshold_configs else 0 }})</summary>
+  <div class="thr-manage card" style="margin-top:8px;">
+  <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+    <div style="font-size:14px; font-weight:700;">Manage thresholds</div>
+    <button class="btn btn-primary btn-sm" onclick="thrOpenEditor('')">+ New threshold</button>
+  </div>
+  <div class="thr-manage-list" id="thr-manage-list">
+    {% for name, cfg in (threshold_configs or {}).items() %}
+    <div class="thr-manage-row" data-name="{{ name }}">
+      <span class="thr-manage-name">{{ name }}</span>
+      <span class="thr-manage-meta">{{ cfg.get('metric','') }} · {{ cfg.get('direction','max') }} {{ cfg.get('value','') }}</span>
+      <button class="btn btn-ghost btn-sm" onclick="thrOpenEditor('{{ name }}')">Edit</button>
+      <button class="btn btn-ghost btn-sm" style="color:var(--error);border-color:var(--error);" onclick="thrDelete('{{ name }}')">Delete</button>
+    </div>
+    {% endfor %}
+    {% if not threshold_configs %}
+    <div style="font-size:12px; color:var(--sub);">No thresholds yet. Click "+ New threshold".</div>
+    {% endif %}
+  </div>
+  </div>
+</details>
+
+<div class="thr-modal" id="thr-modal">
+  <div class="thr-modal-box">
+    <div style="font-size:16px; font-weight:700; margin-bottom:10px;">Threshold</div>
+    <label>Name</label>
+    <input type="text" id="thr-name" placeholder="e.g. food_budget">
+    <label>Metric / Query</label>
+    <select id="thr-metric">
+      {% for m in (threshold_metric_opts or []) %}
+      <option value="{{ m }}">{{ m }}</option>
+      {% endfor %}
+    </select>
+    <label>Target value</label>
+    <input type="text" id="thr-value" placeholder="5000 or another metric/query name">
+    <label>Direction</label>
+    <select id="thr-direction">
+      <option value="max">max (don't exceed)</option>
+      <option value="min">min (reach target)</option>
+    </select>
+    <label>Agg (if plain query)</label>
+    <select id="thr-agg">
+      <option value="sum">sum</option>
+      <option value="count">count</option>
+      <option value="">n/a (use metric)</option>
+    </select>
+    <label>Sum field</label>
+    <input type="text" id="thr-sum-field" placeholder="amount">
+    <label>Time override</label>
+    <select id="thr-time">
+      <option value="">Default (this-month)</option>
+      {% for label, code in time_options %}
+      <option value="{{ code }}">{{ label }}</option>
+      {% endfor %}
+    </select>
+    <label>Unit</label>
+    <input type="text" id="thr-unit" placeholder="fills">
+    <div id="thr-msg" style="font-size:13px; color:var(--error); margin-top:8px; display:none;"></div>
+    <div class="thr-modal-actions">
+      <button class="btn btn-primary" onclick="thrSave()">Save</button>
+      <button class="btn btn-ghost" onclick="thrClose()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(function() {
+  var configs = {{ (threshold_configs or {}) | tojson }};
+  var metricOpts = {{ (threshold_metric_opts or []) | tojson }};
+
+  window.thrOpenEditor = function(name) {
+    var cfg = (name && configs[name]) ? configs[name] : {};
+    document.getElementById("thr-name").value = name || "";
+    document.getElementById("thr-name").disabled = !!name;
+    var metricSel = document.getElementById("thr-metric");
+    if (metricSel) {
+      metricSel.value = cfg.metric || (metricOpts[0] || "");
+      if (!metricSel.value && metricOpts.length) metricSel.value = metricOpts[0];
+    }
+    document.getElementById("thr-value").value = (cfg.value !== undefined && cfg.value !== null) ? cfg.value : "";
+    document.getElementById("thr-direction").value = cfg.direction || "max";
+    document.getElementById("thr-agg").value = cfg.agg || "sum";
+    document.getElementById("thr-sum-field").value = cfg.sum_field || "";
+    document.getElementById("thr-time").value = cfg.time || "";
+    document.getElementById("thr-unit").value = cfg.unit || "";
+    var msg = document.getElementById("thr-msg");
+    if (msg) { msg.style.display = "none"; msg.textContent = ""; }
+    document.getElementById("thr-modal").classList.add("open");
+  };
+
+  window.thrClose = function() {
+    document.getElementById("thr-modal").classList.remove("open");
+  };
+
+  window.thrSave = function() {
+    var name = document.getElementById("thr-name").value.trim();
+    var msg = document.getElementById("thr-msg");
+    if (!name) { if (msg) { msg.textContent = "Enter a name."; msg.style.display = "block"; } return; }
+    var cfg = {
+      metric: document.getElementById("thr-metric").value,
+      value: document.getElementById("thr-value").value.trim(),
+      direction: document.getElementById("thr-direction").value,
+      agg: document.getElementById("thr-agg").value,
+      sum_field: document.getElementById("thr-sum-field").value.trim(),
+      time: document.getElementById("thr-time").value,
+      unit: document.getElementById("thr-unit").value.trim(),
+    };
+    // coerce numeric value
+    if (cfg.value !== "" && !isNaN(Number(cfg.value))) { cfg.value = Number(cfg.value); }
+    fetch("/api/query-builder/threshold", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ name: name, cfg: cfg, action: "save" })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) { thrClose(); window.location.reload(); }
+      else { if (msg) { msg.textContent = d.error || "Save failed"; msg.style.display = "block"; } }
+    }).catch(function(e){ if (msg) { msg.textContent = String(e); msg.style.display = "block"; } });
+  };
+
+  window.thrDelete = function(name) {
+    if (!confirm("Delete threshold '" + name + "'?")) return;
+    fetch("/api/query-builder/threshold", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ name: name, action: "delete" })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) { window.location.reload(); }
+      else { alert(d.error || "Delete failed"); }
+    });
+  };
+
+  // close on backdrop click
+  var modal = document.getElementById("thr-modal");
+  if (modal) modal.addEventListener("click", function(e){ if (e.target === modal) thrClose(); });
+})();
+</script>

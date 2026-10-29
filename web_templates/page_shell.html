@@ -59,6 +59,8 @@
       <tr><td><code style="color:var(--sub);">rec:interval</code></td><td>Recurrence - rec:1d rec:1w rec:2w rec:1m rec:2m rec:3m rec:1y</td></tr>
     </table>
   </div>{% endif %}
+  {% if tab == "thresholds" %}{% include "_threshold_manage.html" %}{% endif %}
+  {% if tab == "habits" %}{% include "_habit_manage.html" %}{% endif %}
   <div class="page-shell-widget" id="page-widget"></div>
 </section>
 {% if page_toolbar == 'todo' %}{% include '_todo_modal.html' %}{% endif %}
