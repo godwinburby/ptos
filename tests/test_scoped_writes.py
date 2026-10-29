@@ -928,3 +928,52 @@ class TestDueRead:
         _write_queries('[expenses]\nwhere = "type=expense"\n')
         with pytest.raises(SystemExit):
             ptos_cli.run_due(None)
+
+
+class TestPageManagePanels:
+    """Domain pages render their manage panels with configured entries."""
+
+    def test_thresholds_page_renders_manage(self):
+        _write_queries(_FULL_TOML)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/thresholds")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "Manage thresholds" in body
+
+    def test_habits_page_renders_manage(self):
+        _write_queries(_FULL_TOML)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/habits")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "Manage habits" in body
+
+    def test_calendar_page_renders_manage(self):
+        _write_queries(_FULL_TOML)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/calendar")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "Manage calendars" in body
+
+    def test_due_page_renders_manage(self):
+        _write_queries(_FULL_TOML)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/due")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "Manage due views" in body
+
+    def test_board_page_renders_manage(self):
+        _write_queries(_FULL_TOML)
+        from ptos_web import app
+        client = app.test_client()
+        resp = client.get("/board")
+        assert resp.status_code == 200
+        body = resp.get_data(as_text=True)
+        assert "Manage boards" in body
