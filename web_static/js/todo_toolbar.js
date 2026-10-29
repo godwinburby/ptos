@@ -156,26 +156,14 @@
       '<input id="todo-shell-search-input" type="search" data-todo-search value="' +
       esc(filters.search) + '" placeholder="Search tasks; use +Project @context pri:A due:today * for wildcard">' +
       '<button type="submit" class="btn btn-primary btn-sm">Search</button></form>' +
-'<div class="groupby-bar" style="display:flex;gap:4px;margin:8px 0;align-items:center;">' +
-      groupChoices.map(function (entry) {
-        var mode = entry[0];
-        var label = entry[1];
-        var active = (state.groupby || "timeline") === mode ? "active" : "";
-        return '<button type="button" class="groupby-btn ' + active + '" data-todo-groupby="' + mode + '" ' +
-          'style="padding:4px 10px;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;font-size:12px;' +
-          (active ? 'background:var(--accent);color:#fff;border-color:var(--accent);' : '') + '">' + label + '</button>';
-      }).join("") +
-      '<button type="button" class="groupby-sort" onclick="toggleSectionSort()" title="Toggle sort order" ' +
-      'style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;font-size:12px;margin-left:auto;">↕</button>' +
-      '<button type="button" class="todo-sel-btn" onclick="toggleSelectMode()" title="Select multiple tasks" ' +
-      'style="padding:4px 8px;border:1px solid var(--border);border-radius:6px;background:transparent;cursor:pointer;font-size:12px;">☐ Select</button>' +
-      '</div>' +
       '<div class="todo-shell-filters">' +
       select("project", "Project", projectChoices, filters.project) +
       select("context", "Context", contextChoices, filters.context) +
       select("priority", "Priority", priorityChoices, filters.priority) +
       select("due", "Due", dueChoices, filters.due) +
+      select("groupby", "Group by", groupChoices, state.groupby || "timeline") +
       select("sort", "Sort sections", sortChoices, state.sort || "default") +
+       '<button type="button" class="todo-sel-btn" onclick="toggleSelectMode()" title="Select multiple tasks">☐ Select</button>' +
       '</div><div class="todo-shell-active" data-todo-active>' +
       currentChips(filters, state.hide_routines) +
       (Object.keys(filters).some(function (key) { return filters[key]; }) || state.hide_routines
@@ -205,14 +193,6 @@
         if (["context", "priority", "due"].indexOf(key) >= 0) filters[key] = node.value;
         syncChrome();
         onChange(changes);
-      });
-    });
-    root.querySelectorAll("[data-todo-groupby]").forEach(function (node) {
-      on(node, "click", function () {
-        var mode = node.getAttribute("data-todo-groupby");
-        state.groupby = mode;
-        syncChrome();
-        onChange({ groupby: mode });
       });
     });
     on(root.querySelector("[data-todo-search-form]"), "submit", function (event) {
@@ -485,20 +465,6 @@
         (Object.keys(filters).some(function (key) { return filters[key]; }) || state.hide_routines
           ? '<button type="button" class="todo-shell-clear" data-todo-clear>Clear filters</button>' : "");
       root.querySelector("[data-todo-hide-routines]").checked = !!state.hide_routines;
-      root.querySelectorAll("[data-todo-groupby]").forEach(function (btn) {
-        var mode = btn.getAttribute("data-todo-groupby");
-        if (mode === (state.groupby || "timeline")) {
-          btn.classList.add("active");
-          btn.style.background = "var(--accent)";
-          btn.style.color = "#fff";
-          btn.style.borderColor = "var(--accent)";
-        } else {
-          btn.classList.remove("active");
-          btn.style.background = "transparent";
-          btn.style.color = "";
-          btn.style.borderColor = "var(--border)";
-        }
-      });
     }
     return { destroy: function () {
       listeners.forEach(function (entry) {
