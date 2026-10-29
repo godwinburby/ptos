@@ -964,7 +964,8 @@ def due_page():
         time_options=[], time_value="", custom_time="", from_date="", to_date="",
         year_range=_YEAR_RANGE, page_data=page_data or {},
         page_spec={"body": embed_body, "kind": "due"},
-        page_state={"error": page_error}, select_controls=select_controls)
+        page_state={"error": page_error}, select_controls=select_controls,
+        due_configs=list(due_configs.keys()))
 
 
 # ══════════════════════════════════════════════════════════════════════════════
