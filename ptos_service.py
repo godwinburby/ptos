@@ -12,7 +12,7 @@ DO NOT expose in public API: filepath, lineno, raw_line, old_line
 Public API:
 - get_schema() → dict
 - get_records(filters, time, search) → List[dict]
-- edit_record(context, changes, note) → result  
+- edit_record(context, changes, note) → result
 - append_record(record) → result
 - get_dashboard(), get_metric(), get_due() → business objects
 
@@ -86,7 +86,7 @@ QUERIES_PATH = ptos.QUERIES_PATH
 
 def _update_record_in_file(filepath, old_line, new_line, lineno):
     """Update record in file - wraps engine file operations.
-    
+
     Args:
         filepath: Path to the record file
         old_line: Original record line
@@ -109,7 +109,7 @@ _CACHE_MAP = {
 
 def invalidate(resource):
     """Invalidate cache for a resource and all its dependents.
-    
+
     Args:
         resource: One of "schema", "queries", "config", "presets",
                   or a list/tuple of such keys.
@@ -458,7 +458,7 @@ def _build_row_from_parsed(d, kv, note, format_date=True, dt_fields=None):
 
 def get_config():
     """Get PTOS configuration.
-    
+
     Returns:
         dict: Configuration as dict loaded from config.toml.
     """
@@ -467,10 +467,10 @@ def get_config():
 
 def save_config(config_dict):
     """Save PTOS configuration atomically with backup.
-    
+
     Args:
         config_dict: Configuration dict to save to config.toml.
-    
+
     Returns:
         dict: Result with ok and message.
     """
@@ -701,7 +701,7 @@ def _update_project_notes_path_after_rename(old_rel, new_rel):
 
 def get_schema():
     """Get record schema definition.
-    
+
     Returns:
         dict: Schema loaded from schema.toml with types, fields, and options.
     """
@@ -710,7 +710,7 @@ def get_schema():
 
 def get_presets():
     """Get saved presets.
-    
+
     Returns:
         dict: Presets loaded from presets.toml.
     """
@@ -723,10 +723,10 @@ def get_presets():
 
 def append_record(line):
     """Append a record line to the appropriate year log file.
-    
+
     Args:
         line: Record line string to append.
-    
+
     Returns:
         dict: Result with ok and message.
     """
@@ -741,11 +741,11 @@ def append_record(line):
 
 def write_file(filepath, content):
     """Write content to a file atomically.
-    
+
     Args:
         filepath: Path to file to write.
         content: String content to write.
-    
+
     Returns:
         None
     """
@@ -761,7 +761,7 @@ def write_file(filepath, content):
 
 def backup_full():
     """Create a full backup of records/, config/, and templates/ folders.
-    
+
     Returns:
         str: Path to the created backup ZIP file.
     """
@@ -774,7 +774,7 @@ def backup_full():
 
 def backup_config_only():
     """Create a config-only backup ZIP.
-    
+
     Returns:
         str: Path to the created backup ZIP file.
     """
@@ -787,7 +787,7 @@ def backup_config_only():
 
 def get_backup_preview():
     """Get preview of what will be backed up.
-    
+
     Returns:
         dict: Preview information about backup contents.
     """
@@ -800,10 +800,10 @@ def get_backup_preview():
 
 def get_restore_preview(filename):
     """Get preview of what will be restored from a backup file.
-    
+
     Args:
         filename: Name of backup file to preview.
-    
+
     Returns:
         dict: Preview information about backup contents.
     """
@@ -819,7 +819,7 @@ def get_restore_preview(filename):
 
 def list_backups():
     """List all backup files.
-    
+
     Returns:
         list: List of tuples (filename, created_datetime, type).
               type is 'full' or 'config'.
@@ -911,10 +911,10 @@ def reinstall_demo_data():
 
 def delete_backup(filename):
     """Delete a backup file.
-    
+
     Args:
         filename: Name of backup file to delete.
-    
+
     Returns:
         bool: True on success.
     """
@@ -926,10 +926,10 @@ def delete_backup(filename):
 
 def restore_full(zip_path):
     """Restore data from a full backup ZIP.
-    
+
     Args:
         zip_path: Path to backup ZIP file.
-    
+
     Returns:
         None
     """
@@ -1750,19 +1750,19 @@ def get_metric(name, time="tm", from_date=None, to_date=None):
             # substitute resolved names with numeric values
             # Handle special tokens for date/day arithmetic
             import calendar as _cal
-            
+
             now = dt.date.today()
-            
+
             # Default values (month-based)
             month_days = _cal.monthrange(now.year, now.month)[1]
             month_day = now.day
-            
+
             # Try to use first configured cycle
             cycle_start_day = None
             for _name, day in cycles.items():
                 cycle_start_day = day
                 break  # Use first cycle defined
-            
+
             if cycle_start_day:
                 # Calculate cycle start date
                 if now.day >= cycle_start_day:
@@ -1770,29 +1770,29 @@ def get_metric(name, time="tm", from_date=None, to_date=None):
                 else:
                     prev = now.replace(day=1) - dt.timedelta(days=1)
                     cycle_start = dt.date(prev.year, prev.month, cycle_start_day)
-                
+
                 # Calculate cycle end (start of next cycle)
                 next_month = cycle_start.replace(day=28) + dt.timedelta(days=4)
                 next_cycle_start = next_month.replace(day=cycle_start_day)
                 cycle_end = next_cycle_start - dt.timedelta(days=1)
-                
+
                 cycle_days = (cycle_end - cycle_start).days + 1
                 cycle_day = (now - cycle_start).days + 1  # 1-indexed
             else:
                 # No cycle defined, use month
                 cycle_days = month_days
                 cycle_day = month_day
-            
+
             # Add special tokens to resolved dict
             resolved['cycle_day'] = cycle_day
             resolved['cycle_days'] = cycle_days
             resolved['month_day'] = month_day
             resolved['month_days'] = month_days
-            
+
             eval_expr = expr
             for token, val in resolved.items():
                 eval_expr = _re.sub(rf'\b{token}\b', str(val), eval_expr)
-            
+
             # safe eval — only digits, spaces, and arithmetic operators (including scientific notation e)
             if not _re.match(r'^[\d\s\.+\-*/()e]+$', eval_expr):
                 return {"name": _disp(name), "value": f"unsafe expression: {eval_expr}", "raw": None}
@@ -1802,10 +1802,10 @@ def get_metric(name, time="tm", from_date=None, to_date=None):
                 return {"name": _disp(name), "value": formatted, "raw": raw}
             except Exception as e:
                 return {"name": _disp(name), "value": f"eval error: {e}", "raw": None}
-            
+
     except Exception as e:
         return {"name": _disp(name), "value": f"error: {e}", "raw": None}
-    
+
     return {"name": _disp(name), "value": "?", "raw": None}
 
 
@@ -1960,7 +1960,7 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
         period: str,
         items: [{name, value, raw}],
         groups: [{name, items}] | None }   # None when no groups configured
-    
+
     use_dashboard_time: if False (default), each metric/query uses its own time.
                       if True, all use the dashboard's time.
     """
@@ -1984,7 +1984,7 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
     elif use_dashboard_time:
         db_start, db_end = _resolve_time(time)
         period_from, period_to = db_start, db_end
-    
+
     items = []
     group_map = {}
     group_order = []
@@ -2024,7 +2024,7 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
     for group_name, item_name in ordered:
         metrics = queries.get("metrics", {})
         queries_dict = queries.get("queries", queries)
-        
+
         # Determine which time to use for this item
         if use_dashboard_time:
             # Override: use dashboard's time for all
@@ -2052,7 +2052,7 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
                     item_time = "tm"
                     item_start, item_end = _resolve_time("tm")
         item_period = f"{item_start} to {item_end}"
-        
+
         if item_name in metrics:
             item = get_metric(item_name, item_time, from_date=from_date, to_date=to_date)
             item["raw_name"] = item_name
@@ -2082,7 +2082,7 @@ def get_dashboard(name, time="tm", use_dashboard_time=False,
         else:
             _push({"name": _disp(item_name), "value": "not found", "raw": None,
                    "kind": "unknown", "item_time": item_time, "item_period": item_period})
-    
+
     if from_date:
         period_from = ptos.parse_from_to(from_date)
         period_end = ptos.parse_from_to(to_date, as_end=True) if to_date else dt.date.max
@@ -3304,8 +3304,8 @@ def _register_builtin_widgets():
         icon="list", category="tasks", named=False,
         interactive_default=False,
         fields=_widget_fields(
-            "todo_summary", view_options=("todo_summary",), time=False,
-            limit=False, extra=()), quick_add=True,
+            "todo_summary", view_options=("todo_summary",), limit=False, time=False,
+            extra=()), quick_add=True,
         starters=({"id": "task_summary", "label": "Task summary",
                    "description": "Counts of open, due and overdue tasks.",
                    "body": 'view = "todo_summary"\n'},))
@@ -3315,7 +3315,7 @@ def _register_builtin_widgets():
         icon="book", category="capture", named=False,
         interactive_default=False,
         fields=_widget_fields(
-            "journal", view_options=("journal",), time=False, limit=False,
+            "journal", view_options=("journal",), limit=False, time=False,
             extra=()), quick_add=True,
         starters=({"id": "journal_preview", "label": "Journal",
                    "description": "Recent journal entries.",
@@ -3329,7 +3329,7 @@ def _register_builtin_widgets():
                    "description": "Type a line and save it.",
                    "body": 'view = "capture"\n'},),
         fields=_widget_fields(
-            "capture", view_options=("capture",), time=False, limit=False,
+            "capture", view_options=("capture",), limit=False, time=False,
             extra=()), quick_add=True)
     reg("quick_add", _w_quick_add, needs_name=False, infer_order=99,
         label="Quick add",
@@ -3340,7 +3340,7 @@ def _register_builtin_widgets():
                    "description": "One-tap buttons for your common presets.",
                    "body": 'view = "quick_add"\n'},),
         fields=_widget_fields(
-            "quick_add", view_options=("quick_add",), time=False, limit=False,
+            "quick_add", view_options=("quick_add",), limit=False, time=False,
             extra=()), quick_add=True)
     reg("quick_add_multi", _w_quick_add_multi, needs_name=False,
         infer_order=99,
@@ -3352,8 +3352,8 @@ def _register_builtin_widgets():
                    "description": "Pick from multi-field presets.",
                    "body": 'view = "quick_add_multi"\n'},),
         fields=_widget_fields(
-            "quick_add_multi", view_options=("quick_add_multi",),
-            time=False, limit=False, extra=()), quick_add=True)
+            "quick_add_multi", view_options=("quick_add_multi",), limit=False,
+            time=False, extra=()), quick_add=True)
     reg("time_picker", _w_time_picker, needs_name=False, infer_order=99,
         label="Time window picker",
         description="Choose the time window for time-aware widgets on Home.",
@@ -3362,8 +3362,8 @@ def _register_builtin_widgets():
         starters=({"id": "time_window_picker", "label": "Time window",
                    "description": "A Home-wide time window selector.",
                    "body": 'view = "time_picker"\nlive = true\n'},),
-        fields=_widget_fields("time_picker", view_options=("time_picker",),
-                              time=False, limit=False, extra=()),
+        fields=_widget_fields("time_picker", view_options=("time_picker",), limit=False,
+                              time=False, extra=()),
         quick_add=True)
 
 
@@ -4174,10 +4174,10 @@ def restore_config(zip_path):
     import zipfile
     import uuid
     import shutil
-    
+
     if not os.path.exists(zip_path):
         raise PTOSError(f"Backup file not found: {zip_path}")
-    
+
     # Validate zip contents and check for path traversal
     try:
         base_dir = os.path.abspath(ptos.BASE_DIR)
@@ -4193,37 +4193,37 @@ def restore_config(zip_path):
                     raise PTOSError(f"Invalid path in backup: {name}")
     except zipfile.BadZipFile:
         raise PTOSError("Invalid zip file")
-    
+
     # Backup current config first - abort if this fails
     try:
         current_backup = ptos.backup_config()
     except Exception as e:
         raise PTOSError(f"Failed to create backup before restore: {e}")
-    
+
     # Restore config atomically using temp directory
     temp_dir = os.path.join(ptos.BACKUP_DIR, f".config-restore-{uuid.uuid4().hex[:8]}")
     config_path = os.path.join(ptos.BASE_DIR, "config")
-    
+
     try:
         # Extract to temp directory
         os.makedirs(temp_dir)
         with zipfile.ZipFile(zip_path, "r") as zf:
             zf.extractall(temp_dir)
-        
+
         # Verify extraction
         temp_config = os.path.join(temp_dir, "config")
         if not os.path.isdir(temp_config):
             raise PTOSError("Invalid backup: config folder not found after extraction")
-        
+
         # Atomic swap with rollback: backup to config.bak, copy new, cleanup on success
         config_bak = config_path + ".bak"
-        
+
         # Backup existing config to config.bak
         if os.path.exists(config_path):
             if os.path.exists(config_bak):
                 shutil.rmtree(config_bak)
             ptos.rename_with_retry(config_path, config_bak)
-        
+
         # Copy new config — each file under its sidecar lock, atomically,
         # so a settings/schema save racing this restore serializes.
         try:
@@ -4243,19 +4243,19 @@ def restore_config(zip_path):
                     shutil.rmtree(config_path)
                 ptos.rename_with_retry(config_bak, config_path)
             raise
-        
+
         # Success: delete config.bak
         if os.path.exists(config_bak):
             shutil.rmtree(config_bak)
-        
+
         # Cleanup temp
         shutil.rmtree(temp_dir)
-        
+
     except Exception as e:
         if os.path.exists(temp_dir):
             shutil.rmtree(temp_dir)
         raise PTOSError(f"Failed to restore config: {e}")
-    
+
     # Invalidate caches
     invalidate_all()
     _emit_changed("config")
@@ -7550,14 +7550,14 @@ def save_queries_full(raw_queries, raw_metrics, raw_dashboards, raw_aliases=None
 
 def fmt_date(date_obj):
     """Format date object according to configured format.
-    
-    Supports presets: indian (dd/mm/yyyy), us (mm/dd/yyyy), 
+
+    Supports presets: indian (dd/mm/yyyy), us (mm/dd/yyyy),
     eu (dd.mm.yyyy), readable (15 Apr 2026), iso (yyyy-mm-dd),
     or custom strftime pattern.
     """
     import datetime as dt
     fmt = ptos.date_format()
-    
+
     if fmt == "indian":
         return date_obj.strftime("%d/%m/%Y")
     elif fmt == "us":
@@ -7594,7 +7594,7 @@ def fmt_datetime(dt_obj):
 
 def lint_all():
     """Lint all records and return structured data.
-    
+
     Returns:
         dict: Lint results including errors, warnings, quality warnings, and counts.
     """
@@ -7603,10 +7603,10 @@ def lint_all():
 
 def validate_content(content):
     """Validate raw log file content.
-    
+
     Args:
         content: String content of a log file.
-    
+
     Returns:
         dict: Validation results with errors list.
     """
@@ -7624,24 +7624,24 @@ def validate_content(content):
                 "lineno": lineno
             })
             continue
-        
+
         line_errors = []
         if d == dt.date.min:
             line_errors.append("missing or malformed date")
         if "type" not in kv:
             line_errors.append("missing type field")
-        
+
         schema = ptos.get_schema()
         schema_problems = ptos.validate_record(schema, kv)
         line_errors.extend(schema_problems)
-        
+
         if line_errors:
             errors.append({
                 "line": line,
                 "problems": line_errors,
                 "lineno": lineno
             })
-    
+
     return {
         "valid": len(errors) == 0,
         "error_count": len(errors),
@@ -7651,11 +7651,11 @@ def validate_content(content):
 
 def lint_content_with_schema(content, schema_override=None):
     """Lint content against a specific schema (for schema builder preview).
-    
+
     Args:
         content: String content to lint.
         schema_override: Optional schema dict to use instead of current schema.
-    
+
     Returns:
         dict: Lint results with errors and quality warnings.
     """
@@ -7663,7 +7663,7 @@ def lint_content_with_schema(content, schema_override=None):
     errors = []
     warnings = []
     quality_warnings = []
-    
+
     for lineno, raw_line in enumerate(content.split("\n"), 1):
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -7677,10 +7677,10 @@ def lint_content_with_schema(content, schema_override=None):
                 "lineno": lineno
             })
             continue
-        
+
         line_errors = []
         line_quality = []
-        
+
         if d == dt.date.min:
             line_errors.append("missing or malformed date")
         if "type" not in kv:
@@ -7689,24 +7689,24 @@ def lint_content_with_schema(content, schema_override=None):
             line_quality.append("no tag")
         if not note or not note.strip():
             line_quality.append("no note")
-        
+
         schema_problems = ptos.validate_record(schema, kv)
         line_errors.extend(schema_problems)
-        
+
         if line_errors:
             errors.append({
                 "line": line,
                 "problems": line_errors,
                 "lineno": lineno
             })
-        
+
         if line_quality:
             quality_warnings.append({
                 "line": line,
                 "problems": line_quality,
                 "lineno": lineno
             })
-    
+
     return {
         "clean": len(errors) == 0 and len(quality_warnings) == 0,
         "error_count": len(errors),
@@ -7737,14 +7737,14 @@ def resolve_tags(schema, type_schema, record):
 
 def get_tag_context(rtype, record):
     """Get tag field names and their parent values for a record type.
-    
+
     Returns a list of dicts with tag_field name and current parent_value.
     """
     try:
         schema = ptos.get_schema()
         type_schema = schema.get("type", {}).get(rtype, {})
         tag_section = type_schema.get("tags", {})
-        
+
         result = []
         for tag_field, trigger in tag_section.items():
             parent_value = record.get(tag_field, "")
@@ -7753,7 +7753,7 @@ def get_tag_context(rtype, record):
                     "tag_field": tag_field,
                     "parent_value": parent_value
                 })
-        
+
         return result
     except Exception as e:
         return []
@@ -7779,13 +7779,13 @@ def add_global_field_option(field_name, new_option):
 
 def add_tag_option(rtype, tag_field, parent_value, new_tag):
     """Add a new tag option to schema.toml.
-    
+
     Args:
         rtype: Record type (e.g., 'expense', 'income')
         tag_field: The tag field name (e.g., 'category', 'source')
         parent_value: The parent value this tag belongs to (e.g., 'food', 'salary')
         new_tag: The new tag option to add
-    
+
     Returns:
         dict: Result with success boolean and optional error message.
     """
@@ -7793,24 +7793,24 @@ def add_tag_option(rtype, tag_field, parent_value, new_tag):
         schema = ptos.get_schema()
         type_schema = schema.get("type", {}).get(rtype, {})
         tag_section = type_schema.get("tags", {})
-        
+
         if tag_field not in tag_section:
             return {"success": False, "error": f"No tags section for {tag_field}"}
-        
+
         tag_options = tag_section.get(tag_field, {}).get("options", {})
         if not isinstance(tag_options, dict):
             return {"success": False, "error": f"Tags for {tag_field} not parent-dependent"}
-        
+
         if parent_value not in tag_options:
             return {"success": False, "error": f"Parent value '{parent_value}' not found in {tag_field} tags"}
-        
+
         new_tag = ptos.normalize_field_value(new_tag)
         if not new_tag:
             return {"success": False, "error": "Empty tag"}
-        
+
         if new_tag in tag_options.get(parent_value, []):
             return {"success": True, "message": f"Tag '{new_tag}' already exists"}
-        
+
         tag_options[parent_value].append(new_tag)
         tag_options[parent_value] = sorted(tag_options[parent_value])
 
@@ -8451,10 +8451,10 @@ def get_queries():
 
 def save_schema(schema_dict):
     """Save schema dict to schema.toml atomically with backup and cache invalidation.
-    
+
     Args:
         schema_dict: Complete schema dict to write.
-    
+
     Raises:
         PTOSError on failure.
     """
