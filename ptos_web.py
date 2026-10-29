@@ -3401,7 +3401,8 @@ def calendar_view(name=None):
         select_controls=[{"label": "Calendar", "param": "calendar", "body_key": "name",
                           "path_prefix": "/calendar", "value": active,
                           "options": [("All records", "__all__")] +
-                                     [(n.replace("_", " "), n) for n in names]}])
+                                     [(n.replace("_", " "), n) for n in names]}],
+        calendar_configs={k: v for k, v in ptos.get_queries().items() if k.startswith("calendar.")})
 
 
 @app.route("/projects")

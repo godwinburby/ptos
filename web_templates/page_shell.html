@@ -61,6 +61,8 @@
   </div>{% endif %}
   {% if tab == "thresholds" %}{% include "_threshold_manage.html" %}{% endif %}
   {% if tab == "habits" %}{% include "_habit_manage.html" %}{% endif %}
+  {% if tab == "calendar" %}{% include "_calendar_manage.html" %}{% endif %}
+  {% if tab == "due" %}{% include "_due_manage.html" %}{% endif %}
   <div class="page-shell-widget" id="page-widget"></div>
 </section>
 {% if page_toolbar == 'todo' %}{% include '_todo_modal.html' %}{% endif %}

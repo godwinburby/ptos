@@ -1,0 +1,37 @@
+{# Manage due views on /due — editing routes to Query Builder (complex config) #}
+<details style="margin-bottom:16px;">
+  <summary style="cursor:pointer; font-size:14px; font-weight:700; padding:8px 0;">Manage due views ({{ due_configs|length if due_configs else 0 }})</summary>
+  <div class="card" style="margin-top:8px; padding:12px 16px;">
+    <div style="display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:10px;">
+      <div style="font-size:14px; font-weight:700;">Manage due views</div>
+      <a class="btn btn-primary btn-sm" href="/query-builder?section=due">+ New due view (Query Builder)</a>
+    </div>
+    <div id="due-manage-list">
+      {% for name in (due_configs or []) %}
+      <div style="display:flex; align-items:center; gap:8px; padding:6px 0; border-bottom:1px solid var(--border);">
+        <span style="flex:1; font-weight:600; font-size:13px;">{{ name }}</span>
+        <a class="btn btn-ghost btn-sm" href="/query-builder?section=due&edit={{ name|urlencode }}">Edit (QB)</a>
+        <button class="btn btn-ghost btn-sm" style="color:var(--error);border-color:var(--error);" onclick="dueDelete('{{ name }}')">Delete</button>
+      </div>
+      {% endfor %}
+      {% if not due_configs %}
+      <div style="font-size:12px; color:var(--sub);">No due views yet.</div>
+      {% endif %}
+    </div>
+  </div>
+</details>
+
+<script>
+(function() {
+  window.dueDelete = function(name) {
+    if (!confirm("Delete due view '" + name + "'?")) return;
+    fetch("/api/query-builder/due", {
+      method: "POST", headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({ name: name, action: "delete" })
+    }).then(function(r){ return r.json(); }).then(function(d){
+      if (d.ok) { window.location.reload(); }
+      else { alert(d.error || "Delete failed"); }
+    });
+  };
+})();
+</script>
