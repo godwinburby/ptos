@@ -2,7 +2,8 @@
 tests/test_routines.py  —  Tests for the routines view (checkbox cards over +routine todos)
 """
 
-import datetime as dt, os, pytest
+import datetime as dt, json, os, re, pytest
+from pathlib import Path
 import ptos
 import ptos_todo
 import ptos_service as svc
@@ -14,6 +15,27 @@ def _write_todo(path, lines):
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w", encoding="utf-8") as f:
         f.write("\n".join(lines) + "\n")
+
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+
+
+def _page_state(html):
+    m = re.search(r"window\.PTOS_PAGE\s*=\s*(\{.*?\});\s*</script>", html, re.S)
+    assert m, "window.PTOS_PAGE not found in page shell HTML"
+    return json.loads(m.group(1))
+
+
+def _page_data(html):
+    m = re.search(
+        r'<script type="application/json" id="page-data">(.*?)</script>',
+        html, re.S)
+    assert m, "page-data JSON not found in page shell HTML"
+    return json.loads(m.group(1))
+
+
+def _repo_text(rel):
+    return (_REPO_ROOT / rel).read_text(encoding="utf-8")
 
 
 TODAY = dt.date.today()
@@ -878,10 +900,12 @@ class TestTodoPageHideRoutines:
         resp = client.get("/todo")
         html = resp.get_data(as_text=True)
         assert resp.status_code == 200
-        assert "Hide routines" in html
-        assert "Water plants" in html
-        assert "Call client" in html
-        assert "project=-routine" in html
+        assert _page_state(html)["todo"]["hide_routines"] is False
+        data = json.dumps(_page_data(html))
+        assert "Water plants" in data
+        assert "Call client" in data
+        assert "todo_toolbar.js" in html
+        assert "Hide routines" in _repo_text("web_static/js/todo_toolbar.js")
 
     def test_param_negative_hides_routines(self, tmp_path, monkeypatch):
         self._setup(tmp_path, monkeypatch, [
@@ -891,10 +915,15 @@ class TestTodoPageHideRoutines:
         client = app.test_client()
         resp = client.get("/todo?project=-routine")
         html = resp.get_data(as_text=True)
-        assert "Water plants" not in html
-        assert "Call client" in html
-        assert "Routines hidden" in html
-        assert "Show routines" in html
+        state = _page_state(html)["todo"]
+        assert state["hide_routines"] is True
+        assert state["filters"]["project"] == "-routine"
+        data = json.dumps(_page_data(html))
+        assert "Water plants" not in data
+        assert "Call client" in data
+        toolbar = _repo_text("web_static/js/todo_toolbar.js")
+        assert "Routines hidden" in toolbar
+        assert "Show routines" in toolbar
 
     def test_config_default_hides(self, tmp_path, monkeypatch):
         self._setup(tmp_path, monkeypatch, [
@@ -905,10 +934,10 @@ class TestTodoPageHideRoutines:
         client = app.test_client()
         resp = client.get("/todo")
         html = resp.get_data(as_text=True)
-        assert "Water plants" not in html
-        assert "Call client" in html
-        assert "Routines hidden" in html
-        assert "Show routines" in html
+        assert _page_state(html)["todo"]["hide_routines"] is True
+        data = json.dumps(_page_data(html))
+        assert "Water plants" not in data
+        assert "Call client" in data
 
     def test_empty_param_overrides_config(self, tmp_path, monkeypatch):
         self._setup(tmp_path, monkeypatch, [
@@ -919,10 +948,10 @@ class TestTodoPageHideRoutines:
         client = app.test_client()
         resp = client.get("/todo?project=")
         html = resp.get_data(as_text=True)
-        assert "Water plants" in html
-        assert "Call client" in html
-        assert "Routines hidden" not in html
-        assert "Hide routines" in html
+        assert _page_state(html)["todo"]["hide_routines"] is False
+        data = json.dumps(_page_data(html))
+        assert "Water plants" in data
+        assert "Call client" in data
 
     def test_positive_routine_drills_in(self, tmp_path, monkeypatch):
         self._setup(tmp_path, monkeypatch, [

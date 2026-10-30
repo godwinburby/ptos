@@ -1080,7 +1080,7 @@ def todo_page():
         time_options=[], time_value="", custom_time="", from_date="", to_date="",
         year_range=_YEAR_RANGE, page_data=page_data or {},
         projects=projects, contexts=contexts, priority_labels=priority_labels,
-        show_delete=True,
+        show_delete=False,
         page_spec={"body": embed_body, "kind": "todo"},
         page_toolbar="todo", page_state={
             "error": page_error,

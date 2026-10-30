@@ -5,6 +5,14 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-10-30
+
+### Wave 3 todo shell — delete path and test stabilisation
+
+- **Row delete works on the shell** — `widget_host.js` posted to a non-existent `/api/todo/delete`; it now posts to `/todo/delete` (open) or `/todo/delete-done` (completed) with the row's `expect` guard and surfaces a failure toast instead of an unhandled promise rejection.
+- **Modal delete stays off the todo page** — `todo_page`'s shell branch passes `show_delete=False` (routines keeps it), so row ✕ is the single delete affordance and the modal invariant holds again.
+- **Hide-routines parity tests re-pointed** — the four `TestTodoPageHideRoutines` tests now assert the inlined `window.PTOS_PAGE` hide-routines flag, the `#page-data` row set, and the toolbar JS chip strings, instead of legacy template markup that no longer renders on the shell.
+
 ## 2026-10-29
 
 ### Wave 2 Browse and Queries page migration (Phase 1 + Phase 2)

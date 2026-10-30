@@ -663,10 +663,14 @@ if (act === "edit") {
           if (act === "delete") {
             var delLineNo = parseInt(row.getAttribute("data-line"), 10);
             var raw = row.getAttribute("data-raw") || "";
+            var delDone = row.classList.contains("completed");
             if (!isNaN(delLineNo) && window.confirm("Delete this task?")) {
-              _post("/api/todo/delete", { line_no: delLineNo, target: row.classList.contains("completed") ? "done" : "todo", expect: raw }).then(function (r) {
+              var delUrl = delDone ? "/todo/delete-done" : "/todo/delete";
+              _post(delUrl, { line_no: delLineNo, expect: raw }).then(function (r) {
                 if (r && r.ok) ctx.refresh();
                 else window.alert((r && r.error) || "Failed to delete");
+              }).catch(function () {
+                window.alert("Failed to delete");
               });
             }
             return;
