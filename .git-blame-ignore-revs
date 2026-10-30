@@ -1,0 +1,7 @@
+# Commits that only normalize line endings (CRLF <-> LF), so `git blame`
+# should skip them. See docs/specs/ptos-line-endings-spec.md §4.5.
+#
+# Deliberately NOT listed: 2f9cb5a, 11d0fa6, 69f0504, 2b56814, be07621.
+# Those commits flipped line endings but also contain real content changes,
+# and ignoring them entirely would hide real authorship from blame.
+25cc155e9c80e90d0ee1bdb240038ef47645ab9a
