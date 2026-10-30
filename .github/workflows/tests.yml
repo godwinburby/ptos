@@ -12,6 +12,23 @@ permissions:
   contents: read
 
 jobs:
+  line-endings:
+    name: line endings (LF)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Reject non-LF text files in the index
+        run: |
+          bad=$(git ls-files --eol | grep -v -E 'i/(lf|none|-text)' || true)
+          if [ -n "$bad" ]; then
+            echo "$bad"
+            echo ""
+            echo "Non-LF files found in the index (CRLF or mixed endings)."
+            echo "Text files must be stored as LF; see docs/specs/ptos-line-endings-spec.md."
+            exit 1
+          fi
+
   pytest:
     name: pytest (${{ matrix.os }}, Python ${{ matrix.python-version }})
     runs-on: ${{ matrix.os }}

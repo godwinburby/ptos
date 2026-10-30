@@ -1,0 +1,22 @@
+# Normalize all text files to LF in the repository, regardless of what an
+# editor or agent writes in the working tree.
+* text=auto eol=lf
+
+# Windows scripts must stay CRLF in the working tree (index still LF).
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
+
+# Binary files — never convert or diff as text.
+*.ico binary
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.webp binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.otf binary
+*.zip binary
+*.pdf binary

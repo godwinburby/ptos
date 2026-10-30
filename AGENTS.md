@@ -73,6 +73,12 @@ hidden/detached window may misreport — use the whole-suite command.
 - Prefer editing existing files over creating new ones
 - No emojis in code unless explicitly requested
 
+### Line endings
+- **Write files with LF endings.** Never convert a file's line endings as a side effect of an edit (this repo is edited from Windows IDEs/agents that default to CRLF).
+- `.gitattributes` (`* text=auto eol=lf`; `.bat`/`.cmd`/`.ps1` stay CRLF in the working tree) normalizes on stage, `.editorconfig` and `.vscode/settings.json` set the editor default, and CI's `line-endings` job rejects a CRLF/mixed file in the index. See `docs/specs/ptos-line-endings-spec.md`.
+- **Before committing, compare `git diff --stat` with `git diff --stat --ignore-space-at-eol`.** If they differ materially, stop and fix the endings rather than committing whole-file churn.
+- **Prefer targeted edits over whole-file rewrites.**
+
 ### File naming
 - `ptos_*.py` — core modules
 - `web_templates/*.html` — Jinja2 templates
