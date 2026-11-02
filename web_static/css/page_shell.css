@@ -96,6 +96,22 @@
 .todo-full-list .todo-group-rows { padding-bottom:5px; }
 .todo-full-list .todo-group-count { min-width:22px; padding:1px 6px; border-radius:10px; background:var(--bg); color:var(--sub); text-align:center; }
 .todo-full-list .emb-stat { padding:6px 8px 10px; }
+.todo-help-card {
+  display:none; margin-top:8px; padding:14px 16px;
+  background:var(--card); border:1px solid var(--border); border-radius:10px;
+  font-size:13px; color:var(--text);
+}
+.todo-help-card.open { display:block; }
+.todo-help-title { font-weight:700; font-size:12px; color:var(--sub); text-transform:uppercase; letter-spacing:0.4px; margin-bottom:8px; }
+.todo-help-row { margin-bottom:8px; }
+.todo-help-row code { font-size:12px; background:var(--bg); padding:2px 6px; border-radius:4px; }
+.todo-help-table { width:100%; border-collapse:collapse; }
+.todo-help-table td { padding:3px 0; vertical-align:top; }
+.todo-help-table td:first-child { width:140px; padding-right:12px; }
+.todo-help-table code { font-size:12px; background:var(--bg); padding:1px 5px; border-radius:4px; }
+.sel-bar { display:none; }
+.sel-bar.show { display:flex; }
+.sel-bar span { font-size:13px; font-weight:600; color:var(--sub); flex:1; }
 @media (max-width:767px) {
   .page-controls { align-items:stretch; }
   .page-control-field select,.page-custom-time input { min-width:0; width:100%; }

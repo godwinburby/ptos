@@ -873,23 +873,18 @@ function _todoDueBadge(t) {
 
 function renderTodoRow(t, filters) {
   filters = filters || {};
-  var _priLabels = {A:'Critical',B:'Important',C:'Moderate',D:'Low'};
-  var priLabel = t.priority ? (_priLabels[t.priority] || '') : '';
+  var _priDefaults = {A:'Critical',B:'Important',C:'Moderate',D:'Low'};
+  var _priConfig = (typeof window !== "undefined" && window.PTOS &&
+    window.PTOS.priorityLabels) || {};
+  var priLabel = t.priority ? (_priConfig[t.priority] || _priDefaults[t.priority] || '') : '';
   var priTitle = t.priority ? 'Priority ' + t.priority + (priLabel ? ' — ' + priLabel : '') : 'No priority';
   var pri = t.priority
     ? '<div class="todo-pri ' + esc(t.priority) + '" data-field="priority" data-value="' + esc(t.priority) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="' + esc(priTitle) + '">' + esc(t.priority) + '</div>'
     : '<div class="todo-pri none" data-field="priority" data-value="" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="No priority">—</div>';
   var dueBadge = _todoDueBadge(t);
-  // Threshold badge
-  var threshBadge = "";
-  if (t.threshold) {
-    var tiso = String(t.threshold).slice(0, 10);
-    var tdd = parseInt(tiso.slice(8, 10), 10);
-    var tm = parseInt(tiso.slice(5, 7), 10);
-    var ttime = t.threshold_time ? " " + t.threshold_time : "";
-    threshBadge = '<span class="todo-context" data-field="threshold" data-value="' + esc(t.threshold) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="Change threshold date">threshold ' + tdd + " " + _monthName(tm) + ttime + '</span>';
-  }
-  // Make due badge clickable for popup editing (full mode only)
+  var selMode = typeof window !== "undefined" && !!window._selMode;
+  var selLines = (selMode && typeof window !== "undefined" && window._selLines) || {};
+  var isSelected = selMode && Object.prototype.hasOwnProperty.call(selLines, t.line_no);
   var activeProj = String(filters.project || "").replace(/^\+/, "");
   var projs = (t.projects || []).map(function (p) {
     var pNorm = String(p).replace(/^\+/, "");
@@ -908,7 +903,8 @@ function renderTodoRow(t, filters) {
   var idBadge = t.id
     ? '<span class="todo-link-badge" title="id:' + esc(t.id) + '">id:' + esc(t.id) + '</span>'
     : "";
-  return '<div class="todo-row' + (t.done ? " completed" : "") + '"' +
+  return '<div class="todo-row' + (t.done ? " completed" : "") +
+    (selMode ? " sel-mode" : "") + (isSelected ? " selected" : "") + '"' +
     ' data-line="' + (t.line_no == null ? "" : t.line_no) + '"' +
     ' data-raw="' + esc(t.raw_line || "") + '"' +
     ' data-id="' + esc(t.id || "") + '"' +
@@ -985,10 +981,14 @@ function renderTodo(d, opts) {
         '<button type="button" class="btn btn-ghost btn-sm todo-add-btn">Add</button>' +
       '</div>');
   }
-  // Select mode bar
+  // Select mode bar (state survives a widget refresh)
+  var _selActive = typeof window !== "undefined" && !!window._selMode;
+  var _selCount = (typeof window !== "undefined" && window._selLines)
+    ? Object.keys(window._selLines).length : 0;
   parts.push(
-    '<div id="sel-bar" class="sel-bar" style="display:none;padding:6px 12px;background:var(--accent-lt);border-bottom:1px solid var(--border);align-items:center;gap:8px;">' +
-    '<span id="sel-count" style="font-size:13px;font-weight:600;">0 selected</span>' +
+    '<div id="sel-bar" class="sel-bar' + (_selActive ? " show" : "") +
+    '" style="display:' + (_selActive ? "flex" : "none") + ';padding:6px 12px;background:var(--accent-lt);border-bottom:1px solid var(--border);align-items:center;gap:8px;">' +
+    '<span id="sel-count" style="font-size:13px;font-weight:600;">' + _selCount + ' selected</span>' +
     '<button type="button" class="btn btn-sm btn-primary" onclick="openBulkEdit()">Bulk edit</button>' +
     '<button type="button" class="btn btn-sm" onclick="toggleSelectMode()">Cancel</button>' +
     '</div>');

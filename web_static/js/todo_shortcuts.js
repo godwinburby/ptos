@@ -23,7 +23,8 @@
     if (isTypingTarget(active)) return;
 
     if (e.key === "n" || e.key === "N") {
-      var addInput = document.querySelector(".todo-add-input");
+      var addInput = document.querySelector(
+        "[data-todo-add-input], .todo-add-input");
       if (addInput) { addInput.focus(); e.preventDefault(); }
     } else if (e.key === "/") {
       var search = document.getElementById("sidebar-search") || document.querySelector('input[name="q"]');

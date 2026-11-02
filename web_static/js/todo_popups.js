@@ -263,7 +263,8 @@
     var popup = document.getElementById("field-popup");
     if (!popup || !popup.classList.contains("open")) return;
     if (popup.contains(e.target)) return;
-    if (e.target && e.target.closest && e.target.closest(".todo-due-badge, .todo-pri, .todo-rec-badge, .todo-thr-badge")) return;
+    if (e.target && e.target.closest && e.target.closest(
+      '.todo-due-badge, .todo-pri, .todo-rec-badge, .todo-context[data-field="threshold"]')) return;
     closeFieldPopup();
   });
 

@@ -108,14 +108,6 @@
     var tok = _getCurrentToken(input);
     if (tok) {
       var v = item.v;
-      if (v.indexOf("__PICKER__") === 0) {
-        var pfx = v.replace("__PICKER__:", "").replace(":", "");
-        if (window.PtosTodoPopups && window.PtosTodoPopups.pickAddDate) {
-          window.PtosTodoPopups.pickAddDate(pfx);
-        }
-        _hideDropdown();
-        return;
-      }
       var newText = val.substring(0, tok.start) + v + val.substring(tok.start + tok.fullToken.length);
       input.value = newText;
       input.selectionStart = input.selectionEnd = tok.start + v.length;
@@ -200,9 +192,23 @@
     fetch("/api/link-ids").then(function (r) { return r.json(); }).then(function (d) {
       if (!d || d.ok === false || !Array.isArray(d)) return;
       var items = d.map(function (it) {
-        return { l: it.target, v: it.target + " " };
+        var label = it.target;
+        if (it.line) label += " — " + it.line;
+        return { target: it.target, label: label,
+          l: label, v: it.target + " " };
       });
-      _acData["links:"] = items;
+      window._linkIdItems = items;
+      _acData["links:"] = items.map(function (it) {
+        return { l: it.l, v: it.v };
+      });
+      var list = document.getElementById("link-id-list");
+      if (list) {
+        list.innerHTML = items.map(function (it) {
+          return '<option value="' + it.target + '">' +
+            String(it.label).replace(/</g, "&lt;").replace(/"/g, "&quot;") +
+            "</option>";
+        }).join("");
+      }
     }).catch(function () {});
 
     _wired = true;

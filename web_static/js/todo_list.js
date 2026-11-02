@@ -89,6 +89,7 @@
   }
 
   function mount(root) {
+    if (!root) return { destroy: function () {} };
     var savedState = readState();
     var _usp = new URLSearchParams(window.location.search);
     var isSearching = ["search","project","context","priority","due","linked_to"].some(function (k) {
@@ -100,6 +101,8 @@
     );
     var listeners = [];
     nodes.forEach(function (node) {
+      if (node._ptosSectionBound) return;
+      node._ptosSectionBound = true;
       var key = node.getAttribute("data-todo-section") || "";
       if (isSearching) {
         // When searching, respect the server-rendered open state (items present => open)

@@ -204,14 +204,14 @@
                     .replace(/\bdue:(\S+)/gi, function (_, v) { params.due = v; return ''; })
                     .replace(/\bpri:([A-Da-d])/gi, function (_, v) { params.priority = v.toUpperCase(); return ''; })
                     .trim();
-      if (search) params.search = search;
+      params.search = search;
       // Clear filter tokens from the search input — only the search term remains
       root.querySelector("[data-todo-search]").value = search;
       if (params.project !== undefined) filters.project = params.project;
       if (params.context !== undefined) filters.context = params.context;
       if (params.priority !== undefined) filters.priority = params.priority;
       if (params.due !== undefined) filters.due = params.due;
-      if (params.search !== undefined) filters.search = params.search;
+      filters.search = search;
       syncChrome();
       onChange(params);
     });
@@ -464,6 +464,17 @@
       active.innerHTML = currentChips(filters, state.hide_routines) +
         (Object.keys(filters).some(function (key) { return filters[key]; }) || state.hide_routines
           ? '<button type="button" class="todo-shell-clear" data-todo-clear>Clear filters</button>' : "");
+      root.querySelectorAll("[data-todo-filter]").forEach(function (node) {
+        var key = node.getAttribute("data-todo-filter");
+        var value = key === "groupby" ? (state.groupby || "timeline")
+          : key === "sort" ? (state.sort || "default")
+          : (filters[key] || "");
+        if (node.value !== value) node.value = value;
+      });
+      var searchInput = root.querySelector("[data-todo-search]");
+      if (searchInput && searchInput !== document.activeElement) {
+        searchInput.value = filters.search || "";
+      }
       root.querySelector("[data-todo-hide-routines]").checked = !!state.hide_routines;
     }
     return { destroy: function () {

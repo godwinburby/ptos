@@ -724,16 +724,6 @@ if (act === "edit") {
           }
           return;
         }
-        // Link button
-        var linkBtn = e.target && e.target.closest && e.target.closest('[data-todo-act="link"]');
-        if (linkBtn && el.contains(linkBtn)) {
-          var linkRow = linkBtn.closest(".todo-row");
-          if (linkRow) {
-            var lineNo = parseInt(linkRow.getAttribute("data-line"), 10);
-            if (!isNaN(lineNo)) _linkTodoRow(lineNo, linkRow);
-          }
-          return;
-        }
       });
       on(el, "keydown", function (e) {
         if (e.key !== "Enter") return;

@@ -221,6 +221,10 @@ def _inject_globals():
         "last_change": last_change,
         "favorites": favorites,
         "user_name": str(cfg.get("user", {}).get("name", "User") or ""),
+        "priority_labels": (
+            cfg.get("todo", {}).get("priority_labels", {})
+            if isinstance(cfg.get("todo"), dict) else {}
+        ) or {},
         # Rendered through Jinja's |tojson (which escapes <, >, &, ...) so a
         # synced-in URL containing "</script>" can never break out of the shim.
         "fav_urls": [f["url"] for f in favorites],

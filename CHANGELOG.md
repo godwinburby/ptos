@@ -5,6 +5,21 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-11-02
+
+### Wave 3 todo shell — interaction parity gaps
+
+- **Threshold popup survives outside clicks** — the outside-click whitelist still named the retired `.todo-thr-badge`; it now matches the rendered `.todo-context[data-field="threshold"]`, so picking a date no longer closes the popup on the first click.
+- **Help card renders on the shell** — the shell's help markup had a duplicated/stray `<div class="todo-help-toggle"` and an inline `display:none` that beat `.todo-help-card.open`; both are fixed, and the help-card CSS (plus `.sel-bar`) now lives in `page_shell.css` instead of only the legacy template.
+- **Collapsed sections persist after a refresh** — `page_shell.js` mounts `PtosTodoList` against the widget host and re-mounts on mutation (idempotent per node), so section open/closed state survives the widget's `ctx.refresh()` repaint.
+- **Toolbar chrome re-syncs after chip edits** — `syncChrome()` now writes filter values back into the project/context/priority/due/group/sort selects and the search box, so removing a chip or clearing filters can't leave a stale select behind.
+- **Search filter clears when the box empties** — submitting an empty search now emits `search = ""` instead of keeping the previous query in `filters.search`.
+- **Link autocomplete shares the id list** — the shell's `/api/link-ids` fetch now fills `window._linkIdItems` and the `#link-id-list` datalist (as the legacy page did), so the task modal's Id/Links fields autocomplete.
+- **Priority labels come from config** — `[todo] priority_labels` is injected into the `window.PTOS` shim and read by `renderTodoRow`, so row tooltips honour custom labels on the shell.
+- **Select mode survives a widget refresh** — `renderTodo` renders the selection bar and `sel-mode`/`selected` row classes from the live `_selMode`/`_selLines` state, so a refresh no longer silently exits bulk-select.
+- **`n` focuses the shell add box** — the shortcut now targets `[data-todo-add-input], .todo-add-input`, not the legacy-only `.todo-add-input` selector.
+- **Dead code removed** — the duplicate threshold-badge builder in `widgets.js`, the unreachable second link handler in `widget_host.js`, and the unreachable `__PICKER__` branch in `todo_autocomplete.js`.
+
 ## 2026-10-30
 
 ### Wave 3 todo shell — delete path and test stabilisation

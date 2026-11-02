@@ -56,6 +56,18 @@
       });
     }
 
+    function mountTodoSections() {
+      if (host && window.PtosTodoList &&
+          typeof window.PtosTodoList.mount === "function") {
+        window.PtosTodoList.mount(host);
+      }
+    }
+    mountTodoSections();
+    if (host && window.MutationObserver) {
+      new window.MutationObserver(mountTodoSections).observe(
+        host, { childList: true, subtree: true });
+    }
+
     function refreshBodies(update, p, path) {
       items.forEach(function (item, index) {
         item.body = update(item.body, index);

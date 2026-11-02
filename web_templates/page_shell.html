@@ -43,8 +43,8 @@
     {% endfor %}
   </div>{% endif %}
   {% if page_toolbar %}<div class="page-shell-toolbar" id="page-widget-toolbar"></div>{% endif %}
-  {% if page_toolbar == 'todo' %}<div class="todo-help-toggle" <div class="todo-help-toggle"><a onclick="var h=document.getElementById('todo-help');h.classList.toggle('open');this.textContent=h.classList.contains('open')?'Hide help':'? Help'" style="font-size:12px;color:var(--sub);cursor:pointer;user-select:none;">? Help</a></div>
-  <div id="todo-help" class="todo-help-card" style="display:none;">
+  {% if page_toolbar == 'todo' %}<div class="todo-help-toggle"><a onclick="var h=document.getElementById('todo-help');h.classList.toggle('open');this.textContent=h.classList.contains('open')?'Hide help':'? Help'" style="font-size:12px;color:var(--sub);cursor:pointer;user-select:none;">? Help</a></div>
+  <div id="todo-help" class="todo-help-card">
     <div class="todo-help-title">Todo format reference</div>
     <div class="todo-help-row" style="font-size:13px;line-height:1.8;">
       <code><span style="color:var(--error);">(A)</span> Review proposal <span style="color:var(--accent);">+Work</span> <span style="color:var(--green);">@office</span> <span style="color:#f0ad4e;">due:tomorrow 3pm</span> <span style="color:var(--sub);">rec:1w</span></code>

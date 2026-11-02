@@ -308,7 +308,7 @@ class TestBaseTemplateUsesExternalScripts:
              "nav_chords.js", "sse.js", "bracket_links.js", "pomodoro.js",
              "last_change.js", "favorites.js", "ui_scale.js")
     SHIM_KEYS = ("frozen", "desktop", "pomoMinutes", "pomoLog", "favUrls",
-                 "userName")
+                 "userName", "priorityLabels")
 
     def _base(self):
         return open(os.path.join(TEMPLATE_DIR, "base.html"), encoding="utf-8").read()
