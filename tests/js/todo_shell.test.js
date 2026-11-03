@@ -244,3 +244,56 @@ test("todo collapsed section state survives a widget rerender", () => {
   assert.equal(win.document.querySelector("#b details").open, false);
   dom.window.close();
 });
+test("todo toolbar without hide-routines checkbox does not throw on group change", () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const ROOT = path.join(__dirname, "..", "..");
+  function load(name) { win.eval(fs.readFileSync(path.join(ROOT, "web_static", "js", name), "utf8")); }
+  load("todo_controller.js");
+  load("todo_toolbar.js");
+  const changes = [];
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    projects: ["+home", "+work"], contexts: ["@shop"], priorities: ["A"],
+    filters: { project: "+home", context: "", priority: "", due: "", search: "", linked_to: "" },
+    groupby: "timeline", sort: "default", hide_routines: false
+  }, value => changes.push(value));
+  const cb = win.document.querySelector("[data-todo-hide-routines]");
+  if (cb) cb.remove();
+  const groupTab = win.document.querySelector('[data-todo-groupby="project"]');
+  let threw = false;
+  try { groupTab.click(); } catch (e) { threw = true; }
+  assert.equal(threw, false);
+  assert.ok(changes.length >= 1);
+  dom.window.close();
+});
+
+test("todo toolbar without hide-routines checkbox: clear filters no throw", () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  const fs = require("node:fs");
+  const path = require("node:path");
+  const ROOT = path.join(__dirname, "..", "..");
+  function load(name) { win.eval(fs.readFileSync(path.join(ROOT, "web_static", "js", name), "utf8")); }
+  load("todo_controller.js");
+  load("todo_toolbar.js");
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    projects: [], contexts: [], priorities: [],
+    filters: { project: "+home", context: "", priority: "", due: "", search: "", linked_to: "" },
+    groupby: "timeline", sort: "default", hide_routines: false
+  }, () => {});
+  const cb = win.document.querySelector("[data-todo-hide-routines]");
+  if (cb) cb.remove();
+  const clearBtn = win.document.querySelector("[data-todo-clear]");
+  if (clearBtn) {
+    let threw = false;
+    try { clearBtn.click(); } catch (e) { threw = true; }
+    assert.equal(threw, false);
+  }
+  dom.window.close();
+});

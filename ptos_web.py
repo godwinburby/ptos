@@ -4351,6 +4351,8 @@ def _valid_log_filename(name):
     RECORDS_DIR."""
     if not name or not isinstance(name, str):
         return False
+    if not name.strip():
+        return False
     # normalize separators
     if "\\" in name:
         name = name.replace("\\", "/")
