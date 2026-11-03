@@ -900,6 +900,29 @@ def bucket_todos(todos):
 # ── CLI preprocessing ──────────────────────────────────────────────────────
 
 _PRIORITY_WORDS = {"high": "A", "medium": "B", "med": "B", "low": "C"}
+_PRIORITY_TOKEN_RE = re.compile(r"^(?:\(([A-Za-z])\)|pri:([A-Za-z]))$", re.IGNORECASE)
+
+
+def _extract_priority(text):
+    """Hoist the first standalone (X)/pri:X token to the front of *text*.
+
+    Returns (new_text, priority).  Explicit priority tokens are removed from
+    wherever they appear and normalised to ``(X)`` so the todo.txt parser (which
+    only reads a leading priority) always sees them.  Extra explicit tokens are
+    dropped; the first one wins.
+    """
+    words = []
+    explicit = None
+    for tok in text.split():
+        match = _PRIORITY_TOKEN_RE.match(tok)
+        if match:
+            if explicit is None:
+                explicit = (match.group(1) or match.group(2)).upper()
+            continue
+        words.append(tok)
+    if explicit is None:
+        return text, None
+    return " ".join([f"({explicit})"] + words), explicit
 _REC_WORDS = {
     "daily": "1d", "day": "1d",
     "weekly": "1w", "week": "1w",
@@ -957,6 +980,14 @@ def scrape_todo_text(text, projects=None, contexts=None):
     known_ctx  = set(c.lower() for c in (contexts or []))
 
     priority = None
+    explicit_priority = None
+    for tok in tokens:
+        match = _PRIORITY_TOKEN_RE.match(tok)
+        if match:
+            if explicit_priority is None:
+                explicit_priority = (match.group(1) or match.group(2)).upper()
+    if explicit_priority:
+        priority = explicit_priority
     due = None
     due_time = None
     threshold = None
@@ -1011,11 +1042,16 @@ def scrape_todo_text(text, projects=None, contexts=None):
         low = tok.lower()
 
         # ── 1. priority ──────────────────────────────────────────────────
-        if low == "very" and i + 1 < len(tokens) and tokens[i + 1].lower() == "low":
+        if _PRIORITY_TOKEN_RE.match(tok):
+            i += 1
+            continue
+        if explicit_priority is not None:
+            pass
+        elif low == "very" and i + 1 < len(tokens) and tokens[i + 1].lower() == "low":
             priority = "D"
             i += 2
             continue
-        if low in _PRIORITY_WORDS:
+        elif low in _PRIORITY_WORDS:
             # consume optional trailing "priority"
             if i + 1 < len(tokens) and tokens[i + 1].lower() == "priority":
                 priority = _PRIORITY_WORDS[low]
@@ -1024,7 +1060,7 @@ def scrape_todo_text(text, projects=None, contexts=None):
                 priority = _PRIORITY_WORDS[low]
                 i += 1
             continue
-        if low == "priority" and i + 1 < len(tokens) and tokens[i + 1].lower() in _PRIORITY_WORDS:
+        elif low == "priority" and i + 1 < len(tokens) and tokens[i + 1].lower() in _PRIORITY_WORDS:
             priority = _PRIORITY_WORDS[tokens[i + 1].lower()]
             i += 2
             continue
@@ -1179,6 +1215,9 @@ def preprocess_todo_text(text, projects=None, contexts=None):
     by combining them.
     """
     text = text.strip()
+
+    # ── step 0a: hoist an explicit (X)/pri:X token to the front ──────────
+    text, _explicit_priority = _extract_priority(text)
 
     # ── step 0: scrape free-text when project/context lists available ────
     if projects or contexts:

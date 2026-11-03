@@ -179,6 +179,7 @@ class TestWindowsLauncher:
         assert "http.lowSpeedLimit" in self.text
         assert "fetch --quiet origin main" in self.text
         assert "pull --ff-only origin main" in self.text
+        assert 'pull --ff-only origin main 2>$null' in self.text
         assert '2>$null | Out-Null' in self.text
 
     def test_update_check_runs_every_launch(self):

@@ -203,44 +203,6 @@
     if (row) row.querySelectorAll(".ac-extra").forEach(function (c) { c.style.display = "inline-flex"; });
     if (btn) btn.classList.add("expanded");
   }
-  function _wireQuickPick() {
-    var input = _addInput();
-    var chips = document.getElementById("add-chips");
-    if (!input || !chips) return;
-    var timer = null;
-    input.addEventListener("focus", function () {
-      if (timer) { clearTimeout(timer); timer = null; }
-      chips.style.display = "grid";
-    });
-    input.addEventListener("blur", function () {
-      timer = setTimeout(function () {
-        if (document.activeElement && chips.contains(document.activeElement)) return;
-        chips.style.display = "none";
-      }, 200);
-    });
-    chips.addEventListener("mousedown", function (e) {
-      // Prevent blur from firing when clicking chips
-      e.preventDefault();
-    });
-  }
-
-  // Wire up after toolbar renders (poll for the input element)
-  var _qpAttempts = 0;
-  function _tryWire() {
-    var input = _addInput();
-    var chips = document.getElementById("add-chips");
-    if (input && chips) {
-      _wireQuickPick();
-    } else if (_qpAttempts < 50) {
-      _qpAttempts++;
-      setTimeout(_tryWire, 100);
-    }
-  }
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", function () { setTimeout(_tryWire, 200); });
-  } else {
-    setTimeout(_tryWire, 200);
-  }
 
   window.PtosTodoPopups = {
     popupEditDate: popupEditDate,

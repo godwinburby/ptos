@@ -700,6 +700,15 @@ class TestPreprocessTodoText:
         result = preprocess_todo_text("pri:b Buy milk")
         assert result.startswith("(B)")
 
+    def test_pri_token_hoisted_from_middle(self):
+        assert preprocess_todo_text("Buy milk pri:b") == "(B) Buy milk"
+
+    def test_explicit_priority_hoisted_from_end(self):
+        assert preprocess_todo_text("Call supplier (A)") == "(A) Call supplier"
+
+    def test_duplicate_explicit_priority_first_wins(self):
+        assert preprocess_todo_text("(B) (A) call") == "(B) call"
+
     def test_due_tomorrow(self):
         result = preprocess_todo_text("Buy milk due:tomorrow")
         tomorrow = (dt.date.today() + dt.timedelta(days=1)).isoformat()
@@ -1440,6 +1449,37 @@ class TestScrapeTodoText:
     def test_no_priority(self):
         s = self._scrape("buy milk")
         assert "priority" not in s
+
+    def test_explicit_priority_wins_over_words(self):
+        assert self._pp("(B) high call") == "(B) high call"
+
+    def test_explicit_priority_keeps_word_in_description(self):
+        assert self._pp("(A) buy low fat milk") == "(A) buy low fat milk"
+
+    def test_explicit_priority_hoisted_from_middle(self):
+        assert self._pp("+HearingCare (A) Call") == "(A) Call +HearingCare"
+
+    def test_explicit_priority_hoisted_from_end(self):
+        assert self._pp("Call supplier (A)") == "(A) Call supplier"
+
+    def test_explicit_priority_lowercase(self):
+        assert self._pp("(a) call") == "(A) call"
+
+    def test_first_explicit_priority_wins(self):
+        assert self._pp("(B) (A) call") == "(B) call"
+
+    def test_pri_token_anywhere(self):
+        assert self._pp("Buy milk pri:a") == "(A) Buy milk"
+
+    def test_explicit_priority_in_scrape(self):
+        s = self._scrape("(C) buy low fat milk")
+        assert s["priority"] == "C"
+        assert s["description_parts"] == ["buy", "low", "fat", "milk"]
+
+    def test_word_priority_still_works_without_explicit(self):
+        s = self._scrape("buy low fat milk")
+        assert s["priority"] == "C"
+        assert s["description_parts"] == ["buy", "fat", "milk"]
 
     # ── due date (explicit) ──────────────────────────────────────────────
 

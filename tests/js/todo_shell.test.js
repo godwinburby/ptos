@@ -27,10 +27,20 @@ test("todo toolbar changes filters and group mode through the controller", () =>
     groupby: "timeline", sort: "default", hide_routines: false
   }, value => changes.push(value));
 
-  const groupby = win.document.querySelector('[data-todo-filter="groupby"]');
-  groupby.value = "project";
-  groupby.dispatchEvent(new win.Event("change", { bubbles: true }));
+  const activeRow = win.document.querySelector("[data-todo-active]");
+  const groupBar = win.document.querySelector(".todo-shell-groupby");
+  assert.ok(activeRow.compareDocumentPosition(groupBar) & win.Node.DOCUMENT_POSITION_FOLLOWING);
+  assert.match(activeRow.textContent, /Project: \+home/);
+  assert.ok(activeRow.querySelector("[data-todo-clear]"));
+
+  const groupTab = win.document.querySelector('[data-todo-groupby="project"]');
+  groupTab.click();
   assert.deepEqual(changes[0], { groupby: "project" });
+  assert.equal(groupTab.getAttribute("aria-selected"), "true");
+  assert.equal(groupTab.getAttribute("tabindex"), "0");
+  const timelineTab = win.document.querySelector('[data-todo-groupby="timeline"]');
+  assert.equal(timelineTab.getAttribute("aria-selected"), "false");
+  assert.equal(timelineTab.getAttribute("tabindex"), "-1");
 
   const search = win.document.querySelector("[data-todo-search]");
   search.value = "call*";
@@ -40,6 +50,77 @@ test("todo toolbar changes filters and group mode through the controller", () =>
 
   win.document.querySelector('[data-todo-remove="project"]').click();
   assert.deepEqual(changes[2], { project: "" });
+  dom.window.close();
+});
+
+test("group tablist arrows move focus without changing the view", () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  load(win, "todo_controller.js");
+  load(win, "todo_toolbar.js");
+  const changes = [];
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    filters: { project: "", context: "", priority: "", due: "", search: "", linked_to: "" },
+    groupby: "timeline", sort: "default"
+  }, value => changes.push(value));
+
+  const timeline = win.document.querySelector('[data-todo-groupby="timeline"]');
+  const priority = win.document.querySelector('[data-todo-groupby="priority"]');
+  const context = win.document.querySelector('[data-todo-groupby="context"]');
+  timeline.focus();
+  timeline.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true }));
+  assert.equal(win.document.activeElement, priority);
+  priority.dispatchEvent(new win.KeyboardEvent("keydown", { key: "End", bubbles: true }));
+  assert.equal(win.document.activeElement, context);
+  context.dispatchEvent(new win.KeyboardEvent("keydown", { key: "Home", bubbles: true }));
+  assert.equal(win.document.activeElement, timeline);
+  timeline.dispatchEvent(new win.KeyboardEvent("keydown", { key: "ArrowLeft", bubbles: true }));
+  assert.equal(win.document.activeElement, context);
+  assert.deepEqual(changes, []);
+  dom.window.close();
+});
+
+test("quick pick opens on focus, closes on blur, and toggles priority chips", async () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  load(win, "todo_toolbar.js");
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    filters: { project: "", context: "", priority: "", due: "", search: "", linked_to: "" },
+    groupby: "timeline", sort: "default"
+  }, () => {});
+  const input = win.document.querySelector("[data-todo-add-input]");
+  const chips = win.document.querySelector("[data-qp-chips]");
+  const toggle = win.document.querySelector("[data-qp-toggle]");
+
+  input.focus();
+  assert.equal(chips.style.display, "grid");
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
+
+  const priA = win.document.querySelector('[data-qp-group="pri"][data-token="(A) "]');
+  const priB = win.document.querySelector('[data-qp-group="pri"][data-token="(B) "]');
+  priA.click();
+  assert.ok(priA.classList.contains("selected"));
+  assert.ok(input.value.startsWith("(A) "));
+  priB.click();
+  assert.ok(!priA.classList.contains("selected"));
+  assert.ok(priB.classList.contains("selected"));
+  assert.ok(input.value.startsWith("(B) "));
+  priB.click();
+  assert.ok(!priB.classList.contains("selected"));
+  assert.equal(input.value, "");
+
+  input.blur();
+  await new Promise(resolve => setTimeout(resolve, 250));
+  assert.equal(chips.style.display, "none");
+  assert.equal(toggle.getAttribute("aria-expanded"), "false");
+
+  toggle.click();
+  assert.equal(chips.style.display, "grid");
+  assert.equal(toggle.getAttribute("aria-expanded"), "true");
   dom.window.close();
 });
 
@@ -56,6 +137,7 @@ test("todo quick add posts the task and requests a widget refresh", async () => 
   };
   const changes = [];
   win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {}, value => changes.push(value));
+  win.document.querySelector('[data-qp-group="pri"][data-token="(A) "]').click();
   win.document.querySelector("[data-todo-add-input]").value = "Call the dentist";
   win.document.querySelector("[data-todo-add-form]").dispatchEvent(
     new win.Event("submit", { bubbles: true, cancelable: true }));
@@ -64,6 +146,7 @@ test("todo quick add posts the task and requests a widget refresh", async () => 
   assert.equal(JSON.parse(request.options.body).text, "Call the dentist");
   assert.deepEqual(changes, [{}]);
   assert.equal(win.document.querySelector("[data-todo-add-input]").value, "");
+  assert.equal(win.document.querySelectorAll("[data-qp-chips] .add-chip.selected").length, 0);
   dom.window.close();
 });
 
@@ -107,6 +190,8 @@ test("saved Todo views load into filters and support save and delete", async () 
   picker.dispatchEvent(new win.Event("change", { bubbles: true }));
   assert.equal(changes[0].project, "+work");
   assert.equal(changes[0].groupby, "project");
+  assert.equal(win.document.querySelector('[data-todo-groupby="project"]').getAttribute("aria-selected"), "true");
+  assert.equal(win.document.querySelector("[data-todo-saved-name]").textContent, " · work week");
 
   win.document.querySelector("[data-todo-update-view]").click();
   await new Promise(resolve => setTimeout(resolve, 0));

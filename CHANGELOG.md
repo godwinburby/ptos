@@ -5,7 +5,23 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-11-03
+
+### Todo shell — legacy group-by bar, saved-view disclosure, priority fixes
+
+- **Group-by bar matches legacy** — the shell rendered the tabs and ☐ Select as unstyled native buttons; `page_shell.css` now carries the legacy bar (full-width card, `10px 14px` / `14px` tabs, stretched Sort select and Select with separator borders, accent `.active` state) and scrolls horizontally on phones. The legacy `todo.html` sizing was enlarged to match.
+- **Real tablist keyboard support** — the four group tabs are `role="tab"` inside the `role="tablist"` bar with roving `tabindex`; ArrowLeft/ArrowRight wrap focus and Home/End jump, while activation stays on click so arrowing fires no refresh. `syncChrome()` now updates `.active`, `aria-selected`, and `tabindex` after a saved view loads.
+- **Saved views collapse** — the saved-view row is a `<details>` ("Saved views · <active view>") that defaults closed and remembers its open state per device in `localStorage["ptos.todo.savedOpen"]`.
+- **Active filters sit under the search box** — the chip row ("Project: +home", "Routines hidden", …) and its Clear filters button moved from below the group-by bar to directly under the search field, with the Hide routines checkbox alongside them; the empty row collapses itself so there is no blank gap when no filter is active.
+- **One quick-pick owner** — `todo_popups.js` still bound focus/blur on the same add input and could close the chips behind the toolbar; that wiring is removed. The toolbar now owns open-on-focus, close-on-blur (unless focus stays in the form/chips/toggle), the `aria-expanded` toggle button, and clears `.selected` chips after a successful add.
+- **Explicit priority wins** — `(X)`/`pri:X` is hoisted to the front from anywhere in the line, the first occurrence wins over duplicates, and it suppresses the word rules so `high`/`low` stay in the description instead of being silently consumed; `pri:` accepts any letter A–Z.
+
 ## 2026-11-02
+
+### Windows launcher — update check no longer aborts
+
+- **Pull can't kill the launcher** — `run_ptos.ps1` ran `git pull` under `$ErrorActionPreference = "Stop"`; PowerShell 5.1 turns a native command's stderr into a terminating `NativeCommandError`, and git prints routine progress ("From github.com:…") there even on success, so the launcher died mid-update and left the window on "Press any key to continue". The git fetch/pull block now relaxes the preference to `Continue` inside a `try/finally` (restoring it afterwards), so a failed update still falls through to the "continuing with local version" message instead of aborting.
+- **Regression pin** — `tests/test_launch_scripts.py` asserts the pull line keeps its stderr redirected (`pull --ff-only origin main 2>$null`).
 
 ### Wave 3 todo shell — interaction parity gaps
 

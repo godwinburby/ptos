@@ -72,16 +72,31 @@
 .todo-shell-add button[type="submit"],.todo-shell-search button { display:inline-flex; align-items:center; justify-content:center; flex:0 0 auto; height:38px; box-sizing:border-box; margin:0; padding:0 16px; font-size:13px; line-height:1; white-space:nowrap; }
 .todo-shell-add-form { width:38px; min-width:38px; height:38px; padding:0 !important; font-size:18px !important; line-height:1; }
 .todo-shell-add-error { color:var(--error); font-size:12px; }
-.todo-shell-saved { display:flex; align-items:end; flex-wrap:wrap; gap:8px; }
+.todo-shell-saved { display:flex; align-items:end; flex-wrap:wrap; gap:8px; padding:10px 12px; }
+.todo-shell-saved-wrap { border:1px solid var(--border); border-radius:8px; background:var(--bg); }
+.todo-shell-saved-summary { display:flex; align-items:center; gap:6px; padding:10px 12px; color:var(--sub); font-size:13px; font-weight:600; cursor:pointer; user-select:none; }
+.todo-shell-saved-summary:hover { color:var(--text); }
+.todo-shell-saved-wrap[open] .todo-shell-saved-summary { border-bottom:1px solid var(--border); }
 .todo-shell-saved .todo-shell-field { width:min(240px,100%); }
 .todo-shell-saved button { min-height:34px; }
 .todo-shell-saved button:disabled { opacity:.45; cursor:not-allowed; }
 .todo-shell-view-message { align-self:center; color:var(--success); font-size:12px; }
 .todo-shell-view-message.error { color:var(--error); }
-.todo-shell-filters { display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:8px; }
+.groupby-bar { display:flex; gap:4px; width:100%; box-sizing:border-box; margin-bottom:14px; padding:6px; overflow:hidden; background:var(--card); border:1px solid var(--border); border-radius:10px; }
+.todo-shell-groupby { margin-bottom:0; }
+.groupby-btn { flex:1; padding:10px 14px; border:0; border-radius:8px; background:transparent; color:var(--sub); font:inherit; font-size:14px; font-weight:600; white-space:nowrap; cursor:pointer; transition:all .15s; }
+.groupby-btn:hover { color:var(--text); background:var(--bg); }
+.groupby-btn.active { background:var(--accent); color:#fff; }
+.groupby-btn:focus-visible,.groupby-sort:focus-visible,.groupby-sel:focus-visible { outline:2px solid var(--accent); outline-offset:-2px; }
+.groupby-sort-wrap { display:flex; flex:0 0 auto; align-self:stretch; border-left:1px solid var(--border); }
+.groupby-sort { height:100%; padding:0 8px 0 12px; border:0; background:transparent; color:var(--sub); font:inherit; font-size:14px; cursor:pointer; }
+.groupby-sel { align-self:stretch; padding:0 14px; border:0; border-left:1px solid var(--border); border-radius:0 8px 8px 0; background:transparent; color:var(--sub); font:inherit; font-size:14px; font-weight:600; cursor:pointer; transition:all .15s; }
+.groupby-sort:hover,.groupby-sel:hover { color:var(--text); background:var(--bg); }
+.groupby-sel.active { color:var(--accent); font-weight:700; }
 .todo-shell-field { display:flex; flex-direction:column; gap:4px; color:var(--sub); font-size:11px; font-weight:600; }
 .todo-shell-field select { width:100%; min-width:0; padding:7px 9px; border:1px solid var(--border); border-radius:6px; background:var(--bg); color:var(--text); font:inherit; font-size:13px; }
 .todo-shell-active { display:flex; align-items:center; flex-wrap:wrap; gap:6px; }
+.todo-shell-active:empty { display:none; }
 .todo-shell-chip { display:inline-flex; align-items:center; gap:6px; padding:4px 8px; border:0; border-radius:10px; background:var(--accent-lt); color:var(--accent); font:inherit; font-size:12px; cursor:pointer; }
 .todo-shell-chip b { color:var(--error); font-size:14px; }
 .todo-shell-clear { padding:4px 8px; border:1px solid var(--border); border-radius:8px; background:transparent; color:var(--error); font:inherit; font-size:12px; cursor:pointer; }
@@ -116,7 +131,7 @@
   .page-controls { align-items:stretch; }
   .page-control-field select,.page-custom-time input { min-width:0; width:100%; }
   .page-custom-time { width:100%; }
-  .todo-shell-filters { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .groupby-bar { overflow-x:auto; -webkit-overflow-scrolling:touch; }
   .todo-shell-add,.todo-shell-search { padding:8px; min-width:0; }
   .todo-shell-toolbar { overflow:hidden; }
   .todo-shell-add input,.todo-shell-search input { font-size:14px; }

@@ -14,12 +14,13 @@
       esc(label) + "</option>";
   }
 
-  function select(key, label, choices, value) {
-    return '<label class="todo-shell-field">' + esc(label) +
-      '<select data-todo-filter="' + esc(key) + '" aria-label="' + esc(label) + '">' +
-      choices.map(function (entry) {
-        return option(entry[0], entry[1], value);
-      }).join("") + "</select></label>";
+  var GROUP_TABS = [
+    ["timeline", "Timeline"], ["priority", "Priority"],
+    ["project", "Project"], ["context", "Context"]
+  ];
+
+  function defaultPriorityLabels() {
+    return { A: "Critical", B: "Important", C: "Moderate", D: "Low" };
   }
 
   function currentChips(filters, hideRoutines) {
@@ -51,40 +52,8 @@
     }, state.filters || {});
     var projects = state.projects || [];
     var contexts = state.contexts || [];
-    var priorities = state.priorities || [];
     var views = state.views || {};
-    var projectChoices = [["", "All projects"]];
-    projects.forEach(function (project) {
-      var raw = String(project);
-      var normalized = raw.charAt(0) === "+" ? raw.slice(1) : raw;
-      projectChoices.push([raw, normalized]);
-      projectChoices.push(["-" + normalized, "Exclude " + normalized]);
-    });
-    if (projectChoices.every(function (entry) { return entry[0] !== filters.project; }) && filters.project) {
-      projectChoices.push([filters.project, "Current: " + filters.project]);
-    }
-    var contextChoices = [["", "All contexts"]].concat(contexts.map(function (value) {
-      return [value, value];
-    }));
-    if (filters.context && contextChoices.every(function (entry) { return entry[0] !== filters.context; })) {
-      contextChoices.push([filters.context, "Current: " + filters.context]);
-    }
-    var priorityChoices = [["", "All priorities"]].concat(priorities.map(function (value) {
-      var labels = state.priority_labels || {};
-      return [value, value + (labels[value] ? " · " + labels[value] : "")];
-    }));
-    if (filters.priority && priorityChoices.every(function (entry) { return entry[0] !== filters.priority; })) {
-      priorityChoices.push([filters.priority, "Current: " + filters.priority]);
-    }
-    var dueChoices = [["", "Any due"]].concat([
-      ["overdue", "Overdue"], ["today", "Today"], ["tomorrow", "Tomorrow"],
-      ["upcoming", "Upcoming"], ["someday", "Someday"], ["none", "No due date"],
-      ["week", "This week"]
-    ]);
-    var groupChoices = [
-      ["timeline", "Timeline"], ["priority", "Priority"],
-      ["project", "Project"], ["context", "Context"], ["none", "None"]
-    ];
+    var priLabels = Object.assign(defaultPriorityLabels(), state.priority_labels || {});
     var sortChoices = [
       ["default", "Default order"], ["reverse", "Reverse order"],
       ["most", "Most tasks first"], ["fewest", "Fewest tasks first"]
@@ -92,6 +61,10 @@
     var savedViewChoices = [['', 'Current filters']].concat(Object.keys(views).sort().map(function (name) {
       return [name, views[name].title || name.replace(/_/g, " ")];
     }));
+    var activeViewLabel = state.selected_view
+      ? ((views[state.selected_view] && views[state.selected_view].title) ||
+        state.selected_view.replace(/_/g, " "))
+      : "";
 
     root.innerHTML = '<div class="todo-shell-toolbar">' +
       '<form class="todo-shell-add" data-todo-add-form>' +
@@ -102,7 +75,7 @@
       '<button type="button" class="btn btn-ghost todo-shell-add-form" data-todo-form-add ' +
       'title="Form add (n)" aria-label="Open task form">+</button></form>' +
       '<div class="todo-shell-add-error" data-todo-add-error role="alert" hidden></div>' +
-      '<div class="chip-toggle-bar" data-qp-toggle style="cursor:pointer;font-size:12px;color:var(--sub);user-select:none;margin-top:6px;">' +
+      '<div class="chip-toggle-bar" data-qp-toggle role="button" tabindex="0" aria-expanded="false" style="cursor:pointer;font-size:12px;color:var(--sub);user-select:none;margin-top:6px;">' +
       '<span class="chip-toggle-arrow" style="display:inline-block;transition:transform .15s;">&#9654;</span> Quick pick</div>' +
       '<div class="add-chips" id="add-chips" data-qp-chips style="display:none;gap:6px;margin-top:6px;">' +
       '<div class="chip-group-card"><div class="chip-group-label">Due</div><div class="chip-row">' +
@@ -115,10 +88,10 @@
       '<button class="add-chip" data-token="__PICKER__:due:" data-qp-group="due" data-qp-picker="due">pick date...</button>' +
       '</div></div>' +
       '<div class="chip-group-card"><div class="chip-group-label">Priority</div><div class="chip-row">' +
-      '<button class="add-chip pri-chip pri-A" data-token="(A) " data-qp-group="pri">(A) Critical</button>' +
-      '<button class="add-chip pri-chip pri-B" data-token="(B) " data-qp-group="pri">(B) Important</button>' +
-      '<button class="add-chip pri-chip pri-C" data-token="(C) " data-qp-group="pri">(C) Moderate</button>' +
-      '<button class="add-chip pri-chip pri-D" data-token="(D) " data-qp-group="pri">(D) Low</button>' +
+      ["A", "B", "C", "D"].map(function (letter) {
+        return '<button class="add-chip pri-chip pri-' + letter + '" data-token="(' + letter +
+          ') " data-qp-group="pri">(' + letter + ') ' + esc(priLabels[letter] || letter) + '</button>';
+      }).join("") +
       '</div></div>' +
       (state.projects && state.projects.length ? '<div class="chip-group-card full-width"><div class="chip-group-label">Projects</div><div class="chip-row">' +
       state.projects.map(function (p) {
@@ -142,6 +115,9 @@
       '<button class="add-chip" data-token="rec:1y " data-qp-group="rec">yearly</button>' +
       '</div></div>' +
       '</div>' +
+      '<details class="todo-shell-saved-wrap" data-todo-saved-wrap>' +
+      '<summary class="todo-shell-saved-summary">Saved views<span data-todo-saved-name>' +
+      (activeViewLabel ? ' &middot; ' + esc(activeViewLabel) : "") + '</span></summary>' +
       '<div class="todo-shell-saved">' +
       '<label class="todo-shell-field">Saved view<select data-todo-saved-view aria-label="Saved Todo view">' +
       savedViewChoices.map(function (entry) {
@@ -151,26 +127,34 @@
       '<button type="button" class="btn btn-ghost btn-sm" data-todo-update-view>Update view</button>' +
       '<button type="button" class="btn btn-ghost btn-sm" data-todo-delete-view>Delete view</button>' +
       '<span class="todo-shell-view-message" data-todo-view-message role="status" aria-live="polite"></span></div>' +
+      '</details>' +
       '<form class="todo-shell-search" data-todo-search-form role="search">' +
       '<label class="sr-only" for="todo-shell-search-input">Search tasks</label>' +
       '<input id="todo-shell-search-input" type="search" data-todo-search value="' +
       esc(filters.search) + '" placeholder="Search tasks; use +Project @context pri:A due:today * for wildcard">' +
       '<button type="submit" class="btn btn-primary btn-sm">Search</button></form>' +
-      '<div class="todo-shell-filters">' +
-      select("project", "Project", projectChoices, filters.project) +
-      select("context", "Context", contextChoices, filters.context) +
-      select("priority", "Priority", priorityChoices, filters.priority) +
-      select("due", "Due", dueChoices, filters.due) +
-      select("groupby", "Group by", groupChoices, state.groupby || "timeline") +
-      select("sort", "Sort sections", sortChoices, state.sort || "default") +
-       '<button type="button" class="todo-sel-btn" onclick="toggleSelectMode()" title="Select multiple tasks">☐ Select</button>' +
-      '</div><div class="todo-shell-active" data-todo-active>' +
+      '<div class="todo-shell-active" data-todo-active>' +
       currentChips(filters, state.hide_routines) +
       (Object.keys(filters).some(function (key) { return filters[key]; }) || state.hide_routines
         ? '<button type="button" class="todo-shell-clear" data-todo-clear>Clear filters</button>' : "") +
       '</div>' +
       '<label class="todo-shell-routines"><input type="checkbox" data-todo-hide-routines' +
       (state.hide_routines ? " checked" : "") + '> Hide routines</label>' +
+      '<div class="groupby-bar todo-shell-groupby" role="tablist" aria-label="Group tasks">' +
+      GROUP_TABS.map(function (entry) {
+        var active = (state.groupby || "timeline") === entry[0];
+        return '<button type="button" class="groupby-btn' + (active ? " active" : "") +
+          '" role="tab" aria-controls="page-widget" aria-selected="' +
+          (active ? "true" : "false") + '" tabindex="' + (active ? "0" : "-1") +
+          '" data-todo-groupby="' + entry[0] + '">' + entry[1] + '</button>';
+      }).join("") +
+      '<label class="groupby-sort-wrap"><span class="sr-only">Sort sections</span>' +
+      '<select class="groupby-sort" data-todo-filter="sort" aria-label="Sort sections">' +
+      sortChoices.map(function (entry) {
+        return option(entry[0], entry[1], state.sort || "default");
+      }).join("") + '</select></label>' +
+      '<button type="button" class="groupby-sel" onclick="toggleSelectMode()" title="Select multiple tasks">☐ Select</button>' +
+      '</div>' +
       '</div>';
 
     var listeners = [];
@@ -183,18 +167,47 @@
         var key = node.getAttribute("data-todo-filter");
         var changes = {};
         changes[key] = node.value;
-        if (key === "project") {
-          state.hide_routines = node.value.charAt(0) === "-";
-          changes.hide_routines = state.hide_routines;
-        }
-        if (key === "groupby") state.groupby = node.value;
         if (key === "sort") state.sort = node.value;
-        if (key === "project") filters.project = node.value;
-        if (["context", "priority", "due"].indexOf(key) >= 0) filters[key] = node.value;
         syncChrome();
         onChange(changes);
       });
     });
+    root.querySelectorAll("[data-todo-groupby]").forEach(function (node) {
+      on(node, "click", function () {
+        state.groupby = node.getAttribute("data-todo-groupby");
+        syncChrome();
+        onChange({ groupby: state.groupby });
+      });
+    });
+    var groupbyBar = root.querySelector("[data-todo-groupby]");
+    if (groupbyBar) groupbyBar = groupbyBar.closest(".todo-shell-groupby");
+    if (groupbyBar) {
+      on(groupbyBar, "keydown", function (event) {
+        var tabs = Array.prototype.slice.call(
+          groupbyBar.querySelectorAll("[data-todo-groupby]"));
+        var index = tabs.indexOf(document.activeElement);
+        if (index < 0) return;
+        var next = null;
+        if (event.key === "ArrowRight") next = tabs[(index + 1) % tabs.length];
+        else if (event.key === "ArrowLeft") next = tabs[(index - 1 + tabs.length) % tabs.length];
+        else if (event.key === "Home") next = tabs[0];
+        else if (event.key === "End") next = tabs[tabs.length - 1];
+        if (!next) return;
+        event.preventDefault();
+        next.focus();
+      });
+    }
+    var savedWrap = root.querySelector("[data-todo-saved-wrap]");
+    if (savedWrap) {
+      try {
+        if (window.localStorage.getItem("ptos.todo.savedOpen") === "1") savedWrap.open = true;
+      } catch (e) {}
+      on(savedWrap, "toggle", function () {
+        try {
+          window.localStorage.setItem("ptos.todo.savedOpen", savedWrap.open ? "1" : "0");
+        } catch (e) {}
+      });
+    }
     on(root.querySelector("[data-todo-search-form]"), "submit", function (event) {
       event.preventDefault();
       var raw = root.querySelector("[data-todo-search]").value.trim();
@@ -202,7 +215,7 @@
       var search = raw.replace(/\+(\S+)/g, function (_, v) { params.project = v; return ''; })
                     .replace(/@(\S+)/g, function (_, v) { params.context = v; return ''; })
                     .replace(/\bdue:(\S+)/gi, function (_, v) { params.due = v; return ''; })
-                    .replace(/\bpri:([A-Da-d])/gi, function (_, v) { params.priority = v.toUpperCase(); return ''; })
+                    .replace(/\bpri:([A-Za-z])/gi, function (_, v) { params.priority = v.toUpperCase(); return ''; })
                     .trim();
       params.search = search;
       // Clear filter tokens from the search input — only the search term remains
@@ -235,6 +248,9 @@
           return;
         }
         input.value = "";
+        root.querySelectorAll("[data-qp-chips] .add-chip.selected").forEach(function (chip) {
+          chip.classList.remove("selected");
+        });
         onChange({});
       }).catch(function () {
         message.textContent = "Could not add task. Check your connection and try again.";
@@ -248,6 +264,13 @@
     function refreshViewButtons() {
       root.querySelector("[data-todo-update-view]").disabled = !state.selected_view;
       root.querySelector("[data-todo-delete-view]").disabled = !state.selected_view;
+      var label = root.querySelector("[data-todo-saved-name]");
+      if (label) {
+        var name = state.selected_view;
+        label.textContent = name
+          ? " · " + ((views[name] && views[name].title) || name.replace(/_/g, " "))
+          : "";
+      }
     }
     function viewConfig() {
       var cfg = {};
@@ -357,19 +380,51 @@
       }).catch(function () { showViewMessage("Could not delete view", true); });
     });
     refreshViewButtons();
-    // Quick-pick chip delegation
+    // Quick-pick chips: open on add-input focus, toggle bar, close on blur
     var qpToggle = root.querySelector("[data-qp-toggle]");
+    var qpChips = root.querySelector("[data-qp-chips]");
+    var addInput = root.querySelector("[data-todo-add-input]");
+    var addForm = root.querySelector("[data-todo-add-form]");
+    function setQpOpen(open) {
+      if (!qpToggle || !qpChips) return;
+      qpChips.style.display = open ? "grid" : "none";
+      qpToggle.setAttribute("aria-expanded", open ? "true" : "false");
+      qpToggle.classList.toggle("open", open);
+      var arrow = qpToggle.querySelector(".chip-toggle-arrow");
+      if (arrow) arrow.style.transform = open ? "rotate(90deg)" : "";
+    }
+    function qpIsOpen() {
+      return !!qpToggle && qpToggle.getAttribute("aria-expanded") === "true";
+    }
+    function focusStaysInQuickPick(node) {
+      if (!node) return false;
+      if (addForm && (addForm === node || addForm.contains(node))) return true;
+      if (qpToggle && qpToggle.contains(node)) return true;
+      return !!(qpChips && qpChips.contains(node));
+    }
     if (qpToggle) {
-      on(qpToggle, "click", function () {
-        var chips = root.querySelector("[data-qp-chips]");
-        if (!chips) return;
-        var open = chips.style.display !== "none" && chips.style.display !== "";
-        chips.style.display = open ? "none" : "grid";
-        var arrow = qpToggle.querySelector(".chip-toggle-arrow");
-        if (arrow) arrow.style.transform = open ? "" : "rotate(90deg)";
+      on(qpToggle, "click", function () { setQpOpen(!qpIsOpen()); });
+      on(qpToggle, "keydown", function (event) {
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          setQpOpen(!qpIsOpen());
+        }
       });
     }
-    var qpChips = root.querySelector("[data-qp-chips]");
+    var qpBlurTimer = null;
+    if (addInput) {
+      on(addInput, "focus", function () {
+        if (qpBlurTimer) { clearTimeout(qpBlurTimer); qpBlurTimer = null; }
+        setQpOpen(true);
+      });
+      on(addInput, "blur", function () {
+        qpBlurTimer = setTimeout(function () {
+          qpBlurTimer = null;
+          if (focusStaysInQuickPick(document.activeElement)) return;
+          setQpOpen(false);
+        }, 200);
+      });
+    }
     if (qpChips) {
       on(qpChips, "click", function (e) {
         var chip = e.target && e.target.closest && e.target.closest(".add-chip");
@@ -387,12 +442,14 @@
         if (!input) return;
         var text = input.value;
         var bare = token.trim();
+        var wasSelected = chip.classList.contains("selected");
         if (group === "pri") {
           qpChips.querySelectorAll(".pri-chip").forEach(function (c) {
             var t = (c.getAttribute("data-token") || "").trim();
-            text = text.replace(new RegExp("\\(" + t + "\\)" + "\\s*"), "");
+            if (!t) return;
+            text = text.replace(new RegExp(t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*", "g"), "");
           });
-          if (text.indexOf(bare) === -1) text = token + text;
+          if (!wasSelected) text = token + text.replace(/^\s+/, "");
         } else if (group === "due" || group === "threshold") {
           var prefix = group === "threshold" ? "t:" : "due:";
           text = text.replace(new RegExp(prefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\S*\\s*", "gi"), "");
@@ -405,12 +462,10 @@
         } else {
           text = text.trimEnd() + " " + token;
         }
-        var wasSelected = chip.classList.contains("selected");
         input.value = text.replace(/^\s+/, "");
         // Mutual exclusivity: clear selected from siblings in same group
         if (group === "pri" || group === "due" || group === "threshold" || group === "rec") {
-          var grp = chip.getAttribute("data-qp-group");
-          qpChips.querySelectorAll(".add-chip[data-qp-group='" + grp + "']").forEach(function (c) {
+          qpChips.querySelectorAll(".add-chip[data-qp-group='" + group + "']").forEach(function (c) {
             c.classList.remove("selected");
           });
           if (!wasSelected) {
@@ -466,10 +521,15 @@
           ? '<button type="button" class="todo-shell-clear" data-todo-clear>Clear filters</button>' : "");
       root.querySelectorAll("[data-todo-filter]").forEach(function (node) {
         var key = node.getAttribute("data-todo-filter");
-        var value = key === "groupby" ? (state.groupby || "timeline")
-          : key === "sort" ? (state.sort || "default")
-          : (filters[key] || "");
+        var value = key === "sort" ? (state.sort || "default") : (filters[key] || "");
         if (node.value !== value) node.value = value;
+      });
+      var activeGroup = state.groupby || "timeline";
+      root.querySelectorAll("[data-todo-groupby]").forEach(function (node) {
+        var selected = node.getAttribute("data-todo-groupby") === activeGroup;
+        node.classList.toggle("active", selected);
+        node.setAttribute("aria-selected", selected ? "true" : "false");
+        node.tabIndex = selected ? 0 : -1;
       });
       var searchInput = root.querySelector("[data-todo-search]");
       if (searchInput && searchInput !== document.activeElement) {

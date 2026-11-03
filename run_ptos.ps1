@@ -242,24 +242,37 @@ if ($LASTEXITCODE -ne 0) {
 if (Test-Path ".git") {
     Write-Host "Checking for updates..."
     $env:GIT_SSL_NO_VERIFY = "1"
-    # Bounded the same way as the shell launchers: low-speed limits stand in
-    # for GNU timeout (not available on Windows) so a dead link cannot hang
-    # the launcher. Only pull when the fetch shows we are actually behind.
-    git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 fetch --quiet origin main 2>$null | Out-Null
-    $fetchOk = $LASTEXITCODE -eq 0
-    $local = git rev-parse HEAD 2>$null
-    $remote = git rev-parse origin/main 2>$null
-    if ($fetchOk -and $local -and $remote -and "$local" -eq "$remote") {
-        Write-Host "Already on latest version."
-    } elseif ($fetchOk -and $local -and $remote) {
-        Write-Host "Updating..."
-        git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 pull --ff-only origin main 2>&1 | Out-Null
-        if ($LASTEXITCODE -eq 0) { Write-Host "Updated to latest version." }
-        else { Write-Host "Could not reach GitHub - continuing with local version." }
-    } else {
-        Write-Host "Update check failed (offline?) - continuing with local version."
+    # Native git writes normal progress ("From github.com:...") to stderr, and
+    # PowerShell 5.1 turns any native stderr into a terminating
+    # NativeCommandError under $ErrorActionPreference = "Stop" -- even when the
+    # command succeeded and even when stderr is redirected to $null. That killed
+    # the launcher mid-update. Relax the preference for the git calls only, so a
+    # failed fetch/pull falls through to the "continuing with local version"
+    # branches below instead of aborting the script.
+    $prevEap = $ErrorActionPreference
+    $ErrorActionPreference = "Continue"
+    try {
+        # Bounded the same way as the shell launchers: low-speed limits stand in
+        # for GNU timeout (not available on Windows) so a dead link cannot hang
+        # the launcher. Only pull when the fetch shows we are actually behind.
+        git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 fetch --quiet origin main 2>$null | Out-Null
+        $fetchOk = $LASTEXITCODE -eq 0
+        $local = git rev-parse HEAD 2>$null
+        $remote = git rev-parse origin/main 2>$null
+        if ($fetchOk -and $local -and $remote -and "$local" -eq "$remote") {
+            Write-Host "Already on latest version."
+        } elseif ($fetchOk -and $local -and $remote) {
+            Write-Host "Updating..."
+            git -c http.lowSpeedLimit=1000 -c http.lowSpeedTime=5 pull --ff-only origin main 2>$null | Out-Null
+            if ($LASTEXITCODE -eq 0) { Write-Host "Updated to latest version." }
+            else { Write-Host "Could not reach GitHub - continuing with local version." }
+        } else {
+            Write-Host "Update check failed (offline?) - continuing with local version."
+        }
+    } finally {
+        $ErrorActionPreference = $prevEap
+        $env:GIT_SSL_NO_VERIFY = $null
     }
-    $env:GIT_SSL_NO_VERIFY = $null
 } else {
     Write-Host "Not a git repo - skipping update check."
 }
