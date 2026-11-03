@@ -3773,6 +3773,20 @@ def api_entity_field_values(field):
 # Query Builder
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _habit_record_names():
+    try:
+        res = svc.get_records(["type=habit"], "all")
+        recs = res.get("records", []) if isinstance(res, dict) else []
+    except Exception:
+        recs = []
+    names = set()
+    for r in recs:
+        v = r.get("name") if isinstance(r, dict) else None
+        if v:
+            names.add(str(v))
+    return sorted(names)
+
+
 @app.route("/query-builder")
 def query_builder():
     try:
@@ -3858,7 +3872,8 @@ def query_builder():
         field_types=field_types,
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
         due_config=all_due_configs, boards=boards, habits=habits,
-        calendars=calendars, thresholds=thresholds)
+        calendars=calendars, thresholds=thresholds,
+     habit_record_names=_habit_record_names())
 
 
 @app.route("/api/query-builder/<kind>", methods=["POST"])

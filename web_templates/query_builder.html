@@ -1866,7 +1866,17 @@ function showHabitEditor() {
   var cfg = _st.habits[_cur.name] || {filters:[],weeks:12};
   var filtersText = (cfg.filters || []).join(" ");
 
+  var srcOpts = ({{ habit_record_names | tojson }} || []).map(function(n){return '<option value="rec:'+_esc(n)+'">'+_esc(n)+' (record)</option>';}).join("") +
+    ({{ types | tojson }} || []).map(function(t){return '<option value="type:'+_esc(t)+'">'+_esc(t)+' (type)</option>';}).join("");
+
   ed.innerHTML = '<div class="card" style="margin-bottom:12px;">'+
+    '<div style="margin-bottom:10px;">'+
+      '<label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Source (optional)</label>'+
+      '<select id="habit-source-select" onchange="onHabitSourceChange()" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
+        '<option value="">-- new / blank --</option>'+srcOpts+
+      '</select>'+
+      '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Pick an existing habit record or schema type to pre-fill name + filters; edit filters to add extra field=value pairs.</div>'+
+    '</div>'+
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">'+
       '<div style="flex:1;"><label>Name</label>'+
         '<input type="text" id="habit-name-input" value="'+_esc(_cur.name)+'" oninput="onHabitNameChange()"'+
@@ -1906,6 +1916,25 @@ function onHabitWeeksChange() {
   if (!cfg) return;
   var val = parseInt(document.getElementById("habit-weeks-input").value, 10);
   cfg.weeks = val > 0 ? val : 12;
+}
+
+function onHabitSourceChange() {
+  var sel = document.getElementById("habit-source-select");
+  if (!sel || !sel.value) return;
+  var parts = sel.value.split(":");
+  var kind = parts[0];
+  var val = parts.slice(1).join(":");
+  var nameInput = document.getElementById("habit-name-input");
+  var filtInput = document.getElementById("habit-filters-input");
+  if (kind === "rec") {
+    if (nameInput) { nameInput.value = val; }
+    if (filtInput) { filtInput.value = "type=habit name=" + val; }
+  } else if (kind === "type") {
+    if (nameInput && !nameInput.value) { nameInput.value = val; }
+    if (filtInput) { filtInput.value = "type=" + val; }
+  }
+  onHabitNameChange();
+  onHabitFiltersChange();
 }
 
 function onHabitNameChange() {
