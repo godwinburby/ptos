@@ -76,7 +76,7 @@ function renderLint(d) {
   // ── errors ────────────────────────────────────────────────────────────────
   if (d.errors && d.errors.length) {
     const rows = d.errors.map(e => {
-      const gotoUrl = '/editor?file='+encodeURIComponent(e.filepath||'')+'&goto='+e.lineno;
+      const gotoUrl = '/edit?filepath='+encodeURIComponent(e.filepath||'')+'&lineno='+e.lineno+'&line='+encodeURIComponent(e.line||'')+'&return_to='+encodeURIComponent('/lint');
       return `
       <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
         <div style="flex:1;">
@@ -103,7 +103,7 @@ function renderLint(d) {
   if (d.warnings && d.warnings.length) {
     // collapsed by default — can be large
     const rows = d.warnings.map(w => {
-      const gotoUrl = '/editor?file='+encodeURIComponent(w.filepath||'')+'&goto='+w.lineno;
+      const gotoUrl = '/edit?filepath='+encodeURIComponent(w.filepath||'')+'&lineno='+w.lineno+'&line='+encodeURIComponent(w.line||'')+'&return_to='+encodeURIComponent('/lint');
       return `
       <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
         <div style="flex:1;">
@@ -137,7 +137,7 @@ function renderLint(d) {
   // ── quality notes (collapsed, non-blocking) ─────────────────────────────
   if (d.quality_warnings && d.quality_warnings.length) {
     const rows = d.quality_warnings.map(w => {
-      const gotoUrl = '/editor?file='+encodeURIComponent(w.filepath||'')+'&goto='+w.lineno;
+      const gotoUrl = '/edit?filepath='+encodeURIComponent(w.filepath||'')+'&lineno='+w.lineno+'&line='+encodeURIComponent(w.line||'')+'&return_to='+encodeURIComponent('/lint');
       return `
       <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
         <div style="flex:1;">

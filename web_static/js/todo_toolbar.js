@@ -115,31 +115,30 @@
       '<button class="add-chip" data-token="rec:1y " data-qp-group="rec">yearly</button>' +
       '</div></div>' +
       '</div>' +
-      '<details class="todo-shell-saved-wrap" data-todo-saved-wrap>' +
-      '<summary class="todo-shell-saved-summary">Saved views<span data-todo-saved-name>' +
-      (activeViewLabel ? ' &middot; ' + esc(activeViewLabel) : "") + '</span></summary>' +
-      '<div class="todo-shell-saved">' +
-      '<label class="todo-shell-field">Saved view<select data-todo-saved-view aria-label="Saved Todo view">' +
-      savedViewChoices.map(function (entry) {
-        return option(entry[0], entry[1], state.selected_view || "");
-      }).join("") + '</select></label>' +
-      '<button type="button" class="btn btn-ghost btn-sm" data-todo-save-view>Save view</button>' +
-      '<button type="button" class="btn btn-ghost btn-sm" data-todo-update-view>Update view</button>' +
-      '<button type="button" class="btn btn-ghost btn-sm" data-todo-delete-view>Delete view</button>' +
-      '<span class="todo-shell-view-message" data-todo-view-message role="status" aria-live="polite"></span></div>' +
-      '</details>' +
+       '<div class="chip-toggle-bar" data-saved-toggle role="button" tabindex="0" aria-expanded="false" style="cursor:pointer;font-size:12px;color:var(--sub);user-select:none;margin-top:6px;">' +
+       '<span class="chip-toggle-arrow" style="display:inline-block;transition:transform .15s;">&#9654;</span> Saved views' +
+       '<span data-todo-saved-name>' + (activeViewLabel ? ' &middot; ' + esc(activeViewLabel) : "") + '</span></div>' +
+       '<div class="todo-shell-saved-panel" data-saved-panel style="display:none;gap:6px;margin-top:6px;">' +
+       '<label class="todo-shell-field">Saved view<select data-todo-saved-view aria-label="Saved Todo view">' +
+       savedViewChoices.map(function (entry) {
+         return option(entry[0], entry[1], state.selected_view || "");
+       }).join("") + '</select></label>' +
+       '<button type="button" class="btn btn-ghost btn-sm" data-todo-save-view>Save view</button>' +
+       '<button type="button" class="btn btn-ghost btn-sm" data-todo-update-view>Update view</button>' +
+       '<button type="button" class="btn btn-ghost btn-sm" data-todo-delete-view>Delete view</button>' +
+       '<span class="todo-shell-view-message" data-todo-view-message role="status" aria-live="polite"></span></div>' +
       '<form class="todo-shell-search" data-todo-search-form role="search">' +
       '<label class="sr-only" for="todo-shell-search-input">Search tasks</label>' +
       '<input id="todo-shell-search-input" type="search" data-todo-search value="' +
       esc(filters.search) + '" placeholder="Search tasks; use +Project @context pri:A due:today * for wildcard">' +
       '<button type="submit" class="btn btn-primary btn-sm">Search</button></form>' +
-      '<div class="todo-shell-active" data-todo-active>' +
-      currentChips(filters, state.hide_routines) +
-      (Object.keys(filters).some(function (key) { return filters[key]; }) || state.hide_routines
-        ? '<button type="button" class="todo-shell-clear" data-todo-clear>Clear filters</button>' : "") +
-      '</div>' +
-      '<label class="todo-shell-routines"><input type="checkbox" data-todo-hide-routines' +
-      (state.hide_routines ? " checked" : "") + '> Hide routines</label>' +
+       '<div class="todo-shell-active" data-todo-active style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">' +
+       currentChips(filters, state.hide_routines) +
+       (Object.keys(filters).some(function (key) { return filters[key]; }) || state.hide_routines
+         ? '<button type="button" class="todo-shell-clear" data-todo-clear>Clear filters</button>' : "") +
+       '<label class="todo-shell-routines" style="margin-left:auto;"><input type="checkbox" data-todo-hide-routines' +
+       (state.hide_routines ? " checked" : "") + '> Hide routines</label>' +
+       '</div>' +
       '<div class="groupby-bar todo-shell-groupby" role="tablist" aria-label="Group tasks">' +
       GROUP_TABS.map(function (entry) {
         var active = (state.groupby || "timeline") === entry[0];
@@ -197,17 +196,43 @@
         next.focus();
       });
     }
-    var savedWrap = root.querySelector("[data-todo-saved-wrap]");
-    if (savedWrap) {
-      try {
-        if (window.localStorage.getItem("ptos.todo.savedOpen") === "1") savedWrap.open = true;
-      } catch (e) {}
-      on(savedWrap, "toggle", function () {
-        try {
-          window.localStorage.setItem("ptos.todo.savedOpen", savedWrap.open ? "1" : "0");
-        } catch (e) {}
-      });
-    }
+     var savedToggle = root.querySelector("[data-saved-toggle]");
+     var savedPanel = root.querySelector("[data-saved-panel]");
+     function setSavedOpen(open) {
+       if (!savedToggle || !savedPanel) return;
+       savedPanel.style.display = open ? "flex" : "none";
+       savedToggle.setAttribute("aria-expanded", open ? "true" : "false");
+       savedToggle.classList.toggle("open", open);
+       var arrow = savedToggle.querySelector(".chip-toggle-arrow");
+       if (arrow) arrow.style.transform = open ? "rotate(90deg)" : "";
+     }
+     function savedIsOpen() {
+       return !!savedToggle && savedToggle.getAttribute("aria-expanded") === "true";
+     }
+     if (savedToggle) {
+       try {
+         if (window.localStorage.getItem("ptos.todo.savedOpen") === "1") setSavedOpen(true);
+       } catch (e) {}
+       on(savedToggle, "click", function () { setSavedOpen(!savedIsOpen()); });
+       on(savedToggle, "keydown", function (event) {
+         if (event.key === "Enter" || event.key === " ") {
+           event.preventDefault();
+           setSavedOpen(!savedIsOpen());
+         }
+       });
+       on(savedPanel, "toggle", function () {});
+     }
+     if (savedPanel) {
+       // persist on display change via MutationObserver-free: hook toggle via click already;
+       // also persist when panel visibility changes
+       var _orig = setSavedOpen;
+     }
+     // persist open state
+     if (savedToggle) {
+       savedToggle.addEventListener("click", function () {
+         try { window.localStorage.setItem("ptos.todo.savedOpen", savedIsOpen() ? "1" : "0"); } catch (e) {}
+       });
+     }
     on(root.querySelector("[data-todo-search-form]"), "submit", function (event) {
       event.preventDefault();
       var raw = root.querySelector("[data-todo-search]").value.trim();

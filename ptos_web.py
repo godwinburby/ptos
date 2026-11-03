@@ -4259,7 +4259,7 @@ def browse_get():
             types=types, field_types=field_types, log_files=log_files,
             group_dimensions=group_dimensions,
             time_options=_get_time_options(), year_range=_YEAR_RANGE,
-            current_time=request.args.get("time", "tm"),
+            current_time=request.args.get("time", "td"),
             custom_time=request.args.get("custom_time", ""),
             from_date=request.args.get("from_date", ""),
             to_date=request.args.get("to_date", ""))
@@ -4268,7 +4268,7 @@ def browse_get():
         types=types, field_types=field_types, log_files=log_files,
         group_dimensions=group_dimensions,
         time_options=_get_time_options(), year_range=_YEAR_RANGE,
-        current_time=request.args.get("time", "tm"),
+            current_time=request.args.get("time", "td"),
         custom_time=request.args.get("custom_time", ""),
         from_date=request.args.get("from_date", ""),
         to_date=request.args.get("to_date", ""))
@@ -4276,7 +4276,7 @@ def browse_get():
 @app.route("/browse/run", methods=["POST"])
 def browse_run():
     data   = request.get_json(silent=True) or {}
-    raw_time = data.get("time","tm")
+    raw_time = data.get("time","td")
     from_date = data.get("from_date") or None
     to_date   = data.get("to_date") or None
     _valid = {code for _, code in _get_time_options()}
@@ -4326,11 +4326,20 @@ def browse_run():
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _valid_log_filename(name):
-    """A plain log filename: no path separators (either style, either OS),
-    not '.' or '..', not empty. The Log Editor only ever touches flat
-    *.log basenames inside RECORDS_DIR."""
-    return (bool(name) and "/" not in name and "\\" not in name
-            and name not in (".", ".."))
+    """A log filename (possibly in a log_group subdirectory): no traversal,
+    not absolute, not empty. The Log Editor only touches *.log files inside
+    RECORDS_DIR."""
+    if not name or not isinstance(name, str):
+        return False
+    # normalize separators
+    if "\\" in name:
+        name = name.replace("\\", "/")
+    if name.startswith("/") or ":" in name.split("/")[0]:
+        return False
+    parts = name.split("/")
+    if any(p in ("", ".", "..") for p in parts):
+        return False
+    return True
 
 
 @app.route("/editor")
@@ -4789,14 +4798,13 @@ def edit_post():
         return_to = url_for("browse_get")
     after_save = _after_save_target(return_to)
     if not set_args and new_note is None:
-        app.logger.debug("edit_post: no changes, redirect to %s", after_save)
         return redirect(after_save)
-    if not ptos._path_within(filepath, svc.RECORDS_DIR):
+    full_path = os.path.join(svc.RECORDS_DIR, filepath)
+    if not ptos._path_within(full_path, svc.RECORDS_DIR):
         return redirect(after_save)
     try:
-        svc.edit_record(filepath, old_line,
+        res = svc.edit_record(full_path, old_line,
                         set_args=set_args, new_note=new_note, lineno=lineno_int)
-        app.logger.debug("edit_post: success, redirect to %s", after_save)
         return redirect(after_save)
     except PTOSError as e:
         try:
@@ -4873,11 +4881,11 @@ def api_records_edit():
         except Exception: lineno = None
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
-    if not ptos._path_within(filepath, svc.RECORDS_DIR):
+    if not ptos._path_within(os.path.join(svc.RECORDS_DIR, filepath), svc.RECORDS_DIR):
         return jsonify(ok=False, error="Invalid filepath")
     try:
-        result = svc.edit_record(filepath, old_line,
-                                 set_args=set_args, new_note=new_note, lineno=lineno)
+        result = svc.edit_record(os.path.join(svc.RECORDS_DIR, filepath), old_line,
+                                  set_args=set_args, new_note=new_note, lineno=lineno)
         return jsonify(ok=True, **result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))
@@ -4896,10 +4904,10 @@ def api_records_delete():
         except Exception: lineno = None
     if not filepath or not old_line:
         return jsonify(ok=False, error="filepath and old_line required")
-    if not ptos._path_within(filepath, svc.RECORDS_DIR):
+    if not ptos._path_within(os.path.join(svc.RECORDS_DIR, filepath), svc.RECORDS_DIR):
         return jsonify(ok=False, error="Invalid filepath")
     try:
-        result = svc.delete_record(filepath, old_line, lineno=lineno)
+        result = svc.delete_record(os.path.join(svc.RECORDS_DIR, filepath), old_line, lineno=lineno)
         return jsonify(ok=True, **result)
     except PTOSError as e:
         return jsonify(ok=False, error=str(e))

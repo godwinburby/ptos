@@ -38,7 +38,7 @@ window.BrowseController = (function () {
       containerId: "result-area",
       returnTo: "/browse",
       enableBulk: true,
-      quickEdit: true,
+      quickEdit: false,
       fieldTypes: _fieldTypes,
       exportName: "browse_results",
       onRefresh: function () { runBrowse(); }
@@ -166,7 +166,7 @@ window.BrowseController = (function () {
   }
 
   function _params() {
-    var time = tp ? (tp.getTime() || "tm") : "tm";
+    var time = tp ? (tp.getTime() || "td") : "td";
     var searchEl = document.getElementById("b-search");
     var groupEl = document.getElementById("b-group");
     var sortEl = document.getElementById("b-sort");
@@ -212,7 +212,7 @@ window.BrowseController = (function () {
     var si = document.getElementById("b-search");
     if (si) si.value = "";
     var ts = document.getElementById("b-time-select");
-    if (ts) ts.value = "tm";
+    if (ts) ts.value = "td";
     if (tp) tp.reset();
     var g = document.getElementById("b-group");
     var s = document.getElementById("b-sort");
