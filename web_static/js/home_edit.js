@@ -14,7 +14,7 @@
 
   function serialize(items) {
     return items.map(function (part) {
-      return part.type === "widget" ? "```ptos\n" + part.body + "\n```" : part.text;
+      return part.type === "widget" ? "```ptos\n" + String(part.body).trim() + "\n```" : part.text;
     }).join("\n\n").replace(/^\n+|\n+$/g, "") + "\n";
   }
 

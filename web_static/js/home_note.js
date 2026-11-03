@@ -39,7 +39,7 @@
         var r = rmap[i];
         out.push({
           type: "widget",
-          body: lines.slice(r.start + 1, r.end).join("\n")
+          body: lines.slice(r.start + 1, r.end).join("\n").replace(/^\s+|\s+$/g, "")
         });
         i = r.end;
       } else {
