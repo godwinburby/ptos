@@ -6807,6 +6807,8 @@ def save_board(name, cfg):
     if not name or not str(name).strip():
         raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
+    if not _has_entry(existing, "board", name):
+        name = _validate_name(name)
     cols = cfg.get("columns", [])
     if not cols or not isinstance(cols, list):
         raise PTOSError(f"Board '{name}' must have a non-empty columns list")
@@ -6875,6 +6877,8 @@ def save_habit(name, cfg):
     if not name or not str(name).strip():
         raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
+    if not _has_entry(existing, "habit", name):
+        name = _validate_name(name)
     hfilters = cfg.get("filters", [])
     if not hfilters or not isinstance(hfilters, list):
         raise PTOSError(f"Habit '{name}' must have a non-empty filters list")
@@ -6911,6 +6915,8 @@ def save_calendar(name, cfg):
     if not name or not str(name).strip():
         raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
+    if not _has_entry(existing, "calendar", name):
+        name = _validate_name(name)
     cfilters = cfg.get("filters", [])
     if not cfilters or not isinstance(cfilters, list):
         raise PTOSError(f"Calendar '{name}' must have a non-empty filters list")
@@ -6950,6 +6956,8 @@ def save_threshold(name, cfg):
     if not name or not str(name).strip():
         raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
+    if not _has_entry(existing, "threshold", name):
+        name = _validate_name(name)
     if not cfg.get("metric", "").strip():
         raise PTOSError(f"Threshold '{name}' must have a metric")
     entry = {"metric": cfg["metric"].strip()}
@@ -6995,6 +7003,8 @@ def save_todo_view(name, cfg):
     if not name or not str(name).strip():
         raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
+    if not _has_entry(existing, "todo", name):
+        name = _validate_name(name)
     if not isinstance(cfg, dict):
         raise PTOSError("Todo view settings must be an object")
     allowed = set(TODO_VIEW_KEYS)
@@ -7057,6 +7067,8 @@ def save_due(name, cfg):
     if not name or not str(name).strip():
         raise PTOSError("Config key: lowercase letters, digits, underscores only")
     existing = _load_queries_toml()
+    if not _has_entry(existing, "due", name):
+        name = _validate_name(name)
     entry = {}
     if cfg.get("type"):
         entry["type"] = cfg["type"]
