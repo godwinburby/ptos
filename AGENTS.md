@@ -1,5 +1,12 @@
 # AGENTS.md — PTOS Development Guide
 
+## HARD RULES (read first)
+   1. Never run git commit, git push or git add -A. Leave changes uncommitted.
+   2. Every fix and feature needs a test in tests/ that fails without it. No test, not done.
+   3. Product-file changes need a CHANGELOG.md entry in the same change.
+   4. Run python -m pytest tests/ -q and node --test tests/js/*.test.js; report the counts.
+   5. LF line endings only. One task per change.
+
 ## Project overview
 
 PTOS (Plain Text Operating System) is a plain-text life-logging and task management system. Core philosophy: no database, no cloud — just `.log` files, one line per record, TOML config, and a Flask web UI.

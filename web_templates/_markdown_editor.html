@@ -324,6 +324,29 @@
 
   if (typeof mdBlocks !== "undefined" && mdBlocks.init) mdBlocks.init(_eid);
 
+  // Task-list checkbox toggling in the preview pane.
+  // Map a clicked checkbox to its source line and flip - [ ] <-> - [x].
+  function _taskLines(src) {
+    var lines = String(src == null ? "" : src).split(/\r\n|\n/);
+    var out = [];
+    var inFence = false;
+    for (var i = 0; i < lines.length; i++) {
+      if (/^\s*```/.test(lines[i])) { inFence = !inFence; continue; }
+      if (inFence) continue;
+      if (/^[ \t]*[-*+][ \t]+\[[ xX]\]/.test(lines[i])) out.push(i);
+    }
+    return out;
+  }
+  function _flipTaskLine(src, lineIdx, checked) {
+    var lines = String(src == null ? "" : src).split(/\r\n|\n/);
+    if (lineIdx < 0 || lineIdx >= lines.length) return null;
+    var line = lines[lineIdx];
+    if (!/^[ \t]*[-*+][ \t]+\[[ xX]\]/.test(line)) return null;
+    lines[lineIdx] = line.replace(/^([ \t]*[-*+][ \t]+)\[[ xX]\]/,
+                                 "$1" + (checked ? "[x]" : "[ ]"));
+    return lines.join("\n");
+  }
+
   window.renderPreview = function() {
     var src = document.getElementById(_eid).value;
     var pane = document.getElementById("preview-pane");
@@ -333,8 +356,36 @@
       ? renderMarkdown(text)
       : "<pre style='white-space:pre-wrap'>" +
           src.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;") + "</pre>";
+    // Enable task checkboxes and tag them for source mapping.
+    var cbs = pane.querySelectorAll('input[type="checkbox"]');
+    for (var k = 0; k < cbs.length; k++) {
+      cbs[k].removeAttribute("disabled");
+      cbs[k].setAttribute("data-task-idx", String(k));
+    }
     if (typeof window.mountEmbeds === "function") window.mountEmbeds(pane);
   };
+
+  // Delegated toggle handler for preview checkboxes.
+  (function() {
+    var pane = document.getElementById("preview-pane");
+    if (!pane) return;
+    pane.addEventListener("change", function(e) {
+      var cb = e.target;
+      if (!cb || cb.tagName !== "INPUT" || cb.type !== "checkbox") return;
+      var idx = parseInt(cb.getAttribute("data-task-idx"), 10);
+      if (isNaN(idx)) return;
+      var ta = document.getElementById(_eid);
+      if (!ta) return;
+      var lines = _taskLines(ta.value);
+      if (idx < 0 || idx >= lines.length) return;
+      var next = _flipTaskLine(ta.value, lines[idx], cb.checked);
+      if (next === null) return;
+      ta.value = next;
+      if (typeof window.onEditorInput === "function") window.onEditorInput();
+      // re-render to keep preview consistent with source
+      if (typeof window.renderPreview === "function") window.renderPreview();
+    });
+  })();
 
   window.addEventListener("ptos:time-window-change", function() {
     var pane = document.getElementById("preview-pane");
