@@ -33,6 +33,11 @@
 <div class="thr-modal" id="cal-modal">
   <div class="thr-modal-box">
     <div style="font-size:16px; font-weight:700; margin-bottom:10px;">Calendar</div>
+    <label>Source (optional)</label>
+    <select id="cal-source" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;margin-bottom:6px;" onchange="calSourceChange()">
+      <option value="">-- new / blank --</option>
+      {% for t in (types or []) %}<option value="type:{{ t }}">{{ t }} (type)</option>{% endfor %}
+    </select>
     <label>Name</label>
     <input type="text" id="cal-name">
     <label>Filters (space-separated field=value)</label>
@@ -62,6 +67,16 @@
     var msg = document.getElementById("cal-msg");
     if (msg) { msg.style.display = "none"; msg.textContent = ""; }
     document.getElementById("cal-modal").classList.add("open");
+  };
+  window.calSourceChange = function() {
+    var sel = document.getElementById("cal-source");
+    if (!sel || !sel.value) return;
+    var parts = sel.value.split(":");
+    var val = parts.slice(1).join(":");
+    var nameEl = document.getElementById("cal-name");
+    var filtEl = document.getElementById("cal-filters");
+    if (nameEl && !nameEl.value) nameEl.value = val;
+    if (filtEl) filtEl.value = "type=" + val;
   };
   window.calClose = function() { document.getElementById("cal-modal").classList.remove("open"); };
   window.calSave = function() {

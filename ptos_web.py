@@ -3411,8 +3411,9 @@ def calendar_view(name=None):
                           "path_prefix": "/calendar", "value": active,
                           "options": [("All records", "__all__")] +
                                      [(n.replace("_", " "), n) for n in names]}],
-        calendar_configs={k.split('.', 1)[1]: v for k, v in ptos.get_queries().items() if k.startswith("calendar.")})
-
+        calendar_configs={k.split('.', 1)[1]: v for k, v in ptos.get_queries().items() if k.startswith("calendar.")},
+         calendar_record_names=[],
+         types=svc.get_schema().get("types", {}).get("allowed", []))
 
 @app.route("/projects")
 def projects_page():
