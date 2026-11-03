@@ -1,0 +1,61 @@
+{% set _hrn = habit_record_names if habit_record_names is defined else [] %}
+{% set _types = types if types is defined else [] %}
+<div class="card" style="max-width:520px;padding:20px;margin:0 auto 16px;">
+  <div style="font-size:15px;font-weight:700;margin-bottom:8px;">Quick create a habit</div>
+  <div style="font-size:13px;color:var(--sub);margin-bottom:12px;">
+    Pick an existing habit record or a schema type to pre-fill name + filters; edit filters to add extra field=value pairs.
+  </div>
+  <div style="margin-bottom:10px;">
+    <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Source</label>
+    {% include "_habit_source_select.html" with context %}
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:10px;">
+    <div style="flex:1;min-width:120px;">
+      <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Name</label>
+      <input type="text" id="habit-name-input" placeholder="meditation" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">
+    </div>
+  </div>
+  <div style="margin-bottom:10px;">
+    <label style="font-size:12px;font-weight:700;display:block;margin-bottom:4px;">Filters</label>
+    <input type="text" id="habit-filters-input" placeholder="type=habit name=meditation" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;box-sizing:border-box;">
+    <div style="font-size:11px;color:var(--sub);margin-top:4px;">Space-separated field=value pairs.</div>
+  </div>
+  <div style="display:flex;gap:8px;">
+    <button type="button" class="btn btn-success btn-sm" onclick="createHabitFromPartial()">Create</button>
+    <a class="btn btn-ghost btn-sm" href="/query-builder?section=habits">Advanced (Query Builder)</a>
+  </div>
+</div>
+<script>
+(function() {
+  var sel = document.getElementById("habit-source");
+  if (sel) sel.addEventListener("change", function() {
+    var v = sel.value;
+    if (!v) return;
+    var parts = v.split(":");
+    var kind = parts[0];
+    var val = parts.slice(1).join(":");
+    var nameInput = document.getElementById("habit-name-input");
+    var filtInput = document.getElementById("habit-filters-input");
+    if (kind === "rec") {
+      if (nameInput) nameInput.value = val;
+      if (filtInput) filtInput.value = "type=habit name=" + val;
+    } else if (kind === "type") {
+      if (nameInput && !nameInput.value) nameInput.value = val;
+      if (filtInput) filtInput.value = "type=" + val;
+    }
+  });
+  window.createHabitFromPartial = function() {
+    var name = (document.getElementById("habit-name-input").value || "").trim().toLowerCase().replace(/[^a-z0-9_]/g, "_");
+    var filters = (document.getElementById("habit-filters-input").value || "").trim().split(/\s+/).filter(Boolean);
+    if (!name) { alert("Name required"); return; }
+    fetch("/api/query-builder/habit", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({name: name, filters: filters, weeks: 12, toggleable: true})
+    }).then(function(r){return r.json();}).then(function(res){
+      if (res && res.ok) { window.location.reload(); }
+      else { alert((res && res.error) || "Failed"); }
+    }).catch(function(e){ alert("Failed: " + e); });
+  };
+})();
+</script>

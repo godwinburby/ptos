@@ -1,0 +1,5 @@
+<select id="{{ select_id or 'habit-source' }}" style="width:100%;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:13px;margin-bottom:6px;" onchange="{{ onchange or 'habitSourceChange()' }}">
+  <option value="">-- new / blank --</option>
+  {% for n in (habit_record_names or []) %}<option value="rec:{{ n }}">{{ n }} (record)</option>{% endfor %}
+  {% for t in (types or []) %}<option value="type:{{ t }}">{{ t }} (type)</option>{% endfor %}
+</select>

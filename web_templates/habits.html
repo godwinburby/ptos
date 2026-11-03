@@ -1,3 +1,5 @@
+{% set habit_record_names = habit_record_names if habit_record_names is defined else [] %}
+{% set types = types if types is defined else [] %}
 {% extends "base.html" %}
 {% block content %}
 
@@ -121,13 +123,13 @@ var tp;
 </script>
 
 {% if not habits %}
-<div class="card" style="max-width:520px;padding:24px;margin:0 auto;">
-  <div style="font-size:15px;font-weight:700;margin-bottom:8px;">No habits configured yet</div>
-  <div style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    Add a <code>[habit.NAME]</code> table to <code>queries.toml</code>, or use the
+{% include "_habit_quick_create.html" %}
+<div class="card" style="max-width:520px;padding:16px;margin:0 auto;">
+  <div style="font-size:13px;color:var(--sub);">
+    Or add a <code>[habit.NAME]</code> table to <code>queries.toml</code>, or use the
     <a href="/query-builder?section=habits">Query Builder</a> Habits tab.
   </div>
-  <pre style="background:var(--bg);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;">[habit.meditation]
+  <pre style="background:var(--bg);padding:12px;border-radius:8px;font-size:12px;overflow-x:auto;margin-top:8px;">[habit.meditation]
 filters = ["type=habit", "name=meditation"]
 weeks = 12</pre>
 </div>

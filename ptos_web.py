@@ -3156,7 +3156,9 @@ def habits():
             time_options=_habit_time_options(),
             time=time_param, custom_time=custom_time,
             from_date=from_date or "", to_date=to_date or "",
-            year_range=_YEAR_RANGE)
+            year_range=_YEAR_RANGE,
+            habit_record_names=_habit_record_names(),
+            types=(svc.get_schema().get("types", {}).get("allowed", []) if hasattr(svc, "get_schema") else []))
 
     items = []
     page_data = []
@@ -3196,7 +3198,9 @@ def habits():
                     "monthParam": "custom_time",
                     "empty": "No habits configured." if not names else ""},
         month_navigation=True, month_label=month_label, select_controls=[],
-        habit_configs={k.split('.', 1)[1]: v for k, v in ptos.get_queries().items() if k.startswith("habit.")})
+        habit_configs={k.split('.', 1)[1]: v for k, v in ptos.get_queries().items() if k.startswith("habit.")},
+         habit_record_names=_habit_record_names(),
+         types=svc.get_schema().get("types", {}).get("allowed", []))
 
 
 @app.route("/api/habit/toggle", methods=["POST"])

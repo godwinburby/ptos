@@ -33,6 +33,8 @@
 <div class="thr-modal" id="habit-modal">
   <div class="thr-modal-box">
     <div style="font-size:16px; font-weight:700; margin-bottom:10px;">Habit</div>
+    <label>Source (optional)</label>
+    {% include "_habit_source_select.html" with context %}
     <label>Name</label>
     <input type="text" id="habit-name">
     <label>Filters (space-separated field=value)</label>
@@ -61,6 +63,22 @@
     var msg = document.getElementById("habit-msg");
     if (msg) { msg.style.display = "none"; msg.textContent = ""; }
     document.getElementById("habit-modal").classList.add("open");
+  };
+  window.habitSourceChange = function() {
+    var sel = document.getElementById("habit-source");
+    if (!sel || !sel.value) return;
+    var parts = sel.value.split(":");
+    var kind = parts[0];
+    var val = parts.slice(1).join(":");
+    var nameEl = document.getElementById("habit-name");
+    var filtEl = document.getElementById("habit-filters");
+    if (kind === "rec") {
+      if (nameEl && !nameEl.value) nameEl.value = val;
+      if (filtEl) filtEl.value = "type=habit name=" + val;
+    } else if (kind === "type") {
+      if (nameEl && !nameEl.value) nameEl.value = val;
+      if (filtEl) filtEl.value = "type=" + val;
+    }
   };
   window.habitClose = function() {
     document.getElementById("habit-modal").classList.remove("open");
