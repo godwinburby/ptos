@@ -132,7 +132,7 @@ class TestSettingsControl:
         text = _read(TEMPLATE_DIR, "settings.html")
         assert "ptos.uiScale" not in text
         assert "ui_scale" not in text
-        block = text.split('id="sec-display"')[1].split('id="sec-dashboard"')[0]
+        block = text.split('id="sec-display"')[1].split('id="sec-highlights"')[0]
         assert "/settings/save" not in block
         assert "data-uiscale" in block
 

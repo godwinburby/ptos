@@ -7,6 +7,10 @@ Format: `[version or date] — description`
 
 ## 2026-11-03
 
+### Settings — remove obsolete home/default-dashboard controls
+
+- **Settings cleanup** — removed the obsolete "Home Page Thresholds" filter and the "Default Dashboard" selector (home note embeds its own dashboard widget); dashboard highlights remain.
+
 ### Todo shell — legacy group-by bar, saved-view disclosure, priority fixes
 
 - **Group-by bar matches legacy** — the shell rendered the tabs and ☐ Select as unstyled native buttons; `page_shell.css` now carries the legacy bar (full-width card, `10px 14px` / `14px` tabs, stretched Sort select and Select with separator borders, accent `.active` state) and scrolls horizontally on phones. The legacy `todo.html` sizing was enlarged to match.

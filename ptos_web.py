@@ -2280,7 +2280,6 @@ def settings_page():
     cycles_raw = cfg.get("cycles", {})
     backup = cfg.get("backup", {})
     todo = cfg.get("todo", {})
-    dashboard = cfg.get("dashboard", {})
     auth = cfg.get("auth", {})
 
     cycles = [{"name": k, "day": v} for k, v in cycles_raw.items()]
@@ -2301,7 +2300,6 @@ def settings_page():
     
     dashboards = list(svc.get_dashboard_names()) if hasattr(svc, 'get_dashboard_names') else []
     thresholds = list(ptos.get_thresholds().keys())
-    home_thresholds = cfg.get("home", {}).get("thresholds", [])
     dashboard_highlights = cfg.get("dashboard", {}).get("highlights", {})
     queries = svc.get_queries()
     dashboard_metrics_map = {}
@@ -2328,9 +2326,7 @@ def settings_page():
         backup=backup,
         backup_folders=backup.get("folders", []),
         dashboards=dashboards,
-        default_dashboard=dashboard.get("default", ""),
         thresholds=thresholds,
-        home_thresholds=home_thresholds,
         dashboard_highlights=dashboard_highlights,
         dashboard_metrics_map=dashboard_metrics_map,
         auth_enabled=auth.get("enabled", False),
@@ -2393,13 +2389,6 @@ def settings_save():
         if "archive_months" in data:
             cfg.setdefault("todo", {})["archive_months"] = max(1, min(24, int(data["archive_months"])))
 
-        if "default_dashboard" in data:
-            db_val = data["default_dashboard"]
-            cfg["dashboard"] = {"default": db_val} if db_val else {}
-        
-        if "home_thresholds" in data and isinstance(data["home_thresholds"], list):
-            cfg.setdefault("home", {})["thresholds"] = data["home_thresholds"]
-        
         if "backup_folders" in data and isinstance(data["backup_folders"], list):
             core_folders = ["records", "config", "templates", "journal", "todo", "notes"]
             valid_folders = list(data["backup_folders"])

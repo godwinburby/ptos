@@ -28,7 +28,6 @@
   <a href="#sec-profile">Profile</a>
   <a href="#sec-home">Home</a>
   <a href="#sec-display">Display</a>
-  <a href="#sec-dashboard">Dashboard</a>
   {% if dashboards %}<a href="#sec-highlights">Highlights</a>{% endif %}
   <a href="#sec-auth">Auth</a>
   <a href="#sec-cycles">Cycles</a>
@@ -127,36 +126,6 @@
       <button type="button" class="uiscale-btn" data-scale="1.5">150%</button>
     </div>
     <div id="uiscale-sample" style="margin-top:8px;font-size:14px;color:var(--sub);">The quick brown fox jumps over the lazy dog.</div>
-  </div>
-</div>
-
-<div class="card" id="sec-dashboard" style="margin-bottom:14px;">
-  <div class="card-title">Dashboard</div>
-  <div style="display:flex;flex-wrap:wrap;gap:16px;">
-    <div class="field-group" style="flex:1;min-width:160px;">
-      <label>Default Dashboard</label>
-      <select id="default-dashboard">
-        <option value="">— none —</option>
-        {% for db in dashboards %}
-        <option value="{{ db }}" {% if db == default_dashboard %}selected{% endif %}>{{ db }}</option>
-        {% endfor %}
-      </select>
-    </div>
-    {% if thresholds %}
-    <div class="field-group" style="flex:1;min-width:200px;">
-      <label>Home Page Thresholds</label>
-      <div style="font-size:11px;color:var(--sub);margin-bottom:6px;">
-        Leave all unchecked to show every threshold.
-      </div>
-      {% for name in thresholds %}
-      <label style="display:flex;align-items:center;gap:6px;font-size:13px;margin-bottom:4px;">
-        <input type="checkbox" class="home-threshold-cb" value="{{ name }}"
-          {% if name in home_thresholds %}checked{% endif %}>
-        {{ name.replace('_', ' ') }}
-      </label>
-      {% endfor %}
-    </div>
-{% endif %}
   </div>
 </div>
 
@@ -616,10 +585,6 @@
     var userName = document.getElementById("user-name").value.trim();
     var currency = document.getElementById("currency").value.trim();
     var dateFormat = document.getElementById("date-format").value;
-    var defaultDashboard = document.getElementById("default-dashboard").value;
-    var homeThresholds = Array.from(document.querySelectorAll(".home-threshold-cb:checked"))
-      .map(function(cb) { return cb.value; });
-    
     var validCycles = cycles.filter(function(c) { return c.name && c.day; })
       .map(function(c) { return {name: c.name.toLowerCase().replace(/[^a-z0-9-]/g, "-"), day: c.day}; });
     
@@ -643,8 +608,6 @@
         remind_before_minutes: parseInt(document.getElementById("remind-before").value) || 0,
         reminder_check_interval: parseInt(document.getElementById("reminder-check").value) || 2,
         archive_months: parseInt(document.getElementById("archive-months").value) || 6,
-        default_dashboard: defaultDashboard,
-        home_thresholds: homeThresholds,
         backup_folders: backupFolders,
         auth_enabled: document.getElementById("auth-enabled").checked,
         auth_username: document.getElementById("auth-username").value.trim(),

@@ -107,10 +107,21 @@
 
   function showUndoIfAvailable() {
     var toast = document.getElementById("home-edit-undo");
+    if (!toast) return;
     try {
       var saved = JSON.parse(sessionStorage.getItem("ptos.home.undo") || "null");
-      if (toast && saved && saved.path === source.path) toast.style.display = "block";
-    } catch (e) {}
+      if (saved && saved.path === source.path) {
+        toast.style.display = "block";
+        clearTimeout(window.__homeUndoTimer);
+        window.__homeUndoTimer = setTimeout(function () {
+          toast.style.display = "none";
+        }, 5000);
+      } else {
+        toast.style.display = "none";
+      }
+    } catch (e) {
+      toast.style.display = "none";
+    }
   }
 
   function configure(index) {
@@ -170,6 +181,9 @@
     var previous = null;
     try { previous = JSON.parse(sessionStorage.getItem("ptos.home.undo") || "null"); } catch (e) {}
     if (!previous || previous.path !== source.path) return;
+    var toast = document.getElementById("home-edit-undo");
+    if (toast) toast.style.display = "none";
+    clearTimeout(window.__homeUndoTimer);
     save(previous.content, window.PtosHomeNote.split(previous.content), false);
   };
 
