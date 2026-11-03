@@ -503,7 +503,8 @@
       });
     }
 
-    on(root.querySelector("[data-todo-hide-routines]"), "change", function (event) {
+    var hrNode = root.querySelector("[data-todo-hide-routines]");
+    if (hrNode) on(hrNode, "change", function (event) {
       state.hide_routines = !!event.target.checked;
       if (state.hide_routines) filters.project = "-routine";
       else if (filters.project === "-routine") filters.project = "";
@@ -560,7 +561,8 @@
       if (searchInput && searchInput !== document.activeElement) {
         searchInput.value = filters.search || "";
       }
-      root.querySelector("[data-todo-hide-routines]").checked = !!state.hide_routines;
+      var hr = root.querySelector("[data-todo-hide-routines]");
+      if (hr) hr.checked = !!state.hide_routines;
     }
     return { destroy: function () {
       listeners.forEach(function (entry) {
