@@ -339,6 +339,8 @@
     }
     .floating-add:hover { transform: scale(1.08); box-shadow: 0 6px 16px rgba(0,0,0,.25); }
     .floating-add:active { transform: scale(.95); }
+    @media (min-width: 1024px) { .floating-add { display: none; } }
+    @media (max-width: 1023px) { .main { padding-bottom: 88px; } }
 
     .msg-warn-banner { padding:10px 16px; border-radius: 9px; font-size: var(--fs-md); font-weight:500; background:var(--warn-lt); color:var(--warn); border:1px solid var(--warn); margin-bottom:10px; cursor:pointer; }
     .msg-warn-banner a { color:var(--warn); font-weight:600; }
