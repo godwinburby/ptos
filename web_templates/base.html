@@ -11,6 +11,7 @@
   <meta name="theme-color" content="#0F1115" media="(prefers-color-scheme: dark)">
   <title>PTOS{% if title %} · {{ title }}{% endif %}</title>
   <script>(function(){try{var t=localStorage.getItem('ptos-theme');if(t==='dark'||t==='light')document.documentElement.setAttribute('data-theme',t);else document.documentElement.removeAttribute('data-theme');}catch(e){}})();</script>
+  <script>window.applyTheme=function(t){try{if(t==='light'||t==='dark'){localStorage.setItem('ptos-theme',t);document.documentElement.setAttribute('data-theme',t);}else{localStorage.removeItem('ptos-theme');document.documentElement.removeAttribute('data-theme');}}catch(e){}document.querySelectorAll('.theme-btn').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-theme')===t);});};(function(){var t='auto';try{t=localStorage.getItem('ptos-theme')||'auto';}catch(e){}if(t!=='light'&&t!=='dark')t='auto';document.querySelectorAll('.theme-btn').forEach(function(b){b.addEventListener('click',function(){window.applyTheme(b.getAttribute('data-theme'));});b.classList.toggle('active',b.getAttribute('data-theme')===t);});})();</script>
   <script>(function(){try{var s=parseFloat(localStorage.getItem('ptos.uiScale'));if([1.15,1.3,1.5].indexOf(s)>-1&&CSS.supports('zoom','1.2'))document.documentElement.style.zoom=s;}catch(e){}})();</script>
   <link rel="stylesheet" href="{{ av('/static/css/components.css') }}">
   <link rel="stylesheet" href="{{ av('/static/css/base.css') }}">
@@ -60,6 +61,12 @@
     {% endfor %}
   </nav>
   <div class="sidebar-footer">
+    <div style="display:flex;align-items:center;gap:4px;margin-bottom:10px;">
+      <button type="button" class="theme-btn" data-theme="auto" onclick="window.applyTheme('auto')" title="Auto theme" style="flex:1;padding:4px 0;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:11px;font-weight:600;cursor:pointer;">Auto</button>
+      <button type="button" class="theme-btn" data-theme="light" onclick="window.applyTheme('light')" title="Light theme" style="flex:1;padding:4px 0;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:11px;font-weight:600;cursor:pointer;">Light</button>
+      <button type="button" class="theme-btn" data-theme="dark" onclick="window.applyTheme('dark')" title="Dark theme" style="flex:1;padding:4px 0;border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--text);font-size:11px;font-weight:600;cursor:pointer;">Dark</button>
+    </div>
+    <script>(function(){var t='auto';try{t=localStorage.getItem('ptos-theme')||'auto';}catch(e){}if(t!=='light'&&t!=='dark')t='auto';document.querySelectorAll('.theme-btn').forEach(function(b){b.classList.toggle('active',b.getAttribute('data-theme')===t);});})();</script>
     <div data-uiscale style="display:flex;align-items:center;gap:8px;margin-bottom:10px;">
       <button type="button" onclick="stepUiScale(-1)" title="Smaller display" style="flex:1;padding:6px 0;border:1px solid var(--border);border-radius:8px;background:var(--card);color:var(--text);font-size:13px;font-weight:700;cursor:pointer;">A−</button>
       <span id="uiscale-label" style="min-width:38px;text-align:center;font-size:12px;color:var(--sub);font-weight:600;">100%</span>
