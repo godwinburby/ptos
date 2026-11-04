@@ -75,8 +75,7 @@
     <div style="font-size:12px;font-weight:700;color:var(--sub);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;">Common fields</div>
     <div id="entity-chips" class="entity-val-chips">
       {% for s in suggestions %}
-      <button type="button" class="entity-chip" data-field="{{ s.field }}" onclick="toggleField('{{ s.field }}')"
-              title="{{ s.types | join(', ') }}">
+      <button type="button" class="entity-chip" data-field="{{ s.field }}" onclick="toggleField('{{ s.field }}')">
         <span class="entity-chip-field">{{ s.field }}</span>
         <span class="entity-chip-meta">{{ s.types | length }} types &middot; {{ s.count }} values</span>
       </button>
