@@ -27,6 +27,7 @@
   <a href="#sec-data">Data</a>
   <a href="#sec-profile">Profile</a>
   <a href="#sec-home">Home</a>
+  <a href="#sec-theme">Theme</a>
   <a href="#sec-display">Display</a>
   {% if dashboards %}<a href="#sec-highlights">Highlights</a>{% endif %}
   <a href="#sec-auth">Auth</a>
@@ -98,6 +99,18 @@
     <span style="font-size:12px;color:var(--sub);">
       Rewrites the note from the template; the old one is kept as a backup.
     </span>
+  </div>
+</div>
+
+<div class="card" id="sec-theme" style="margin-bottom:14px;">
+  <div class="card-title">Theme</div>
+  <div style="font-size:13px;color:var(--sub);margin-bottom:8px;">
+    Auto follows your OS. Choice is stored on this device only.
+  </div>
+  <div class="view-toggle" style="width:max-content;">
+    <button type="button" class="theme-btn" data-theme="auto">Auto</button>
+    <button type="button" class="theme-btn" data-theme="light">Light</button>
+    <button type="button" class="theme-btn" data-theme="dark">Dark</button>
   </div>
 </div>
 
@@ -581,6 +594,30 @@
     cycles[idx][field] = field === "day" ? parseInt(input.value) || 1 : input.value;
   };
   
+  window.applyTheme = function(t) {
+    try {
+      if (t === "light" || t === "dark") {
+        localStorage.setItem("ptos-theme", t);
+        document.documentElement.setAttribute("data-theme", t);
+      } else {
+        localStorage.removeItem("ptos-theme");
+        document.documentElement.removeAttribute("data-theme");
+      }
+    } catch (e) {}
+    document.querySelectorAll(".theme-btn").forEach(function(b) {
+      b.classList.toggle("active", b.getAttribute("data-theme") === t);
+    });
+  };
+  (function() {
+    var t = "auto";
+    try { t = localStorage.getItem("ptos-theme") || "auto"; } catch (e) {}
+    if (t !== "light" && t !== "dark") t = "auto";
+    document.querySelectorAll(".theme-btn").forEach(function(b) {
+      b.addEventListener("click", function() { window.applyTheme(b.getAttribute("data-theme")); });
+      b.classList.toggle("active", b.getAttribute("data-theme") === t);
+    });
+  })();
+
   window.saveSettings = function() {
     var userName = document.getElementById("user-name").value.trim();
     var currency = document.getElementById("currency").value.trim();
