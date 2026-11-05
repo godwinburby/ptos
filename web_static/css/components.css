@@ -380,3 +380,31 @@ li.md-task-list-item { list-style:none;margin-left:-22px; }
 .emb-heat { width:8px;height:8px;border-radius:50%;flex-shrink:0; }
 .emb-name { font-weight:700;color:var(--text); }
 .emb-due-gap { color:var(--accent);font-weight:600; }
+
+/* ── Utility colour classes (for inline style migration) ────────────── */
+.u-text-on-accent { color: var(--text-on-accent); }
+.u-bg-error-lt { background: var(--error-lt); }
+.u-bg-warn-lt { background: var(--warn-lt); }
+.u-bg-success-lt { background: var(--success-lt); }
+.u-bg-surface-2 { background: var(--surface-2); }
+.u-bg-error { background: var(--error); }
+.u-bg-warn { background: var(--warn); }
+.u-bg-accent { background: var(--accent); }
+.u-bg-accent-lt { background: var(--accent-lt); }
+.u-bg-card { background: var(--card); }
+.u-bg-surface { background: var(--surface-2); }
+.u-text-error { color: var(--error); }
+.u-text-warn { color: var(--warn); }
+.u-text-success { color: var(--success); }
+.u-text-accent { color: var(--accent); }
+.u-text-sub { color: var(--sub); }
+.u-text-muted { color: var(--sub); }
+.u-border-border { border-color: var(--border); }
+.u-border-error { border-color: var(--error); }
+.u-border-warn { border-color: var(--warn); }
+.u-border-accent { border-color: var(--accent); }
+.u-border-sub { border-color: var(--sub); }
+.u-focus-ring { box-shadow: 0 0 0 2px var(--focus-ring-color, var(--accent)); }
+.u-bg-overlay-1 { background: rgba(var(--text-rgb, 26, 29, 46), 0.02); }
+.u-bg-overlay-3 { background: rgba(var(--text-rgb, 26, 29, 46), 0.03); }
+.u-bg-overlay-10 { background: rgba(var(--text-rgb, 26, 29, 46), 0.1); }

@@ -3,7 +3,7 @@
 
 <div class="page-title">Log Editor</div>
 
-<div style="background:#FEE2E2;border:2px solid #DC2626;color:#991B1B;padding:14px 18px;border-radius:10px;margin-bottom:14px;font-size:14px;font-weight:600;">
+<div style="background:var(--error-lt);border:2px solid var(--error);color:var(--error);padding:14px 18px;border-radius:10px;margin-bottom:14px;font-size:14px;font-weight:600;">
   ⚠️ WARNING: Wrong edits can break PTOS! Each record must follow the correct syntax below.
 </div>
 
@@ -60,7 +60,7 @@
             style="width:100%;min-height:70vh;padding:14px 16px;
                    font-family:'Consolas','Courier New',monospace;
                    font-size:14px;line-height:1.7;
-                   background:#1E2130;color:#D4D8E8;
+                   background:var(--surface-2);color:var(--text);
                    border:none;border-radius:0;
                    resize:vertical;outline:none;
                    box-sizing:border-box;"
@@ -72,7 +72,7 @@
        style="display:none;min-height:70vh;padding:14px 16px;
               font-family:'Consolas','Courier New',monospace;
               font-size:14px;line-height:1.7;
-              background:#1E2130;color:#D4D8E8;
+              background:var(--surface-2);color:var(--text);
               border:none;border-radius:10px;
               overflow:auto;margin:0;white-space:pre;cursor:text;"
        onclick="setEditMode()"
@@ -89,15 +89,16 @@
 <style>
   /* ── Log syntax colours ── */
   /* based on a dark theme that matches the existing output pane */
-  .log-date    { color: #7EC8E3; font-weight:600; }       /* date — steel blue  */
-  .log-type    { color: #C792EA; font-weight:700; }       /* type=X — purple    */
-  .log-key     { color: #82AAFF; }                        /* key=   — blue      */
-  .log-val     { color: #C3E88D; }                        /* =value — green     */
-  .log-amount  { color: #FFCB6B; font-weight:600; }       /* amount/numeric — gold */
-  .log-note    { color: #697098; font-style:italic; }     /* note= — muted      */
-  .log-pipe    { color: #546E7A; }                        /* | separator        */
-  .log-comment { color: #546E7A; font-style:italic; }     /* # comment lines    */
-  .log-tag     { color: #F07178; }                        /* tag=X — coral      */
+  /* allow-color: syntax highlighting */
+  .log-date    { color: #7EC8E3; font-weight:600; }       /* date — steel blue  */ /* allow-color: syntax highlighting */
+  .log-type    { color: #C792EA; font-weight:700; }       /* type=X — purple    */ /* allow-color: syntax highlighting */
+  .log-key     { color: #82AAFF; }                        /* key=   — blue      */ /* allow-color: syntax highlighting */
+  .log-val     { color: #C3E88D; }                        /* =value — green     */ /* allow-color: syntax highlighting */
+  .log-amount  { color: #FFCB6B; font-weight:600; }       /* amount/numeric — gold */ /* allow-color: syntax highlighting */
+  .log-note    { color: #697098; font-style:italic; }     /* note= — muted      */ /* allow-color: syntax highlighting */
+  .log-pipe    { color: #546E7A; }                        /* | separator        */ /* allow-color: syntax highlighting */
+  .log-comment { color: #546E7A; font-style:italic; }     /* # comment lines    */ /* allow-color: syntax highlighting */
+  .log-tag     { color: #F07178; }                        /* tag=X — coral      */ /* allow-color: syntax highlighting */
 </style>
 
 <script>
@@ -362,7 +363,7 @@ function showValidationModal(d, title) {
     }
     
     if (warnings.length > 0) {
-      html += '<div style="background:#FFF8E1;border-radius:8px;margin-bottom:12px;max-height:150px;overflow-y:auto;">';
+      html += '<div style="background:var(--warn-lt);border-radius:8px;margin-bottom:12px;max-height:150px;overflow-y:auto;">';
       html += '<div style="padding:8px 12px;font-weight:700;color:var(--warn);border-bottom:1px solid var(--border);">Warnings</div>';
       warnings.slice(0, 10).forEach(function(w) {
         html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family:monospace;word-break:break-all;">';
@@ -469,7 +470,7 @@ function goToLineNum(num) {
   
   // Brief visual flash to show the line
   var oldBg = editor.style.backgroundColor;
-  editor.style.backgroundColor = "#3a4a6b";
+  editor.style.backgroundColor = "var(--accent-lt)";
   setTimeout(function() {
     editor.style.backgroundColor = oldBg;
   }, 500);

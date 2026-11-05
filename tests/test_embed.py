@@ -1,5 +1,7 @@
 import datetime as dt
 import os
+import shutil
+import subprocess
 import tomli_w
 import pytest
 
@@ -788,6 +790,17 @@ class TestEmbedMarkup:
                     ".emb-cal-rec", ".emb-cal-rec-note"):
             assert cls in html, cls
 
+    def test_emb_stat_uses_flex_and_gap(self):
+        # B1: the habit summary .emb-stat must use display:flex and gap
+        path = os.path.join(_REPO_ROOT, "web_static", "css", "components.css")
+        with open(path, encoding="utf-8") as f:
+            css = f.read()
+        m = __import__("re").search(r"\.emb-stat\s*\{([^}]*)\}", css)
+        assert m, ".emb-stat rule not found"
+        body = m.group(1)
+        assert "display:flex" in body
+        assert "gap:" in body
+
     def test_slash_menu_supports_time_window(self):
         path = os.path.join(_REPO_ROOT, "web_static", "js", "slash_embed.js")
         with open(path, encoding="utf-8") as f:
@@ -817,4 +830,18 @@ class TestEmbedMarkup:
         assert "md-embed-title" in js
         # but no ✎ — the preview never edits
         assert "md-embed-edit" not in js
+
+
+class TestB1WidgetRenderers:
+    @pytest.mark.skipif(shutil.which("node") is None,
+                        reason="node not installed")
+    def test_node_suite(self):
+        path = os.path.join(_REPO_ROOT, "tests", "js",
+                            "widgets_summary.test.js")
+        if not os.path.isfile(path):
+            pytest.skip("js suite missing")
+        proc = subprocess.run(
+            [shutil.which("node"), "--test", path],
+            cwd=_REPO_ROOT, capture_output=True, text=True, timeout=180)
+        assert proc.returncode == 0, proc.stdout + "\n" + proc.stderr
 

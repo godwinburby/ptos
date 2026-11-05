@@ -621,3 +621,24 @@ class TestEntityValuePanelMarkup:
                         "entity-val-more", "entity-val-total", "entity-val-field",
                         "entity-val-text", "entity-field", "entity-chips"):
             assert f'id="{node_id}"' in html, node_id
+
+    def test_entity_chips_have_no_redundant_tooltip(self):
+        # B3: entity chips must not carry a redundant title= attribute
+        from ptos_web import app
+        import ptos_service as svc
+        import pytest
+        # Monkeypatch suggestions to ensure chips render
+        original = svc.get_entity_suggestions
+        try:
+            svc.get_entity_suggestions = lambda *a, **k: [
+                {"field": "client", "types": ["expense", "income"], "count": 2},
+                {"field": "category", "types": ["expense"], "count": 5},
+            ]
+            html = app.test_client().get("/entity").get_data(as_text=True)
+        finally:
+            svc.get_entity_suggestions = original
+        import re
+        chips = re.findall(r'<button[^>]*class="entity-chip"[^>]*>', html)
+        assert chips, "at least one entity-chip button expected"
+        for chip in chips:
+            assert 'title=' not in chip, f"chip has redundant title: {chip}"

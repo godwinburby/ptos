@@ -5,8 +5,7 @@ python -m pytest tests/ -q
 if [ $? -ne 0 ]; then
     echo ""
     echo "Tests failed. Commit blocked."
-    echo "Fix the failures, or use 'git commit --no-verify' to bypass"
-    echo "(only for genuinely unrelated pre-existing failures)."
+    echo "Fix the failures before committing."
     exit 1
 fi
 
@@ -15,7 +14,7 @@ if git diff --cached --name-only | grep -E '^(ptos[^/]*\.py|desktop_app\.py|web_
     if ! git diff --cached --name-only | grep -q '^CHANGELOG\.md$'; then
         echo ""
         echo "CHANGELOG.md must be updated when product files change."
-        echo "Stage a CHANGELOG.md entry (see AGENTS.md 'Changelog'), or use --no-verify (not recommended)."
+        echo "Stage a CHANGELOG.md entry (see AGENTS.md 'Changelog')."
         exit 1
     fi
 fi

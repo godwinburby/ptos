@@ -1,8 +1,4 @@
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-    @font-face {
-      font-family: "Inter"; font-style: normal; font-weight: 100 900;
-      font-display: swap; src: url("/static/fonts/inter.woff2") format("woff2");
-    }
     :root {
       --bg:        #F4F6FB;
       --card:      #FFFFFF;
@@ -16,8 +12,14 @@
       --error-lt:  #FDECEA;
       --warn:      #E8803A;
       --warn-lt:   #FFF3E0;
+      --hl-purple-lt:#F3EEFF; --hl-teal-lt:#E6FAF5; --hl-rose-lt:#FDE7F3;
+      --hl-slate-lt:#EFF2F6; --hl-indigo-lt:#EEF0FD; --hl-cyan-lt:#E0F4FA;
+      --hl-lime-lt:#F0F7E0; --hl-amber-lt:#FBF0DC; --hl-pink-lt:#FDE6F0;
+      --hl-brown-lt:#F2E8DC; --hl-navy-lt:#E3E8F6; --hl-olive-lt:#EEF1E0;
       --text:      #1A1D2E;
       --sub:       #646B78;
+      --text-rgb:  26, 29, 46;
+      --text-on-accent: #FFFFFF;
       --nav-h:     60px;
       --safe-b:    env(safe-area-inset-bottom, 0px);
       --sidebar-w: 220px;
@@ -31,6 +33,18 @@
       --chart-7:    #E0538E;
       --chart-8:    #64748B;
       --chart-other:#B3BDCC;
+      /* tint tokens for category/status fills (14% chart color on card) */
+      --tint-1:     color-mix(in srgb, var(--chart-1) 14%, var(--card));
+      --tint-2:     color-mix(in srgb, var(--chart-2) 14%, var(--card));
+      --tint-3:     color-mix(in srgb, var(--chart-3) 14%, var(--card));
+      --tint-4:     color-mix(in srgb, var(--chart-4) 14%, var(--card));
+      --tint-5:     color-mix(in srgb, var(--chart-5) 14%, var(--card));
+      --tint-6:     color-mix(in srgb, var(--chart-6) 14%, var(--card));
+      --tint-7:     color-mix(in srgb, var(--chart-7) 14%, var(--card));
+      --tint-8:     color-mix(in srgb, var(--chart-8) 14%, var(--card));
+      --tint-success: color-mix(in srgb, var(--success) 14%, var(--card));
+      --tint-error:   color-mix(in srgb, var(--error) 14%, var(--card));
+      --tint-warn:    color-mix(in srgb, var(--warn) 14%, var(--card));
       /* spacing */
       --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
       --space-4: 16px; --space-5: 24px; --space-6: 32px;
@@ -54,30 +68,75 @@
       --hl-accent: #4F6BED; --hl-warn: #E8803A; --hl-success: #2a9d4e;
       --hl-error: #d14343; --hl-purple: #8B5CF6; --hl-teal: #14B8A6;
       --hl-rose: #E11D78; --hl-slate: #64748B;
+      /* board highlight swatches (extend dashboard set) */
+      --hl-indigo: #6366F1; --hl-cyan: #0891B2; --hl-lime: #65A30D;
+      --hl-amber: #D97706; --hl-pink: #DB2777; --hl-brown: #8B5A2B;
+      --hl-navy: #1E3A8A; --hl-olive: #5F6B2B;
+      /* context semantic tokens (for routines, todo, etc.) — reference dashboard tokens */
+      --ctx-blue-border: var(--hl-accent);   --ctx-blue-bg: var(--accent-lt);
+      --ctx-orange-border: var(--hl-warn);   --ctx-orange-bg: var(--warn-lt);
+      --ctx-green-border: var(--hl-success); --ctx-green-bg: var(--success-lt);
+      --ctx-purple-border: var(--hl-purple); --ctx-purple-bg: var(--hl-purple-lt);
+      --ctx-teal-border: var(--hl-teal);     --ctx-teal-bg: var(--hl-teal-lt);
+      --ctx-rose-border: var(--hl-rose);     --ctx-rose-bg: var(--hl-rose-lt);
+      --ctx-other-border: var(--sub);        --ctx-other-bg: var(--surface-2);
     }
     :root[data-theme="dark"] {
       --bg:#0F1115; --card:#171A21; --surface-2:#1C2029; --border:#2A2F3A;
-      --text:#E6E8EE; --sub:#9AA3B2;
+--text:#E6E8EE; --sub:#9AA3B2; --text-on-accent:#0F1115; --text-rgb: 230, 232, 238;
       --accent:#7C93FF; --accent-d:#9DB0FF; --accent-lt:#1E2540;
       --success:#4CC38A; --success-lt:#12261D;
       --error:#FF7B6B;   --error-lt:#2C1614;
       --warn:#F0A15E;    --warn-lt:#2B2013;  --warn-text:#F0A15E;
+      --hl-purple-lt:#2E1A3D; --hl-teal-lt:#0D2A2D; --hl-rose-lt:#2D1A25;
+      --hl-slate-lt:#1E2A3A; --hl-indigo-lt:#1E1E3A; --hl-cyan-lt:#0D2A2D;
+      --hl-lime-lt:#1A2A1A; --hl-amber-lt:#2A2210; --hl-pink-lt:#2D1A25;
+      --hl-brown-lt:#2A201A; --hl-navy-lt:#1A1E2A; --hl-olive-lt:#2A2A1A;
       --chart-1:#7C93FF; --chart-2:#F0A15E; --chart-3:#4CC38A; --chart-4:#FF7B6B;
       --chart-5:#A78BFA; --chart-6:#2DD4BF; --chart-7:#F472B6; --chart-8:#94A3B8;
       --chart-other:#475569;
+      /* tint tokens for category/status fills (14% chart color on card) */
+      --tint-1:     color-mix(in srgb, var(--chart-1) 14%, var(--card));
+      --tint-2:     color-mix(in srgb, var(--chart-2) 14%, var(--card));
+      --tint-3:     color-mix(in srgb, var(--chart-3) 14%, var(--card));
+      --tint-4:     color-mix(in srgb, var(--chart-4) 14%, var(--card));
+      --tint-5:     color-mix(in srgb, var(--chart-5) 14%, var(--card));
+      --tint-6:     color-mix(in srgb, var(--chart-6) 14%, var(--card));
+      --tint-7:     color-mix(in srgb, var(--chart-7) 14%, var(--card));
+      --tint-8:     color-mix(in srgb, var(--chart-8) 14%, var(--card));
+      --tint-success: color-mix(in srgb, var(--success) 14%, var(--card));
+      --tint-error:   color-mix(in srgb, var(--error) 14%, var(--card));
+      --tint-warn:    color-mix(in srgb, var(--warn) 14%, var(--card));
+      --tint-9:     color-mix(in srgb, var(--hl-indigo) 14%, var(--card));
+      --tint-10:    color-mix(in srgb, var(--hl-cyan) 14%, var(--card));
+      --tint-11:    color-mix(in srgb, var(--hl-lime) 14%, var(--card));
+      --tint-12:    color-mix(in srgb, var(--hl-amber) 14%, var(--card));
+      --tint-13:    color-mix(in srgb, var(--hl-pink) 14%, var(--card));
+      --tint-14:    color-mix(in srgb, var(--hl-brown) 14%, var(--card));
+      --tint-15:    color-mix(in srgb, var(--hl-navy) 14%, var(--card));
+      --tint-16:    color-mix(in srgb, var(--hl-olive) 14%, var(--card));
       --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;
       --radius-xs:2px;--radius-sm:6px;--radius-md:10px;--radius-lg:14px;
       --shadow-1:0 1px 2px rgba(0,0,0,.06);--shadow-2:0 4px 16px rgba(0,0,0,.12);--shadow-3:0 8px 32px rgba(0,0,0,.20);--shadow-up:0 -3px 16px rgba(0,0,0,.13);
       --fs-xs:11px;--fs-sm:13px;--fs-md:15px;--fs-base:16px;--fs-lg:18px;--fs-xl:22px;--fs-2xl:28px;
       --hl-accent:#7C93FF;--hl-warn:#F0A15E;--hl-success:#4CC38A;--hl-error:#FF7B6B;--hl-purple:#A78BFA;--hl-teal:#2DD4BF;--hl-rose:#F472B6;--hl-slate:#94A3B8;
+      /* board highlight swatches (extend dashboard set) */
+      --hl-indigo:#6366F1;--hl-cyan:#0891B2;--hl-lime:#65A30D;--hl-amber:#D97706;--hl-pink:#DB2777;--hl-brown:#8B5A2B;--hl-navy:#1E3A8A;--hl-olive:#5F6B2B;
+      /* context semantic tokens (dark) — use -lt tokens for visible backgrounds */
+      --ctx-blue-border: var(--hl-accent);   --ctx-blue-bg: var(--accent-lt);
+      --ctx-orange-border: var(--hl-warn);   --ctx-orange-bg: var(--warn-lt);
+      --ctx-green-border: var(--hl-success); --ctx-green-bg: var(--success-lt);
+      --ctx-purple-border: var(--hl-purple); --ctx-purple-bg: var(--hl-purple-lt);
+      --ctx-teal-border: var(--hl-teal);     --ctx-teal-bg: var(--hl-teal-lt);
+      --ctx-rose-border: var(--hl-rose);     --ctx-rose-bg: var(--hl-rose-lt);
+      --ctx-other-border: var(--sub);        --ctx-other-bg: var(--surface-2);
       --nav-h:60px;--safe-b:env(safe-area-inset-bottom,0px);--sidebar-w:220px;--content-max:1200px;
       color-scheme: dark;
-
     }
     @media (prefers-color-scheme: dark) {
       :root:not([data-theme="light"]) {
         --bg:#0F1115; --card:#171A21; --surface-2:#1C2029; --border:#2A2F3A;
-        --text:#E6E8EE; --sub:#9AA3B2;
+--text:#E6E8EE; --sub:#9AA3B2; --text-on-accent: #0F1115; --text-rgb: 230, 232, 238;
         --accent:#7C93FF; --accent-d:#9DB0FF; --accent-lt:#1E2540;
         --success:#4CC38A; --success-lt:#12261D;
         --error:#FF7B6B;   --error-lt:#2C1614;
@@ -85,6 +144,26 @@
         --chart-1:#7C93FF; --chart-2:#F0A15E; --chart-3:#4CC38A; --chart-4:#FF7B6B;
         --chart-5:#A78BFA; --chart-6:#2DD4BF; --chart-7:#F472B6; --chart-8:#94A3B8;
         --chart-other:#475569;
+        /* tint tokens for category/status fills (14% chart color on card) */
+        --tint-1:     color-mix(in srgb, var(--chart-1) 14%, var(--card));
+        --tint-2:     color-mix(in srgb, var(--chart-2) 14%, var(--card));
+        --tint-3:     color-mix(in srgb, var(--chart-3) 14%, var(--card));
+        --tint-4:     color-mix(in srgb, var(--chart-4) 14%, var(--card));
+        --tint-5:     color-mix(in srgb, var(--chart-5) 14%, var(--card));
+        --tint-6:     color-mix(in srgb, var(--chart-6) 14%, var(--card));
+        --tint-7:     color-mix(in srgb, var(--chart-7) 14%, var(--card));
+--tint-8:     color-mix(in srgb, var(--chart-8) 14%, var(--card));
+      --tint-9:     color-mix(in srgb, var(--hl-indigo) 14%, var(--card));
+      --tint-10:    color-mix(in srgb, var(--hl-cyan) 14%, var(--card));
+      --tint-11:    color-mix(in srgb, var(--hl-lime) 14%, var(--card));
+      --tint-12:    color-mix(in srgb, var(--hl-amber) 14%, var(--card));
+      --tint-13:    color-mix(in srgb, var(--hl-pink) 14%, var(--card));
+      --tint-14:    color-mix(in srgb, var(--hl-brown) 14%, var(--card));
+      --tint-15:    color-mix(in srgb, var(--hl-navy) 14%, var(--card));
+      --tint-16:    color-mix(in srgb, var(--hl-olive) 14%, var(--card));
+      --tint-success: color-mix(in srgb, var(--success) 14%, var(--card));
+        --tint-error:   color-mix(in srgb, var(--error) 14%, var(--card));
+        --tint-warn:    color-mix(in srgb, var(--warn) 14%, var(--card));
         --content-max:1200px;
         color-scheme: dark;
       }
@@ -121,7 +200,7 @@
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
     html, body { height: 100%; }
     body {
-      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
       font-size: var(--fs-base); background: var(--bg); color: var(--text);
       display: flex; flex-direction: column; min-height: 100%;
       -webkit-text-size-adjust: 100%;

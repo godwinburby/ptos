@@ -159,6 +159,23 @@ class TestWorkflowShape:
         """CI must install from requirements-dev.txt, not an inline package list."""
         assert any("requirements-dev.txt" in r for r in _run_lines(wf))
 
+    def test_runs_js_test_suite(self, wf):
+        """The workflow must run the JS test suite with node --test."""
+        runs = _run_lines(wf)
+        assert any("node --test" in r and "tests/js" in r for r in runs)
+
+    def test_changelog_job_exists(self, wf):
+        """CI must have a changelog job that runs the check script."""
+        assert "changelog" in wf["jobs"]
+        changelog_job = wf["jobs"]["changelog"]
+        assert changelog_job["runs-on"] == "ubuntu-latest"
+        # Must have fetch-depth: 0 on checkout
+        checkout = next(s for s in changelog_job["steps"] if s.get("uses", "").startswith("actions/checkout"))
+        assert checkout.get("with", {}).get("fetch-depth") == 0
+        # Must run the check script
+        runs = [s.get("run", "") for s in changelog_job["steps"] if "run" in s]
+        assert any("check_changelog.sh" in r for r in runs)
+
     def test_covers_every_third_party_import(self, wf):
         """Product imports need requirements.txt; suite imports need the dev
         file. Derived from the actual imports, so a new dependency fails here
@@ -189,6 +206,14 @@ class TestWorkflowShape:
                 uses = step.get("uses", "")
                 if uses.startswith("actions/"):
                     assert re.search(r"@v\d+$", uses), uses
+
+
+class TestPreCommitHook:
+    def test_never_advises_a_bypass(self):
+        hook = open(HOOK, encoding="utf-8").read()
+        assert "--no-verify" not in hook
+        assert "python -m pytest tests/ -q" in hook
+        assert "CHANGELOG.md must be updated" in hook
 
 
 class TestRequirementsFiles:

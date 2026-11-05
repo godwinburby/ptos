@@ -40,6 +40,8 @@ def is_allowed_shadow(val):
         return True
     if v.startswith("inset 3px 0 0 var(--"):
         return True
+    if v.startswith("0 0 0 2px var(--focus-ring-color") or v.startswith("0 0 0 2px var(--accent"):
+        return True
     return False
 
 

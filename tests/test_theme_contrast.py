@@ -115,3 +115,46 @@ def test_variable_parity():
 
 def test_accent_d_on_accent_lt():
     assert contrast(resolve("--accent-d", LIGHT), resolve("--accent-lt", LIGHT)) >= 4.5
+
+
+def test_tint_tokens_contrast():
+    # Normal text (--text) on each tint token must meet 4.5:1 in both themes
+    tint_vars = [f"--tint-{i}" for i in range(1, 9)] + [
+        "--tint-success", "--tint-error", "--tint-warn"
+    ]
+    for tv in tint_vars:
+        for theme_name, theme in (("light", LIGHT), ("dark", DARK)):
+            text_var = "--text"
+            # tint tokens use color-mix, so resolve() won't fully expand them.
+            # Compute expected color by evaluating the mix manually using the theme's chart/success/error/warn and card.
+            if tv.startswith("--tint-") and tv[7].isdigit():
+                idx = int(tv[7])
+                chart = f"--chart-{idx}"
+            elif tv == "--tint-success":
+                chart = "--success"
+            elif tv == "--tint-error":
+                chart = "--error"
+            else:
+                chart = "--warn"
+            # color-mix(in srgb, <color> 14%, <color>)
+            # We approximate by mixing in linear srgb for testing purposes.
+            # But for simplicity, just verify the resolved value contains the right refs.
+            val = theme.get(tv, "")
+            assert val, f"{theme_name}: {tv} not defined"
+            assert "color-mix" in val, f"{theme_name}: {tv} is not a color-mix: {val}"
+            assert chart in val, f"{theme_name}: {tv} missing {chart}"
+            assert "--card" in val, f"{theme_name}: {tv} missing --card"
+            # Now compute actual mixed color and check contrast with --text
+            # Parse the two source colors
+            c1 = resolve(chart, theme)
+            c2 = resolve("--card", theme)
+            # Mix: 14% of chart + 86% of card in srgb
+            r1, g1, b1 = hex_to_rgb(c1)
+            r2, g2, b2 = hex_to_rgb(c2)
+            rm = round(r1 * 0.14 + r2 * 0.86)
+            gm = round(g1 * 0.14 + g2 * 0.86)
+            bm = round(b1 * 0.14 + b2 * 0.86)
+            mixed = f"#{rm:02X}{gm:02X}{bm:02X}"
+            text = resolve(text_var, theme)
+            cr = contrast(mixed, text)
+            assert cr >= 4.5, f"{theme_name}: {tv} on text contrast {cr:.2f} < 4.5 (mixed={mixed}, text={text})"

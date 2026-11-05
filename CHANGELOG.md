@@ -7,6 +7,41 @@ Format: `[version or date] — description`
 
 ## 2026-11-05
 
+### Dark-mode token system & inline colour migration (A1–A5)
+
+- **Tint tokens** — Added `--tint-1..16`, `--tint-success`, `--tint-error`, `--tint-warn` (14% colour-mix on `--card` in light, `--chart-*` in dark); contrast test `test_tint_tokens_contrast` pins ≥4.5:1 in both themes.
+- **Inline colour migration** — 150+ hardcoded hex colours replaced with semantic tokens:
+  - `board.html` (47 → 0): dashboard highlight swatches now use `--hl-*`/`--tint-*`
+  - `routines.html` (27 → 0): context colours now reference dashboard tokens (`--hl-*` borders, `--tint-*`/`--*-lt` backgrounds); green now matches dashboard `--hl-success`
+  - `settings.html` (58 → 0): Syncthing status, theme picker, dashboard highlights, Syncthing JS all use `--error`/`--warn`/`--success`/`--sub`/`--hl-*`
+  - `editor.html` (18 → 0): error box, dark editor, warning box, go-to-line flash use `--error-lt`/`--surface-2`/`--warn-lt`/`--accent-lt`; syntax highlighting kept via `allow-color` comments
+- **Context token standardization** — Routine context colours now use `--hl-*` borders and `--tint-*`/`--*-lt` backgrounds, matching dashboard/board cards exactly; dark theme uses `--*-lt` tokens for visible backgrounds
+- **Inline colour ratchet** — New `tests/test_inline_color_ratchet.py` + `tests/inline_color_baseline.json`; counts only go down, allow-color comments for syntax highlighting
+- **Utility classes** — Added `.u-text-on-accent`, `.u-bg-*`, `.u-text-*`, `.u-border-*`, overlay classes for inline style migration
+
+### CI/Enforcement improvements
+
+- **P1** — Removed `--no-verify` advice from pre-commit hook (both test failure and changelog gate)
+- **P2** — Added `scripts/check_changelog.sh` + CI `changelog` job with `fetch-depth: 0`
+- **P3** — Added `node --test "tests/js/*.test.js"` step to pytest job (covers `page_shell.test.js`)
+- **P8** — Added B1 widget renderer tests (`tests/js/widgets_summary.test.js` + `TestB1WidgetRenderers`) and B3 entity chip test (`test_entity_chips_have_no_redundant_tooltip`)
+- **P4/P5/P6** — AGENTS.md HARD RULES block, `.kilo/kilo.jsonc` with deny rules, `.mailmap` + fixed author email
+
+### Infrastructure
+
+- **C1** — Dropped Inter `@font-face` (missing `inter.woff2`); added `tests/test_css_urls.py` to assert CSS `url()` targets exist
+- **A1** — Inline colour ratchet test + baseline (`tests/test_inline_color_ratchet.py` + `tests/inline_color_baseline.json`)
+- **Utility colour classes** — `.u-text-on-accent`, `.u-bg-error-lt`/`.u-bg-warn-lt`/`.u-bg-success-lt`/`.u-bg-surface-2`, `.u-bg-*`, `.u-text-*`, `.u-border-*`, overlay classes for inline style migration
+- **`--text-rgb` token** — For rgba overlay utilities (light/dark)
+- **`--text-on-accent` token** — White in light, dark in dark, for text on accent backgrounds
+
+### Tests
+
+- **3,962 pytest** + **79 Node.js** tests pass
+- New: `TestB1WidgetRenderers`, `test_emb_stat_uses_flex_and_gap`, `test_entity_chips_have_no_redundant_tooltip`, `TestPreCommitHook`, `TestWorkflowShape::test_changelog_job_exists`, `test_tint_tokens_contrast`, `test_inline_colour_ratchet`, `test_css_urls`, `TestB1WidgetRenderers::test_node_suite`
+
+## 2026-11-05 (original)
+
 ### Dark mode — focused form fields stay readable
 
 - **Focus background** — `input:focus`/`select:focus`/`textarea:focus` set a literal `background: white` while the text colour stayed `var(--text)`, which is light in dark mode, so focused textboxes rendered grey-on-white and were unreadable. They now use `var(--card)`; a static test pins the focus rule to theme tokens (no literal white or hex).

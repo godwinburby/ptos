@@ -1,11 +1,14 @@
 # AGENTS.md — PTOS Development Guide
 
-## HARD RULES (read first)
-   1. Never run git commit, git push or git add -A. Leave changes uncommitted.
-   2. Every fix and feature needs a test in tests/ that fails without it. No test, not done.
-   3. Product-file changes need a CHANGELOG.md entry in the same change.
-   4. Run python -m pytest tests/ -q and node --test tests/js/*.test.js; report the counts.
-   5. LF line endings only. One task per change.
+## HARD RULES (read first, apply always)
+  1. Never run git commit, git push or git add -A. Never use --no-verify. Leave changes uncommitted; the user commits.
+  2. Every bug fix and feature needs a test in tests/ that fails without it. No test, not done.
+  3. Product-file changes need a CHANGELOG.md entry in the same change.
+  4. Run python -m pytest tests/ -q and node --test tests/js/*.test.js before saying done; report the counts.
+  5. LF line endings only. One task per change. No unrelated edits.
+  6. No hardcoded colours, radii, shadows or font sizes; use the CSS tokens.
+
+## 3. Verify: `head -20 AGENTS.md`
 
 ## Project overview
 

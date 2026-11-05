@@ -13,7 +13,7 @@
   background: var(--card); color: var(--sub); border: 1px solid var(--border);
   text-decoration: none; white-space: nowrap; transition: all .15s;
 }
-.settings-toc a:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.settings-toc a:hover { background: var(--accent); color: var(--text-on-accent); border-color: var(--accent); }
 [id^="sec-"] { scroll-margin-top: 50px; }
 </style>
 
@@ -42,11 +42,11 @@
   <div class="card-title">Data Folder</div>
   <div style="display:flex;gap:8px;align-items:center;">
     <input type="text" id="base-dir" value="{{ base_dir }}" readonly
-           style="flex:1;font-family:monospace;font-size:0.85em;background:var(--bg-secondary,#f5f5f5);cursor:default;">
+           style="flex:1;font-family:monospace;font-size:0.85em;background:var(--surface-2);cursor:default;">
     <button type="button" onclick="navigator.clipboard.writeText(document.getElementById('base-dir').value)"
             style="padding:4px 10px;font-size:0.8em;cursor:pointer;">Copy</button>
   </div>
-  <div style="font-size:0.8em;color:var(--text-secondary,#888);margin-top:6px;">
+  <div style="font-size:0.8em;color:var(--sub);margin-top:6px;">
     To change: <code>python ptos.py --set-home /new/path</code>
   </div>
   {% if demo_present %}
@@ -93,7 +93,7 @@
     {% endif %}
     <button type="button" class="btn btn-ghost"
             onclick="resetHomePage()"
-            style="font-size:12px;color:var(--danger,#e55);border:1px solid var(--danger,#e55);">
+            style="font-size:12px;color:var(--error);border:1px solid var(--error);">
       Reset home to default
     </button>
     <span style="font-size:12px;color:var(--sub);">
@@ -152,7 +152,7 @@
     {% for c in ["accent","warn","success","error","purple","teal","rose","slate"] %}
     <span class="hl-swatch" data-color="{{ c }}" draggable="true"
           ondragstart="dragStartColor(event)" ondragend="dragEndColor(event)"
-          style="background:{{ {'accent':'var(--accent)','warn':'var(--warn)','success':'#2a9d4e','error':'#d14343','purple':'#8B5CF6','teal':'#14B8A6','rose':'#E11D78','slate':'#64748B'}[c] }}">{{ c }}</span>
+          style="background:{{ {'accent':'var(--accent)','warn':'var(--warn)','success':'var(--hl-success)','error':'var(--hl-error)','purple':'var(--hl-purple)','teal':'var(--hl-teal)','rose':'var(--hl-rose)','slate':'var(--hl-slate)'}[c] }}">{{ c }}</span>
     {% endfor %}
     <span class="hl-swatch hl-swatch-clear" data-color="" draggable="true"
           ondragstart="dragStartColor(event)" ondragend="dragEndColor(event)">⊗ clear</span>
@@ -184,7 +184,7 @@
 .hl-swatch {
   display: inline-flex; align-items: center; justify-content: center;
   padding: 4px 12px; border-radius: 14px; font-size: 12px; font-weight: 700;
-  color: #fff; cursor: grab; user-select: none; border: 2px solid transparent;
+  color: var(--text-on-accent); cursor: grab; user-select: none; border: 2px solid transparent;
   transition: transform .12s, box-shadow .12s, border-color .12s;
 }
 .hl-swatch:hover { transform: translateY(-1px); box-shadow: 0 3px 8px rgba(0,0,0,.18); }
@@ -196,12 +196,12 @@
 .hl-dot { background: var(--border); width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; transition: background .12s; }
 .hl-chip[data-color="accent"] .hl-dot { background: var(--accent); }
 .hl-chip[data-color="warn"]   .hl-dot { background: var(--warn); }
-.hl-chip[data-color="success"] .hl-dot { background: #2a9d4e; }
-.hl-chip[data-color="error"]  .hl-dot { background: #d14343; }
-.hl-chip[data-color="purple"] .hl-dot { background: #8B5CF6; }
-.hl-chip[data-color="teal"]   .hl-dot { background: #14B8A6; }
-.hl-chip[data-color="rose"]   .hl-dot { background: #E11D78; }
-.hl-chip[data-color="slate"]  .hl-dot { background: #64748B; }
+.hl-chip[data-color="success"] .hl-dot { background: var(--hl-success); }
+  .hl-chip[data-color="error"]  .hl-dot { background: var(--hl-error); }
+  .hl-chip[data-color="purple"] .hl-dot { background: var(--hl-purple); }
+  .hl-chip[data-color="teal"]   .hl-dot { background: var(--hl-teal); }
+  .hl-chip[data-color="rose"]   .hl-dot { background: var(--hl-rose); }
+  .hl-chip[data-color="slate"]  .hl-dot { background: var(--hl-slate); }
 </style>
 
 <div class="card" id="sec-auth" style="margin-bottom:14px;">
@@ -335,14 +335,14 @@
     <button type="button" class="btn btn-ghost" style="margin-left:auto;font-size:0.8em;padding:3px 10px;"
             onclick="refreshSyncthing()">Refresh</button>
   </div>
-  <div style="font-size:0.8em;color:var(--text-secondary,#888);margin-bottom:10px;">
+  <div style="font-size:0.8em;color:var(--sub);margin-bottom:10px;">
     PTOS does not sync anything itself — it reports whether the ptos-data folder is
     in sync and when it last succeeded, reading Syncthing's own API + log.
     Syncthing runs on its own; PTOS never installs or starts it.
   </div>
   <div id="syncthing-status-body">
   {% if not syncthing_status.ok %}
-    <div style="color:var(--error,#c0392b);">{{ syncthing_status.error }}</div>
+    <div style="color:var(--error);">{{ syncthing_status.error }}</div>
     <div class="hint" style="margin-top:8px;">
       Run Syncthing on this machine and sync your ptos-data folder. You only need one device to run Syncthing;
       the folder must be shared with at least one other device for Syncthing to sync at all.
@@ -351,53 +351,53 @@
     </div>
   {% else %}
     <table style="width:100%;border-collapse:collapse;font-size:0.9em;">
-      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);width:130px;">Daemon</td>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--sub);width:130px;">Daemon</td>
           <td>{{ syncthing_status.version or 'unknown' }}
-              {% if not syncthing_status.reachable %}<span style="color:var(--error,#c0392b);"> · not reachable</span>{% endif %}
+              {% if not syncthing_status.reachable %}<span style="color:var(--error);"> · not reachable</span>{% endif %}
           </td></tr>
-      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Address</td>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--sub);">Address</td>
           <td style="font-family:monospace;">{{ syncthing_status.address }}</td></tr>
       {% if syncthing_status.my_id %}
-      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">This device</td>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--sub);">This device</td>
           <td style="font-family:monospace;">{{ syncthing_status.my_id }}
-              {% if syncthing_status.my_name %}<span style="color:var(--text-secondary,#888);"> ({{ syncthing_status.my_name }})</span>{% endif %}
+              {% if syncthing_status.my_name %}<span style="color:var(--sub);"> ({{ syncthing_status.my_name }})</span>{% endif %}
               <button type="button" class="btn btn-ghost" style="margin-left:8px;font-size:0.75em;padding:1px 8px;"
                       onclick="copyStId()">Copy</button>
           </td></tr>
       {% endif %}
       {% if syncthing_status.folder %}
-      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Folder</td>
-          <td>{{ syncthing_status.folder.label }} <span style="color:var(--text-secondary,#888);">({{ syncthing_status.folder.id }})</span>
-              <div style="font-family:monospace;font-size:0.85em;color:var(--text-secondary,#888);">{{ syncthing_status.folder.path }}</div>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--sub);">Folder</td>
+          <td>{{ syncthing_status.folder.label }} <span style="color:var(--sub);">({{ syncthing_status.folder.id }})</span>
+              <div style="font-family:monospace;font-size:0.85em;color:var(--sub);">{{ syncthing_status.folder.path }}</div>
           </td></tr>
-      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">State</td>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--sub);">State</td>
           <td>{{ syncthing_status.state or 'unknown' }}
               {% if syncthing_status.completion_pct is not none %} · {{ syncthing_status.completion_pct }}% in sync{% endif %}
               {% if syncthing_status.need_bytes %} · {{ syncthing_status.need_bytes }} bytes waiting{% endif %}
           </td></tr>
-      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Last sync</td>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--sub);">Last sync</td>
           <td>
             {% if syncthing_status.last_sync_fmt or syncthing_status.last_sync %}
               {{ syncthing_status.last_sync_fmt or syncthing_status.last_sync }}
-              <span style="color:var(--text-secondary,#888);">
+              <span style="color:var(--sub);">
                 from {{ 'Syncthing event log' if syncthing_status.last_sync_source == 'api' else 'Syncthing log file' }}
               </span>
             {% elif syncthing_status.fully_in_sync_as_of_fmt or syncthing_status.fully_in_sync_as_of %}
               unknown since last Syncthing restart — folder is currently fully in sync
-              <span style="color:var(--text-secondary,#888);">(as of {{ syncthing_status.fully_in_sync_as_of_fmt or syncthing_status.fully_in_sync_as_of }})</span>
+              <span style="color:var(--sub);">(as of {{ syncthing_status.fully_in_sync_as_of_fmt or syncthing_status.fully_in_sync_as_of }})</span>
             {% else %}
               not recorded since Syncthing last restarted
             {% endif %}
           </td></tr>
       {% else %}
-      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Folder</td>
-          <td style="color:var(--error,#c0392b);">No configured Syncthing folder matches this data folder.</td></tr>
-      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Data dir</td>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--sub);">Folder</td>
+          <td style="color:var(--error);">No configured Syncthing folder matches this data folder.</td></tr>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--sub);">Data dir</td>
           <td style="font-family:monospace;">{{ base_dir }}</td></tr>
       {% endif %}
       {% if syncthing_status.error %}
-      <tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);">Note</td>
-          <td style="color:var(--warn,#e67e22);">{{ syncthing_status.error }}</td></tr>
+      <tr><td style="padding:3px 8px 3px 0;color:var(--sub);">Note</td>
+          <td style="color:var(--warn);">{{ syncthing_status.error }}</td></tr>
       {% endif %}
     </table>
     {% if syncthing_status.devices %}
@@ -405,7 +405,7 @@
       <strong>{{ syncthing_status.devices_connected }} of {{ syncthing_status.devices|length }} other device(s) connected</strong>
     </div>
     <table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-top:6px;">
-      <tr style="color:var(--text-secondary,#888);text-align:left;">
+      <tr style="color:var(--sub);text-align:left;">
         <th style="padding:3px 8px 3px 0;">Device</th>
         <th style="padding:3px 8px 3px 0;">ID</th>
         <th style="padding:3px 8px 3px 0;">Status</th>
@@ -413,12 +413,12 @@
       {% for d in syncthing_status.devices %}
       <tr>
         <td style="padding:2px 8px 2px 0;">{{ d.name or (d.id[:7] if d.id else '') }}</td>
-        <td style="padding:2px 8px 2px 0;font-family:monospace;color:var(--text-secondary,#888);">{% if d.id %}{{ d.id[:13] }}…{% endif %}</td>
+        <td style="padding:2px 8px 2px 0;font-family:monospace;color:var(--sub);">{% if d.id %}{{ d.id[:13] }}…{% endif %}</td>
         <td style="padding:2px 8px 2px 0;">
           {% if d.connected %}
-            <span style="color:var(--success,#27ae60);">connected</span>
+            <span style="color:var(--success);">connected</span>
           {% else %}
-            <span style="color:var(--text-secondary,#888);">offline · last seen {{ d.last_seen_fmt or d.last_seen or 'never' }}</span>
+            <span style="color:var(--sub);">offline · last seen {{ d.last_seen_fmt or d.last_seen or 'never' }}</span>
           {% endif %}
         </td>
       </tr>
@@ -429,7 +429,7 @@
   </div>
   <details id="sync-setup-guide" {% if syncthing_status.ok and syncthing_status.folder and syncthing_status.devices_connected == 0 %}open{% endif %}>
     <summary style="cursor:pointer;font-size:0.9em;margin-top:12px;">Set up sync between two devices
-      <span style="color:var(--text-secondary,#888);">(one-time)</span></summary>
+      <span style="color:var(--sub);">(one-time)</span></summary>
     <ol style="margin:8px 0 0 18px;font-size:0.9em;line-height:1.6;">
       <li>Install and start Syncthing on <strong>each</strong> device that should share the data
           (this one included). Open its UI at <code>http://127.0.0.1:8384</code>, go to
@@ -446,7 +446,7 @@
           differ per device; the folder ID is what syncs, not the path).</li>
       <li>Press <em>Refresh</em> here — you should see both devices connected and the folder at 100%.</li>
     </ol>
-    <div style="margin:8px 0 0 18px;font-size:0.85em;color:var(--text-secondary,#888);">
+    <div style="margin:8px 0 0 18px;font-size:0.85em;color:var(--sub);">
       Stuck on "0 of 1 other device connected"? Check both IDs were exchanged in <em>both</em> directions and that the
       devices can reach each other (same Wi‑Fi, or open the firewall/relay on Syncthing's <em>Settings</em> tab).
       This card only observes Syncthing — PTOS never syncs anything itself.
@@ -775,55 +775,55 @@ function refreshSyncthing() {
   .then(function(s) {
     var h = "";
     if (!s.ok) {
-      h = '<div style="color:var(--error,#c0392b);">' + esc(s.error) + "</div>";
+      h = '<div style="color:var(--error);">' + esc(s.error) + "</div>";
     } else {
       h += '<table style="width:100%;border-collapse:collapse;font-size:0.9em;">';
       var addRow = function(label, val) {
-        h += '<tr><td style="padding:3px 8px 3px 0;color:var(--text-secondary,#888);width:130px;">' + label + "</td><td>" + val + "</td></tr>";
+        h += '<tr><td style="padding:3px 8px 3px 0;color:var(--sub);width:130px;">' + label + "</td><td>" + val + "</td></tr>";
       };
-      addRow("Daemon", (s.version || "unknown") + (s.reachable ? "" : ' <span style="color:var(--error,#c0392b);">· not reachable</span>'));
+      addRow("Daemon", (s.version || "unknown") + (s.reachable ? "" : ' <span style="color:var(--error);">· not reachable</span>'));
       addRow("Address", '<span style="font-family:monospace;">' + esc(s.address) + "</span>");
       if (s.my_id) {
         _stMyID = s.my_id;
         addRow("This device", '<span style="font-family:monospace;">' + esc(s.my_id) + "</span>" +
-          (s.my_name ? ' <span style="color:var(--text-secondary,#888);">(' + esc(s.my_name) + ")</span>" : "") +
+          (s.my_name ? ' <span style="color:var(--sub);">(' + esc(s.my_name) + ")</span>" : "") +
           ' <button type="button" class="btn btn-ghost" style="font-size:0.75em;padding:1px 8px;" onclick="copyStId()">Copy</button>');
       }
       if (s.folder) {
-        addRow("Folder", esc(s.folder.label) + ' <span style="color:var(--text-secondary,#888);">(' + esc(s.folder.id) + ")</span>" +
-          '<div style="font-family:monospace;font-size:0.85em;color:var(--text-secondary,#888);">' + esc(s.folder.path) + "</div>");
+        addRow("Folder", esc(s.folder.label) + ' <span style="color:var(--sub);">(' + esc(s.folder.id) + ")</span>" +
+          '<div style="font-family:monospace;font-size:0.85em;color:var(--sub);">' + esc(s.folder.path) + "</div>");
         var state = esc(s.state || "unknown");
         if (s.completion_pct != null) state += " · " + esc(s.completion_pct) + "% in sync";
         if (s.need_bytes) state += " · " + esc(s.need_bytes) + " bytes waiting";
         addRow("State", state);
         var ls;
         if (s.last_sync_fmt || s.last_sync) {
-          ls = esc(s.last_sync_fmt || s.last_sync) + ' <span style="color:var(--text-secondary,#888);">from ' +
+          ls = esc(s.last_sync_fmt || s.last_sync) + ' <span style="color:var(--sub);">from ' +
                (s.last_sync_source === "api" ? "Syncthing event log" : "Syncthing log file") + "</span>";
         } else if (s.fully_in_sync_as_of_fmt || s.fully_in_sync_as_of) {
           ls = "unknown since last Syncthing restart — folder is currently fully in sync " +
-               ' <span style="color:var(--text-secondary,#888);">(as of ' + esc(s.fully_in_sync_as_of_fmt || s.fully_in_sync_as_of) + ")</span>";
+               ' <span style="color:var(--sub);">(as of ' + esc(s.fully_in_sync_as_of_fmt || s.fully_in_sync_as_of) + ")</span>";
         } else {
           ls = "not recorded since Syncthing last restarted";
         }
         addRow("Last sync", ls);
       } else {
-        addRow("Folder", '<span style="color:var(--error,#c0392b);">No configured Syncthing folder matches this data folder.</span>');
+        addRow("Folder", '<span style="color:var(--error);">No configured Syncthing folder matches this data folder.</span>');
       }
-      if (s.error) addRow("Note", '<span style="color:var(--warn,#e67e22);">' + esc(s.error) + "</span>");
+      if (s.error) addRow("Note", '<span style="color:var(--warn);">' + esc(s.error) + "</span>");
       h += "</table>";
       if (s.devices && s.devices.length) {
         h += '<div style="margin-top:10px;font-size:0.9em;"><strong>' + esc(s.devices_connected) + " of " + esc(s.devices.length) + " other device(s) connected</strong></div>";
         h += '<table style="width:100%;border-collapse:collapse;font-size:0.85em;margin-top:6px;">';
-        h += '<tr style="color:var(--text-secondary,#888);text-align:left;"><th style="padding:3px 8px 3px 0;">Device</th><th style="padding:3px 8px 3px 0;">ID</th><th style="padding:3px 8px 3px 0;">Status</th></tr>';
+        h += '<tr style="color:var(--sub);text-align:left;"><th style="padding:3px 8px 3px 0;">Device</th><th style="padding:3px 8px 3px 0;">ID</th><th style="padding:3px 8px 3px 0;">Status</th></tr>';
         s.devices.forEach(function(d) {
           var name = d.name || (d.id ? d.id.slice(0, 7) : "");
           var did = d.id ? esc(d.id.slice(0, 13)) + "…" : "";
           var lastSeen = d.last_seen_fmt || d.last_seen || "never";
           var st = d.connected
-            ? '<span style="color:var(--success,#27ae60);">connected</span>'
-            : '<span style="color:var(--text-secondary,#888);">offline · last seen ' + esc(lastSeen) + "</span>";
-          h += "<tr><td style=\"padding:2px 8px 2px 0;\">" + esc(name) + "</td><td style=\"padding:2px 8px 2px 0;font-family:monospace;color:var(--text-secondary,#888);\">" + did + "</td><td style=\"padding:2px 8px 2px 0;\">" + st + "</td></tr>";
+            ? '<span style="color:var(--success);">connected</span>'
+            : '<span style="color:var(--sub);">offline · last seen ' + esc(lastSeen) + "</span>";
+          h += "<tr><td style=\"padding:2px 8px 2px 0;\">" + esc(name) + "</td><td style=\"padding:2px 8px 2px 0;font-family:monospace;color:var(--sub);\">" + did + "</td><td style=\"padding:2px 8px 2px 0;\">" + st + "</td></tr>";
         });
         h += "</table>";
       }
@@ -835,7 +835,7 @@ function refreshSyncthing() {
     }
   })
   .catch(function(err) {
-    body.innerHTML = '<div style="color:var(--error,#c0392b);">Could not reach PTOS: ' + esc(err.message) + "</div>";
+    body.innerHTML = '<div style="color:var(--error);">Could not reach PTOS: ' + esc(err.message) + "</div>";
   });
 }
 </script>
