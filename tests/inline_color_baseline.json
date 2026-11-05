@@ -95,7 +95,7 @@
   "web_templates/journal.html": 4,
   "web_templates/lint.html": 0,
   "web_templates/notes.html": 0,
-  "web_templates/notes_edit.html": 6,
+  "web_templates/notes_edit.html": 0,
   "web_templates/page_shell.html": 3,
   "web_templates/project_delete.html": 2,
   "web_templates/project_form.html": 1,

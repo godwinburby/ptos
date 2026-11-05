@@ -21,7 +21,7 @@
 {% endif %}
 <details style="margin-bottom:12px;position:relative;width:max-content;">
   <summary class="btn btn-ghost" style="font-size:12px;cursor:pointer;">Page actions</summary>
-  <div style="position:absolute;left:0;top:100%;z-index:20;min-width:180px;padding:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px #0002;">
+  <div style="position:absolute;left:0;top:100%;z-index:20;min-width:180px;padding:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(var(--text-rgb),0.02);">
     <button type="button" onclick="pinThisPage()" style="display:block;width:100%;text-align:left;padding:7px;border:0;background:transparent;color:var(--text);cursor:pointer;">Pin to menu</button>
     {% if not is_home %}<button type="button" onclick="makeThisHome()" style="display:block;width:100%;text-align:left;padding:7px;border:0;background:transparent;color:var(--text);cursor:pointer;">Make this my home</button>{% endif %}
   </div>
@@ -29,17 +29,17 @@
 
 {% include "_markdown_editor.html" with context %}
 
-<div id="backlinks-panel" style="margin-top:16px;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;background:var(--bg-card,var(--bg));">
+<div id="backlinks-panel" style="margin-top:16px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--card);">
   <div style="font-size:13px;font-weight:800;margin-bottom:2px;color:var(--text);">Linked mentions</div>
   <div id="backlinks-panel-body" style="margin-top:4px;"></div>
 </div>
 
 <div style="margin-top:10px;display:flex;gap:8px;">
-  <button onclick="linkToNote()" class="btn btn-ghost" style="border:1px solid var(--accent,#4a9);color:var(--accent,#4a9);">Link to this page</button>
+  <button onclick="linkToNote()" class="btn btn-ghost" style="border:1px solid var(--accent);color:var(--accent);">Link to this page</button>
   <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success" style="flex:1;">
     Save Page
   </button>
-  <button onclick="deleteNote()" class="btn btn-ghost" style="color:var(--danger,#e55);border:1px solid var(--danger,#e55);">
+  <button onclick="deleteNote()" class="btn btn-ghost" style="color:var(--error);border:1px solid var(--error);">
     Delete
   </button>
 </div>
