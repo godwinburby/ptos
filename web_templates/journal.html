@@ -15,7 +15,7 @@
     {% endif %}
     <input type="date" value="{{ date }}" max="{{ today }}"
            onchange="if(this.value) window.location='/journal?date='+encodeURIComponent(this.value)"
-           style="margin-top:4px;font-size:13px;color:var(--text);background:var(--bg,#fff);border:1px solid var(--border);border-radius:6px;padding:3px 6px;width:140px;">
+           style="margin-top:4px;font-size:13px;color:var(--text);background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:3px 6px;width:140px;">
   </div>
 
   {% if date < today %}
@@ -36,7 +36,7 @@
 
 {% include "_markdown_editor.html" with context %}
 
-<div id="backlinks-panel" style="margin-top:16px;border:1px solid var(--border,#ddd);border-radius:8px;padding:10px 12px;background:var(--bg-card,var(--bg));">
+<div id="backlinks-panel" style="margin-top:16px;border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--card);">
   <div style="font-size:13px;font-weight:800;margin-bottom:2px;color:var(--text);">Linked mentions</div>
   <div id="backlinks-panel-body" style="margin-top:4px;"></div>
 </div>
@@ -45,7 +45,7 @@
   <button onclick="window._mdEditorTriggerSave(false)" class="btn btn-success" style="flex:1;" id="save-btn-2">
     Save Journal
   </button>
-  <button onclick="deleteJournal()" class="btn btn-ghost" style="color:var(--danger,#e55);border:1px solid var(--danger,#e55);">
+  <button onclick="deleteJournal()" class="btn btn-ghost" style="color:var(--error);border:1px solid var(--error);">
     Delete
   </button>
 </div>

@@ -92,7 +92,7 @@
   "web_templates/icons/thresholds.html": 0,
   "web_templates/icons/todo.html": 3,
   "web_templates/icons/types.html": 1,
-  "web_templates/journal.html": 4,
+  "web_templates/journal.html": 0,
   "web_templates/lint.html": 0,
   "web_templates/notes.html": 0,
   "web_templates/notes_edit.html": 0,
