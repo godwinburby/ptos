@@ -12,6 +12,8 @@
       --error-lt:  #FDECEA;
       --warn:      #E8803A;
       --warn-lt:   #FFF3E0;
+      --pri-d:     #6c757d;
+      --pri-d-lt:  #e9ecef;
       --hl-purple-lt:#F3EEFF; --hl-teal-lt:#E6FAF5; --hl-rose-lt:#FDE7F3;
       --hl-slate-lt:#EFF2F6; --hl-indigo-lt:#EEF0FD; --hl-cyan-lt:#E0F4FA;
       --hl-lime-lt:#F0F7E0; --hl-amber-lt:#FBF0DC; --hl-pink-lt:#FDE6F0;
@@ -88,6 +90,7 @@
       --success:#4CC38A; --success-lt:#12261D;
       --error:#FF7B6B;   --error-lt:#2C1614;
       --warn:#F0A15E;    --warn-lt:#2B2013;  --warn-text:#F0A15E;
+      --pri-d:     #8b8d93; --pri-d-lt: #dee2e6;
       --hl-purple-lt:#2E1A3D; --hl-teal-lt:#0D2A2D; --hl-rose-lt:#2D1A25;
       --hl-slate-lt:#1E2A3A; --hl-indigo-lt:#1E1E3A; --hl-cyan-lt:#0D2A2D;
       --hl-lime-lt:#1A2A1A; --hl-amber-lt:#2A2210; --hl-pink-lt:#2D1A25;

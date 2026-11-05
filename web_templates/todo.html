@@ -39,7 +39,7 @@
   }
   .todo-quick-add button {
     padding:8px 16px; border-radius:8px; border:none;
-    background:var(--accent); color:#fff; font-size:13px;
+    background:var(--accent); color:var(--text-on-accent); font-size:13px;
     font-weight:600; cursor:pointer; white-space:nowrap;
   }
   .todo-section { margin-bottom:20px; }
@@ -69,7 +69,7 @@
     font-family:inherit; white-space:nowrap;
   }
   .groupby-btn:hover { color:var(--text); background:var(--bg); }
-  .groupby-btn.active { background:var(--accent); color:#fff; }
+  .groupby-btn.active { background:var(--accent); color:var(--text-on-accent); }
   .groupby-sort {
     padding:6px 10px; border-radius:7px; border:none;
     background:transparent; color:var(--sub); font-size:13px;
@@ -97,7 +97,7 @@
     padding:6px 14px; border-radius:7px; border:none; font-size:12px;
     font-weight:600; cursor:pointer; font-family:inherit;
   }
-  .sel-bar .btn-sel-edit { background:var(--accent); color:#fff; }
+  .sel-bar .btn-sel-edit { background:var(--accent); color:var(--text-on-accent); }
   .sel-bar .btn-sel-cancel { background:var(--bg); color:var(--sub); }
 
   .sel-mode { cursor:pointer; }
@@ -131,7 +131,7 @@
     transition: all 0.15s;
   }
   .todo-chip:hover { border-color:var(--accent); color:var(--accent); }
-  .todo-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .todo-chip.active { background:var(--accent); color:var(--text-on-accent); border-color:var(--accent); }
   .todo-project-rail {
     display:flex; gap:6px; overflow-x:auto; padding-bottom:8px;
     margin-bottom:14px; -webkit-overflow-scrolling:touch;
@@ -146,7 +146,7 @@
     white-space:nowrap; transition: all 0.15s;
   }
   .todo-proj-chip:hover { border-color:var(--accent); color:var(--accent); }
-  .todo-proj-chip.active { background:var(--accent); color:#fff; border-color:var(--accent); }
+  .todo-proj-chip.active { background:var(--accent); color:var(--text-on-accent); border-color:var(--accent); }
   .todo-empty {
     text-align:center; padding:32px; color:var(--sub);
   }
@@ -189,11 +189,11 @@
   }
   .add-chip:hover { border-color:var(--accent); color:var(--accent); }
   .add-chip.selected { background:var(--accent-lt); border-color:var(--accent); color:var(--accent); }
-  .add-chip.pri-chip.selected { color:#fff; }
+  .add-chip.pri-chip.selected { color:var(--text-on-accent); }
   .add-chip.pri-chip.pri-A.selected { background:var(--error); border-color:var(--error); }
   .add-chip.pri-chip.pri-B.selected { background:var(--warn); border-color:var(--warn); }
   .add-chip.pri-chip.pri-C.selected { background:var(--accent); border-color:var(--accent); }
-  .add-chip.pri-chip.pri-D.selected { background:#6c757d; border-color:#6c757d; }
+  .add-chip.pri-chip.pri-D.selected { background:var(--pri-d); border-color:var(--pri-d); }
   .ac-more { display:none; }
 
 
@@ -410,14 +410,14 @@
   <div id="todo-help" class="todo-help-card">
     <div class="todo-help-title">Todo format reference</div>
     <div class="todo-help-row" style="font-size:13px;line-height:1.8;">
-      <code><span style="color:var(--error);">(A)</span> Review proposal <span style="color:var(--accent);">+Work</span> <span style="color:var(--green);">@office</span> <span style="color:#f0ad4e;">due:tomorrow 3pm</span> <span style="color:var(--sub);">rec:1w</span></code>
+      <code><span style="color:var(--error);">(A)</span> Review proposal <span style="color:var(--accent);">+Work</span> <span style="color:var(--green);">@office</span> <span style="color:var(--warn);">due:tomorrow 3pm</span> <span style="color:var(--sub);">rec:1w</span></code>
     </div>
     <table class="todo-help-table">
       <tr><td><code style="color:var(--error);">(A)</code></td><td>Priority <code>(A)</code>–<code>(Z)</code>. Or type <code>pri:a</code>{% set _def = {'A':'Critical','B':'Important','C':'Moderate','D':'Low'} %}{% for p in ["A","B","C","D"] %}<br><code>({{ p }})</code> = {{ priority_labels.get(p, _def.get(p, p)) }}{% endfor %}</td></tr>
       <tr><td><code style="color:var(--accent);">+Project</code></td><td>Project tag, e.g. <code>+Home</code></td></tr>
       <tr><td><code style="color:var(--green);">@context</code></td><td>Context tag, e.g. <code>@phone</code></td></tr>
-      <tr><td><code style="color:#f0ad4e;">due:date</code></td><td>Due date — <code>today</code> <code>tomorrow</code> <code>fri</code> <code>this_week</code> <code>next_month</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
-      <tr><td><code style="color:#f0ad4e;">due:date time</code></td><td>With time — <code>due:tomorrow 3pm</code> <code>due:2026-07-12T14:30</code></td></tr>
+      <tr><td><code style="color:var(--warn);">due:date</code></td><td>Due date — <code>today</code> <code>tomorrow</code> <code>fri</code> <code>this_week</code> <code>next_month</code> <code>+3d</code> <code>2026-07-12</code></td></tr>
+      <tr><td><code style="color:var(--warn);">due:date time</code></td><td>With time — <code>due:tomorrow 3pm</code> <code>due:2026-07-12T14:30</code></td></tr>
       <tr><td><code>t:date</code></td><td>Threshold date — surfaces when it arrives</td></tr>
       <tr><td><code style="color:var(--sub);">rec:interval</code></td><td>Recurrence — <code>rec:1d</code> <code>rec:1w</code> <code>rec:2w</code> <code>rec:1m</code> <code>rec:2m</code> <code>rec:3m</code> <code>rec:1y</code></td></tr>
     </table>
