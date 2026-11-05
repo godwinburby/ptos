@@ -69,7 +69,7 @@
     <div id="del-msg-text" style="font-size:14px;color:var(--sub);margin-bottom:16px;"></div>
     <div style="display:flex;gap:10px;">
       <button onclick="confirmDelete()" class="btn btn-sm"
-              style="flex:1;background:var(--error);color:#fff;border:none;">Delete</button>
+              style="flex:1;background:var(--error);color:var(--text-on-accent);border:none;">Delete</button>
       <button onclick="closeDeleteModal()" class="btn btn-ghost btn-sm" style="flex:1;">Cancel</button>
     </div>
   </div>
@@ -105,7 +105,7 @@
     cursor:pointer;transition:all .15s;white-space:nowrap;
   }
   .qb-sec-tab:hover  { background:var(--bg);color:var(--text); }
-  .qb-sec-tab.active { background:var(--accent);color:#fff; }
+  .qb-sec-tab.active { background:var(--accent);color:var(--text-on-accent); }
   .qb-sec-tab .sec-count {
     display:inline-block;font-size:10px;font-weight:700;
     background:rgba(255,255,255,.25);color:inherit;
@@ -160,7 +160,7 @@
     transition:all .15s;margin:3px;
   }
   .qb-chip:hover    { border-color:var(--accent);color:var(--accent); }
-  .qb-chip.active   { background:var(--accent);border-color:var(--accent);color:#fff; }
+  .qb-chip.active   { background:var(--accent);border-color:var(--accent);color:var(--text-on-accent); }
   .qb-chip.selected { background:var(--accent-lt);border-color:var(--accent);color:var(--accent); }
   .qb-active-chip {
     display:inline-flex;align-items:center;gap:5px;padding:5px 10px;
@@ -172,16 +172,17 @@
     cursor:pointer;font-size:14px;padding:0;line-height:1;font-weight:700;
   }
   .qb-preview {
-    font-family:'Consolas','Courier New',monospace;font-size:13px;
-    background:#1E2130;color:#D4D8E8;padding:12px 14px;border-radius:8px;
+    font-family:'Consolas','Coupons New',monospace;font-size:13px;
+    background:var(--surface-2);color:var(--text);padding:12px 14px;border-radius:8px;
     line-height:1.8;word-break:break-all;min-height:56px;
     border:1px solid var(--border);
   }
-  .p-name  { color:#82AAFF;font-weight:700; }
-  .p-where { color:#C3E88D; }
-  .p-time  { color:#7EC8E3; }
-  .p-opt   { color:#FFCB6B; }
-  .p-dim   { color:#697098; }
+  /* allow-color: syntax highlighting */
+  .p-name  { color:#82AAFF;font-weight:700; } /* allow-color: syntax highlighting */
+  .p-where { color:#C3E88D; } /* allow-color: syntax highlighting */
+  .p-time  { color:#7EC8E3; } /* allow-color: syntax highlighting */
+  .p-opt   { color:#FFCB6B; } /* allow-color: syntax highlighting */
+  .p-dim   { color:#697098; } /* allow-color: syntax highlighting */
 </style>
 
 <script src="{{ av('/static/js/filter_builder.js') }}"></script>

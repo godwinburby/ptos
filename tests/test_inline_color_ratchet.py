@@ -37,6 +37,8 @@ def count_inline_colours(text: str, fname: str) -> int:
             continue
         # Remove data: URIs from the line for counting
         clean_line = DATA_URI_RE.sub("", line)
+        # Remove HTML entity references (&#12345;) which look like hex but aren't colours
+        clean_line = re.sub(r"&#\d+;", "", clean_line)
 
         # Hex colours
         for m in HEX_RE.finditer(clean_line):

@@ -2,7 +2,7 @@
 {% block content %}
 
 {% if error %}
-<div style="padding:12px 16px;background:var(--danger,#e55);color:#fff;border-radius:8px;margin-bottom:12px;">{{ error }}</div>
+<div style="padding:12px 16px;background:var(--error);color:var(--text-on-accent);border-radius:8px;margin-bottom:12px;">{{ error }}</div>
 {% endif %}
 
 <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap;">
@@ -21,29 +21,29 @@
 </div>
 
 <div style="display:flex;gap:8px;margin-bottom:14px;">
-  <button onclick="promptNewFolder()" class="btn btn-sm btn-ghost" style="border:1px solid var(--border,#ccc);">New Folder</button>
-  <button onclick="promptNewFile()" class="btn btn-sm btn-ghost" style="border:1px solid var(--border,#ccc);">New Page</button>
+  <button onclick="promptNewFolder()" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);">New Folder</button>
+  <button onclick="promptNewFile()" class="btn btn-sm btn-ghost" style="border:1px solid var(--border);">New Page</button>
 </div>
 
 {% if listing.folders %}
   {% for f in listing.folders %}
-  <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-hover,#f5f5f5)'" onmouseout="this.style.background=''">
-    <a href="/notes/browse/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128193; {{ f.name }}</a>
+  <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+    <a href="/notes/browse/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--accent);font-size:15px;">&#128193; {{ f.name }}</a>
     <button data-path="{{ f.rel_path }}" data-name="{{ f.name }}" data-folder="true" onclick="promptRename(this)" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
-    <button data-path="{{ f.rel_path }}" data-name="{{ f.name }}" data-folder="true" onclick="confirmDelete(this)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+    <button data-path="{{ f.rel_path }}" data-name="{{ f.name }}" data-folder="true" onclick="confirmDelete(this)" class="btn btn-xs btn-ghost" style="color:var(--error);font-size:12px;">&#10005;</button>
   </div>
   {% endfor %}
 {% endif %}
 
 {% if listing.files %}
   {% for f in listing.files %}
-  <div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--bg-hover,#f5f5f5)'" onmouseout="this.style.background=''">
-    <a href="/notes/edit/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--text);font-size:15px;">&#128196; {{ f.display_name }}</a>
+<div class="note-row" style="display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;cursor:pointer;" onmouseover="this.style.background='var(--surface-2)'" onmouseout="this.style.background=''">
+    <a href="/notes/edit/{{ f.rel_path }}" style="flex:1;text-decoration:none;color:var(--accent);font-size:15px;">&#128196; {{ f.display_name }}</a>
     <button data-path="{{ f.rel_path }}" data-name="{{ f.display_name }}" data-folder="false" onclick="promptRename(this)" class="btn btn-xs btn-ghost" style="font-size:12px;">&#9998;</button>
-    <button data-path="{{ f.rel_path }}" data-name="{{ f.display_name }}" data-folder="false" onclick="confirmDelete(this)" class="btn btn-xs btn-ghost" style="color:var(--danger,#e55);font-size:12px;">&#10005;</button>
+    <button data-path="{{ f.rel_path }}" data-name="{{ f.display_name }}" data-folder="false" onclick="confirmDelete(this)" class="btn btn-xs btn-ghost" style="color:var(--error);font-size:12px;">&#10005;</button>
     <details class="page-actions" style="position:relative;">
-      <summary title="Page actions" style="list-style:none;padding:4px 8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:13px;cursor:pointer;">⋮</summary>
-      <div style="position:absolute;right:0;top:100%;z-index:10;min-width:150px;padding:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px #0002;">
+      <summary title="Page actions" style="list-style:none;padding:4px 8px;border:1px solid var(--border);border-radius:6px;font-size:13px;cursor:pointer;">&vellip;</summary>
+      <div style="position:absolute;right:0;top:100%;z-index:10;min-width:150px;padding:5px;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 4px 16px rgba(var(--text-rgb),0.02);">
         <button type="button" data-page-action="pin" data-path="{{ f.rel_path }}" data-name="{{ f.display_name }}" style="display:block;width:100%;text-align:left;padding:7px;border:0;background:transparent;color:var(--text);cursor:pointer;">Pin to menu</button>
         <button type="button" data-page-action="home" data-path="{{ f.rel_path }}" style="display:block;width:100%;text-align:left;padding:7px;border:0;background:transparent;color:var(--text);cursor:pointer;">Make this my home</button>
       </div>
@@ -59,9 +59,9 @@
 {% endif %}
 
 <div id="new-folder-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center;">
-  <div style="background:var(--bg-card,var(--bg));border:1px solid var(--border,#ccc);border-radius:10px;padding:20px;min-width:320px;">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;min-width:320px;">
     <div style="font-size:15px;font-weight:700;margin-bottom:10px;">New Folder</div>
-    <input id="nf-name" type="text" placeholder="Folder name" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
+    <input id="nf-name" type="text" placeholder="Folder name" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
       <button onclick="closeDialog('new-folder-dialog')" class="btn btn-sm btn-ghost">Cancel</button>
       <button onclick="submitNewFolder()" class="btn btn-sm btn-primary">Create</button>
@@ -70,27 +70,27 @@
 </div>
 
 <div id="new-file-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center;">
-  <div style="background:var(--bg-card,var(--bg));border:1px solid var(--border,#ccc);border-radius:10px;padding:20px;min-width:320px;">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;min-width:320px;">
     <div style="font-size:15px;font-weight:700;margin-bottom:10px;">New Page</div>
-    <input id="nfl-name" type="text" placeholder="File name" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
+    <input id="nfl-name" type="text" placeholder="File name" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
     <label for="nfl-folder" style="display:block;font-size:13px;font-weight:600;margin-top:12px;">Folder</label>
-    <select id="nfl-folder" onchange="onPageTemplateChange()" style="width:100%;margin-top:5px;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;background:var(--bg);color:var(--text);">
+    <select id="nfl-folder" onchange="onPageTemplateChange()" style="width:100%;margin-top:5px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">
       <option value="{{ rel_path }}">{{ rel_path or "Pages" }}</option>
       {% for folder in listing.folders %}<option value="{{ folder.rel_path }}">{{ folder.name }}</option>{% endfor %}
     </select>
     <label for="nfl-template" style="display:block;font-size:13px;font-weight:600;margin-top:12px;">Template</label>
-    <select id="nfl-template" onchange="onPageTemplateChange()" style="width:100%;margin-top:5px;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;background:var(--bg);color:var(--text);">
+    <select id="nfl-template" onchange="onPageTemplateChange()" style="width:100%;margin-top:5px;padding:8px;border:1px solid var(--border);border-radius:6px;background:var(--bg);color:var(--text);">
       <option value="blank">Blank</option>
       <option value="dashboard">Dashboard</option>
       <option value="project">Project</option>
       <option value="folder">Folder template</option>
     </select>
-    <div id="template-choice" style="display:none;margin-top:12px;padding:10px;background:var(--bg-subtle,#f9f9f9);border-radius:6px;">
+    <div id="template-choice" style="display:none;margin-top:12px;padding:10px;background:var(--surface-2);border-radius:6px;">
       <div style="font-size:13px;font-weight:600;margin-bottom:8px;">Use template?</div>
       <div style="display:flex;gap:6px;flex-wrap:wrap;">
-        <button id="tpl-use-parent" onclick="useTemplate('parent')" class="btn btn-xs btn-ghost" style="border:1px solid var(--border,#ccc);">Use parent template</button>
-        <button onclick="createTemplateHere()" class="btn btn-xs btn-ghost" style="border:1px solid var(--border,#ccc);">Create a template here</button>
-        <button onclick="useTemplate('none')" class="btn btn-xs btn-ghost" style="border:1px solid var(--border,#ccc);">Continue blank</button>
+        <button id="tpl-use-parent" onclick="useTemplate('parent')" class="btn btn-xs btn-ghost" style="border:1px solid var(--border);">Use parent template</button>
+        <button onclick="createTemplateHere()" class="btn btn-xs btn-ghost" style="border:1px solid var(--border);">Create a template here</button>
+        <button onclick="useTemplate('none')" class="btn btn-xs btn-ghost" style="border:1px solid var(--border);">Continue blank</button>
       </div>
     </div>
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
@@ -101,9 +101,9 @@
 </div>
 
 <div id="rename-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center;">
-  <div style="background:var(--bg-card,var(--bg));border:1px solid var(--border,#ccc);border-radius:10px;padding:20px;min-width:320px;">
+  <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;min-width:320px;">
     <div style="font-size:15px;font-weight:700;margin-bottom:10px;">Rename</div>
-    <input id="rn-name" type="text" placeholder="New name" style="width:100%;padding:8px;border:1px solid var(--border,#ccc);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
+    <input id="rn-name" type="text" placeholder="New name" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
     <div id="rn-status" style="display:none;margin-top:8px;font-size:13px;color:var(--accent);"></div>
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
       <button onclick="closeDialog('rename-dialog')" class="btn btn-sm btn-ghost">Cancel</button>
