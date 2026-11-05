@@ -400,7 +400,7 @@ function _checkThresholds() {
         return;
       }
       area.style.display = "block";
-      var _thrColor = {ok:"#2ECC71",warning:"#F39C12",over:"#E74C3C",met:"#3498DB"};
+      var _thrColor = {ok:"var(--hl-success)",warning:"var(--hl-warn)",over:"var(--hl-error)",met:"var(--hl-accent)"};
       bars.innerHTML = d.matches.map(function(m) {
         var oldAmount = 0;
         if (m.agg !== "count" && m.sum_field) {
