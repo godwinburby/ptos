@@ -1241,6 +1241,20 @@ def _now_time_str():
     return dt.datetime.now().strftime("%H:%M")
 
 
+def _period_of_time(ts):
+    try:
+        hour = int(ts.split(":")[0])
+    except (ValueError, AttributeError, IndexError):
+        return "morning"
+    if hour < 12:
+        return "morning"
+    if hour < 17:
+        return "afternoon"
+    if hour < 21:
+        return "evening"
+    return "night"
+
+
 def _fmt_ampm(time_str):
     if not time_str:
         return ""
@@ -1363,6 +1377,7 @@ def routines_page():
     return render_template("routines.html", tab="routines",
                            title="Routines", cards=cards, today=today,
                            now_time=now_time,
+                           now_context=_period_of_time(now_time),
                            fmt_ampm=_fmt_ampm,
                            fmt_rec=_fmt_rec,
                            timed=timed, untimed=untimed,

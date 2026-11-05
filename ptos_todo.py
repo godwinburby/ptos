@@ -349,10 +349,15 @@ _TODO_LOAD_CACHE = {}
 
 
 def _todo_file_sig(path):
-    """(mtime_ns, size) for a file, or None when it does not exist."""
+    """(mtime_ns, size, ctime_ns, inode) for a file, or None when absent.
+
+    ctime/inode are part of the key because folder sync (Syncthing) replaces
+    the file and preserves the sender's mtime: a same-size delivery would
+    otherwise keep the old mtime/size pair and serve the stale parse forever.
+    """
     try:
         st = os.stat(path)
-        return (st.st_mtime_ns, st.st_size)
+        return (st.st_mtime_ns, st.st_size, st.st_ctime_ns, st.st_ino)
     except OSError:
         return None
 
@@ -372,12 +377,14 @@ def load_todos(path):
     ``add_todo`` now appends in place, so a load can race the tail write; the
     read is bracketed by two stats and only cached/returned when they match,
     so a half-written line is never served as a parseable Todo. A file that
-    never settles is not cached (bounded retries). A write that starts before
-    the read and completes after it leaves both stats equal, so the final
-    line is also dropped when the file does not end in a line terminator —
-    every ``append_line_fast`` write ends in ``\\n``, so an unterminated tail
-    is provably a partial line, never a complete one.
+    never settles is not cached (bounded retries) and falls back to the last
+    good snapshot rather than reporting an empty list. A write that starts
+    before the read and completes after it leaves both stats equal, so the
+    final line is also dropped when the file does not end in a line
+    terminator — every ``append_line_fast`` write ends in ``\\n``, so an
+    unterminated tail is provably a partial line, never a complete one.
     """
+    last_good = _TODO_LOAD_CACHE.get(path)
     not_stable = 0
     while True:
         sig = _todo_file_sig(path)
@@ -391,7 +398,9 @@ def load_todos(path):
                 with open(path, "r", encoding="utf-8") as f:
                     data = f.read()
             except OSError:
-                break
+                if last_good is not None:
+                    return list(last_good[1]), list(last_good[2])
+                return [], []
             complete = data.endswith("\n")
             lines = data.split("\n")
             last = len(lines) - 1
@@ -411,13 +420,13 @@ def load_todos(path):
                 return list(todos), list(errors)
             not_stable += 1
             if not_stable >= 8:
-                return [], []
+                if last_good is not None:
+                    return list(last_good[1]), list(last_good[2])
+                return list(todos), list(errors)
             time.sleep(0.001)
         else:
             _TODO_LOAD_CACHE[path] = (sig, todos, errors)
             return list(todos), list(errors)
-    _TODO_LOAD_CACHE[path] = (sig, todos, errors)
-    return list(todos), list(errors)
 
 
 def save_todos(path, todos):

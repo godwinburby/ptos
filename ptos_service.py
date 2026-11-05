@@ -2713,7 +2713,7 @@ def _decorate_dashboard_items(db, from_date, to_date):
 
 
 def _w_dashboard(spec, name, time, from_date, to_date):
-    result = get_dashboard(name, time or "tm", use_dashboard_time=True,
+    result = get_dashboard(name, time or "tm", use_dashboard_time=bool(time),
                            from_date=from_date, to_date=to_date)
     result["kind"] = "dashboard"
     _decorate_dashboard_items(result, from_date, to_date)
@@ -4407,12 +4407,19 @@ def get_habit_data(habit_name, time=None, from_date=None, to_date=None):
             key = (d.year, d.month)
             if key != cur_month:
                 cur_month = key
-                # leading blanks align the first day under its weekday (Monday=0)
-                month = {
-                    "name": d.strftime("%B %Y"),
-                    "days": [{"date": None, "present": False, "is_today": False}]
-                            * d.weekday(),
-                }
+                # The first block's leading cells are the real Monday-floored
+                # days before the window, so days logged there still show (a
+                # calendar month view); later blocks keep blank leading cells.
+                if not months:
+                    lead = d - dt.timedelta(days=d.weekday())
+                    leading = [{"date": str(lead + dt.timedelta(days=j)),
+                                "present": (lead + dt.timedelta(days=j)) in days_present,
+                                "is_today": (lead + dt.timedelta(days=j)) == today}
+                               for j in range(d.weekday())]
+                else:
+                    leading = [{"date": None, "present": False, "is_today": False}] \
+                        * d.weekday()
+                month = {"name": d.strftime("%B %Y"), "days": leading}
                 months.append(month)
             months[-1]["days"].append({
                 "date": str(d),

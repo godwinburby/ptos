@@ -327,6 +327,52 @@ class TestRoutinesTimeView:
         assert "routine-now" in html
 
 
+class TestRoutinesNowMarker:
+    def test_period_of_time(self):
+        assert ptos_web._period_of_time("08:15") == "morning"
+        assert ptos_web._period_of_time("12:00") == "afternoon"
+        assert ptos_web._period_of_time("18:30") == "evening"
+        assert ptos_web._period_of_time("22:00") == "night"
+        assert ptos_web._period_of_time("") == "morning"
+
+    def _setup(self, tmp_path, monkeypatch, lines, now="10:30"):
+        todo_path = tmp_path / "todo" / "todo.txt"
+        monkeypatch.setattr(ptos, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_todo, "TODO_PATH", str(todo_path))
+        monkeypatch.setattr(ptos_web, "_now_time_str", lambda: now)
+        _write_todo(todo_path, lines)
+        return app.test_client().get("/routines").get_data(as_text=True)
+
+    def test_one_now_line_in_matching_card(self, tmp_path, monkeypatch):
+        html = self._setup(tmp_path, monkeypatch, [
+            f"(A) {TODAY_S} Morning thing +routine @morning due:{TODAY_S} due_time:11:00",
+            f"(A) {TODAY_S} Afternoon thing +routine @afternoon due:{TODAY_S} due_time:13:00",
+            f"(A) {TODAY_S} Evening thing +routine @evening due:{TODAY_S} due_time:19:00",
+        ])
+        assert html.count('class="routine-now"') == 1
+        now_pos = html.index('class="routine-now"')
+        morning_pos = html.index('routine-title">morning')
+        afternoon_pos = html.index('routine-title">afternoon')
+        assert morning_pos < now_pos < afternoon_pos
+
+    def test_now_line_sits_after_past_items(self, tmp_path, monkeypatch):
+        html = self._setup(tmp_path, monkeypatch, [
+            f"(A) {TODAY_S} Early thing +routine @morning due:{TODAY_S} due_time:08:00",
+            f"(A) {TODAY_S} Later thing +routine @morning due:{TODAY_S} due_time:11:00",
+        ])
+        assert html.count('class="routine-now"') == 1
+        early = html.index("Early thing")
+        now_pos = html.index('class="routine-now"')
+        later = html.index("Later thing")
+        assert early < now_pos < later
+
+    def test_no_now_line_when_matching_context_has_no_card(self, tmp_path, monkeypatch):
+        html = self._setup(tmp_path, monkeypatch, [
+            f"(A) {TODAY_S} Morning thing +routine @morning due:{TODAY_S} due_time:08:00",
+        ], now="14:30")
+        assert 'class="routine-now"' not in html
+
+
 class TestRoutinesDayView:
     def test_view_toggle_in_html(self, tmp_path, monkeypatch):
         todo_path = tmp_path / "todo" / "todo.txt"

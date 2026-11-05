@@ -456,6 +456,43 @@ class TestEmbedWebRoute:
         assert data["data"]["kind"] == "project"
 
 
+class TestDashboardWidgetTime:
+    def _setup(self):
+        _clean()
+        today = ptos.today()
+        past = dt.date(today.year, 1, 5)
+        if past == today:
+            past = dt.date(today.year, 1, 6)
+        _write_records([
+            f"{past.isoformat()} type=expense amount=200 category=food",
+            f"{today.isoformat()} type=expense amount=50 category=food",
+        ])
+        _set_queries({
+            "exp_year": {"where": "type=expense", "time": "this-year"},
+            "exp_today": {"where": "type=expense", "time": "today"},
+            "dashboards": {"money": {"metrics": ["exp_year", "exp_today"]}},
+        })
+
+    @staticmethod
+    def _raws(result):
+        return {i["raw_name"]: i["raw"] for i in result["items"]}
+
+    def test_items_use_their_own_time_without_a_selection(self):
+        self._setup()
+        own_year = svc.resolve_embed({"view": "query", "name": "exp_year"})["count"]
+        own_today = svc.resolve_embed({"view": "query", "name": "exp_today"})["count"]
+        raws = self._raws(svc.resolve_embed({"view": "dashboard", "name": "money"}))
+        assert raws["exp_year"] == own_year
+        assert raws["exp_today"] == own_today
+        assert own_today < own_year
+
+    def test_explicit_window_overrides_every_item(self):
+        self._setup()
+        raws = self._raws(svc.resolve_embed(
+            {"view": "dashboard", "name": "money", "time": "today"}))
+        assert raws["exp_year"] == raws["exp_today"] == 1
+
+
 def _rich_queries():
     return {
         "exp": {"where": "type=expense", "time": "this-month"},

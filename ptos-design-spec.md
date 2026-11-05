@@ -17,31 +17,40 @@ Scope: how PTOS looks (tokens, dark mode, type, layout, mobile polish, widget co
 
 ## 1. Status
 
-- [ ] D1a Token definitions in `base.css`
-- [ ] D1b Ratchet test for hardcoded values
-- [ ] D1c Migrate radii, shadows, font sizes
-- [ ] D1d Migrate hardcoded colours
-- [ ] D2a Dark palette and theme switching
-- [ ] D2b Theme toggle in settings
-- [ ] D2c Contrast test
+- [x] D1a Token definitions in `base.css`
+- [x] D1b Ratchet test for hardcoded values
+- [x] D1c Migrate radii, shadows, font sizes
+- [x] D1d Migrate hardcoded colours
+- [x] D2a Dark palette and theme switching
+- [x] D2b Theme toggle in settings
+- [x] D2c Contrast test
 - [ ] D3a Font and `.num` class
 - [ ] D3b Apply `.num` to numbers
-- [ ] D4 Layout and mobile polish (several small tasks, see section 5)
+- [ ] D4 Layout and mobile polish (partial, see notes)
 - [ ] D5 Inline-style cleanup (ratchet plus top five templates)
 - [ ] D6a Widget `tone` and `icon` keys (backend)
 - [ ] D6b Render tone and icon (frontend)
 - [ ] D6c Tokenize todo group colours
 - [ ] D6d Swatch picker in the widget editor
-- [ ] B1 Run-together text on Habits summary and Overdue Records row
-- [ ] B2 Floating + button covers row actions
-- [ ] B3 Browse tooltip overlaps the "VALUES FOR" label
-- [ ] B4 Check the "Expense today" card on Home
-- [ ] B5 Check completed days on the Habits grid
-- [ ] B6 Check the repeated "Now" line on Routines
+- [x] B1 Run-together text on Habits summary and Overdue Records row
+- [x] B2 Floating + button covers row actions
+- [x] B3 Browse tooltip overlaps the "VALUES FOR" label
+- [x] B4 Check the "Expense today" card on Home
+- [x] B5 Check completed days on the Habits grid
+- [x] B6 Check the repeated "Now" line on Routines
 - [ ] D7 Screen-by-screen design fixes (section 10)
 
 Questions / blockers (agents write here):
-- (none)
+- D1c/D1d complete: measured at `e5fb205` there were 0 hex, 19 radius, 17 shadow and 7 font-size hardcoded values outside `:root`; after the D1c migration all four counts are 0 and `tests/css_token_baseline.json` is reset accordingly.
+- D3a is half done: `@font-face` and `.num` exist in `base.css`, but `web_static/fonts/` is empty (the font 404s and falls back to Segoe UI) and `.num` is not used outside `base.css`.
+- D4 is partial: D4-1/3/4/5/6 are in place; `--content-max` and `.content-wrap` exist, but no template uses `.content-wrap`, so D4-8 is not applied.
+- D2b was implemented as a sidebar toggle in `base.html` as well as Settings; both call `window.applyTheme` (logic is duplicated, not shared).
+- B3 was fixed in `entity.html` (the page that renders "VALUES FOR"), not `browse.html`.
+- B4 was the Home dashboard widget (`_w_dashboard`): it passed `use_dashboard_time=True` even with no window selected, so every card ran in the dashboard default `tm` instead of its own configured `time`. No selection now leaves each item's own window; an explicit selection (spec `time`/`from_date` or the picker) still overrides all. Pinned by `tests/test_embed.py::TestDashboardWidgetTime`.
+- B5 was not a colour bug: the summary counted Monday-floored padding days (`grid_start`), but month blocks began at the window's first day, so attendance logged a few days before the window was counted yet never drawn. The first block now carries those real leading dates, so completed cells show (later blocks keep blank leading cells); legacy `#2ECC71`/`white` became `var(--success)`/`var(--bg)`. Pinned by `tests/test_habits.py::TestHabitMonths::test_days_before_window_show_in_first_block`.
+- B6: the card view's JS inserted a "Now" marker into every context card. The marker is now computed server-side (`_period_of_time`, morning <12 / afternoon <17 / evening <21 / night) and rendered once, before the first upcoming item in the matching card; JS only dims past items. Pinned by `tests/test_routines.py::TestRoutinesNowMarker`.
+- Separately reported: dark-mode focused inputs used `background:white` with light `--text`, so text was unreadable. Now `var(--card)`, pinned by `tests/test_theme_contrast.py::test_focus_fields_use_theme_background`.
+- Tokens added during D1c because the scale lacked them: `--fs-2xl` (28px, stat values), `--shadow-up` (upward pinned-toolbar shadow) and `--radius-xs` (2px, swatches/checkboxes). Defined in both light and dark blocks.
 
 Order: D1 first. D2 after D1d. D3 any time after D1a. D4 after D1c. D5 in parallel with anything. D6 after D1d and D2a.
 

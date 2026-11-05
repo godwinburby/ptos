@@ -99,6 +99,15 @@ def test_button_text_contrast():
     assert contrast(resolve("--bg", DARK), resolve("--accent", DARK)) >= 4.5
 
 
+def test_focus_fields_use_theme_background():
+    m = re.search(r"input:focus[^{]*\{([^}]*)\}", TEXT)
+    assert m, "focus rule not found"
+    body = m.group(1)
+    assert "white" not in body
+    assert not re.search(r"background:\s*#[0-9A-Fa-f]{3,8}", body)
+    assert "var(--" in body
+
+
 def test_variable_parity():
     missing = set(LIGHT.keys()) - set(DARK.keys())
     assert not missing, f"missing in dark: {sorted(missing)}"

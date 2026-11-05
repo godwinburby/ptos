@@ -1735,3 +1735,46 @@ class TestLoadTodosCache:
         done_path = os.path.join(str(tmpdir), "done.txt")
         done, _ = load_todos(done_path)
         assert len(done) == 1 and done[0].completed_date is not None
+
+    def test_sync_style_replace_with_preserved_mtime_is_reread(self, tmpdir):
+        path = os.path.join(str(tmpdir), "todo.txt")
+        with open(path, "w", encoding="utf-8", newline="\n") as f:
+            f.write("Buy milk +Home\n")
+        st = os.stat(path)
+        first, _ = load_todos(path)
+        assert first[0].description.startswith("Buy milk")
+        replacement = path + ".new"
+        with open(replacement, "w", encoding="utf-8", newline="\n") as f:
+            f.write("Buy rice +Home\n")  # same byte length
+        os.utime(replacement, ns=(st.st_atime_ns, st.st_mtime_ns))
+        os.replace(replacement, path)
+        second, _ = load_todos(path)
+        assert second[0].description.startswith("Buy rice")
+
+    def test_unstable_file_returns_last_good_snapshot(self, tmpdir, monkeypatch):
+        path = _write_todo(tmpdir)
+        good, _ = load_todos(path)
+        assert good
+        counter = {"n": 0}
+
+        def flapping(_path):
+            counter["n"] += 1
+            return ("changing", counter["n"])
+
+        monkeypatch.setattr(ptos_todo, "_todo_file_sig", flapping)
+        monkeypatch.setattr(ptos_todo.time, "sleep", lambda _s: None)
+        again, errors = load_todos(path)
+        assert len(again) == len(good)
+        assert not errors
+
+    def test_read_error_does_not_publish_an_empty_snapshot(self, tmpdir, monkeypatch):
+        path = _write_todo(tmpdir)
+        good, _ = load_todos(path)
+        monkeypatch.setattr(ptos_todo, "_todo_file_sig", lambda _path: ("unreadable", 1))
+
+        def boom(*_a, **_k):
+            raise OSError("busy")
+
+        monkeypatch.setattr("builtins.open", boom)
+        again, _ = load_todos(path)
+        assert len(again) == len(good)

@@ -26,6 +26,9 @@ def is_allowed_radius(val):
         return True
     if v.startswith("var(--radius-"):
         return True
+    parts = v.split()
+    if len(parts) > 1:
+        return all(p == "0" or p.startswith("var(--radius-") for p in parts)
     return False
 
 

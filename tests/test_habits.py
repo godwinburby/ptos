@@ -1,4 +1,5 @@
 import os
+import pathlib
 import datetime as dt
 import tomli_w
 import ptos
@@ -306,19 +307,37 @@ class TestHabitMonths:
             assert m["name"]
             assert any(c["date"] for c in m["days"])
 
-    def test_month_leading_blanks_align_first_day(self):
+    def test_month_leading_cells_align_first_day(self):
         data = self._data()
-        for m in data["months"]:
-            leading = 0
-            for c in m["days"]:
-                if c["date"] is None:
-                    leading += 1
-                else:
-                    break
+        grid_start = dt.date.fromisoformat(data["grid"][0]["date"])
+        today = dt.date.today()
+        start = dt.date(today.year, today.month, 1)
+        first_block = data["months"][0]
+        assert first_block["days"][0]["date"] == str(grid_start)
+        assert grid_start.weekday() == 0
+        assert first_block["days"][(start - grid_start).days]["date"] == str(start)
+        for m in data["months"][1:]:
             first = dt.date.fromisoformat(
                 next(c["date"] for c in m["days"] if c["date"]))
-            # every block aligns its first real day under its weekday (Monday=0)
-            assert leading == first.weekday()
+            # later blocks keep blank leading cells
+            assert m["days"][0]["date"] is None
+            assert first.day == 1
+            assert first.weekday() == next(
+                i for i, c in enumerate(m["days"]) if c["date"])
+
+    def test_days_before_window_show_in_first_block(self, monkeypatch):
+        _clean_cache()
+        _add_habit("maid", ["type=attendance", "person=susan",
+                            "status=present"], weeks=4)
+        monkeypatch.setattr(ptos, "today", lambda: dt.date(2026, 11, 5))
+        _write_records(["2026-10-28 type=attendance person=susan status=present"])
+        data = svc.get_habit_data("maid")
+        assert data["days_done"] == 1
+        first = data["months"][0]
+        cells = {c["date"]: c["present"] for c in first["days"] if c["date"]}
+        assert first["name"] == "November 2026"
+        assert cells["2026-10-28"] is True
+        assert cells["2026-11-01"] is False
 
     def test_months_weeks_padded_to_multiple_of_7(self):
         data = self._data()
@@ -332,6 +351,14 @@ class TestHabitMonths:
         today_cells = [c for c in data["months"][-1]["days"] if c["date"] == str(today)]
         assert len(today_cells) == 1
         assert today_cells[0]["is_today"]
+
+
+class TestHabitGridColour:
+    def test_legacy_completed_cells_use_success_token(self):
+        root = pathlib.Path(__file__).resolve().parents[1]
+        src = (root / "web_templates" / "habits.html").read_text(encoding="utf-8")
+        assert "background:var(--success)" in src
+        assert "#2ECC71" not in src
 
 
 class TestHabitCli:

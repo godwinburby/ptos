@@ -270,7 +270,12 @@
         <div class="routine-title">{{ context_name }}</div>
         <span class="routine-badge">{{ total }}</span>
       </div>
+      {% set ns = namespace(now_done=false) %}
       {% for t in todos %}
+      {% if context_name == now_context and not ns.now_done and t.due_time and t.due_time > now_time %}
+      <div class="routine-now">Now: {{ fmt_ampm(now_time) }}</div>
+      {% set ns.now_done = true %}
+      {% endif %}
       <div class="routine-item {{ row_colors.get(t.line_no, 'ctx-other') }}{% if t.done %} completed{% endif %}" data-line="{{ t.line_no }}" data-raw="{{ t.raw_line }}" data-time="{{ t.due_time or '' }}">
         {% if t.done %}
         <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
@@ -295,6 +300,9 @@
         {% endif %}
       </div>
       {% endfor %}
+      {% if context_name == now_context and not ns.now_done %}
+      <div class="routine-now">Now: {{ fmt_ampm(now_time) }}</div>
+      {% endif %}
       {% if context_name != 'other' %}
       <button class="routine-add-btn" onclick="openAddRoutine('{{ context_name }}')">+ Add</button>
       {% endif %}
@@ -423,30 +431,17 @@ function _scrollToNow() {
 
 function _insertNowLines() {
   document.querySelectorAll('#view-cards .routine-card').forEach(function(card) {
-    var items = card.querySelectorAll('.routine-item:not(.completed)');
-    var inserted = false;
-    items.forEach(function(item) {
-      var time = item.getAttribute('data-time');
-      if (!inserted && time && time > _nowTime) {
-        var line = document.createElement('div');
-        line.className = 'routine-now';
-        line.textContent = 'Now: ' + fmtAmpm(_nowTime);
-        item.parentNode.insertBefore(line, item);
-        inserted = true;
+    var marker = card.querySelector('.routine-now');
+    card.querySelectorAll('.routine-item:not(.completed)').forEach(function(item) {
+      var past;
+      if (marker) {
+        past = !(marker.compareDocumentPosition(item) & Node.DOCUMENT_POSITION_FOLLOWING);
+      } else {
+        var time = item.getAttribute('data-time');
+        past = !!time && time <= _nowTime;
       }
+      if (past) item.classList.add('past');
     });
-    if (!inserted && items.length > 0) {
-      items.forEach(function(item) { item.classList.add('past'); });
-    }
-    if (inserted) {
-      var prev = card.querySelector('.routine-now').previousElementSibling;
-      while (prev) {
-        if (prev.classList.contains('routine-item') && !prev.classList.contains('completed')) {
-          prev.classList.add('past');
-        }
-        prev = prev.previousElementSibling;
-      }
-    }
   });
 }
 

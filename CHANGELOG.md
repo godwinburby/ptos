@@ -5,6 +5,41 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-11-05
+
+### Dark mode — focused form fields stay readable
+
+- **Focus background** — `input:focus`/`select:focus`/`textarea:focus` set a literal `background: white` while the text colour stayed `var(--text)`, which is light in dark mode, so focused textboxes rendered grey-on-white and were unreadable. They now use `var(--card)`; a static test pins the focus rule to theme tokens (no literal white or hex).
+
+### Routines — a single "Now" marker in the right card
+
+- **One marker** — the card view inserted "Now: …" into every context card (Morning, Afternoon, Evening) because the JS looked for the first item after the current time in each card. The marker is now rendered server-side only in the card matching the current time of day (morning <12, afternoon <17, evening <21, else night), positioned before the first item still ahead; the JS now only dims past items.
+- **Tests** — `tests/test_routines.py::TestRoutinesNowMarker` pins the period mapping, exactly one marker in the matching card, its position between past and future items, and no marker when no card matches.
+
+### Habits — completed days before the window are visible
+
+- **Leading cells are real dates** — the summary counted Monday-floored padding days (`days_done`/`total_days` use `grid_start`), but the first month block started at the window's first day, so attendance logged just before the window (e.g. Oct 28–30 in a November view) was counted but never drawn. The first block now renders those real leading dates, so completed cells appear; later blocks keep blank leading cells.
+- **Theme tokens** — the legacy `.habit-cell.on` uses `var(--success)`/`var(--bg)` instead of `#2ECC71`/`white`, and the page-shell habit cell's success text uses `var(--bg)`, keeping contrast in both themes.
+
+## 2026-11-04
+
+### Todo cache freshness and read-failure fallback
+
+- **Synced todo edits are picked up** — `load_todos` cached a file on `(mtime_ns, size)`, but Syncthing preserves the sender's mtime, so a same-size delivery looked unchanged and kept serving the old parse. The cache key now includes `st_ctime_ns` and `st_ino`, which change when a file is replaced.
+- **No more phantom empty list** — after 8 unstable read brackets `load_todos` returned `[]`, so a busy writer could render the todo page empty. It now falls back to the last good snapshot (or the best-effort parse if there is none).
+- **Read errors don't poison the cache** — an `OSError` (e.g. a Windows sharing violation) used to fall through and publish an empty snapshot under the new stat. It now returns the last good snapshot and leaves the cache untouched.
+
+### Home dashboard — per-query time windows are honoured by default
+
+- **B4 fixed** — the dashboard widget forced its own default window (`tm`) onto every card, so a query configured for `time = "td"` ("Expense today") showed the month's total and the "This month" caption. With no explicit time selection the dashboard now lets each query/metric use its own configured window; picking a window still overrides all cards, and the caption follows each card's own window.
+
+### Design system — migrate the last hardcoded radii, shadows and font sizes
+
+- **Tokens, not literals** — every `border-radius`, `box-shadow` and `font-size` outside `:root` now uses the scale (`--radius-xs/sm/md/lg`, `--shadow-1/2/3/up`, `--fs-*`); the ratchet baseline is 0 for all four counts (hex was already 0).
+- **Three gaps filled** — added `--fs-2xl` (28px stat values), `--shadow-up` (the pinned markdown toolbar casts upward) and `--radius-xs` (2px swatches/checkboxes). All three are defined in the light and dark token blocks.
+- **Focus ring** — `.todo-pri.active` drew a 2px fake border with `box-shadow`; it is now a real `outline` at the same offset, so it can use `currentColor` without inventing a shadow token.
+- **Ratchet fix** — `is_allowed_radius` accepts multi-part values built from `0` plus radius tokens (e.g. `0 var(--radius-md) var(--radius-md) 0`), which the old exact-match check rejected.
+
 ## 2026-11-03
 
 ### Settings — remove obsolete home/default-dashboard controls
