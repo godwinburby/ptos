@@ -15,7 +15,7 @@
   .proj-name { font-size:16px;font-weight:700; }
   .proj-name a { color:var(--fg);text-decoration:none; }
   .proj-name a:hover { color:var(--accent); }
-  .proj-badge { font-size:11px;font-weight:700;padding:2px 10px;border-radius:12px;color:#fff; }
+  .proj-badge { font-size:11px;font-weight:700;padding:2px 10px;border-radius:12px;color:var(--text-on-accent); }
   .proj-badge.hot { background:var(--error); }
   .proj-badge.warm { background:var(--warn); }
   .proj-badge.cool { background:var(--success); }
@@ -28,7 +28,7 @@
   .proj-board-stall { display:inline-block;background:color-mix(in srgb, var(--warn) 12%, transparent);border:1px solid color-mix(in srgb, var(--warn) 30%, transparent);border-radius:6px;padding:1px 8px;font-size:11px;font-weight:600;margin-right:4px; }
   .proj-links { display:flex;gap:6px;flex-wrap:wrap;margin-top:10px; }
   .proj-link-btn { font-size:11px;font-weight:600;padding:3px 10px;border-radius:6px;background:var(--accent-lt);color:var(--accent);text-decoration:none;border:1px solid color-mix(in srgb, var(--accent) 25%, transparent);transition:background .12s; }
-  .proj-link-btn:hover { background:var(--accent);color:#fff; }
+  .proj-link-btn:hover { background:var(--accent);color:var(--text-on-accent); }
   .proj-empty { text-align:center;padding:50px 20px;color:var(--sub);font-size:14px; }
   .proj-empty code { background:var(--bg);padding:2px 8px;border-radius:4px;font-size:13px; }
 
@@ -55,7 +55,7 @@
   .proj-todo-meta { display:flex;gap:4px;flex-wrap:wrap;flex-shrink:0; }
   .proj-todo-due { font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;background:var(--accent-lt);color:var(--accent); }
   .proj-todo-due.overdue { background:var(--error-lt);color:var(--error); }
-  .proj-todo-due.today { background:#FEF3E7;color:var(--warn); }
+  .proj-todo-due.today { background:var(--warn-lt);color:var(--warn); }
   .proj-todo-proj { font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;background:color-mix(in srgb, var(--accent) 10%, transparent);color:var(--accent); }
   .proj-todo-ctx { font-size:11px;font-weight:600;padding:1px 6px;border-radius:8px;background:color-mix(in srgb, var(--sub) 10%, transparent);color:var(--sub); }
   .proj-todo-done .proj-todo-desc { text-decoration:line-through;opacity:0.5; }
@@ -81,7 +81,7 @@
   {% if projects %}
   <span class="proj-count">{{ projects | length }} project(s)</span>
   {% endif %}
-  <a href="/projects/new" style="margin-left:auto;font-size:13px;font-weight:600;padding:5px 14px;border-radius:8px;background:var(--accent);color:#fff;text-decoration:none;">+ New Project</a>
+  <a href="/projects/new" style="margin-left:auto;font-size:13px;font-weight:600;padding:5px 14px;border-radius:8px;background:var(--accent);color:var(--text-on-accent);text-decoration:none;">+ New Project</a>
 </div>
 
 {% if not projects %}
