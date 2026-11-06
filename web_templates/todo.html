@@ -569,6 +569,7 @@
   <button class="btn-sel-edit" onclick="openBulkEdit()">Edit Selected</button>
 </div>
 
+    <div class="content-wrap">
 {% for sec_key, sec_label, sec_color, sec_todos in grouped %}
 <div class="todo-section">
   <div class="todo-section-header" onclick="toggleSection('{{ sec_key }}')">
@@ -592,6 +593,7 @@
     {% for t in done_recent %}
     <div class="todo-row" data-line="{{ t.line_no }}" data-raw="{{ t.raw_line }}">
       <div class="todo-check checked" onclick="undoTodo({{ t.line_no }}, this)"></div>
+  </div>  <!-- end content-wrap -->
       <div class="todo-pri {{ t.priority or 'none' }}" style="opacity:0.5;" title="{{ t.priority or '—' }}{% if t.priority %} — {{ priority_labels.get(t.priority, {'A':'Critical','B':'Important','C':'Moderate','D':'Low'}.get(t.priority, '')) }}{% endif %}"><a href="/todo?priority={{ (t.priority or '')|urlencode }}">{{ t.priority or '—' }}</a></div>
       <div class="todo-body">
         <div class="todo-desc" style="text-decoration:line-through;">{{ t.description }}</div>
@@ -610,6 +612,7 @@
     {% endfor %}
   </div>
 </div>
+  </div>  <!-- end content-wrap -->
 {% endif %}
 
 {% include '_todo_modal.html' %}
