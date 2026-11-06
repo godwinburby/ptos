@@ -20,9 +20,16 @@
       <div class="todo-actions">
         <button class="pomo-row-btn" data-line="{{ t.line_no }}" onclick="todoPomoAction(this, '{{ t.description|e }}')" title="Start pomodoro">▶</button>
         <button class="pomo-row-stop" onclick="todoPomoStop()" title="Stop pomodoro">⏹</button>
-        <button onclick="linkTodoRow({{ t.line_no }})" title="Link to...">🔗</button>
-        <button onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}', this)" title="Edit">✎</button>
-        <button onclick="deleteTodo({{ t.line_no }}, this)" title="Delete">✕</button>
+        <div class="todo-menu" tabindex="0" role="menu" aria-label="Actions">
+          <button type="button" class="todo-menu-btn" aria-label="Actions" aria-haspopup="true" aria-expanded="false">⋯</button>
+          <div class="todo-menu-panel" role="menu">
+            <button type="button" class="todo-menu-item" onclick="linkTodoRow({{ t.line_no }})" role="menuitem">🔗 Link</button>
+            <button type="button" class="todo-menu-item" onclick="openEdit({{ t.line_no }}, '{{ t.description|e }}', '{{ t.priority or '' }}', '{{ t.due.isoformat() if t.due else '' }}', '{{ t.due_time or '' }}', '{{ t.threshold.isoformat() if t.threshold else '' }}', '{{ t.threshold_time or '' }}', '{{ t.projects|join(' ') }}', '{{ t.contexts|join(' ') }}', '{{ t.rec or '' }}', '{{ t.id or '' }}', '{{ t.links|join(',') }}', this)" role="menuitem">✎ Edit</button>
+            <button type="button" class="todo-menu-item" onclick="deleteTodo({{ t.line_no }}, this)" role="menuitem">✕ Delete</button>
+          </div>
+        </div>
+        <button class="pomo-row-btn" data-line="{{ t.line_no }}" onclick="todoPomoAction(this, '{{ t.description|e }}')" title="Start pomodoro">▶</button>
+        <button class="pomo-row-stop" onclick="todoPomoStop()" title="Stop pomodoro">⏹</button>
       </div>
     </div>
 {% endmacro %}
@@ -1563,6 +1570,47 @@ document.addEventListener('click', function(e) {
   var popup = document.getElementById('field-popup');
   if (popup.classList.contains('open') && !popup.contains(e.target) && !e.target.closest('.todo-due-badge, .todo-context, .todo-pri')) {
     closeFieldPopup();
+  }
+});
+
+/* Todo menu dropdown */
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.todo-menu')) {
+    document.querySelectorAll('.todo-menu[data-open="true"]').forEach(function(m) {
+      m.removeAttribute('data-open');
+    });
+  }
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape') {
+    document.querySelectorAll('.todo-menu[data-open="true"]').forEach(function(m) {
+      m.removeAttribute('data-open');
+    });
+  }
+});
+
+document.addEventListener('click', function(e) {
+  var btn = e.target.closest('.todo-menu-btn');
+  if (btn) {
+    e.preventDefault();
+    var menu = btn.closest('.todo-menu');
+    var isOpen = menu.hasAttribute('data-open');
+    document.querySelectorAll('.todo-menu[data-open="true"]').forEach(function(m) {
+      if (m !== menu) m.removeAttribute('data-open');
+    });
+    if (isOpen) {
+      menu.removeAttribute('data-open');
+    } else {
+      menu.setAttribute('data-open', 'true');
+      var panel = menu.querySelector('.todo-menu-panel');
+      if (panel) {
+        var rect = panel.getBoundingClientRect();
+        var vw = window.innerWidth, vh = window.innerHeight;
+        if (rect.right > vw) panel.style.right = 'auto', panel.style.left = '0';
+        if (rect.bottom > vh) panel.style.bottom = 'auto', panel.style.top = '100%';
+      }
+    }
   }
 });
 </script>
