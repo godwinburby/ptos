@@ -400,7 +400,7 @@
 
     // ── Public API ─────────────────────────────────────────────────────────────
     self.getExpr=function(){var el=self.$("expr");return el?el.value.trim():self._chipsToExpr();};
-    self.setExpr=function(expr){
+self.setExpr=function(expr){
       var el=self.$("expr");if(el)el.value=expr||"";
       if(!expr)return;
       var parsed=self._parseExpr(expr);
@@ -410,10 +410,188 @@
         self._type=tc?tc.value:null;
         self._renderTypeRow();
         var fw=self.$("field_wrap");if(fw)fw.style.display=self._type?"block":"none";
-        self._renderActiveChips();
+        self._renderActiveChips(); self._renderFieldRow(); self._renderTagsSection();
         if(self._type)self._fetch(function(){self._renderFieldRow();self._renderTagsSection();});
+        else{var tw=self.$("tags_wrap");if(tw)tw.style.display="none";}
       }
     };
+
+    // ── Enhance chip groups with "Show all" + filter (D4-12) ──────────────────
+    self._enhanceChipGroups = function() {
+      document.querySelectorAll(".chip-group").forEach(function(group) {
+        if (group.dataset.enhanced) return;
+        group.dataset.enhanced = "true";
+
+        var chips = Array.from(group.querySelectorAll(".qb-chip"));
+        var activeSelected = chips.filter(function(c) {
+          return c.classList.contains("active") || c.classList.contains("selected");
+        });
+        var inactive = chips.filter(function(c) {
+          return !c.classList.contains("active") && !c.classList.contains("selected");
+        });
+
+        if (inactive.length <= 6) return; // No need to collapse
+
+        var header = document.createElement("div");
+        header.style.display = "flex";
+        header.style.alignItems = "center";
+        header.style.justifyContent = "space-between";
+        header.style.marginBottom = "4px";
+        header.style.flexWrap = "wrap";
+        header.style.gap = "8px";
+
+        var filterInput = document.createElement("input");
+        filterInput.type = "text";
+        filterInput.className = "chip-group-filter";
+        filterInput.placeholder = "Filter chips...";
+        filterInput.style.display = "none";
+        filterInput.placeholder = "Filter chips...";
+
+        var toggleBtn = document.createElement("button");
+        toggleBtn.type = "button";
+        toggleBtn.className = "chip-group-toggle";
+        toggleBtn.textContent = "Show all (" + (chips.length - 6) + ")";
+
+        var header = document.createElement("div");
+        header.style.display = "flex";
+        header.style.alignItems = "center";
+        header.style.justifyContent = "space-between";
+        header.style.marginBottom = "4px";
+        header.style.flexWrap = "wrap";
+        header.style.gap = "8px";
+
+        var filterInput = document.createElement("input");
+        filterInput.type = "text";
+        filterInput.className = "chip-group-filter";
+        filterInput.placeholder = "Filter chips...";
+        filterInput.style.display = "none";
+
+        var toggleBtn = document.createElement("button");
+        toggleBtn.type = "button";
+        toggleBtn.className = "chip-group-toggle";
+        toggleBtn.textContent = "Show all (" + (chips.length - 6) + ")";
+
+        header.appendChild(filterInput);
+        header.appendChild(toggleBtn);
+
+        var chipContainer = group.querySelector(".chip-group-chips") || group;
+        var headerEl = group.querySelector(".chip-group-header") || group.parentElement.querySelector(".chip-group-header");
+
+        if (headerEl) {
+          headerEl.parentNode.insertBefore(header, headerEl.nextSibling);
+        } else {
+          group.insertBefore(header, group.firstChild);
+        }
+
+        var filterInput = document.createElement("input");
+        filterInput.type = "text";
+        filterInput.className = "chip-group-filter";
+        filterInput.placeholder = "Filter chips...";
+        filterInput.style.display = "none";
+
+        var toggleBtn = document.createElement("button");
+        toggleBtn.type = "button";
+        toggleBtn.className = "chip-group-toggle";
+        toggleBtn.textContent = "Show all (" + (inactive.length) + ")";
+
+        var filterInput = document.createElement("input");
+        filterInput.type = "text";
+        filterInput.className = "chip-group-filter";
+        filterInput.placeholder = "Filter chips...";
+        filterInput.style.display = "none";
+
+        var toggleBtn = document.createElement("button");
+        toggleBtn.type = "button";
+        toggleBtn.className = "chip-group-toggle";
+        toggleBtn.textContent = "Show all (" + (inactive.length) + ")";
+
+        header.appendChild(filterInput);
+        header.appendChild(toggleBtn);
+
+        group.insertBefore(header, group.firstChild);
+
+        var filterInput = document.createElement("input");
+        filterInput.type = "text";
+        filterInput.className = "chip-group-filter";
+        filterInput.placeholder = "Filter chips...";
+        filterInput.style.display = "none";
+
+        var toggleBtn = document.createElement("button");
+        toggleBtn.type = "button";
+        toggleBtn.className = "chip-group-toggle";
+        toggleBtn.textContent = "Show all (" + (inactive.length) + ")";
+
+        header.appendChild(filterInput);
+        header.appendChild(toggleBtn);
+
+        group.insertBefore(header, group.firstChild);
+
+        var filterText = "";
+        var showAll = false;
+
+        function render() {
+          var inactive = chips.filter(function(c) {
+            return !c.classList.contains("active") && !c.classList.contains("selected");
+          });
+          var visible = showAll ? inactive : inactive.slice(0, 6);
+          inactive.forEach(function(chip, i) {
+            chip.style.display = (i < 6 || showAll) ? "inline-flex" : "none";
+          });
+
+          var showCount = inactive.length - 6;
+          if (showAll) {
+            toggleBtn.textContent = "Show less";
+            filterInput.style.display = "block";
+          } else {
+            toggleBtn.textContent = "Show all (" + Math.max(0, inactive.length - 6) + ")";
+            filterInput.style.display = "none";
+            filterInput.value = "";
+          }
+        }
+
+        function render() {
+          inactive.forEach(function(chip, i) {
+            chip.style.display = (i < 6 || showAll) ? "inline-flex" : "none";
+          });
+
+          var remaining = Math.max(0, inactive.length - 6);
+          if (showAll) {
+            toggleBtn.textContent = "Show less";
+            filterInput.style.display = "block";
+          } else {
+            toggleBtn.textContent = remaining > 0 ? "Show all (" + remaining + ")" : "";
+            filterInput.style.display = "none";
+            filterInput.value = "";
+          }
+        }
+
+        filterInput.addEventListener("input", function() {
+          var text = this.value.toLowerCase();
+          var chips = group.querySelectorAll(".qb-chip");
+          chips.forEach(function(chip) {
+            if (chip.classList.contains("active") || chip.classList.contains("selected")) return;
+            var match = chip.textContent.toLowerCase().indexOf(this.value.toLowerCase()) !== -1;
+            chip.style.display = (showAll || match) ? "inline-flex" : "none";
+          });
+        }
+
+        filterInput.addEventListener("input", function() {
+          var text = this.value.toLowerCase();
+          var chips = group.querySelectorAll(".qb-chip");
+          chips.forEach(function(chip) {
+            if (chip.classList.contains("active") || chip.classList.contains("selected")) return;
+            var match = chip.textContent.toLowerCase().indexOf(text.toLowerCase()) !== -1;
+            chip.style.display = (showAll || match) ? "inline-flex" : "none";
+          });
+        }
+
+        toggleBtn.addEventListener("click", function() {
+          showAll = !showAll;
+          render();
+        });
+
+        render();
+      });
     self.setTypes=function(types){self._types=types||[];self._renderTypeRow();};
     self.getChips=function(){return self._chips.slice();};
     self.clear=function(){
