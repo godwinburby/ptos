@@ -147,21 +147,40 @@
     font-size:15px; font-weight:600; white-space:nowrap;
     overflow:hidden; text-overflow:ellipsis;
   }
-  .ctx-blue    { background:var(--ctx-blue-bg); border-color:var(--ctx-blue-border); color:var(--text); }
-  .ctx-orange  { background:var(--ctx-orange-bg); border-color:var(--ctx-orange-border); color:var(--text); }
-  .ctx-green   { background:var(--ctx-green-bg); border-color:var(--ctx-green-border); color:var(--text); }
-  .ctx-purple  { background:var(--ctx-purple-bg); border-color:var(--ctx-purple-border); color:var(--text); }
-  .ctx-teal    { background:var(--ctx-teal-bg); border-color:var(--ctx-teal-border); color:var(--text); }
-  .ctx-rose    { background:var(--ctx-rose-bg); border-color:var(--ctx-rose-border); color:var(--text); }
-  .ctx-other   { background:var(--ctx-other-bg); border-color:var(--ctx-other-border); color:var(--text); }
+  /* Tone-based colors for routine contexts (replaces full pastel backgrounds with thin left bar + tone chip) */
+  .ctx-blue    { --tone: var(--hl-accent);   border-color: var(--ctx-blue-border); color: var(--text); }
+  .ctx-orange  { --tone: var(--hl-warn);     border-color: var(--ctx-orange-border); color: var(--text); }
+  .ctx-green   { --tone: var(--hl-success);  border-color: var(--ctx-green-border); color: var(--text); }
+  .ctx-purple  { --tone: var(--hl-purple);   border-color: var(--ctx-purple-border); color: var(--text); }
+  .ctx-teal    { --tone: var(--hl-teal);     border-color: var(--ctx-teal-border); color: var(--text); }
+  .ctx-rose    { --tone: var(--hl-rose);     border-color: var(--ctx-rose-border); color: var(--text); }
+  .ctx-other   { --tone: var(--sub);         border-color: var(--ctx-other-border); color: var(--text); }
 
-  .routine-item.ctx-blue    { border-left:3px solid var(--ctx-blue-border); border-bottom-color:var(--border-lt); }
-  .routine-item.ctx-orange  { border-left:3px solid var(--ctx-orange-border); border-bottom-color:var(--border-lt); }
-  .routine-item.ctx-green   { border-left:3px solid var(--ctx-green-border); border-bottom-color:var(--border-lt); }
-  .routine-item.ctx-purple  { border-left:3px solid var(--ctx-purple-border); border-bottom-color:var(--border-lt); }
-  .routine-item.ctx-teal    { border-left:3px solid var(--ctx-teal-border); border-bottom-color:var(--border-lt); }
-  .routine-item.ctx-rose    { border-left:3px solid var(--ctx-rose-border); border-bottom-color:var(--border-lt); }
-  .routine-item.ctx-other   { border-left:none; border-bottom-color:var(--border-lt); }
+  .routine-item {
+    --tone-border: var(--ctx-other-border);
+    --tone-bg: var(--surface-2);
+  }
+  .routine-item.ctx-blue    { --tone-border: var(--ctx-blue-border);   --tone-bg: var(--tint-1); }
+  .routine-item.ctx-orange  { --tone-border: var(--ctx-orange-border); --tone-bg: var(--tint-2); }
+  .routine-item.ctx-green   { --tone-border: var(--ctx-green-border);  --tone-bg: var(--tint-3); }
+  .routine-item.ctx-purple  { --tone-border: var(--ctx-purple-border); --tone-bg: var(--tint-5); }
+  .routine-item.ctx-teal    { --tone-border: var(--ctx-teal-border);   --tone-bg: var(--tint-6); }
+  .ctx-item.ctx-rose        { --tone-border: var(--ctx-rose-border);   --tone-bg: var(--tint-7); }
+  .routine-item.ctx-other   { --tone-border: var(--ctx-other-border);  --tone-bg: var(--surface-2); }
+
+  .routine-item {
+    border-left: 3px solid var(--tone-border);
+    background: var(--tone-bg);
+  }
+  .routine-item::before {
+    content: "";
+    display: inline-block;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--tone-border);
+    margin-right: 8px;
+    vertical-align: middle;
+    flex-shrink: 0;
+  }
 
   .rv-legend {
     display:flex; flex-wrap:wrap; gap:4px 14px;
