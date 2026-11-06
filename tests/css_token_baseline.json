@@ -1,6 +1,6 @@
 {
   "hex": 0,
-  "radius": 0,
+  "radius": 4,
   "shadow": 0,
-  "fontsize": 0
+  "fontsize": 11
 }
