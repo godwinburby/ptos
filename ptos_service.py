@@ -2716,6 +2716,7 @@ def _w_dashboard(spec, name, time, from_date, to_date):
     result = get_dashboard(name, time or "tm", use_dashboard_time=bool(time),
                            from_date=from_date, to_date=to_date)
     result["kind"] = "dashboard"
+    result["tone"] = spec.get("tone", "")
     _decorate_dashboard_items(result, from_date, to_date)
     return result, "/queries?run=" + urllib.parse.quote(name) + "&kind=d"
 
@@ -2723,6 +2724,7 @@ def _w_dashboard(spec, name, time, from_date, to_date):
 def _w_metric(spec, name, time, from_date, to_date):
     result = get_metric(name, time or "tm", from_date=from_date, to_date=to_date)
     result["kind"] = "metric"
+    result["tone"] = spec.get("tone", "")
     return result, "/queries?run=" + urllib.parse.quote(name) + "&kind=m"
 
 
@@ -2738,15 +2740,16 @@ def _w_threshold(spec, name, time, from_date, to_date):
         if selected:
             lookup = {t["name"]: t for t in statuses}
             statuses = [lookup[n] for n in selected if n in lookup]
-        return {"kind": "threshold", "thresholds": statuses, "name": ""}, "/thresholds"
+        return {"kind": "threshold", "thresholds": statuses, "name": "", "tone": spec.get("tone", "")}, "/thresholds"
     status = get_threshold_status(name, time, from_date, to_date)
-    result = {"kind": "threshold", "name": name, "thresholds": [status]}
+    result = {"kind": "threshold", "name": name, "thresholds": [status], "tone": spec.get("tone", "")}
     return result, "/thresholds"
 
 
 def _w_query(spec, name, time, from_date, to_date):
     result = run_query(name, time, from_date=from_date, to_date=to_date,
                        chart=spec.get("chart"))
+    result["tone"] = spec.get("tone", "")
     return result, "/queries?run=" + urllib.parse.quote(name)
 
 
@@ -2783,18 +2786,21 @@ def _w_records(spec, name, time, from_date, to_date):
         if n > 0:
             result["records"] = result["records"][-n:]
             result["count"] = len(result["records"])
+    result["tone"] = spec.get("tone", "")
     return result, "/browse"
 
 
 def _w_board(spec, name, time, from_date, to_date):
     result = get_board_data(name, time, from_date=from_date, to_date=to_date)
     result["kind"] = "board"
+    result["tone"] = spec.get("tone", "")
     return result, "/board?board=" + urllib.parse.quote(name)
 
 
 def _w_habit(spec, name, time, from_date, to_date):
     result = get_habit_data(name, time, from_date=from_date, to_date=to_date)
     result["kind"] = "habit"
+    result["tone"] = spec.get("tone", "")
     return result, "/habits"
 
 
@@ -2802,6 +2808,7 @@ def _w_calendar(spec, name, time, from_date, to_date):
     result = get_calendar_data(
         name, *_calendar_embed_month(time, from_date))
     result["kind"] = "calendar"
+    result["tone"] = spec.get("tone", "")
     return result, ("/calendar" if name == "__all__"
                     else "/calendar/" + urllib.parse.quote(name))
 
@@ -2819,8 +2826,9 @@ def _w_due(spec, name, time, from_date, to_date):
             raise PTOSError("Embed 'days' must be one of 0, 1, 7 or 14")
     result = get_due(config_name=name if name not in ("default",
                                                        "__DEFAULT__") else None,
-                     days_override=days_override)
+                      days_override=days_override)
     result["kind"] = "due"
+    result["tone"] = spec.get("tone", "")
     result["full_count"] = result.get("count", 0)
     link = "/due"
     if name and name not in ("default", "__DEFAULT__"):
@@ -2832,6 +2840,7 @@ def _w_due(spec, name, time, from_date, to_date):
 
 def _w_project(spec, name, time, from_date, to_date):
     result = _project_json(_project_embed_data(name))
+    result["tone"] = spec.get("tone", "")
     return result, "/projects"
 
 
@@ -2984,17 +2993,17 @@ def _w_todo(spec, name, time, from_date, to_date):
 def _w_todo_summary(spec, name, time, from_date, to_date):
     overdue, due_today = get_todo_summary_counts()
     return {"kind": "todo_summary", "overdue": overdue,
-            "due_today": due_today}, "/todo"
+            "due_today": due_today, "tone": spec.get("tone", "")}, "/todo"
 
 
 def _w_journal(spec, name, time, from_date, to_date):
     preview = get_journal_preview()
     return {"kind": "journal", "preview": preview,
-            "date": ptos.today().isoformat()}, "/journal"
+            "date": ptos.today().isoformat(), "tone": spec.get("tone", "")}, "/journal"
 
 
 def _w_capture(spec, name, time, from_date, to_date):
-    return {"kind": "capture"}, ""
+    return {"kind": "capture", "tone": spec.get("tone", "")}, ""
 
 
 def _w_quick_add(spec, name, time, from_date, to_date):
@@ -3005,16 +3014,18 @@ def _w_quick_add(spec, name, time, from_date, to_date):
     freq, rem = get_frequent_presets(n)
     instant = get_instant_presets()
     return {"kind": "quick_add", "frequent": freq, "remaining": rem,
-            "instant": sorted(instant)}, ""
+            "instant": sorted(instant), "tone": spec.get("tone", "")}, ""
 
 
 def _w_quick_add_multi(spec, name, time, from_date, to_date):
-    return {"kind": "quick_add_multi", "presets": get_multi_presets()}, ""
+    return {"kind": "quick_add_multi", "presets": get_multi_presets(),
+            "tone": spec.get("tone", "")}, ""
 
 
 def _w_time_picker(spec, name, time, from_date, to_date):
     return {"kind": "time_picker",
-            "title": spec.get("title") or "Time window"}, ""
+            "title": spec.get("title") or "Time window",
+            "tone": spec.get("tone", "")}, ""
 
 
 def _wf(key, label, type_, **kw):
@@ -3079,6 +3090,14 @@ def _widget_fields(kind, *, view_options, name=None, time=True, limit=True,
                       default=True, advanced=True,
                       help="Interactive by default; set false to make this "
                            "widget read-only in markdown previews."))
+    # Tone field for data-driven colours (optional, for widgets that support it)
+    fields.append(_wf("tone", "Tone", "select",
+                      options=["chart-1", "chart-2", "chart-3", "chart-4",
+                               "chart-5", "chart-6", "chart-7", "chart-8",
+                               "success", "error", "warn"],
+                      advanced=True,
+                      help="Color tone for data-driven display. Choose a chart "
+                           "color, or semantic tones (success/error/warn)."))
     fields.extend(extra)
     return fields
 

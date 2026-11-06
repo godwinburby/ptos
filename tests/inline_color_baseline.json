@@ -38,7 +38,7 @@
   "web_static/js/widget_host.js": 0,
   "web_static/js/widget_picker.js": 0,
   "web_static/js/widget_toml.js": 0,
-  "web_static/js/widgets.js": 0,
+  "web_static/js/widgets.js": 1,
   "web_templates/_board_manage.html": 0,
   "web_templates/_calendar_manage.html": 0,
   "web_templates/_due_manage.html": 0,

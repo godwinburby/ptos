@@ -1,6 +1,53 @@
-// widgets.js — shared query/dashboard render helpers.
+// widgets.js -- shared query/dashboard render helpers.
 // Extracted from queries.html so both the Queries page and the markdown
 // embed mounter (embeds.js) render results identically.
+
+function esc(s) {
+  return String(s == null ? "" : s)
+    .replace(/&/g, "&")
+    .replace(/</g, "<")
+    .replace(/>/g, ">")
+    .replace(/"/g, "\\\"")
+    .replace(/'/g, "\\'");
+}
+
+// Helper: map tone value to CSS color variable
+function _toneColor(tone) {
+  if (!tone) return "";
+  var map = {
+    "chart-1": "var(--chart-1)",
+    "chart-2": "var(--chart-2)",
+    "chart-3": "var(--chart-3)",
+    "chart-4": "var(--chart-4)",
+    "chart-5": "var(--chart-5)",
+    "chart-6": "var(--chart-6)",
+    "chart-7": "var(--chart-7)",
+    "chart-8": "var(--chart-8)",
+    "success": "var(--success)",
+    "error": "var(--error)",
+    "warn": "var(--warn)",
+  };
+  return map[tone] || "";
+}
+
+// Helper: get light variant of tone color for backgrounds
+function _toneBg(tone) {
+  if (!tone) return "";
+  var map = {
+    "chart-1": "var(--tint-1)",
+    "chart-2": "var(--tint-2)",
+    "chart-3": "var(--tint-3)",
+    "chart-4": "var(--tint-4)",
+    "chart-5": "var(--tint-5)",
+    "chart-6": "var(--tint-6)",
+    "chart-7": "var(--tint-7)",
+    "chart-8": "var(--tint-8)",
+    "success": "var(--success-lt)",
+    "error": "var(--error-lt)",
+    "warn": "var(--warn-lt)",
+  };
+  return map[tone] || "";
+}
 
 function esc(s) {
   return String(s == null ? "" : s)
@@ -37,7 +84,7 @@ function renderResult(d) {
     case "quick_add":    return renderQuickAdd(d);
     case "quick_add_multi": return renderQuickAddMulti(d);
     case "time_picker": return '<div class="card" style="color:var(--sub);font-size:13px;">' +
-      'Time window picker — available on Home or in a live preview.</div>';
+      'Time window picker -- available on Home or in a live preview.</div>';
     default:             return errorCard("Unknown result type");
   }
 }
@@ -624,6 +671,8 @@ function renderHabit(d) {
   var wd = ["M", "T", "W", "T", "F", "S", "S"];
   var now = new Date();
   var today = now.getFullYear() + "-" + _pad2(now.getMonth() + 1) + "-" + _pad2(now.getDate());
+  var toneColor = _toneColor(d.tone);
+  var toneBg = _toneBg(d.tone);
   var monthHtml = "";
   if (blk) {
     var cells = (blk.days || []).map(function (day) {
@@ -634,10 +683,11 @@ function renderHabit(d) {
       // data-* attrs let the interactive mount toggle a day without the
       // page's global ids; static embeds ignore them.
       var canToggle = !!d.toggleable && day.date <= today;
+      var style = day.present && toneColor ? ' style="background:' + toneColor + ';color:white;"' : '';
       return '<td class="emb-cal-cell' + on + out + (canToggle ? ' clickable' : '') + '"' +
         (canToggle ? ' data-date="' + esc(day.date) + '" data-present="' + (day.present ? 1 : 0) +
           '" data-today="' + (day.is_today ? 1 : 0) + '" tabindex="0" role="button"' : '') +
-        ' title="' + esc(day.date) + '">' + dnum + '</td>';
+        style + ' title="' + esc(day.date) + '">' + dnum + '</td>';
     });
     var rows = [];
     for (var i = 0; i < cells.length; i += 7) rows.push("<tr>" + cells.slice(i, i + 7).join("") + "</tr>");
@@ -646,7 +696,8 @@ function renderHabit(d) {
       '<table class="emb-cal"><thead><tr>' + wd.map(function (w) { return '<th class="emb-cal-wd">' + w + '</th>'; }).join("") +
       '</tr></thead><tbody>' + rows.join("") + '</tbody></table></div>';
   }
-  return '<div class="card" data-toggleable="' + (d.toggleable ? 1 : 0) + '" data-habit="' + esc(d.habit_name || "") + '">' +
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  return '<div class="card" data-toggleable="' + (d.toggleable ? 1 : 0) + '" data-habit="' + esc(d.habit_name || "") + '"' + toneBorder + '>' +
     '<div class="card-title">Habit · ' + esc(String(d.habit_name || "").replace(/_/g, " ")) + '</div>' +
     '<div class="emb-stat">' +
       '<span><b data-stat="streak">' + _fmt(d.streak || 0) + '</b>-day streak</span>' +
@@ -723,10 +774,10 @@ function renderDue(d, opts) {
   }
   var heatColor = { hot: "var(--error)", warm: "var(--warn)", cool: "var(--accent)" };
   // Same link the /due page rows use (open the located record, return to
-  // the widget's own page) — always an anchor, static or interactive.
+  // the widget's own page) -- always an anchor, static or interactive.
   var list = rows.map(function (r) {
     var hc = heatColor[r.heat] || "var(--sub)";
-    var note = r.note ? '<span style="color:var(--sub);">— ' + esc(r.note) + '</span>' : "";
+    var note = r.note ? '<span style="color:var(--sub);">-- ' + esc(r.note) + '</span>' : "";
     var href = "/edit?filepath=" + encodeURIComponent(r.filepath || "") +
       "&lineno=" + encodeURIComponent(String(r.lineno == null ? "" : r.lineno)) +
       "&line=" + encodeURIComponent(r.line || "") +
@@ -790,7 +841,7 @@ function renderProject(d, opts) {
       return html ? '<details class="page-project-section"><summary>' + title + ' <span>(' + count + ')</span></summary><div>' + html + '</div></details>' : "";
     }
     var open = (d.open_items || []).map(function (t) {
-      return '<div class="page-project-row"><b>' + esc(t.priority || "—") + '</b><span>' + esc(t.description || "") + '</span>' +
+      return '<div class="page-project-row"><b>' + esc(t.priority || "--") + '</b><span>' + esc(t.description || "") + '</span>' +
         (t.due ? '<small>Due ' + esc(t.due) + '</small>' : '') + '</div>';
     }).join("");
     var done = (d.done_items || []).map(function (t) {
@@ -877,10 +928,10 @@ function renderTodoRow(t, filters) {
   var _priConfig = (typeof window !== "undefined" && window.PTOS &&
     window.PTOS.priorityLabels) || {};
   var priLabel = t.priority ? (_priConfig[t.priority] || _priDefaults[t.priority] || '') : '';
-  var priTitle = t.priority ? 'Priority ' + t.priority + (priLabel ? ' — ' + priLabel : '') : 'No priority';
+  var priTitle = t.priority ? 'Priority ' + t.priority + (priLabel ? ' -- ' + priLabel : '') : 'No priority';
   var pri = t.priority
     ? '<div class="todo-pri ' + esc(t.priority) + '" data-field="priority" data-value="' + esc(t.priority) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="' + esc(priTitle) + '">' + esc(t.priority) + '</div>'
-    : '<div class="todo-pri none" data-field="priority" data-value="" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="No priority">—</div>';
+    : '<div class="todo-pri none" data-field="priority" data-value="" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="No priority">--</div>';
   var dueBadge = _todoDueBadge(t);
   var selMode = typeof window !== "undefined" && !!window._selMode;
   var selLines = (selMode && typeof window !== "undefined" && window._selLines) || {};

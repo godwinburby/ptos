@@ -21,7 +21,7 @@ import re
 
 COMMON_KEYS = frozenset({
     "view", "name", "time", "from_date", "to_date", "title", "limit",
-    "span", "hide_on", "live",
+    "span", "hide_on", "live", "tone",
 })
 
 # Gallery categories, in display order (the client merges its own
@@ -49,7 +49,7 @@ _VIEW_ALIASES = {}  # view name -> canonical kind
 
 def register(kind, resolve, views=(), keys=(), needs_name=True,
              infer_order=99, owns_name=None, label=None, description=None,
-             icon=None, category=None, named=False, fields=(),
+             icon=None, tone=None, category=None, named=False, fields=(),
              starters=(), interactive_default=False, quick_add=False):
     """Register one widget kind (re-registration replaces the entry,
     so an importlib.reload of the registering module stays safe).
@@ -64,7 +64,7 @@ def register(kind, resolve, views=(), keys=(), needs_name=True,
     infer_order  position in the name->kind scan (lower wins first);
                  99 = never inferred
     owns_name    callable(name, queries) -> bool, used during inference
-    label/description/icon
+    label/description/icon/tone
                  gallery card text (label defaults to the kind name)
     category     one of CATEGORIES ids (or None for test-only kinds)
     named        kind's second gallery step lists saved items
@@ -124,6 +124,7 @@ def register(kind, resolve, views=(), keys=(), needs_name=True,
         "label": str(label).strip() if label else kind.replace("_", " ").title(),
         "description": str(description or ""),
         "icon": str(icon or ""),
+        "tone": str(tone or ""),
         "category": category,
         "named": bool(named),
         "fields": fields,
@@ -270,6 +271,7 @@ def catalog_entry(entry):
         "label": entry.get("label") or entry["kind"],
         "description": entry.get("description") or "",
         "icon": entry.get("icon") or "",
+        "tone": entry.get("tone") or "",
         "category": entry.get("category"),
         "named": bool(entry.get("named")),
         "needs_name": entry["needs_name"],
