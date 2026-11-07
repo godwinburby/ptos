@@ -376,9 +376,20 @@
     return hit;
   }
 
-  function _card(attr, val, icon, label, desc) {
+  function _card(attr, val, icon, label, desc, tone) {
+    var toneColor = "";
+    if (tone) {
+      var map = {
+        "chart-1": "var(--chart-1)", "chart-2": "var(--chart-2)", "chart-3": "var(--chart-3)",
+        "chart-4": "var(--chart-4)", "chart-5": "var(--chart-5)", "chart-6": "var(--chart-6)",
+        "chart-7": "var(--chart-7)", "chart-8": "var(--chart-8)",
+        "success": "var(--success)", "error": "var(--error)", "warn": "var(--warn)",
+      };
+      toneColor = map[tone] || "";
+    }
+    var borderStyle = toneColor ? ' style="border-left:3px solid ' + toneColor + ';"' : '';
     return '<button type="button" class="wp-card" data-' + attr + '="' +
-      _esc(val) + '">' +
+      _esc(val) + '"' + borderStyle + '>' +
       '<span class="wp-card-ico">' + _iconHtml(icon) + "</span>" +
       '<span class="wp-card-txt">' +
         '<span class="wp-card-label">' + _esc(label) + "</span>" +
@@ -420,13 +431,15 @@
       texts.forEach(function (t) { (grouped.text = grouped.text || []).push(_textCard(t)); });
       starters.forEach(function (s) {
         var id = s.category || "other";
+        var st = _cat && _cat.kinds ? _cat.kinds.find(function (k) { return k.kind === s.kind; }) : null;
+        var stTone = st ? st.tone : "";
         (grouped[id] = grouped[id] || []).push(_card("starter", s.id,
-          _kindIcon(s.kind), s.label, s.description));
+          _kindIcon(s.kind), s.label, s.description, stTone));
       });
       kinds.forEach(function (k) {
         var id = k.category || "other";
         (grouped[id] = grouped[id] || []).push(_card("kind", k.kind,
-          k.icon, k.label, k.description));
+          k.icon, k.label, k.description, k.tone));
       });
       var groupOrder = ["text"].concat((_cat && _cat.categories || []).map(function (c) { return c.id; }));
       var matchCount = 0;
@@ -477,7 +490,8 @@
       if (rec.length) {
         html += '<div class="wp-sec-label">Recent</div><div class="wp-recent-strip">';
         rec.forEach(function (r, i) {
-          html += _card("recent", i, "layers", r.label, "");
+          var rTone = _cat && _cat.kinds ? _cat.kinds.find(function (k) { return k.kind === r.kind; }) : null;
+          html += _card("recent", i, "layers", r.label, "", rTone ? rTone.tone : "");
         });
         html += "</div>";
       }
@@ -508,7 +522,9 @@
     });
     var html = '<div class="wp-grid">';
     starters.forEach(function (s) {
-      html += _card("starter", s.id, _kindIcon(s.kind), s.label, s.description);
+      var st = _cat && _cat.kinds ? _cat.kinds.find(function (k) { return k.kind === s.kind; }) : null;
+      var stTone = st ? st.tone : "";
+      html += _card("starter", s.id, _kindIcon(s.kind), s.label, s.description, stTone);
     });
     body.innerHTML = (starters.length ? html + "</div>" :
       '<div class="wp-empty">No starters match.</div>');
@@ -546,7 +562,7 @@
 
   function _textCard(t) {
     return _card("text", _textItems().indexOf(t), t.icon || "pilcrow",
-                 t.label, t.description);
+                 t.label, t.description, "");
   }
 
   function _kindsIn(catId) {
@@ -577,7 +593,7 @@
     if (q) kinds = kinds.filter(function (k) { return _hay(k).indexOf(q) !== -1; });
     html = '<div class="wp-grid">';
     kinds.forEach(function (k) {
-      html += _card("kind", k.kind, k.icon, k.label, k.description);
+      html += _card("kind", k.kind, k.icon, k.label, k.description, k.tone);
     });
     html += "</div>";
     if (!kinds.length) html = '<div class="wp-empty">No widgets here.</div>' + html;

@@ -5,6 +5,31 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-11-07
+
+### C8: Widget tone + icon (frontend)
+
+- **Backend tones** — Added `tone` to all 16 widget registrations in ptos_service.py
+  (dashboard: chart-1, metric: chart-2, threshold: success, board: chart-5,
+  habit: chart-3, calendar: chart-4, due: warn, project: chart-6, todo: chart-7,
+  query: chart-8, records: chart-1, todo_summary: chart-8, journal: chart-2,
+  capture: chart-3, quick_add: chart-4, quick_add_multi: chart-5,
+  time_picker: chart-6)
+
+- **Widget renderers** — widgets.js: added `_WIDGET_ICONS` SVG map + `_iconHtml()`;
+  updated 15 render functions to apply tone `border-left` and prepend icon to card titles
+
+- **Widget picker** — widget_picker.js: `_card()` now accepts `tone` for left-border
+  coloring on all gallery cards (starters, kinds, recent, categories)
+
+- **Test baselines** — Updated inline_style_baseline.json (widgets.js: 95,
+  widget_picker.js: 2) and inline_color_baseline.json (widgets.js: 1)
+
+- **Fix** — test_default_off now mocks svc.get_config to test default from
+  starter config, not user's overridden config
+
+---
+
 ## 2026-11-05
 
 ### Dark-mode token system & inline colour migration (A1–A5)

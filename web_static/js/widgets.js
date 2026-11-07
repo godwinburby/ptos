@@ -49,6 +49,42 @@ function _toneBg(tone) {
   return map[tone] || "";
 }
 
+// Icon SVG map (shared with widget_picker.js)
+var _WIDGET_ICONS = {
+  "layout": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+  "hash": '<path d="M9 3 7 21M17 3l-2 18M4 8h16M4 16h16"/>',
+  "gauge": '<path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/>',
+  "columns": '<rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="16" rx="1"/><rect x="17" y="4" width="4" height="16" rx="1"/>',
+  "calendar-check": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18M9 15l2 2 4-4"/>',
+  "calendar": '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M8 3v4M16 3v4M3 10h18"/>',
+  "clock": '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+  "folder": '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+  "check-square": '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M8 12l3 3 6-6"/>',
+  "search": '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+  "table": '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 10h18M3 15h18M9 4v16M15 4v16"/>',
+  "list": '<path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/>',
+  "book": '<path d="M4 5a2 2 0 0 1 2-2h14v18H6a2 2 0 0 0-2 2z"/><path d="M4 19a2 2 0 0 1 2-2h14"/>',
+  "inbox": '<path d="M3 13h5l2 3h4l2-3h5"/><path d="M5 5h14l2 8v5a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-5z"/>',
+  "zap": '<path d="M13 2 4 14h6l-1 8 9-12h-6z"/>',
+  "layers": '<path d="M12 3 3 8l9 5 9-5z"/><path d="M3 13l9 5 9-5"/>',
+  "heading": '<path d="M6 4v16M18 4v16M6 12h12"/>',
+  "pilcrow": '<path d="M14 4h-4a4 4 0 0 0 0 8h4"/><path d="M14 4v16"/>',
+  "list-ordered": '<path d="M10 6h11M10 12h11M10 18h11"/><path d="M4 6h1v4M4 10h2M6 18H4c0-1 2-2 2-3s-1-1.5-2-1"/>',
+  "code": '<path d="m8 8-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+  "sun": '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/>',
+  "user": '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>',
+  "quote": '<path d="M10 11H6a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v6a4 4 0 0 1-4 4"/><path d="M20 11h-4a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v6a4 4 0 0 1-4 4"/>',
+  "minus": '<path d="M5 12h14"/>',
+  "message-square": '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>',
+};
+
+function _iconHtml(name) {
+  var body = _WIDGET_ICONS[name] || _WIDGET_ICONS["layers"];
+  return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+    'stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true" style="width:16px;height:16px;">' + body + "</svg>";
+}
+
 function esc(s) {
   return String(s == null ? "" : s)
     .replace(/&/g, "&amp;")
@@ -90,7 +126,11 @@ function renderResult(d) {
 }
 
 function renderCapture(d) {
-  return '<div class="card"><div style="display:flex;gap:8px;flex-wrap:wrap;">' +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Quick capture</div>' +
+    '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
     '<input type="text" class="cap-input" placeholder="Quick record… (Enter to capture)" disabled ' +
     'style="flex:1;min-width:180px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">' +
     '<button type="button" class="btn btn-primary" disabled>Capture</button>' +
@@ -100,7 +140,11 @@ function renderCapture(d) {
 function renderQuickAdd(d) {
   var names = (d.frequent || []).concat(d.remaining || []);
   if (!names.length) return '<div class="card" style="color:var(--sub);font-size:13px;">No quick-add presets.</div>';
-  return '<div class="chip-group">' + names.map(function (name) {
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Quick add</div>' +
+    '<div class="chip-group">' + names.map(function (name) {
     return '<a class="preset-chip" href="/add?preset=' +
       encodeURIComponent(name) + '">+ ' + esc(name) + '</a>';
   }).join("") + '</div>';
@@ -110,7 +154,11 @@ function renderQuickAddMulti(d) {
   var presets = d.presets || {};
   var names = Object.keys(presets);
   if (!names.length) return '<div class="card" style="color:var(--sub);font-size:13px;">No multi-record presets.</div>';
-  return '<div class="chip-group">' + names.map(function (name) {
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Quick add multi</div>' +
+    '<div class="chip-group">' + names.map(function (name) {
     var detail = presets[name] ? ' <span style="opacity:.6;font-size:11px;">(' + esc(presets[name]) + ')</span>' : '';
     return '<span class="preset-chip">+ ' + esc(name) + detail + '</span>';
   }).join("") + '</div>';
@@ -166,13 +214,19 @@ function renderDashboard(d, opts) {
     return label + '<div class="stat-grid">' + cards + '</div>';
   }).join('');
   if (opts.bare) return html;
-  return '<div class="card"><div class="card-title">Dashboard · ' + esc(d.name) + '</div>' +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Dashboard · ' + esc(d.name) + '</div>' +
     exprBadge(d) + html + '</div>';
 }
 
 function renderMetric(d) {
-  return '<div class="card">' +
-    '<div class="card-title">Metric</div>' +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '>' +
+    '<div class="card-title">' + iconHtml + 'Metric</div>' +
     exprBadge(d) +
     '<div style="font-size:28px;font-weight:800;color:var(--accent);">' + esc(d.value) + '</div>' +
     '<div style="font-size:13px;color:var(--sub);margin-top:4px;">' + esc(d.name.replace(/_/g, " ")) + '</div>' +
@@ -195,8 +249,11 @@ function renderGroup(d) {
     ? qtWrap(renderChart(d.chart, _groupChartData(d),
         { label: "Grouped by " + (d.fields || []).join(", ") }), table)
     : table;
-  return '<div class="card">' +
-    '<div class="card-title">Grouped by ' + esc((d.fields || []).join(", ")) + ' · ' + esc(d.time_label) + '</div>' +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '>' +
+    '<div class="card-title">' + iconHtml + 'Grouped by ' + esc((d.fields || []).join(", ")) + ' · ' + esc(d.time_label) + '</div>' +
     exprBadge(d) +
     body +
     summaryBar(d) +
@@ -220,8 +277,11 @@ function renderPivot(d) {
   } else if (d.chart === "bar") {
     body = qtWrap(renderChart("bar", _pivotBarData(d), { label: label }), table);
   }
-  return '<div class="card">' +
-    '<div class="card-title">Pivot · ' + esc(d.row_field) + ' × ' + esc(d.col_field) + ' · ' + esc(d.time_label) + '</div>' +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '>' +
+    '<div class="card-title">' + iconHtml + 'Pivot · ' + esc(d.row_field) + ' × ' + esc(d.col_field) + ' · ' + esc(d.time_label) + '</div>' +
     exprBadge(d) +
     body +
   '</div>';
@@ -240,8 +300,11 @@ function renderTrend(d) {
     ? qtWrap(renderChart(d.chart, _trendChartData(d),
         { label: "Trend " + (d.filter_str || "") }), table)
     : table;
-  return '<div class="card">' +
-    '<div class="card-title">Trend · ' + esc(d.filter_str) + '</div>' +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '>' +
+    '<div class="card-title">' + iconHtml + 'Trend · ' + esc(d.filter_str) + '</div>' +
     exprBadge(d) +
     body +
   '</div>';
@@ -287,7 +350,10 @@ function renderThresholdResult(thresholds, opts) {
       : inner;
   }).join("");
   if (opts.bare) return bars;
-  return '<div class="card"><div class="card-title">Thresholds</div>' + bars + '</div>';
+  var toneColor = _toneColor(thresholds[0].tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = thresholds[0].icon ? _iconHtml(thresholds[0].icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Thresholds</div>' + bars + '</div>';
 }
 
 function summaryBar(d) {
@@ -659,8 +725,11 @@ function renderBoard(d) {
       '<div class="emb-chip-count">' + _fmt(count) + '</div>' + rollup + '</div>';
   }).join("");
   var matched = (d.match_field && d.grid_rows) ? d.grid_rows.length : null;
-  return '<div class="card">' +
-    '<div class="card-title">Board · ' + esc(String(d.board_name || "").replace(/_/g, " ")) + '</div>' +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '>' +
+    '<div class="card-title">' + iconHtml + 'Board · ' + esc(String(d.board_name || "").replace(/_/g, " ")) + '</div>' +
     '<div class="emb-chip-row">' + chips + '</div>' +
     (matched !== null ? '<div class="emb-kicker" style="margin-top:8px;">' + _fmt(matched) + ' matched across columns</div>' : '') +
   '</div>';
@@ -754,8 +823,11 @@ function renderCalendar(d, opts) {
   var detailBlock = detailDays.length
     ? '<div class="emb-cal-day-list">' + details + '</div>'
     : '<div class="msg emb-cal-empty" style="color:var(--sub);">No records this month.</div>';
-  return '<div class="card">' +
-    '<div class="card-title">Calendar · ' + esc(label) + '</div>' +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '>' +
+    '<div class="card-title">' + iconHtml + 'Calendar · ' + esc(label) + '</div>' +
     '<div class="emb-kicker">' + esc(_monthName(d.month) + " " + d.year) + '</div>' +
     '<table class="emb-cal emb-cal-rec-grid"><thead><tr>' + wd.map(function (w) { return '<th class="emb-cal-wd">' + w + '</th>'; }).join("") +
     '</tr></thead><tbody>' + rows + '</tbody></table>' +
@@ -770,7 +842,10 @@ function renderDue(d, opts) {
   if (!rows.length) {
     var empty = '<div class="msg" style="color:var(--sub);">Nothing outstanding.</div>';
     if (opts.bare) return empty;
-    return '<div class="card"><div class="card-title">' + esc(d.title || "Due") + '</div>' + empty + '</div>';
+    var toneColor = _toneColor(d.tone);
+    var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+    var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+    return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + esc(d.title || "Due") + '</div>' + empty + '</div>';
   }
   var heatColor = { hot: "var(--error)", warm: "var(--warn)", cool: "var(--accent)" };
   // Same link the /due page rows use (open the located record, return to
@@ -796,7 +871,10 @@ function renderDue(d, opts) {
     return list +
       '<div class="emb-stat" style="margin-top:8px;"><span><b>' + _fmt(count) + '</b> overdue</span></div>';
   }
-  return '<div class="card"><div class="card-title">' + esc(d.title || "Due") + '</div>' + list +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + esc(d.title || "Due") + '</div>' + list +
     '<div class="emb-stat" style="margin-top:8px;"><span><b>' + _fmt(count) + '</b> overdue</span></div>' +
   '</div>';
 }
@@ -807,16 +885,22 @@ function renderTodoSummary(d) {
   if (d.overdue && d.due_today) parts.push('<span style="color:var(--sub);"> · </span>');
   if (d.due_today) parts.push('<span style="color:var(--accent);">' + _fmt(d.due_today) + ' due today</span>');
   if (!parts.length) parts.push('<span style="color:var(--sub);">No todos due today</span>');
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
   return '<a href="' + esc(d.link || "/todo") + '" style="display:flex;align-items:center;gap:12px;text-decoration:none;">' +
-    '<span style="font-size:14px;font-weight:600;color:var(--text);">' + parts.join("") + '</span>' +
+    '<span style="font-size:14px;font-weight:600;color:var(--text);">' + iconHtml + parts.join("") + '</span>' +
     '<span style="margin-left:auto;color:var(--sub);font-size:13px;">→</span>' +
   '</a>';
 }
 
 function renderJournal(d) {
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
   return '<a href="' + esc(d.link || "/journal") + '" style="display:block;text-decoration:none;">' +
     '<span style="font-size:14px;font-weight:600;color:var(--text);">' +
-    esc(d.preview || "No entry yet") + '</span>' +
+    iconHtml + esc(d.preview || "No entry yet") + '</span>' +
   '</a>';
 }
 
@@ -824,6 +908,9 @@ function renderProject(d, opts) {
   opts = opts || {};
   var heatColor = { hot: "var(--error)", warm: "var(--warn)", cool: "var(--accent)" };
   var hc = heatColor[d.heat] || "var(--sub)";
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
   if (opts.full) {
     var label = esc(d.label || d.name || "");
     var stats = [];
@@ -888,8 +975,11 @@ function renderProject(d, opts) {
     lines.push('<span>' + _fmt(d.board_stalls) + ' stalled</span>');
   }
   var label = d.label || d.name || "";
-  return '<div class="card">' +
-    '<div class="card-title">Project · ' + esc(label) + '</div>' +
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
+  return '<div class="card"' + toneBorder + '>' +
+    '<div class="card-title">' + iconHtml + 'Project · ' + esc(label) + '</div>' +
     '<div class="emb-stat">' + lines.join("") + '</div>' +
   '</div>';
 }
@@ -1065,7 +1155,10 @@ function renderTodo(d, opts) {
   } else {
     parts.push('<div class="msg" style="color:var(--sub);margin:10px 12px;">No todos.</div>');
   }
+  var toneColor = _toneColor(d.tone);
+  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
   return opts.full
     ? '<div class="todo-full-list">' + parts.join("") + '</div>'
-    : '<div class="card">' + parts.join("") + '</div>';
+    : '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Task list</div>' + parts.join("") + '</div>';
 }

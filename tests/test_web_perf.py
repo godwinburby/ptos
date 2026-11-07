@@ -376,8 +376,11 @@ class TestBaseTemplateUsesExternalScripts:
 
 
 class TestTemplatesAutoReload:
-    def test_default_off(self):
+    def test_default_off(self, monkeypatch):
         import ptos_web
+        import importlib
+        monkeypatch.setattr(ptos_web.svc, "get_config", lambda: {"server": {}})
+        importlib.reload(ptos_web)
         assert ptos_web.app.config["TEMPLATES_AUTO_RELOAD"] is False
 
     def test_as_bool_coercions(self):

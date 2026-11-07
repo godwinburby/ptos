@@ -622,57 +622,6 @@
     .preset-chip-wrap.simple .preset-instant { color: var(--success); }
     .preset-chip-wrap.simple .preset-instant::after { content: " instant"; font-size: var(--fs-xs); opacity: .7; margin-left: 4px; }
 
-    /* ── FilterBuilder chip groups (D4-12: tame pill lists) ─────────── */
-    .chip-group {
-      position: relative;
-    }
-    .chip-group .qb-chip {
-      flex-shrink: 0;
-    }
-    .chip-group.show-all .qb-chip {
-      display: inline-flex;
-    }
-    .chip-group:not(.show-all) .qb-chip:not(.active):not(.selected) {
-      display: none;
-    }
-    .chip-group .qb-chip.active,
-    .chip-group .qb-chip.selected {
-      display: inline-flex;
-    }
-    .chip-group-toggle {
-      display: inline-flex;
-      align-items: center;
-      gap: 4px;
-      padding: 4px 12px;
-      margin: 4px 0;
-      font-size: var(--fs-sm);
-      font-weight: 600;
-      color: var(--accent);
-      background: var(--accent-lt);
-      border: 1px solid var(--accent);
-      border-radius: var(--radius-md);
-      cursor: pointer;
-      transition: all 0.15s;
-      white-space: nowrap;
-    }
-    .chip-group-toggle:hover {
-      background: var(--accent);
-      color: white;
-    }
-    .chip-group-toggle:focus { outline: none; box-shadow: 0 0 0 2px var(--accent); }
-    .chip-group-filter {
-      width: 100%;
-      max-width: 240px;
-      padding: 6px 10px;
-      margin: 4px 0;
-      font-size: var(--fs-sm);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      background: var(--bg);
-      color: var(--text);
-    }
-    .chip-group-filter:focus { outline: none; box-shadow: 0 0 0 2px var(--accent); }
-
     /* output */
     .output {
       background: var(--text); color: var(--border);
