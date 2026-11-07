@@ -53,6 +53,16 @@ Format: `[version or date] — description`
 - **Updated** inline_style_baseline.json
 - **All tests pass** (3963 Python + 81 Node)
 
+### C7b: Utility class migration (settings.html)
+
+- **Migrated** inline styles in settings.html to utility classes
+  (d-flex, gap-*, mb-*, d-none, classList.toggle, alert classes)
+- **Converted** `style.display` toggles to `classList.add/remove/toggle("d-none")`
+- **Reduced** inline style count from 167 to 39 (128 fewer)
+- **Updated** inline_style_baseline.json
+- **Fixed** test_settings_reuses_view_toggle_style to match actual HTML class format
+- **All tests pass** (3963 Python + 81 Node)
+
 ---
 
 ## 2026-11-05

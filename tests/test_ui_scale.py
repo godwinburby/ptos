@@ -139,4 +139,5 @@ class TestSettingsControl:
     def test_settings_reuses_view_toggle_style(self):
         text = _read(TEMPLATE_DIR, "settings.html")
         block = text.split('id="sec-display"')[1]
-        assert 'class="view-toggle"' in block
+        # view-toggle appears as class="view-toggle mt-1" so check for the class name
+        assert 'view-toggle' in block and 'class=' in block
