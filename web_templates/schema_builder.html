@@ -3,55 +3,55 @@
 
 <div class="page-title">Schema Builder</div>
 
-<div style="background:var(--warn);color:var(--text-on-accent);padding:12px 16px;border-radius:10px;margin-bottom:14px;font-size:14px;font-weight:600;">
+<div class="alert alert-warn mb-3 fw-600">
   ⚠️ Schema changes affect all existing records. Wrong changes can break PTOS. Use "Preview Lint" before saving.
 </div>
 
-<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+<div class="d-flex items-center justify-between flex-wrap gap-2 mb-2">
+  <div class="d-flex gap-2 items-center flex-wrap">
     <button onclick="previewLint()" class="btn btn-warn btn-sm" id="lint-btn">🔍 Preview Lint</button>
     <button onclick="confirmSave()" class="btn btn-success btn-sm" id="save-btn">💾 Save Schema</button>
     <button onclick="addType()" class="btn btn-primary btn-sm">+ Add Type</button>
   </div>
 </div>
-<div id="save-msg" style="font-size:13px;display:none;padding:8px 12px;border-radius:6px;margin-bottom:12px;background:var(--success-lt);color:var(--success);"></div>
+<div id="save-msg" class="fs-sm d-none p-2 rounded mb-3 bg-success-lt text-success"></div>
 
 <!-- ── Type chip bar ── -->
 <div class="sb-type-bar">
   <div id="type-tabs" class="sb-type-strip"></div>
-  <span id="new-type-wrap" style="display:none;">
+  <span id="new-type-wrap" class="d-none">
     <input type="text" id="new-type-input" placeholder="type name"
-           style="font-size:14px;padding:5px 10px;border:2px solid var(--accent);border-radius:6px;width:140px;"
+           class="fs-md p-2 border-2 border-accent rounded w-140"
            onkeydown="if(event.key==='Enter')confirmAddType();else if(event.key==='Escape')cancelAddType();"
            onblur="cancelAddType()">
   </span>
 </div>
 
 <!-- ── Type editor ── -->
-<div id="type-editor" style="margin-top:14px;display:none;">
+<div id="type-editor" class="mt-3 d-none">
 
     <!-- type name row -->
-    <div class="card" style="margin-bottom:12px;">
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-        <div style="flex:1;">
+    <div class="card mb-2">
+      <div class="d-flex items-center gap-2 flex-wrap">
+        <div class="flex-1">
           <label>Type name</label>
           <input type="text" id="ed-type-name" placeholder="e.g. lead"
                  oninput="onTypeNameChange()"
                  style="font-size:16px;font-weight:700;">
         </div>
         <button onclick="deleteCurrentType()"
-                class="btn btn-ghost btn-sm"
-                style="color:var(--error);border-color:var(--error);margin-top:18px;">
+                class="btn btn-ghost btn-sm mt-4"
+                style="color:var(--error);border-color:var(--error);">
           Delete type
         </button>
       </div>
     </div>
 
     <!-- record line preview -->
-    <div id="preview-line" style="font-size:12px;color:var(--sub);padding:8px 12px;border-radius:6px;background:var(--border-lt);margin-bottom:12px;font-family:monospace;white-space:pre;overflow-x:auto;">Type a name and add fields to see a preview</div>
+    <div id="preview-line" class="fs-xs text-muted p-2 rounded mb-3 font-mono" style="background:var(--border-lt);white-space:pre;overflow-x:auto;">Type a name and add fields to see a preview</div>
 
     <!-- fields editor -->
-    <div class="card" style="margin-bottom:12px;">
+    <div class="card mb-2">
       <div class="chip-section" style="border-top:3px solid var(--success);">
         <div class="chip-section-header" onclick="toggleSection(this)">
           <div class="chip-section-label" style="color:var(--success);">Fields</div>
@@ -448,15 +448,15 @@ function renderTypeList() {
 function selectType(tname) {
   _currentType = tname;
   renderTypeList();
-  document.getElementById("type-editor").style.display = "block";
-  document.getElementById("type-empty").style.display  = "none";
+document.getElementById("type-editor").classList.remove("d-none");
+document.getElementById("type-empty").classList.add("d-none");
   renderEditor();
 }
 
 function addType() {
   var wrap = document.getElementById("new-type-wrap");
   var inp = document.getElementById("new-type-input");
-  wrap.style.display = "inline";
+  wrap.classList.remove("d-none");
   inp.value = "";
   inp.focus();
 }
@@ -464,7 +464,7 @@ function addType() {
 function confirmAddType() {
   var inp = document.getElementById("new-type-input");
   var name = inp.value.trim().toLowerCase().replace(/[^a-z0-9_]/g,"_");
-  document.getElementById("new-type-wrap").style.display = "none";
+  document.getElementById("new-type-wrap").classList.add("d-none");
   if (!name) return;
   if (_state.types.includes(name)) { alert("Type already exists"); return; }
   _state.types.push(name);
@@ -477,7 +477,7 @@ function confirmAddType() {
 }
 
 function cancelAddType() {
-  document.getElementById("new-type-wrap").style.display = "none";
+  document.getElementById("new-type-wrap").classList.add("d-none");
 }
 
 function deleteCurrentType() {
@@ -485,9 +485,10 @@ function deleteCurrentType() {
   if (!confirm("Delete type '" + _currentType + "'? This only changes the schema, not existing records.")) return;
   _state.types = _state.types.filter(function(t){ return t !== _currentType; });
   delete _state.type_schemas[_currentType];
-  _currentType = null;
-  document.getElementById("type-editor").style.display = "none";
-  document.getElementById("type-empty").style.display  = "block";
+_currentType = null;
+document.getElementById("type-editor").classList.add("d-none");
+document.getElementById("type-empty").classList.remove("d-none");
+renderTypeList();
   renderTypeList();
 }
 
@@ -1285,9 +1286,9 @@ function makeGlobalDerivedRow(fname, ddef) {
   var hint = document.createElement("div");
   hint.style.cssText = "font-size:11px;color:var(--sub);margin-top:6px;";
   hint.innerHTML = '<span style="cursor:pointer;color:var(--accent);" ' +
-    'onclick="var el=this.nextElementSibling;el.style.display=el.style.display===\'none\'?\'block\':\'none\'">' +
+    'onclick="var el=this.nextElementSibling;el.classList.toggle(\'d-none\')">' +
     '▸ Expression help</span>' +
-    '<div style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px;line-height:1.6;">' +
+    '<div class="d-none p-2 rounded border" style="background:var(--bg);font-size:11px;line-height:1.6;">' +
       '<div style="font-weight:600;margin-bottom:4px;">Keywords</div>' +
       '<table style="border-collapse:collapse;width:100%;">' +
         '<tr><td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap;"><code>today</code></td><td>Current date (e.g. 2026-09-16)</td></tr>' +
@@ -1363,9 +1364,9 @@ function makeDerivedRow(fname, ddef) {
   var hint = document.createElement("div");
   hint.style.cssText = "font-size:11px;color:var(--sub);margin-top:6px;";
   hint.innerHTML = '<span style="cursor:pointer;color:var(--accent);" ' +
-    'onclick="var el=this.nextElementSibling;el.style.display=el.style.display===\'none\'?\'block\':\'none\'">' +
+    'onclick="var el=this.nextElementSibling;el.classList.toggle(\'d-none\')">' +
     '▸ Expression help</span>' +
-    '<div style="display:none;margin-top:6px;padding:8px 10px;background:var(--bg);border:1px solid var(--border);border-radius:8px;font-size:11px;line-height:1.6;">' +
+    '<div class="d-none p-2 rounded border" style="background:var(--bg);font-size:11px;line-height:1.6;">' +
       '<div style="font-weight:600;margin-bottom:4px;">Keywords</div>' +
       '<table style="border-collapse:collapse;width:100%;">' +
         '<tr><td style="padding:1px 8px 1px 0;font-weight:600;white-space:nowrap;"><code>today</code></td><td>Current date (e.g. 2026-09-16)</td></tr>' +
@@ -1409,16 +1410,16 @@ function validateDerivedInline(fname, inputEl) {
   var val = inputEl.value;
   if (!val || !val.trim()) {
     inputEl.style.borderColor = "";
-    if (errEl) errEl.style.display = "none";
+    if (errEl) errEl.classList.add("d-none");
     return;
   }
   var r = validateDerivedExpr(val);
   if (r.ok) {
     inputEl.style.borderColor = "";
-    if (errEl) errEl.style.display = "none";
+    if (errEl) errEl.classList.add("d-none");
   } else {
     inputEl.style.borderColor = "var(--error)";
-    if (errEl) { errEl.textContent = r.error; errEl.style.display = "block"; }
+    if (errEl) { errEl.textContent = r.error; errEl.classList.remove("d-none"); }
   }
 }
 function deleteDerivedField(fname) {
@@ -1650,7 +1651,7 @@ function saveSchema() {
   var btn = document.getElementById("save-btn");
   var msg = document.getElementById("save-msg");
   btn.disabled = true; btn.textContent = "Saving…";
-  msg.style.display = "none";
+  msg.classList.add("d-none");
 
   fetch("/schema-builder/save", {
     method: "POST",
@@ -1660,13 +1661,13 @@ function saveSchema() {
   .then(function(r) { return r.json(); })
   .then(function(d) {
     btn.disabled = false; btn.textContent = "💾 Save Schema";
-    msg.style.display = "block";
+    msg.classList.remove("d-none");
     if (d.ok) {
       msg.style.background = "var(--success-lt)";
       msg.style.color = "var(--success)";
       msg.textContent = "✔ Schema saved";
       clearTimeout(msg._hideTimer);
-      msg._hideTimer = setTimeout(function() { msg.style.display = "none"; }, 3000);
+      msg._hideTimer = setTimeout(function() { msg.classList.add("d-none"); }, 3000);
     } else {
       msg.style.background = "var(--error-lt)";
       msg.style.color = "var(--error)";
@@ -1709,7 +1710,7 @@ function showLintModal(d) {
   
   if (!d.ok) {
     content.innerHTML = '<div style="color:var(--error);padding:20px;">Error: '+escHtml(d.error||"Unknown error")+'</div>';
-    modal.style.display = "flex";
+    modal.classList.remove("d-none");
     return;
   }
   
@@ -1768,11 +1769,11 @@ function showLintModal(d) {
   html += '</div>';
   
   content.innerHTML = html;
-  modal.style.display = "flex";
+  modal.classList.remove("d-none");
 }
 
 function closeLintModal() {
-  document.getElementById("lint-modal").style.display = "none";
+  document.getElementById("lint-modal").classList.add("d-none");
 }
 
 // ── Derived field validation ──────────────────────────────────────────────────
@@ -1847,11 +1848,11 @@ function confirmSave() {
     '<button onclick="closeSaveModal()" class="btn btn-ghost">Cancel</button>'+
     '<button onclick="doSaveSchema()" class="btn btn-success">Save Anyway</button>'+
     '</div></div>';
-  modal.style.display = "flex";
+  modal.classList.remove("d-none");
 }
 
 function closeSaveModal() {
-  document.getElementById("save-modal").style.display = "none";
+  document.getElementById("save-modal").classList.add("d-none");
 }
 
 function doSaveSchema() {

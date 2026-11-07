@@ -44,6 +44,15 @@ Format: `[version or date] — description`
 - **Updated** inline_style_baseline.json
 - **All tests pass** (3963 Python + 81 Node)
 
+### C7b: Utility class migration (schema_builder.html)
+
+- **Migrated** inline styles in schema_builder.html to utility classes
+  (d-flex, gap-*, mb-*, d-none, classList.toggle, alert classes)
+- **Converted** `style.display` toggles to `classList.add/remove/toggle("d-none")`
+- **Reduced** inline style count from 182 to 171 (11 fewer)
+- **Updated** inline_style_baseline.json
+- **All tests pass** (3963 Python + 81 Node)
+
 ---
 
 ## 2026-11-05
