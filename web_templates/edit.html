@@ -266,23 +266,21 @@ value="{{ f.value }}"
       </div>
     </div>
 
-    <!-- id / links -->
+<!-- id / links -->
     <div class="divider"></div>
     {% set has_links = field_values.get('id') or field_values.get('links') %}
-    <div onclick="toggleLinks()"
-         style="display:flex;align-items:center;justify-content:space-between;
-                padding:10px 0;cursor:pointer;user-select:none;">
-      <span style="font-size:13px;font-weight:600;color:var(--sub);">
-        Id &amp; links
+    <div onclick="toggleLinks()" class="d-flex items-center justify-between p-0 cursor-pointer user-select-none">
+      <span class="fs-xs fw-600 text-sub">
+        Id & links
         {% if has_links %}
-        <span style="color:var(--accent);margin-left:6px;">· filled</span>
+        <span class="text-accent ms-1">· filled</span>
         {% endif %}
       </span>
-      <span id="link-arrow" style="font-size:11px;color:var(--sub);">
+      <span id="link-arrow" class="fs-xs text-sub">
         {% if has_links %}▲{% else %}▼{% endif %}
       </span>
     </div>
-    <div id="link-fields" style="display:{% if has_links %}block{% else %}none{% endif %};">
+    <div id="link-fields" class="{% if has_links %}d-block{% else %}d-none{% endif %}">
       <div class="field-group">
         <label>Id <span style="color:var(--sub);font-weight:400;">optional · link target</span></label>
         <div style="display:flex;gap:4px;align-items:center;">
@@ -306,8 +304,9 @@ value="{{ f.value }}"
     function toggleLinks() {
       var el  = document.getElementById("link-fields");
       var arr = document.getElementById("link-arrow");
-      var open = el.style.display !== "none";
-      el.style.display = open ? "none" : "block";
+      var open = el.classList.contains("d-block");
+      el.classList.toggle("d-none", open);
+      el.classList.toggle("d-block", !open);
       arr.textContent  = open ? "▼" : "▲";
     }
     </script>

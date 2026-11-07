@@ -224,18 +224,19 @@ function toggleMoreMenu(e) {
 // ── Keyboard Shortcuts ────────────────────────────────────────────────────────
 (function() {
   // Navigation shortcuts
+  // Navigation shortcuts
   var NAV = {
-    "g h": "/",
-    "g a": "/add",
-    "g b": "/browse",
-    "g q": "/queries",
-    "g j": "/journal",
-    "g n": "/notes",
-    "g d": "/due",
-    "g t": "/todo",
-    "g e": "/editor",
+    "g b": "/board",
+    "g h": "/habits",
+    "g a": "/calendar",
+    "g q": "/thresholds",
+    "g j": "/entity",
+    "g f": "/favorites",
+    "g d": "/schema-builder",
+    "g t": "/query-builder",
+    "g e": "/lint",
+    "g s": "/backup",
     "g l": "/lint",
-    "g s": "/settings",
     "g k": "/backup",
     "g c": "/schema-builder",
     "g u": "/query-builder",
@@ -291,18 +292,26 @@ function toggleMoreMenu(e) {
       <table class="data-table" style="width:100%;">
         <thead><tr><th style="width:140px;"><kbd>G</kbd> then…</th><th>Page</th></tr></thead>
         <tbody>
-          <tr><td><kbd>D</kbd></td><td>Due List</td></tr>
+          <tr><td><kbd>B</kbd></td><td>Board</td></tr>
+          <tr><td><kbd>H</kbd></td><td>Habits</td></tr>
+          <tr><td><kbd>A</kbd></td><td>Calendar</td></tr>
+          <tr><td><kbd>Q</kbd></td><td>Thresholds</td></tr>
+          <tr><td><kbd>J</kbd></td><td>Entity</td></tr>
+          <tr><td><kbd>F</kbd></td><td>Favorites</td></tr>
+          <tr><td><kbd>D</kbd></td><td>Schema Builder</td></tr>
+          <tr><td><kbd>T</kbd></td><td>Query Builder</td></tr>
+          <tr><td><kbd>E</kbd></td><td>Lint</td></tr>
+          <tr><td><kbd>S</kbd></td><td>Backup</td></tr>
+          <tr><td><kbd>L</kbd></td><td>Lint</td></tr>
+          <tr><td><kbd>K</kbd></td><td>Backup</td></tr>
+          <tr><td><kbd>C</kbd></td><td>Schema Builder</td></tr>
+          <tr><td><kbd>U</kbd></td><td>Query Builder</td></tr>
           <tr><td><kbd>O</kbd></td><td>Board</td></tr>
           <tr><td><kbd>M</kbd></td><td>Habits</td></tr>
           <tr><td><kbd>Y</kbd></td><td>Calendar</td></tr>
           <tr><td><kbd>R</kbd></td><td>Thresholds</td></tr>
           <tr><td><kbd>V</kbd></td><td>Entity</td></tr>
           <tr><td><kbd>F</kbd></td><td>Pinned pages</td></tr>
-          <tr><td><kbd>U</kbd></td><td>Query Builder</td></tr>
-          <tr><td><kbd>C</kbd></td><td>Schema Builder</td></tr>
-          <tr><td><kbd>E</kbd></td><td>Log Editor</td></tr>
-          <tr><td><kbd>L</kbd></td><td>Lint</td></tr>
-          <tr><td><kbd>K</kbd></td><td>Backup</td></tr>
         </tbody>
       </table>
     </div>

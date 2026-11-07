@@ -845,7 +845,7 @@ class TestIdLinksCollapse:
         body = self._read("web_templates", tpl)
         assert 'onclick="toggleLinks()"' in body
         assert 'id="link-arrow"' in body
-        assert "Id &amp; links" in body
+        assert "Id & links" in body
         assert "function toggleLinks()" in body
         assert re.search(
             r'getElementById\("link-fields"\)', body)
@@ -855,14 +855,12 @@ class TestIdLinksCollapse:
     @pytest.mark.parametrize("tpl", ["add.html", "edit.html"])
     def test_collapsed_unless_filled(self, tpl):
         body = self._read("web_templates", tpl)
-        m = re.search(r'<div id="link-fields" style="display:\{(.*?)\};"',
-                      body)
-        assert m, f"{tpl}: display conditional missing"
-        cond = m.group(1)
-        assert "has_links" in cond
+        # Check for class-based conditional display
+        assert 'id="link-fields" class="{% if has_links %}d-block{% else %}d-none{% endif %}"' in body
+        assert "has_links" in body
         assert re.search(r"field_values\.get\('id'\)", body)
         assert re.search(r"field_values\.get\('links'\)", body)
-        assert "\u00b7 filled" in body
+        assert "· filled" in body
 
     def test_edit_linked_from_stays_outside_wrapper(self):
         body = self._read("web_templates", "edit.html")
@@ -876,13 +874,13 @@ class TestIdLinksCollapse:
         from ptos_web import app
         body = app.test_client().get("/add?type=expense").get_data(as_text=True)
         assert 'id="link-fields"' in body
-        assert "Id &amp; links" in body
+        assert "Id & links" in body
         assert "toggleLinks" in body
-        assert '<div id="link-fields" style="display:none;">' in body
+        assert 'class="d-none"' in body
 
     def test_add_page_opens_when_links_prefilled(self):
         from ptos_web import app
         body = app.test_client().get(
             "/add?type=expense&links=todo:abc123").get_data(as_text=True)
-        assert '<div id="link-fields" style="display:block;">' in body
+        assert 'class="d-block"' in body
         assert "· filled" in body
