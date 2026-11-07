@@ -83,6 +83,13 @@
       --ctx-rose-border: var(--hl-rose);     --ctx-rose-bg: var(--hl-rose-lt);
       --ctx-other-border: var(--sub);        --ctx-other-bg: var(--surface-2);
     }
+
+@font-face {
+  font-family: "Inter";
+  src: url("../fonts/InterVariable.woff2") format("woff2");
+  font-weight: 100 900;
+  font-display: swap;
+}
     :root[data-theme="dark"] {
       --bg:#0F1115; --card:#171A21; --surface-2:#1C2029; --border:#2A2F3A;
 --text:#E6E8EE; --sub:#9AA3B2; --text-on-accent:#0F1115; --text-rgb: 230, 232, 238;
@@ -203,7 +210,7 @@
     @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
     html, body { height: 100%; }
     body {
-      font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+      font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
       font-size: var(--fs-base); background: var(--bg); color: var(--text);
       display: flex; flex-direction: column; min-height: 100%;
       -webkit-text-size-adjust: 100%;

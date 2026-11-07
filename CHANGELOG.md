@@ -28,6 +28,13 @@ Format: `[version or date] — description`
 - **Fix** — test_default_off now mocks svc.get_config to test default from
   starter config, not user's overridden config
 
+### D3a: Inter variable font
+
+- **Downloaded** InterVariable.woff2 (352 KB) to web_static/fonts/
+- **Added** @font-face in base.css after light theme :root block
+- **Updated** body font-family to use Inter with system fallbacks
+- **All tests pass** (3963 Python + 81 Node)
+
 ---
 
 ## 2026-11-05
