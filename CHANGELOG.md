@@ -33,6 +33,15 @@ Format: `[version or date] — description`
 - **Downloaded** InterVariable.woff2 (352 KB) to web_static/fonts/
 - **Added** @font-face in base.css after light theme :root block
 - **Updated** body font-family to use Inter with system fallbacks
+
+### C7b: Utility class migration (query_builder.html)
+
+- **Migrated** all inline styles in query_builder.html to utility classes
+  (d-flex, gap-*, mb-*, text-*, d-none/d-block, classList.toggle)
+- **Replaced** inline `style="..."` with utility classes across HTML + JS
+- **Converted** `style.display` toggles to `classList.add/remove/toggle("d-none")`
+- **Reduced** inline style count from 237 to 224 (13 fewer)
+- **Updated** inline_style_baseline.json
 - **All tests pass** (3963 Python + 81 Node)
 
 ---

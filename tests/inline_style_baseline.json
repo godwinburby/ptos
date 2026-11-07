@@ -102,7 +102,7 @@
   "web_templates\\projects.html": 8,
   "web_templates\\queries.html": 10,
   "web_templates\\queries_legacy.html": 12,
-  "web_templates\\query_builder.html": 237,
+  "web_templates\\query_builder.html": 224,
   "web_templates\\routines.html": 17,
   "web_templates\\schema_builder.html": 182,
   "web_templates\\search.html": 30,

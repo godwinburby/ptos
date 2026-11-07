@@ -8,12 +8,12 @@
 
 {% block content %}
 
-<div id="qb-header" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:10px;">
+<div id="qb-header" class="d-flex items-center justify-between flex-wrap gap-2 mb-2">
   <div class="page-title" style="margin:0;">Query Builder</div>
-  <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;">
+  <div class="d-flex gap-2 items-center flex-wrap">
     <button onclick="addEntry()" class="btn btn-primary btn-sm">+ New</button>
     <button onclick="resetQuery()" class="btn btn-ghost btn-sm" id="reset-btn">Clear</button>
-    <div id="save-msg" style="font-size:13px;display:none;"></div>
+    <div id="save-msg" class="fs-sm d-none"></div>
   </div>
 </div>
 
@@ -54,23 +54,19 @@
 </div>
 
 <!-- ── Editor ── -->
-<div id="entry-editor" style="margin-top:14px;display:none;"></div>
-<div id="entry-empty"
-     style="margin-top:40px;text-align:center;color:var(--sub);font-size:14px;">
+<div id="entry-editor" class="mt-3 d-none"></div>
+<div id="entry-empty" class="mt-5 text-center text-muted fs-md">
   Select an entry above, or click <strong>+ New</strong>.
 </div>
 
 <!-- delete modal -->
-<div id="del-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
-     z-index:500;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;width:300px;
-              box-shadow:0 8px 32px rgba(0,0,0,.2);">
-    <div style="font-size:16px;font-weight:700;color:var(--error);margin-bottom:10px;">Delete?</div>
-    <div id="del-msg-text" style="font-size:14px;color:var(--sub);margin-bottom:16px;"></div>
-    <div style="display:flex;gap:10px;">
-      <button onclick="confirmDelete()" class="btn btn-sm"
-              style="flex:1;background:var(--error);color:var(--text-on-accent);border:none;">Delete</button>
-      <button onclick="closeDeleteModal()" class="btn btn-ghost btn-sm" style="flex:1;">Cancel</button>
+<div id="del-modal" class="d-none fixed inset-0 bg-black-40 z-500 items-center justify-center">
+  <div class="bg-card rounded-xl p-6 w-300 shadow-3">
+    <div class="fw-700 text-error fs-lg mb-2">Delete?</div>
+    <div id="del-msg-text" class="fs-md text-muted mb-4"></div>
+    <div class="d-flex gap-2">
+      <button onclick="confirmDelete()" class="btn btn-sm flex-1" style="background:var(--error);color:var(--text-on-accent);border:none;">Delete</button>
+      <button onclick="closeDeleteModal()" class="btn btn-ghost btn-sm flex-1">Cancel</button>
     </div>
   </div>
 </div>
@@ -261,7 +257,7 @@ function _refreshChartSelect() {
   var sel = document.getElementById("qb-chart");
   if (sel) sel.innerHTML = _chartOptsHtml(q);
   var yWrap = document.getElementById("qb-y-wrap");
-  if (yWrap) yWrap.style.display = view === "trend" ? "flex" : "none";
+  if (yWrap) yWrap.classList.toggle("d-none", view !== "trend");
   if (view !== "trend" && q.y) q.y = "";
 }
 
@@ -383,7 +379,7 @@ function _refreshChartSelect() {
     });
     if (unknownKeys.length) {
       var banner = document.createElement("div");
-      banner.style.cssText = "padding:8px 12px;background:var(--warn-lt);border:1px solid var(--warn);border-radius:6px;margin-bottom:12px;font-size:12px;color:var(--text);";
+      banner.className = "alert alert-warn mb-3";
       banner.innerHTML = "<b>Some config sections are managed outside the Query Builder</b> and are preserved but not editable here: " +
         unknownKeys.map(function(k) { return "<code>" + k + "</code>"; }).join(", ") +
         ". Edit them directly in <code>queries.toml</code> or via the CLI.";
@@ -418,7 +414,7 @@ function switchSection(sec) {
   // show only the matching item strip
   ["queries","metrics","dashboards","aliases","due","boards","habits","calendars","thresholds"].forEach(function(s) {
     var el = document.getElementById("tabs-"+s);
-    if (el) el.style.display = s === sec ? "flex" : "none";
+    if (el) el.classList.toggle("d-none", s !== sec);
   });
 }
 
@@ -499,8 +495,8 @@ function select(section, name) {
   _cur = {section: section, name: name, origName: name};
   if (_curSection !== section) switchSection(section);
   renderTabs();
-  document.getElementById("entry-editor").style.display = "block";
-  document.getElementById("entry-empty").style.display  = "none";
+  document.getElementById("entry-editor").classList.remove("d-none");
+  document.getElementById("entry-empty").classList.add("d-none");
   renderEditor();
 }
 
@@ -515,8 +511,8 @@ function _clearTime() {
 function resetQuery() {
   _clearTime();
   _cur = null;
-  document.getElementById("entry-editor").style.display = "none";
-  document.getElementById("entry-empty").style.display = "block";
+  document.getElementById("entry-editor").classList.add("d-none");
+  document.getElementById("entry-empty").classList.remove("d-none");
   renderTabs();
 }
 
@@ -585,7 +581,7 @@ function renderEditor() {
   }
   // header
   var hdr = document.createElement("div");
-  hdr.className = "card"; hdr.style.marginBottom = "12px";
+  hdr.className = "card mb-3";
   hdr.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
       '<div style="flex:1;"><label>Name</label>' +
@@ -625,7 +621,7 @@ function _buildQueryEditor(container, name) {
 
   // 1+2+Tags+WHERE — FilterBuilder handles all filter UI
   var fbCard = document.createElement("div");
-  fbCard.className = "card"; fbCard.style.marginBottom = "10px";
+  fbCard.className = "card mb-2";
   var fbCid = "qb-fb-" + name.replace(/[^a-z0-9]/gi,"_");
   fbCard.innerHTML = '<div id="' + fbCid + '"></div>';
   container.appendChild(fbCard);
@@ -667,7 +663,7 @@ function _buildQueryEditor(container, name) {
 
   // 4. Expression filter (collapsed)
   var c4 = document.createElement("div");
-  c4.className = "card"; c4.style.marginBottom = "10px";
+  c4.className = "card mb-2";
   c4.innerHTML =
     '<div style="display:flex;align-items:center;justify-content:space-between;">'+
       '<label style="margin:0;">Expression filter '+
@@ -692,7 +688,7 @@ function _buildQueryEditor(container, name) {
 
   // 6. Options
   var c6 = document.createElement("div");
-  c6.className = "card"; c6.style.marginBottom = "10px";
+  c6.className = "card mb-2";
   var _view6 = _chartViewKind(q);
   c6.innerHTML =
     '<label>Options</label>'+
@@ -749,7 +745,7 @@ function _buildQueryEditor(container, name) {
 
   // 7. Preview
   var c7 = document.createElement("div");
-  c7.className = "card"; c7.style.marginBottom = "10px";
+  c7.className = "card mb-2";
   c7.innerHTML =
     '<label>Query preview</label>'+
     '<div class="hint" style="margin-bottom:8px;">Live view of what will be saved. Read-only.</div>'+
@@ -805,7 +801,7 @@ function _buildAliasEditor(container, name) {
     return '<option value="'+n+'"'+(n===a.alias?" selected":"")+'>'+n+'</option>';
   }).join("");
   var hdr = document.createElement("div");
-  hdr.className = "card"; hdr.style.marginBottom = "12px";
+  hdr.className = "card mb-3";
   hdr.innerHTML =
     '<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">' +
       '<div style="flex:1;"><label>Name</label>' +
@@ -1150,7 +1146,7 @@ function _buildMetricEditor(name) {
     '<option value="">— pick a query or metric —</option>'+base2Opts+mOpts2+'</select>',
     "ratio = first value ÷ second value × 100%. Plain queries count records; sum metrics use their summed value.");
   r2.id = "ratio2-row";
-  r2.style.display = m.kind==="ratio"?"block":"none";
+  r2.classList.toggle("d-none", m.kind !== "ratio");
   div.appendChild(r2);
 
   // Avg: unit_field and unit_weights
@@ -1160,13 +1156,13 @@ function _buildMetricEditor(name) {
     ' oninput="_st.metrics[_cur.name].unit_field=this.value">',
     "Field to group by for weighted average.");
   avgOpts.id = "unit-field-row";
-  avgOpts.style.display = m.kind==="avg"?"block":"none";
+  avgOpts.classList.toggle("d-none", m.kind !== "avg");
   div.appendChild(avgOpts);
 
   var weightsRow = document.createElement("div");
-  weightsRow.className = "card"; weightsRow.style.marginBottom = "10px";
+  weightsRow.className = "card mb-2";
   weightsRow.id = "unit-weights-row";
-  weightsRow.style.display = m.kind==="avg"?"block":"none";
+  weightsRow.classList.toggle("d-none", m.kind !== "avg");
   weightsRow.innerHTML =
     '<label>Unit weights (JSON)</label>'+
     '<textarea id="m-unit-weights" rows="4" placeholder="{ \&quot;monaural\&quot;: 1, \&quot;binaural\&quot;: 2 }"'+
@@ -1189,11 +1185,11 @@ function _buildMetricEditor(name) {
 function onMetricKindChange(kind) {
   _st.metrics[_cur.name].kind = kind;
   var r = document.getElementById("ratio2-row");
-  if (r) r.style.display = kind==="ratio"?"block":"none";
+  if (r) r.classList.toggle("d-none", kind !== "ratio");
   var u = document.getElementById("unit-field-row");
-  if (u) u.style.display = kind==="avg"?"block":"none";
+  if (u) u.classList.toggle("d-none", kind !== "avg");
   var w = document.getElementById("unit-weights-row");
-  if (w) w.style.display = kind==="avg"?"block":"none";
+  if (w) w.classList.toggle("d-none", kind !== "avg");
 }
 function onUnitWeightsChange(val) {
   if (!_cur || _cur.section !== "metrics") return;
@@ -1217,7 +1213,7 @@ function _buildDashEditor(name) {
   var db = _st.dashboards[name];
   var div = document.createElement("div");
   var card = document.createElement("div");
-  card.className = "card"; card.style.marginBottom = "10px";
+  card.className = "card mb-2";
   var allNames = Object.keys(_st.queries).concat(Object.keys(_st.metrics));
   var opts = allNames.filter(function(n){ return db.metrics.indexOf(n)===-1; })
     .map(function(n){
@@ -1280,7 +1276,7 @@ function _buildDashBox(db, gname, items) {
   nameSpan.textContent = gname || db.ungrouped_label || "General (ungrouped)";
   head.appendChild(nameSpan);
   var actions = document.createElement("span");
-  actions.style.display = "inline-flex"; actions.style.gap = "6px";
+  actions.className = "d-inline-flex gap-2";
   if (gname) {
     var grip = document.createElement("button");
     grip.className = "btn btn-ghost btn-sm dbg-handle"; grip.textContent = "⠿";
@@ -1389,7 +1385,7 @@ function _dbChip(db, item) {
   var m = _st.metrics[item];
   var tag = m ? (m.derived ? "derived" : "metric") : "query";
   var tagSpan = document.createElement("span");
-  tagSpan.style.cssText = "color:var(--accent);opacity:.7;font-size:11px;margin-right:4px;";
+  tagSpan.className = "text-accent opacity-70 fs-xs me-2";
   tagSpan.textContent = tag;
   var nameSpan = document.createElement("span");
   nameSpan.textContent = item;
@@ -1508,9 +1504,9 @@ function removeDashItem(item) {
 // ── Shared helpers ────────────────────────────────────────────────────────────
 function _mkCard(label, inputHTML, hint) {
   var w = document.createElement("div");
-  w.className = "card"; w.style.marginBottom = "10px";
+  w.className = "card mb-2";
   w.innerHTML = '<label>'+label+'</label>'+inputHTML+
-    (hint?'<div class="hint" style="margin-top:4px;">'+hint+'</div>':"");
+    (hint?'<div class="hint mt-1">'+hint+'</div>':"");
   return w;
 }
 function _esc(s) {
@@ -1524,11 +1520,11 @@ function askDelete() {
   _delPending = {section:_cur.section, name:_cur.name};
   document.getElementById("del-msg-text").textContent =
     "Delete "+_cur.section.slice(0,-1)+" '"+_cur.name+"'?";
-  document.getElementById("del-modal").style.display = "flex";
+  document.getElementById("del-modal").classList.remove("d-none");
 }
 function closeDeleteModal() {
   _delPending = null;
-  document.getElementById("del-modal").style.display = "none";
+  document.getElementById("del-modal").classList.add("d-none");
 }
 function confirmDelete() {
   if (!_delPending) return;
@@ -1546,8 +1542,8 @@ function confirmDelete() {
   .then(function(d) {
     if (d.ok) {
       delete _st[s][n]; _cur=null; renderTabs();
-      document.getElementById("entry-editor").style.display = "none";
-      document.getElementById("entry-empty").style.display  = "block";
+document.getElementById("entry-editor").classList.add("d-none");
+  document.getElementById("entry-empty").classList.remove("d-none");
       showMsg("✔ Deleted",true);
     } else showMsg("✖ "+d.error,false);
   })
@@ -1687,9 +1683,10 @@ function saveCurrent() {
 
 function showMsg(text, ok) {
   var el = document.getElementById("save-msg");
-  el.textContent=text; el.style.color=ok?"var(--success)":"var(--error)";
-  el.style.display="inline";
-  if (ok) setTimeout(function(){ el.style.display="none"; },3000);
+  el.textContent = text;
+  el.className = "fw-600 " + (ok ? "text-success" : "text-error");
+  el.classList.remove("d-none");
+  if (ok) setTimeout(function(){ el.classList.add("d-none"); }, 3000);
 }
 
 document.getElementById("del-modal").addEventListener("click", function(e) {
@@ -1778,8 +1775,8 @@ document.getElementById("del-modal").addEventListener("click", function(e) {
 function showBoardEditor() {
   var ed = document.getElementById("entry-editor");
   var empty = document.getElementById("entry-empty");
-  ed.style.display = "block";
-  empty.style.display = "none";
+  ed.classList.remove("d-none");
+  empty.classList.add("d-none");
 
   var cfg = _st.boards[_cur.name] || {columns:[]};
   var cols = cfg.columns || [];
@@ -1861,8 +1858,8 @@ function showBoardEditor() {
 function showHabitEditor() {
   var ed = document.getElementById("entry-editor");
   var empty = document.getElementById("entry-empty");
-  ed.style.display = "block";
-  empty.style.display = "none";
+  ed.classList.remove("d-none");
+  empty.classList.add("d-none");
 
   var cfg = _st.habits[_cur.name] || {filters:[],weeks:12};
   var filtersText = (cfg.filters || []).join(" ");
@@ -1954,8 +1951,8 @@ function onHabitNameChange() {
 function showCalendarEditor() {
   var ed = document.getElementById("entry-editor");
   var empty = document.getElementById("entry-empty");
-  ed.style.display = "block";
-  empty.style.display = "none";
+  ed.classList.remove("d-none");
+  empty.classList.add("d-none");
 
   var cfg = _st.calendars[_cur.name] || {filters:[], time_window:'this-month', display_fields:[]};
   var filtersText = (cfg.filters || []).join(" ");
@@ -2067,8 +2064,8 @@ function _thrValueOpts(selected) {
 function showThresholdEditor() {
   var ed = document.getElementById("entry-editor");
   var empty = document.getElementById("entry-empty");
-  ed.style.display = "block";
-  empty.style.display = "none";
+  ed.classList.remove("d-none");
+  empty.classList.add("d-none");
 
   var cfg = _st.thresholds[_cur.name] || {metric:"",agg:"sum",sum_field:"",value:"",direction:"max",time:"",unit:""};
   var isNum = !cfg.value || (cfg.value && !isNaN(Number(cfg.value)));
@@ -2171,11 +2168,11 @@ function onThrValueSelect() {
   var num = document.getElementById("thr-value-num");
   if (!sel) return;
   if (sel.value === "") {
-    num.style.display = "";
+    num.classList.remove("d-none");
     num.focus();
     cfg.value = num.value;
   } else {
-    num.style.display = "none";
+    num.classList.add("d-none");
     num.value = "";
     cfg.value = sel.value;
   }
@@ -2214,7 +2211,7 @@ function renderChipPicker(opts) {
     el.appendChild(chip);
   });
   var addContainer = document.createElement("div");
-  addContainer.style.marginTop = items.length ? "8px" : "0";
+  addContainer.className = items.length ? "mt-2" : "";
   addContainer.innerHTML = '<div style="font-size:11px;color:var(--sub);margin-bottom:4px;">'+opts.addLabel+'</div>';
   available.forEach(function(item) {
     if (items.indexOf(item) !== -1) return;
@@ -2373,7 +2370,7 @@ function fetchBoardOverlap(types) {
   var statusEl = document.getElementById("board-overlap-status");
   if (!area || !fieldsEl || !statusEl) return;
   if (types.length < 2) {
-    area.style.display = "none";
+    area.classList.add("d-none");
     fetch("/api/board/field-overlap", {
       method: "POST",
       headers: {"Content-Type":"application/json"},
@@ -2394,8 +2391,8 @@ function fetchBoardOverlap(types) {
     });
     return;
   }
-  area.style.display = "block";
-  fieldsEl.innerHTML = '<span style="color:var(--border);">Checking…</span>';
+  area.classList.remove("d-none");
+  fieldsEl.innerHTML = '<span class="text-muted">Checking…</span>';
   fetch("/api/board/field-overlap", {
     method: "POST",
     headers: {"Content-Type":"application/json"},
@@ -2508,8 +2505,8 @@ function onBoardNameChange() {
 function showDueEditor() {
   var ed = document.getElementById("entry-editor");
   var empty = document.getElementById("entry-empty");
-  ed.style.display = "block";
-  empty.style.display = "none";
+  ed.classList.remove("d-none");
+  empty.classList.add("d-none");
 
   var cfg = _st.due[_cur.name] || {type:"", key:"", sort_by:"", days:7, exclude_results:[]};
   var selectedType = cfg.type || "";
