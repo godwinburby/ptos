@@ -37,7 +37,7 @@
 
 <!-- ── Paste from clipboard ── -->
 {% if not selected_type %}
-<div class="card" id="paste-card" class="border-dashed-accent">
+<div class="card border-dashed-accent" id="paste-card">
   <div class="card-title text-accent">Paste to Record</div>
   <p class="fs-xs text-muted mb-3">Paste a PTOS line to append directly, or free-form text to capture + convert.</p>
   <div class="d-flex gap-2 items-start">
@@ -131,7 +131,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
       {% endfor %}
     </div>
     {% if remaining_presets %}
-    <div class="chip-group" id="remaining-presets" class="d-none mt-2 pt-2 border-t border-border">
+    <div class="chip-group d-none mt-2 pt-2 border-t border-border" id="remaining-presets">
       {% for name in remaining_presets %}
       <span class="preset-chip-wrap">
         {% if name in instant_presets %}
@@ -943,9 +943,10 @@ function trackPreset(name) {
 function toggleAllPresets(btn) {
   var el = document.getElementById("remaining-presets");
   if (!el) return;
-  var open = el.style.display !== "none";
-  el.style.display = open ? "none" : "flex";
-  btn.textContent  = open ? "Show all ▾" : "Show less ▲";
+  var open = el.classList.contains("d-none");
+  el.classList.toggle("d-none", !open);
+  el.classList.toggle("d-flex", open);
+  btn.textContent  = open ? "Show less ▲" : "Show all ▾";
 }
 </script>
 {% endif %}
