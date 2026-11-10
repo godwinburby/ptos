@@ -193,10 +193,43 @@
 .text-accent { color: var(--accent); }
 .text-on-accent { color: var(--text-on-accent); }
 .text-on-warn { color: var(--warn-text); }
-.text-error { color: var(--error); }
-.text-warn { color: var(--warn); }
-.text-success { color: var(--success); }
-.text-accent { color: var(--accent); }
+
+/* Font size + color combos for messages/toasts */
+.text-sub-fs13 { font-size: 13px; color: var(--sub); }
+.text-success-fs13 { font-size: 13px; color: var(--success); }
+.text-error-fs13 { font-size: 13px; color: var(--error); }
+.text-sub-fs12 { font-size: 12px; color: var(--sub); }
+.text-error-fs12 { font-size: 12px; color: var(--error); }
+.text-accent-fs12 { font-size: 12px; color: var(--accent); }
+.text-success-fs12 { font-size: 12px; color: var(--success); }
+.text-warn-fs12 { font-size: 12px; color: var(--warn); }
+.text-sub-fs11 { font-size: 11px; color: var(--sub); }
+.text-error-fs11 { font-size: 11px; color: var(--error); }
+.text-accent-fs11 { font-size: 11px; color: var(--accent); }
+.text-success-fs11 { font-size: 11px; color: var(--success); }
+.text-warn-fs11 { font-size: 11px; color: var(--warn); }
+
+/* Font weight */
+.fw-600 { font-weight: 600; }
+.fw-700 { font-weight: 700; }
+.fw-800 { font-weight: 800; }
+
+/* White-space */
+.nowrap { white-space: nowrap; }
+
+/* Min-width utilities */
+.min-w-100 { min-width: 100px; }
+.min-w-120 { min-width: 120px; }
+
+/* Flex utilities for messages */
+.flex-1 { flex: 1; }
+.min-w-0 { min-width: 0; }
+
+/* Border radius */
+.rounded-7 { border-radius: 7px; }
+
+/* Background utilities for progress bars */
+.bg-border { background: var(--border); }
 
 /* Background utilities */
 .bg-warn-lt { background: var(--warn-lt); }
@@ -212,6 +245,12 @@
 .border-error { border-color: var(--error); }
 .border-success { border-color: var(--success); }
 .border-accent { border-color: var(--accent); }
+.border-dashed-accent { border: 1.5px dashed var(--accent); }
+
+/* Text transform utilities */
+.lowercase { text-transform: lowercase; }
+.uppercase { text-transform: uppercase; }
+.capitalize { text-transform: capitalize; }
 
 /* Chip group utilities (D4-12) */
 .chip-group { display: flex; flex-wrap: wrap; gap: 4px; }

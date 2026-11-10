@@ -13,10 +13,10 @@
   width: auto;
 }
 </style>
-<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
-  <div class="page-title" style="margin:0;">Add Record</div>
+<div class="d-flex items-center gap-2 flex-wrap">
+  <div class="page-title mb-0">Add Record</div>
   {% if return_to and return_to != '/' %}
-  <a href="{{ return_to }}" style="font-size:13px;color:var(--sub);text-decoration:none;font-weight:600;">↩ Back</a>
+  <a href="{{ return_to }}" class="fs-xs text-muted text-decoration-none fw-600">↩ Back</a>
   {% endif %}
 </div>
 
@@ -25,10 +25,10 @@
 {% endif %}
 
 {% if last_line %}
-<div class="card" style="border-color:var(--success);">
-  <div class="card-title" style="color:var(--success);">✔ Saved</div>
-  <div style="font-family:monospace;font-size:13px;word-break:break-all;color:var(--sub);">{{ last_line }}</div>
-  <div style="margin-top:12px;display:flex;gap:8px;">
+<div class="card border-success">
+  <div class="card-title text-success">✔ Saved</div>
+  <div class="font-mono fs-xs text-sub break-all">{{ last_line }}</div>
+  <div class="d-flex gap-2 mt-3">
     <a href="/add" class="btn btn-primary btn-sm">Add Another</a>
     <a href="{{ return_to or '/' }}" class="btn btn-ghost btn-sm">Done</a>
   </div>
@@ -37,24 +37,21 @@
 
 <!-- ── Paste from clipboard ── -->
 {% if not selected_type %}
-<div class="card" id="paste-card" style="border:1.5px dashed var(--accent);">
-  <div class="card-title" style="color:var(--accent);">Paste to Record</div>
-  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    Paste a PTOS line to append directly, or free-form text to capture + convert.
-  </p>
-  <div style="display:flex;gap:8px;align-items:flex-start;">
+<div class="card" id="paste-card" class="border-dashed-accent">
+  <div class="card-title text-accent">Paste to Record</div>
+  <p class="fs-xs text-muted mb-3">Paste a PTOS line to append directly, or free-form text to capture + convert.</p>
+  <div class="d-flex gap-2 items-start">
     <textarea id="paste-input" rows="2" placeholder="Paste from clipboard…"
-              style="flex:1;padding:8px 12px;border:1.5px solid var(--border);border-radius:8px;
-                     font-size:14px;font-family:monospace;background:var(--bg);color:var(--text);resize:vertical;"></textarea>
+              class="flex-1 p-2 border border-border rounded-md fs-md font-mono bg-bg text-text resize-y"></textarea>
   </div>
-  <div style="display:flex;gap:8px;margin-top:10px;align-items:center;">
+  <div class="d-flex gap-2 mt-2 items-center">
     <button type="button" class="btn btn-primary btn-sm" onclick="doPaste(false)">Add</button>
     <button type="button" class="btn btn-ghost btn-sm" onclick="doPaste(true)">Dry run</button>
-    <span id="paste-clipboard-btn" style="margin-left:auto;">
+    <span id="paste-clipboard-btn" class="ms-auto">
       <button type="button" class="btn btn-ghost btn-sm" onclick="doClipPaste()">📋 From clipboard</button>
     </span>
   </div>
-  <div id="paste-result" style="margin-top:10px;display:none;"></div>
+  <div id="paste-result" class="mt-2 d-none"></div>
 </div>
 <script>
 function doClipPaste() {
@@ -68,7 +65,7 @@ function doPaste(dryRun) {
   if (!text) return;
   var box = document.getElementById('paste-result');
   box.style.display = '';
-  box.innerHTML = '<span style="color:var(--sub);font-size:13px;">Processing…</span>';
+  box.innerHTML = '<span class="text-sub-fs13">Processing…</span>';
   fetch('/api/paste', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
@@ -77,25 +74,25 @@ function doPaste(dryRun) {
   }).then(function(r) { return r.json(); }).then(function(d) {
     if (d.kind === 'line') {
       if (d.ok) {
-        box.innerHTML = '<span style="color:var(--success);font-size:13px;">✔ ' +
+        box.innerHTML = '<span class="text-success-fs13">✔ ' +
           (dryRun ? '[dry-run] Valid PTOS line: ' : 'Added: ') + '<code>' + esc(d.line) + '</code></span>';
         if (!dryRun) document.getElementById('paste-input').value = '';
       } else {
-        box.innerHTML = '<span style="color:var(--error);font-size:13px;">✘ Validation failed:<br>' +
+        box.innerHTML = '<span class="text-error-fs13">✘ Validation failed:<br>' +
           (d.problems || []).map(function(p) { return '· ' + esc(p); }).join('<br>') + '</span>';
       }
     } else if (d.kind === 'capture') {
       if (d.review_url) {
-        box.innerHTML = '<span style="color:var(--success);font-size:13px;">✔ Captured. ' +
-          '<a href="' + d.review_url + '" style="color:var(--accent);font-weight:600;">Review & convert →</a></span>';
+        box.innerHTML = '<span class="text-success-fs13">✔ Captured. ' +
+          '<a href="' + d.review_url + '" class="text-accent fw-600">Review & convert →</a></span>';
       } else {
-        box.innerHTML = '<span style="color:var(--success);font-size:13px;">✔ Captured (no type suggestion)</span>';
+        box.innerHTML = '<span class="text-success-fs13">✔ Captured (no type suggestion)</span>';
       }
     } else {
-      box.innerHTML = '<span style="font-size:13px;color:var(--sub);">' + esc(JSON.stringify(d)) + '</span>';
+      box.innerHTML = '<span class="text-sub-fs13">' + esc(JSON.stringify(d)) + '</span>';
     }
   }).catch(function(e) {
-    box.innerHTML = '<span style="color:var(--error);font-size:13px;">Error: ' + esc(String(e)) + '</span>';
+    box.innerHTML = '<span class="text-error-fs13">Error: ' + esc(String(e)) + '</span>';
   });
 }
 function esc(s) { var d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
@@ -108,13 +105,11 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
   <div class="card-title">Select Record Type</div>
 
   {% if frequent_presets %}
-  <div style="margin-bottom:16px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-      <div style="font-size:12px;color:var(--sub);font-weight:600;">QUICK PRESETS</div>
+  <div class="mb-4">
+    <div class="d-flex items-center justify-between mb-2">
+      <div class="fs-xs text-muted fw-600">QUICK PRESETS</div>
       {% if remaining_presets %}
-      <button onclick="toggleAllPresets(this)"
-              style="background:none;border:none;font-size:12px;color:var(--accent);
-                     cursor:pointer;font-weight:600;padding:0;">Show all ▾</button>
+      <button onclick="toggleAllPresets(this)" class="bg-transparent border-0 fs-xs text-accent fw-600 cursor-pointer p-0">Show all ▾</button>
       {% endif %}
     </div>
     <div class="chip-group" id="frequent-presets">
@@ -122,7 +117,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
       <span class="preset-chip-wrap">
         {% if name in instant_presets %}
         <button class="preset-chip preset-instant" onclick="addMultiPreset(this)" data-name="{{ name }}" data-return-to="{{ return_to }}">
-          + {{ name }} <span style="opacity:.6;font-size:11px;">instant</span>
+          + {{ name }} <span class="opacity-60 fs-xs">instant</span>
         </button>
         <a href="/add?preset={{ name }}" class="preset-edit" title="Edit preset">✎</a>
         {% else %}
@@ -136,12 +131,12 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
       {% endfor %}
     </div>
     {% if remaining_presets %}
-    <div class="chip-group" id="remaining-presets" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--border);">
+    <div class="chip-group" id="remaining-presets" class="d-none mt-2 pt-2 border-t border-border">
       {% for name in remaining_presets %}
       <span class="preset-chip-wrap">
         {% if name in instant_presets %}
         <button class="preset-chip preset-instant" onclick="addMultiPreset(this)" data-name="{{ name }}" data-return-to="{{ return_to }}">
-          + {{ name }} <span style="opacity:.6;font-size:11px;">instant</span>
+          + {{ name }} <span class="opacity-60 fs-xs">instant</span>
         </button>
         <a href="/add?preset={{ name }}" class="preset-edit" title="Edit preset">✎</a>
         {% else %}
@@ -160,28 +155,28 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
   {% endif %}
 
   {% if multi_presets %}
-  <div style="margin-bottom:16px;">
-    <div style="font-size:12px;color:var(--sub);font-weight:600;margin-bottom:8px;">MULTI PRESETS</div>
+  <div class="mb-4">
+    <div class="fs-xs text-muted fw-600 mb-2">MULTI PRESETS</div>
     <div class="chip-group">
       {% for name, refs in multi_presets.items() %}
       <span class="preset-chip-wrap">
         <button class="preset-chip" onclick="addMultiPreset(this)" data-name="{{ name }}" data-return-to="{{ return_to }}">
-          + {{ name }} <span style="opacity:.6;font-size:11px;">({{ refs }})</span>
+          + {{ name }} <span class="opacity-60 fs-xs">({{ refs }})</span>
         </button>
         <button class="preset-del" onclick="deletePreset('{{ name }}', this)" title="Delete preset">×</button>
       </span>
       {% endfor %}
     </div>
-    <div id="multi-msg-add" style="font-size:13px;margin-top:8px;display:none;"></div>
+    <div id="multi-msg-add" class="fs-xs mt-2 d-none"></div>
   </div>
   <div class="divider"></div>
   {% else %}
-  <div id="multi-msg-add" style="font-size:13px;display:none;"></div>
+  <div id="multi-msg-add" class="fs-xs d-none"></div>
   {% endif %}
 
   <div class="type-grid">
     {% for t in types %}
-    <a href="/add?type={{ t }}" class="type-card" style="display:block;text-decoration:none;">
+    <a href="/add?type={{ t }}" class="type-card d-block text-decoration-none">
       <div class="type-card-icon">
         {% if t == 'expense' %}💸
         {% elif t == 'income' %}💰
@@ -199,8 +194,8 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
     </a>
     {% endfor %}
   </div>
-  <div style="margin-top:12px;font-size:13px;color:var(--sub);">
-    Don't see your type? <a href="/types/new" style="color:var(--accent);text-decoration:none;font-weight:600;">Create one</a>
+  <div class="mt-3 fs-xs text-muted">
+    Don't see your type? <a href="/types/new" class="text-accent text-decoration-none fw-600">Create one</a>
   </div>
 </div>
 
@@ -211,13 +206,13 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
   <input type="hidden" name="return_to" value="{{ return_to }}">
 
   <!-- type indicator + change link -->
-  <div class="card" style="padding:12px 18px;margin-bottom:14px;">
-    <div style="display:flex;align-items:center;justify-content:space-between;">
+  <div class="card p-3 mb-3">
+    <div class="d-flex items-center justify-between">
       <div>
-        <span style="font-size:12px;color:var(--sub);font-weight:600;">TYPE</span>
-        <span style="font-size:16px;font-weight:800;margin-left:10px;color:var(--accent);">{{ selected_type }}</span>
+        <span class="fs-xs text-muted fw-600">TYPE</div>
+        <span class="fs-lg fw-800 ms-2 text-accent">{{ selected_type }}</div>
       </div>
-      <a href="/add" style="font-size:13px;color:var(--sub);text-decoration:none;font-weight:600;">↩ Change</a>
+      <a href="/add" class="fs-xs text-muted text-decoration-none fw-600">↩ Change</a>
     </div>
   </div>
 
@@ -236,10 +231,10 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
       <label>
         {{ f.name }}
         {% if f.required %}<span class="req">*</span>{% endif %}
-        {% if f.unit %}<span style="color:var(--sub);font-weight:400;"> · {{ f.unit }}</span>{% endif %}
+        {% if f.unit %}<span class="text-muted fw-400"> · {{ f.unit }}</span>{% endif %}
       </label>
       {% if f.has_options %}
-      <div style="display:flex;gap:4px;align-items:center;">
+      <div class="d-flex gap-1 items-center">
         <select name="{{ f.name }}" id="field-{{ f.name }}"
                 data-field-info="{{ f | tojson | escape }}"
                 {% if f.is_parent or f.is_tag_trigger or f.is_condition_trigger %}onchange="onParentChange('{{ f.name }}')"{% endif %}
@@ -253,7 +248,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
           {% endfor %}
         </select>
         <button type="button" onclick="addNewOption('{{ f.name }}')" 
-                style="padding:4px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;" 
+                class="p-1 fs-xs bg-bg border border-border rounded cursor-pointer" 
                 title="Add new option">+</button>
       </div>
       {% elif f.has_parent %}
@@ -263,10 +258,10 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
         <option value="">— select {{ f.parent }} first —</option>
       </select>
       {% elif f.is_int %}
-      <div style="display:flex;gap:4px;align-items:center;">
+      <div class="d-flex gap-1 items-center">
         <input type="number" name="{{ f.name }}" id="field-{{ f.name }}" min="0" inputmode="numeric"
                value="{{ field_values.get(f.name, '') if field_values else '' }}"
-               placeholder="0" style="flex:1;min-width:0;">
+               placeholder="0" class="flex-1 min-w-0">
         <button type="button" class="calc-btn" data-for="field-{{ f.name }}" title="Calculator">ƒx</button>
       </div>
       {% elif f.is_month %}
@@ -281,33 +276,34 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
         <!-- date part -->
         <input type="date"
                id="date-part-{{ f.name }}"
-               style="flex:2;min-width:0;"
+               class="flex-2 min-w-0"
                oninput="syncDatetime('{{ f.name }}')">
         <!-- time part — always visible, explicit hour/minute selects -->
-        <div style="display:flex;gap:4px;align-items:center;flex:1;min-width:0;">
+        <div class="d-flex gap-1 items-center flex-1 min-w-0">
           <select id="hour-part-{{ f.name }}"
-                  style="flex:1;min-width:0;"
+                  class="flex-1 min-w-0"
                   onchange="syncDatetime('{{ f.name }}')">
             {% for h in range(24) %}
             <option value="{{ '%02d'|format(h) }}">{{ '%02d'|format(h) }}</option>
             {% endfor %}
           </select>
-          <span style="font-weight:700;color:var(--sub);">:</span>
+          <span class="fw-700 text-sub">:</span>
           <select id="min-part-{{ f.name }}"
-                  style="flex:1;min-width:0;"
+                  class="flex-1 min-w-0"
                   onchange="syncDatetime('{{ f.name }}')">
             {% for m in [0,5,10,15,20,25,30,35,40,45,50,55] %}
             <option value="{{ '%02d'|format(m) }}">{{ '%02d'|format(m) }}</option>
             {% endfor %}
           </select>
         </div>
-        <!-- hidden field that actually gets submitted -->
-        <input type="hidden"
-               name="{{ f.name }}"
-               id="hidden-{{ f.name }}"
-               value="{{ field_values.get(f.name, '') if field_values else '' }}">
       </div>
-      <div style="font-size:11px;color:var(--sub);margin-top:4px;">
+      <!-- hidden field that actually gets submitted -->
+<input type="hidden"
+                name="{{ f.name }}"
+                id="hidden-{{ f.name }}"
+                value="{{ field_values.get(f.name, '') if field_values else '' }}">
+      </div>
+      <div class="fs-xs text-muted mt-1">
         Leave date blank to skip · time in 5-min steps
       </div>
       {% else %}
@@ -323,7 +319,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
     <div class="field-group">
       <label>Tags</label>
       {% if tag_options %}
-      <div class="chip-group" style="margin-top:4px;">
+      <div class="chip-group mt-1">
         {% for tag in tag_options %}
         <label class="chip {% if field_values and tag in (field_values.get('tag') or []) %}selected{% endif %}">
           <input type="checkbox" name="tag" value="{{ tag }}"
@@ -334,19 +330,19 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
         {% endfor %}
         {% if tag_context %}
         <button type="button" onclick="addSchemaTag('{{ selected_type }}')"
-                style="padding:2px 6px;font-size:11px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;margin-left:4px;"
+                class="p-1 px-2 fs-xs bg-bg border border-border rounded cursor-pointer ms-1"
                 title="Add new tag to schema">+</button>
         {% endif %}
       </div>
       {% endif %}
       <input type="text" name="custom_tags" placeholder="tags, comma separated"
-             style="margin-top:{% if tag_options %}10px{% else %}4px{% endif %};"
-             value="{{ field_values.get('custom_tags','') if field_values else '' }}">
+             class="mt-{% if tag_options %}3{% else %}1{% endif %}">
+      value="{{ field_values.get('custom_tags','') if field_values else '' }}">
     </div>
 
     <!-- threshold match indicator -->
-    <div id="threshold-match-area" style="display:none;margin-top:8px;">
-      <div style="font-size:11px;color:var(--sub);margin-bottom:4px;">Thresholds</div>
+    <div id="threshold-match-area" class="d-none mt-2">
+      <div class="fs-xs text-muted mb-1">Thresholds</div>
       <div id="threshold-match-bars"></div>
     </div>
 
@@ -354,27 +350,25 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
     {% if global_field_defs %}
     <div class="divider"></div>
     {% set filled = global_field_defs | selectattr('value') | list %}
-    <div onclick="toggleExtra()"
-         style="display:flex;align-items:center;justify-content:space-between;
-                padding:10px 0;cursor:pointer;user-select:none;">
-      <span style="font-size:13px;font-weight:600;color:var(--sub);">
+    <div onclick="toggleExtra()" class="d-flex items-center justify-between p-0 cursor-pointer user-select-none">
+      <span class="fs-xs fw-600 text-sub">
         Additional info
         {% if filled %}
-        <span style="color:var(--accent);margin-left:6px;">· {{ filled|length }} filled</span>
+        <span class="text-accent ms-1">· {{ filled|length }} filled</span>
         {% endif %}
       </span>
-      <span id="extra-arrow" style="font-size:11px;color:var(--sub);">
+      <span id="extra-arrow" class="fs-xs text-sub">
         {% if filled %}▲{% else %}▼{% endif %}
       </span>
     </div>
-    <div id="extra-fields" style="display:{% if filled %}block{% else %}none{% endif %};">
+    <div id="extra-fields" class="{% if filled %}d-block{% else %}d-none{% endif %}">
       {% for f in global_field_defs %}
-      <div class="field-group" style="margin-bottom:10px;">
+      <div class="field-group mb-2">
         <label>{{ f.name }}
-          <span style="color:var(--sub);font-weight:400;font-size:11px;"> optional</span>
+          <span class="text-muted fw-400 fs-xs"> optional</span>
         </label>
         {% if f.options %}
-        <div style="display:flex;gap:4px;align-items:center;">
+        <div class="d-flex gap-1 items-center">
           <select name="{{ f.name }}" id="field-{{ f.name }}">
             <option value="">— none —</option>
             {% for opt in f.options %}
@@ -382,7 +376,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
             {% endfor %}
           </select>
           <button type="button" onclick="addGlobalFieldOption('{{ f.name }}', 'field-{{ f.name }}')"
-                  style="padding:4px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;"
+                  class="p-1 px-2 fs-xs bg-bg border border-border rounded cursor-pointer"
                   title="Add new option">+</button>
         </div>
         {% else %}
@@ -397,99 +391,97 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
     function toggleExtra() {
       var el  = document.getElementById("extra-fields");
       var arr = document.getElementById("extra-arrow");
-      var open = el.style.display !== "none";
-      el.style.display = open ? "none" : "block";
+      var open = el.classList.contains("d-block");
+      el.classList.toggle("d-none", open);
+      el.classList.toggle("d-block", !open);
       arr.textContent  = open ? "▼" : "▲";
     }
     </script>
     {% endif %}
 
-    <!-- links -->
+<!-- links -->
     <div class="divider"></div>
     {% set has_links = field_values and (field_values.get('id') or field_values.get('links')) %}
-    <div onclick="toggleLinks()"
-         style="display:flex;align-items:center;justify-content:space-between;
-                padding:10px 0;cursor:pointer;user-select:none;">
-      <span style="font-size:13px;font-weight:600;color:var(--sub);">
-        Id &amp; links
+    <div onclick="toggleLinks()" class="d-flex items-center justify-between p-0 cursor-pointer user-select-none">
+      <span class="fs-xs fw-600 text-sub">
+        Id & links
         {% if has_links %}
-        <span style="color:var(--accent);margin-left:6px;">· filled</span>
+        <span class="text-accent ms-1">· filled</span>
         {% endif %}
       </span>
-      <span id="link-arrow" style="font-size:11px;color:var(--sub);">
+      <span id="link-arrow" class="fs-xs text-sub">
         {% if has_links %}▲{% else %}▼{% endif %}
       </span>
     </div>
-    <div id="link-fields" style="display:{% if has_links %}block{% else %}none{% endif %};">
+    <div id="link-fields" class="{% if has_links %}d-block{% else %}d-none{% endif %}">
       <div class="field-group">
-        <label>Id <span style="color:var(--sub);font-weight:400;">optional · link target</span></label>
-        <div style="display:flex;gap:4px;align-items:center;">
+        <label>Id <span class="text-muted fw-400">optional · link target</span></label>
+        <div class="d-flex gap-1 items-center">
           <input type="text" name="id" id="add-id" list="add-link-id-list"
                  value="{{ field_values.get('id','') if field_values else '' }}"
-                 placeholder="auto link target (e.g. k3f9a1)" style="flex:1;">
-          <button type="button" onclick="generateRecordId()" style="padding:4px 8px;font-size:12px;background:var(--bg);border:1px solid var(--border);border-radius:4px;cursor:pointer;" title="Generate a random id">Generate</button>
+                 placeholder="auto link target (e.g. k3f9a1)" class="flex-1">
+          <button type="button" onclick="generateRecordId()" class="p-1 px-2 fs-xs bg-bg border border-border rounded cursor-pointer" title="Generate a random id">Generate</button>
         </div>
         <datalist id="add-link-id-list"></datalist>
       </div>
       <div class="field-group">
-        <label>Links <span style="color:var(--sub);font-weight:400;">optional · comma-separated type:id</span></label>
+        <label>Links <span class="text-muted fw-400">optional · comma-separated type:id</span></label>
         <input type="text" name="links" id="add-links" list="add-link-ids-list"
                value="{{ field_values.get('links','') if field_values else '' }}"
                placeholder="expense:k3f9a1, todo:t7c2b8">
         <datalist id="add-link-ids-list"></datalist>
-        <div style="font-size:11px;color:var(--sub);margin-top:4px;">links reference existing entries by their id — e.g. project:p91a, expense:k3f9a1</div>
+        <div class="fs-xs text-muted mt-1">links reference existing entries by their id — e.g. project:p91a, expense:k3f9a1</div>
       </div>
     </div>
     <script>
     function toggleLinks() {
       var el  = document.getElementById("link-fields");
       var arr = document.getElementById("link-arrow");
-      var open = el.style.display !== "none";
-      el.style.display = open ? "none" : "block";
+      var open = el.classList.contains("d-block");
+      el.classList.toggle("d-none", open);
+      el.classList.toggle("d-block", !open);
       arr.textContent  = open ? "▼" : "▲";
     }
     </script>
 
     <!-- note -->
     <div class="divider"></div>
-    <div style="background:var(--accent-lt);border-left:3px solid var(--accent);border-radius:8px;padding:12px 16px;margin:14px 0;">
-      <div class="field-group" style="margin:0;">
-        <label>Note <span style="color:var(--sub);font-weight:400;">(optional)</span></label>
+    <div class="bg-accent-lt border-l-3 border-accent rounded-md p-3 mb-4">
+      <div class="field-group mb-0">
+        <label>Note <span class="text-muted fw-400">(optional)</span></label>
         <input type="text" name="note"
                value="{{ field_values.get('note','') if field_values else '' }}"
                placeholder="brief context">
-        <div style="font-size:11px;color:var(--sub);margin-top:4px;">After the pipe (|) — this is freeform text, not a key=value field or tag</div>
+        <div class="fs-xs text-muted mt-1">After the pipe (|) — this is freeform text, not a key=value field or tag</div>
       </div>
     </div>
   </div>
 
   <button type="submit" class="btn btn-primary btn-full" id="save-btn">Save Record</button>
-  <button type="button" class="btn btn-ghost btn-full" style="margin-top:10px;"
+  <button type="button" class="btn btn-ghost btn-full mt-3"
           onclick="showSavePreset()">☆ Save as Preset</button>
-  <a href="{{ return_to }}" class="btn btn-ghost btn-full" style="margin-top:10px;">✕ Cancel</a>
+  <a href="{{ return_to }}" class="btn btn-ghost btn-full mt-3">✕ Cancel</a>
 </form>
 
 <!-- Save as Preset dialog -->
-<div id="preset-dialog" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.4);
-     z-index:500;display:none;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;width:320px;
-              box-shadow:0 8px 32px rgba(0,0,0,.18);">
-    <div style="font-size:16px;font-weight:700;margin-bottom:14px;">Save as Preset</div>
+<div id="preset-dialog" class="fixed inset-0 bg-black-40 z-500 d-none items-center justify-center">
+  <div class="bg-card rounded-xl p-6 w-320 shadow-3">
+    <div class="fw-700 fs-lg mb-3">Save as Preset</div>
     <div class="field-group">
       <label>Preset name</label>
       <input type="text" id="preset-name-input" placeholder="e.g. commute"
-             style="text-transform:lowercase;"
+             class="lowercase"
              oninput="this.value=this.value.replace(/[^a-z0-9_]/g,'')">
       <div class="hint">lowercase letters, numbers, underscores</div>
     </div>
-    <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--sub);margin-bottom:10px;cursor:pointer;">
+    <label class="d-flex items-center gap-2 fs-xs text-sub mb-2 cursor-pointer">
       <input type="checkbox" id="preset-instant-input" {% if selected_type == 'habit' %}checked{% endif %}>
       ⚡ Save as instant preset (one-click)
     </label>
-    <div id="preset-msg" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>
-    <div style="display:flex;gap:10px;">
-      <button class="btn btn-primary" style="flex:1" onclick="doSavePreset()">Save</button>
-      <button class="btn btn-ghost"   style="flex:1" onclick="hidePresetDialog()">Cancel</button>
+    <div id="preset-msg" class="fs-xs text-error mb-2 d-none"></div>
+    <div class="d-flex gap-2">
+      <button class="btn btn-primary flex-1" onclick="doSavePreset()">Save</button>
+      <button class="btn btn-ghost flex-1" onclick="hidePresetDialog()">Cancel</button>
     </div>
   </div>
 </div>
@@ -750,16 +742,17 @@ function _checkThresholds() {
         if (m.direction === "max") {
           label = previewStatus === "over" ? "WILL BE OVER" : previewStatus === "warning" ? "WARN" : "OK";
         } else {
-          label = previewStatus === "met" ? "WILL MEET" : previewStatus === "warning" ? "WARN" : "OK";
+          label = previewStatus === "met" ? "WILL MEET" : previewPct < 50 ? "WARN" : "OK";
         }
         var _thrColor = {ok:"var(--hl-success)",warning:"var(--hl-warn)",over:"var(--hl-error)",met:"var(--hl-accent)"};
-        return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;">'
-          + '<span style="font-size:12px;font-weight:600;min-width:100px;">' + m.name.replace(/_/g, ' ') + '</span>'
-          + '<div style="flex:1;min-width:120px;height:14px;background:var(--border);border-radius:7px;overflow:hidden;">'
-          + '<div style="height:100%;border-radius:7px;width:' + Math.min(previewPct, 100) + '%;background:' + (_thrColor[previewStatus]||'var(--sub)') + '"></div>'
+        var statusColor = _thrColor[previewStatus] || 'var(--sub)';
+        return '<div class="d-flex items-center gap-2 mb-1">'
+          + '<span class="fw-600 min-w-100 fs-xs">' + m.name.replace(/_/g, ' ') + '</span>'
+          + '<div class="flex-1 min-w-120 h-14 bg-border rounded-7 overflow-hidden">'
+          + '<div class="h-full rounded-7" style="width:' + Math.min(previewPct, 100) + '%;background:' + statusColor + '"></div>'
           + '</div>'
-          + '<span style="font-size:11px;color:var(--sub);white-space:nowrap;">' + previewRaw + '/' + m.target + (m.unit ? ' ' + m.unit : '') + '</span>'
-          + '<span style="font-size:11px;font-weight:700;color:' + (_thrColor[previewStatus]||'var(--sub)') + ';">' + label + '</span>'
+          + '<span class="text-sub-fs11 nowrap">' + previewRaw + '/' + m.target + (m.unit ? ' ' + m.unit : '') + '</span>'
+          + '<span class="fw-700 fs-xs nowrap" style="color:' + statusColor + ';">' + label + '</span>'
           + '</div>';
       }).join("");
     })
