@@ -1,0 +1,10 @@
+{
+  "permission": {
+    "bash": {
+      "git commit*": "ask",
+      "git push*": "ask",
+      "git * --no-verify*": "deny",
+      "git reset --hard*": "deny"
+    }
+  }
+}
