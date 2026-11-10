@@ -7,6 +7,11 @@ import ptos_todo
 import ptos_cli
 
 
+# Register custom markers
+def pytest_configure(config):
+    config.addinivalue_line("markers", "slow: marks tests as slow (deselect with '-m \"not slow\"')")
+
+
 _PATCHED_ATTRS = [
     "BASE_DIR", "SCRIPT_DIR", "CONFIG_DIR", "RECORDS_DIR", "JOURNAL_DIR",
     "TEMPLATE_DIR", "EXPORTS_DIR", "BACKUP_DIR", "TODO_DIR",

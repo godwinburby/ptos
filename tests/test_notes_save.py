@@ -59,6 +59,7 @@ def _leftovers():
 # ── 1. concurrent complete-content saves ─────────────────────────────────────
 
 class TestConcurrentSaves:
+    @pytest.mark.slow
     def test_two_threads_write_one_complete_content(self):
         errors = []
 
@@ -81,6 +82,7 @@ class TestConcurrentSaves:
         assert raw in (CONT_A.encode("utf-8"), CONT_B.encode("utf-8"))
         assert not _leftovers()
 
+    @pytest.mark.slow
     def test_two_subprocesses_write_one_complete_content(self):
         base = ptos.BASE_DIR
         procs = [

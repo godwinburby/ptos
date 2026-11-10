@@ -119,6 +119,7 @@ def lockfile_mode(monkeypatch):
 # ── 1. mutual exclusion ───────────────────────────────────────────────────────
 
 class TestMutualExclusion:
+    @pytest.mark.slow
     def test_two_processes_serialize(self, tmp_path):
         path = str(tmp_path / "data.txt")
         child = _spawn(_HOLD_WHILE_LOCKED, str(tmp_path), path, "1.5")
@@ -237,6 +238,7 @@ class TestLockfileFallback:
     def test_mode_reports_lockfile(self, lockfile_mode):
         assert ptos.file_lock_mode() == "lockfile"
 
+    @pytest.mark.slow
     def test_two_processes_serialize(self, tmp_path, lockfile_mode):
         path = str(tmp_path / "data.txt")
         child = _spawn(_HOLD_WHILE_LOCKED, str(tmp_path), path, "1.0")
@@ -457,6 +459,7 @@ class TestRaceEditorAppender:
 
 
 class TestRaceTwoEditors:
+    @pytest.mark.slow
     def test_threads_150_edits_each(self, tmp_path):
         path = str(tmp_path / "race.log")
         _seed_seeds(path, 300)
@@ -487,6 +490,7 @@ class TestRaceTwoEditors:
         assert not any(ln.startswith("seed-") for ln in lines)
         _assert_no_leftovers(tmp_path)
 
+    @pytest.mark.slow
     def test_processes_150_edits_each(self, tmp_path):
         path = str(tmp_path / "race.log")
         _seed_seeds(path, 300)

@@ -56,12 +56,14 @@ class TestInitPtos:
         assert "*.tmp" in stignore.read_text()
         assert "*.bak" in stignore.read_text()
 
+    @pytest.mark.slow
     def test_stignore_idempotent(self, ptos_home):
         ptos.init_ptos()
         first = (ptos_home / ".stignore").read_text()
         ptos.init_ptos()
         assert (ptos_home / ".stignore").read_text() == first
 
+    @pytest.mark.slow
     def test_idempotent_no_errors(self, ptos_home):
         ptos.init_ptos()
         ptos.init_ptos()  # second run should not raise
@@ -83,6 +85,7 @@ class TestInitPtos:
         ptos.init_ptos()
         assert "secret_key" not in (ptos.get_config().get("server") or {})
 
+    @pytest.mark.slow
     def test_init_does_not_modify_a_config_already_holding_a_secret(
             self, ptos_home):
         import tomli_w
@@ -154,6 +157,7 @@ class TestInitKeepsConfigComments:
         produced = open(ptos.CONFIG_PATH, encoding="utf-8").read()
         assert len(self._comments(produced)) == len(self._comments(starter))
 
+    @pytest.mark.slow
     def test_second_init_changes_nothing(self, ptos_home):
         ptos.init_ptos()
         path = os.path.join(ptos_home, "config", "config.toml")
