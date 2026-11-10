@@ -3,84 +3,79 @@
 
 <div class="page-title">Backup & Restore</div>
 
-<div id="folder-warning" class="msg msg-error" style="display:none;margin-bottom:14px;">
+<div id="folder-warning" class="msg msg-error d-none mb-3">
   ⚠️ Missing folders: <span id="missing-folders"></span>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card mb-2">
   <div class="card-title">Full Backup</div>
-  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    Creates a full backup of <code>records/</code>, <code>config/</code>, and <code>templates/</code> folders.
-  </p>
-  <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+  <p class="fs-xs text-muted mb-3">Creates a full backup of <code>records/</code>, <code>config/</code>, and <code>templates/</code> folders.</p>
+  <div class="d-flex gap-2 items-center flex-wrap">
     <button onclick="createBackup()" class="btn btn-primary" id="create-btn">
       💾 Create Full Backup
     </button>
     <button onclick="showBackupPreview()" class="btn btn-ghost" id="preview-btn">
       🔍 Preview Backup
     </button>
-    <span id="create-msg" style="margin-left:12px;font-size:13px;display:none;"></span>
+    <span id="create-msg" class="ms-2 fs-xs d-none"></span>
   </div>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card mb-2">
   <div class="card-title">Restore Full Backup</div>
-  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    Upload a full backup ZIP file to restore. This will overwrite existing data.
-  </p>
+  <p class="fs-xs text-muted mb-2">Upload a full backup ZIP file to restore. This will overwrite existing data.</p>
   <form onsubmit="return restoreUpload(event)">
-    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
-      <input type="file" id="restore-file" accept=".zip" style="flex:1;">
+    <div class="d-flex gap-2 items-center flex-wrap">
+      <input type="file" id="restore-file" accept=".zip" class="flex-1">
       <button type="submit" class="btn btn-warn" id="restore-btn">Restore Full Backup</button>
     </div>
   </form>
-  <div id="restore-msg" style="margin-top:10px;font-size:13px;display:none;"></div>
+  <div id="restore-msg" class="fs-xs mt-1 d-none"></div>
+</form>
 </div>
 
-<div class="card" style="margin-bottom:14px;">
+<div class="card mb-2">
   <div class="card-title">Config Backup</div>
-  <p style="font-size:13px;color:var(--sub);margin-bottom:12px;">
-    Export or import only your config files (schema, queries, presets, config toml). Useful for sharing settings without your records.
-  </p>
-  <div style="display:flex;gap:10px;flex-wrap:wrap;">
+  <p class="fs-xs text-muted mb-2">Export or import only your config files (schema, queries, presets, config toml). Useful for sharing settings without your records.</p>
+  <div class="d-flex gap-2 flex-wrap">
     <button onclick="exportConfig()" class="btn btn-ghost">
       📤 Export Config
     </button>
-    <label class="btn btn-ghost" style="cursor:pointer;">
+    <label class="btn btn-ghost cursor-pointer">
       📥 Import Config
-      <input type="file" id="config-import-input" accept=".zip" onchange="handleConfigImport(this)" style="display:none;">
+      <input type="file" id="config-import-input" accept=".zip" onchange="handleConfigImport(this)" class="d-none">
     </label>
   </div>
 </div>
 
-<div class="card" id="sec-share" style="margin-bottom:14px;">
+<div class="card mb-2" id="sec-share">
   <div class="card-title">Share Schema</div>
-  <p style="font-size:13px;color:var(--sub);margin:0 0 12px;">Export a filtered bundle of your schema, queries, presets, and config as a ZIP. Select which record types to include — queries and presets are filtered automatically.</p>
+  <p class="fs-xs text-muted mb-2">Export a filtered bundle of your schema, queries, presets, and config as a ZIP. Select which record types to include — queries and presets are filtered automatically.</p>
   {% if schema_types %}
-  <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;">
+  <div class="d-flex flex-wrap gap-2 mb-3">
     {% for t in schema_types %}
-    <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;padding:4px 10px;border-radius:16px;border:1px solid var(--border);background:var(--card);">
+    <label class="d-flex items-center gap-1 fs-xs cursor-pointer p-2 rounded-full border border-border bg-card">
       <input type="checkbox" class="share-type-cb" value="{{ t }}" checked> {{ t }}
     </label>
     {% endfor %}
   </div>
-  <button onclick="downloadShareBundle()" class="btn btn-primary" style="font-size:13px;">Download Bundle</button>
+  <button onclick="downloadShareBundle()" class="btn btn-primary fs-xs">Download Bundle</button>
   {% else %}
-  <p style="font-size:13px;color:var(--sub);">No schema types defined.</p>
+  <p class="fs-xs text-muted">No schema types defined.</p>
   {% endif %}
 </div>
 
 <!-- Config Import Confirmation Modal -->
-<div id="import-config-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:500;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,.2);">
-    <div style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--warn);">
+<div id="import-config-modal" class="fixed inset-0 bg-black-40 z-500 d-none items-center justify-center">
+  <div class="bg-card rounded-xl p-6 w-340 shadow-3">
+    <div class="fw-700 fs-lg mb-3 text-warn">
       ⚠️ Warning: Import Config
     </div>
-    <div style="font-size:14px;color:var(--sub);margin-bottom:16px;">
+    <div class="fs-md text-sub mb-4">
       This will replace your current config files with the imported ones.<br><br>
       Your existing config will be backed up first.
     </div>
-    <div style="display:flex;gap:10px;">
+    <div class="d-flex gap-2">
       <button onclick="confirmConfigImport()" class="btn btn-primary">Import</button>
       <button onclick="closeConfigModal()" class="btn btn-ghost">Cancel</button>
     </div>
@@ -88,12 +83,12 @@
 </div>
 
 <!-- Backup/Restore Preview Modal -->
-<div id="preview-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:600;align-items:center;justify-content:center;">
-  <div style="background:var(--card);border-radius:14px;padding:24px;width:480px;max-width:90vw;max-height:90vh;box-shadow:0 8px 32px rgba(0,0,0,.2);display:flex;flex-direction:column;">
-    <div style="font-size:16px;font-weight:700;margin-bottom:16px;color:var(--accent);flex-shrink:0;" id="preview-modal-title">
+<div id="preview-modal" class="fixed inset-0 bg-black-40 z-600 d-none items-center justify-center">
+  <div class="bg-card rounded-xl p-6 w-480 max-w-90vw max-h-90vh shadow-3 d-flex flex-col">
+    <div class="fw-700 fs-lg mb-4 text-accent flex-shrink-0" id="preview-modal-title">
       Preview
     </div>
-    <div id="preview-modal-content" style="flex:1;overflow:hidden;">
+    <div id="preview-modal-content" class="flex-1 overflow-hidden">
       <!-- Content will be loaded dynamically -->
     </div>
   </div>
@@ -102,37 +97,37 @@
 <div class="card">
   <div class="card-title">Backup History</div>
   {% if not backups %}
-  <p style="font-size:13px;color:var(--sub);">No backups yet. Create your first backup above.</p>
+  <p class="fs-xs text-muted">No backups yet. Create your first backup above.</p>
   {% else %}
-  <div style="overflow-x:auto;">
+  <div class="overflow-x-auto">
     <table class="data-table">
       <thead>
         <tr>
           <th>Date</th>
           <th>File</th>
-          <th style="text-align:right;">Actions</th>
+          <th class="text-right">Actions</th>
         </tr>
       </thead>
       <tbody>
         {% for name, created, btype in backups %}
         <tr id="row-{{ loop.index }}">
            <td>{{ created }}</td>
-          <td>
-            <code>{{ name }}</code>
-            {% if btype == 'config' %}
-            <span style="font-size:11px;color:var(--sub);margin-left:6px;">(config only)</span>
-            {% endif %}
-          </td>
-<td style="text-align:right;">
-             <a href="/backup/download/{{ name }}" class="btn btn-ghost btn-sm" style="margin-right:6px;">Download</a>
-             <button onclick="showRestorePreview('{{ name }}')" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--sub);">Preview</button>
+           <td>
+             <code>{{ name }}</code>
              {% if btype == 'config' %}
-             <button onclick="restoreConfigBackup('{{ name }}', true)" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--accent);">Restore Config</button>
-             {% else %}
-             <button onclick="restoreBackup('{{ name }}', true)" class="btn btn-ghost btn-sm" style="margin-right:6px;color:var(--warn);">Restore</button>
+             <span class="fs-xs text-sub ml-1">(config only)</span>
              {% endif %}
-             <button onclick="deleteBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm" style="color:var(--error);">Delete</button>
            </td>
+ <td class="text-right">
+              <a href="/backup/download/{{ name }}" class="btn btn-ghost btn-sm mr-2">Download</a>
+              <button onclick="showRestorePreview('{{ name }}')" class="btn btn-ghost btn-sm mr-2 text-sub">Preview</button>
+              {% if btype == 'config' %}
+              <button onclick="restoreConfigBackup('{{ name }}', true)" class="btn btn-ghost btn-sm mr-2 text-accent">Restore Config</button>
+              {% else %}
+              <button onclick="restoreBackup('{{ name }}', true)" class="btn btn-ghost btn-sm mr-2 text-warn">Restore</button>
+              {% endif %}
+              <button onclick="deleteBackup('{{ name }}', {{ loop.index }})" class="btn btn-ghost btn-sm text-error">Delete</button>
+            </td>
         </tr>
         {% endfor %}
       </tbody>
@@ -161,28 +156,28 @@ function createBackup() {
   var msg = document.getElementById("create-msg");
   btn.disabled = true;
   btn.textContent = "Creating...";
-  msg.style.display = "none";
+  msg.classList.add("d-none");
   
   fetch("/backup/create", {method: "POST"})
     .then(function(r) { return r.json(); })
     .then(function(d) {
       btn.disabled = false;
       btn.textContent = "💾 Create Full Backup";
-      msg.style.display = "inline";
+      msg.classList.remove("d-none");
       if (d.ok) {
-        msg.style.color = "var(--success)";
+        msg.className = "fs-xs text-success";
         msg.textContent = "✔ Backup created! Refreshing...";
         setTimeout(function() { location.reload(); }, 1000);
       } else {
-        msg.style.color = "var(--error)";
+        msg.className = "fs-xs text-error";
         msg.textContent = "✖ " + d.error;
       }
     })
     .catch(function(e) {
       btn.disabled = false;
       btn.textContent = "💾 Create Full Backup";
-      msg.style.display = "inline";
-      msg.style.color = "var(--error)";
+      msg.classList.remove("d-none");
+      msg.className = "fs-xs text-error";
       msg.textContent = "✖ " + e;
     });
 }
@@ -293,7 +288,7 @@ function restoreUpload(e) {
   var btn = document.getElementById("restore-btn");
   var msg = document.getElementById("restore-msg");
   btn.disabled = true;
-  msg.style.display = "none";
+  msg.classList.add("d-none");
   
   var formData = new FormData();
   formData.append("file", file);
@@ -305,20 +300,20 @@ function restoreUpload(e) {
     .then(function(r) { return r.json(); })
     .then(function(d) {
       btn.disabled = false;
-      msg.style.display = "block";
+      msg.classList.remove("d-none");
       if (d.ok) {
-        msg.style.color = "var(--success)";
+        msg.className = "fs-xs text-success";
         msg.textContent = "✔ Restore complete! Page will reload.";
         setTimeout(function() { location.reload(); }, 1000);
       } else {
-        msg.style.color = "var(--error)";
+        msg.className = "fs-xs text-error";
         msg.textContent = "✖ " + d.error;
       }
     })
     .catch(function(e) {
       btn.disabled = false;
-      msg.style.display = "block";
-      msg.style.color = "var(--error)";
+      msg.classList.remove("d-none");
+      msg.className = "fs-xs text-error";
       msg.textContent = "✖ " + e;
     });
   
@@ -329,12 +324,11 @@ function exportConfig() {
   window.location = "/backup/config";
 }
 
-var _pendingConfigFile = null;
-
 function handleConfigImport(input) {
   if (input.files && input.files[0]) {
     _pendingConfigFile = input.files[0];
-    document.getElementById("import-config-modal").style.display = "flex";
+    document.getElementById("import-config-modal").classList.remove("d-none");
+    document.getElementById("import-config-modal").classList.add("d-flex");
   }
 }
 
@@ -348,24 +342,25 @@ function confirmConfigImport() {
     method: "POST",
     body: formData
   })
-  .then(function(r) { return r.json(); })
-  .then(function(d) {
-    closeConfigModal();
-    if (d.ok) {
-      alert("Config imported successfully!");
-      location.reload();
-    } else {
-      alert("Error: " + d.error);
-    }
-  })
-  .catch(function(e) {
-    closeConfigModal();
-    alert("Error: " + e);
-  });
+    .then(function(r) { return r.json(); })
+    .then(function(d) {
+      closeConfigModal();
+      if (d.ok) {
+        alert("Config imported successfully!");
+        location.reload();
+      } else {
+        alert("Error: " + d.error);
+      }
+    })
+    .catch(function(e) {
+      closeConfigModal();
+      alert("Error: " + e);
+    });
 }
 
 function closeConfigModal() {
-  document.getElementById("import-config-modal").style.display = "none";
+  document.getElementById("import-config-modal").classList.add("d-none");
+  document.getElementById("import-config-modal").classList.remove("d-flex");
   _pendingConfigFile = null;
 }
 
@@ -422,94 +417,95 @@ function showPreviewModal(preview, type, backupName) {
     content.innerHTML = renderRestorePreview(preview, backupName);
   }
   
-  modal.style.display = "flex";
+  modal.classList.remove("d-none");
+  modal.classList.add("d-flex");
 }
 
 function renderBackupPreview(preview) {
-  var html = '<div style="max-height:70vh;overflow-y:auto;padding-right:8px;">';
+  var html = '<div class="max-h-70vh overflow-y-auto pr-2">';
   
   // Summary
-  html += '<div style="background:var(--bg);padding:12px;border-radius:8px;margin-bottom:16px;">';
-  html += '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">Summary</div>';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">';
-  html += '<div><span style="color:var(--sub);">Total files:</span> ' + preview.total_files + '</div>';
-  html += '<div><span style="color:var(--sub);">Total size:</span> ' + (preview.total_size_formatted || '0 bytes') + '</div>';
+  html += '<div class="bg-bg p-3 rounded-md mb-4">';
+  html += '<div class="fw-700 fs-lg mb-2">Summary</div>';
+  html += '<div class="grid grid-cols-2 gap-2 fs-xs">';
+  html += '<div><span class="text-sub">Total files:</span> ' + preview.total_files + '</div>';
+  html += '<div><span class="text-sub">Total size:</span> ' + (preview.total_size_formatted || '0 bytes') + '</div>';
   html += '</div>';
   
   if (preview.last_backup) {
-    html += '<div style="margin-top:8px;font-size:12px;color:var(--accent);">';
+    html += '<div class="mt-2 fs-xs text-accent">';
     html += 'Last backup: ' + formatDateTime(preview.last_backup.timestamp) + ' (' + preview.last_backup.file_count + ' files)';
     html += '</div>';
   }
   html += '</div>';
   
   // Folders
-  html += '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">Folders to backup</div>';
+  html += '<div class="fs-lg fw-700 mb-2">Folders to backup</div>';
   
   if (preview.folders && preview.folders.length > 0) {
     for (var i = 0; i < preview.folders.length; i++) {
       var folder = preview.folders[i];
-      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;">';
-      html += '<div style="font-weight:700;color:var(--text);"><code>' + folder.name + '/</code></div>';
-      html += '<div style="font-size:12px;color:var(--sub);">' + folder.file_count + ' files · ' + (folder.size_formatted || '0 bytes') + '</div>';
+      html += '<div class="bg-card border border-border rounded-md p-3 mb-2">';
+      html += '<div class="d-flex justify-between items-center mb-1">';
+      html += '<div class="fw-700 text-text"><code>' + folder.name + '/</code></div>';
+      html += '<div class="fs-xs text-sub">' + folder.file_count + ' files · ' + (folder.size_formatted || '0 bytes') + '</div>';
       html += '</div>';
       
       if (folder.files && folder.files.length > 0) {
-        html += '<div style="font-size:11px;color:var(--sub);margin-top:6px;">Sample files:</div>';
-        html += '<div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:4px;">';
+        html += '<div class="fs-xs text-sub mt-1">Sample files:</div>';
+        html += '<div class="d-flex flex-wrap gap-1 mt-1">';
         for (var j = 0; j < Math.min(folder.files.length, 8); j++) {
           var file = folder.files[j];
-          html += '<span style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--text);">' + file.name + '</span>';
+          html += '<span class="bg-bg px-1 py-px rounded-sm fs-xs text-text">' + file.name + '</span>';
         }
         if (folder.file_count > 8) {
-          html += '<span style="background:var(--bg);padding:2px 6px;border-radius:4px;font-size:11px;color:var(--sub);">+' + (folder.file_count - 8) + ' more</span>';
+          html += '<span class="bg-bg px-1 py-px rounded-sm fs-xs text-sub">+' + (folder.file_count - 8) + ' more</span>';
         }
         html += '</div>';
       }
       html += '</div>';
     }
   } else {
-    html += '<div style="color:var(--sub);font-size:13px;padding:12px;text-align:center;">No folders to backup</div>';
+    html += '<div class="text-sub fs-xs p-3 text-center">No folders to backup</div>';
   }
   
   html += '</div>'; // Close scrollable div
   
   // Action buttons
-  html += '<div style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">';
-  html += '<button onclick="closePreviewModal()" class="btn btn-ghost" style="flex:1;">Close</button>';
-  html += '<button onclick="closePreviewModal();createBackup();" class="btn btn-primary" style="flex:1;">Create Backup Now</button>';
+  html += '<div class="d-flex gap-2 mt-4 pt-4 border-t border-border">';
+  html += '<button onclick="closePreviewModal()" class="btn btn-ghost flex-1">Close</button>';
+  html += '<button onclick="closePreviewModal();createBackup();" class="btn btn-primary flex-1">Create Backup Now</button>';
   html += '</div>';
   
   return html;
 }
 
 function renderRestorePreview(preview, backupName) {
-  var html = '<div style="max-height:70vh;overflow-y:auto;padding-right:8px;">';
+  var html = '<div class="max-h-70vh overflow-y-auto pr-2">';
   
   // Summary
-  html += '<div style="background:var(--bg);padding:12px;border-radius:8px;margin-bottom:16px;">';
-  html += '<div style="font-size:14px;font-weight:700;margin-bottom:6px;">Backup Details</div>';
-  html += '<div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;font-size:13px;">';
-  html += '<div><span style="color:var(--sub);">Type:</span> ' + (preview.type === 'config' ? 'Config only' : 'Full backup') + '</div>';
-  html += '<div><span style="color:var(--sub);">Total files:</span> ' + preview.total_files + '</div>';
-  html += '<div><span style="color:var(--sub);">Total size:</span> ' + (preview.total_size_formatted || '0 bytes') + '</div>';
+  html += '<div class="bg-bg p-3 rounded-md mb-4">';
+  html += '<div class="fw-700 fs-lg mb-2">Backup Details</div>';
+  html += '<div class="grid grid-cols-2 gap-2 fs-xs">';
+  html += '<div><span class="text-sub">Type:</span> ' + (preview.type === 'config' ? 'Config only' : 'Full backup') + '</div>';
+  html += '<div><span class="text-sub">Total files:</span> ' + preview.total_files + '</div>';
+  html += '<div><span class="text-sub">Total size:</span> ' + (preview.total_size_formatted || '0 bytes') + '</div>';
   if (preview.backup_date) {
-    html += '<div><span style="color:var(--sub);">Created:</span> ' + formatDateTime(preview.backup_date) + '</div>';
+    html += '<div><span class="text-sub">Created:</span> ' + formatDateTime(preview.backup_date) + '</div>';
   }
   html += '</div>';
   html += '</div>';
   
   // Folders in backup
   if (preview.folders_formatted && Object.keys(preview.folders_formatted).length > 0) {
-    html += '<div style="font-size:14px;font-weight:700;margin-bottom:8px;">Contents</div>';
+    html += '<div class="fs-lg fw-700 mb-2">Contents</div>';
     
     for (var folder in preview.folders_formatted) {
       var info = preview.folders_formatted[folder];
-      html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin-bottom:10px;">';
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;">';
-      html += '<div style="font-weight:700;color:var(--text);"><code>' + folder + '/</code></div>';
-      html += '<div style="font-size:12px;color:var(--sub);">' + info.file_count + ' files · ' + info.size + '</div>';
+      html += '<div class="bg-card border border-border rounded-md p-3 mb-2">';
+      html += '<div class="d-flex justify-between items-center">';
+      html += '<div class="fw-700 text-text"><code>' + folder + '/</code></div>';
+      html += '<div class="fs-xs text-sub">' + info.file_count + ' files · ' + info.size + '</div>';
       html += '</div>';
       html += '</div>';
     }
@@ -517,17 +513,17 @@ function renderRestorePreview(preview, backupName) {
   
   // File list
   if (preview.contents && preview.contents.length > 0) {
-    html += '<div style="font-size:14px;font-weight:700;margin-bottom:8px;margin-top:16px;">Files</div>';
-    html += '<div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;max-height:200px;overflow-y:auto;">';
+    html += '<div class="fs-lg fw-700 mb-2 mt-4">Files</div>';
+    html += '<div class="bg-card border border-border rounded-md p-3 max-h-200 overflow-y-auto">';
     for (var i = 0; i < Math.min(preview.contents.length, 20); i++) {
       var file = preview.contents[i];
-      html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:4px 0;border-bottom:1px solid var(--border-light);font-size:12px;">';
-      html += '<div style="color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + file.path + '</div>';
-      html += '<div style="color:var(--sub);white-space:nowrap;margin-left:8px;">' + (file.size_formatted || '0 bytes') + '</div>';
+      html += '<div class="d-flex justify-between items-center p-1 border-b border-border-light fs-xs">';
+      html += '<div class="text-text truncate pr-2 max-w-[70%]">' + file.path + '</div>';
+      html += '<div class="text-sub whitespace-nowrap ml-2">' + (file.size_formatted || '0 bytes') + '</div>';
       html += '</div>';
     }
     if (preview.total_files > 20) {
-      html += '<div style="text-align:center;color:var(--sub);font-size:11px;padding:8px;">+' + (preview.total_files - 20) + ' more files</div>';
+      html += '<div class="text-center text-sub fs-xs p-2">+' + (preview.total_files - 20) + ' more files</div>';
     }
     html += '</div>';
   }
@@ -535,12 +531,12 @@ function renderRestorePreview(preview, backupName) {
   html += '</div>'; // Close scrollable div
   
   // Action buttons
-  html += '<div style="display:flex;gap:10px;margin-top:16px;padding-top:16px;border-top:1px solid var(--border);">';
-  html += '<button onclick="closePreviewModal()" class="btn btn-ghost" style="flex:1;">Cancel</button>';
+  html += '<div class="d-flex gap-2 mt-4 pt-4 border-t border-border">';
+  html += '<button onclick="closePreviewModal()" class="btn btn-ghost flex-1">Cancel</button>';
   if (preview.type === 'config') {
-    html += '<button onclick="restoreFromModal(\'' + escapeSingleQuotes(backupName || '') + '\', \'config\')" class="btn btn-primary" style="flex:1;">Restore Config</button>';
+    html += '<button onclick="restoreFromModal(\'' + escapeSingleQuotes(backupName || '') + '\', \'config\')" class="btn btn-primary flex-1">Restore Config</button>';
   } else {
-    html += '<button onclick="restoreFromModal(\'' + escapeSingleQuotes(backupName || '') + '\', \'full\')" class="btn btn-warn" style="flex:1;">Restore Backup</button>';
+    html += '<button onclick="restoreFromModal(\'' + escapeSingleQuotes(backupName || '') + '\', \'full\')" class="btn btn-warn flex-1">Restore Backup</button>';
   }
   html += '</div>';
   
@@ -558,7 +554,8 @@ function formatDateTime(dtStr) {
 }
 
 function closePreviewModal() {
-  document.getElementById("preview-modal").style.display = "none";
+  document.getElementById("preview-modal").classList.add("d-none");
+  document.getElementById("preview-modal").classList.remove("d-flex");
 }
 
 function escapeSingleQuotes(str) {

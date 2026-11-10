@@ -51,7 +51,7 @@
   "web_templates\\_time_picker.html": 21,
   "web_templates\\_todo_modal.html": 4,
   "web_templates\\add.html": 2,
-  "web_templates\\backup.html": 83,
+  "web_templates\\backup.html": 0,
   "web_templates\\base.html": 23,
   "web_templates\\board.html": 8,
   "web_templates\\browse.html": 16,
@@ -109,5 +109,6 @@
   "web_templates\\settings.html": 39,
   "web_templates\\thresholds.html": 1,
   "web_templates\\todo.html": 35,
-  "web_templates\\types.html": 33
+  "web_templates\\types.html": 33,
+  "web_templates/backup.html": 0
 }
