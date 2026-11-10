@@ -47,7 +47,7 @@
   <div id="editor-pane" style="flex:1;min-width:0;">
     <textarea id="{{ _eid }}"
       style="width:100%;min-height:{{ _h }};padding:16px;
-             font-family:'Consolas','Courier New',monospace;
+             font-family: var(--font-mono);
              font-size:16px;line-height:1.85;
              background:var(--card);color:var(--text);
              border:1.5px solid var(--border);border-radius:10px;
@@ -104,7 +104,7 @@
     width:16px;height:16px;vertical-align:middle;
   }
   #preview-pane code {
-    font-family:'Consolas','Courier New',monospace;font-size:14px;
+    font-family: var(--font-mono);font-size:14px;
     background:var(--bg);padding:2px 6px;border-radius:4px;color:var(--accent);
   }
   #preview-pane pre {
@@ -130,7 +130,7 @@
   .md-syntax {
     display:none; margin:0; padding:16px; box-sizing:border-box;
     width:100%; min-height:{{ _h }};
-    font-family:'Consolas','Courier New',monospace; font-size:16px;
+    font-family: var(--font-mono); font-size:16px;
     line-height:1.85;
     background:var(--card); color:var(--text);
     border:1.5px solid var(--border); border-radius:10px;
@@ -146,7 +146,7 @@
   .mh-i { color:var(--sub); font-style:italic; }
   .mh-s { color:var(--sub); text-decoration:line-through; }
   .mh-c {
-    font-family:'Consolas','Courier New',monospace; color:var(--accent);
+    font-family: var(--font-mono); color:var(--accent);
     background:var(--bg); border-radius:4px; padding:0 3px;
   }
   .mh-br { color:var(--accent); }
@@ -267,7 +267,7 @@
     width:16px;height:16px;vertical-align:middle;
   }
   .md-block-body code {
-    font-family:'Consolas','Courier New',monospace;font-size:14px;
+    font-family: var(--font-mono);font-size:14px;
     background:var(--card);padding:2px 6px;border-radius:4px;color:var(--accent);
   }
   .md-block-body pre {
@@ -296,7 +296,7 @@
   .md-block-add-row:hover { border-color:var(--accent);color:var(--accent); }
   .md-block-edit-box {
     box-sizing:border-box;width:100%;min-height:96px;padding:9px 10px;
-    font-family:'Consolas','Courier New',monospace;font-size:14px;
+    font-family: var(--font-mono);font-size:14px;
     line-height:1.7;background:var(--card);color:var(--text);
     border:1.5px solid var(--accent);border-radius:8px;
     resize:vertical;outline:none;

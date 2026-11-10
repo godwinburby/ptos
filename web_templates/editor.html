@@ -11,7 +11,7 @@
 
 <div id="syntax-guide" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:14px;">
   <div style="font-weight:700;margin-bottom:10px;">Record Syntax:</div>
-  <code style="display:block;background:var(--bg);padding:10px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family:monospace;">
+  <code style="display:block;background:var(--bg);padding:10px;border-radius:6px;font-size:13px;margin-bottom:12px;font-family: var(--font-mono);">
     DATE type=VALUE FIELD=VALUE... tag=VALUE note="NOTE"
   </code>
   <div style="font-size:13px;color:var(--sub);">
@@ -23,7 +23,7 @@
   </div>
   <div style="margin-top:12px;padding-top:12px;border-top:1px solid var(--border);font-size:12px;">
     <strong>Example:</strong>
-    <code style="display:block;background:var(--bg);padding:8px;border-radius:6px;margin-top:6px;font-family:monospace;">2026-04-15 type=expense amount=50 category=transport tag=restaurant note="lunch with team"</code>
+    <code style="display:block;background:var(--bg);padding:8px;border-radius:6px;margin-top:6px;font-family: var(--font-mono);">2026-04-15 type=expense amount=50 category=transport tag=restaurant note="lunch with team"</code>
   </div>
 </div>
 
@@ -58,7 +58,7 @@
   <!-- raw textarea (edit mode) -->
   <textarea id="log-editor"
             style="width:100%;min-height:70vh;padding:14px 16px;
-                   font-family:'Consolas','Courier New',monospace;
+                   font-family: var(--font-mono);
                    font-size:14px;line-height:1.7;
                    background:var(--surface-2);color:var(--text);
                    border:none;border-radius:0;
@@ -70,7 +70,7 @@
   <!-- highlighted overlay (view mode) — hidden by default -->
   <pre id="log-highlight"
        style="display:none;min-height:70vh;padding:14px 16px;
-              font-family:'Consolas','Courier New',monospace;
+              font-family: var(--font-mono);
               font-size:14px;line-height:1.7;
               background:var(--surface-2);color:var(--text);
               border:none;border-radius:10px;
@@ -348,7 +348,7 @@ function showValidationModal(d, title) {
       html += '<div style="background:var(--error-lt);border-radius:8px;margin-bottom:12px;max-height:200px;overflow-y:auto;">';
       html += '<div style="padding:8px 12px;font-weight:700;color:var(--error);border-bottom:1px solid var(--border);">Errors</div>';
       errors.slice(0, 20).forEach(function(e) {
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family:monospace;word-break:break-all;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family: var(--font-mono);word-break:break-all;">';
         html += '<div style="flex:1;overflow:hidden;">';
         html += '<span style="color:var(--error);font-weight:700;">Line ' + e.lineno + '</span>';
         html += '<div style="color:var(--error);margin-left:12px;">' + escHtml((e.problems || []).join("; ")) + '</div>';
@@ -366,7 +366,7 @@ function showValidationModal(d, title) {
       html += '<div style="background:var(--warn-lt);border-radius:8px;margin-bottom:12px;max-height:150px;overflow-y:auto;">';
       html += '<div style="padding:8px 12px;font-weight:700;color:var(--warn);border-bottom:1px solid var(--border);">Warnings</div>';
       warnings.slice(0, 10).forEach(function(w) {
-        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family:monospace;word-break:break-all;">';
+        html += '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;font-family: var(--font-mono);word-break:break-all;">';
         html += '<div style="flex:1;overflow:hidden;">';
         html += '<span style="color:var(--warn);font-weight:700;">Line ' + w.lineno + '</span>';
         html += '<div style="color:var(--warn);margin-left:12px;">' + escHtml((w.problems || []).join("; ")) + '</div>';

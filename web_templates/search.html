@@ -35,7 +35,7 @@ setTimeout(function() {
     {% for r in records %}
     <div style="margin-bottom:6px;">
       <a href="/browse?file={{ r.file }}&search={{ query }}" style="font-size:13px;color:var(--accent);">{{ r.file }}:{{ r.line }}</a>
-      <div style="font-size:13px;color:var(--text);font-family:monospace;white-space:pre-wrap;word-break:break-all;margin-top:2px;">{{ r.text }}</div>
+      <div style="font-size:13px;color:var(--text);font-family: var(--font-mono);white-space:pre-wrap;word-break:break-all;margin-top:2px;">{{ r.text }}</div>
     </div>
     {% endfor %}
   </div>
@@ -59,7 +59,7 @@ setTimeout(function() {
     {% for t in todo %}
     <div style="margin-bottom:6px;">
       <a href="/todo?search={{ query }}" style="font-size:13px;color:var(--accent);">{{ t.file }}:{{ t.line }}</a>
-      <div style="font-size:13px;color:var(--text);font-family:monospace;white-space:pre-wrap;word-break:break-all;margin-top:2px;">{{ t.text }}</div>
+      <div style="font-size:13px;color:var(--text);font-family: var(--font-mono);white-space:pre-wrap;word-break:break-all;margin-top:2px;">{{ t.text }}</div>
     </div>
     {% endfor %}
   </div>

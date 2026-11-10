@@ -32,7 +32,7 @@ function _showTodoToast(tasks) {
           es.close();
           var d = document.createElement("div");
           d.id = "sse-shutdown-overlay";
-          d.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;";
+          d.style.cssText = "position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family: var(--font-ui);";
           d.innerHTML = "<h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p>";
           document.body.appendChild(d);
         }

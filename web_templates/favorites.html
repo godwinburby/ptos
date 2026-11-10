@@ -13,7 +13,7 @@
     <input type="text" id="fav-name" placeholder="Name (e.g. Northside clinic note)"
            style="flex:1;min-width:160px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);">
     <input type="text" id="fav-url" placeholder="/notes/edit/clients/northside/clinic.md"
-           style="flex:2;min-width:220px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-family:monospace;font-size:13px;">
+           style="flex:2;min-width:220px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-family: var(--font-mono);font-size:13px;">
     <button class="btn" onclick="favAddManual()">Add</button>
   </div>
   <div id="fav-msg" style="display:none;margin-top:8px;font-size:13px;"></div>
@@ -28,7 +28,7 @@
         <div class="fav-row-name" onclick="favRename(this)" title="Click to rename"
              style="font-size:15px;font-weight:700;cursor:pointer;">{{ fav.name }}</div>
         <a href="{{ fav.url }}" class="fav-row-url"
-           style="font-size:12px;color:var(--sub);font-family:monospace;text-decoration:none;word-break:break-all;">{{ fav.url }}</a>
+           style="font-size:12px;color:var(--sub);font-family: var(--font-mono);text-decoration:none;word-break:break-all;">{{ fav.url }}</a>
       </div>
       <div style="display:flex;gap:4px;align-items:center;">
         <button class="btn btn-sm" onclick="favMove(this, 'up')" title="Move up" style="padding:4px 8px;">&#9650;</button>

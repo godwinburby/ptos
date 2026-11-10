@@ -96,7 +96,7 @@
             '<span style="font-size:11px;color:var(--sub);">= != &gt; &lt; &gt;= &lt;= ~contains &nbsp;&middot;&nbsp; AND OR NOT ( )</span>' +
           '</div>' +
           '<textarea id="fb_'+id+'_expr" rows="2"' +
-            ' style="width:100%;font-family:monospace;font-size:13px;padding:10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);resize:vertical;outline:none;transition:border-color .15s;"' +
+            ' style="width:100%;font-family: var(--font-mono);font-size:13px;padding:10px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);resize:vertical;outline:none;transition:border-color .15s;"' +
             ' placeholder="e.g. type=followup AND (intent=trial OR intent=decision) AND NOT result=deceased"' +
             ' oninput="FilterBuilder._get(\''+id+'\')._onExprInput()"' +
             ' onfocus="this.style.borderColor=\'var(--accent)\'"' +

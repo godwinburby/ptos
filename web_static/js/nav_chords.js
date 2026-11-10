@@ -523,7 +523,7 @@ window.stopServer = function() {
     window.pywebview.api.close_app();
   } else {
     document.body.style.cssText = "display:block;margin:0;padding:0;";
-    document.body.innerHTML = "<div style='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family:system-ui,sans-serif;'><h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p></div>";
+    document.body.innerHTML = "<div style='position:fixed;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;background:#1a1a1a;color:#fff;font-family: var(--font-ui);'><h1 style='font-size:32px;margin-bottom:12px;'>Server stopped</h1><p style='font-size:18px;opacity:.7;'>You can close this tab.</p></div>";
     fetch("/shutdown").then(() => window.close());
   }
 }

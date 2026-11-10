@@ -81,7 +81,7 @@ function renderLint(d) {
       <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
         <div style="flex:1;">
           <div style="font-size:11px;color:var(--sub);">${escHtml(e.filepath||'')} line ${e.lineno}</div>
-          <div style="font-family:monospace;font-size:12px;color:var(--sub);
+          <div style="font-family: var(--font-mono);font-size:12px;color:var(--sub);
                       word-break:break-all;margin-bottom:4px;">${escHtml(e.line)}</div>
           ${e.problems.map(p =>
             `<div style="font-size:13px;color:var(--error);font-weight:600;">✖ ${escHtml(p)}</div>`
@@ -108,7 +108,7 @@ function renderLint(d) {
       <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
         <div style="flex:1;">
           <div style="font-size:11px;color:var(--sub);">${escHtml(w.filepath||'')} line ${w.lineno}</div>
-          <div style="font-family:monospace;font-size:12px;color:var(--sub);
+          <div style="font-family: var(--font-mono);font-size:12px;color:var(--sub);
                       word-break:break-all;margin-bottom:4px;">${escHtml(w.line)}</div>
           ${w.problems.map(p =>
             `<div style="font-size:13px;color:var(--warn);font-weight:600;">⚠ ${escHtml(p)}</div>`
@@ -142,7 +142,7 @@ function renderLint(d) {
       <div style="padding:10px 0;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;">
         <div style="flex:1;">
           <div style="font-size:11px;color:var(--sub);">${escHtml(w.filepath||'')} line ${w.lineno}</div>
-          <div style="font-family:monospace;font-size:12px;color:var(--sub);
+          <div style="font-family: var(--font-mono);font-size:12px;color:var(--sub);
                       word-break:break-all;margin-bottom:4px;">${escHtml(w.line)}</div>
           ${w.problems.map(p =>
             `<div style="font-size:13px;color:var(--info);font-weight:600;">ℹ ${escHtml(p)}</div>`

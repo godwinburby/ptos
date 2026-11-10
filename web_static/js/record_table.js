@@ -146,7 +146,7 @@ function RecordTable(opts) {
         '<div style="background:var(--card);border-radius:14px;padding:24px;width:340px;box-shadow:0 8px 32px rgba(0,0,0,.2);">' +
           '<div style="font-size:16px;font-weight:700;margin-bottom:12px;color:var(--error);">Delete Record</div>' +
           '<div style="font-size:13px;color:var(--sub);margin-bottom:8px;">This cannot be undone (backup is kept).</div>' +
-          '<div id="'+M.delLine+'" style="font-family:monospace;font-size:12px;background:var(--bg);padding:8px;border-radius:6px;word-break:break-all;margin-bottom:14px;"></div>' +
+          '<div id="'+M.delLine+'" style="font-family: var(--font-mono);font-size:12px;background:var(--bg);padding:8px;border-radius:6px;word-break:break-all;margin-bottom:14px;"></div>' +
           '<div id="'+M.delMsg+'" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>' +
           '<div style="display:flex;gap:10px;">' +
             '<button class="btn btn-primary" style="flex:1;background:var(--error);" data-rt="del">Delete</button>' +
@@ -194,7 +194,7 @@ function RecordTable(opts) {
               '<label style="font-size:12px;">New value</label>' +
               '<div id="'+M.bkValContainer+'"></div>' +
             '</div>' +
-            '<div id="'+M.bkPrev+'" style="font-size:12px;color:var(--sub);font-family:monospace;background:var(--bg);padding:8px;border-radius:6px;margin-bottom:12px;display:none;"></div>' +
+            '<div id="'+M.bkPrev+'" style="font-size:12px;color:var(--sub);font-family: var(--font-mono);background:var(--bg);padding:8px;border-radius:6px;margin-bottom:12px;display:none;"></div>' +
             '<div id="'+M.bkSetMsg+'" style="font-size:13px;color:var(--error);margin-bottom:10px;display:none;"></div>' +
             '<div style="display:flex;gap:10px;">' +
               '<button class="btn btn-primary" style="flex:1;" data-rt="bksetconfirm">Apply</button>' +

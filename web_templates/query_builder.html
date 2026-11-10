@@ -675,7 +675,7 @@ function _buildQueryEditor(container, name) {
     '<div id="qb-expr-area" style="display:'+(q._exprManual?'block':'none')+';margin-top:8px;">'+
       '<input type="text" id="qb-expr" value="'+_esc(q._exprManual||'')+'"'+
       ' placeholder="type=expense AND (domain=self OR domain=home)"'+
-      ' style="font-family:monospace;font-size:13px;"'+
+      ' style="font-family: var(--font-mono);font-size:13px;"'+
       ' oninput="_onExprInput(this.value)">'+
       '<div class="hint" style="margin-top:4px;">= != &gt; &lt; ~ !~ AND OR NOT ( ) — ANDed with chip filters</div>'+
     '</div>';
@@ -1087,7 +1087,7 @@ function _buildMetricEditor(name) {
     div.appendChild(_mkCard("Expression",
       '<input type="text" id="m-derived" value="'+_esc(m.derived)+'"'+
       ' placeholder="e.g. income - expense"'+
-      ' style="font-family:monospace;" oninput="_st.metrics[_cur.name].derived=this.value">',
+      ' style="font-family: var(--font-mono);" oninput="_st.metrics[_cur.name].derived=this.value">',
       "Math expression using other metrics. Type or use the inserter below."));
     div.appendChild(_mkCard("Insert reference",
       '<select id="m-ref" onchange="insertDerivedRef(this.value); this.value=\'\';">'+
@@ -1166,7 +1166,7 @@ function _buildMetricEditor(name) {
   weightsRow.innerHTML =
     '<label>Unit weights (JSON)</label>'+
     '<textarea id="m-unit-weights" rows="4" placeholder="{ \&quot;monaural\&quot;: 1, \&quot;binaural\&quot;: 2 }"'+
-    ' style="width:100%;font-family:monospace;font-size:13px;padding:8px;border-radius:8px;resize:vertical;"'+
+    ' style="width:100%;font-family: var(--font-mono);font-size:13px;padding:8px;border-radius:8px;resize:vertical;"'+
     ' oninput="onUnitWeightsChange(this.value)">'+JSON.stringify(m.unit_weights||{},null,2)+'</textarea>'+
     '<div class="hint">Key-value pairs for weighted avg. Keys must match unit_field values.</div>';
   div.appendChild(weightsRow);
@@ -1175,7 +1175,7 @@ function _buildMetricEditor(name) {
   var rawKeys = Object.keys(m._raw || {});
   if (rawKeys.length > 0) {
     div.appendChild(_mkCard("Advanced / Raw config",
-      '<textarea id="m-raw" rows="3" style="width:100%;font-family:monospace;font-size:12px;padding:8px;"'+
+      '<textarea id="m-raw" rows="3" style="width:100%;font-family: var(--font-mono);font-size:12px;padding:8px;"'+
       ' oninput="onMetricRawChange(this.value)">'+JSON.stringify(m._raw||{},null,2)+'</textarea>',
       "Extra fields not handled by UI. Edit as JSON."));
   }
