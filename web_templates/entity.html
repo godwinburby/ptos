@@ -277,20 +277,20 @@
 <div class="entity-summary">
   <div class="entity-stat">
     <span class="stat-label">Records</span>
-    <span class="stat-value">{{ entity.count }}</span>
+    <span class="stat-value num">{{ entity.count }}</span>
   </div>
   <div class="entity-stat">
     <span class="stat-label">Types</span>
-    <span class="stat-value">{{ entity.types | length }}</span>
+    <span class="stat-value num">{{ entity.types | length }}</span>
   </div>
   <div class="entity-stat">
     <span class="stat-label">Date range</span>
-    <span class="stat-value" style="font-size:14px;">{{ entity.start }} → {{ entity.end }}</span>
+    <span class="stat-value num" style="font-size:14px;">{{ entity.start }} → {{ entity.end }}</span>
   </div>
   {% if entity.total_amount %}
   <div class="entity-stat">
     <span class="stat-label">Total amount</span>
-    <span class="stat-value accent">{{ fmt(entity.total_amount) }}</span>
+    <span class="stat-value num accent">{{ fmt(entity.total_amount) }}</span>
   </div>
   {% endif %}
 </div>

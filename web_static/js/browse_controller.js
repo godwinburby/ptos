@@ -240,16 +240,16 @@ window.BrowseController = (function () {
   function renderGroup(d) {
     var hasTot = d.has_amount;
     var heads = hasTot
-      ? '<th>Group</th><th class="numeric">Count</th><th class="numeric">Total</th>'
-      : '<th>Group</th><th class="numeric">Count</th>';
+      ? '<th>Group</th><th class="num">Count</th><th class="num">Total</th>'
+      : '<th>Group</th><th class="num">Count</th>';
     var rows = (d.rows || []).map(function (r) {
       return hasTot
-        ? '<tr><td>' + r.key + '</td><td class="numeric">' + r.count + '</td><td class="numeric">' + r.total_fmt + '</td></tr>'
-        : '<tr><td>' + r.key + '</td><td class="numeric">' + r.count + '</td></tr>';
+        ? '<tr><td>' + r.key + '</td><td class="num">' + r.count + '</td><td class="num">' + r.total_fmt + '</td></tr>'
+        : '<tr><td>' + r.key + '</td><td class="num">' + r.count + '</td></tr>';
     }).join("");
     var foot = hasTot
-      ? '<tr class="total-row"><td>Total</td><td class="numeric">' + d.grand_count + '</td><td class="numeric">' + d.grand_total_fmt + '</td></tr>'
-      : '<tr class="total-row"><td>Total</td><td class="numeric">' + d.grand_count + '</td></tr>';
+      ? '<tr class="total-row"><td>Total</td><td class="num">' + d.grand_count + '</td><td class="num">' + d.grand_total_fmt + '</td></tr>'
+      : '<tr class="total-row"><td>Total</td><td class="num">' + d.grand_count + '</td></tr>';
     return '<div class="card">' +
       '<div class="card-title">Grouped by ' + (d.fields || []).join(", ") + ' · ' + d.time_label + '</div>' +
       summaryBar(d) +

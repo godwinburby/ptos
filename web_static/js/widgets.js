@@ -191,7 +191,7 @@ function _dashboardStatCard(i, bare) {
   var card = '<div class="stat-card' + (i.highlight ? ' c-' + esc(i.highlight) : '') + '">';
   var inner =
     '<div class="stat-label">' + esc((i.name || '').replace(/_/g, ' ')) + '</div>' +
-    '<div class="stat-value" style="font-size:20px;">' + esc(i.value) + '</div>' +
+    '<div class="stat-value num" style="font-size:20px;">' + esc(i.value) + '</div>' +
     '<div class="stat-sub">' + esc(i.sub || '') + '</div>';
   if (i.query_url) {
     return '<a href="' + esc(i.query_url) + '" style="text-decoration:none;">' +
@@ -236,14 +236,14 @@ function renderMetric(d) {
 function renderGroup(d) {
   const hasTot = d.has_amount;
   const heads = hasTot
-    ? '<th>Group</th><th class="numeric">Count</th><th class="numeric">Total</th>'
-    : '<th>Group</th><th class="numeric">Count</th>';
+    ? '<th>Group</th><th class="num">Count</th><th class="num">Total</th>'
+    : '<th>Group</th><th class="num">Count</th>';
   const rows = (d.rows || []).map(r => hasTot
-    ? '<tr><td>' + esc(r.key) + '</td><td class="numeric">' + esc(r.count) + '</td><td class="numeric">' + esc(r.total_fmt) + '</td></tr>'
-    : '<tr><td>' + esc(r.key) + '</td><td class="numeric">' + esc(r.count) + '</td></tr>').join("");
+    ? '<tr><td>' + esc(r.key) + '</td><td class="num">' + esc(r.count) + '</td><td class="num">' + esc(r.total_fmt) + '</td></tr>'
+    : '<tr><td>' + esc(r.key) + '</td><td class="num">' + esc(r.count) + '</td></tr>').join("");
   const foot = hasTot
-    ? '<tr class="total-row"><td>Total</td><td class="numeric">' + esc(d.grand_count) + '</td><td class="numeric">' + esc(d.grand_total_fmt) + '</td></tr>'
-    : '<tr class="total-row"><td>Total</td><td class="numeric">' + esc(d.grand_count) + '</td></tr>';
+    ? '<tr class="total-row"><td>Total</td><td class="num">' + esc(d.grand_count) + '</td><td class="num">' + esc(d.grand_total_fmt) + '</td></tr>'
+    : '<tr class="total-row"><td>Total</td><td class="num">' + esc(d.grand_count) + '</td></tr>';
   const table = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + heads + '</tr></thead><tbody>' + rows + foot + '</tbody></table></div>';
   const body = d.chart
     ? qtWrap(renderChart(d.chart, _groupChartData(d),
@@ -262,13 +262,13 @@ function renderGroup(d) {
 
 function renderPivot(d) {
   const cols  = d.cols || [];
-  const heads = '<th>' + esc(d.row_field) + '</th>' + cols.map(c => '<th class="numeric">' + esc(c) + '</th>').join("") + '<th class="numeric">Total</th>';
+  const heads = '<th>' + esc(d.row_field) + '</th>' + cols.map(c => '<th class="num">' + esc(c) + '</th>').join("") + '<th class="num">Total</th>';
   const rows  = (d.rows || []).map(r => {
-    const cells = cols.map(c => '<td class="numeric">' + esc(r[c] || 0) + '</td>').join("");
-    return '<tr><td>' + esc(r.label) + '</td>' + cells + '<td class="numeric" style="font-weight:700">' + esc(r.total) + '</td></tr>';
+    const cells = cols.map(c => '<td class="num">' + esc(r[c] || 0) + '</td>').join("");
+    return '<tr><td>' + esc(r.label) + '</td>' + cells + '<td class="num" style="font-weight:700">' + esc(r.total) + '</td></tr>';
   }).join("");
-  const totCells = cols.map(c => '<td class="numeric" style="font-weight:700">' + esc((d.col_totals || {})[c] || 0) + '</td>').join("");
-  const foot = '<tr class="total-row"><td>Total</td>' + totCells + '<td class="numeric">' + esc(d.grand) + '</td></tr>';
+  const totCells = cols.map(c => '<td class="num" style="font-weight:700">' + esc((d.col_totals || {})[c] || 0) + '</td>').join("");
+  const foot = '<tr class="total-row"><td>Total</td>' + totCells + '<td class="num">' + esc(d.grand) + '</td></tr>';
   const table = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + heads + '</tr></thead><tbody>' + rows + foot + '</tbody></table></div>';
   const label = "Pivot · " + d.row_field + " × " + d.col_field;
   let body = table;
@@ -290,11 +290,11 @@ function renderPivot(d) {
 function renderTrend(d) {
   const has  = d.has_amount;
   const head = has
-    ? '<th>Period</th><th class="numeric">Count</th><th class="numeric">Total</th><th class="numeric">Avg</th>'
-    : '<th>Period</th><th class="numeric">Count</th>';
+    ? '<th>Period</th><th class="num">Count</th><th class="num">Total</th><th class="num">Avg</th>'
+    : '<th>Period</th><th class="num">Count</th>';
   const rows = (d.periods || []).map(p => has
-    ? '<tr><td>' + esc(p.label) + '</td><td class="numeric">' + esc(p.count) + '</td><td class="numeric">' + esc(p.total_fmt) + '</td><td class="numeric">' + esc(p.avg_fmt) + '</td></tr>'
-    : '<tr><td>' + esc(p.label) + '</td><td class="numeric">' + esc(p.count) + '</td></tr>').join("");
+    ? '<tr><td>' + esc(p.label) + '</td><td class="num">' + esc(p.count) + '</td><td class="num">' + esc(p.total_fmt) + '</td><td class="num">' + esc(p.avg_fmt) + '</td></tr>'
+    : '<tr><td>' + esc(p.label) + '</td><td class="num">' + esc(p.count) + '</td></tr>').join("");
   const table = '<div style="overflow-x:auto;"><table class="data-table"><thead><tr>' + head + '</tr></thead><tbody>' + rows + '</tbody></table></div>';
   const body = d.chart
     ? qtWrap(renderChart(d.chart, _trendChartData(d),
