@@ -26,7 +26,7 @@
   function currentChips(filters, hideRoutines) {
     var labels = {
       project: "Project", context: "Context", priority: "Priority",
-      due: "Due", search: "Search", linked_to: "Linked"
+      due: "Due", search: "Search", linked_to: "Linked", area: "Area"
     };
     var chips = Object.keys(labels).filter(function (key) {
       if (key === "project" && hideRoutines && String(filters.project).charAt(0) === "-") return false;
@@ -48,10 +48,11 @@
   function mount(root, state, onChange) {
     state = state || {};
     var filters = Object.assign({
-      project: "", context: "", priority: "", due: "", search: "", linked_to: ""
+      project: "", context: "", priority: "", due: "", search: "", linked_to: "", area: ""
     }, state.filters || {});
     var projects = state.projects || [];
     var contexts = state.contexts || [];
+    var areas = state.areas || [];
     var views = state.views || {};
     var priLabels = Object.assign(defaultPriorityLabels(), state.priority_labels || {});
     var sortChoices = [
@@ -100,6 +101,10 @@
       (state.contexts && state.contexts.length ? '<div class="chip-group-card full-width"><div class="chip-group-label">Contexts</div><div class="chip-row">' +
       state.contexts.map(function (c) {
         return '<button class="add-chip" data-token="' + c.replace(/"/g, '&quot;') + ' " data-qp-group="ctx">' + c + '</button>';
+      }).join("") + '</div></div>' : '') +
+      (areas.length ? '<div class="chip-group-card full-width"><div class="chip-group-label">Areas</div><div class="chip-row">' +
+      areas.map(function (a) {
+        return '<button class="add-chip" data-token="area:' + esc(a) + ' " data-qp-group="area">' + esc(a) + '</button>';
       }).join("") + '</div></div>' : '') +
       '<div class="chip-group-card"><div class="chip-group-label">Threshold</div><div class="chip-row">' +
       '<button class="add-chip" data-token="t:today " data-qp-group="threshold">today</button>' +
@@ -152,6 +157,11 @@
       sortChoices.map(function (entry) {
         return option(entry[0], entry[1], state.sort || "default");
       }).join("") + '</select></label>' +
+      ((areas.length || filters.area) ? '<label class="groupby-sort-wrap"><span class="sr-only">Area</span>' +
+      '<select class="groupby-sort" data-todo-filter="area" aria-label="Filter by area">' +
+      option("", "All areas", filters.area) +
+      areas.map(function (area) { return option(area, area, filters.area); }).join("") +
+      '</select></label>' : '') +
       '<button type="button" class="groupby-sel" onclick="toggleSelectMode()" title="Select multiple tasks">☐ Select</button>' +
       '</div>' +
       '</div>';
@@ -167,6 +177,7 @@
         var changes = {};
         changes[key] = node.value;
         if (key === "sort") state.sort = node.value;
+        else filters[key] = node.value;
         syncChrome();
         onChange(changes);
       });
@@ -241,6 +252,7 @@
                     .replace(/@(\S+)/g, function (_, v) { params.context = v; return ''; })
                     .replace(/\bdue:(\S+)/gi, function (_, v) { params.due = v; return ''; })
                     .replace(/\bpri:([A-Za-z])/gi, function (_, v) { params.priority = v.toUpperCase(); return ''; })
+                    .replace(/\barea:(\S+)/gi, function (_, v) { params.area = v; return ''; })
                     .trim();
       params.search = search;
       // Clear filter tokens from the search input — only the search term remains
@@ -249,6 +261,7 @@
       if (params.context !== undefined) filters.context = params.context;
       if (params.priority !== undefined) filters.priority = params.priority;
       if (params.due !== undefined) filters.due = params.due;
+      if (params.area !== undefined) filters.area = params.area;
       filters.search = search;
       syncChrome();
       onChange(params);
@@ -259,6 +272,9 @@
       var message = root.querySelector("[data-todo-add-error]");
       var text = input.value.trim();
       if (!text) { input.focus(); return; }
+      if (filters.area && !/\barea:\S+/i.test(text)) {
+        text = text + " area:" + filters.area;
+      }
       var button = root.querySelector('[data-todo-add-form] [type="submit"]');
       button.disabled = true;
       message.hidden = true;
@@ -299,7 +315,7 @@
     }
     function viewConfig() {
       var cfg = {};
-      ["project", "context", "priority", "due", "search", "linked_to"].forEach(function (key) {
+      ["project", "context", "priority", "due", "search", "linked_to", "area"].forEach(function (key) {
         if (filters[key]) cfg[key] = filters[key];
       });
       cfg.groupby = state.groupby || "timeline";
@@ -353,7 +369,7 @@
       state.selected_view = name;
       state.include_done = name && views[name] && views[name].include_done === false ? false : true;
       var cfg = views[name] || {};
-      ["project", "context", "priority", "due", "search", "linked_to"].forEach(function (key) {
+      ["project", "context", "priority", "due", "search", "linked_to", "area"].forEach(function (key) {
         filters[key] = cfg[key] || "";
       });
       state.groupby = cfg.groupby || "timeline";
@@ -362,7 +378,7 @@
       refreshViewButtons();
       syncChrome();
       var changes = { selected_view: name };
-      ["project", "context", "priority", "due", "search", "linked_to"].forEach(function (key) {
+      ["project", "context", "priority", "due", "search", "linked_to", "area"].forEach(function (key) {
         changes[key] = filters[key];
       });
       changes.groupby = state.groupby;
@@ -482,6 +498,9 @@
         } else if (group === "rec") {
           text = text.replace(/rec:\\S+\\s*/gi, "");
           text = text.trimEnd() + " " + token;
+        } else if (group === "area") {
+          text = text.replace(/area:\\S+\\s*/gi, "");
+          text = text.trimEnd() + " " + token;
         } else if (text.indexOf(bare) !== -1) {
           text = text.replace(new RegExp(bare.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "\\s*"), "");
         } else {
@@ -489,7 +508,7 @@
         }
         input.value = text.replace(/^\s+/, "");
         // Mutual exclusivity: clear selected from siblings in same group
-        if (group === "pri" || group === "due" || group === "threshold" || group === "rec") {
+        if (group === "pri" || group === "due" || group === "threshold" || group === "rec" || group === "area") {
           qpChips.querySelectorAll(".add-chip[data-qp-group='" + group + "']").forEach(function (c) {
             c.classList.remove("selected");
           });
@@ -536,7 +555,7 @@
         state.hide_routines = false;
         syncChrome();
         onChange({ project: "", context: "", priority: "", due: "", search: "",
-          linked_to: "", hide_routines: false });
+          linked_to: "", area: "", hide_routines: false });
       }
     });
 

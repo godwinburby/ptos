@@ -564,6 +564,10 @@
         if (!input) return;
         var text = (input.value || "").trim();
         if (!text) { input.focus(); return; }
+        var area = (data && data.filters && data.filters.area) || "";
+        if (area && !/\barea:\S+/i.test(text)) {
+          text = text + " area:" + area;
+        }
         _post("/todo/add", { text: text }).then(function (res) {
           if (!res || !res.ok) {
             ctx.toast((res && res.error) || "Could not add", { error: true });

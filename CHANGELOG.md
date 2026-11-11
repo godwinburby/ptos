@@ -5,6 +5,20 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-11-11
+
+### Area pages: todo `area:` filter and widgets
+
+- **`area:` on todos** — `Todo.area` parses the first `area:<slug>` token (invalid/empty values stay in the description), round-trips through `format_line`, and is handled by `edit_todo`, `batch_edit_todos` and `filter_todos`. Slugs are `[a-z0-9_-]+`.
+- **Saved views and embeds** — `area` joins the saved todo view filter keys (`TODO_VIEW_FILTERS`/`TODO_VIEW_KEYS`) and the engine lint key list, so `["todo.NAME"]` with `area = "work"` loads; `_w_todo` passes it to `query_todos`, echoes it in `result.filters`, and adds `area=` to the widget's `/todo` link.
+- **Task summary widget** — `todo_summary` gains an optional `area` key (counts only that area's tasks, links to `/todo?area=…`).
+- **Gallery options** — new `get_todo_areas()` service helper and `todo.areas` option source; the todo widget's Area chips now list real areas instead of projects. The starter's commented todo view documents `area`.
+
+- **Todos page area filter** — shell toolbar renders an area <select> when tasks have areas; selecting it filters the list and persists in saved views; quick-add appends the active area token; quick-pick Areas chips write area tokens; autocomplete lists known areas.
+- **Area chip on tasks** — .todo-area badge in each task row (class only, no inline style); active filter state adds .todo-area.active for visual feedback via CSS.
+- **Widget spec and page state** — shell widget spec includes area when provided; page_state.todo.filters.area and page_state.todo.areas list exposed for client-side hydration.
+- **Service round-trip** — save_todo_view now extracts and validates the area slug; todo widget embed resolves area from inline spec or saved view.
+- **Invalid slug handling** — non-slug area values raise a friendly error instead of silently dropping the filter.
 ## 2026-11-07
 
 ### C8: Widget tone + icon (frontend)

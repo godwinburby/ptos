@@ -2846,12 +2846,31 @@ def _w_project(spec, name, time, from_date, to_date):
 
 TODO_VIEW_FILTERS = ("project", "context", "priority", "due", "search",
                      "linked_to", "include_done", "hide_routines", "groupby",
-                     "sort", "add")
+                     "sort", "add", "area")
 TODO_VIEW_KEYS = TODO_VIEW_FILTERS + ("title", "limit")
 TODO_DUE_VALUES = ("overdue", "today", "tomorrow", "upcoming",
                    "someday", "none", "week")
 _TODO_GROUPBYS = ("timeline", "priority", "project", "context", "none")
 _TODO_SORTS = (None, "", "default", "reverse", "most", "fewest")
+
+
+def _area_slug(value):
+    """Return a normalized area slug, or None when unset.
+
+    Areas are note-page slugs (`[a-z0-9_-]+`); anything else raises
+    `PTOSError` so a bad URL or widget key surfaces instead of silently
+    filtering every task out.
+    """
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    if not all(("a" <= c <= "z") or ("0" <= c <= "9") or c in "_-"
+               for c in s):
+        raise PTOSError(
+            "`area` must be a lowercase slug (letters, digits, _, -)")
+    return s
 
 
 def _todo_json(t):
@@ -2870,6 +2889,7 @@ def _todo_json(t):
         "contexts": list(t.contexts),
         "id": t.id or "",
         "links": list(t.links),
+        "area": t.area or "",
         "done": bool(t.done),
         "completed_date": (t.completed_date.isoformat()
                            if t.completed_date else ""),
@@ -2939,6 +2959,8 @@ def _w_todo(spec, name, time, from_date, to_date):
     if hide is None:
         hide = (not project) and bool(todo_cfg.get("hide_routines", False))
 
+    area = _area_slug(filters.get("area"))
+
     buckets = query_todos(
         project=project,
         context=filters.get("context") or None,
@@ -2952,6 +2974,7 @@ def _w_todo(spec, name, time, from_date, to_date):
         sort=sort,
         limit=limit,
         priority_labels=todo_cfg.get("priority_labels", {}),
+        area=area,
     )
 
     groups = [{"key": k, "label": l, "color": c,
@@ -2971,7 +2994,8 @@ def _w_todo(spec, name, time, from_date, to_date):
         "counts": counts,
         "total_open": buckets.get("total_open", sum(counts.values())),
         "add": bool(add),
-        "filters": {k: filters[k] for k in ("project", "context", "priority")
+        "filters": {k: filters[k] for k in ("project", "context", "priority",
+                                            "area")
                     if filters.get(k)},
         "title": saved.get("title") or None,
     }
@@ -2983,6 +3007,7 @@ def _w_todo(spec, name, time, from_date, to_date):
                      ("due", filters.get("due") or None),
                      ("search", filters.get("search") or None),
                      ("linked_to", filters.get("linked_to") or None),
+                     ("area", area),
                      ("groupby", groupby if groupby != "timeline" else None)):
         if val:
             params.append(f"{key}={urllib.parse.quote(str(val))}")
@@ -2991,9 +3016,14 @@ def _w_todo(spec, name, time, from_date, to_date):
 
 
 def _w_todo_summary(spec, name, time, from_date, to_date):
-    overdue, due_today = get_todo_summary_counts()
+    area = _area_slug(spec.get("area"))
+    overdue, due_today = get_todo_summary_counts(area=area)
+    link = "/todo"
+    if area:
+        link += "?area=" + urllib.parse.quote(area)
     return {"kind": "todo_summary", "overdue": overdue,
-            "due_today": due_today, "tone": spec.get("tone", "")}, "/todo"
+            "due_today": due_today, "area": area,
+            "tone": spec.get("tone", "")}, link
 
 
 def _w_journal(spec, name, time, from_date, to_date):
@@ -3279,6 +3309,9 @@ starters=({"id": "due_default", "label": "Overdue records",
                     options=[s for s in _TODO_SORTS if s]),
                 _wf("add", "Show add box", "bool", advanced=True,
                     help="Show the quick-add box in the widget."),
+                _wf("area", "Area", "chips",
+                    options_from="todo.areas",
+                    help="Only this area (empty = all)."),
             )))
     reg("query", _w_query, views=("group", "pivot", "trend"),
         keys=("chart",), infer_order=90,
@@ -3317,14 +3350,18 @@ starters=({"id": "due_default", "label": "Overdue records",
                     advanced=True,
                     help="Reserved — records views render as a table."),
             )))
-    reg("todo_summary", _w_todo_summary, needs_name=False, infer_order=99,
+    reg("todo_summary", _w_todo_summary, keys=("area",), needs_name=False,
+        infer_order=99,
         label="Task summary",
         description="Counts of open, due and overdue tasks.",
         icon="list", category="tasks", named=False,
         interactive_default=False,
         fields=_widget_fields(
             "todo_summary", view_options=("todo_summary",), limit=False, time=False,
-            extra=()), quick_add=True,
+            extra=(
+                _wf("area", "Area", "chips", options_from="todo.areas",
+                    help="Only count tasks in this area."),
+            )), quick_add=True,
         starters=({"id": "task_summary", "label": "Task summary",
                    "description": "Counts of open, due and overdue tasks.",
                    "body": 'view = "todo_summary"\n'},))
@@ -3630,9 +3667,9 @@ _SAVED_KIND_KEY = {
 def get_widget_options(source):
     """Values for a gallery field's options_from source string.
 
-    Sources: todo.projects, todo.contexts, todo.priorities, time,
-    schema.types, schema.fields (union across all allowed types, for
-    expression autocomplete), schema.fields:<type>, saved.<kind>
+    Sources: todo.projects, todo.contexts, todo.areas, todo.priorities,
+    time, schema.types, schema.fields (union across all allowed types,
+    for expression autocomplete), schema.fields:<type>, saved.<kind>
     (dashboard, metric, threshold, board, habit, calendar, due, project,
     query, todo). Unknown sources raise PTOSError so a typo surfaces
     instead of silently rendering an empty dropdown.
@@ -3642,6 +3679,8 @@ def get_widget_options(source):
         return list(get_todo_projects())
     if source == "todo.contexts":
         return list(get_todo_contexts())
+    if source == "todo.areas":
+        return list(get_todo_areas())
     if source == "todo.priorities":
         try:
             labels = (get_config().get("todo") or {}).get("priority_labels")
@@ -7039,7 +7078,7 @@ def save_todo_view(name, cfg):
         raise PTOSError("Unsupported Todo view setting(s): " + ", ".join(unknown))
     entry = {}
     for key in ("project", "context", "priority", "due", "search", "linked_to",
-                "groupby", "sort", "title"):
+                "groupby", "sort", "title", "area"):
         value = cfg.get(key)
         if isinstance(value, str) and value.strip():
             entry[key] = value.strip()
@@ -7053,6 +7092,11 @@ def save_todo_view(name, cfg):
         if not re.fullmatch(r"[A-Z]", entry["priority"].upper()):
             raise PTOSError("Todo view priority must be a single letter")
         entry["priority"] = entry["priority"].upper()
+    if entry.get("area"):
+        slug = _area_slug(entry["area"])
+        if slug is None:
+            raise PTOSError("Todo view area must be a slug (lowercase, digits, hyphens, underscores)")
+        entry["area"] = slug
     for key in ("include_done", "hide_routines", "add"):
         if key in cfg:
             if not isinstance(cfg[key], bool):
@@ -8548,7 +8592,7 @@ def get_todos_bucketed():
 def query_todos(project=None, context=None, priority=None, due=None,
                 search=None, linked_to=None, hide_routines=False,
                 include_done=False, groupby=None, sort=None, limit=None,
-                priority_labels=None):
+                priority_labels=None, area=None):
     """Open todos bucketed + filtered — the /todo page's query, shared
     with the todo widget so the two can never drift.
 
@@ -8598,6 +8642,8 @@ def query_todos(project=None, context=None, priority=None, due=None,
                     "(or a list of them)")
             pri_list.append(s.upper())
 
+    area = _area_slug(area)
+
     def _filter_list(todos):
         result = todos
         if project:
@@ -8624,6 +8670,8 @@ def query_todos(project=None, context=None, priority=None, due=None,
                       if ptos._glob_match(search, t.description)]
         if linked_to:
             result = [t for t in result if linked_to in t.links]
+        if area:
+            result = [t for t in result if t.area == area]
         return result
 
     for key in ("overdue", "today", "tomorrow", "upcoming", "someday"):
@@ -8748,7 +8796,7 @@ def group_todos(buckets, groupby, priority_labels):
     return grouped
 
 
-def get_todo_summary_counts():
+def get_todo_summary_counts(area=None):
     """Return (overdue_count, due_today_count) without loading full todo dicts."""
     try:
         todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
@@ -8757,6 +8805,8 @@ def get_todo_summary_counts():
         due_today = 0
         for t in todos:
             if t.done or not t.due:
+                continue
+            if area and t.area != area:
                 continue
             if t.threshold and t.threshold > today:
                 continue
@@ -8951,6 +9001,16 @@ def get_todo_projects():
         todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
         done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
         return ptos_todo.get_projects(todos + done)
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
+def get_todo_areas():
+    """Get all unique area: slugs from open and done todos, sorted."""
+    try:
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+        done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+        return sorted({t.area for t in todos + done if t.area})
     except Exception as e:
         raise PTOSError(str(e))
 

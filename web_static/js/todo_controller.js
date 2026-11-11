@@ -10,7 +10,7 @@
     });
     keys.forEach(function (key) {
       var value = changes[key];
-      if (value === "" && ["project", "context", "priority", "due", "search", "linked_to"].indexOf(key) >= 0) {
+      if (value === "" && ["project", "context", "priority", "due", "search", "linked_to", "area"].indexOf(key) >= 0) {
         lines.push(key + " = \"\"");
       } else if (value !== null && value !== undefined && value !== "") {
         lines.push(key + " = " + (typeof value === "boolean"

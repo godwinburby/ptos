@@ -79,3 +79,41 @@ test("renderDue row has separate name, due-gap, due-open children", () => {
   assert.strictEqual(gap.textContent.trim(), "2d");
   assert.ok(open.textContent.trim().includes("Open"));
 });
+
+test("renderTodoRow shows an area chip only when the task has an area", () => {
+  const win = setup();
+  const withArea = win.renderTodoRow(
+    { description: "Review roster", area: "work", raw_line: "x", projects: [], contexts: [], links: [] },
+    { area: "work" }
+  );
+  const root = win.document.createElement("div");
+  root.innerHTML = withArea;
+  const chip = root.querySelector(".todo-area");
+  assert.ok(chip, "row has an area chip");
+  assert.strictEqual(chip.getAttribute("data-todo-filter-badge"), "area");
+  assert.strictEqual(chip.getAttribute("data-value"), "work");
+  assert.strictEqual(chip.getAttribute("style"), null, "area chip uses a class, not an inline style");
+  assert.ok(chip.classList.contains("active"), "area chip is marked active for the current filter");
+  assert.strictEqual(root.querySelector(".todo-row").getAttribute("data-area"), "work");
+
+  const other = win.renderTodoRow(
+    { description: "Review roster", area: "home", raw_line: "x", projects: [], contexts: [], links: [] },
+    { area: "work" }
+  );
+  const otherRoot = win.document.createElement("div");
+  otherRoot.innerHTML = other;
+  assert.ok(!otherRoot.querySelector(".todo-area").classList.contains("active"),
+    "area chip of another area is not active");
+});
+
+test("renderTodoRow shows no area chip when the task has no area", () => {
+  const win = setup();
+  const html = win.renderTodoRow(
+    { description: "Call supplier", raw_line: "x", projects: [], contexts: [], links: [] },
+    {}
+  );
+  const root = win.document.createElement("div");
+  root.innerHTML = html;
+  assert.strictEqual(root.querySelector(".todo-area"), null);
+  assert.strictEqual(root.querySelector(".todo-row").getAttribute("data-area"), "");
+});

@@ -1857,7 +1857,7 @@ class AtomicWrite:
 
 TODO_VIEW_LINT_KEYS = ("project", "context", "priority", "due", "search",
                        "linked_to", "include_done", "hide_routines",
-                       "groupby", "sort", "add", "title", "limit")
+                       "groupby", "sort", "add", "area", "title", "limit")
 TODO_VIEW_LINT_GROUPBYS = ("timeline", "priority", "project", "context", "none")
 TODO_VIEW_LINT_SORTS = ("default", "reverse", "most", "fewest")
 

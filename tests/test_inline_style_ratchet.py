@@ -5,7 +5,6 @@ Baseline stored in tests/inline_style_baseline.json.
 """
 
 import json
-import os
 import pathlib
 
 REPO_ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -17,13 +16,14 @@ BASELINE_FILE = pathlib.Path(__file__).resolve().parents[1] / "tests" / "inline_
 def scan_all():
     """Scan all template and JS files, return dict of counts."""
     counts = {}
-    repo_root = pathlib.Path.cwd()
-    for f in sorted(pathlib.Path('web_templates').rglob('*.html')):
+    for f in sorted((REPO_ROOT / TEMPLATE_DIR).rglob('*.html')):
+        rel = f.relative_to(REPO_ROOT)
         text = f.read_text(encoding='utf-8')
-        counts[os.path.relpath(f, pathlib.Path.cwd())] = text.count('style="')
-    for f in sorted(pathlib.Path('web_static/js').rglob('*.js')):
+        counts[rel.as_posix()] = text.count('style="')
+    for f in sorted((REPO_ROOT / JS_DIR).rglob('*.js')):
+        rel = f.relative_to(REPO_ROOT)
         text = f.read_text(encoding='utf-8')
-        counts[os.path.relpath(f, pathlib.Path.cwd())] = text.count('style="')
+        counts[rel.as_posix()] = text.count('style="')
     return counts
 
 
@@ -35,6 +35,10 @@ def load_baseline():
 
 def save_baseline(data):
     BASELINE_FILE.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n', encoding='utf-8')
+
+
+def test_baseline_keys_use_posix_paths():
+    assert all("\\" not in k for k in scan_all())
 
 
 def test_inline_style_ratchet():

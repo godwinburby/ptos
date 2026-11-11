@@ -297,3 +297,169 @@ test("todo toolbar without hide-routines checkbox: clear filters no throw", () =
   }
   dom.window.close();
 });
+
+test("todo toolbar shows an area filter only when areas exist and sends area changes", () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  load(win, "todo_controller.js");
+  load(win, "todo_toolbar.js");
+  const changes = [];
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    projects: [], contexts: [], priorities: [], areas: ["home", "work"],
+    filters: { project: "", context: "", priority: "", due: "", search: "", linked_to: "", area: "" },
+    groupby: "timeline", sort: "default"
+  }, value => changes.push(value));
+
+  const select = win.document.querySelector('select[data-todo-filter="area"]');
+  assert.ok(select, "area filter select is rendered when areas exist");
+  assert.deepEqual(Array.from(select.options).map(o => o.value), ["", "home", "work"]);
+  select.value = "work";
+  select.dispatchEvent(new win.Event("change", { bubbles: true }));
+  assert.deepEqual(changes[0], { area: "work" });
+  dom.window.close();
+});
+
+test("todo toolbar has no area filter when no task has an area", () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  load(win, "todo_controller.js");
+  load(win, "todo_toolbar.js");
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    projects: [], contexts: [], priorities: [], areas: [],
+    filters: { project: "", context: "", priority: "", due: "", search: "", linked_to: "", area: "" },
+    groupby: "timeline", sort: "default"
+  }, () => {});
+  assert.equal(win.document.querySelector('select[data-todo-filter="area"]'), null);
+  dom.window.close();
+});
+
+test("todo toolbar parses an area: token from the search box into the area filter", () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  load(win, "todo_controller.js");
+  load(win, "todo_toolbar.js");
+  const changes = [];
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    projects: [], contexts: [], priorities: [], areas: ["work"],
+    filters: { project: "", context: "", priority: "", due: "", search: "", linked_to: "", area: "" },
+    groupby: "timeline", sort: "default"
+  }, value => changes.push(value));
+
+  const search = win.document.querySelector("[data-todo-search]");
+  search.value = "area:work dentist";
+  win.document.querySelector("[data-todo-search-form]").dispatchEvent(
+    new win.Event("submit", { bubbles: true, cancelable: true }));
+  assert.equal(changes[0].area, "work");
+  assert.equal(changes[0].search, "dentist");
+  assert.equal(search.value, "dentist");
+  assert.equal(win.document.querySelector('select[data-todo-filter="area"]').value, "work");
+  dom.window.close();
+});
+
+test("todo toolbar keeps the area filter in saved views", async () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  load(win, "todo_controller.js");
+  load(win, "todo_toolbar.js");
+  win.prompt = () => "work_area";
+  const requests = [];
+  win.fetch = (url, options) => {
+    requests.push({ url, options });
+    return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+  };
+  const changes = [];
+  const state = {
+    views: { work_area: { area: "work" } },
+    areas: ["work"],
+    filters: { project: "", context: "", priority: "", due: "", search: "", linked_to: "", area: "" },
+    groupby: "timeline", sort: "default"
+  };
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), state,
+    value => changes.push(value));
+
+  const picker = win.document.querySelector("[data-todo-saved-view]");
+  picker.value = "work_area";
+  picker.dispatchEvent(new win.Event("change", { bubbles: true }));
+  assert.equal(changes[0].area, "work");
+  assert.equal(win.document.querySelector('select[data-todo-filter="area"]').value, "work");
+
+  win.document.querySelector("[data-todo-save-view]").click();
+  await new Promise(resolve => setTimeout(resolve, 0));
+  const saved = JSON.parse(requests[0].options.body);
+  assert.equal(saved.cfg.area, "work");
+  dom.window.close();
+});
+
+test("todo quick add appends the active area to the new task", async () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  load(win, "todo_toolbar.js");
+  let request;
+  win.fetch = (url, options) => {
+    request = { url, options };
+    return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+  };
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    areas: ["work"],
+    filters: { project: "", context: "", priority: "", due: "", search: "", linked_to: "", area: "work" },
+    groupby: "timeline", sort: "default"
+  }, () => {});
+  win.document.querySelector("[data-todo-add-input]").value = "Call the dentist";
+  win.document.querySelector("[data-todo-add-form]").dispatchEvent(
+    new win.Event("submit", { bubbles: true, cancelable: true }));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(JSON.parse(request.options.body).text, "Call the dentist area:work");
+  dom.window.close();
+});
+
+test("todo quick add does not add an area when no area filter is active", async () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  load(win, "todo_toolbar.js");
+  let request;
+  win.fetch = (url, options) => {
+    request = { url, options };
+    return Promise.resolve({ json: () => Promise.resolve({ ok: true }) });
+  };
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    areas: ["work"],
+    filters: { project: "", context: "", priority: "", due: "", search: "", linked_to: "", area: "" },
+    groupby: "timeline", sort: "default"
+  }, () => {});
+  win.document.querySelector("[data-todo-add-input]").value = "Call the dentist";
+  win.document.querySelector("[data-todo-add-form]").dispatchEvent(
+    new win.Event("submit", { bubbles: true, cancelable: true }));
+  await new Promise(resolve => setTimeout(resolve, 0));
+  assert.equal(JSON.parse(request.options.body).text, "Call the dentist");
+  dom.window.close();
+});
+
+test("todo quick pick offers an Areas group that writes an area token", () => {
+  const dom = new JSDOM("<!doctype html><body><div id='toolbar'></div></body>", {
+    url: "http://ptos.test/todo", runScripts: "outside-only"
+  });
+  const win = dom.window;
+  load(win, "todo_toolbar.js");
+  win.PtosTodoToolbar.mount(win.document.getElementById("toolbar"), {
+    areas: ["work", "home"],
+    filters: { project: "", context: "", priority: "", due: "", search: "", linked_to: "", area: "" },
+    groupby: "timeline", sort: "default"
+  }, () => {});
+  const chip = win.document.querySelector('[data-qp-group="area"][data-token="area:work "]');
+  assert.ok(chip, "area quick pick chip exists");
+  chip.click();
+  assert.equal(win.document.querySelector("[data-todo-add-input]").value, "area:work ");
+  dom.window.close();
+});

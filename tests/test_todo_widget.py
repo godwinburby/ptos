@@ -42,6 +42,10 @@ def _today():
     return ptos.today().isoformat()
 
 
+def _yesterday():
+    return (ptos.today() - dt.timedelta(days=1)).isoformat()
+
+
 def _flat_descriptions(result):
     return [t["description"] for g in result["groups"] for t in g["todos"]]
 
@@ -532,6 +536,7 @@ class TestStaticPins:
                   encoding="utf-8") as f:
             src = f.read()
         assert '["todo.NAME"]' in src
+        assert "# area" in src
 
     def test_cli_lint_reaches_todo_views(self):
         with open(self._repo("ptos_cli.py"), encoding="utf-8") as f:
@@ -711,3 +716,133 @@ class TestQueryTodoFilterValidation:
         assert res1["ok"] is False
         assert "due" in res1.get("error", "")
         assert res2["ok"], res2.get("error")
+
+
+class TestTodoArea:
+    @staticmethod
+    def _descs(b):
+        return [t.description for k in ("overdue", "today", "tomorrow",
+                                        "upcoming", "someday") for t in b[k]]
+
+    def test_query_todos_filters_by_area(self):
+        _clean()
+        _seed_todos(["Water plants area:home", "Ship invoice area:work",
+                     "No area task"])
+        assert self._descs(svc.query_todos(area="work")) == ["Ship invoice"]
+        assert svc.query_todos(area="work")["total_open"] == 1
+
+    def test_query_todos_area_empty_or_none_is_unfiltered(self):
+        _clean()
+        _seed_todos(["Water plants area:home", "Ship invoice area:work"])
+        assert sorted(self._descs(svc.query_todos(area=None))) == [
+            "Ship invoice", "Water plants"]
+        assert sorted(self._descs(svc.query_todos(area=""))) == [
+            "Ship invoice", "Water plants"]
+
+    def test_query_todos_rejects_bad_area_slug(self):
+        _clean()
+        _seed_todos(["Water plants area:home"])
+        with pytest.raises(PTOSError, match="area"):
+            svc.query_todos(area="Work Area")
+        with pytest.raises(PTOSError, match="area"):
+            svc.query_todos(area="Work")
+
+    def test_saved_view_area_key_filters(self):
+        _clean()
+        _set_queries({"todo.work": {"area": "work"}})
+        _seed_todos(["Water plants area:home", "Ship invoice area:work"])
+        r = svc.resolve_embed({"view": "todo", "name": "work"})
+        assert _flat_descriptions(r) == ["Ship invoice"]
+        assert r["filters"] == {"area": "work"}
+        assert "area=work" in r["link"]
+
+    def test_inline_area_overrides_saved_view(self):
+        _clean()
+        _set_queries({"todo.home_stuff": {"area": "home"}})
+        _seed_todos(["Water plants area:home", "Ship invoice area:work"])
+        r = svc.resolve_embed({"view": "todo", "name": "home_stuff",
+                               "area": "work"})
+        assert _flat_descriptions(r) == ["Ship invoice"]
+
+    def test_area_with_no_matches_is_empty_not_error(self):
+        _clean()
+        _seed_todos(["Water plants area:home"])
+        r = svc.resolve_embed({"view": "todo", "area": "work"})
+        assert r["groups"] == []
+        assert r["total_open"] == 0
+
+    def test_todo_summary_area_key(self):
+        _clean()
+        _seed_todos([f"Late work area:work due:{_yesterday()}",
+                     f"Late home area:home due:{_yesterday()}",
+                     "Open work area:work"])
+        r = svc.resolve_embed({"view": "todo_summary", "area": "work"})
+        assert r["kind"] == "todo_summary"
+        assert r["overdue"] == 1
+        assert r["due_today"] == 0
+        assert "area=work" in r["link"]
+
+    def test_todo_summary_rejects_bad_area(self):
+        _clean()
+        _seed_todos(["Late work area:work"])
+        with pytest.raises(PTOSError, match="area"):
+            svc.resolve_embed({"view": "todo_summary", "area": "Not A Slug"})
+
+    def test_get_todo_areas_sorted_unique(self):
+        _clean()
+        _seed_todos(["Beta area:work", "Alpha area:home",
+                     "Gamma area:work"])
+        assert svc.get_todo_areas() == ["home", "work"]
+
+    def test_widget_options_exposes_todo_areas(self):
+        _clean()
+        _seed_todos(["Beta area:work", "Alpha area:home"])
+        assert svc.get_widget_options("todo.areas") == ["home", "work"]
+
+    def test_lint_accepts_area_key(self):
+        assert ptos.lint_todo_views({"todo.work": {"area": "work"}}) == []
+
+
+class TestTodoPageArea:
+    """The shell Todos page carries the area filter, the area list and the
+    quick-add area token."""
+
+    @staticmethod
+    def _page(args=None):
+        import json
+        import re
+        from ptos_web import app
+        response = app.test_client().get("/todo", query_string=args or {})
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        spec = json.loads(re.search(
+            r'<script type="application/json" id="page-spec">(.*?)</script>',
+            html, re.S).group(1))
+        data = json.loads(re.search(
+            r'<script type="application/json" id="page-data">(.*?)</script>',
+            html, re.S).group(1))
+        state = json.loads(re.search(
+            r"window\.PTOS_PAGE = (\{.*\});", html, re.S).group(1))
+        return html, spec, data, state
+
+    def test_area_param_filters_the_page_and_is_echoed(self):
+        _clean()
+        _seed_todos(["Ship invoice area:work", "Water plants area:home"])
+        _html, spec, data, state = self._page({"area": "work"})
+        assert 'area = "work"' in spec["body"]
+        descriptions = [todo["description"] for group in data["groups"]
+                        for todo in group["todos"]]
+        assert descriptions == ["Ship invoice"]
+        assert state["todo"]["filters"]["area"] == "work"
+
+    def test_page_exposes_the_list_of_areas(self):
+        _clean()
+        _seed_todos(["Ship invoice area:work", "Water plants area:home"])
+        _html, _spec, _data, state = self._page()
+        assert state["todo"]["areas"] == ["home", "work"]
+
+    def test_invalid_area_slug_is_reported_not_silently_ignored(self):
+        _clean()
+        _seed_todos(["Ship invoice area:work"])
+        _html, _spec, _data, state = self._page({"area": "Bad Area"})
+        assert "area" in (state["error"] or "").lower()

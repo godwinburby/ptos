@@ -1029,6 +1029,13 @@ function renderTodoRow(t, filters) {
     var cls = (activeCtx && cNorm === activeCtx) ? " active" : "";
     return '<a class="todo-context' + cls + '" data-todo-filter-badge="context" data-value="' + esc(c) + '" style="cursor:pointer">' + esc(c) + '</a>';
   }).join("");
+  var activeArea = String(filters.area || "");
+  var areaVal = t.area ? String(t.area) : "";
+  var areaChip = areaVal
+    ? '<a class="todo-area' + (activeArea && activeArea === areaVal ? " active" : "") +
+      '" data-todo-filter-badge="area" data-value="' + esc(areaVal) +
+      '" title="Area: ' + esc(areaVal) + '">' + esc(areaVal) + '</a>'
+    : "";
   var links = (t.links || []).map(function (lk) {
     return '<a class="todo-link-badge" href="/todo?linked_to=' + encodeURIComponent(lk) + '" title="Todos linked to ' + esc(lk) + '">' + esc(lk) + '</a>';
   }).join("");
@@ -1048,7 +1055,8 @@ function renderTodoRow(t, filters) {
     ' data-threshold-time="' + esc(t.threshold_time || "") + '"' +
     ' data-rec="' + esc(t.rec || "") + '"' +
     ' data-projects="' + esc((t.projects || []).join(" ")) + '"' +
-    ' data-contexts="' + esc((t.contexts || []).join(" ")) + '">' +
+    ' data-contexts="' + esc((t.contexts || []).join(" ")) + '"' +
+    ' data-area="' + esc(areaVal) + '">' +
     '<div class="todo-check' + (t.done ? " checked" : "") + '"' +
       ' data-todo-act="' + (t.done ? "undo" : "complete") + '"' +
       ' role="button" tabindex="0"' +
@@ -1058,7 +1066,7 @@ function renderTodoRow(t, filters) {
       '<div class="todo-desc">' + esc(t.description) + '</div>' +
       '<div class="todo-meta">' + idBadge + links + dueBadge + _todoThresholdBadge(t) +
         (t.rec ? '<span class="todo-rec-badge" data-field="rec" data-value="' + esc(t.rec) + '" data-raw="' + esc(t.raw_line || "") + '" style="cursor:pointer" title="Change recurrence">rec:' + esc(t.rec) + '</span>' : '') +
-        projs + " " + ctxs +
+        areaChip + " " + projs + " " + ctxs +
       '</div>' +
     '</div>' +
 '<div class="todo-actions">' +

@@ -181,6 +181,12 @@ class TestWidgetOptions:
         assert "+HearingCare" in svc.get_widget_options("todo.projects")
         assert "@phone" in svc.get_widget_options("todo.contexts")
 
+    def test_todo_areas_source(self):
+        with open(ptos.TODO_PATH, "a", encoding="utf-8") as f:
+            f.write("2026-01-01 Water plants area:home\n"
+                    "2026-01-01 Ship invoice area:work\n")
+        assert svc.get_widget_options("todo.areas") == ["home", "work"]
+
     def test_todo_priorities_default_when_unconfigured(self, monkeypatch):
         monkeypatch.setattr(svc, "get_config", lambda: {})
         assert svc.get_widget_options("todo.priorities") == ["A", "B", "C", "D"]

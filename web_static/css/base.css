@@ -58,6 +58,7 @@
       --radius-sm: 6px;   /* inputs, chips */
       --radius-md: 10px;  /* cards, buttons */
       --radius-lg: 14px;  /* modals, sheets */
+      --radius-pill: 9999px;  /* fully rounded for chips/pills */
       /* shadow */
       --shadow-1: 0 1px 2px rgba(0,0,0,.06);
       --shadow-2: 0 4px 16px rgba(0,0,0,.12);   /* popovers, menus */
@@ -133,7 +134,7 @@
         --space-10: 40px; --space-12: 48px; --space-14: 56px;
         --space-16: 64px; --space-20: 80px; --space-24: 96px;
       --radius-xs: 2px;  --radius-sm: 6px;  --radius-md: 10px; --radius-lg: 14px;
-        --radius-xl: 20px; --radius-2xl: 28px; --radius-full: 9999px;
+        --radius-xl: 20px; --radius-2xl: 28px; --radius-full: 9999px; --radius-pill: 9999px;
       --shadow-1:0 1px 2px rgba(0,0,0,.06);--shadow-2:0 4px 16px rgba(0,0,0,.12);--shadow-3:0 8px 32px rgba(0,0,0,.20);--shadow-up:0 -3px 16px rgba(0,0,0,.13);
       --fs-xs:11px;--fs-12:12px;--fs-sm:13px;--fs-md:15px;--fs-base:16px;--fs-lg:18px;--fs-xl:22px;--fs-2xl:28px;
       --hl-accent:#7C93FF;--hl-warn:#F0A15E;--hl-success:#4CC38A;--hl-error:#FF7B6B;--hl-purple:#A78BFA;--hl-teal:#2DD4BF;--hl-rose:#F472B6;--hl-slate:#94A3B8;

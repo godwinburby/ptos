@@ -135,6 +135,63 @@ class TestParseTodoLine:
         assert t.due == dt.date(2026, 7, 12)
         assert t.due_time is None
 
+    # ── area tag tests ───────────────────────────────────────────────────────
+
+    def test_parse_area_tag(self):
+        t = parse_todo_line("Task +Home @phone area:work")
+        assert t.area == "work"
+        assert t.projects == ["+Home"]
+        assert t.contexts == ["@phone"]
+        assert t.description == "Task"
+
+    def test_parse_area_with_underscore_and_hyphen(self):
+        t = parse_todo_line("Task area:work_life")
+        assert t.area == "work_life"
+        t2 = parse_todo_line("Task area:work-life")
+        assert t2.area == "work-life"
+
+    def test_parse_area_invalid_value_preserved(self):
+        t = parse_todo_line("Task area:Work")
+        assert t.area is None  # uppercase not valid
+        assert t.description == "Task area:Work"  # preserved in description
+
+    def test_parse_area_empty_value_preserved(self):
+        t = parse_todo_line("Task area:")
+        assert t.area is None
+        assert t.description == "Task area:"
+
+    def test_parse_multiple_area_first_wins(self):
+        t = parse_todo_line("Task area:work area:health")
+        assert t.area == "work"
+        assert "area:health" in t.description
+
+    def test_parse_area_case_insensitive_key(self):
+        t = parse_todo_line("Task AREA:work")
+        assert t.area == "work"
+        t2 = parse_todo_line("Task Area:work")
+        assert t2.area == "work"
+
+    def test_round_trip_with_area(self):
+        raw = "Task +Home @phone area:work due:2026-07-12"
+        t = parse_todo_line(raw)
+        formatted = format_line(t)
+        # format_line normalizes token order; verify parsed fields survive
+        t2 = parse_todo_line(formatted)
+        assert t2.area == "work"
+        assert t2.due == dt.date(2026, 7, 12)
+        assert t2.projects == ["+Home"]
+        assert t2.contexts == ["@phone"]
+
+    def test_round_trip_completed_with_area(self):
+        raw = "x 2026-07-11 2026-07-09 Fix printer +Home @office area:work"
+        t = parse_todo_line(raw)
+        formatted = format_line(t)
+        t2 = parse_todo_line(formatted)
+        assert t2.done is True
+        assert t2.area == "work"
+        assert t2.completed_date == dt.date(2026, 7, 11)
+        assert t2.created_date == dt.date(2026, 7, 9)
+
 
 class TestSafeParseTodoLine:
     def test_valid_line(self):

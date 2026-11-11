@@ -40,6 +40,7 @@ class Todo:
     rec: Optional[str] = None               # "1w", "+1m", "3d", etc.
     id: Optional[str] = None                # "t7c2b8" or None
     links: List[str] = field(default_factory=list)  # ["expense:k3f9a1", ...]
+    area: Optional[str] = None              # slug like "work", "health"
     line_no: int = 0
 
 # ── date resolution ─────────────────────────────────────────────────────────
@@ -164,6 +165,13 @@ def _add_months(d, n):
     max_day = calendar.monthrange(year, month)[1]
     return dt.date(year, month, min(d.day, max_day))
 
+
+def _is_valid_area_slug(s):
+    """Validate an area slug: lowercase letters, digits, underscore, hyphen only."""
+    if not s:
+        return False
+    return all(c.islower() or c.isdigit() or c in "_-" for c in s)
+
 # ── parsing ─────────────────────────────────────────────────────────────────
 
 def parse_todo_line(line, line_no=0):
@@ -215,6 +223,7 @@ def parse_todo_line(line, line_no=0):
     rec = None
     todo_id = None
     links = []
+    area = None
     desc_parts = []
 
     for token in remaining.split():
@@ -244,6 +253,12 @@ def parse_todo_line(line, line_no=0):
             todo_id = token[3:] if len(token) > 3 else None
         elif token.lower().startswith("links:") and len(token) > 6:
             links = [t for t in token[6:].split(",") if t.strip()]
+        elif token.lower().startswith("area:") and area is None:
+            val = token[5:]
+            if _is_valid_area_slug(val):
+                area = val
+            else:
+                desc_parts.append(token)
         elif token.lower().startswith("pri:") and len(token) == 5 and token[4].isalpha() and priority is None:
             priority = token[4].upper()
         else:
@@ -267,6 +282,7 @@ def parse_todo_line(line, line_no=0):
         rec=rec,
         id=todo_id,
         links=links,
+        area=area,
         line_no=line_no,
     )
 
@@ -336,6 +352,9 @@ def format_line(todo):
 
     if todo.links:
         parts.append("links:" + ",".join(todo.links))
+
+    if todo.area:
+        parts.append(f"area:{todo.area}")
 
     return " ".join(parts)
 
@@ -725,6 +744,11 @@ def edit_todo(todo_path, line_no, updates):
                     t.id = val if val else None
                 elif key == "links":
                     t.links = val if isinstance(val, list) else ([val] if val else [])
+                elif key == "area":
+                    if val and _is_valid_area_slug(val):
+                        t.area = val
+                    else:
+                        t.area = None
                 elif key == "done":
                     t.done = bool(val)
             break
@@ -776,6 +800,11 @@ def batch_edit_todos(todo_path, line_nos, updates):
                         t.id = val if val else None
                     elif key == "links":
                         t.links = val if isinstance(val, list) else ([val] if val else [])
+                    elif key == "area":
+                        if val and _is_valid_area_slug(val):
+                            t.area = val
+                        else:
+                            t.area = None
                 matched.append(t)
                 break
         if not found:
@@ -789,7 +818,7 @@ def batch_edit_todos(todo_path, line_nos, updates):
 
 def filter_todos(todos, project=None, context=None, priority=None,
                  due_before=None, threshold_before=None, include_done=False,
-                 linked_to=None):
+                 linked_to=None, area=None):
     """Filter a list of Todo objects by various criteria.
 
     project, context, priority can be a single value or a list.
@@ -797,6 +826,7 @@ def filter_todos(todos, project=None, context=None, priority=None,
     Project values with a leading `-` EXCLUDE that project (e.g. '-routine'
     drops '+routine' todos); can be mixed with includes in one list.
     linked_to is a 'type:id' target — matches todos whose links contain it.
+    area matches the area: slug exactly (case-sensitive).
     """
     def _norm(p):
         return p if p.startswith("+") else "+" + p
@@ -824,6 +854,10 @@ def filter_todos(todos, project=None, context=None, priority=None,
         if priority:
             pri_list = priority if isinstance(priority, list) else [priority]
             if t.priority not in pri_list:
+                continue
+        if area:
+            area_list = area if isinstance(area, list) else [area]
+            if t.area not in area_list:
                 continue
         if due_before and (t.due is None or t.due > due_before):
             continue

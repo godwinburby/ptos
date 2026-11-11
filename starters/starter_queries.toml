@@ -254,6 +254,7 @@ notes_path   = "Demo/Find a Job"
 # linked_to    = "expense:abc123" # only todos linking to this type:id
 # include_done = false            # append a Done bucket (recent 50, filtered)
 # hide_routines = false           # drop +routine todos (defaults on when no project)
+# area         = "work"           # only todos in this area (area:work)
 # groupby      = "project"        # timeline (default) | priority | project | context | none
 # sort         = "most"           # default | reverse | most | fewest (group order)
 # limit        = 20               # truncate open groups in group order

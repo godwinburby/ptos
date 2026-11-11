@@ -340,6 +340,16 @@
 
 .todo-project.active {  background:var(--accent-lt); color:var(--accent); font-weight:600;  }
 
+.todo-area {
+  font-size: var(--fs-sm); padding:2px 7px; border-radius: var(--radius-pill);
+  background:var(--surface-2); color:var(--sub);
+  text-decoration:none; cursor:pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.todo-area:hover,
+.todo-area.active {  background:var(--accent-lt); color:var(--accent);  }
+
 .todo-sel-btn {  padding:4px 8px; border:none; background:transparent; color:var(--sub); font-size: var(--fs-sm); cursor:pointer; border-radius: var(--radius-sm); flex-shrink:0; width:auto; min-width:0; line-height:1;  }
 
 .todo-sel-btn:hover {  color:var(--text); background:var(--bg);  }

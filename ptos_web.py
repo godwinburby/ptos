@@ -989,6 +989,7 @@ def todo_page():
     due_filter = request.args.get("due", saved_view.get("due"))
     search = request.args.get("search", saved_view.get("search"))
     linked_to = request.args.get("linked_to", saved_view.get("linked_to"))
+    area = request.args.get("area", saved_view.get("area"))
     groupby = request.args.get("groupby", saved_view.get("groupby", "timeline"))
     sort = request.args.get("sort", saved_view.get("sort"))
     todo_cfg = svc.get_config().get("todo", {})
@@ -1048,7 +1049,7 @@ def todo_page():
     for key, value in (("project", project), ("context", context),
                        ("priority", pri), ("due", due_filter),
                        ("search", search), ("linked_to", linked_to),
-                       ("sort", sort)):
+                       ("area", area), ("sort", sort)):
         if key in request.args:
             widget_spec[key] = request.args.get(key, "")
         elif value and not selected_view:
@@ -1066,6 +1067,7 @@ def todo_page():
 
     projects = []
     contexts = []
+    areas = []
     all_priorities = sorted({
         todo.get("priority", "")
         for group in (page_data or {}).get("groups", [])
@@ -1075,6 +1077,7 @@ def todo_page():
     try:
         projects = svc.get_todo_projects()
         contexts = svc.get_todo_contexts()
+        areas = svc.get_todo_areas()
     except PTOSError as e:
         if page_error is None:
             page_error = str(e)
@@ -1083,19 +1086,21 @@ def todo_page():
         page_title="Todos", now=_now_str(), configure_url="",
         time_options=[], time_value="", custom_time="", from_date="", to_date="",
         year_range=_YEAR_RANGE, page_data=page_data or {},
-        projects=projects, contexts=contexts, priority_labels=priority_labels,
+        projects=projects, contexts=contexts, areas=areas,
+        priority_labels=priority_labels,
         show_delete=False,
         page_spec={"body": embed_body, "kind": "todo"},
         page_toolbar="todo", page_state={
             "error": page_error,
             "todo": {
-                "projects": projects, "contexts": contexts,
+                "projects": projects, "contexts": contexts, "areas": areas,
                 "views": saved_views, "selected_view": selected_view,
                 "priorities": all_priorities,
                 "priority_labels": priority_labels,
                 "filters": {"project": project or "", "context": context or "",
                             "priority": pri or "", "due": due_filter or "",
-                            "search": search or "", "linked_to": linked_to or ""},
+                            "search": search or "", "linked_to": linked_to or "",
+                            "area": area or ""},
                 "groupby": groupby, "sort": sort or "default",
                 "include_done": bool(saved_view.get("include_done", True)),
                 "hide_routines": bool(hide_routines),
