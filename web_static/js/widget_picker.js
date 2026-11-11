@@ -377,19 +377,13 @@
   }
 
   function _card(attr, val, icon, label, desc, tone) {
-    var toneColor = "";
+    var toneClass = "";
     if (tone) {
-      var map = {
-        "chart-1": "var(--chart-1)", "chart-2": "var(--chart-2)", "chart-3": "var(--chart-3)",
-        "chart-4": "var(--chart-4)", "chart-5": "var(--chart-5)", "chart-6": "var(--chart-6)",
-        "chart-7": "var(--chart-7)", "chart-8": "var(--chart-8)",
-        "success": "var(--success)", "error": "var(--error)", "warn": "var(--warn)",
-      };
-      toneColor = map[tone] || "";
+      toneClass = "tone-" + tone;
     }
-    var borderStyle = toneColor ? ' style="border-left:3px solid ' + toneColor + ';"' : '';
-    return '<button type="button" class="wp-card" data-' + attr + '="' +
-      _esc(val) + '"' + borderStyle + '>' +
+    var toneAttr = toneClass ? ' class="wp-card ' + toneClass + '"' : ' class="wp-card"';
+    return '<button type="button"' + toneAttr + ' data-' + attr + '="' +
+      _esc(val) + '">' +
       '<span class="wp-card-ico">' + _iconHtml(icon) + "</span>" +
       '<span class="wp-card-txt">' +
         '<span class="wp-card-label">' + _esc(label) + "</span>" +

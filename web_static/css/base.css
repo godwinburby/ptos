@@ -48,8 +48,11 @@
       --tint-error:   color-mix(in srgb, var(--error) 14%, var(--card));
       --tint-warn:    color-mix(in srgb, var(--warn) 14%, var(--card));
       /* spacing */
-      --space-1: 4px;  --space-2: 8px;  --space-3: 12px;
-      --space-4: 16px; --space-5: 24px; --space-6: 32px;
+      --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+        --space-4: 16px; --space-5: 24px; --space-6: 32px;
+        --space-7: 28px; --space-8: 32px; --space-9: 36px;
+        --space-10: 40px; --space-12: 48px; --space-14: 56px;
+        --space-16: 64px; --space-20: 80px; --space-24: 96px;
       /* radius */
       --radius-xs: 2px;   /* swatches, checkboxes */
       --radius-sm: 6px;   /* inputs, chips */
@@ -61,7 +64,7 @@
       --shadow-3: 0 8px 32px rgba(0,0,0,.20);   /* modals */
       --shadow-up: 0 -3px 16px rgba(0,0,0,.13); /* pinned bars below content */
       /* type scale */
-      --fs-xs: 11px; --fs-sm: 13px; --fs-md: 15px; --fs-base: 16px;
+      --fs-xs: 11px; --fs-12: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-base: 16px;
       --fs-lg: 18px; --fs-xl: 22px; --fs-2xl: 28px;
       /* font stacks */
       --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
@@ -124,10 +127,15 @@
       --tint-14:    color-mix(in srgb, var(--hl-brown) 14%, var(--card));
       --tint-15:    color-mix(in srgb, var(--hl-navy) 14%, var(--card));
       --tint-16:    color-mix(in srgb, var(--hl-olive) 14%, var(--card));
-      --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:24px;--space-6:32px;
-      --radius-xs:2px;--radius-sm:6px;--radius-md:10px;--radius-lg:14px;
+      --space-1: 4px;  --space-2: 8px;  --space-3: 12px; --space-4: 16px;
+        --space-4: 16px; --space-5: 24px; --space-6: 32px;
+        --space-7: 28px; --space-8: 32px; --space-9: 36px;
+        --space-10: 40px; --space-12: 48px; --space-14: 56px;
+        --space-16: 64px; --space-20: 80px; --space-24: 96px;
+      --radius-xs: 2px;  --radius-sm: 6px;  --radius-md: 10px; --radius-lg: 14px;
+        --radius-xl: 20px; --radius-2xl: 28px; --radius-full: 9999px;
       --shadow-1:0 1px 2px rgba(0,0,0,.06);--shadow-2:0 4px 16px rgba(0,0,0,.12);--shadow-3:0 8px 32px rgba(0,0,0,.20);--shadow-up:0 -3px 16px rgba(0,0,0,.13);
-      --fs-xs:11px;--fs-sm:13px;--fs-md:15px;--fs-base:16px;--fs-lg:18px;--fs-xl:22px;--fs-2xl:28px;
+      --fs-xs:11px;--fs-12:12px;--fs-sm:13px;--fs-md:15px;--fs-base:16px;--fs-lg:18px;--fs-xl:22px;--fs-2xl:28px;
       --hl-accent:#7C93FF;--hl-warn:#F0A15E;--hl-success:#4CC38A;--hl-error:#FF7B6B;--hl-purple:#A78BFA;--hl-teal:#2DD4BF;--hl-rose:#F472B6;--hl-slate:#94A3B8;
       /* board highlight swatches (extend dashboard set) */
       --hl-indigo:#6366F1;--hl-cyan:#0891B2;--hl-lime:#65A30D;--hl-amber:#D97706;--hl-pink:#DB2777;--hl-brown:#8B5A2B;--hl-navy:#1E3A8A;--hl-olive:#5F6B2B;
@@ -180,6 +188,9 @@
         --font-ui: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
         --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
         --content-max:1200px;
+        /* type scale */
+        --fs-xs: 11px; --fs-12: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-base: 16px;
+        --fs-lg: 18px; --fs-xl: 22px; --fs-2xl: 28px;
         color-scheme: dark;
       }
     }

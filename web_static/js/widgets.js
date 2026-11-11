@@ -49,6 +49,12 @@ function _toneBg(tone) {
   return map[tone] || "";
 }
 
+// Helper: map tone value to CSS class name
+function _toneClass(tone) {
+  if (!tone) return "";
+  return "tone-" + tone;
+}
+
 // Icon SVG map (shared with widget_picker.js)
 var _WIDGET_ICONS = {
   "layout": '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -126,10 +132,9 @@ function renderResult(d) {
 }
 
 function renderCapture(d) {
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Quick capture</div>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '"><div class="card-title">' + iconHtml + 'Quick capture</div>' +
     '<div style="display:flex;gap:8px;flex-wrap:wrap;">' +
     '<input type="text" class="cap-input" placeholder="Quick record… (Enter to capture)" disabled ' +
     'style="flex:1;min-width:180px;padding:8px 12px;border-radius:8px;border:1.5px solid var(--border);background:var(--bg);color:var(--text);font-size:14px;">' +
@@ -140,10 +145,9 @@ function renderCapture(d) {
 function renderQuickAdd(d) {
   var names = (d.frequent || []).concat(d.remaining || []);
   if (!names.length) return '<div class="card" style="color:var(--sub);font-size:13px;">No quick-add presets.</div>';
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Quick add</div>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '"><div class="card-title">' + iconHtml + 'Quick add</div>' +
     '<div class="chip-group">' + names.map(function (name) {
     return '<a class="preset-chip" href="/add?preset=' +
       encodeURIComponent(name) + '">+ ' + esc(name) + '</a>';
@@ -154,10 +158,9 @@ function renderQuickAddMulti(d) {
   var presets = d.presets || {};
   var names = Object.keys(presets);
   if (!names.length) return '<div class="card" style="color:var(--sub);font-size:13px;">No multi-record presets.</div>';
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Quick add multi</div>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '"><div class="card-title">' + iconHtml + 'Quick add multi</div>' +
     '<div class="chip-group">' + names.map(function (name) {
     var detail = presets[name] ? ' <span style="opacity:.6;font-size:11px;">(' + esc(presets[name]) + ')</span>' : '';
     return '<span class="preset-chip">+ ' + esc(name) + detail + '</span>';
@@ -214,18 +217,16 @@ function renderDashboard(d, opts) {
     return label + '<div class="stat-grid">' + cards + '</div>';
   }).join('');
   if (opts.bare) return html;
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Dashboard · ' + esc(d.name) + '</div>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '"><div class="card-title">' + iconHtml + 'Dashboard · ' + esc(d.name) + '</div>' +
     exprBadge(d) + html + '</div>';
 }
 
 function renderMetric(d) {
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '">' +
     '<div class="card-title">' + iconHtml + 'Metric</div>' +
     exprBadge(d) +
     '<div style="font-size:28px;font-weight:800;color:var(--accent);">' + esc(d.value) + '</div>' +
@@ -277,10 +278,9 @@ function renderPivot(d) {
   } else if (d.chart === "bar") {
     body = qtWrap(renderChart("bar", _pivotBarData(d), { label: label }), table);
   }
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '">' +
     '<div class="card-title">' + iconHtml + 'Pivot · ' + esc(d.row_field) + ' × ' + esc(d.col_field) + ' · ' + esc(d.time_label) + '</div>' +
     exprBadge(d) +
     body +
@@ -300,10 +300,9 @@ function renderTrend(d) {
     ? qtWrap(renderChart(d.chart, _trendChartData(d),
         { label: "Trend " + (d.filter_str || "") }), table)
     : table;
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '">' +
     '<div class="card-title">' + iconHtml + 'Trend · ' + esc(d.filter_str) + '</div>' +
     exprBadge(d) +
     body +
@@ -350,10 +349,9 @@ function renderThresholdResult(thresholds, opts) {
       : inner;
   }).join("");
   if (opts.bare) return bars;
-  var toneColor = _toneColor(thresholds[0].tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(thresholds[0].tone);
   var iconHtml = thresholds[0].icon ? _iconHtml(thresholds[0].icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Thresholds</div>' + bars + '</div>';
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '"><div class="card-title">' + iconHtml + 'Thresholds</div>' + bars + '</div>';
 }
 
 function summaryBar(d) {
@@ -725,10 +723,9 @@ function renderBoard(d) {
       '<div class="emb-chip-count">' + _fmt(count) + '</div>' + rollup + '</div>';
   }).join("");
   var matched = (d.match_field && d.grid_rows) ? d.grid_rows.length : null;
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '">' +
     '<div class="card-title">' + iconHtml + 'Board · ' + esc(String(d.board_name || "").replace(/_/g, " ")) + '</div>' +
     '<div class="emb-chip-row">' + chips + '</div>' +
     (matched !== null ? '<div class="emb-kicker" style="margin-top:8px;">' + _fmt(matched) + ' matched across columns</div>' : '') +
@@ -741,6 +738,7 @@ function renderHabit(d) {
   var now = new Date();
   var today = now.getFullYear() + "-" + _pad2(now.getMonth() + 1) + "-" + _pad2(now.getDate());
   var toneColor = _toneColor(d.tone);
+  var toneClass = _toneClass(d.tone);
   var toneBg = _toneBg(d.tone);
   var monthHtml = "";
   if (blk) {
@@ -765,8 +763,7 @@ function renderHabit(d) {
       '<table class="emb-cal"><thead><tr>' + wd.map(function (w) { return '<th class="emb-cal-wd">' + w + '</th>'; }).join("") +
       '</tr></thead><tbody>' + rows.join("") + '</tbody></table></div>';
   }
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
-  return '<div class="card" data-toggleable="' + (d.toggleable ? 1 : 0) + '" data-habit="' + esc(d.habit_name || "") + '"' + toneBorder + '>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '" data-toggleable="' + (d.toggleable ? 1 : 0) + '" data-habit="' + esc(d.habit_name || "") + '">' +
     '<div class="card-title">Habit · ' + esc(String(d.habit_name || "").replace(/_/g, " ")) + '</div>' +
     '<div class="emb-stat">' +
       '<span><b data-stat="streak">' + _fmt(d.streak || 0) + '</b>-day streak</span>' +
@@ -823,10 +820,9 @@ function renderCalendar(d, opts) {
   var detailBlock = detailDays.length
     ? '<div class="emb-cal-day-list">' + details + '</div>'
     : '<div class="msg emb-cal-empty" style="color:var(--sub);">No records this month.</div>';
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '>' +
     '<div class="card-title">' + iconHtml + 'Calendar · ' + esc(label) + '</div>' +
     '<div class="emb-kicker">' + esc(_monthName(d.month) + " " + d.year) + '</div>' +
     '<table class="emb-cal emb-cal-rec-grid"><thead><tr>' + wd.map(function (w) { return '<th class="emb-cal-wd">' + w + '</th>'; }).join("") +
@@ -842,10 +838,9 @@ function renderDue(d, opts) {
   if (!rows.length) {
     var empty = '<div class="msg" style="color:var(--sub);">Nothing outstanding.</div>';
     if (opts.bare) return empty;
-    var toneColor = _toneColor(d.tone);
-    var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+    var toneClass = _toneClass(d.tone);
     var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-    return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + esc(d.title || "Due") + '</div>' + empty + '</div>';
+    return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '"><div class="card-title">' + iconHtml + esc(d.title || "Due") + '</div>' + empty + '</div>';
   }
   var heatColor = { hot: "var(--error)", warm: "var(--warn)", cool: "var(--accent)" };
   // Same link the /due page rows use (open the located record, return to
@@ -865,16 +860,15 @@ function renderDue(d, opts) {
       '<span class="emb-due-open" style="margin-left:auto;font-size:11px;color:var(--accent);">Open â†’</span>' +
     '</a>';
   }).join("");
-  var count = d.full_count != null ? d.full_count
+var count = d.full_count != null ? d.full_count
     : (d.count == null ? rows.length : d.count);
   if (opts.bare) {
     return list +
       '<div class="emb-stat" style="margin-top:8px;"><span><b>' + _fmt(count) + '</b> overdue</span></div>';
   }
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + esc(d.title || "Due") + '</div>' + list +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '"><div class="card-title">' + iconHtml + esc(d.title || "Due") + '</div>' + list +
     '<div class="emb-stat" style="margin-top:8px;"><span><b>' + _fmt(count) + '</b> overdue</span></div>' +
   '</div>';
 }
@@ -885,8 +879,7 @@ function renderTodoSummary(d) {
   if (d.overdue && d.due_today) parts.push('<span style="color:var(--sub);"> · </span>');
   if (d.due_today) parts.push('<span style="color:var(--accent);">' + _fmt(d.due_today) + ' due today</span>');
   if (!parts.length) parts.push('<span style="color:var(--sub);">No todos due today</span>');
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
   return '<a href="' + esc(d.link || "/todo") + '" style="display:flex;align-items:center;gap:12px;text-decoration:none;">' +
     '<span style="font-size:14px;font-weight:600;color:var(--text);">' + iconHtml + parts.join("") + '</span>' +
@@ -895,8 +888,7 @@ function renderTodoSummary(d) {
 }
 
 function renderJournal(d) {
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
   return '<a href="' + esc(d.link || "/journal") + '" style="display:block;text-decoration:none;">' +
     '<span style="font-size:14px;font-weight:600;color:var(--text);">' +
@@ -975,10 +967,9 @@ function renderProject(d, opts) {
     lines.push('<span>' + _fmt(d.board_stalls) + ' stalled</span>');
   }
   var label = d.label || d.name || "";
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
-  return '<div class="card"' + toneBorder + '>' +
+  return '<div class="card' + (toneClass ? ' ' + toneClass : '') + '>' +
     '<div class="card-title">' + iconHtml + 'Project · ' + esc(label) + '</div>' +
     '<div class="emb-stat">' + lines.join("") + '</div>' +
   '</div>';
@@ -1155,10 +1146,9 @@ function renderTodo(d, opts) {
   } else {
     parts.push('<div class="msg" style="color:var(--sub);margin:10px 12px;">No todos.</div>');
   }
-  var toneColor = _toneColor(d.tone);
-  var toneBorder = toneColor ? ' style="border-left:4px solid ' + toneColor + ';"' : '';
+  var toneClass = _toneClass(d.tone);
   var iconHtml = d.icon ? _iconHtml(d.icon) + ' ' : '';
   return opts.full
     ? '<div class="todo-full-list">' + parts.join("") + '</div>'
-    : '<div class="card"' + toneBorder + '><div class="card-title">' + iconHtml + 'Task list</div>' + parts.join("") + '</div>';
+    : '<div class="card' + (toneClass ? ' ' + toneClass : '') + '"><div class="card-title">' + iconHtml + 'Task list</div>' + parts.join("") + '</div>';
 }
