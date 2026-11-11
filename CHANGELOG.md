@@ -2093,3 +2093,4 @@ ec:, pri:, (, and links:; keyboard navigation (arrows, Enter, Escape); positione
 - `--from`/`--to` for arbitrary date ranges
 - `--save` to persist any CLI filter as a named query
 - `--save-preset` to persist any add as a preset
+- Fix: restore 69 CSS rules dropped by the duplicate-rule cleanup (d-flex, gap-*, due badges, hover/active states, calculator panel, popup chips); lower CSS token and inline-style baselines.

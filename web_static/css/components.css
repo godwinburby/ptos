@@ -1116,3 +1116,251 @@ li.md-task-list-item {  list-style:none;margin-left:-22px;  }
 .z-1400 {  z-index: 1400;  }
 
 .z-1500 {  z-index: 1500;  }
+
+/* ---- Restored selectors dropped by V1 (fe3b00a). Review, then fold into the sections above. ---- */
+.d-flex {
+  display: flex;
+}
+.text-muted {
+  color: var(--sub);
+}
+.gap-4 {
+  gap: 4px;
+}
+.gap-8 {
+  gap: 8px;
+}
+.gap-10 {
+  gap: 10px;
+}
+.gap-12 {
+  gap: 12px;
+}
+.gap-14 {
+  gap: 14px;
+}
+.gap-16 {
+  gap: 16px;
+}
+.chip-group .qb-chip.active,
+.chip-group .qb-chip.selected {
+  display: inline-flex;
+}
+.flex-gap-4-wrap {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.todo-due-badge.overdue {
+  background:var(--error-lt);
+  color:var(--error);
+}
+.todo-due-badge.today {
+  background:var(--warn-lt);
+  color:var(--warn);
+}
+.todo-due-badge.future {
+  background:var(--accent-lt);
+  color:var(--accent);
+}
+.todo-project:hover {
+  background:var(--accent-lt);
+  color:var(--accent);
+}
+.todo-context {
+  font-size: var(--fs-sm);
+  padding:2px 7px;
+  border-radius: var(--radius-sm);
+  background:var(--bg);
+  color:var(--sub);
+  text-decoration:none;
+  cursor:pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.todo-context:hover {
+  background:var(--accent-lt);
+  color:var(--accent);
+}
+.todo-context.active {
+  background:var(--accent-lt);
+  color:var(--accent);
+  font-weight:600;
+}
+.todo-menu-btn:hover {
+  background:var(--bg);
+}
+.todo-menu-item:hover {
+  background:var(--accent-lt);
+  color:var(--accent);
+}
+.field-popup .fp-chip:hover {
+  background:var(--accent-lt);
+  color:var(--accent);
+}
+.field-popup .fp-chip.active {
+  background:var(--accent);
+  color:white;
+  border-color:var(--accent);
+}
+.calc-btn:hover {
+  background:var(--accent-lt);
+  color:var(--accent);
+}
+.calc-panel.open {
+  display:block;
+}
+.calc-panel .calc-key:hover {
+  background:var(--accent-lt);
+  color:var(--accent);
+}
+.card-actions .edit-btn {
+  color:var(--accent);
+}
+.card-actions .del-btn {
+  color:var(--error);
+}
+.view-toggle button:hover:not(.active) {
+  background:var(--bg);
+}
+.wp-recent-strip {
+  display:flex;
+  gap:8px;
+  overflow-x:auto;
+  padding:0 0 4px;
+}
+.wp-item:hover {
+  background:var(--bg);
+}
+.wp-item-main {
+  display:flex;
+  flex-direction:column;
+  gap:2px;
+  min-width:0;
+}
+.wf-req {
+  color:var(--error);
+}
+.wf-input:focus,
+.wf-textbox:focus {
+  outline:none;
+  border-color:var(--accent);
+}
+.wf-unknown {
+  font-size: var(--fs-xs);
+  color:var(--sub);
+}
+.wf-spacer {
+  flex:1;
+}
+.md-tool-menu[hidden] {
+  display:none;
+}
+.add-chip:hover {
+  border-color:var(--accent);
+  color:var(--accent);
+}
+.emb-stat b {
+  color:var(--text);
+}
+.emb-due-row:last-child {
+  border-bottom:none;
+}
+.u-text-on-accent {
+  color: var(--text-on-accent);
+}
+.u-bg-error-lt {
+  background: var(--error-lt);
+}
+.u-bg-warn-lt {
+  background: var(--warn-lt);
+}
+.u-bg-success-lt {
+  background: var(--success-lt);
+}
+.u-bg-surface-2 {
+  background: var(--surface-2);
+}
+.u-bg-accent-lt {
+  background: var(--accent-lt);
+}
+.u-bg-card {
+  background: var(--card);
+}
+.u-bg-surface {
+  background: var(--surface-2);
+}
+.u-text-error {
+  color: var(--error);
+}
+.u-text-warn {
+  color: var(--warn);
+}
+.u-text-success {
+  color: var(--success);
+}
+.u-text-accent {
+  color: var(--accent);
+}
+.u-text-sub {
+  color: var(--sub);
+}
+.u-text-muted {
+  color: var(--sub);
+}
+.u-border-error {
+  border-color: var(--error);
+}
+.u-border-warn {
+  border-color: var(--warn);
+}
+.u-border-accent {
+  border-color: var(--accent);
+}
+.overlay-45-600 {
+  background: rgba(0, 0, 0, 0.45);
+}
+.whitespace-nowrap {
+  white-space: nowrap;
+}
+.cursor-pointer {
+  cursor: pointer;
+}
+.mt-3 {
+  margin-top: 12px;
+}
+.mb-1 {
+  margin-bottom: 4px;
+}
+.mb-2 {
+  margin-bottom: 8px;
+}
+.mb-3 {
+  margin-bottom: 12px;
+}
+.flex-shrink-0 {
+  flex-shrink: 0;
+}
+.items-center {
+  align-items: center;
+}
+.gap-1 {
+  gap: 4px;
+}
+.gap-2 {
+  gap: 8px;
+}
+.gap-3 {
+  gap: 12px;
+}
+.todo-menu-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 6px 10px;
+  font-size: var(--fs-lg);
+  color: var(--sub);
+  border-radius: var(--radius-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
