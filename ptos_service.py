@@ -9034,19 +9034,19 @@ def get_todo_areas():
 
 
 def get_todo_areas_with_fallback():
-    """Get todo areas with schema fallback when no todo areas exist."""
-    try:
-        areas = get_todo_areas()
-        if areas:
-            return areas
-    except Exception:
-        pass
+    """Get todo areas from schema options (primary), optionally merged with actual todo areas."""
     try:
         schema = ptos.get_schema()
         gf = (schema.get("global_fields") or {})
         area_opts = gf.get("area", {}).get("options", [])
         if area_opts:
             return area_opts
+    except Exception:
+        pass
+    try:
+        areas = get_todo_areas()
+        if areas:
+            return areas
     except Exception:
         pass
     return []

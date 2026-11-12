@@ -839,7 +839,7 @@ class TestTodoPageArea:
         _clean()
         _seed_todos(["Ship invoice area:work", "Water plants area:home"])
         _html, _spec, _data, state = self._page()
-        assert state["todo"]["areas"] == ["home", "work"]
+        assert state["todo"]["areas"] == ["work", "home", "personal", "health"]
 
     def test_invalid_area_slug_is_reported_not_silently_ignored(self):
         _clean()
