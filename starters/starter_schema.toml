@@ -74,6 +74,11 @@ type     = "string"
 linkable = true
 # no options = free-text entry
 
+[global_fields.area]
+type     = "string"
+linkable = true
+options  = ["work", "home", "personal", "health"]
+
 # ==================================================
 # TYPES
 # ==================================================
