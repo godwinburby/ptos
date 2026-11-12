@@ -9033,6 +9033,25 @@ def get_todo_areas():
         raise PTOSError(str(e))
 
 
+def get_todo_areas_with_fallback():
+    """Get todo areas with schema fallback when no todo areas exist."""
+    try:
+        areas = get_todo_areas()
+        if areas:
+            return areas
+    except Exception:
+        pass
+    try:
+        schema = ptos.get_schema()
+        gf = (schema.get("global_fields") or {})
+        area_opts = gf.get("area", {}).get("options", [])
+        if area_opts:
+            return area_opts
+    except Exception:
+        pass
+    return []
+
+
 def get_areas_with_counts():
     """Get all areas with task counts for the areas index page."""
     try:

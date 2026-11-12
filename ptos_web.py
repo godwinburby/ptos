@@ -1078,7 +1078,7 @@ def todo_page():
     try:
         projects = svc.get_todo_projects()
         contexts = svc.get_todo_contexts()
-        areas = svc.get_todo_areas()
+        areas = svc.get_todo_areas_with_fallback()
     except PTOSError as e:
         if page_error is None:
             page_error = str(e)
@@ -1784,12 +1784,21 @@ def _notes_page_templates():
                 area_tpl = f.read()
     except Exception:
         pass
-    # Get available areas from todo areas
+    # Get available areas from todo areas, fallback to schema options
     areas = []
     try:
         areas = svc.get_todo_areas()
     except Exception:
         pass
+    if not areas:
+        try:
+            schema = ptos.get_schema()
+            gf = (schema.get("global_fields") or {})
+            area_opts = gf.get("area", {}).get("options", [])
+            if area_opts:
+                areas = area_opts
+        except Exception:
+            pass
     return {
         "dashboard": next(iter(candidates.get("dashboards") or []), ""),
         "project": next(iter(candidates.get("projects") or []), ""),

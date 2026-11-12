@@ -16,9 +16,13 @@
     var priLabels = (state && state.priority_labels) || {};
     var projects = (state && state.projects) || [];
     var contexts = (state && state.contexts) || [];
+    var areas = (state && state.areas) || [];
     var ac = {};
     ac["+"] = projects.map(function (p) { return { l: p, v: p + " " }; });
     ac["@"] = contexts.map(function (c) { return { l: c, v: c + " " }; });
+    if (areas.length) {
+      ac["area:"] = areas.map(function (a) { return { l: a, v: "area:" + a + " " }; });
+    }
     ac["due:"] = [
       { l: "today", v: "due:today " }, { l: "tomorrow", v: "due:tomorrow " },
       { l: "this week", v: "due:this_week " }, { l: "next week", v: "due:next_week " },
