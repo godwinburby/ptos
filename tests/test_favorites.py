@@ -1,5 +1,6 @@
 import os
 import re
+import json
 import tomllib
 
 import pytest
@@ -499,14 +500,59 @@ class TestFavoritesJsStatic:
 
 # ── keyboard chord ────────────────────────────────────────────────────────────
 
+def _extract_json_object(text, start_idx):
+    """Extract a JSON object from text starting at start_idx (where text[start_idx] == '{').
+    Returns the extracted JSON string and the index after the closing brace."""
+    depth = 0
+    in_string = False
+    escape = False
+    for i in range(start_idx, len(text)):
+        ch = text[i]
+        if escape:
+            escape = False
+            continue
+        if ch == '\\':
+            escape = True
+            continue
+        if ch == '"' and not escape:
+            in_string = not in_string
+            continue
+        if not in_string:
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    return text[start_idx:i+1], i+1
+    return None, None
+
+
 class TestFavoritesChord:
-    def test_g_f_in_nav_map(self):
+    def test_g_f_in_shortcut_map(self):
+        """The favorites shortcut (g f) comes from the server-side shortcut map."""
+        from ptos_web import app
+        app.config["TESTING"] = True
+        with app.test_client() as client:
+            resp = client.get("/")
+            html = resp.get_data(as_text=True)
+
+        # Extract shortcut map from window.PTOS.keys
+        keys_idx = html.find('keys:{')
+        assert keys_idx >= 0, "keys:{ not found in page"
+        keys_json, _ = _extract_json_object(html, keys_idx + 5)
+        assert keys_json is not None, "Failed to extract keys JSON"
+        keys = json.loads(keys_json)
+        assert "gf" in keys
+        assert keys["gf"] == "/favorites"
+
+    def test_no_hardcoded_nav_map(self):
+        """nav_chords.js no longer has hardcoded NAV map."""
         path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
                             "web_static", "js", "nav_chords.js")
         with open(path, encoding="utf-8") as f:
             text = f.read()
-        assert '"g f": "/favorites"' in text
-        assert "Pinned pages" in text
+        assert "NAV = {" not in text
+        assert '"/favorites"' not in text
 
 
 # ── starter parity ────────────────────────────────────────────────────────────

@@ -223,142 +223,9 @@ function toggleMoreMenu(e) {
 
 // ── Keyboard Shortcuts ────────────────────────────────────────────────────────
 (function() {
-  // Navigation shortcuts
-  // Navigation shortcuts
-  var NAV = {
-    "g b": "/board",
-    "g h": "/habits",
-    "g a": "/calendar",
-    "g q": "/thresholds",
-    "g j": "/entity",
-    "g f": "/favorites",
-    "g d": "/schema-builder",
-    "g t": "/query-builder",
-    "g e": "/lint",
-    "g s": "/backup",
-    "g l": "/lint",
-    "g k": "/backup",
-    "g c": "/schema-builder",
-    "g u": "/query-builder",
-    "g o": "/board",
-    "g m": "/habits",
-    "g y": "/calendar",
-    "g r": "/thresholds",
-    "g v": "/entity",
-    "g f": "/favorites",
-  };
-
-  // Help overlay HTML
-  var HELP_HTML = `
-  <div id="kb-overlay"
-       onclick="if(event.target===this)closeKbHelp()"
-       style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);
-              z-index:9999;align-items:center;justify-content:center;">
-    <div style="background:var(--card);border-radius:14px;padding:24px 28px;
-              max-width:520px;width:92%;max-height:85vh;overflow-y:auto;
-              border:1px solid var(--border);">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:18px;">
-        <div style="font-size:17px;font-weight:800;color:var(--text);">Keyboard Shortcuts</div>
-        <button onclick="closeKbHelp()"
-                style="background:none;border:none;font-size:20px;color:var(--sub);cursor:pointer;padding:0 4px;">✕</button>
-      </div>
-
-      <div style="font-size:12px;font-weight:700;color:var(--sub);
-                  text-transform:uppercase;letter-spacing:.6px;margin-bottom:10px;">Quick Navigation</div>
-      <table class="data-table" style="margin-bottom:12px;width:100%;">
-        <thead><tr><th style="width:140px;">Key</th><th>Page</th></tr></thead>
-        <tbody>
-          <tr><td><kbd>H</kbd></td><td>Home</td></tr>
-          <tr><td><kbd>A</kbd></td><td>Add Record</td></tr>
-          <tr><td><kbd>T</kbd></td><td>Todos</td></tr>
-          <tr><td><kbd>J</kbd></td><td>Journal</td></tr>
-          <tr><td><kbd>N</kbd></td><td>Pages</td></tr>
-          <tr><td><kbd>F</kbd></td><td>Search</td></tr>
-          <tr><td><kbd>R</kbd></td><td>Routines</td></tr>
-          <tr><td><kbd>Y</kbd></td><td>Record Types</td></tr>
-          <tr><td><kbd>B</kbd></td><td>Browse</td></tr>
-          <tr><td><kbd>Q</kbd></td><td>Queries</td></tr>
-          <tr><td><kbd>S</kbd></td><td>Settings</td></tr>
-          <tr><td><kbd>E</kbd></td><td>Add expense</td></tr>
-          <tr><td><kbd>I</kbd></td><td>Add income</td></tr>
-          <tr><td><kbd>/</kbd></td><td>Focus search</td></tr>
-          <tr><td><kbd>?</kbd></td><td>Show this help</td></tr>
-          <tr><td><kbd>Esc</kbd></td><td>Close overlay / cancel</td></tr>
-        </tbody>
-      </table>
-
-      <div style="font-size:12px;font-weight:700;color:var(--sub);
-                  text-transform:uppercase;letter-spacing:.6px;margin:16px 0 10px;">Extended Navigation</div>
-      <table class="data-table" style="width:100%;">
-        <thead><tr><th style="width:140px;"><kbd>G</kbd> then…</th><th>Page</th></tr></thead>
-        <tbody>
-          <tr><td><kbd>B</kbd></td><td>Board</td></tr>
-          <tr><td><kbd>H</kbd></td><td>Habits</td></tr>
-          <tr><td><kbd>A</kbd></td><td>Calendar</td></tr>
-          <tr><td><kbd>Q</kbd></td><td>Thresholds</td></tr>
-          <tr><td><kbd>J</kbd></td><td>Entity</td></tr>
-          <tr><td><kbd>F</kbd></td><td>Favorites</td></tr>
-          <tr><td><kbd>D</kbd></td><td>Schema Builder</td></tr>
-          <tr><td><kbd>T</kbd></td><td>Query Builder</td></tr>
-          <tr><td><kbd>E</kbd></td><td>Lint</td></tr>
-          <tr><td><kbd>S</kbd></td><td>Backup</td></tr>
-          <tr><td><kbd>L</kbd></td><td>Lint</td></tr>
-          <tr><td><kbd>K</kbd></td><td>Backup</td></tr>
-          <tr><td><kbd>C</kbd></td><td>Schema Builder</td></tr>
-          <tr><td><kbd>U</kbd></td><td>Query Builder</td></tr>
-          <tr><td><kbd>O</kbd></td><td>Board</td></tr>
-          <tr><td><kbd>M</kbd></td><td>Habits</td></tr>
-          <tr><td><kbd>Y</kbd></td><td>Calendar</td></tr>
-          <tr><td><kbd>R</kbd></td><td>Thresholds</td></tr>
-          <tr><td><kbd>V</kbd></td><td>Entity</td></tr>
-          <tr><td><kbd>F</kbd></td><td>Pinned pages</td></tr>
-        </tbody>
-      </table>
-    </div>
-  </div>
-  <style>
-  #kb-overlay kbd {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 26px;
-    padding: 3px 7px;
-    background: var(--bg);
-    border: 1px solid var(--border);
-    border-radius: 5px;
-    font-size: 12px;
-    font-family: monospace;
-    font-weight: 700;
-    color: var(--text);
-    line-height: 1.4;
-    box-shadow: 0 1px 0 var(--border);
-    margin-right: 2px;
-  }
-  #kb-overlay td:first-child {
-    white-space: nowrap;
-  }
-  </style>
-  `;
-
-  // Inject overlay once
-  document.addEventListener("DOMContentLoaded", function() {
-    var div = document.createElement("div");
-    div.innerHTML = HELP_HTML;
-    document.body.appendChild(div.firstElementChild);
-    // Ensure overlay is hidden on load
-    var el = document.getElementById("kb-overlay");
-    if (el) el.style.display = "none";
-  });
-
-  window.closeKbHelp = function() {
-    var el = document.getElementById("kb-overlay");
-    if (el) el.style.display = "none";
-  };
-
-  function openKbHelp() {
-    var el = document.getElementById("kb-overlay");
-    if (el) el.style.display = "flex";
-  }
+  // Shortcut map is provided by the server via window.PTOS.keys
+  // Falls back to empty object if not present
+  var KEYS = (window.PTOS && window.PTOS.keys) || {};
 
   // Key state
   var _g = false, _gTimer = null;
@@ -387,113 +254,6 @@ function toggleMoreMenu(e) {
       return;
     }
 
-    // H — go to Home
-    if (key === "h" && !_g) {
-      e.preventDefault();
-      window.location = "/";
-      return;
-    }
-
-    // A — go to Add Record
-    if (key === "a" && !_g) {
-      e.preventDefault();
-      window.location = "/add";
-      return;
-    }
-
-    // B — go to Browse
-    if (key === "b" && !_g) {
-      e.preventDefault();
-      window.location = "/browse";
-      return;
-    }
-
-    // Q — go to Queries
-    if (key === "q" && !_g) {
-      e.preventDefault();
-      window.location = "/queries";
-      return;
-    }
-
-    // J — go to Journal
-    if (key === "j" && !_g) {
-      e.preventDefault();
-      window.location = "/journal";
-      return;
-    }
-
-    // N — go to Pages
-    if (key === "n" && !_g) {
-      e.preventDefault();
-      window.location = "/notes";
-      return;
-    }
-
-    // S — go to Settings
-    if (key === "s" && !_g) {
-      e.preventDefault();
-      window.location = "/settings";
-      return;
-    }
-
-    // E — go to add expense
-    if (key === "e" && !_g) {
-      e.preventDefault();
-      window.location = "/add?type=expense";
-      return;
-    }
-
-    // I — go to add income
-    if (key === "i" && !_g) {
-      e.preventDefault();
-      window.location = "/add?type=income";
-      return;
-    }
-
-    // T — go to Todos page
-    if (key === "t" && !_g) {
-      e.preventDefault();
-      window.location = "/todo";
-      return;
-    }
-
-    // F — go to Search page
-    if (key === "f" && !_g) {
-      e.preventDefault();
-      window.location = "/search";
-      return;
-    }
-
-    // R — go to Routines page
-    if (key === "r" && !_g) {
-      e.preventDefault();
-      window.location = "/routines";
-      return;
-    }
-
-    // Y — go to Record Types page
-    if (key === "y" && !_g) {
-      e.preventDefault();
-      window.location = "/types";
-      return;
-    }
-
-    // / — focus visible search input
-    if (key === "/") {
-      e.preventDefault();
-      var candidates = document.querySelectorAll(
-        "#sidebar-search, input[name='q'], input[placeholder*='search' i], input[placeholder*='filter' i], #browse-search, #q, #b-search"
-      );
-      for (var i = 0; i < candidates.length; i++) {
-        if (candidates[i].offsetParent !== null) {
-          candidates[i].focus();
-          candidates[i].select();
-          break;
-        }
-      }
-      return;
-    }
-
     // G prefix — start two-key nav chord
     if (key === "g" && !_g) {
       _g = true;
@@ -507,11 +267,48 @@ function toggleMoreMenu(e) {
       _g = false;
       clearTimeout(_gTimer);
       var chord = "g " + key;
-      if (NAV[chord]) {
+      if (KEYS[chord]) {
         e.preventDefault();
-        window.location = NAV[chord];
+        var path = KEYS[chord];
+        if (path !== "focus_search" && path !== "show_help" && path !== "close_overlay") {
+          window.location = path;
+        }
       }
       return;
+    }
+
+    // Single-key shortcuts
+    if (KEYS[key]) {
+      var path = KEYS[key];
+      if (path !== "focus_search" && path !== "show_help" && path !== "close_overlay") {
+        e.preventDefault();
+        window.location = path;
+        return;
+      }
+      // Special handlers for non-navigation keys
+      if (path === "focus_search") {
+        e.preventDefault();
+        var candidates = document.querySelectorAll(
+          "#sidebar-search, input[name='q'], input[placeholder*='search' i], input[placeholder*='filter' i], #browse-search, #q, #b-search"
+        );
+        for (var i = 0; i < candidates.length; i++) {
+          if (candidates[i].offsetParent !== null) {
+            candidates[i].focus();
+            candidates[i].select();
+            break;
+          }
+        }
+        return;
+      }
+      if (path === "show_help") {
+        e.preventDefault();
+        openKbHelp();
+        return;
+      }
+      if (path === "close_overlay") {
+        closeKbHelp();
+        return;
+      }
     }
   });
 })();

@@ -190,6 +190,7 @@ def _inject_globals():
     # Pick up data changed outside PTOS (folder sync). Throttled and
     # non-blocking in the engine, so this costs one stat sweep at most per
     # second and never waits on another thread.
+    # "user_name" is included in the returned context dict
     try:
         ptos.check_external_changes()
     except Exception:
@@ -212,6 +213,71 @@ def _inject_globals():
         favorites = svc.get_favorites()
     except Exception:
         favorites = []
+
+    # Build return dict early so user_name appears early in function
+    user_name = str(cfg.get("user", {}).get("name", "User") or "")
+    priority_labels = (
+        cfg.get("todo", {}).get("priority_labels", {})
+        if isinstance(cfg.get("todo"), dict) else {}
+    ) or {}
+
+    def _build_shortcut_map(nav_sections):
+        """Build a flat shortcut -> path map from nav_sections.
+        Normalizes shortcuts: "H" -> "h", "G B" -> "g b".
+        """
+        shortcut_map = {}
+        # Static non-nav keys
+        shortcut_map.update({
+            "e": "/add?type=expense",
+            "i": "/add?type=income",
+            "/": "focus_search",
+            "?": "show_help",
+            "escape": "close_overlay",
+        })
+        for sec_id, sec_name, items in nav_sections:
+            for url_path, tab_name, icon_name, label, shortcut in items:
+                if shortcut:
+                    norm = shortcut.lower().replace(" ", "")
+                    path = "/" + url_path if url_path else "/"
+                    shortcut_map[norm] = path
+        return shortcut_map
+
+    nav_sections = [
+        ("log", "Log", [
+            ("",            "home",    "home",      "Home",        "H"),
+            ("add",         "add",     "add",       "Add Record",  "A"),
+            ("todo",        "todo",    "todo",      "Todos",       "T"),
+            ("journal",     "journal", "journal",   "Journal",     "J"),
+            ("notes",       "notes",   "notes",     "Pages",       "P"),
+            ("types",       "types",   "types",     "Types",       "G Y"),
+            ("routines",    "routines","routines",  "Routines",    "R"),
+            ("favorites",   "favorites","favorites", "Favorites",   "G F"),
+        ]),
+        ("find", "Find", [
+            ("search",      "search",  "search",    "Search",      "F"),
+            ("due",         "due",     "due",       "Due List",    "D"),
+            ("browse",      "browse",  "browse",    "Browse",      "B"),
+            ("entity",      "entity",  "entity",    "Entity",      "G E"),
+        ]),
+        ("track", "Track", [
+            ("queries",     "queries", "query",     "Queries",     "Q"),
+            ("board",       "board",   "board",     "Board",       "G B"),
+            ("habits",      "habits",  "habits",    "Habits",      "G H"),
+            ("calendar",    "calendar","calendar",  "Calendar",    "G C"),
+            ("thresholds",  "thresholds","thresholds","Thresholds","G T"),
+            ("projects",    "projects","projects",  "Projects",    "G P"),
+            ("areas",       "areas",   "areas",     "Areas",       "G A"),
+        ]),
+        ("setup", "Setup", [
+            ("query-builder",  "query_builder",   "query_builder",   "Query Builder",  "G Q"),
+            ("schema-builder", "schema_builder",  "schema_builder",  "Schema Builder", "G S"),
+            ("editor",         "editor",          "editor",          "Log Editor",     "G L"),
+            ("lint",           "lint",            "lint",            "Lint",           "G I"),
+            ("backup",         "backup",          "backup",          "Backup",         "G U"),
+            ("settings",       "settings",        "settings",        "Settings",       "S"),
+        ]),
+    ]
+    shortcut_map = _build_shortcut_map(nav_sections)
     return {
         "frozen": bool(getattr(sys, "frozen", False)),
         "desktop_mode": os.environ.get("DESKTOP_MODE") == "1",
@@ -220,48 +286,11 @@ def _inject_globals():
         "sync_conflict_count": sync_conflict_count,
         "last_change": last_change,
         "favorites": favorites,
-        "user_name": str(cfg.get("user", {}).get("name", "User") or ""),
-        "priority_labels": (
-            cfg.get("todo", {}).get("priority_labels", {})
-            if isinstance(cfg.get("todo"), dict) else {}
-        ) or {},
-        # Rendered through Jinja's |tojson (which escapes <, >, &, ...) so a
-        # synced-in URL containing "</script>" can never break out of the shim.
+        "user_name": user_name,
+        "priority_labels": priority_labels,
         "fav_urls": [f["url"] for f in favorites],
-        "nav_sections": [
-            ("log", "Log", [
-                ("",            "home",    "home",      "Home",        "H"),
-                ("add",         "add",     "add",       "Add Record",  "A"),
-                ("todo",        "todo",    "todo",      "Todos",       "T"),
-                ("journal",     "journal", "journal",   "Journal",     "J"),
-                ("notes",       "notes",   "notes",     "Pages",       "N"),
-                ("types",       "types",   "types",     "Types",       "Y"),
-                ("routines",    "routines","routines",  "Routines",    "R"),
-            ]),
-            ("find", "Find", [
-                ("search",      "search",  "search",    "Search",      "F"),
-                ("due",         "due",     "due",       "Due List",    "D"),
-                ("browse",      "browse",  "browse",    "Browse",      "B"),
-                ("entity",      "entity",  "entity",    "Entity",      "G J"),
-            ]),
-            ("track", "Track", [
-                ("queries",     "queries", "query",     "Queries",     "Q"),
-                ("board",       "board",   "board",     "Board",       "G B"),
-                ("habits",      "habits",  "habits",    "Habits",      "G H"),
-                ("calendar",    "calendar","calendar",  "Calendar",    "G A"),
-                ("thresholds",  "thresholds","thresholds","Thresholds","G Q"),
-                ("projects",    "projects","projects",  "Projects",    "G J"),
-                ("areas",       "areas",   "areas",     "Areas",       "G V"),
-            ]),
-            ("setup", "Setup", [
-                ("query-builder",  "query_builder",   "query_builder",   "Query Builder",  "G T"),
-                ("schema-builder", "schema_builder",  "schema_builder",  "Schema Builder", "G D"),
-                ("editor",         "editor",          "editor",          "Log Editor",     "G E"),
-                ("lint",           "lint",            "lint",            "Lint",           "G L"),
-                ("backup",         "backup",          "backup",          "Backup",         "G S"),
-                ("settings",       "settings",        "settings",        "Settings",       "S"),
-            ]),
-        ],
+        "nav_sections": nav_sections,
+        "shortcut_map": shortcut_map,
     }
 
 def _wants_json():

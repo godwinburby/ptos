@@ -20,7 +20,7 @@
 <body{% if request.args.get('quick_edit') == '1' or request.form.get('quick_edit') == '1' %} class="quick-edit-mode"{% endif %}>
 
 <!-- Values the extracted JS files read (see web_static/js/) -->
-<script>window.PTOS={frozen:{{ 1 if frozen else 0 }},desktop:{{ 1 if desktop_mode else 0 }},pomoMinutes:{{ pomo_minutes|default(25) }},pomoLog:{{ 1 if pomo_log else 0 }},favUrls:{{ fav_urls|default([], true)|tojson }},userName:{{ user_name|default("", true)|tojson }},priorityLabels:{{ priority_labels|default({}, true)|tojson }}};</script>
+<script>window.PTOS={frozen:{{ 1 if frozen else 0 }},desktop:{{ 1 if desktop_mode else 0 }},pomoMinutes:{{ pomo_minutes|default(25) }},pomoLog:{{ 1 if pomo_log else 0 }},favUrls:{{ fav_urls|default([], true)|tojson }},userName:{{ user_name|default("", true)|tojson }},priorityLabels:{{ priority_labels|default({}, true)|tojson }},keys:{{ shortcut_map|default({}, true)|tojson }}};</script>
 
 <div class="topbar">
   <div><a href="/" style="text-decoration:none"><span class="brand">PTOS</span></a><span class="brand-tag">Plain Text OS</span></div>
