@@ -230,6 +230,16 @@ function toggleMoreMenu(e) {
   // Key state
   var _g = false, _gTimer = null;
 
+  window.closeKbHelp = function() {
+    var el = document.getElementById("kb-overlay");
+    if (el) el.style.display = "none";
+  };
+
+  function openKbHelp() {
+    var el = document.getElementById("kb-overlay");
+    if (el) el.style.display = "flex";
+  }
+
   document.addEventListener("keydown", function(e) {
     // Ignore when typing in inputs, textareas, selects
     var tag = document.activeElement && document.activeElement.tagName;

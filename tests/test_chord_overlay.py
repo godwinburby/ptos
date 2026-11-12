@@ -95,6 +95,21 @@ class TestChordOverlay:
         assert "tag === \"INPUT\"" in content or "tag === \"TEXTAREA\"" in content or "tag === \"SELECT\"" in content
         assert "e.ctrlKey || e.metaKey || e.altKey" in content
 
+    def test_help_shortcut_in_event_handler(self):
+        """The ? key (Shift+/) opens the help overlay"""
+        js_path = os.path.join(
+            os.path.dirname(__file__), "..", "web_static", "js", "nav_chords.js"
+        )
+        with open(js_path, encoding="utf-8") as f:
+            content = f.read()
+        
+        # Check that the ? key handler exists
+        assert 'key === "?"' in content, "Missing ? key handler"
+        # Check that it calls openKbHelp
+        assert "openKbHelp()" in content, "Missing openKbHelp call for ? key"
+        # Check that it handles shiftKey for the ? character
+        assert "shiftKey" in content, "Missing shiftKey check for ? key"
+
     def test_help_overlay_styles_use_css_variables(self):
         """Help overlay uses CSS variables, not hardcoded colors (server-side template)"""
         # The help overlay is now rendered server-side with CSS variables
