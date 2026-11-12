@@ -211,6 +211,8 @@
 
 <script src="{{ av('/static/js/nav_chords.js') }}"></script>
 
+{{ help_overlay_html|safe }}
+
 {% if not frozen or desktop_mode %}
 <script src="{{ av('/static/js/sse.js') }}"></script>
 {% endif %}

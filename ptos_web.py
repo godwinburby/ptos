@@ -4,7 +4,7 @@ Place alongside ptos.py and ptos_service.py.
 Run:  python ptos_web.py   →  http://localhost:5000
 """
 
-import sys, os, re, glob, fnmatch, datetime as dt, json, platform, subprocess, atexit, queue, threading, time, logging, shutil, gzip as _gzip, hmac, tomllib
+import sys, os, re, glob, fnmatch, datetime as dt, json, platform, subprocess, atexit, queue, threading, time, logging, shutil, gzip as _gzip, hmac, tomllib, html
 from collections import OrderedDict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -242,6 +242,70 @@ def _inject_globals():
                     shortcut_map[norm] = path
         return shortcut_map
 
+
+    def _build_help_overlay(nav_sections):
+        """Generate help overlay HTML from nav_sections (single source of truth)."""
+        # Collect single-key shortcuts
+        single_keys = []
+        # Collect G-prefixed shortcuts with section grouping
+        g_shortcuts = {}
+        for sec_id, sec_name, items in nav_sections:
+            for url_path, tab_name, icon_name, label, shortcut in items:
+                if not shortcut:
+                    continue
+                if shortcut.startswith("G "):
+                    # G-prefixed: extract the letter after "G "
+                    letter = shortcut.split(" ")[1] if " " in shortcut else shortcut[1:]
+                    if sec_name not in g_shortcuts:
+                        g_shortcuts[sec_name] = []
+                    g_shortcuts[sec_name].append((letter, label))
+                elif shortcut:
+                    single_keys.append((shortcut, label))
+
+        # Build single-key table
+        single_rows = "\n".join(
+            f'<tr><td><kbd>{html.escape(k)}</kbd></td><td>{html.escape(v)}</td></tr>'
+            for k, v in single_keys
+        )
+
+        # Build G-prefixed tables by section
+        g_tables = []
+        for section_name, shortcuts in g_shortcuts.items():
+            rows = "\n".join(
+                f'<tr><td><kbd>G</kbd> + <kbd>{html.escape(k)}</kbd></td><td>{html.escape(v)}</td></tr>'
+                for k, v in shortcuts
+            )
+            g_tables.append(
+                f'<div class="kb-section">\n'
+                f'  <h3 class="kb-section-title">{html.escape(section_name)}</h3>\n'
+                f'  <table class="kb-table">\n'
+                f'    <thead><tr><th>Key</th><th>Action</th></tr></thead>\n'
+                f'    <tbody>{rows}</tbody>\n'
+                f'  </table>\n'
+                f'</div>'
+            )
+        g_html = "\n".join(g_tables)
+
+        return f'''<div id="kb-overlay" class="kb-overlay" onclick="if(event.target===this)closeKbHelp()" style="display:none;">
+  <div class="kb-overlay-content">
+    <div class="kb-header">
+      <h2 class="kb-title">Keyboard Shortcuts</h2>
+      <button class="kb-close" onclick="closeKbHelp()" aria-label="Close">✕</button>
+    </div>
+
+    <div class="kb-section">
+      <h3 class="kb-section-title">Quick Navigation</h3>
+      <table class="kb-table">
+        <thead><tr><th>Key</th><th>Page</th></thead>
+        <tbody>{single_rows}</tbody>
+      </table>
+    </div>
+
+    {g_html}
+
+  </div>
+</div>'''
+
     nav_sections = [
         ("log", "Log", [
             ("",            "home",    "home",      "Home",        "H"),
@@ -291,6 +355,7 @@ def _inject_globals():
         "fav_urls": [f["url"] for f in favorites],
         "nav_sections": nav_sections,
         "shortcut_map": shortcut_map,
+        "help_overlay_html": _build_help_overlay(nav_sections),
     }
 
 def _wants_json():

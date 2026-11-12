@@ -266,7 +266,7 @@ function toggleMoreMenu(e) {
     if (_g) {
       _g = false;
       clearTimeout(_gTimer);
-      var chord = "g " + key;
+      var chord = "g" + key;
       if (KEYS[chord]) {
         e.preventDefault();
         var path = KEYS[chord];
