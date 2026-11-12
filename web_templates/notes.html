@@ -61,7 +61,14 @@
 <div id="new-folder-dialog" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,.35);z-index:1000;align-items:center;justify-content:center;">
   <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;min-width:320px;">
     <div style="font-size:15px;font-weight:700;margin-bottom:10px;">New Folder</div>
-    <input id="nf-name" type="text" placeholder="Folder name" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;box-sizing:border-box;" autofocus>
+    <div class="modal-field">
+      <label for="nf-area">Area (optional)</label>
+      <select id="nf-area" onchange="onNewFolderAreaChange()">
+        <option value="">— Select an area —</option>
+        {% for a in page_templates.areas %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
+      </select>
+    </div>
+    <input id="nf-name" type="text" placeholder="Folder name" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:14px;box-sizing:border-box;margin-top:10px;" autofocus>
     <div style="display:flex;gap:8px;margin-top:12px;justify-content:flex-end;">
       <button onclick="closeDialog('new-folder-dialog')" class="btn btn-sm btn-ghost">Cancel</button>
       <button onclick="submitNewFolder()" class="btn btn-sm btn-primary">Create</button>
@@ -83,6 +90,7 @@
       <option value="blank">Blank</option>
       <option value="dashboard">Dashboard</option>
       <option value="project">Project</option>
+      <option value="area">Area</option>
       <option value="folder">Folder template</option>
     </select>
     <div id="template-choice" style="display:none;margin-top:12px;padding:10px;background:var(--surface-2);border-radius:6px;">
@@ -117,9 +125,21 @@ var _curPath = "{{ rel_path }}";
 var _parentDir = _curPath ? _curPath : "";
 var _templateContent = null;
 var _renameTarget = "";
+var _nfAreaSelected = "";
+
+function onNewFolderAreaChange() {
+  var sel = document.getElementById("nf-area");
+  _nfAreaSelected = sel.value;
+  var nameInput = document.getElementById("nf-name");
+  if (_nfAreaSelected && !nameInput.value) {
+    nameInput.value = _nfAreaSelected;
+  }
+}
 
 function promptNewFolder() {
   document.getElementById("nf-name").value = "";
+  document.getElementById("nf-area").value = "";
+  _nfAreaSelected = "";
   openDialog("new-folder-dialog");
   setTimeout(function() { document.getElementById("nf-name").focus(); }, 100);
 }
@@ -150,6 +170,22 @@ function onPageTemplateChange() {
     _templateContent = project
       ? '# ' + project.replace(/_/g, ' ') + '\n\n```ptos\nview = "project"\nname = "' + project + '"\n```\n\n## Next steps\n\n- [ ] Define the next action\n'
       : '# Project\n\n## Goal\n\n## Next steps\n\n- [ ] Define the next action\n\n## Notes\n';
+    choice.style.display = "none";
+  } else if (kind === "area") {
+    var areaTpl = {{ page_templates.area|tojson }};
+    var areas = {{ page_templates.areas|tojson }};
+    var folder = _selectedFolder();
+    var areaSlug = "";
+    // If the selected folder is a known area slug, use it
+    if (folder && areas.includes(folder)) {
+      areaSlug = folder;
+    }
+    // If no area slug from folder, we'll prompt in the dialog
+    // For now, just use the template with placeholders - the user can edit
+    var areaTitle = areaSlug ? areaSlug.charAt(0).toUpperCase() + areaSlug.slice(1) : "Area";
+    _templateContent = areaTpl
+      ? areaTpl.replace(/\{\{AREA\}\}/g, areaSlug).replace(/\{\{AREA_TITLE\}\}/g, areaTitle)
+      : '# {{AREA_TITLE}}\n\nArea page for **{{AREA}}** — tasks, notes, and records filtered to this area.\n\n---\n\n## Tasks\n\n```ptos\nview = "todo"\narea = "{{AREA}}"\nadd = true\ntitle = "Tasks in {{AREA_TITLE}}"\nlimit = 20\n```\n';
     choice.style.display = "none";
   } else if (kind === "folder") {
     _templateContent = null;
@@ -214,10 +250,11 @@ function createTemplateHere() {
 
 function submitNewFolder() {
   var name = document.getElementById("nf-name").value.trim();
+  var area = document.getElementById("nf-area").value.trim();
   if (!name) return;
   fetch("/notes/new-folder", {
     method: "POST", headers: {"Content-Type": "application/json"},
-    body: JSON.stringify({path: _curPath, name: name})
+    body: JSON.stringify({path: _curPath, name: name, area: area})
   })
   .then(function(r) { return r.json(); })
   .then(function(d) {

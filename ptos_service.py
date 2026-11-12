@@ -8029,9 +8029,27 @@ def svc_list_dir(rel_path=""):
     return ptos.list_dir(rel_path)
 
 
-def svc_create_folder(rel_path, name):
+def svc_create_folder(rel_path, name, area=None):
     ptos.create_folder(rel_path, name)
+    if area:
+        _seed_area_template(rel_path, name, area)
     _emit_changed("notes")
+
+
+def _seed_area_template(rel_path, folder_name, area):
+    """Create template.md in the new area folder from starter_area.md."""
+    try:
+        starter_dir = os.path.join(os.path.dirname(__file__), "starters")
+        area_path = os.path.join(starter_dir, "starter_area.md")
+        if not os.path.isfile(area_path):
+            return
+        with open(area_path, encoding="utf-8") as f:
+            content = f.read()
+        area_title = area.replace("-", " ").replace("_", " ").title()
+        content = content.replace("{{AREA}}", area).replace("{{AREA_TITLE}}", area_title)
+        ptos.create_file(rel_path, folder_name + "/template.md", content)
+    except Exception:
+        log.exception("Failed to seed area template for %s/%s", rel_path, folder_name)
 
 
 def svc_create_file(rel_path, name, content):

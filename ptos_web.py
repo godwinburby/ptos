@@ -1767,9 +1767,27 @@ def _notes_page_templates():
         candidates = svc.get_embed_candidates()
     except Exception:
         candidates = {}
+    # Load starter_area.md for the Area template
+    area_tpl = ""
+    try:
+        starter_dir = os.path.join(os.path.dirname(__file__), "starters")
+        area_path = os.path.join(starter_dir, "starter_area.md")
+        if os.path.isfile(area_path):
+            with open(area_path, encoding="utf-8") as f:
+                area_tpl = f.read()
+    except Exception:
+        pass
+    # Get available areas from todo areas
+    areas = []
+    try:
+        areas = svc.get_todo_areas()
+    except Exception:
+        pass
     return {
         "dashboard": next(iter(candidates.get("dashboards") or []), ""),
         "project": next(iter(candidates.get("projects") or []), ""),
+        "area": area_tpl,
+        "areas": areas,
     }
 
 
@@ -1796,10 +1814,11 @@ def notes_new_folder():
     data = request.get_json(silent=True) or {}
     rel_path = data.get("path", "")
     name = data.get("name", "").strip()
+    area = data.get("area", "").strip()
     if not name:
         return jsonify(ok=False, error="Folder name is required")
     try:
-        svc.svc_create_folder(rel_path, name)
+        svc.svc_create_folder(rel_path, name, area or None)
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
