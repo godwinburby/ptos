@@ -1362,6 +1362,117 @@ li.md-task-list-item {  list-style:none;margin-left:-22px;  }
 .gap-3 {
   gap: 12px;
 }
+
+/* Areas page */
+.page-title {
+  font-size: var(--fs-xl);
+  font-weight: 800;
+  color: var(--text);
+  margin: 0;
+}
+.text-sm {
+  font-size: var(--fs-sm);
+}
+.text-sub {
+  color: var(--sub);
+}
+.text-error {
+  color: var(--error);
+}
+.text-warn {
+  color: var(--warn);
+}
+.text-success {
+  color: var(--success);
+}
+.text-text {
+  color: var(--text);
+}
+.alert {
+  padding: 12px 16px;
+  border-radius: var(--radius-md);
+  margin-bottom: 12px;
+}
+.alert-error {
+  background: var(--error);
+  color: var(--text-on-accent);
+}
+.empty-state {
+  padding: 32px;
+  text-align: center;
+  color: var(--sub);
+}
+.empty-icon {
+  font-size: var(--fs-xl);
+  margin-bottom: 12px;
+}
+.empty-title {
+  font-size: var(--fs-md);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+.empty-desc {
+  font-size: var(--fs-sm);
+  max-width: 400px;
+  margin: 0 auto;
+}
+.areas-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+}
+.area-card {
+  text-decoration: none;
+  color: inherit;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px;
+  transition: box-shadow 0.15s, transform 0.15s;
+}
+.area-card:hover {
+  box-shadow: var(--shadow-2);
+  transform: translateY(-2px);
+}
+.area-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.area-title {
+  font-size: var(--fs-lg);
+  font-weight: 800;
+  color: var(--text);
+}
+.area-slug {
+  font-size: var(--fs-xs);
+  color: var(--sub);
+  background: var(--surface-2);
+  padding: 2px 8px;
+  border-radius: 999px;
+}
+.area-stats {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+  font-size: var(--fs-sm);
+}
+.stat {
+  padding: 8px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+}
+.stat-label {
+  color: var(--sub);
+  font-size: var(--fs-xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.stat-value {
+  font-weight: 700;
+}
+
 .todo-menu-btn {
   background: none;
   border: none;

@@ -251,6 +251,7 @@ def _inject_globals():
                 ("calendar",    "calendar","calendar",  "Calendar",    "G A"),
                 ("thresholds",  "thresholds","thresholds","Thresholds","G Q"),
                 ("projects",    "projects","projects",  "Projects",    "G J"),
+                ("areas",       "areas",   "areas",     "Areas",       "G V"),
             ]),
             ("setup", "Setup", [
                 ("query-builder",  "query_builder",   "query_builder",   "Query Builder",  "G T"),
@@ -1225,6 +1226,12 @@ _REC_LABELS = {
     "1m": "monthly", "2m": "bimonthly", "3m": "quarterly", "1y": "yearly",
 }
 _UNIT_SUFFIX = {"d": "days", "w": "weeks", "m": "months", "y": "years"}
+
+
+@app.route("/areas")
+def areas_index():
+    areas = svc.get_areas_with_counts()
+    return render_template("areas.html", tab="areas", areas=areas, title="Areas")
 
 
 def _fmt_rec(rec):

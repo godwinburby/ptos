@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% if error %}
+<div class="alert alert-error">{{ error }}</div>
+{% endif %}
+
+<div class="mb-12">
+  <h1 class="page-title">Areas</h1>
+  <p class="text-sub text-sm">Task areas with open/due counts</p>
+</div>
+
+{% if not areas %}
+<div class="empty-state">
+  <div class="empty-icon">&#128293;</div>
+  <div class="empty-title">No areas yet</div>
+  <div class="empty-desc">Areas emerge from <code>area:</code> tokens in your todos. Add <code>area:work</code> or <code>area:home</code> to tasks, then they'll appear here.</div>
+</div>
+{% else %}
+<div class="areas-grid">
+  {% for a in areas %}
+  <a href="/todo?area={{ a.slug }}" class="area-card">
+    <div class="area-header">
+      <div class="area-title">{{ a.title }}</div>
+      <span class="area-slug">{{ a.slug }}</span>
+    </div>
+    <div class="area-stats">
+      <div class="stat">
+        <div class="stat-label">Open</div>
+        <div class="stat-value text-text">{{ a.open }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Done</div>
+        <div class="stat-value text-success">{{ a.done }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Overdue</div>
+        <div class="stat-value text-error">{{ a.overdue }}</div>
+      </div>
+      <div class="stat">
+        <div class="stat-label">Due today</div>
+        <div class="stat-value text-warn">{{ a.due_today }}</div>
+      </div>
+    </div>
+  </a>
+  {% endfor %}
+</div>
+{% endif %}
+
+{% endblock %}

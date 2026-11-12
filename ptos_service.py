@@ -9033,6 +9033,43 @@ def get_todo_areas():
         raise PTOSError(str(e))
 
 
+def get_areas_with_counts():
+    """Get all areas with task counts for the areas index page."""
+    try:
+        todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
+        done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
+        all_todos = todos + done
+        areas = sorted({t.area for t in all_todos if t.area})
+        result = []
+        today = ptos.today()
+        for area in areas:
+            area_todos = [t for t in todos if t.area == area]
+            area_done = [t for t in done if t.area == area]
+            overdue = 0
+            due_today = 0
+            for t in area_todos:
+                if t.due:
+                    try:
+                        due_date = ptos.parse_date(t.due)
+                        if due_date < today:
+                            overdue += 1
+                        elif due_date == today:
+                            due_today += 1
+                    except Exception:
+                        pass
+            result.append({
+                "slug": area,
+                "title": area.replace("-", " ").replace("_", " ").title(),
+                "open": len(area_todos),
+                "done": len(area_done),
+                "overdue": overdue,
+                "due_today": due_today,
+            })
+        return result
+    except Exception as e:
+        raise PTOSError(str(e))
+
+
 def get_todo_contexts():
     """Get all unique @context tokens from open todos."""
     try:
