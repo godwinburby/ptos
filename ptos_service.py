@@ -9064,6 +9064,24 @@ def get_areas_with_counts():
         areas = sorted({t.area for t in all_todos if t.area})
         result = []
         today = ptos.today()
+        # Get record counts for this month for each area
+        record_counts = {}
+        if areas:
+            from_date = today.replace(day=1).isoformat()
+            # Get last day of current month
+            if today.month == 12:
+                to_date = today.replace(day=31).isoformat()
+            else:
+                next_month = today.replace(month=today.month + 1, day=1)
+                to_date = (next_month - dt.timedelta(days=1)).isoformat()
+            for area in areas:
+                try:
+                    records_result = get_records([f"area={area}"], from_date=from_date, to_date=to_date)
+                    record_counts[area] = records_result["count"]
+                except Exception:
+                    record_counts[area] = 0
+        result = []
+        today = ptos.today()
         for area in areas:
             area_todos = [t for t in todos if t.area == area]
             area_done = [t for t in done if t.area == area]
@@ -9086,6 +9104,7 @@ def get_areas_with_counts():
                 "done": len(area_done),
                 "overdue": overdue,
                 "due_today": due_today,
+                "records_this_month": record_counts.get(area, 0),
             })
         return result
     except Exception as e:

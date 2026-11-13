@@ -1473,6 +1473,33 @@ li.md-task-list-item {  list-style:none;margin-left:-22px;  }
   font-weight: 700;
 }
 
+.area-links {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+
+.area-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--accent);
+  background: var(--accent-lt);
+  border-radius: var(--radius-pill);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.area-link:hover {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
+
 .todo-menu-btn {
   background: none;
   border: none;

@@ -41,6 +41,13 @@
         <div class="stat-label">Due today</div>
         <div class="stat-value text-warn">{{ a.due_today }}</div>
       </div>
+      <div class="stat">
+        <div class="stat-label">Records this month</div>
+        <div class="stat-value text-text">{{ a.records_this_month }}</div>
+      </div>
+    </div>
+    <div class="area-links">
+      <a href="/notes/browse/{{ a.slug }}" class="area-link">View notes</a>
     </div>
   </a>
   {% endfor %}
