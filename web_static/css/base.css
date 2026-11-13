@@ -610,42 +610,6 @@
     }
     .preset-edit:hover { border-color: var(--accent); color: var(--accent); }
 
-    /* ── Preset manage dropdown ────────────────────────────────────── */
-    .preset-manage-toggle {
-      display: inline-flex; align-items: center; justify-content: center;
-      width: 24px; height: 24px; border-radius: var(--radius-md);
-      background: transparent; border: 1px solid var(--border); color: var(--sub);
-      cursor: pointer; line-height: 1;
-    }
-    .preset-manage-toggle:hover { background: var(--accent-lt); color: var(--accent); border-color: var(--accent); }
-    .preset-manage-toggle:focus { outline: none; box-shadow: 0 0 0 2px var(--accent); }
-    .preset-manage-toggle[aria-expanded="true"] { background: var(--accent-lt); color: var(--accent); }
-    .preset-manage-panel {
-      position: absolute; top: calc(100% + 4px); right: 0; min-width: 160px;
-      background: var(--card); border: 1px solid var(--border); border-radius: var(--radius-md);
-      box-shadow: var(--shadow-2); padding: 4px; display: flex; flex-direction: column; gap: 2px;
-      z-index: 100;
-    }
-    .preset-manage-panel[hidden] { display: none; }
-    .preset-manage-panel button {
-      display: flex; align-items: center; gap: 8px; width: 100%;
-      padding: 6px 10px; border: none; background: transparent; color: var(--text);
-      font-size: var(--fs-sm); font-weight: 500; text-align: left; cursor: pointer;
-      border-radius: var(--radius-sm); transition: background 0.1s;
-    }
-    .preset-manage-panel button:hover { background: var(--accent-lt); color: var(--accent); }
-    .preset-manage-panel button:focus { outline: none; background: var(--accent); color: white; }
-    .preset-manage-panel button[aria-disabled="true"] { opacity: 0.5; cursor: not-allowed; }
-    .preset-manage-panel .preset-instant-toggle { width: 100%; text-align: left; font-weight: 600; }
-    .preset-manage-panel .preset-edit { width: 100%; justify-content: flex-start; }
-    .preset-manage-panel .preset-del { width: 100%; justify-content: flex-start; color: var(--error); }
-
-    /* ── Preset chips (simplified for non-manage mode) ────────────── */
-    .preset-chip-wrap.simple .preset-del,
-    .preset-chip-wrap.simple .preset-instant-toggle { display: none; }
-    .preset-chip-wrap.simple .preset-instant { color: var(--success); }
-    .preset-chip-wrap.simple .preset-instant::after { content: " instant"; font-size: var(--fs-xs); opacity: .7; margin-left: 4px; }
-
     /* output */
     .output {
       background: var(--text); color: var(--border);

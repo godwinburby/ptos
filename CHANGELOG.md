@@ -18,6 +18,20 @@ Format: `[version or date] — description`
 - **Capture** — `POST /api/capture` accepts an `area`, so a quick record lands in the right area.
 - **Tests** — `tests/test_area_pages.py` (index counts, schema/record/in-use areas, page link branches, no inline style or hex colours, no link-wrapped cards, one area queryable across two record types), `tests/test_starter_area.py` (the starter parses and every widget validates), `tests/js/md_tokens.test.js` (`{{AREA}}`/`{{AREA_TITLE}}` stay literal).
 
+### Add page: presets card and broken toggle fixes
+
+- **Paste Add / Dry run feedback restored** — the C7b utility-class migration swapped `style="display:none"` for `.d-none` (which is `display:none !important`) but left `box.style.display` in the handler, so `#paste-result` could never be revealed and the buttons looked dead. Toggles now use `classList` add/remove.
+- **Same root cause fixed on** `#threshold-match-area` (threshold preview never appeared), `#preset-dialog` (Save as Preset never opened), `#preset-msg` (errors invisible) and `#multi-msg-add` (multi-preset messages invisible). `#preset-dialog` carries `d-flex` so showing is just removing `d-none`.
+- **Presets moved into their own card** — QUICK PRESETS and MULTI PRESETS now sit in a `#presets-card` above **Select Record Type**, which holds only the type grid. The card renders only when presets exist, and `#multi-msg-add` is emitted once.
+- **Instant-only presets** — the preset script is gated on `frequent_presets or multi_presets` instead of `multi_presets`, so an instant quick preset without any multi preset no longer calls an undefined `addMultiPreset()`.
+- **Tests** — `tests/test_add_page_toggles.py` (no `style.display`, class-based toggles, presets card is a sibling above the type card, no empty card, instant-only script).
+
+### Home Quick Add: per-chip preset controls restored
+
+- **Instant/delete on every home preset chip** — `_quickAddHtml` renders both the frequent and the remaining presets with the same chip builder as `/add`, so each chip carries the ⚡ instant toggle and × delete (and ✎ edit for instant) instead of hiding them.
+- **Dead Manage UI removed** — the D4-11 "Manage presets" tidying left `openManagePresets()` undefined (`Uncaught ReferenceError` on click), an unwired ⋯ dropdown, a dead Edit `<button>`, and `.preset-manage-*`/`.simple` CSS behind it. That button, the ⋯ panel, the two one-off chip renderers and their CSS are gone.
+- **Tests** — `tests/test_home_widgets.py` pins both groups to `_presetChip`, its two controls, and the absence of the dead names/CSS; `tests/js/home_quick_add.test.js` mounts the widget and asserts ⚡ posts `/api/preset_instant` and × posts `/api/preset_delete`.
+
 ## 2026-11-11
 
 ### Area pages: todo `area:` filter and widgets

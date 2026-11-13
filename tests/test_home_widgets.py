@@ -442,6 +442,40 @@ class TestHomeWidgetsJsPins:
         assert "preventDefault" not in branch
         assert "return false" not in branch
 
+    def test_quick_add_every_chip_carries_instant_and_delete_controls(self):
+        src = self._js()
+        m = re.search(r"function _presetChip\(.*?\n\}", src, re.S)
+        assert m, "_presetChip missing"
+        chip = m.group(0)
+        assert 'class="preset-instant-toggle"' in chip
+        assert 'class="preset-del"' in chip
+
+    def test_quick_add_renders_both_groups_with_the_managed_chip(self):
+        src = self._js()
+        m = re.search(r"function _quickAddHtml\(data, showAll\) \{.*?\n\}", src, re.S)
+        assert m, "_quickAddHtml missing"
+        body = m.group(0)
+        assert body.count("_presetChip(") == 2, (
+            "frequent and remaining presets must both render with _presetChip "
+            "so every chip owns its instant/delete buttons")
+        assert "_presetChipSimple" not in body
+        assert "_presetChipManaged" not in body
+
+    def test_quick_add_dead_manage_controls_are_gone(self):
+        src = self._js()
+        for dead in ("openManagePresets", "preset-manage-toggle",
+                     "preset-manage-panel", "_presetChipSimple",
+                     "_presetChipManaged"):
+            assert dead not in src, f"{dead} is dead code (removed with the Manage UI)"
+
+    def test_preset_manage_css_is_gone(self):
+        root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        css = open(os.path.join(root, "web_static", "css", "base.css"),
+                   encoding="utf-8").read()
+        assert ".preset-manage-toggle" not in css
+        assert ".preset-manage-panel" not in css
+        assert ".preset-chip-wrap.simple" not in css
+
     def test_mount_batch_exported_from_widget_host(self):
         assert "mountBatch: mountBatch" in self._host_js()
 

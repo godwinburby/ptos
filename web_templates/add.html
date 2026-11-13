@@ -64,7 +64,7 @@ function doPaste(dryRun) {
   var text = document.getElementById('paste-input').value.trim();
   if (!text) return;
   var box = document.getElementById('paste-result');
-  box.style.display = '';
+  box.classList.remove('d-none');
   box.innerHTML = '<span class="text-sub-fs13">Processing…</span>';
   fetch('/api/paste', {
     method: 'POST',
@@ -101,8 +101,9 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
 
 <!-- ── STEP 1: choose type (shown when no type selected) ── -->
 {% if not selected_type %}
-<div class="card">
-  <div class="card-title">Select Record Type</div>
+{% if frequent_presets or multi_presets %}
+<div class="card" id="presets-card">
+  <div class="card-title">Presets</div>
 
   {% if frequent_presets %}
   <div class="mb-4">
@@ -151,6 +152,9 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
     </div>
     {% endif %}
   </div>
+  {% endif %}
+
+  {% if frequent_presets and multi_presets %}
   <div class="divider"></div>
   {% endif %}
 
@@ -167,13 +171,15 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
       </span>
       {% endfor %}
     </div>
-    <div id="multi-msg-add" class="fs-xs mt-2 d-none"></div>
   </div>
-  <div class="divider"></div>
-  {% else %}
-  <div id="multi-msg-add" class="fs-xs d-none"></div>
   {% endif %}
 
+  <div id="multi-msg-add" class="fs-xs mt-2 d-none"></div>
+</div>
+{% endif %}
+
+<div class="card">
+  <div class="card-title">Select Record Type</div>
   <div class="type-grid">
     {% for t in types %}
     <a href="/add?type={{ t }}" class="type-card d-block text-decoration-none">
@@ -464,7 +470,7 @@ function esc(s) { var d = document.createElement('div'); d.textContent = s; retu
 </form>
 
 <!-- Save as Preset dialog -->
-<div id="preset-dialog" class="fixed inset-0 bg-black-40 z-500 d-none items-center justify-center">
+<div id="preset-dialog" class="fixed inset-0 bg-black-40 z-500 d-flex d-none items-center justify-center">
   <div class="bg-card rounded-xl p-6 w-320 shadow-3">
     <div class="fw-700 fs-lg mb-3">Save as Preset</div>
     <div class="field-group">
@@ -719,10 +725,10 @@ function _checkThresholds() {
     .then(r => r.json())
     .then(d => {
       if (!d.ok || !d.matches || !d.matches.length) {
-        area.style.display = "none";
+        area.classList.add("d-none");
         return;
       }
-      area.style.display = "block";
+      area.classList.remove("d-none");
       bars.innerHTML = d.matches.map(function(m) {
         var pendingAmount = 0;
         if (m.agg === "count") {
@@ -756,7 +762,7 @@ function _checkThresholds() {
           + '</div>';
       }).join("");
     })
-    .catch(function() { area.style.display = "none"; });
+    .catch(function() { area.classList.add("d-none"); });
   }, 300);
 }
 document.querySelectorAll("#add-form select[name], #add-form input[name]").forEach(function(el) {
@@ -799,20 +805,20 @@ function showSavePreset() {
     return;
   }
   document.getElementById("preset-name-input").value = "{{ preset_name|default('') }}";
-  document.getElementById("preset-msg").style.display = "none";
+  document.getElementById("preset-msg").classList.add("d-none");
   const dlg = document.getElementById("preset-dialog");
-  dlg.style.display = "flex";
+  dlg.classList.remove("d-none");
   document.getElementById("preset-name-input").focus();
 }
 
 function hidePresetDialog() {
-  document.getElementById("preset-dialog").style.display = "none";
+  document.getElementById("preset-dialog").classList.add("d-none");
 }
 
 function doSavePreset() {
   const name = document.getElementById("preset-name-input").value.trim();
   const msg  = document.getElementById("preset-msg");
-  if (!name) { msg.textContent = "Enter a name."; msg.style.display="block"; return; }
+  if (!name) { msg.textContent = "Enter a name."; msg.classList.remove("d-none"); return; }
   if (_existingPresets.has(name) && name !== _loadedPresetName) {
     if (!confirm(`"${name}" already exists. Overwrite it?`)) return;
   }
@@ -834,10 +840,10 @@ function doSavePreset() {
       setTimeout(() => { btn.textContent = "☆ Save as Preset"; btn.style.color = ""; }, 3000);
     } else {
       msg.textContent = d.error;
-      msg.style.display = "block";
+      msg.classList.remove("d-none");
     }
   })
-  .catch(e => { msg.textContent = String(e); msg.style.display="block"; });
+  .catch(e => { msg.textContent = String(e); msg.classList.remove("d-none"); });
 }
 
 // close dialog on backdrop click
@@ -851,7 +857,7 @@ document.getElementById("preset-name-input").addEventListener("keydown", functio
 </script>
 {% endif %}
 
-{% if multi_presets %}
+{% if frequent_presets or multi_presets %}
 <script>
 function addMultiPreset(btn) {
   const name = btn.dataset.name;
@@ -871,7 +877,7 @@ function addMultiPreset(btn) {
     if (d.ok) {
       btn.textContent = `✔ ${d.count} added`;
       btn.style.background = "var(--success)";
-      msg.style.display = "none";
+      msg.classList.add("d-none");
       if (returnTo) {
         setTimeout(() => { window.location.href = returnTo; }, 1200);
       } else {
@@ -886,7 +892,7 @@ function addMultiPreset(btn) {
       btn.disabled = false;
       msg.textContent = d.error;
       msg.style.color = "var(--error)";
-      msg.style.display = "block";
+      msg.classList.remove("d-none");
     }
   })
   .catch(e => {
@@ -894,7 +900,7 @@ function addMultiPreset(btn) {
     btn.disabled = false;
     msg.textContent = String(e);
     msg.style.color = "var(--error)";
-    msg.style.display = "block";
+    msg.classList.remove("d-none");
   });
 }
 function toggleInstantPreset(name, btn) {

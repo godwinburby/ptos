@@ -325,43 +325,6 @@ function _presetChip(name, data, isRemaining) {
     '" title="Delete preset">×</button></span>';
 }
 
-function _presetChipSimple(name, data, isRemaining) {
-  var instant = (data.instant || []).indexOf(name) !== -1;
-  var chip;
-  if (instant) {
-    chip = '<button type="button" class="preset-chip preset-instant" data-preset="' + esc(name) + '">' +
-      '+ ' + esc(name) + ' <span style="opacity:.7;font-size:11px;">instant</span></button>';
-  } else {
-    chip = '<a href="/add?preset=' + encodeURIComponent(name) + '" class="preset-chip" data-preset="' +
-      esc(name) + '">+ ' + esc(name) + '</a>';
-  }
-  return '<span class="preset-chip-wrap">' + chip + '</span>';
-}
-
-function _presetChipManaged(name, data, isRemaining) {
-  var instant = (data.instant || []).indexOf(name) !== -1;
-  var chip;
-  if (instant) {
-    chip = '<button type="button" class="preset-chip preset-instant" data-preset="' + esc(name) + '">' +
-      '+ ' + esc(name) + ' <span style="opacity:.7;font-size:11px;">instant</span></button>';
-  } else {
-    chip = '<a href="/add?preset=' + encodeURIComponent(name) + '" class="preset-chip" data-preset="' +
-      esc(name) + '">+ ' + esc(name) + '</a>';
-  }
-  return '<span class="preset-chip-wrap">' + chip +
-    '<button type="button" class="preset-manage-toggle" data-preset="' + esc(name) + '"' +
-    (instant ? ' data-instant="1"' : '') +
-    ' title="Manage preset" aria-expanded="false" aria-controls="preset-panel-' + esc(name) + '" aria-label="Manage preset ' + esc(name) + '">⋯</button>' +
-    '<div class="preset-manage-panel" id="preset-panel-' + esc(name) + '" role="menu" hidden>' +
-    '  <button type="button" class="preset-instant-toggle" data-preset="' + esc(name) + '"' +
-    (instant ? ' data-active="1"' : '') +
-    ' title="Toggle instant save">⚡ Instant</button>' +
-    '  <button type="button" class="preset-edit" data-preset="' + esc(name) + '" title="Edit preset">✎ Edit</button>' +
-    '  <button type="button" class="preset-del" data-preset="' + esc(name) +
-    '" title="Delete preset">×</button>' +
-    '</div></span>';
-}
-
 function _quickAddHtml(data, showAll) {
   var frequent = data.frequent || [];
   var remaining = data.remaining || [];
@@ -373,17 +336,14 @@ function _quickAddHtml(data, showAll) {
       (showAll ? "Show less ▲" : "Show all ▾") + '</button>';
   }
   html += '</div><div class="chip-group">' +
-    frequent.map(function (n) { return _presetChipSimple(n, data, false); }).join("") +
+    frequent.map(function (n) { return _presetChip(n, data, false); }).join("") +
     '</div>';
   if (remaining.length) {
     html += '<div class="chip-group" style="margin-top:8px;padding-top:8px;border-top:1px solid var(--border);' +
       (showAll ? "" : "display:none;") + '">' +
-      remaining.map(function (n) { return _presetChipManaged(n, data, true); }).join("") +
+      remaining.map(function (n) { return _presetChip(n, data, true); }).join("") +
       '</div>';
   }
-  html += '<div style="margin-top:12px;text-align:center;">' +
-    '<button type="button" class="btn btn-ghost btn-sm" onclick="openManagePresets()" style="font-size:12px;">Manage presets…</button>' +
-    '</div>';
   return html;
 }
 
