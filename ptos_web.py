@@ -1927,6 +1927,12 @@ def notes_new_folder():
     area = data.get("area", "").strip()
     if not name:
         return jsonify(ok=False, error="Folder name is required")
+    # Validate area slug before creating anything
+    if area:
+        try:
+            area = svc._area_slug(area)
+        except PTOSError as e:
+            return jsonify(ok=False, error=str(e))
     try:
         svc.svc_create_folder(rel_path, name, area or None)
         return jsonify(ok=True)

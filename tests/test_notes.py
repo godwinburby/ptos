@@ -690,3 +690,74 @@ class TestDeleteNoteEntryBacklinks:
             f.write("# Inside\n")
         ptos.delete_note_entry("delfolder")
         assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "delfolder"))
+
+
+class TestCreateFolderAreaValidation:
+    """Tests for area validation in new folder creation."""
+
+    def test_create_folder_with_valid_area(self):
+        from ptos_web import app
+        app.config["TESTING"] = True
+        with app.test_client() as client:
+            resp = client.post("/notes/new-folder", json={"path": "", "name": "work", "area": "work"})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["ok"] is True
+            # Check that template.md was created with area replaced
+            folder_path = os.path.join(ptos.NOTES_DIR, "work")
+            tpl_path = os.path.join(folder_path, "template.md")
+            assert os.path.isfile(tpl_path)
+            with open(tpl_path, encoding="utf-8") as f:
+                content = f.read()
+            # Placeholder should be replaced
+            assert "{{AREA}}" not in content
+            assert "{{AREA_TITLE}}" not in content
+            assert "work" in content
+            assert "Work" in content
+
+    def test_create_folder_with_invalid_area_rejected(self):
+        from ptos_web import app
+        app.config["TESTING"] = True
+        with app.test_client() as client:
+            # Invalid characters in area
+            resp = client.post("/notes/new-folder", json={"path": "", "name": "work", "area": "Bad Name"})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["ok"] is False
+            assert "area" in data["error"].lower()
+            # Folder should not be created
+            assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "work"))
+
+    def test_create_folder_with_invalid_area_chars_rejected(self):
+        from ptos_web import app
+        app.config["TESTING"] = True
+        with app.test_client() as client:
+            resp = client.post("/notes/new-folder", json={"path": "", "name": "test", "area": "bad@name"})
+            data = resp.get_json()
+            assert data["ok"] is False
+            assert "area" in data["error"].lower()
+
+    def test_create_folder_with_special_chars_rejected(self):
+        from ptos_web import app
+        app.config["TESTING"] = True
+        with app.test_client() as client:
+            # Path traversal attempt
+            resp = client.post("/notes/new-folder", json={"path": "", "name": "test", "area": "../x"})
+            data = resp.get_json()
+            assert data["ok"] is False
+            assert "area" in data["error"].lower()
+            # Folder should not be created
+            assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "test"))
+
+    def test_create_folder_without_area_creates_no_template(self):
+        from ptos_web import app
+        app.config["TESTING"] = True
+        with app.test_client() as client:
+            resp = client.post("/notes/new-folder", json={"path": "", "name": "noarea"})
+            assert resp.status_code == 200
+            data = resp.get_json()
+            assert data["ok"] is True
+            # No template.md should be created
+            folder_path = os.path.join(ptos.NOTES_DIR, "noarea")
+            tpl_path = os.path.join(folder_path, "template.md")
+            assert not os.path.isfile(tpl_path)

@@ -8033,6 +8033,10 @@ def svc_list_dir(rel_path=""):
 
 
 def svc_create_folder(rel_path, name, area=None):
+    # Validate area slug before creating anything
+    if area:
+        area = _area_slug(area)
+    # Create folder first, then seed template if area provided
     ptos.create_folder(rel_path, name)
     if area:
         _seed_area_template(rel_path, name, area)
@@ -8050,7 +8054,10 @@ def _seed_area_template(rel_path, folder_name, area):
             content = f.read()
         area_title = area.replace("-", " ").replace("_", " ").title()
         content = content.replace("{{AREA}}", area).replace("{{AREA_TITLE}}", area_title)
-        ptos.create_file(rel_path, folder_name + "/template.md", content)
+        # rel_path is the parent path, folder_name is the folder name
+        # create_file expects (rel_path, name, content) where name is just the filename
+        folder_rel_path = os.path.join(rel_path, folder_name) if rel_path else folder_name
+        ptos.create_file(folder_rel_path, "template.md", content)
     except Exception:
         log.exception("Failed to seed area template for %s/%s", rel_path, folder_name)
 
