@@ -4,6 +4,115 @@ Area page for **{{AREA}}** — tasks, notes, and records filtered to this area.
 
 ---
 
+## Now
+
+````ptos
+view = "todo"
+area = "{{AREA}}"
+title = "Now"
+add = true
+````
+
+---
+
+## Plan
+
+````ptos
+view = "records"
+where = "area={{AREA}}"
+time = "all"
+title = "Plan — {{AREA_TITLE}}"
+````
+
+### Quarter
+
+````ptos
+view = "records"
+where = "area={{AREA}}"
+time = "tq"
+title = "This Quarter"
+limit = 20
+````
+
+### Year
+
+````ptos
+view = "records"
+where = "area={{AREA}}"
+time = "ty"
+title = "This Year"
+limit = 20
+````
+
+### Someday
+
+````ptos
+view = "records"
+where = "area={{AREA}}"
+time = "all"
+title = "Someday"
+limit = 20
+````
+
+---
+
+## Log
+
+````ptos
+view = "records"
+where = "area={{AREA}}"
+time = "td"
+title = "Log — Today"
+limit = 20
+````
+
+---
+
+## Reflections
+
+````ptos
+view = "records"
+where = "area={{AREA}}"
+time = "all"
+title = "Reflections — {{AREA_TITLE}}"
+````
+
+---
+
+## Reviews
+
+### Weekly Review
+
+````ptos
+view = "records"
+where = "area={{AREA}}"
+time = "tw"
+title = "Weekly Review"
+limit = 20
+````
+
+### Monthly Review
+
+````ptos
+view = "records"
+where = "area={{AREA}}"
+time = "lm"
+title = "Monthly Review"
+limit = 20
+````
+
+### Quarterly Review
+
+````ptos
+view = "records"
+where = "area={{AREA}}"
+time = "lq"
+title = "Quarterly Review"
+limit = 20
+````
+
+---
+
 ## Tasks
 
 ````ptos
@@ -26,13 +135,3 @@ title = "Records in {{AREA_TITLE}}"
 limit = 20
 ````
 
----
-
-## Notes in this area
-
-````ptos
-view = "records"
-where = "area={{AREA}} AND type=note"
-time = "all"
-title = "Notes in {{AREA_TITLE}}"
-````
