@@ -5035,7 +5035,7 @@ def _iso_date(value, default=None):
     return iso
 
 
-def capture(text, date=None, tag=None, links=None):
+def capture(text, date=None, tag=None, links=None, area=None):
     """Write a quick capture as a type=capture record.
 
     The captured text is stored in the trailing note. Raises PTOSError
@@ -5053,6 +5053,8 @@ def capture(text, date=None, tag=None, links=None):
         record["tag"] = tag if isinstance(tag, list) else [str(tag)]
     if links:
         record["links"] = links
+    if area:
+        record["area"] = area
     problems = ptos.validate_record(schema, record)
     if problems:
         raise PTOSError("Validation failed: " + "; ".join(problems))
@@ -9044,22 +9046,21 @@ def get_todo_areas():
 
 
 def get_todo_areas_with_fallback():
-    """Get todo areas from schema options (primary), optionally merged with actual todo areas."""
+    """Schema-defined areas first, then any in-use todo areas not in the schema."""
+    options = []
     try:
         schema = ptos.get_schema()
-        gf = (schema.get("global_fields") or {})
-        area_opts = gf.get("area", {}).get("options", [])
-        if area_opts:
-            return area_opts
+        area_field = (schema.get("global_fields") or {}).get("area", {}) or {}
+        options = [a for a in (area_field.get("options") or []) if a]
     except Exception:
-        pass
+        options = []
     try:
-        areas = get_todo_areas()
-        if areas:
-            return areas
+        in_use = get_todo_areas()
     except Exception:
-        pass
-    return []
+        in_use = []
+    seen = set(options)
+    extras = sorted({a for a in in_use if a and a not in seen})
+    return options + extras
 
 
 def get_areas_with_counts():
@@ -9067,15 +9068,21 @@ def get_areas_with_counts():
     try:
         todos, _ = ptos_todo.load_todos(ptos.TODO_PATH)
         done, _ = ptos_todo.load_todos(ptos.DONE_PATH)
-        all_todos = todos + done
-        areas = sorted({t.area for t in all_todos if t.area})
-        result = []
+        areas = get_todo_areas_with_fallback()
+        record_areas = set()
+        try:
+            record_result = get_records([], time="all", sum_field=None)
+            for rec in record_result.get("records", []):
+                if rec.get("area"):
+                    record_areas.add(rec["area"])
+        except Exception:
+            pass
+        known = set(areas)
+        areas = areas + sorted(a for a in record_areas if a not in known)
         today = ptos.today()
-        # Get record counts for this month for each area
         record_counts = {}
         if areas:
             from_date = today.replace(day=1).isoformat()
-            # Get last day of current month
             if today.month == 12:
                 to_date = today.replace(day=31).isoformat()
             else:
@@ -9088,7 +9095,6 @@ def get_areas_with_counts():
                 except Exception:
                     record_counts[area] = 0
         result = []
-        today = ptos.today()
         for area in areas:
             area_todos = [t for t in todos if t.area == area]
             area_done = [t for t in done if t.area == area]
@@ -9112,6 +9118,7 @@ def get_areas_with_counts():
                 "overdue": overdue,
                 "due_today": due_today,
                 "records_this_month": record_counts.get(area, 0),
+                "has_page": os.path.isdir(os.path.join(ptos.NOTES_DIR, area)),
             })
         return result
     except Exception as e:

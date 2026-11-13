@@ -685,6 +685,22 @@ named filtered calendars via `["calendar.NAME"]` in `queries.toml`. Features:
 - Prev/next navigation across months
 - **CLI**: `ptos --calendars [NAME]`
 
+### Areas
+
+Life areas group tasks and records without a new data store. `area` is a global
+schema field (`[global_fields.area]`) whose `options` list the areas you use, and
+a todo can carry an area with an `area:<slug>` token (slugs are `[a-z0-9_-]+`).
+Features:
+- `/areas` index — one card per area with open/done/overdue/due-today task counts
+  and this month's record count; the title filters `/todo?area=<slug>`
+- Areas come from the schema options first, then any area already used by a todo
+  or record — a schema option with no data still shows up
+- Each area may have a notes folder at `notes/<area>/`; creating it from **New
+  Folder** writes a starter `template.md`, and cards link to **View notes**
+  (or show "No page yet")
+- Quick capture accepts an `area` so a one-line record lands in the right area
+- **Shortcut**: `G V` opens Areas (Projects is `G P`, Entity is `G J`)
+
 ### Bracket Cross-linking (`[[Target]]`)
 
 Wiki-style `[[links]]` connect notes, journal entries, and todos. Type `[[`

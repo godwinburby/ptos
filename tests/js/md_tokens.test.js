@@ -43,6 +43,10 @@ test("period boundaries at 11:59, 12:00, 16:59 and 17:00", () => {
 test("unknown tokens are left exactly as typed", () => {
   assert.equal(tokenize("{{foo}} and {{Name}}", CTX), "{{foo}} and {{Name}}");
   assert.equal(tokenize("{{ notatoken }}", CTX), "{{ notatoken }}");
+  assert.equal(
+    tokenize("{{AREA}} and {{AREA_TITLE}}", CTX),
+    "{{AREA}} and {{AREA_TITLE}}"
+  );
 });
 
 test("spaces inside the braces are allowed", () => {

@@ -14,14 +14,14 @@
 <div class="empty-state">
   <div class="empty-icon">&#128293;</div>
   <div class="empty-title">No areas yet</div>
-  <div class="empty-desc">Areas emerge from <code>area:</code> tokens in your todos. Add <code>area:work</code> or <code>area:home</code> to tasks, then they'll appear here.</div>
+  <div class="empty-desc">Areas come from the <code>area</code> options in your schema and from <code>area:</code> tokens in your todos. Add <code>area:work</code> to a task, or add an option to the schema, then they'll appear here.</div>
 </div>
 {% else %}
 <div class="areas-grid">
   {% for a in areas %}
-  <a href="/todo?area={{ a.slug }}" class="area-card">
+  <div class="area-card">
     <div class="area-header">
-      <div class="area-title">{{ a.title }}</div>
+      <a href="/todo?area={{ a.slug }}" class="area-title">{{ a.title }}</a>
       <span class="area-slug">{{ a.slug }}</span>
     </div>
     <div class="area-stats">
@@ -47,9 +47,13 @@
       </div>
     </div>
     <div class="area-links">
+      {% if a.has_page %}
       <a href="/notes/browse/{{ a.slug }}" class="area-link">View notes</a>
+      {% else %}
+      <span class="area-link-muted">No page yet</span>
+      {% endif %}
     </div>
-  </a>
+  </div>
   {% endfor %}
 </div>
 {% endif %}

@@ -93,7 +93,7 @@ _EXPECTED_NAV_SECTIONS = [
         ("search",      "search",  "search",    "Search",      "F"),
         ("due",         "due",     "due",       "Due List",    "D"),
         ("browse",      "browse",  "browse",    "Browse",      "B"),
-        ("entity",      "entity",  "entity",    "Entity",      "G E"),
+        ("entity",      "entity",  "entity",    "Entity",      "G J"),
     ]),
     ("track", "Track", [
         ("queries",     "queries", "query",     "Queries",     "Q"),
@@ -102,7 +102,7 @@ _EXPECTED_NAV_SECTIONS = [
         ("calendar",    "calendar","calendar",  "Calendar",    "G C"),
         ("thresholds",  "thresholds","thresholds","Thresholds","G T"),
         ("projects",    "projects","projects",  "Projects",    "G P"),
-        ("areas",       "areas",   "areas",     "Areas",       "G A"),
+        ("areas",       "areas",   "areas",     "Areas",       "G V"),
     ]),
     ("setup", "Setup", [
         ("query-builder",  "query_builder",   "query_builder",   "Query Builder",  "G Q"),

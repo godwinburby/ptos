@@ -162,7 +162,8 @@ class TestChordOverlay:
             "gh": "/habits",
             "gc": "/calendar",
             "gt": "/thresholds",
-            "ge": "/entity",
+            "gj": "/entity",
+            "gv": "/areas",
             "gf": "/favorites",
             "gs": "/schema-builder",
             "gq": "/query-builder",
@@ -186,7 +187,7 @@ class TestChordOverlay:
                 ("search", "search", "search", "Search", "F"),
                 ("due", "due", "due", "Due List", "D"),
                 ("browse", "browse", "browse", "Browse", "B"),
-                ("entity", "entity", "entity", "Entity", "G E"),
+                ("entity", "entity", "entity", "Entity", "G J"),
             ]),
             ("track", "Track", [
                 ("queries", "queries", "query", "Queries", "Q"),
@@ -195,7 +196,7 @@ class TestChordOverlay:
                 ("calendar", "calendar", "calendar", "Calendar", "G C"),
                 ("thresholds", "thresholds", "thresholds", "Thresholds", "G T"),
                 ("projects", "projects", "projects", "Projects", "G P"),
-                ("areas", "areas", "areas", "Areas", "G A"),
+                ("areas", "areas", "areas", "Areas", "G V"),
             ]),
             ("setup", "Setup", [
                 ("query-builder", "query_builder", "query_builder", "Query Builder", "G Q"),

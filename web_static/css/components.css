@@ -1444,6 +1444,10 @@ li.md-task-list-item {  list-style:none;margin-left:-22px;  }
   font-size: var(--fs-lg);
   font-weight: 800;
   color: var(--text);
+  text-decoration: none;
+}
+.area-title:hover {
+  text-decoration: underline;
 }
 .area-slug {
   font-size: var(--fs-xs);
@@ -1498,6 +1502,17 @@ li.md-task-list-item {  list-style:none;margin-left:-22px;  }
 .area-link:hover {
   background: var(--accent);
   color: var(--text-on-accent);
+}
+
+.area-link-muted {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 12px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--sub);
+  background: var(--surface-2);
+  border-radius: var(--radius-pill);
 }
 
 .todo-menu-btn {

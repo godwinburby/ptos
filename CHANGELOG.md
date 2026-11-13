@@ -5,6 +5,19 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-11-13
+
+### Area follow-up (AF1–AF7)
+
+- **Areas index (`/areas`)** — every area gets a card with open/done/overdue/due-today todo counts and this month's record count; the title links to `/todo?area=<slug>`, and the card shows **View notes** when `notes/<area>/` exists (otherwise a muted "No page yet"). The card is a `div` with the title as the only anchor, so no link is nested inside another.
+- **Schema-aware area list** — `get_todo_areas_with_fallback()` merges the schema's `global_fields.area.options` (order preserved) with todo areas already in use but not configured, deduped with the extras sorted. `/todo`, the todo widget and the areas index all use it, so a configured option with no tasks still appears; the old duplicate `return []` is gone.
+- **Area notes pages** — creating a notes folder from **New Folder** with an `area` writes the area template as its `template.md`, and new notes in that folder inherit it through the normal template resolution.
+- **Keyboard chords** — Areas is `G V`, Projects is `G P`, Entity is `G J`; the generated help overlay and the shortcut/chord tests follow.
+- **Starter area page** — `starters/starter_area.md` documents Now, Plan (quarter/year/someday), Log, Reflections, Reviews (weekly/monthly/quarterly), Tasks and Records as live `ptos` widget blocks, with no unresolved placeholder tokens.
+- **Todo area tokens** — a line with duplicate `area:` tokens keeps both tokens in the description and the last one wins as the parsed area.
+- **Capture** — `POST /api/capture` accepts an `area`, so a quick record lands in the right area.
+- **Tests** — `tests/test_area_pages.py` (index counts, schema/record/in-use areas, page link branches, no inline style or hex colours, no link-wrapped cards, one area queryable across two record types), `tests/test_starter_area.py` (the starter parses and every widget validates), `tests/js/md_tokens.test.js` (`{{AREA}}`/`{{AREA_TITLE}}` stay literal).
+
 ## 2026-11-11
 
 ### Area pages: todo `area:` filter and widgets

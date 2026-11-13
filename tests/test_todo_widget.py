@@ -391,6 +391,27 @@ class TestTodoArea:
         # Area token preserved in description
         assert _flat_descriptions(r) == ["Ship invoice area:work"]
 
+    def test_areas_fallback_merges_schema_and_in_use(self, monkeypatch):
+        _clean()
+        _seed_todos(["Ship invoice area:finance", "Water plants area:work"])
+        monkeypatch.setattr(ptos, "get_schema", lambda: {
+            "global_fields": {"area": {"options": ["work", "home"]}}})
+        assert svc.get_todo_areas_with_fallback() == ["work", "home", "finance"]
+
+    def test_areas_fallback_without_schema_options_uses_in_use(self, monkeypatch):
+        _clean()
+        _seed_todos(["Ship invoice area:finance", "Water plants area:home"])
+        monkeypatch.setattr(ptos, "get_schema",
+                            lambda: {"global_fields": {}})
+        assert svc.get_todo_areas_with_fallback() == ["finance", "home"]
+
+    def test_areas_fallback_with_nothing_configured_is_empty(self, monkeypatch):
+        _clean()
+        _seed_todos(["No area task"])
+        monkeypatch.setattr(ptos, "get_schema",
+                            lambda: {"global_fields": {}})
+        assert svc.get_todo_areas_with_fallback() == []
+
     def test_area_with_no_matches_is_empty_not_error(self):
         _clean()
         _seed_todos(["Water plants area:home"])
@@ -466,9 +487,10 @@ class TestTodoPageArea:
     def test_page_exposes_the_list_of_areas(self):
         _clean()
         _seed_todos(["Ship invoice area:work", "Water plants area:home"])
-        # Schema options order: work, finance, relationship, health, spirituality, career, business, family
+        # Schema options first (in order), then in-use areas not in the
+        # schema, sorted.
         _html, _spec, _data, state = self._page()
-        assert state["todo"]["areas"] == ["work", "finance", "relationship", "health", "spirituality", "career", "business", "family"]
+        assert state["todo"]["areas"] == ["work", "finance", "relationship", "health", "spirituality", "career", "business", "family", "home"]
 
     def test_invalid_area_slug_is_reported_not_silently_ignored(self):
         _clean()

@@ -321,7 +321,7 @@ def _inject_globals():
             ("search",      "search",  "search",    "Search",      "F"),
             ("due",         "due",     "due",       "Due List",    "D"),
             ("browse",      "browse",  "browse",    "Browse",      "B"),
-            ("entity",      "entity",  "entity",    "Entity",      "G E"),
+            ("entity",      "entity",  "entity",    "Entity",      "G J"),
         ]),
         ("track", "Track", [
             ("queries",     "queries", "query",     "Queries",     "Q"),
@@ -330,7 +330,7 @@ def _inject_globals():
             ("calendar",    "calendar","calendar",  "Calendar",    "G C"),
             ("thresholds",  "thresholds","thresholds","Thresholds","G T"),
             ("projects",    "projects","projects",  "Projects",    "G P"),
-            ("areas",       "areas",   "areas",     "Areas",       "G A"),
+            ("areas",       "areas",   "areas",     "Areas",       "G V"),
         ]),
         ("setup", "Setup", [
             ("query-builder",  "query_builder",   "query_builder",   "Query Builder",  "G Q"),
@@ -5791,6 +5791,7 @@ def api_capture():
             date=(data.get("date") or None),
             tag=(data.get("tag") or None),
             links=(data.get("links") or None),
+            area=(data.get("area") or None),
         )
         return jsonify(result)
     except PTOSError as e:
