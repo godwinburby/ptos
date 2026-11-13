@@ -1,115 +1,680 @@
 {
-  "web_static/js/bracket_links.js": 0,
-  "web_static/js/browse_controller.js": 4,
-  "web_static/js/calculator.js": 0,
-  "web_static/js/chips.js": 0,
-  "web_static/js/date_picker.js": 0,
-  "web_static/js/drag.js": 0,
-  "web_static/js/embeds.js": 0,
-  "web_static/js/favorites.js": 0,
-  "web_static/js/filter_builder.js": 26,
-  "web_static/js/home_edit.js": 0,
-  "web_static/js/home_note.js": 0,
-  "web_static/js/home_widgets.js": 22,
-  "web_static/js/last_change.js": 0,
-  "web_static/js/md_blocks.js": 0,
-  "web_static/js/md_highlight.js": 0,
-  "web_static/js/md_render.js": 0,
-  "web_static/js/md_toolbar.js": 0,
-  "web_static/js/nav_chords.js": 3,
-  "web_static/js/page_shell.js": 0,
-  "web_static/js/pomodoro.js": 0,
-  "web_static/js/queries_controller.js": 2,
-  "web_static/js/record_table.js": 56,
-  "web_static/js/sidebar_collapse.js": 0,
-  "web_static/js/sidebar_search.js": 0,
-  "web_static/js/slash_embed.js": 0,
-  "web_static/js/sse.js": 1,
-  "web_static/js/text_blocks.js": 0,
-  "web_static/js/time_picker.js": 0,
-  "web_static/js/todo_autocomplete.js": 1,
-  "web_static/js/todo_controller.js": 0,
-  "web_static/js/todo_list.js": 0,
-  "web_static/js/todo_popups.js": 0,
-  "web_static/js/todo_shortcuts.js": 0,
-  "web_static/js/todo_toolbar.js": 8,
-  "web_static/js/ui_scale.js": 0,
-  "web_static/js/widget_form.js": 0,
-  "web_static/js/widget_host.js": 0,
-  "web_static/js/widget_picker.js": 1,
-  "web_static/js/widget_toml.js": 0,
-  "web_static/js/widgets.js": 78,
-  "web_templates/_board_manage.html": 10,
-  "web_templates/_calendar_manage.html": 13,
-  "web_templates/_due_manage.html": 9,
-  "web_templates/_habit_manage.html": 12,
-  "web_templates/_habit_quick_create.html": 14,
-  "web_templates/_habit_source_select.html": 1,
-  "web_templates/_markdown_editor.html": 9,
-  "web_templates/_threshold_bar.html": 6,
-  "web_templates/_threshold_manage.html": 9,
-  "web_templates/_time_picker.html": 21,
-  "web_templates/_todo_modal.html": 4,
-  "web_templates/add.html": 2,
-  "web_templates/areas.html": 0,
-  "web_templates/backup.html": 0,
-  "web_templates/base.html": 23,
-  "web_templates/board.html": 8,
-  "web_templates/browse.html": 16,
-  "web_templates/browse_legacy.html": 20,
-  "web_templates/calendar.html": 5,
-  "web_templates/conflicts.html": 58,
-  "web_templates/dev_widgets.html": 0,
-  "web_templates/due.html": 20,
-  "web_templates/edit.html": 60,
-  "web_templates/editor.html": 61,
-  "web_templates/entity.html": 17,
-  "web_templates/error.html": 6,
-  "web_templates/favorites.html": 20,
-  "web_templates/habits.html": 10,
-  "web_templates/home.html": 10,
-  "web_templates/icons/add.html": 0,
-  "web_templates/icons/areas.html": 0,
-  "web_templates/icons/backup.html": 0,
-  "web_templates/icons/board.html": 0,
-  "web_templates/icons/browse.html": 0,
-  "web_templates/icons/calendar.html": 0,
-  "web_templates/icons/due.html": 0,
-  "web_templates/icons/editor.html": 0,
-  "web_templates/icons/entity.html": 0,
-  "web_templates/icons/favorites.html": 0,
-  "web_templates/icons/habits.html": 0,
-  "web_templates/icons/home.html": 0,
-  "web_templates/icons/journal.html": 0,
-  "web_templates/icons/lint.html": 0,
-  "web_templates/icons/more.html": 0,
-  "web_templates/icons/notes.html": 0,
-  "web_templates/icons/projects.html": 0,
-  "web_templates/icons/query.html": 0,
-  "web_templates/icons/query_builder.html": 0,
-  "web_templates/icons/routines.html": 0,
-  "web_templates/icons/schema_builder.html": 0,
-  "web_templates/icons/search.html": 0,
-  "web_templates/icons/settings.html": 0,
-  "web_templates/icons/thresholds.html": 0,
-  "web_templates/icons/todo.html": 0,
-  "web_templates/icons/types.html": 0,
-  "web_templates/journal.html": 14,
-  "web_templates/lint.html": 39,
-  "web_templates/notes.html": 49,
-  "web_templates/notes_edit.html": 19,
-  "web_templates/page_shell.html": 13,
-  "web_templates/project_delete.html": 1,
-  "web_templates/project_form.html": 1,
-  "web_templates/projects.html": 8,
-  "web_templates/queries.html": 10,
-  "web_templates/queries_legacy.html": 12,
-  "web_templates/query_builder.html": 224,
-  "web_templates/routines.html": 17,
-  "web_templates/schema_builder.html": 171,
-  "web_templates/search.html": 30,
-  "web_templates/settings.html": 39,
-  "web_templates/thresholds.html": 1,
-  "web_templates/todo.html": 35,
-  "web_templates/types.html": 33
+  "web_static/js/bracket_links.js": {
+    "fontsize": 5,
+    "hex": 4,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/browse_controller.js": {
+    "fontsize": 2,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/calculator.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/chips.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/date_picker.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/drag.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/embeds.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/favorites.js": {
+    "fontsize": 0,
+    "hex": 2,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/filter_builder.js": {
+    "fontsize": 14,
+    "hex": 1,
+    "radius": 4,
+    "shadow": 0
+  },
+  "web_static/js/home_edit.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/home_note.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/home_widgets.js": {
+    "fontsize": 12,
+    "hex": 0,
+    "radius": 2,
+    "shadow": 0
+  },
+  "web_static/js/last_change.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/md_blocks.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/md_highlight.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/md_render.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/md_toolbar.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/nav_chords.js": {
+    "fontsize": 4,
+    "hex": 2,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/page_shell.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/pomodoro.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/queries_controller.js": {
+    "fontsize": 2,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/record_table.js": {
+    "fontsize": 24,
+    "hex": 0,
+    "radius": 9,
+    "shadow": 5
+  },
+  "web_static/js/sidebar_collapse.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/sidebar_search.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/slash_embed.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/sse.js": {
+    "fontsize": 4,
+    "hex": 3,
+    "radius": 1,
+    "shadow": 1
+  },
+  "web_static/js/text_blocks.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/time_picker.js": {
+    "fontsize": 1,
+    "hex": 1,
+    "radius": 1,
+    "shadow": 0
+  },
+  "web_static/js/todo_autocomplete.js": {
+    "fontsize": 1,
+    "hex": 0,
+    "radius": 1,
+    "shadow": 1
+  },
+  "web_static/js/todo_controller.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/todo_list.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/todo_popups.js": {
+    "fontsize": 0,
+    "hex": 1,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/todo_shortcuts.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/todo_toolbar.js": {
+    "fontsize": 2,
+    "hex": 2,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/ui_scale.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/widget_form.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/widget_host.js": {
+    "fontsize": 9,
+    "hex": 0,
+    "radius": 3,
+    "shadow": 1
+  },
+  "web_static/js/widget_picker.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/widget_toml.js": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_static/js/widgets.js": {
+    "fontsize": 23,
+    "hex": 0,
+    "radius": 2,
+    "shadow": 0
+  },
+  "web_templates/_board_manage.html": {
+    "fontsize": 5,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/_calendar_manage.html": {
+    "fontsize": 10,
+    "hex": 0,
+    "radius": 3,
+    "shadow": 1
+  },
+  "web_templates/_due_manage.html": {
+    "fontsize": 4,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/_habit_manage.html": {
+    "fontsize": 9,
+    "hex": 0,
+    "radius": 2,
+    "shadow": 1
+  },
+  "web_templates/_habit_quick_create.html": {
+    "fontsize": 8,
+    "hex": 0,
+    "radius": 2,
+    "shadow": 0
+  },
+  "web_templates/_habit_source_select.html": {
+    "fontsize": 1,
+    "hex": 0,
+    "radius": 1,
+    "shadow": 0
+  },
+  "web_templates/_markdown_editor.html": {
+    "fontsize": 46,
+    "hex": 9,
+    "radius": 21,
+    "shadow": 1
+  },
+  "web_templates/_threshold_bar.html": {
+    "fontsize": 2,
+    "hex": 0,
+    "radius": 2,
+    "shadow": 0
+  },
+  "web_templates/_threshold_manage.html": {
+    "fontsize": 9,
+    "hex": 0,
+    "radius": 3,
+    "shadow": 1
+  },
+  "web_templates/_time_picker.html": {
+    "fontsize": 9,
+    "hex": 0,
+    "radius": 8,
+    "shadow": 1
+  },
+  "web_templates/_todo_modal.html": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/add.html": {
+    "fontsize": 1,
+    "hex": 2,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/areas.html": {
+    "fontsize": 0,
+    "hex": 1,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/backup.html": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/base.html": {
+    "fontsize": 7,
+    "hex": 8,
+    "radius": 9,
+    "shadow": 0
+  },
+  "web_templates/board.html": {
+    "fontsize": 15,
+    "hex": 0,
+    "radius": 11,
+    "shadow": 1
+  },
+  "web_templates/browse.html": {
+    "fontsize": 6,
+    "hex": 1,
+    "radius": 4,
+    "shadow": 1
+  },
+  "web_templates/browse_legacy.html": {
+    "fontsize": 8,
+    "hex": 1,
+    "radius": 4,
+    "shadow": 1
+  },
+  "web_templates/calendar.html": {
+    "fontsize": 17,
+    "hex": 0,
+    "radius": 6,
+    "shadow": 0
+  },
+  "web_templates/conflicts.html": {
+    "fontsize": 38,
+    "hex": 0,
+    "radius": 8,
+    "shadow": 0
+  },
+  "web_templates/dev_widgets.html": {
+    "fontsize": 3,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/due.html": {
+    "fontsize": 9,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/edit.html": {
+    "fontsize": 27,
+    "hex": 0,
+    "radius": 7,
+    "shadow": 0
+  },
+  "web_templates/editor.html": {
+    "fontsize": 13,
+    "hex": 9,
+    "radius": 12,
+    "shadow": 0
+  },
+  "web_templates/entity.html": {
+    "fontsize": 24,
+    "hex": 0,
+    "radius": 12,
+    "shadow": 0
+  },
+  "web_templates/error.html": {
+    "fontsize": 1,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/favorites.html": {
+    "fontsize": 9,
+    "hex": 4,
+    "radius": 3,
+    "shadow": 0
+  },
+  "web_templates/habits.html": {
+    "fontsize": 14,
+    "hex": 1,
+    "radius": 6,
+    "shadow": 0
+  },
+  "web_templates/home.html": {
+    "fontsize": 6,
+    "hex": 2,
+    "radius": 7,
+    "shadow": 2
+  },
+  "web_templates/icons/add.html": {
+    "fontsize": 0,
+    "hex": 1,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/areas.html": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/backup.html": {
+    "fontsize": 0,
+    "hex": 4,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/board.html": {
+    "fontsize": 0,
+    "hex": 6,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/browse.html": {
+    "fontsize": 0,
+    "hex": 3,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/calendar.html": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/due.html": {
+    "fontsize": 0,
+    "hex": 5,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/editor.html": {
+    "fontsize": 0,
+    "hex": 3,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/entity.html": {
+    "fontsize": 0,
+    "hex": 4,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/favorites.html": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/habits.html": {
+    "fontsize": 0,
+    "hex": 24,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/home.html": {
+    "fontsize": 0,
+    "hex": 4,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/journal.html": {
+    "fontsize": 0,
+    "hex": 4,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/lint.html": {
+    "fontsize": 0,
+    "hex": 1,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/more.html": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/notes.html": {
+    "fontsize": 0,
+    "hex": 4,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/projects.html": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/query.html": {
+    "fontsize": 0,
+    "hex": 4,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/query_builder.html": {
+    "fontsize": 0,
+    "hex": 3,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/routines.html": {
+    "fontsize": 0,
+    "hex": 4,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/schema_builder.html": {
+    "fontsize": 0,
+    "hex": 1,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/search.html": {
+    "fontsize": 0,
+    "hex": 3,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/settings.html": {
+    "fontsize": 0,
+    "hex": 2,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/thresholds.html": {
+    "fontsize": 0,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/todo.html": {
+    "fontsize": 0,
+    "hex": 3,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/icons/types.html": {
+    "fontsize": 0,
+    "hex": 1,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/journal.html": {
+    "fontsize": 7,
+    "hex": 0,
+    "radius": 4,
+    "shadow": 0
+  },
+  "web_templates/lint.html": {
+    "fontsize": 15,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/notes.html": {
+    "fontsize": 20,
+    "hex": 6,
+    "radius": 14,
+    "shadow": 1
+  },
+  "web_templates/notes_edit.html": {
+    "fontsize": 6,
+    "hex": 0,
+    "radius": 2,
+    "shadow": 1
+  },
+  "web_templates/page_shell.html": {
+    "fontsize": 2,
+    "hex": 3,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/project_delete.html": {
+    "fontsize": 5,
+    "hex": 0,
+    "radius": 4,
+    "shadow": 0
+  },
+  "web_templates/project_form.html": {
+    "fontsize": 6,
+    "hex": 1,
+    "radius": 3,
+    "shadow": 0
+  },
+  "web_templates/projects.html": {
+    "fontsize": 26,
+    "hex": 0,
+    "radius": 15,
+    "shadow": 0
+  },
+  "web_templates/queries.html": {
+    "fontsize": 1,
+    "hex": 0,
+    "radius": 1,
+    "shadow": 0
+  },
+  "web_templates/queries_legacy.html": {
+    "fontsize": 3,
+    "hex": 0,
+    "radius": 1,
+    "shadow": 0
+  },
+  "web_templates/query_builder.html": {
+    "fontsize": 110,
+    "hex": 5,
+    "radius": 47,
+    "shadow": 0
+  },
+  "web_templates/routines.html": {
+    "fontsize": 31,
+    "hex": 0,
+    "radius": 18,
+    "shadow": 0
+  },
+  "web_templates/schema_builder.html": {
+    "fontsize": 96,
+    "hex": 0,
+    "radius": 13,
+    "shadow": 0
+  },
+  "web_templates/search.html": {
+    "fontsize": 18,
+    "hex": 0,
+    "radius": 0,
+    "shadow": 0
+  },
+  "web_templates/settings.html": {
+    "fontsize": 14,
+    "hex": 0,
+    "radius": 3,
+    "shadow": 1
+  },
+  "web_templates/thresholds.html": {
+    "fontsize": 3,
+    "hex": 0,
+    "radius": 1,
+    "shadow": 0
+  },
+  "web_templates/todo.html": {
+    "fontsize": 35,
+    "hex": 4,
+    "radius": 23,
+    "shadow": 1
+  },
+  "web_templates/types.html": {
+    "fontsize": 40,
+    "hex": 2,
+    "radius": 14,
+    "shadow": 0
+  }
 }

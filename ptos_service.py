@@ -2913,8 +2913,11 @@ def _w_todo(spec, name, time, from_date, to_date):
 
     saved = {}
     if name:
-        if not isinstance(queries.get(f"todo.{name}"), dict):
-            raise PTOSError(f"Todo view '{name}' not found")
+        value = queries.get(f"todo.{name}")
+        if not isinstance(value, dict):
+            if value is None:
+                raise PTOSError(f"Todo view '{name}' not found")
+            raise PTOSError("Todo view settings must be an object")
         saved = dict(queries[f"todo.{name}"])
     bad_saved = [k for k in saved if k not in TODO_VIEW_KEYS]
     if bad_saved:

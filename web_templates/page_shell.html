@@ -6,6 +6,9 @@
     <h1>{{ page_title }}</h1>
     {% if configure_url %}<a class="edit-btn" href="{{ configure_url }}">{{ configure_label or "Configure" }}</a>{% endif %}
   </header>
+  {% if page_state.error %}
+  <div class="msg msg-error" style="margin-bottom:12px;">{{ page_state.error }}</div>
+  {% endif %}
   {% if time_options or month_navigation or select_controls %}<div class="page-controls" data-page-controls>
     {% if time_options %}
     <label class="page-control-field">Time window

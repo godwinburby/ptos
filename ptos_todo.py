@@ -253,12 +253,12 @@ def parse_todo_line(line, line_no=0):
             todo_id = token[3:] if len(token) > 3 else None
         elif token.lower().startswith("links:") and len(token) > 6:
             links = [t for t in token[6:].split(",") if t.strip()]
-        elif token.lower().startswith("area:") and area is None:
+        elif token.lower().startswith("area:"):
             val = token[5:]
+            # Always preserve area tokens in description
+            desc_parts.append(token)
             if _is_valid_area_slug(val):
                 area = val
-            else:
-                desc_parts.append(token)
         elif token.lower().startswith("pri:") and len(token) == 5 and token[4].isalpha() and priority is None:
             priority = token[4].upper()
         else:

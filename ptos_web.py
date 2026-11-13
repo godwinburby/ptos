@@ -1201,7 +1201,7 @@ def todo_page():
                 "hide_routines": bool(hide_routines),
                 "hide_routines_config": hide_routines_cfg,
             },
-        }, select_controls=[])
+        }, error=page_error, select_controls=[])
 
 
 @app.route("/todo/add", methods=["POST"])

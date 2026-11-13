@@ -77,7 +77,7 @@ linkable = true
 [global_fields.area]
 type     = "string"
 linkable = true
-options  = ["work", "home", "personal", "health"]
+options  = ["work", "finance", "relationship", "health", "spirituality", "career", "business", "family"]
 
 # ==================================================
 # TYPES

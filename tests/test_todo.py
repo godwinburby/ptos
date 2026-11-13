@@ -51,8 +51,6 @@ def _write_done(tmpdir, lines=None):
     return _write_todo(tmpdir, lines, filename="done.txt")
 
 
-# ── parsing ─────────────────────────────────────────────────────────────────
-
 class TestParseTodoLine:
     def test_basic_with_priority(self):
         t = parse_todo_line("(A) Buy milk +Home @errand due:2026-07-12")
@@ -142,7 +140,8 @@ class TestParseTodoLine:
         assert t.area == "work"
         assert t.projects == ["+Home"]
         assert t.contexts == ["@phone"]
-        assert t.description == "Task"
+        # Area token preserved in description
+        assert t.description == "Task area:work"
 
     def test_parse_area_with_underscore_and_hyphen(self):
         t = parse_todo_line("Task area:work_life")
@@ -160,10 +159,90 @@ class TestParseTodoLine:
         assert t.area is None
         assert t.description == "Task area:"
 
-    def test_parse_multiple_area_first_wins(self):
+    # AF2: last wins behavior for duplicate area tags
+    def test_parse_multiple_area_last_wins(self):
         t = parse_todo_line("Task area:work area:health")
+        # Last valid area: wins
+        assert t.area == "health"
+        # Other area tokens preserved in description
+        assert "area:work" in t.description
+
+    def test_parse_multiple_area_last_wins_with_invalid_first(self):
+        t = parse_todo_line("Task area:Work area:health")
+        # First is invalid (uppercase), last valid wins
+        assert t.area == "health"
+        assert "area:Work" in t.description
+
+    def test_parse_multiple_area_last_wins_at_start(self):
+        t = parse_todo_line("area:work Task area:health")
+        assert t.area == "health"
+        assert "area:work" in t.description
+        assert t.description == "area:work Task area:health"
+
+    def test_parse_multiple_area_invalid_last_keeps_first(self):
+        t = parse_todo_line("Task area:work area:Health")
+        # Last is invalid, first valid wins
         assert t.area == "work"
+        assert "area:Health" in t.description
+
+    def test_parse_multiple_area_all_invalid(self):
+        t = parse_todo_line("Task area:Work area:Health")
+        assert t.area is None
+        assert t.description == "Task area:Work area:Health"
+
+    def test_round_trip_multiple_area_last_wins(self):
+        raw = "Task area:work area:health"
+        t = parse_todo_line(raw)
+        formatted = format_line(t)
+        t2 = parse_todo_line(formatted)
+        assert t2.area == "health"
+        assert "area:work" in t2.description
+
+    def test_round_trip_multiple_area_completed_last_wins(self):
+        raw = "x 2026-07-11 2026-07-09 Fix printer +Home @office area:work area:health"
+        t = parse_todo_line(raw)
+        formatted = format_line(t)
+        t2 = parse_todo_line(formatted)
+        assert t2.area == "health"
+        assert "area:work" in t2.description
+
+    def test_parse_multiple_area_mixed_valid_invalid(self):
+        t = parse_todo_line("Task area:Work area:health area:fitness")
+        # Last valid wins (fitness)
+        assert t.area == "fitness"
+        assert "area:Work" in t.description
         assert "area:health" in t.description
+
+    def test_parse_area_at_different_positions(self):
+        # area at start, middle, end
+        t1 = parse_todo_line("area:work Task")
+        assert t1.area == "work"
+        t2 = parse_todo_line("Task area:work")
+        assert t2.area == "work"
+        t3 = parse_todo_line("Task +Home area:work @phone")
+        assert t3.area == "work"
+
+    def test_parse_area_mixed_with_other_tokens(self):
+        t = parse_todo_line("area:work +Home @phone Task area:health due:2026-07-12")
+        assert t.area == "health"
+        assert "area:work" in t.description
+        # Projects and contexts are extracted to their own fields, not in description
+        assert t.projects == ["+Home"]
+        assert t.contexts == ["@phone"]
+        assert t.due == dt.date(2026, 7, 12)
+
+    def test_format_line_preserves_area_token_order(self):
+        # format_line should preserve all area tokens in description
+        raw = "Task area:work area:health area:fitness"
+        t = parse_todo_line(raw)
+        formatted = format_line(t)
+        t2 = parse_todo_line(formatted)
+        # All area tokens preserved in description (in original order)
+        assert "area:work" in t2.description
+        assert "area:health" in t2.description
+        assert "area:fitness" in t2.description
+        # Last valid wins
+        assert t2.area == "fitness"
 
     def test_parse_area_case_insensitive_key(self):
         t = parse_todo_line("Task AREA:work")
