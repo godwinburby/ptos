@@ -247,12 +247,44 @@ def _record_id_of(line):
     return None
 
 
-def _record_key(line):
-    """(date, type) of a record line, or None. A display hint only — never the
-    basis for an automatic pairing (same-shaped records are not the same
-    record)."""
-    m = re.match(r'(\d{4}-\d{2}-\d{2})\s+type=(\S+)', line)
-    return (m.group(1), m.group(2)) if m else None
+_HINT_MIN_SIMILARITY = 0.5
+
+
+def _record_hint_parts(line):
+    """(gate, fields) for a record line, or None when it cannot be parsed.
+
+    `gate` is (date, type) and must match for two lines to be hint candidates.
+    `fields` is the set of (key, value) pairs used to score similarity: the
+    date counts as a field and `id` is ignored, while multi-valued fields
+    (`tag`, `links`) contribute one pair per value.
+    """
+    parsed = safe_parse_line(line)
+    if not parsed:
+        return None
+    date, kv, note = parsed
+    rtype = kv.get("type")
+    if not rtype or isinstance(rtype, list):
+        return None
+    iso = date.isoformat()
+    pairs = {("date", iso), ("type", rtype)}
+    for key, val in kv.items():
+        if key in ("id", "type"):
+            continue
+        if isinstance(val, list):
+            pairs.update((key, v) for v in val)
+        else:
+            pairs.add((key, val))
+    if note:
+        pairs.add(("note", note))
+    return (iso, rtype), pairs
+
+
+def _record_similarity(a, b):
+    """Fraction of (key, value) fields two records share (`>= 0.0`, `<= 1.0`)."""
+    union = a | b
+    if not union:
+        return 0.0
+    return len(a & b) / len(union)
 
 
 def _multiset_only_in(a, b):
@@ -278,8 +310,11 @@ def diff_records_conflict(original_path, conflict_path):
       lines_only_in_original: original-only lines, likewise
       edit_conflicts: (original_line, conflict_line) pairs that share an
                       `id=` — an explicit Replace candidate with NO default
-      hints: (original_line, conflict_line) pairs that share a date+type but no
-             id= — display only, never an automatic pairing
+      hints: (original_line, conflict_line) pairs that share a date and type
+             and at least half of their fields (the date counts as a field,
+             `id` is ignored). The most similar unclaimed original line wins
+             and each original is paired at most once. Display only, never an
+             automatic pairing.
     Paths are relative to BASE_DIR."""
     orig_full = os.path.join(BASE_DIR, original_path)
     conf_full = os.path.join(BASE_DIR, conflict_path)
@@ -294,26 +329,36 @@ def diff_records_conflict(original_path, conflict_path):
     only_conf = _multiset_only_in(conf_lines, orig_lines)
     only_orig = _multiset_only_in(orig_lines, conf_lines)
     orig_by_id = {}
-    for line in only_orig:
+    for idx, line in enumerate(only_orig):
         rid = _record_id_of(line)
         if rid and rid not in orig_by_id:
-            orig_by_id[rid] = line
+            orig_by_id[rid] = idx
+    conf_parts = [_record_hint_parts(line) for line in only_conf]
+    orig_parts = [_record_hint_parts(line) for line in only_orig]
     edit_conflicts = []
     hints = []
     claimed = set()
-    for line in only_conf:
+    for line, parts in zip(only_conf, conf_parts):
         rid = _record_id_of(line)
         if rid and rid in orig_by_id and orig_by_id[rid] not in claimed:
-            edit_conflicts.append((orig_by_id[rid], line))
-            claimed.add(orig_by_id[rid])
+            idx = orig_by_id[rid]
+            edit_conflicts.append((only_orig[idx], line))
+            claimed.add(idx)
             continue
-        key = _record_key(line)
-        if key:
-            for orig_line in only_orig:
-                if orig_line not in claimed and _record_key(orig_line) == key:
-                    hints.append((orig_line, line))
-                    claimed.add(orig_line)
-                    break
+        if not parts:
+            continue
+        gate, fields = parts
+        best_idx = None
+        best_score = 0.0
+        for idx, other in enumerate(orig_parts):
+            if idx in claimed or not other or other[0] != gate:
+                continue
+            score = _record_similarity(fields, other[1])
+            if score > best_score:
+                best_idx, best_score = idx, score
+        if best_idx is not None and best_score >= _HINT_MIN_SIMILARITY:
+            hints.append((only_orig[best_idx], line))
+            claimed.add(best_idx)
     return {
         "lines_only_in_conflict": only_conf,
         "lines_only_in_original": only_orig,

@@ -18,6 +18,14 @@ Format: `[version or date] — description`
 - **Same fix on two dynamic blocks** — `#board-overlap-area` (shared-fields panel) and `#thr-value-num` (custom threshold target) were created with inline `display:none` but revealed with `classList.remove("d-none")`, so neither could appear.
 - **Tests** — `tests/test_query_builder_sections.py` (rendered strip classes, tab/strip/section-list parity, classList-based switching, no inline `display:none` left in the template).
 
+### Conflict hints pair only likely edits
+
+- **Similarity-based hints** — a conflict-only record is suggested against an original only when both share a date and type **and** at least half of their `(key, value)` fields (the date counts as a field, `id` is ignored), scored as shared ÷ union. The most similar unclaimed original wins instead of the first, and each original is paired at most once, so a day with several unrelated expenses no longer offers a bogus Replace (the transport-60 vs staff-welfare-115 example scores ≈0.18 against the 0.5 threshold).
+- **Quoted values compare correctly** — hints parse lines through `safe_parse_line`, so `category="staff welfare"` is one field rather than several tokens.
+- **Duplicate originals** — claimed originals are tracked by index, so two identical originals on the conflict side pair independently.
+- **Clearer label** — the hint row now reads "Most similar date+type record:" instead of "Same date+type as:".
+- **Tests** — `tests/test_sync_conflicts.py` covers the unrelated same-day pair, best-match selection, one-pair-per-original, quoted values, duplicate originals, the 0.5 boundary, note-only edits, and the type gate.
+
 ## 2026-11-13
 
 ### Area follow-up (AF1–AF7)

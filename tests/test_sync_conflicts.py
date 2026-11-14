@@ -231,6 +231,77 @@ class TestDiffRecordsConflict:
         assert len(result["lines_only_in_original"]) == 0
         assert len(result["edit_conflicts"]) == 0
 
+    def _diff(self, orig_lines, conf_lines):
+        records_dir = ptos.RECORDS_DIR
+        os.makedirs(records_dir, exist_ok=True)
+        orig = os.path.join(records_dir, "2026.log")
+        conf = os.path.join(records_dir,
+                "2026.sync-conflict-20260911-113533-XAJ7GJU.log")
+        with open(orig, "w", encoding="utf-8") as f:
+            f.write("".join(line + "\n" for line in orig_lines))
+        with open(conf, "w", encoding="utf-8") as f:
+            f.write("".join(line + "\n" for line in conf_lines))
+        orig_rel = os.path.relpath(orig, ptos.BASE_DIR).replace("\\", "/")
+        conf_rel = os.path.relpath(conf, ptos.BASE_DIR).replace("\\", "/")
+        return diff_records_conflict(orig_rel, conf_rel)
+
+    def test_unrelated_same_day_records_are_not_paired(self):
+        transport = ('2026-11-10 type=expense domain=self '
+                     'category=transport amount=60 tag=auto')
+        welfare = ('2026-11-10 type=expense domain=office '
+                   'category="staff welfare" amount=115 tag=upi tag=snacks')
+        result = self._diff([transport], [welfare])
+        assert result["hints"] == []
+        assert result["lines_only_in_conflict"] == [welfare]
+        assert result["lines_only_in_original"] == [transport]
+
+    def test_quoted_option_values_are_compared(self):
+        old = '2026-11-10 type=expense category="staff welfare" amount=10'
+        new = '2026-11-10 type=expense category="staff welfare" amount=20'
+        result = self._diff([old], [new])
+        assert result["hints"] == [(old, new)]
+
+    def test_best_candidate_is_chosen_not_the_first(self):
+        first = "2026-11-10 type=expense category=transport amount=10"
+        second = "2026-11-10 type=expense category=food amount=10"
+        changed = "2026-11-10 type=expense category=food amount=20"
+        result = self._diff([first, second], [changed])
+        assert result["hints"] == [(second, changed)]
+
+    def test_each_original_is_paired_at_most_once(self):
+        original = "2026-11-10 type=expense category=food amount=10"
+        first = "2026-11-10 type=expense category=food amount=11"
+        second = "2026-11-10 type=expense category=food amount=12"
+        result = self._diff([original], [first, second])
+        assert result["hints"] == [(original, first)]
+
+    def test_duplicate_originals_pair_independently(self):
+        original = "2026-11-10 type=expense category=food amount=10"
+        first = "2026-11-10 type=expense category=food amount=11"
+        second = "2026-11-10 type=expense category=food amount=12"
+        result = self._diff([original, original], [first, second])
+        assert result["hints"] == [(original, first), (original, second)]
+
+    def test_hint_needs_at_least_half_the_fields(self):
+        half_old = "2026-01-01 type=expense category=food"
+        half_new = "2026-01-01 type=expense category=transport"
+        assert self._diff([half_old], [half_new])["hints"] == [
+            (half_old, half_new)]
+        under_old = "2026-01-01 type=expense category=food amount=10"
+        under_new = "2026-01-01 type=expense category=transport amount=20"
+        assert self._diff([under_old], [under_new])["hints"] == []
+
+    def test_note_edit_is_a_hint(self):
+        old = '2026-01-01 type=expense note="bought lunch"'
+        new = '2026-01-01 type=expense note="bought dinner"'
+        result = self._diff([old], [new])
+        assert result["hints"] == [(old, new)]
+
+    def test_different_type_is_never_a_hint(self):
+        old = "2026-01-01 type=expense category=food amount=10"
+        new = "2026-01-01 type=income category=food amount=10"
+        assert self._diff([old], [new])["hints"] == []
+
 
 class TestDiffTodosConflict:
     def _write_todo(self, path, lines):
