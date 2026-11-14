@@ -313,7 +313,7 @@
 <script>
 (function() {
   var _eid = "{{ _eid }}";
-  var _mode = window.innerWidth < 768 ? "stacked" : "edit";
+  var _mode = "preview";
   var _saveTimer = null, _dirty = false;
   var _editGen = 0;          // bumped per keystroke; a save clears _dirty only if unchanged
   var _conflictRev = null;   // set while the conflict banner is open (autosave frozen)

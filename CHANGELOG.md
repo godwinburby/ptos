@@ -5,6 +5,13 @@ Format: `[version or date] — description`
 
 ---
 
+## 2026-11-14
+
+### Markdown pages open in preview
+
+- **Preview is the default view** — the shared markdown editor (notes pages and journal) now opens in Preview instead of Edit, so a page reads first and editing is one click on **✎ Edit**. The old mobile-only Stacked default is gone; every viewport starts in Preview and the buttons switch modes as before.
+- **Tests** — `tests/test_md_render.py::TestMdRenderWiring::test_editor_opens_in_preview_mode` pins the default mode and that it is actually applied at boot.
+
 ## 2026-11-13
 
 ### Area follow-up (AF1–AF7)

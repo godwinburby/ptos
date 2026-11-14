@@ -131,6 +131,13 @@ class TestMdRenderWiring:
         assert "? renderMarkdown(text)" in src
         assert "mountEmbeds(pane)" in src
 
+    def test_editor_opens_in_preview_mode(self):
+        src = _read("web_templates", "_markdown_editor.html")
+        m = re.search(r"var _mode = ([^;]+);", src)
+        assert m, "default editor mode not found"
+        assert m.group(1).strip() == '"preview"'
+        assert "setMode(_mode);" in src
+
 
 class TestTokens:
     """Part F — inline {{token}} substitution lives only in md_render."""
