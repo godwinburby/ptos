@@ -43,14 +43,14 @@
 <!-- ── Item chips row ── -->
 <div class="qb-item-bar">
   <div id="tabs-queries"    class="qb-item-strip"></div>
-  <div id="tabs-metrics"    class="qb-item-strip" style="display:none;"></div>
-  <div id="tabs-dashboards" class="qb-item-strip" style="display:none;"></div>
-  <div id="tabs-aliases"    class="qb-item-strip" style="display:none;"></div>
-  <div id="tabs-due"        class="qb-item-strip" style="display:none;"></div>
-  <div id="tabs-boards"     class="qb-item-strip" style="display:none;"></div>
-  <div id="tabs-habits"     class="qb-item-strip" style="display:none;"></div>
-  <div id="tabs-calendars"  class="qb-item-strip" style="display:none;"></div>
-  <div id="tabs-thresholds" class="qb-item-strip" style="display:none;"></div>
+  <div id="tabs-metrics"    class="qb-item-strip d-none"></div>
+  <div id="tabs-dashboards" class="qb-item-strip d-none"></div>
+  <div id="tabs-aliases"    class="qb-item-strip d-none"></div>
+  <div id="tabs-due"        class="qb-item-strip d-none"></div>
+  <div id="tabs-boards"     class="qb-item-strip d-none"></div>
+  <div id="tabs-habits"     class="qb-item-strip d-none"></div>
+  <div id="tabs-calendars"  class="qb-item-strip d-none"></div>
+  <div id="tabs-thresholds" class="qb-item-strip d-none"></div>
 </div>
 
 <!-- ── Editor ── -->
@@ -1801,7 +1801,7 @@ function showBoardEditor() {
       '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Typing a field name switches this board to status mode. Each lane gets a label + a where filter; dragging a card writes the lane\'s set value (or its single field=value) to this field.</div>'+
     '</div>'+
     '<div id="board-lanes-area" style="margin-bottom:14px;"></div>'+
-    '<div id="board-overlap-area" style="margin-bottom:14px;display:none;">'+
+    '<div id="board-overlap-area" class="d-none" style="margin-bottom:14px;">'+
       '<div style="font-size:12px;font-weight:700;margin-bottom:6px;">Shared Fields <span id="board-overlap-status"></span></div>'+
       '<div id="board-overlap-fields" style="font-size:12px;color:var(--sub);"></div>'+
     '</div>'+
@@ -2099,8 +2099,8 @@ function showThresholdEditor() {
           ' style="flex:1;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
           _thrValueOpts(String(cfg.value))+
           '</select>'+
-          '<input type="number" id="thr-value-num" value="'+(isNum?_esc(String(cfg.value)):'')+'" oninput="onThrField(\'value\')"'+
-          ' placeholder="5000" style="width:90px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;'+(isNum?'':'display:none;')+'">'+
+          '<input type="number" id="thr-value-num" class="'+(isNum?'':'d-none')+'" value="'+(isNum?_esc(String(cfg.value)):'')+'" oninput="onThrField(\'value\')"'+
+          ' placeholder="5000" style="width:90px;padding:6px 8px;border-radius:6px;border:1.5px solid var(--border);background:var(--card);color:var(--text);font-size:13px;">'+
         '</div>'+
         '<div style="font-size:11px;color:var(--sub);margin-top:4px;">Number or reference another metric/query</div>'+
       '</div>'+

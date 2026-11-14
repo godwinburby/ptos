@@ -12,6 +12,12 @@ Format: `[version or date] — description`
 - **Preview is the default view** — the shared markdown editor (notes pages and journal) now opens in Preview instead of Edit, so a page reads first and editing is one click on **✎ Edit**. The old mobile-only Stacked default is gone; every viewport starts in Preview and the buttons switch modes as before.
 - **Tests** — `tests/test_md_render.py::TestMdRenderWiring::test_editor_opens_in_preview_mode` pins the default mode and that it is actually applied at boot.
 
+### Query Builder: non-query sections reveal again
+
+- **Section strips hidden by class, not inline styles** — the Metrics/Dashboards/Aliases/Due/Boards/Habits/Calendars/Thresholds item strips carried `style="display:none;"` while `switchSection()` only removed `.d-none`, so clicking a tab never revealed them (only Queries ever showed). The strips now start with `.d-none` like every other toggled block.
+- **Same fix on two dynamic blocks** — `#board-overlap-area` (shared-fields panel) and `#thr-value-num` (custom threshold target) were created with inline `display:none` but revealed with `classList.remove("d-none")`, so neither could appear.
+- **Tests** — `tests/test_query_builder_sections.py` (rendered strip classes, tab/strip/section-list parity, classList-based switching, no inline `display:none` left in the template).
+
 ## 2026-11-13
 
 ### Area follow-up (AF1–AF7)
