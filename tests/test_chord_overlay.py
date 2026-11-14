@@ -163,7 +163,7 @@ class TestChordOverlay:
             "gc": "/calendar",
             "gt": "/thresholds",
             "gj": "/entity",
-            "gv": "/areas",
+            "ga": "/areas",
             "gf": "/favorites",
             "gs": "/schema-builder",
             "gq": "/query-builder",
@@ -196,7 +196,7 @@ class TestChordOverlay:
                 ("calendar", "calendar", "calendar", "Calendar", "G C"),
                 ("thresholds", "thresholds", "thresholds", "Thresholds", "G T"),
                 ("projects", "projects", "projects", "Projects", "G P"),
-                ("areas", "areas", "areas", "Areas", "G V"),
+                ("areas", "areas", "areas", "Areas", "G A"),
             ]),
             ("setup", "Setup", [
                 ("query-builder", "query_builder", "query_builder", "Query Builder", "G Q"),

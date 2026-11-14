@@ -2854,6 +2854,13 @@ _TODO_GROUPBYS = ("timeline", "priority", "project", "context", "none")
 _TODO_SORTS = (None, "", "default", "reverse", "most", "fewest")
 
 
+AREAS_DIR = "Areas"
+
+
+def _area_title(area):
+    return area.replace("-", " ").replace("_", " ").title()
+
+
 def _area_slug(value):
     """Return a normalized area slug, or None when unset.
 
@@ -8034,37 +8041,160 @@ def svc_list_dir(rel_path=""):
     return ptos.list_dir(rel_path)
 
 
-def svc_create_folder(rel_path, name, area=None):
-    # Validate area slug before creating anything
-    if area:
-        area = _area_slug(area)
-    # Create folder first, then seed template if area provided
+def svc_create_folder(rel_path, name):
     ptos.create_folder(rel_path, name)
-    if area:
-        _seed_area_template(rel_path, name, area)
     _emit_changed("notes")
 
 
-def _seed_area_template(rel_path, folder_name, area):
-    """Create template.md in the new area folder from starter_area.md."""
+def _area_raw_template():
+    """Return starter_area.md exactly as shipped (placeholders intact)."""
+    starter_dir = os.path.join(os.path.dirname(__file__), "starters")
+    area_path = os.path.join(starter_dir, "starter_area.md")
+    if not os.path.isfile(area_path):
+        raise PTOSError("Area page template not found")
+    with open(area_path, encoding="utf-8") as f:
+        return f.read()
+
+
+def _area_page_content(area):
+    """Return starter_area.md with the area placeholders filled in."""
+    content = _area_raw_template()
+    return content.replace("{{AREA}}", area).replace(
+        "{{AREA_TITLE}}", _area_title(area))
+
+
+def _ensure_areas_template():
+    """Create notes/Areas/template.md once; never overwrite a user edit."""
+    full = os.path.join(ptos.NOTES_DIR, AREAS_DIR, "template.md")
+    if os.path.isfile(full):
+        return False
+    ptos.create_file(AREAS_DIR, "template.md", _area_raw_template())
+    return True
+
+
+def _ensure_area_home(folder_rel_path, content):
+    """Write Home.md in an area folder unless it already exists."""
+    home_full = os.path.join(ptos.NOTES_DIR, folder_rel_path, "Home.md")
+    if os.path.exists(home_full):
+        return False
+    ptos.create_file(folder_rel_path, "Home", content)
+    return True
+
+
+def _fill_area_placeholders(rel_path, name, content):
+    """Fill area placeholders for a note created under Areas/<slug>/.
+
+    Nested subfolders use the first segment under Areas as the area, and a
+    folder-local template.md is left untouched so it can be authored
+    literally (it still overrides Areas/template.md, the normal rule).
+    """
+    if not content or "{{AREA" not in content:
+        return content
+    base = name[:-3] if name.endswith(".md") else name
+    if base == "template":
+        return content
+    parts = [p for p in rel_path.replace("\\", "/").split("/") if p]
+    if len(parts) < 2 or parts[0] != AREAS_DIR:
+        return content
     try:
-        starter_dir = os.path.join(os.path.dirname(__file__), "starters")
-        area_path = os.path.join(starter_dir, "starter_area.md")
-        if not os.path.isfile(area_path):
-            return
-        with open(area_path, encoding="utf-8") as f:
-            content = f.read()
-        area_title = area.replace("-", " ").replace("_", " ").title()
-        content = content.replace("{{AREA}}", area).replace("{{AREA_TITLE}}", area_title)
-        # rel_path is the parent path, folder_name is the folder name
-        # create_file expects (rel_path, name, content) where name is just the filename
-        folder_rel_path = os.path.join(rel_path, folder_name) if rel_path else folder_name
-        ptos.create_file(folder_rel_path, "template.md", content)
+        slug = _area_slug(parts[1])
+    except PTOSError:
+        return content
+    if not slug:
+        return content
+    return content.replace("{{AREA}}", slug).replace(
+        "{{AREA_TITLE}}", _area_title(slug))
+
+
+def _repair_area_folder_refs(old_rel, new_rel):
+    """Retarget favorites, home page and project notes paths after a move."""
+    try:
+        update_favorites_after_rename(old_rel, new_rel, True)
     except Exception:
-        log.exception("Failed to seed area template for %s/%s", rel_path, folder_name)
+        log.exception("Favorites not updated after area move: %s", old_rel)
+    try:
+        _update_project_notes_path_after_rename(old_rel, new_rel)
+    except Exception:
+        log.exception("Project paths not updated after area move: %s", old_rel)
+    try:
+        _update_home_page_after_rename(old_rel, new_rel, True)
+    except Exception:
+        log.exception("Home page not updated after area move: %s", old_rel)
+
+
+def svc_migrate_area_folders(areas=None):
+    """Move legacy notes/<area>/ folders with a Home.md into notes/Areas/.
+
+    Everything inside moves, including a folder-local template.md (it keeps
+    overriding Areas/template.md, per the normal inheritance rule). A folder
+    is left alone when it has no Home.md (it was never an area page) or when
+    Areas/<area> already exists. Returns the moved rel paths.
+    """
+    names = list(areas) if areas is not None else []
+    if areas is None:
+        try:
+            names = get_todo_areas_with_fallback()
+        except Exception:
+            names = []
+    moved = []
+    for area in names:
+        try:
+            slug = _area_slug(area)
+        except PTOSError:
+            continue
+        if not slug:
+            continue
+        src_rel = slug
+        dst_rel = f"{AREAS_DIR}/{slug}"
+        src_full = os.path.join(ptos.NOTES_DIR, src_rel)
+        dst_full = os.path.join(ptos.NOTES_DIR, dst_rel)
+        if not os.path.isdir(src_full) or os.path.isdir(dst_full):
+            continue
+        if not os.path.isfile(os.path.join(src_full, "Home.md")):
+            continue
+        try:
+            os.makedirs(os.path.dirname(dst_full), exist_ok=True)
+            with ptos.file_lock(dst_full):
+                if os.path.isdir(dst_full):
+                    continue
+                ptos.rename_with_retry(src_full, dst_full)
+        except Exception:
+            log.exception("Area folder migration failed for %s", src_rel)
+            continue
+        moved.append(dst_rel)
+        _repair_area_folder_refs(src_rel, dst_rel)
+        _emit_changed("notes")
+    if moved:
+        try:
+            _ensure_areas_template()
+        except Exception:
+            log.exception("Failed to seed %s/template.md", AREAS_DIR)
+    return moved
+
+
+def _migrate_area_folder(slug):
+    try:
+        svc_migrate_area_folders([slug])
+    except Exception:
+        log.exception("Area folder migration failed for %s", slug)
+
+
+def svc_create_area_page(area):
+    """Create (or reuse) notes/Areas/<slug>/Home.md, without overwriting."""
+    slug = _area_slug(area)
+    if not slug:
+        raise PTOSError("`area` is required")
+    _migrate_area_folder(slug)
+    template_created = _ensure_areas_template()
+    folder_rel = f"{AREAS_DIR}/{slug}"
+    created = _ensure_area_home(folder_rel, _area_page_content(slug))
+    if created or template_created:
+        _emit_changed("notes")
+    return {"rel_path": f"{folder_rel}/Home.md", "created": created}
 
 
 def svc_create_file(rel_path, name, content):
+    content = _fill_area_placeholders(rel_path, name, content)
     ptos.create_file(rel_path, name, content)
     _emit_changed("notes")
 
@@ -9090,7 +9220,9 @@ def get_areas_with_counts():
                 to_date = (next_month - dt.timedelta(days=1)).isoformat()
             for area in areas:
                 try:
-                    records_result = get_records([f"area={area}"], from_date=from_date, to_date=to_date)
+                    records_result = get_records(
+                        [f"area={ptos.quote_filter_value(area)}"],
+                        from_date=from_date, to_date=to_date)
                     record_counts[area] = records_result["count"]
                 except Exception:
                     record_counts[area] = 0
@@ -9110,15 +9242,43 @@ def get_areas_with_counts():
                             due_today += 1
                     except Exception:
                         pass
+            try:
+                todo_slug = _area_slug(area)
+            except PTOSError:
+                todo_slug = None
+            new_dir = f"{AREAS_DIR}/{todo_slug}" if todo_slug else ""
+            legacy_dir = area
+            page_dir = ""
+            if new_dir and os.path.isfile(
+                    os.path.join(ptos.NOTES_DIR, new_dir, "Home.md")):
+                page_dir = new_dir
+            elif os.path.isfile(
+                    os.path.join(ptos.NOTES_DIR, legacy_dir, "Home.md")):
+                page_dir = legacy_dir
+            if new_dir and os.path.isdir(os.path.join(ptos.NOTES_DIR, new_dir)):
+                folder_dir = new_dir
+            elif os.path.isdir(os.path.join(ptos.NOTES_DIR, legacy_dir)):
+                folder_dir = legacy_dir
+            else:
+                folder_dir = page_dir
+            has_page = bool(page_dir)
+            quoted_page = urllib.parse.quote(page_dir, safe="/")
+            quoted_folder = urllib.parse.quote(folder_dir, safe="/")
             result.append({
+                "area": area,
                 "slug": area,
-                "title": area.replace("-", " ").replace("_", " ").title(),
+                "title": _area_title(area),
                 "open": len(area_todos),
                 "done": len(area_done),
                 "overdue": overdue,
                 "due_today": due_today,
                 "records_this_month": record_counts.get(area, 0),
-                "has_page": os.path.isdir(os.path.join(ptos.NOTES_DIR, area)),
+                "has_folder": bool(folder_dir),
+                "has_page": has_page,
+                "todo_linkable": bool(todo_slug),
+                "page_path": f"{page_dir}/Home.md" if has_page else "",
+                "page_url": f"/notes/edit/{quoted_page}/Home.md" if has_page else "",
+                "folder_url": f"/notes/browse/{quoted_folder}" if folder_dir else "",
             })
         return result
     except Exception as e:

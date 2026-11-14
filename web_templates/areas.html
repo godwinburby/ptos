@@ -19,20 +19,43 @@
 {% else %}
 <div class="areas-grid">
   {% for a in areas %}
-  <div class="area-card">
+  <div class="area-card" data-area-card="{{ a.slug }}">
     <div class="area-header">
+      {% if a.page_url %}
+      <a href="{{ a.page_url }}" class="area-title">{{ a.title }}</a>
+      {% elif a.todo_linkable %}
       <a href="/todo?area={{ a.slug }}" class="area-title">{{ a.title }}</a>
+      {% else %}
+      <span class="area-title">{{ a.title }}</span>
+      {% endif %}
       <span class="area-slug">{{ a.slug }}</span>
     </div>
     <div class="area-stats">
+      {% if a.todo_linkable %}
+      <a class="stat stat-link" href="/todo?area={{ a.slug }}">
+        <div class="stat-label">Open</div>
+        <div class="stat-value text-text">{{ a.open }}</div>
+      </a>
+      {% else %}
       <div class="stat">
         <div class="stat-label">Open</div>
         <div class="stat-value text-text">{{ a.open }}</div>
       </div>
+      {% endif %}
       <div class="stat">
         <div class="stat-label">Done</div>
         <div class="stat-value text-success">{{ a.done }}</div>
       </div>
+      {% if a.todo_linkable %}
+      <a class="stat stat-link" href="/todo?area={{ a.slug }}&due=overdue">
+        <div class="stat-label">Overdue</div>
+        <div class="stat-value text-error">{{ a.overdue }}</div>
+      </a>
+      <a class="stat stat-link" href="/todo?area={{ a.slug }}&due=today">
+        <div class="stat-label">Due today</div>
+        <div class="stat-value text-warn">{{ a.due_today }}</div>
+      </a>
+      {% else %}
       <div class="stat">
         <div class="stat-label">Overdue</div>
         <div class="stat-value text-error">{{ a.overdue }}</div>
@@ -41,21 +64,63 @@
         <div class="stat-label">Due today</div>
         <div class="stat-value text-warn">{{ a.due_today }}</div>
       </div>
-      <div class="stat">
+      {% endif %}
+      <a class="stat stat-link" href="/entity?field=area&value={{ a.area|urlencode }}&time=tm">
         <div class="stat-label">Records this month</div>
         <div class="stat-value text-text">{{ a.records_this_month }}</div>
-      </div>
+      </a>
     </div>
     <div class="area-links">
-      {% if a.has_page %}
-      <a href="/notes/browse/{{ a.slug }}" class="area-link">View notes</a>
-      {% else %}
+      {% if a.page_url %}
+      <a href="{{ a.page_url }}" class="area-link">Open area page</a>
+      {% elif a.todo_linkable %}
+      <button type="button" class="area-link" data-area-create="{{ a.slug }}">Create area page</button>
+      {% endif %}
+      {% if a.folder_url %}
+      <a href="{{ a.folder_url }}" class="area-link-muted">Notes</a>
+      {% endif %}
+      {% if not a.page_url and not a.folder_url and not a.todo_linkable %}
       <span class="area-link-muted">No page yet</span>
       {% endif %}
     </div>
+    <div class="area-error" data-area-error hidden></div>
   </div>
   {% endfor %}
 </div>
 {% endif %}
+
+<script>
+(function () {
+  var buttons = document.querySelectorAll("[data-area-create]");
+  for (var i = 0; i < buttons.length; i++) {
+    buttons[i].addEventListener("click", function () {
+      var btn = this;
+      var card = btn.closest("[data-area-card]");
+      var err = card ? card.querySelector("[data-area-error]") : null;
+      btn.disabled = true;
+      fetch("/api/areas/create-page", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ area: btn.getAttribute("data-area-create") })
+      }).then(function (r) {
+        return r.json();
+      }).then(function (res) {
+        if (!res || !res.ok) {
+          throw new Error((res && res.error) || "Could not create the area page");
+        }
+        window.location.href = "/notes/edit/" + encodeURI(res.rel_path);
+      }).catch(function (e) {
+        btn.disabled = false;
+        if (err) {
+          err.textContent = e.message;
+          err.hidden = false;
+        } else {
+          window.alert(e.message);
+        }
+      });
+    });
+  }
+})();
+</script>
 
 {% endblock %}

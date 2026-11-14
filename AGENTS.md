@@ -474,7 +474,7 @@ x 2026-07-12 2026-07-10 Completed task
 - Added in `ptos_cli.py` `run_entity()`, dispatched before query mode.
 
 ### Keyboard shortcut
-- `G V` — Go to Entity page (NAV chord in `base.html`).
+- `G J` — Go to Entity page (NAV chord in `base.html`).
 
 ### Sidebar nav
 - "Entity" link in Find group (after Browse), SVG icon at `web_templates/icons/entity.html`.

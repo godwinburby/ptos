@@ -703,13 +703,19 @@ class TestCreateFolderAreaValidation:
             assert resp.status_code == 200
             data = resp.get_json()
             assert data["ok"] is True
-            # Check that template.md was created with area replaced
-            folder_path = os.path.join(ptos.NOTES_DIR, "work")
-            tpl_path = os.path.join(folder_path, "template.md")
-            assert os.path.isfile(tpl_path)
-            with open(tpl_path, encoding="utf-8") as f:
+            assert data["rel_path"] == "Areas/work/Home.md"
+            shared_path = os.path.join(ptos.NOTES_DIR, "Areas", "template.md")
+            assert os.path.isfile(shared_path)
+            with open(shared_path, encoding="utf-8") as f:
+                template = f.read()
+            assert "{{AREA}}" in template
+            assert "{{AREA_TITLE}}" in template
+            folder_path = os.path.join(ptos.NOTES_DIR, "Areas", "work")
+            assert not os.path.isfile(os.path.join(folder_path, "template.md"))
+            home_path = os.path.join(folder_path, "Home.md")
+            assert os.path.isfile(home_path)
+            with open(home_path, encoding="utf-8") as f:
                 content = f.read()
-            # Placeholder should be replaced
             assert "{{AREA}}" not in content
             assert "{{AREA_TITLE}}" not in content
             assert "work" in content
@@ -725,8 +731,9 @@ class TestCreateFolderAreaValidation:
             data = resp.get_json()
             assert data["ok"] is False
             assert "area" in data["error"].lower()
-            # Folder should not be created
+            # Nothing should be created
             assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "work"))
+            assert not os.path.exists(os.path.join(ptos.NOTES_DIR, "Areas"))
 
     def test_create_folder_with_invalid_area_chars_rejected(self):
         from ptos_web import app

@@ -102,7 +102,7 @@ _EXPECTED_NAV_SECTIONS = [
         ("calendar",    "calendar","calendar",  "Calendar",    "G C"),
         ("thresholds",  "thresholds","thresholds","Thresholds","G T"),
         ("projects",    "projects","projects",  "Projects",    "G P"),
-        ("areas",       "areas",   "areas",     "Areas",       "G V"),
+        ("areas",       "areas",   "areas",     "Areas",       "G A"),
     ]),
     ("setup", "Setup", [
         ("query-builder",  "query_builder",   "query_builder",   "Query Builder",  "G Q"),

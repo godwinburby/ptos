@@ -330,7 +330,7 @@ def _inject_globals():
             ("calendar",    "calendar","calendar",  "Calendar",    "G C"),
             ("thresholds",  "thresholds","thresholds","Thresholds","G T"),
             ("projects",    "projects","projects",  "Projects",    "G P"),
-            ("areas",       "areas",   "areas",     "Areas",       "G V"),
+            ("areas",       "areas",   "areas",     "Areas",       "G A"),
         ]),
         ("setup", "Setup", [
             ("query-builder",  "query_builder",   "query_builder",   "Query Builder",  "G Q"),
@@ -1328,6 +1328,18 @@ def areas_index():
     return render_template("areas.html", tab="areas", areas=areas, title="Areas")
 
 
+@app.route("/api/areas/create-page", methods=["POST"])
+def api_areas_create_page():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify(ok=False, error="JSON body required"), 400
+    try:
+        result = svc.svc_create_area_page(data.get("area", ""))
+    except PTOSError as e:
+        return jsonify(ok=False, error=str(e)), 400
+    return jsonify(ok=True, **result)
+
+
 def _fmt_rec(rec):
     if not rec:
         return ""
@@ -1925,16 +1937,12 @@ def notes_new_folder():
     rel_path = data.get("path", "")
     name = data.get("name", "").strip()
     area = data.get("area", "").strip()
-    if not name:
-        return jsonify(ok=False, error="Folder name is required")
-    # Validate area slug before creating anything
-    if area:
-        try:
-            area = svc._area_slug(area)
-        except PTOSError as e:
-            return jsonify(ok=False, error=str(e))
     try:
-        svc.svc_create_folder(rel_path, name, area or None)
+        if area:
+            return jsonify(ok=True, **svc.svc_create_area_page(area))
+        if not name:
+            return jsonify(ok=False, error="Folder name is required")
+        svc.svc_create_folder(rel_path, name)
         return jsonify(ok=True)
     except Exception as e:
         return jsonify(ok=False, error=str(e))
@@ -5934,6 +5942,14 @@ if __name__ == "__main__":
         ptos.migrate_backup_dir()
     except Exception:
         pass
+
+    # Move legacy notes/<area>/ folders into notes/Areas/
+    try:
+        moved = svc.svc_migrate_area_folders()
+        if moved:
+            print(f"Moved {len(moved)} area folder(s) into {svc.AREAS_DIR}/")
+    except Exception as e:
+        print(f"Area folder migration skipped: {e}")
 
     # Archive old done tasks on startup
     try:

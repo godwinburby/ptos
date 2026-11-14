@@ -691,15 +691,20 @@ Life areas group tasks and records without a new data store. `area` is a global
 schema field (`[global_fields.area]`) whose `options` list the areas you use, and
 a todo can carry an area with an `area:<slug>` token (slugs are `[a-z0-9_-]+`).
 Features:
-- `/areas` index — one card per area with open/done/overdue/due-today task counts
-  and this month's record count; the title filters `/todo?area=<slug>`
+- `/areas` index — one card per area with clickable open/overdue/due-today
+  counts, a this-month record count that opens the entity view, and a total
+  done count
+- Each card opens the area page at `notes/Areas/<area>/Home.md` when it exists;
+  otherwise **Create area page** generates it from the shared starter body
+  at `notes/Areas/template.md` (never overwriting an existing page). A folder's
+  own `template.md` overrides `notes/Areas/template.md` for that area.
 - Areas come from the schema options first, then any area already used by a todo
   or record — a schema option with no data still shows up
-- Each area may have a notes folder at `notes/<area>/`; creating it from **New
-  Folder** writes a starter `template.md`, and cards link to **View notes**
-  (or show "No page yet")
+- Creating an area folder from **New Folder** seeds the shared
+  `notes/Areas/template.md` once and writes `Areas/<area>/Home.md`; cards also
+  link to **Notes**
 - Quick capture accepts an `area` so a one-line record lands in the right area
-- **Shortcut**: `G V` opens Areas (Projects is `G P`, Entity is `G J`)
+- **Shortcut**: `G A` opens Areas (Projects is `G P`, Entity is `G J`)
 
 ### Bracket Cross-linking (`[[Target]]`)
 
@@ -967,7 +972,7 @@ Kanban board view for tracking records across workflow stages. Configured in
 ### Entity
 
 Cross-type lookup: view every record matching a single `field=value` pair across
-all record types at once. Navigate with `G V`. Features:
+all record types at once. Navigate with `G J`. Features:
 - **Landing** — field chips (schema fields shared by 2+ types) with distinct-value
   counts; pick a field, pick a value, or type your own — values containing
   spaces (e.g. `name=cerena binu`) are matched in full

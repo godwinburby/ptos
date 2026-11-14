@@ -62,7 +62,7 @@
   <div style="background:var(--card);border:1px solid var(--border);border-radius:10px;padding:20px;min-width:320px;">
     <div style="font-size:15px;font-weight:700;margin-bottom:10px;">New Folder</div>
     <div class="modal-field">
-      <label for="nf-area">Area (optional)</label>
+      <label for="nf-area">Area (creates Areas/&lt;area&gt;/Home.md)</label>
       <select id="nf-area" onchange="onNewFolderAreaChange()">
         <option value="">— Select an area —</option>
         {% for a in page_templates.areas %}<option value="{{ a }}">{{ a }}</option>{% endfor %}
@@ -131,13 +131,18 @@ function onNewFolderAreaChange() {
   var sel = document.getElementById("nf-area");
   _nfAreaSelected = sel.value;
   var nameInput = document.getElementById("nf-name");
-  if (_nfAreaSelected && !nameInput.value) {
+  if (_nfAreaSelected) {
     nameInput.value = _nfAreaSelected;
+    nameInput.disabled = true;
+  } else {
+    nameInput.value = "";
+    nameInput.disabled = false;
   }
 }
 
 function promptNewFolder() {
   document.getElementById("nf-name").value = "";
+  document.getElementById("nf-name").disabled = false;
   document.getElementById("nf-area").value = "";
   _nfAreaSelected = "";
   openDialog("new-folder-dialog");
@@ -251,7 +256,7 @@ function createTemplateHere() {
 function submitNewFolder() {
   var name = document.getElementById("nf-name").value.trim();
   var area = document.getElementById("nf-area").value.trim();
-  if (!name) return;
+  if (!name && !area) return;
   fetch("/notes/new-folder", {
     method: "POST", headers: {"Content-Type": "application/json"},
     body: JSON.stringify({path: _curPath, name: name, area: area})

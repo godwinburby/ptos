@@ -7,6 +7,18 @@ Format: `[version or date] — description`
 
 ## 2026-11-14
 
+### Areas shortcut is G A again
+
+- **`G A` opens Areas** — the chord had been moved to `G V` (0f9bd3c) even though `G A` was free: the plain `A` key is Add Record, but a `G` chord never collides with a single-key shortcut. Entity stays on `G J`.
+- **Docs corrected** — the Entity sections in `README.md` and `AGENTS.md` said `G V`; both now say `G J`. Tests follow the shortcut map (`tests/test_shortcuts.py`, `tests/test_chord_overlay.py`, `tests/test_area_pages.py`).
+
+### Areas: clickable counts and generated area pages
+
+- **Count tiles are links** — Open, Overdue, Due today and Records this month on `/areas` now navigate (`/todo?area=<slug>`, with `due=overdue`/`due=today`, and `/entity?field=area&value=<area>&time=tm`); Done stays a plain total. Record-only areas that are not valid slugs keep plain tiles so no link can 500 in `_area_slug`.
+- **Area pages** — each area can have `notes/<area>/Home.md`, generated from `starters/starter_area.md` with `{{AREA}}`/`{{AREA_TITLE}}` filled. Cards link to the page when it exists and offer **Create area page** otherwise (`POST /api/areas/create-page`); creation is idempotent and never overwrites an existing `Home.md` or `template.md`.
+- **New Folder seeds both files** — creating an area folder writes `template.md` and its `Home.md`, so the area page exists immediately.
+- **Tests** — `tests/test_area_pages.py` (stat hrefs, non-slug areas, `page_path`/`has_page`, page creation, idempotency, invalid slugs, JSON-only route).
+
 ### Markdown pages open in preview
 
 - **Preview is the default view** — the shared markdown editor (notes pages and journal) now opens in Preview instead of Edit, so a page reads first and editing is one click on **✎ Edit**. The old mobile-only Stacked default is gone; every viewport starts in Preview and the buttons switch modes as before.
@@ -25,6 +37,14 @@ Format: `[version or date] — description`
 - **Duplicate originals** — claimed originals are tracked by index, so two identical originals on the conflict side pair independently.
 - **Clearer label** — the hint row now reads "Most similar date+type record:" instead of "Same date+type as:".
 - **Tests** — `tests/test_sync_conflicts.py` covers the unrelated same-day pair, best-match selection, one-pair-per-original, quoted values, duplicate originals, the 0.5 boundary, note-only edits, and the type gate.
+
+### Areas pages move into notes/Areas/
+
+- **One shared area template** — area pages live under `notes/Areas/<slug>/Home.md` and inherit `notes/Areas/template.md`; a per-area `template.md` still wins for its folder (the normal inheritance rule)
+- **New Folder → Areas** — choosing an area in the New Folder dialog creates `Areas/<slug>/` with a filled `Home.md` (the typed folder name is ignored); plain folders are unchanged
+- **One-time migration** — legacy `notes/<area>/` folders that contain `Home.md` move into `notes/Areas/<area>/` on startup and lazily on first area-page creation, taking every file inside them; favorites, `[home] page` and `project.*.notes_path` are retargeted automatically, and nothing is rolled back if a hook write fails
+- **Placeholder fill** — notes created under `Areas/<slug>/…` (except `template.md`) have `{{AREA}}/{{AREA_TITLE}}` filled in from the area slug
+- **Tests** — `tests/test_area_pages.py` (new layout, shared template, inheritance override, placeholder fill, migration, home/favorite retargeting, legacy fallback, `G A` shortcut)
 
 ## 2026-11-13
 
